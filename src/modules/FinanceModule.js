@@ -1,0 +1,2055 @@
+import { useState, useEffect, useRef } from "react";
+
+// ── ICON BASE ────────────────────────────────────────────────────────
+const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+);
+const IcHome  =(p)=><Ic {...p} d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/>;
+const IcProj  =(p)=><Ic {...p} d="M3 7h18M3 12h18M3 17h18"/>;
+const IcFin   =(p)=><Ic {...p} d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>;
+const IcDes   =(p)=><Ic {...p} d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/>;
+const IcRep   =(p)=><Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/>;
+const IcSet   =(p)=><Ic {...p} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0"/>;
+const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
+const IcProc  =(p)=><Ic {...p} d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/>;
+const IcMenu  =(p)=><Ic {...p} d="M4 6h16M4 12h16M4 18h16"/>;
+const IcBell  =(p)=><Ic {...p} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>;
+const IcSrch  =(p)=><Ic {...p} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>;
+const IcLoc   =(p)=><Ic {...p} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0"/>;
+const IcAdd   =(p)=><Ic {...p} d="M12 5v14M5 12h14"/>;
+const IcEye   =(p)=><Ic {...p} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0"/>;
+const IcEyeX  =(p)=><Ic {...p} d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/>;
+const IcTeam  =(p)=><Ic {...p} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M9 7a4 4 0 100 8 4 4 0 000-8z"/>;
+const IcCRM   =(p)=><Ic {...p} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a3 3 0 00-3-3M16 3.13a4 4 0 010 7.75"/>;
+const IcMOM   =(p)=><Ic {...p} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>;
+const IcPay   =(p)=><Ic {...p} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>;
+const IcLib   =(p)=><Ic {...p} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>;
+const IcX     =(p)=><Ic {...p} d="M18 6L6 18M6 6l12 12"/>;
+const IcCopy  =(p)=><Ic {...p} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>;
+const IcChk   =(p)=><Ic {...p} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>;
+const IcHeart =(p)=><Ic {...p} d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill="currentColor"/>;
+const IcMsg   =(p)=><Ic {...p} d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>;
+const IcWarn  =(p)=><Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01"/>;
+const IcDown  =(p)=><Ic {...p} d="M6 9l6 6 6-6"/>;
+const IcBank  =(p)=><Ic {...p} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11"/>;
+const IcWallet=(p)=><Ic {...p} d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 13a1 1 0 100 2 1 1 0 000-2zM2 9h20"/>;
+const IcArrow =(p)=><Ic {...p} d="M5 12h14M12 5l7 7-7 7"/>;
+const IcBack  =(p)=><Ic {...p} d="M19 12H5M12 19l-7-7 7-7"/>;
+const IcFilter=(p)=><Ic {...p} d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>;
+const IcUB    =(p)=><Ic {...p} d="M9 14l2 2 4-4M7 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8l-5-5H7zM15 3v5h5"/>;
+const IcGrid  =(p)=><Ic {...p} d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>;
+const IcListV =(p)=><Ic {...p} d="M9 5h11M9 12h11M9 19h11M4 5h.01M4 12h.01M4 19h.01"/>;
+const IcPulse =(p)=><Ic {...p} d="M22 12h-4l-3 9L9 3l-3 9H2"/>;
+const IcClip  =(p)=><Ic {...p} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>;
+const IcTrendUp  =(p)=><Ic {...p} d="M23 6l-9.5 9.5-5-5L1 18M17 6h6v6"/>;
+const IcTrendDn  =(p)=><Ic {...p} d="M23 18l-9.5-9.5-5 5L1 6M17 18h6v-6"/>;
+const IcRecv     =(p)=><Ic {...p} d="M12 2v10m0 0l-3-3m3 3l3-3M3 17a9 9 0 0018 0"/>;
+const IcSend     =(p)=><Ic {...p} d="M12 22V12m0 0l-3 3m3-3l3 3M21 7a9 9 0 00-18 0"/>;
+const IcFileInv  =(p)=><Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8"/>;
+const IcCalDue   =(p)=><Ic {...p} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>;
+const IcThumbUp  =(p)=><Ic {...p} d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3zM7 22H4a2 2 0 01-2-2v-7a2 2 0 012-2h3"/>;
+const IcBillDue  =(p)=><Ic {...p} d="M9 14l2 2 4-4M7 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8l-5-5H7zM15 3v5h5"/>;
+const IcOverdue  =(p)=><Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/>;
+const IcClock7   =(p)=><Ic {...p} d="M12 2a10 10 0 100 20A10 10 0 0012 2zM12 6v6l4 2"/>;
+const IcEdit     =(p)=><Ic {...p} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>;
+const IcPendClk  =(p)=><Ic {...p} d="M22 12h-4l-3 3-4-6-3 3H2M12 2a10 10 0 100 20A10 10 0 0012 2"/>;
+const IcPayOut   =(p)=><Ic {...p} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>;
+
+// ── COLORS ───────────────────────────────────────────────────────────
+const C={
+  p:"#1565C0",p2:"#1976D2",a:"#FF6F00",a2:"#FFA726",
+  sb:"#0D1B2A",sbH:"#1E2E42",
+  w:"#FFFFFF",bg:"#F1F4F8",t:"#1A2332",tm:"#4A5568",tl:"#8896A6",b:"#E2E8F0",
+  g:"#2E7D32",gl:"#E8F5E9",o:"#E65100",ol:"#FFF3E0",
+  r:"#C62828",rl:"#FFEBEE",bl:"#E3F2FD",
+  pur:"#6A1B9A",purl:"#F3E5F5",teal:"#00695C",tealL:"#E0F2F1",
+  pink:"#AD1457",pinkL:"#FCE4EC",
+};
+const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:`${(n/1000).toFixed(0)}K`;
+const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
+const T={
+  bg:"#F4F6F9",surface:"#FFFFFF",surfaceB:"#F8F9FB",
+  t1:"#111827",t2:"#374151",t3:"#6B7280",t4:"#9CA3AF",
+  b1:"#E5E7EB",b2:"#D1D5DB",
+  blu:"#2563EB",bluL:"#EFF6FF",bluM:"#BFDBFE",
+  grn:"#059669",grnL:"#ECFDF5",grnM:"#A7F3D0",
+  amb:"#D97706",ambL:"#FFFBEB",ambM:"#FDE68A",
+  red:"#DC2626",redL:"#FEF2F2",redM:"#FECACA",
+  slt:"#64748B",sltL:"#F1F5F9",
+  pur:"#7C3AED",purL:"#F5F3FF",
+};
+
+// ── SHARED DOWNLOAD HELPERS ───────────────────────────────────────────
+const downloadCSV=(filename,rows)=>{
+  const csv=rows.map(r=>r.map(c=>`"${String(c==null?"":c).replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a");a.href=url;a.download=filename;
+  document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+};
+const printHTML=(title,bodyHTML)=>{
+  const w=window.open("","_blank");
+  w.document.write(`<html><head><title>${title}</title><style>
+    *{font-family:Arial,sans-serif;font-size:12px;margin:0;padding:0}
+    body{padding:20px}h2{color:#1565C0;margin-bottom:6px}p{color:#555;margin-bottom:14px}
+    table{width:100%;border-collapse:collapse;margin-top:10px}
+    th{background:#E3F2FD;color:#1565C0;padding:8px 10px;text-align:left;border:1px solid #BFDBFE;font-size:11px;text-transform:uppercase;letter-spacing:0.4px}
+    td{padding:7px 10px;border:1px solid #E5E7EB;vertical-align:top}
+    tr:nth-child(even) td{background:#FAFAFA}
+    .cr{color:#059669;font-weight:700}.dr{color:#DC2626;font-weight:700}
+    .footer{margin-top:16px;font-size:11px;color:#9CA3AF;border-top:1px solid #E5E7EB;padding-top:8px}
+    @media print{button{display:none}}
+  </style></head><body>${bodyHTML}</body></html>`);
+  w.document.close();setTimeout(()=>w.print(),400);
+};
+
+// ── NAV GROUPS ───────────────────────────────────────────────────────
+const NAV_GROUPS=[
+  {section:null,items:[
+    {id:"dashboard",label:"Dashboard",Icon:IcHome},
+    {id:"projects",label:"Projects",Icon:IcProj},
+    {id:"crm",label:"CRM",Icon:IcCRM},
+    {id:"mom",label:"MOM",Icon:IcMOM},
+    {id:"team",label:"Team Schedule",Icon:IcTeam},
+    {id:"design",label:"Design",Icon:IcDes,badge:"NEW",bc:C.a},
+  ]},
+  {section:"FINANCE & OPS",items:[
+    {id:"finance",label:"Finance",Icon:IcFin},
+    {id:"procurement",label:"Procurement",Icon:IcProc,badge:11,bc:C.p},
+    {id:"warehouse",label:"Warehouse",Icon:IcWH},
+    {id:"payroll",label:"Payroll",Icon:IcPay},
+  ]},
+  {section:"REPORTS",items:[
+    {id:"reports",label:"Reports",Icon:IcRep},
+    {id:"library",label:"Library",Icon:IcLib},
+    {id:"settings",label:"Settings",Icon:IcSet},
+  ]},
+];
+
+// ── PROJECTS DATA ────────────────────────────────────────────────────
+const PROJECTS_DATA=[
+  {id:1,name:"Shubham & Nand Kishor 623",client:"Nand Kishor Agrawal",city:"Raipur",type:"Residential",progress:68,status:"Ongoing",boq:4250000,expense:2890000,pm:"Vijay Sahu",start:"Jan 2025",end:"Aug 2025"},
+  {id:2,name:"Tikendra Banchhor Residence",client:"Tikendra Banchhor",city:"Raipur",type:"Residential",progress:42,status:"Ongoing",boq:3100000,expense:1302000,pm:"Niranjan",start:"Mar 2025",end:"Dec 2025"},
+  {id:3,name:"Esther Risali Commercial",client:"Esther Group",city:"Bilaspur",type:"Commercial",progress:91,status:"Ongoing",boq:8750000,expense:7963000,pm:"Harsh Sahu",start:"Jun 2024",end:"Apr 2025"},
+  {id:4,name:"Amarendra Shrivastava Villa",client:"Amarendra Shrivastava",city:"Raipur",type:"Residential",progress:23,status:"Ongoing",boq:5600000,expense:1288000,pm:"Vijay Sahu",start:"May 2025",end:"Feb 2026"},
+  {id:5,name:"Shyam Ji Township Phase 1",client:"Shyam Developers",city:"Bhilai",type:"Commercial",progress:100,status:"Completed",boq:12000000,expense:11200000,pm:"Niranjan",start:"Jan 2024",end:"Dec 2024"},
+  {id:6,name:"Simran Kaur Bungalow",client:"Simran Kaur",city:"Raipur",type:"Residential",progress:0,status:"Not Started",boq:2800000,expense:0,pm:"Priyanka",start:"Jun 2025",end:"Mar 2026"},
+  {id:7,name:"Neha Sagar Office Complex",client:"Neha Sagar Ltd",city:"Durg",type:"Commercial",progress:55,status:"Hold",boq:6400000,expense:3520000,pm:"Harsh Sahu",start:"Feb 2025",end:"Nov 2025"},
+  {id:8,name:"Bablu Mehta Farmhouse",client:"Bablu Mehta",city:"Raipur",type:"Residential",progress:78,status:"Ongoing",boq:1900000,expense:1482000,pm:"Vijay Sahu",start:"Nov 2024",end:"May 2025"},
+];
+const TEAM=[
+  {id:1,name:"Vijay Sahu",role:"Project Manager",color:"#1565C0",initials:"VS"},
+  {id:2,name:"Harsh Sahu",role:"Project Manager",color:"#2E7D32",initials:"HS"},
+  {id:3,name:"Niranjan",role:"Site Supervisor",color:"#6A1B9A",initials:"NJ"},
+  {id:4,name:"Priyanka",role:"Project Manager",color:"#AD1457",initials:"PK"},
+  {id:5,name:"Sunny",role:"Site Engineer",color:"#00695C",initials:"SN"},
+];
+const PULSE_FEED=[
+  {id:1,type:"photo",user:"Vijay Sahu",role:"PM",site:"Shubham 623",time:"2h ago",img:"https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=260&fit=crop",caption:"Slab casting complete — 3rd floor RCC done ✅",likes:12,comments:3,tag:"progress",ac:"#1565C0"},
+  {id:2,type:"material",user:"Niranjan",role:"Supervisor",site:"Tikendra Residence",time:"3h ago",img:null,caption:"50 bags cement received from Abhay Traders 📦",likes:4,comments:1,tag:"material",ac:"#6A1B9A"},
+  {id:3,type:"photo",user:"Harsh Sahu",role:"PM",site:"Esther Risali",time:"5h ago",img:"https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=400&h=260&fit=crop",caption:"Brickwork 2nd floor 80% done, pace is great 💪",likes:18,comments:5,tag:"progress",ac:"#2E7D32"},
+  {id:4,type:"issue",user:"Priyanka",role:"PM",site:"Simran Bungalow",time:"6h ago",img:null,caption:"⚠️ Design approval pending — client revision awaited",likes:0,comments:2,tag:"issue",ac:"#AD1457"},
+  {id:5,type:"photo",user:"Vijay Sahu",role:"PM",site:"Amarendra Villa",time:"1d ago",img:"https://images.unsplash.com/photo-1590725140246-20acddc1ec6d?w=400&h=260&fit=crop",caption:"Foundation waterproofing in progress 🏗️",likes:9,comments:2,tag:"progress",ac:"#1565C0"},
+  {id:6,type:"photo",user:"Harsh Sahu",role:"PM",site:"Neha Sagar Office",time:"1d ago",img:"https://images.unsplash.com/photo-1486325212027-8081e485255e?w=400&h=260&fit=crop",caption:"False ceiling installation started — ground floor",likes:14,comments:4,tag:"progress",ac:"#2E7D32"},
+  {id:7,type:"approval",user:"Niranjan",role:"Supervisor",site:"Tikendra Residence",time:"2d ago",img:null,caption:"✅ Labour payment PR-12 approved — ₹30,000",likes:2,comments:0,tag:"approval",ac:"#6A1B9A"},
+  {id:8,type:"photo",user:"Vijay Sahu",role:"PM",site:"Bablu Farmhouse",time:"2d ago",img:"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=260&fit=crop",caption:"Exterior plastering 90% done, paint starts Monday 🎨",likes:21,comments:7,tag:"progress",ac:"#1565C0"},
+];
+const STATUS_META={"Ongoing":{bg:C.gl,text:C.g},"Completed":{bg:C.bl,text:C.p},"Hold":{bg:C.ol,text:C.o},"Not Started":{bg:C.b,text:C.tl}};
+
+// ── FINANCE DATA ─────────────────────────────────────────────────────
+const ACCOUNTS=[
+  {id:1,name:"HDFC Current",no:"••4821",balance:1823540,color:C.p},
+  {id:2,name:"SBI Current",no:"••2204",balance:945200,color:C.teal},
+  {id:3,name:"Petty Cash",no:null,balance:18500,color:C.g},
+  {id:4,name:"ICICI OD",no:"••9012",balance:-230000,color:C.o},
+];
+const WALLETS=[
+  {id:1,name:"Vijay Sahu",role:"PM",balance:12500,limit:25000,initials:"VS",color:"#1565C0"},
+  {id:2,name:"Harsh Sahu",role:"PM",balance:8200,limit:25000,initials:"HS",color:"#2E7D32"},
+  {id:3,name:"Niranjan",role:"Supervisor",balance:4500,limit:10000,initials:"NJ",color:"#6A1B9A"},
+  {id:4,name:"Priyanka",role:"PM",balance:6800,limit:15000,initials:"PK",color:"#AD1457"},
+];
+const PARTIES=[
+  {id:1,name:"3 Eye CCTV Solution",type:"Other Vendor",balance:82166,balType:"Advance Paid"},
+  {id:2,name:"Abhay Traders",type:"Material Supplier",balance:114328,balType:"To Pay"},
+  {id:3,name:"Akashdeep Raipur",type:"Client",balance:2896400,balType:"Advance Received"},
+  {id:4,name:"Amarendra Shrivastava",type:"Client",balance:542790,balType:"To Receive"},
+  {id:5,name:"Amrit Builders",type:"Client",balance:770294,balType:"To Receive"},
+  {id:6,name:"Ramesh Labour Cont.",type:"Sub-Con",balance:38000,balType:"To Pay"},
+  {id:7,name:"Vaibhav Traders",type:"Material Supplier",balance:22500,balType:"To Pay"},
+  {id:8,name:"Shyam Ji Raipur",type:"Client",balance:180000,balType:"To Receive"},
+];
+const PARTY_TXNS={
+  3:[
+    {id:1,date:"02 Feb 2026",note:"70 param account cash + phone pay to vijay",amount:100000,dr:false},
+    {id:2,date:"12 Jan 2026",note:"by naveen sir to vijay",amount:50000,dr:false},
+    {id:3,date:"31 Dec 2025",note:"Cash received at anand fashion",amount:250000,dr:false},
+  ],
+  2:[
+    {id:1,date:"08 Mar 2026",note:"TMT Steel 2 MT — Esther Risali",amount:126775,dr:true,status:"unpaid",items:[{name:"TMT Steel Fe500",rate:"₹63,000/MT",qty:"2 MT",amt:126000},{name:"Binding Wire",rate:"₹80/kg",qty:"10 kg",amt:800}]},
+    {id:2,date:"01 Mar 2026",note:"Cement 100 bags — Esther Risali",amount:38500,dr:true,status:"paid"},
+    {id:3,date:"20 Feb 2026",note:"Sand 5 loads — Shubham 623",amount:17500,dr:true,status:"paid"},
+  ],
+};
+const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL}};
+const TRANSACTIONS_DATA=[
+  {id:1,date:"09 Mar",ds:20260309,party:"Vijay Sahu → Hukumchand Trilok",sub:"Labour payment at slab casting",project:"Amarendra Villa",type:"Party Payment",account:"HDFC",amount:50000,dr:true,status:"paid"},
+  {id:2,date:"08 Mar",ds:20260308,party:"Vijay Sahu",sub:"Murga jali for plaster",project:"Shubham 623",type:"Site Expense",account:"Petty Cash",amount:500,dr:true,status:"paid"},
+  {id:3,date:"08 Mar",ds:20260308,party:"Abhay Traders",sub:"TMT Steel 2 MT",project:"Esther Risali",type:"Material Purchase",account:"HDFC",amount:126775,dr:true,status:"unpaid"},
+  {id:4,date:"07 Mar",ds:20260307,party:"Shyam Ji Raipur",sub:"Client advance payment",project:"Shyam Township",type:"Payment In",account:"SBI",amount:500000,dr:false,status:"paid"},
+  {id:5,date:"06 Mar",ds:20260306,party:"GBC Sunny",sub:"Harish tile vala",project:"Neha Sagar",type:"Site Expense",account:"Petty Cash",amount:5000,dr:true,status:"paid"},
+  {id:6,date:"05 Mar",ds:20260305,party:"GBC Sunny",sub:"Granite vala",project:"Bablu Farmhouse",type:"Site Expense",account:"Petty Cash",amount:5000,dr:true,status:"paid"},
+  {id:7,date:"04 Mar",ds:20260304,party:"Ramesh Labour Cont.",sub:"Brickwork 2nd floor",project:"Tikendra Residence",type:"Sub-Con Expense",account:"HDFC",amount:38000,dr:true,status:"unpaid"},
+  {id:8,date:"03 Mar",ds:20260303,party:"Rajesh Electrical",sub:"Wiring materials",project:"Amarendra Villa",type:"Material Purchase",account:"HDFC",amount:22500,dr:true,status:"paid"},
+  {id:9,date:"02 Mar",ds:20260302,party:"Abhay Traders",sub:"To be billed — unbilled",project:"Shubham 623",type:"Unbilled Material",account:"—",amount:18000,dr:true,status:"unbilled"},
+  {id:10,date:"01 Mar",ds:20260301,party:"Akashdeep Raipur",sub:"Client payment received",project:"Shyam Township",type:"Payment In",account:"SBI",amount:200000,dr:false,status:"paid"},
+];
+const UNBILLED_PARTIES=[
+  {id:1,name:"AAA Traders",items:1,project:"Shubham 623",billItems:[{name:"Bricks",qty:5000,unit:"Nos",rate:8,amt:40000}]},
+  {id:2,name:"Shyam Ji Raipur",items:1,project:"Shubham 623",billItems:[{name:"Sand",qty:10,unit:"Loads",rate:3500,amt:35000}]},
+  {id:3,name:"Shubham & NK 623",items:9,project:"Shubham 623",billItems:[{name:"Cement OPC",qty:120,unit:"Bags",rate:380,amt:45600},{name:"Sand",qty:5,unit:"Loads",rate:3200,amt:16000}]},
+  {id:4,name:"Akashdeep",items:2,project:"Esther Risali",billItems:[{name:"Tiles 2x2",qty:200,unit:"Sqft",rate:65,amt:13000}]},
+];
+const PAY_REQS_DATA=[
+  {id:12,no:"PR-12",date:"27 Feb",party:"Laxmi Electrical",project:"Neha Sagar",amount:1750,status:"Pending",by:"Harsh Sahu"},
+  {id:10,no:"PR-10",date:"21 Feb",party:"Chandra Shekhar",project:"Tikendra",amount:30000,status:"Pending",by:"Niranjan"},
+  {id:8,no:"PR-8",date:"24 Jan",party:"Vaibhav Traders",project:"Amarendra Villa",amount:22500,status:"Pending",by:"Vijay Sahu"},
+  {id:11,no:"PR-11",date:"21 Feb",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,status:"Approved",by:"Harsh Sahu"},
+  {id:9,no:"PR-9",date:"30 Jan",party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,status:"Approved",by:"Vijay Sahu"},
+];
+const PEND_PMTS_DATA=[
+  {id:1,type:"pr",no:"PR-11",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,date:"21 Feb",overdue:false},
+  {id:2,type:"pr",no:"PR-9",party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,date:"30 Jan",overdue:false},
+  {id:3,type:"bill",no:"MP-38",party:"Abhay Traders",project:"Esther Risali",amount:126775,date:"10 Mar",overdue:true},
+  {id:4,type:"bill",no:"SUB-22",party:"Ramesh Labour",project:"Tikendra",amount:38000,date:"15 Mar",overdue:false},
+  {id:5,type:"bill",no:"MP-41",party:"Vaibhav Traders",project:"Amarendra Villa",amount:31200,date:"20 Mar",overdue:false},
+];
+
+
+// ── SITE PULSE DRAWER ─────────────────────────────────────────────────
+function SitePulseDrawer({onClose}){
+  const [site,setSite]=useState("All");const [type,setType]=useState("All");const [liked,setLiked]=useState({});
+  const tagMeta={"progress":{c:C.g,b:C.gl},"material":{c:C.p,b:C.bl},"issue":{c:C.r,b:C.rl},"approval":{c:C.teal,b:C.tealL}};
+  const filtered=PULSE_FEED.filter(f=>(site==="All"||f.site.includes(site))&&(type==="All"||f.type===type));
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:200,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:390,background:T.bg,zIndex:201,boxShadow:"-8px 0 40px rgba(0,0,0,0.24)",display:"flex",flexDirection:"column",animation:"slideIn 0.22s ease",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <div style={{width:9,height:9,borderRadius:"50%",background:C.g,boxShadow:`0 0 0 3px ${C.gl}`,animation:"livePulse 1.5s infinite"}}/>
+            <span style={{fontSize:14,fontWeight:800,color:C.t}}>Site Pulse</span>
+            <span style={{background:C.r,color:"white",fontSize:8,fontWeight:800,padding:"2px 5px",borderRadius:4,letterSpacing:"0.6px"}}>LIVE</span>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}><IcX size={15}/></button>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <select value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:T.sltL,outline:"none",fontFamily:"inherit",color:C.t}}>
+            <option>All</option>{["Shubham 623","Esther Risali","Amarendra Villa","Tikendra Residence","Neha Sagar Office","Bablu Farmhouse"].map(s=><option key={s}>{s}</option>)}
+          </select>
+          <select value={type} onChange={e=>setType(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:T.sltL,outline:"none",fontFamily:"inherit",color:C.t}}>
+            {["All","photo","material","issue","approval"].map(t=><option key={t} value={t}>{t==="All"?"All Types":t[0].toUpperCase()+t.slice(1)}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
+        {filtered.map(f=>{
+          const tm=tagMeta[f.tag]||{c:C.tm,b:C.b};const isL=liked[f.id];
+          return(
+            <div key={f.id} style={{background:C.w,borderRadius:12,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.08)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:9,padding:"10px 12px 7px"}}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${f.ac},${f.ac}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"white",flexShrink:0}}>{f.user.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
+                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>{f.user} <span style={{fontSize:10,fontWeight:400,color:C.tl}}>· {f.role}</span></div><div style={{fontSize:10,color:C.tl}}>{f.site} · {f.time}</div></div>
+                <span style={{background:tm.b,color:tm.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:20,textTransform:"capitalize"}}>{f.tag}</span>
+              </div>
+              {f.img&&<img src={f.img} alt="site" style={{width:"100%",height:180,objectFit:"cover",display:"block"}} onError={e=>{e.target.parentElement.innerHTML='<div style="height:180px;background:linear-gradient(135deg,#E3F2FD,#BBDEFB);display:flex;align-items:center;justify-content:center;font-size:40px">🏗️</div>';}}/>}
+              {!f.img&&f.type==="issue"&&<div style={{margin:"0 12px 6px",background:C.rl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.r}`,display:"flex",gap:7,alignItems:"center"}}><IcWarn size={13} color={C.r}/><span style={{fontSize:11.5,color:C.r,fontWeight:500}}>Issue Flagged</span></div>}
+              {!f.img&&f.type==="approval"&&<div style={{margin:"0 12px 6px",background:C.tealL,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.teal}`,display:"flex",gap:7,alignItems:"center"}}><IcChk size={13} color={C.teal}/><span style={{fontSize:11.5,color:C.teal,fontWeight:500}}>Payment Approved</span></div>}
+              {!f.img&&f.type==="material"&&<div style={{margin:"0 12px 6px",background:C.bl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.p}`,display:"flex",gap:7,alignItems:"center"}}><span style={{fontSize:16}}>📦</span><span style={{fontSize:11.5,color:C.p,fontWeight:500}}>Material Received</span></div>}
+              <div style={{padding:"7px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user}</strong> {f.caption}</span></div>
+              <div style={{padding:"5px 12px 10px",display:"flex",gap:14,alignItems:"center"}}>
+                <button onClick={()=>setLiked(p=>({...p,[f.id]:!p[f.id]}))} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:isL?C.r:C.tl,padding:0}}>
+                  <IcHeart size={16} color={isL?C.r:C.tl} fill={isL?C.r:"none"}/><span style={{fontSize:11,fontWeight:600}}>{f.likes+(isL?1:0)}</span>
+                </button>
+                <button style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:C.tl,padding:0}}><IcMsg size={15} color={C.tl}/><span style={{fontSize:11,fontWeight:600}}>{f.comments}</span></button>
+                <div style={{flex:1}}/><span style={{fontSize:9.5,color:C.tl}}>{f.time}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{padding:"10px 12px",background:T.surface,borderTop:`1px solid ${T.b1}`}}>
+        <button style={{width:"100%",padding:"9px",borderRadius:8,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>View Full Site Pulse →</button>
+      </div>
+    </div>
+  </>);
+}
+
+// ── DUPLICATE MODAL ───────────────────────────────────────────────────
+function DuplicateModal({project,onClose,onConfirm}){
+  const [step,setStep]=useState(1);const [done,setDone]=useState(false);
+  const [form,setForm]=useState({name:`${project.name} — Copy`,city:project.city,boq:project.boq,start:"",end:""});
+  const [pm,setPM]=useState(project.pm);const [sup,setSup]=useState("Niranjan");
+  const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const handleCreate=()=>{setDone(true);setTimeout(()=>{onConfirm({...project,id:Date.now(),name:form.name,city:form.city,boq:Number(form.boq),pm,progress:0,status:"Not Started",expense:0,start:form.start||"TBD",end:form.end||"TBD"});onClose();},1400);};
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{background:T.blu,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}><IcCopy size={17} color="white"/></div>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"white"}}>Duplicate Project</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.72)"}}>Tasks, dependencies & BOQ carry over automatically</div></div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:7,display:"flex"}}><IcX size={14}/></button>
+      </div>
+      <div style={{display:"flex",alignItems:"center",padding:"10px 20px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
+        {["Project Details","Team Assignment","Review"].map((s,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",flex:i<2?1:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:24,height:24,borderRadius:"50%",background:step>i+1?T.grn:step===i+1?T.blu:T.b1,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:step>=i+1?"white":T.t4,transition:"all 0.3s",flexShrink:0}}>{step>i+1?"✓":i+1}</div>
+              <span style={{fontSize:11,fontWeight:step===i+1?700:400,color:step===i+1?T.blu:step>i+1?T.grn:T.t4,whiteSpace:"nowrap"}}>{s}</span>
+            </div>
+            {i<2&&<div style={{flex:1,height:2,background:step>i+1?T.grn:T.b1,margin:"0 10px",borderRadius:2,transition:"background 0.3s"}}/>}
+          </div>
+        ))}
+      </div>
+      <div style={{padding:"16px 20px",maxHeight:340,overflowY:"auto"}}>
+        {step===1&&<div>
+          <div style={{background:T.sltL,borderRadius:8,padding:"9px 12px",marginBottom:12,display:"flex",alignItems:"center",gap:8,border:`1px solid ${T.b1}`}}>
+            <span style={{fontSize:11,color:T.t3}}>Copying from:</span><strong style={{fontSize:11.5,color:T.t1,flex:1}}>{project.name}</strong>
+            <span style={{background:T.bluL,color:T.blu,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>Template</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {[["New Project Name *",form.name,"name","text",true],["City *",form.city,"city","text",false],["BOQ Value (₹) *",form.boq,"boq","number",false],["Type",project.type,"_type","text",false],["Start Date",form.start,"start","date",false],["End Date",form.end,"end","date",false]].map(([lbl,val,key,type,full])=>(
+              <div key={key} style={{gridColumn:full?"1 / -1":"auto"}}>
+                <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{lbl}</label>
+                <input type={type} value={val} onChange={e=>setF(key,e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.sltL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              </div>
+            ))}
+          </div>
+          <div style={{background:T.grnL,borderRadius:8,padding:"8px 12px",fontSize:11,color:T.grn,display:"flex",gap:6,marginTop:12}}><span>✅</span><span>All tasks, BOQ items, dependencies & phases will be copied automatically.</span></div>
+        </div>}
+        {step===2&&<div>
+          <p style={{fontSize:11.5,color:T.t4,margin:"0 0 14px"}}>Click to assign team for the new project.</p>
+          {[{role:"Project Manager",val:pm,setter:setPM,prev:project.pm},{role:"Site Supervisor",val:sup,setter:setSup,prev:"Niranjan"}].map(({role,val,setter,prev})=>(
+            <div key={role} style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:7}}>{role}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {TEAM.map(t=><button key={t.id} onClick={()=>setter(t.name)} style={{padding:"6px 11px",borderRadius:7,border:`1.5px solid ${val===t.name?t.color:T.b1}`,background:val===t.name?t.color+"14":T.sltL,fontSize:11.5,color:val===t.name?t.color:T.t2,fontWeight:val===t.name?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:val===t.name?t.color:T.b2,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:val===t.name?"white":T.t4}}>{t.initials}</div>
+                  {t.name}{prev===t.name&&<span style={{fontSize:8.5,color:T.t4}}>(prev)</span>}
+                </button>)}
+              </div>
+            </div>
+          ))}
+        </div>}
+        {step===3&&(!done
+          ?<div>
+            <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>Review before creating:</div>
+            {[["Project Name",form.name],["City",form.city],["BOQ",`₹${Number(form.boq).toLocaleString("en-IN")}`],["PM",pm],["Supervisor",sup],["Timeline",`${form.start||"TBD"} → ${form.end||"TBD"}`],["Initial Status","Not Started · 0%"],["Carry Over","Tasks · BOQ · Phases · Dependencies"]].map(([k,v])=>(
+              <div key={k} style={{display:"flex",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}><span style={{width:140,fontSize:11.5,color:T.t3,flexShrink:0}}>{k}</span><span style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{v}</span></div>
+            ))}
+          </div>
+          :<div style={{textAlign:"center",padding:"28px 0"}}><div style={{fontSize:44,marginBottom:10}}>✅</div><div style={{fontSize:15,fontWeight:800,color:T.grn}}>Project Created!</div><div style={{fontSize:12,color:T.t4,marginTop:4}}>{form.name} added.</div></div>
+        )}
+      </div>
+      {!done&&<div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,background:T.surfaceB}}>
+        {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"9px",borderRadius:8,border:`1.5px solid ${T.b1}`,background:T.sltL,fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer"}}>← Back</button>}
+        <button onClick={step<3?()=>setStep(s=>s+1):handleCreate} style={{flex:2,padding:"9px",borderRadius:8,background:step===3?T.grn:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+          {step===1?"Next: Team →":step===2?"Next: Review →":"✓ Create Duplicate"}
+        </button>
+      </div>}
+    </div>
+  </>);
+}
+
+
+// ─── SEARCHABLE SELECT COMBOBOX ───────────────────────────────
+// Uses position:fixed for the dropdown so it is never clipped by overflow:hidden parents
+function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfterSelect,inputRef}){
+  const [open,setOpen]=useState(false);
+  const [q,setQ]=useState("");
+  const [dropPos,setDropPos]=useState({top:0,left:0,width:180});
+  const wrapRef=useRef(null);
+  const ownInputRef=useRef(null);
+  useEffect(()=>{
+    const h=e=>{if(wrapRef.current&&!wrapRef.current.contains(e.target)){setOpen(false);setQ("");}};
+    document.addEventListener("mousedown",h);
+    return()=>document.removeEventListener("mousedown",h);
+  },[]);
+  const ac=accent||T.blu;
+  const opts=Array.isArray(options)?options:[];
+  const filtered=q?opts.filter(o=>(typeof o==="string"?o:o.label).toLowerCase().includes(q.toLowerCase())):opts;
+  const h=compact?28:30;
+  const handleSelect=(val)=>{
+    onChange(val);setQ("");setOpen(false);
+    if(onAfterSelect) setTimeout(()=>onAfterSelect(),30);
+  };
+  const openDrop=()=>{
+    const el=ownInputRef.current;
+    if(el){const r=el.getBoundingClientRect();setDropPos({top:r.bottom+2,left:r.left,width:Math.max(r.width,180)});}
+    setQ("");setOpen(true);
+  };
+  const assignRef=el=>{
+    ownInputRef.current=el;
+    if(inputRef){if(typeof inputRef==="function") inputRef(el); else inputRef.current=el;}
+  };
+  return(
+    <div ref={wrapRef} style={{position:"relative"}}>
+      <input ref={assignRef} value={open?q:value||""}
+        onChange={e=>{setQ(e.target.value);if(!open)openDrop();}}
+        onFocus={openDrop}
+        onKeyDown={e=>{
+          if(e.key==="Escape"){setOpen(false);setQ("");}
+          if(e.key==="Enter"&&filtered.length>0){handleSelect(typeof filtered[0]==="string"?filtered[0]:filtered[0].value);}
+        }}
+        placeholder={placeholder||"Type or select..."}
+        style={{height:h,padding:`0 22px 0 7px`,borderRadius:5,
+          border:`1.5px solid ${open?ac:T.b1}`,fontSize:compact?11:12,outline:"none",
+          boxSizing:"border-box",fontFamily:"inherit",background:T.surface,width:"100%"}}/>
+      <span style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",color:T.t4}}>
+        <IcDown size={10} color="currentColor"/>
+      </span>
+      {open&&(
+        <div style={{position:"fixed",top:dropPos.top,left:dropPos.left,minWidth:dropPos.width,
+          background:T.surface,borderRadius:7,border:`1.5px solid ${ac}`,
+          boxShadow:"0 8px 28px rgba(0,0,0,0.18)",zIndex:9999,maxHeight:200,overflowY:"auto"}}>
+          {filtered.map((opt,i)=>{
+            const label=typeof opt==="string"?opt:opt.label;
+            const val=typeof opt==="string"?opt:opt.value;
+            const cur=val===value;
+            return(
+              <div key={i} onMouseDown={e=>{e.preventDefault();handleSelect(val);}}
+                style={{padding:"7px 10px",fontSize:12,cursor:"pointer",color:cur?ac:T.t1,
+                  fontWeight:cur?700:400,background:cur?ac+"14":"transparent",
+                  borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none",whiteSpace:"nowrap"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
+                onMouseLeave={e=>e.currentTarget.style.background=cur?ac+"14":"transparent"}>
+                {label}
+              </div>
+            );
+          })}
+          {!filtered.length&&(
+            <div style={{padding:"10px",fontSize:11,color:T.t4,textAlign:"center"}}>No match found</div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── CREATE TRANSACTION MODAL ─────────────────────────────────
+function CreateTransactionModal({type,onClose,preParty}){
+  const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
+  const UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"];
+  const INV_UNITS=["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"];
+  const ACCOUNTS_LIST=["HDFC Current","SBI Current","Petty Cash","ICICI OD"];
+  const MOPS_LIST=["Cash","Cheque","Bank Transfer","UPI","NEFT"];
+  const WORK_TYPES=["Plastering","Brickwork","Concrete Casting","Tile Laying","Electrical Work","Plumbing","Bar Bending","Painting","Waterproofing","Flooring","Carpentry","False Ceiling","Other"];
+  const PROJECTS_LIST=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Company Level"];
+  const CLIENT_LIST=["Nand Kishor Agrawal","Tikendra Banchhor","Esther Group","Amarendra Shrivastava","Neha Sagar Ltd","Shyam Developers","Simran Kaur","Bablu Mehta"];
+  const SUPPLIER_LIST=["Abhay Traders","Tata Steel","Ambuja Cement","National Bricks","Laxmi Electrical","Dr. Fixit Suppliers","Somany Tiles","Asian Paints","Other"];
+  const SUBCON_LIST=["Ramesh Labour Cont.","Rupesh Sahu","Naresh","Laxmikant","Plumber Arun","Laxmi Electrical","Chandra Shekhar","Other"];
+
+  // Pre-defined material library (used in Material Purchase Bill)
+  const MATERIAL_LIBRARY=[
+    "TMT Steel Fe500 8mm","TMT Steel Fe500 10mm","TMT Steel Fe500 12mm","TMT Steel Fe500 16mm",
+    "TMT Steel Fe550 12mm","Binding Wire",
+    "OPC 53 Grade Cement","OPC 43 Grade Cement","PPC Cement","White Cement",
+    "River Sand","M-Sand","P-Sand",
+    "20mm Aggregate","10mm Aggregate","Gravel",
+    "Red Clay Brick 9x4x3","Fly Ash Brick","AAC Block 4\"","AAC Block 6\"",
+    "Waterproofing Dr. Fixit","Waterproofing Fosroc","Waterproofing Membrane",
+    "PVC Pipe 1\"","PVC Pipe 2\"","CPVC Pipe","GI Pipe 1\"",
+    "PVC Conduit 25mm","PVC Conduit 32mm","FR Wiring 1.5mm","FR Wiring 2.5mm","FR Wiring 4mm",
+    "MCB 6A","MCB 16A","MCB 32A","DB Box 8 Way","DB Box 16 Way",
+    "Vitrified Tile 600x600","Vitrified Tile 800x800","Wall Tile 300x450","Anti-Skid Tile",
+    "Granite Slab","Marble Slab","Kota Stone",
+    "Asian Paints Apex","Berger WeatherCoat","Asian Paints Tractor","Putty",
+    "Door Frame Teak","Door Frame Steel","Flush Door","PVC Door",
+    "UPVC Window","Aluminium Window","Glass 5mm",
+    "Plywood 18mm","Plywood 12mm","GI Sheet",
+    "Diesel","Petrol","Safety Helmet","Safety Harness","Gloves",
+    "Centering Plate","Prop Stand","Shuttering Oil",
+  ];
+
+  const isBankTransfer=type==="Bank Transfer";
+  const isPayment=["Payment Received","Payment Made","Petty Cash Expense","Advance Payment","Journal Entry","Credit Note"].includes(type);
+  const isMaterial=type==="Material Purchase Bill";
+  const isSubcon=type==="Sub-Con Bill";
+  const isInvoice=type==="Sales Invoice";
+
+  const partyOptions=type==="Payment Received"?CLIENT_LIST:isInvoice?CLIENT_LIST:isMaterial?SUPPLIER_LIST:isSubcon?SUBCON_LIST:SUPPLIER_LIST;
+
+  // ── core state ──────────────────────────────────────────────
+  const [billDate,setBillDate]=useState("2026-03-16");
+  const [delivDate,setDelivDate]=useState("2026-03-16");
+  const [party,setParty]=useState(preParty||"");
+  const [project,setProject]=useState(PROJECTS_LIST[0]);
+  const [account,setAccount]=useState(ACCOUNTS_LIST[0]);
+  const [toAccount,setToAccount]=useState(ACCOUNTS_LIST[1]);
+  const [mop,setMop]=useState(MOPS_LIST[0]);
+  const [note,setNote]=useState("");
+  const [payAmt,setPayAmt]=useState("");
+  const [saved,setSaved]=useState(false);
+
+  // ── invoice state ────────────────────────────────────────────
+  const [invMode,setInvMode]=useState("fresh");
+  const [invoiceNo,setInvoiceNo]=useState("INV-2026-001");
+  const [dueDate,setDueDate]=useState("2026-04-15");
+
+  // ── linked Payment IN (invoice → received same time) ─────────
+  const [payInLinked,setPayInLinked]=useState(false);
+  const [payInAcc,setPayInAcc]=useState(ACCOUNTS_LIST[0]);
+  const [payInMop,setPayInMop]=useState("Bank Transfer");
+  const [payInAmt,setPayInAmt]=useState("");
+  const [payInDate,setPayInDate]=useState("2026-03-16");
+
+  // ── linked Payment OUT (subcon bill → paid same time) ────────
+  const [payOutLinked,setPayOutLinked]=useState(false);
+  const [payOutAcc,setPayOutAcc]=useState(ACCOUNTS_LIST[0]);
+  const [payOutMop,setPayOutMop]=useState(MOPS_LIST[0]);
+  const [payOutAmt,setPayOutAmt]=useState("");
+  const [payOutDesc,setPayOutDesc]=useState("");
+  const [payOutDate,setPayOutDate]=useState("2026-03-16");
+
+  // ── BOQ items (shared between invoice & subcon) ──────────────
+  const BOQ_ITEMS=[
+    {id:1,work:"Foundation Work",desc:"PCC M15 + RCC M25 footings",unit:"Sqft",boqQty:1500,rate:220,billed:0},
+    {id:2,work:"Column & Beam",desc:"RCC columns GF to FF, M25 grade",unit:"Nos",boqQty:24,rate:8500,billed:0},
+    {id:3,work:"Brickwork GF",desc:"9 inch brick wall ground floor",unit:"Sqft",boqQty:2400,rate:160,billed:0},
+    {id:4,work:"Roof Slab GF",desc:"RCC M25 slab 5 inch thick",unit:"Sqft",boqQty:1500,rate:180,billed:1500},
+    {id:5,work:"Plaster External",desc:"CM 1:4 external walls",unit:"Sqft",boqQty:3200,rate:55,billed:0},
+    {id:6,work:"Plaster Internal",desc:"CM 1:5 internal walls all floors",unit:"Sqft",boqQty:5800,rate:45,billed:0},
+    {id:7,work:"Flooring GF",desc:"Vitrified tiles 60x60 with bedding",unit:"Sqft",boqQty:1500,rate:85,billed:0},
+    {id:8,work:"Electrical Works",desc:"Point wiring, DB, mains",unit:"Point",boqQty:42,rate:2200,billed:0},
+  ];
+  const SUBCON_BOQ=[
+    {id:1,work:"Foundation Work",desc:"PCC M15 + RCC M25 footings",unit:"Sqft",boqQty:1500,subRate:150,prevBilled:0},
+    {id:2,work:"Column & Beam",desc:"RCC columns GF to FF, M25 grade",unit:"Nos",boqQty:24,subRate:5500,prevBilled:0},
+    {id:3,work:"Brickwork GF",desc:"9 inch brick wall ground floor",unit:"Sqft",boqQty:2400,subRate:105,prevBilled:0},
+    {id:4,work:"Roof Slab GF",desc:"RCC M25 slab 5 inch thick",unit:"Sqft",boqQty:1500,subRate:120,prevBilled:1500},
+    {id:5,work:"Plaster External",desc:"CM 1:4 external walls",unit:"Sqft",boqQty:3200,subRate:35,prevBilled:0},
+    {id:6,work:"Plaster Internal",desc:"CM 1:5 internal walls all floors",unit:"Sqft",boqQty:5800,subRate:28,prevBilled:0},
+    {id:7,work:"Flooring GF",desc:"Vitrified tiles 60x60 with bedding",unit:"Sqft",boqQty:1500,subRate:55,prevBilled:0},
+    {id:8,work:"Electrical Works",desc:"Point wiring, DB, mains",unit:"Point",boqQty:42,subRate:1400,prevBilled:0},
+  ];
+  const [boqSelected,setBoqSelected]=useState({});
+  const [boqQty,setBoqQty]=useState({});
+  const toggleBoq=id=>setBoqSelected(p=>({...p,[id]:!p[id]}));
+  const boqGrandTotal=BOQ_ITEMS.filter(b=>boqSelected[b.id]).reduce((s,b)=>s+Number(boqQty[b.id]||b.boqQty)*b.rate,0);
+
+  const [subBoqSel,setSubBoqSel]=useState({});
+  const [subBoqQty,setSubBoqQty]=useState({});
+  const toggleSubBoq=id=>setSubBoqSel(p=>({...p,[id]:!p[id]}));
+  const subBoqTotal=SUBCON_BOQ.filter(b=>subBoqSel[b.id]).reduce((s,b)=>s+Number(subBoqQty[b.id]||b.boqQty)*b.subRate,0);
+
+  // ── sub-con mode ─────────────────────────────────────────────
+  const [subMode,setSubMode]=useState("fresh");
+
+  // ── invoice fresh rows — with auto-focus after addInvRow ─────
+  const blankInvRow=()=>({id:Date.now()+Math.random(),work:"",desc:"",qty:"",unit:"Sqft",rate:"",total:0});
+  const [invRows,setInvRows]=useState([blankInvRow()]);
+  const invRowRefs=useRef({});
+  const [focusInvId,setFocusInvId]=useState(null);
+  const addInvRow=()=>{const r=blankInvRow();setInvRows(p=>[...p,r]);setFocusInvId(r.id);};
+  const removeInvRow=id=>invRows.length>1&&setInvRows(p=>p.filter(r=>r.id!==id));
+  const updInvRow=(id,k,v)=>setInvRows(p=>p.map(r=>{
+    if(r.id!==id) return r;
+    const u={...r,[k]:v};
+    if(k==="qty"||k==="rate") u.total=Number(u.qty||0)*Number(u.rate||0);
+    return u;
+  }));
+  useEffect(()=>{
+    if(focusInvId&&invRowRefs.current[focusInvId]){
+      invRowRefs.current[focusInvId].focus();setFocusInvId(null);
+    }
+  },[invRows,focusInvId]);
+  const invFreshTotal=invRows.reduce((s,r)=>s+(r.total||0),0);
+  const invTotal=invMode==="boq"?boqGrandTotal:invFreshTotal;
+
+  // ── material / subcon rows — with auto-focus after addRow ────
+  const blankRow=()=>({id:Date.now()+Math.random(),material:"",head:MAT_HEADS[0],desc:"",qty:"",unit:UNITS[0],rate:"",total:0});
+  const [rows,setRows]=useState([blankRow()]);
+  const matRowRefs=useRef({});
+  const [focusMatId,setFocusMatId]=useState(null);
+  const addRow=()=>{const r=blankRow();setRows(p=>[...p,r]);setFocusMatId(r.id);};
+  const removeRow=id=>rows.length>1&&setRows(p=>p.filter(r=>r.id!==id));
+  const updRow=(id,k,v)=>setRows(p=>p.map(r=>{
+    if(r.id!==id) return r;
+    const u={...r,[k]:v};
+    if(k==="qty"||k==="rate") u.total=Number(u.qty||0)*Number(u.rate||0);
+    return u;
+  }));
+  useEffect(()=>{
+    if(focusMatId&&matRowRefs.current[focusMatId]){
+      matRowRefs.current[focusMatId].focus();setFocusMatId(null);
+    }
+  },[rows,focusMatId]);
+  const grandTotal=rows.reduce((s,r)=>s+(r.total||0),0);
+  const subTotal=subMode==="boq"?subBoqTotal:grandTotal;
+
+  // ── helpers ──────────────────────────────────────────────────
+  const typeColor={"Material Purchase Bill":T.blu,"Sub-Con Bill":T.slt,"Payment Received":T.grn,"Payment Made":T.red,"Bank Transfer":T.blu,"Petty Cash Expense":T.amb,"Advance Payment":T.pur,"Sales Invoice":T.grn,"Journal Entry":T.slt,"Credit Note":T.pur};
+  const tc=typeColor[type]||T.slt;
+  const inp=(extra={})=>({height:30,padding:"0 7px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,width:"100%",...extra});
+  const lbl=(text,color)=>(
+    <label style={{fontSize:9.5,fontWeight:700,color:color||T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{text}</label>
+  );
+  const handleSave=()=>{setSaved(true);setTimeout(()=>{setSaved(false);onClose();},900);};
+
+  const colTpl="28px 1fr 95px 1fr 70px 70px 80px 88px 22px";
+  const invColTpl="28px 1fr 1fr 80px 70px 85px 92px 22px";
+  const subColTpl="28px 130px 95px 1fr 70px 70px 80px 88px 22px";
+
+  // grid cols per type
+  const hdrCols=isMaterial?"115px 115px 1fr 130px 130px"
+    :isSubcon?"115px 1fr 130px"
+    :isBankTransfer?"115px 1fr 22px 1fr"
+    :isInvoice?"130px 115px 115px 1fr 130px"
+    :"110px 1fr 130px 130px 110px";
+
+  // ── subcon BOQ selector row ───────────────────────────────────
+  const SubBoqRow=({b})=>{
+    const isSel=!!subBoqSel[b.id];
+    const qty=Number(subBoqQty[b.id]||b.boqQty);
+    const amt=qty*b.subRate;
+    const prev=b.prevBilled>0;
+    return(
+      <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 80px 60px 100px 95px 95px",
+        padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,gap:7,alignItems:"center",
+        background:isSel?"#F5F0FF":prev?"#FAFAFA":"transparent",
+        opacity:prev&&!isSel?0.5:1,transition:"background .1s"}}>
+        <div onClick={()=>!prev&&toggleSubBoq(b.id)}
+          style={{width:18,height:18,borderRadius:4,border:`2px solid ${isSel?T.slt:T.b2}`,
+            background:isSel?T.slt:"white",cursor:prev?"not-allowed":"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {isSel&&<IcChk size={10} color="white"/>}
+        </div>
+        <div>
+          <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{b.work}</div>
+          {prev&&<span style={{fontSize:9,background:T.ambL,color:T.amb,padding:"1px 5px",borderRadius:20,fontWeight:700}}>Previously billed</span>}
+        </div>
+        <div style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.desc}</div>
+        <div style={{fontSize:11.5,color:T.t3,textAlign:"right"}}>{b.boqQty.toLocaleString("en-IN")}</div>
+        <div style={{fontSize:11,color:T.t3}}>{b.unit}</div>
+        <div style={{fontSize:12,fontWeight:600,color:T.t2,textAlign:"right"}}>
+          Rs.{b.subRate.toLocaleString("en-IN")}
+          <div style={{fontSize:9,color:T.t4,fontWeight:400}}>/{b.unit}</div>
+        </div>
+        <div>
+          {isSel?(
+            <input type="number"
+              value={subBoqQty[b.id]!==undefined?subBoqQty[b.id]:b.boqQty}
+              onChange={e=>setSubBoqQty(p=>({...p,[b.id]:e.target.value}))}
+              style={{width:"100%",height:28,padding:"0 6px",borderRadius:5,
+                border:`1.5px solid ${T.slt}`,fontSize:12,outline:"none",
+                textAlign:"right",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}/>
+          ):(
+            <span style={{fontSize:11.5,color:T.t4,textAlign:"right",display:"block"}}>—</span>
+          )}
+        </div>
+        <div style={{fontSize:13,fontWeight:700,color:isSel?T.slt:T.t4,textAlign:"right"}}>
+          {isSel?`Rs.${amt.toLocaleString("en-IN")}`:"—"}
+        </div>
+      </div>
+    );
+  };
+
+  // ── BOQ selector row (invoice) ────────────────────────────────
+  const BoqRow=({b})=>{
+    const isSel=!!boqSelected[b.id];
+    const qty=Number(boqQty[b.id]||b.boqQty);
+    const amt=qty*b.rate;
+    const prev=b.billed>0;
+    return(
+      <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 85px 72px 85px 90px 90px",
+        padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,gap:7,alignItems:"center",
+        background:isSel?T.grnL:prev?"#FAFAFA":"transparent",
+        opacity:prev&&!isSel?0.5:1,transition:"background .1s"}}>
+        <div onClick={()=>!prev&&toggleBoq(b.id)}
+          style={{width:18,height:18,borderRadius:4,border:`2px solid ${isSel?T.grn:T.b2}`,
+            background:isSel?T.grn:"white",cursor:prev?"not-allowed":"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+          {isSel&&<IcChk size={10} color="white"/>}
+        </div>
+        <div>
+          <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{b.work}</div>
+          {prev&&<span style={{fontSize:9,background:T.ambL,color:T.amb,padding:"1px 5px",borderRadius:20,fontWeight:700}}>Already billed</span>}
+        </div>
+        <div style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{b.desc}</div>
+        <div style={{fontSize:11.5,color:T.t3,textAlign:"right"}}>{b.boqQty.toLocaleString("en-IN")}</div>
+        <div style={{fontSize:11,color:T.t3}}>{b.unit}</div>
+        <div style={{fontSize:11.5,fontWeight:600,color:T.t2,textAlign:"right"}}>Rs.{b.rate.toLocaleString("en-IN")}</div>
+        <div>
+          {isSel?(
+            <input type="number"
+              value={boqQty[b.id]!==undefined?boqQty[b.id]:b.boqQty}
+              onChange={e=>setBoqQty(p=>({...p,[b.id]:e.target.value}))}
+              style={{width:"100%",height:28,padding:"0 6px",borderRadius:5,
+                border:`1.5px solid ${T.grn}`,fontSize:12,outline:"none",
+                textAlign:"right",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}/>
+          ):(
+            <span style={{fontSize:11.5,color:T.t4,textAlign:"right",display:"block"}}>—</span>
+          )}
+        </div>
+        <div style={{fontSize:13,fontWeight:700,color:isSel?T.grn:T.t4,textAlign:"right"}}>
+          {isSel?`Rs.${amt.toLocaleString("en-IN")}`:"—"}
+        </div>
+      </div>
+    );
+  };
+
+  // ── mode toggle renderer ──────────────────────────────────────
+  const ModeToggle=({mode,setMode,c,opts})=>(
+    <div style={{display:"flex",gap:0,marginBottom:12,background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+      {opts.map(([id,label,sub],i)=>(
+        <button key={id} onClick={()=>setMode(id)}
+          style={{flex:1,padding:"10px 14px",border:"none",cursor:"pointer",textAlign:"left",
+            background:mode===id?c:"none",
+            borderRight:i<opts.length-1?`1px solid ${T.b1}`:"none",transition:"background .15s"}}>
+          <div style={{fontSize:12.5,fontWeight:700,color:mode===id?"white":T.t2}}>{label}</div>
+          <div style={{fontSize:10.5,color:mode===id?"rgba(255,255,255,0.72)":T.t4,marginTop:1}}>{sub}</div>
+        </button>
+      ))}
+    </div>
+  );
+
+  // ── total bar renderer ────────────────────────────────────────
+  const TotalBar=({total,c,bg,brd,label})=>(
+    <div style={{padding:"7px 16px",background:bg,borderRadius:7,border:`1.5px solid ${brd}`,display:"flex",gap:8,alignItems:"center"}}>
+      <span style={{fontSize:10,fontWeight:600,color:c,textTransform:"uppercase",letterSpacing:".4px"}}>{label||"Total"}</span>
+      <span style={{fontSize:16,fontWeight:800,color:c}}>Rs.{total.toLocaleString("en-IN")}</span>
+    </div>
+  );
+
+  return(
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:400,backdropFilter:"blur(3px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        background:T.bg,borderRadius:12,
+        width:isMaterial||isSubcon||isInvoice?900:700,
+        maxWidth:"97vw",maxHeight:"91vh",zIndex:401,
+        boxShadow:"0 24px 70px rgba(0,0,0,0.3)",
+        display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
+
+        {/* ── Modal header bar ── */}
+        <div style={{background:tc,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+          <div style={{width:34,height:34,borderRadius:9,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {isMaterial?<IcBillDue size={16} color="white"/>:isSubcon?<IcTeam size={16} color="white"/>:isInvoice?<IcFileInv size={16} color="white"/>:<IcWallet size={16} color="white"/>}
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:800,color:"white"}}>{type}</div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)"}}>
+              {isMaterial?"Qty x Rate = Total per item":isSubcon?"Link with BOQ or enter work items":isInvoice?"Raise invoice — link with BOQ or fresh entry":""}
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:6,display:"flex"}}>
+            <IcX size={14}/>
+          </button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+
+          {/* ════════════════════════════════════════════════════
+              TOP HEADER FIELDS — type-aware grid
+          ════════════════════════════════════════════════════ */}
+          <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,
+            padding:"11px 13px",marginBottom:12,
+            display:"grid",gridTemplateColumns:hdrCols,gap:9,alignItems:"end"}}>
+
+            {/* Invoice: invoiceNo + dueDate + billDate + client + project */}
+            {isInvoice&&(
+              <>
+                <div>
+                  {lbl("Invoice No.")}
+                  <input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)}
+                    style={inp({fontFamily:"monospace",fontSize:12.5,fontWeight:700})}
+                    onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+                <div>
+                  {lbl("Invoice Date *")}
+                  <input type="date" value={billDate} onChange={e=>setBillDate(e.target.value)}
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+                <div>
+                  {lbl("Due Date")}
+                  <input type="date" value={dueDate} onChange={e=>setDueDate(e.target.value)}
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+                <div>
+                  {lbl("Client / Billed To *",T.grn)}
+                  <SearchSelect options={CLIENT_LIST} value={party} onChange={setParty} placeholder="Select client..." accent={T.grn}/>
+                </div>
+                <div>
+                  {lbl("Project")}
+                  <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>
+                </div>
+              </>
+            )}
+
+            {/* Material: billDate + delivDate + supplier + project + account */}
+            {isMaterial&&(
+              <>
+                <div>
+                  {lbl("Bill Date *")}
+                  <input type="date" value={billDate} onChange={e=>setBillDate(e.target.value)}
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+                <div>
+                  {lbl("Delivery Date")}
+                  <input type="date" value={delivDate} onChange={e=>setDelivDate(e.target.value)}
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+                <div>
+                  {lbl("Supplier / Party *")}
+                  <SearchSelect options={SUPPLIER_LIST} value={party} onChange={setParty} placeholder="Select supplier..."/>
+                </div>
+                <div>
+                  {lbl("Project")}
+                  <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>
+                </div>
+                <div>
+                  {lbl("Account *",T.red)}
+                  <SearchSelect options={ACCOUNTS_LIST} value={account} onChange={setAccount} placeholder="Select account..." accent={T.red}/>
+                </div>
+              </>
+            )}
+
+            {/* Sub-Con: billDate + contractor + project (no account — in linked payment) */}
+            {isSubcon&&(
+              <>
+                <div>
+                  {lbl("Bill Date *")}
+                  <input type="date" value={billDate} onChange={e=>setBillDate(e.target.value)}
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+                <div>
+                  {lbl("Contractor / Party *")}
+                  <SearchSelect options={SUBCON_LIST} value={party} onChange={setParty} placeholder="Select contractor..." accent={T.slt}/>
+                </div>
+                <div>
+                  {lbl("Project")}
+                  <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>
+                </div>
+              </>
+            )}
+
+            {/* Bank Transfer: date + from → to */}
+            {isBankTransfer&&(
+              <>
+                <div>
+                  {lbl("Date *")}
+                  <input type="date" value={billDate} onChange={e=>setBillDate(e.target.value)}
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+                <div>
+                  {lbl("From Account *",T.red)}
+                  <SearchSelect options={ACCOUNTS_LIST} value={account} onChange={setAccount} placeholder="From..." accent={T.red}/>
+                </div>
+                <div style={{display:"flex",alignItems:"flex-end",paddingBottom:4,justifyContent:"center"}}>
+                  <IcArrow size={18} color={T.t3}/>
+                </div>
+                <div>
+                  {lbl("To Account *",T.grn)}
+                  <SearchSelect options={ACCOUNTS_LIST.filter(a=>a!==account)} value={toAccount} onChange={setToAccount} placeholder="To..." accent={T.grn}/>
+                </div>
+              </>
+            )}
+
+            {/* Payment types: billDate + party + project + account + mop */}
+            {isPayment&&(
+              <>
+                <div>
+                  {lbl("Date *")}
+                  <input type="date" value={billDate} onChange={e=>setBillDate(e.target.value)}
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+                <div>
+                  {lbl(type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":"Party *")}
+                  <SearchSelect options={partyOptions} value={party} onChange={setParty} placeholder="Type or select..."/>
+                </div>
+                <div>
+                  {lbl("Project")}
+                  <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Project..."/>
+                </div>
+                <div>
+                  {lbl("Account *",T.red)}
+                  <SearchSelect options={ACCOUNTS_LIST} value={account} onChange={setAccount} placeholder="Account..." accent={T.red}/>
+                </div>
+                <div>
+                  {lbl("MOP")}
+                  <SearchSelect options={MOPS_LIST} value={mop} onChange={setMop} placeholder="Mode..."/>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ════════════════════════════════════════════════════
+              BANK TRANSFER — preview + amount
+          ════════════════════════════════════════════════════ */}
+          {isBankTransfer&&(
+            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"10px 14px",background:T.bluL,borderRadius:8,border:`1px solid ${T.bluM}`}}>
+                <div style={{flex:1,textAlign:"center"}}>
+                  {lbl("From")}
+                  <div style={{fontSize:14,fontWeight:800,color:T.red}}>{account||"—"}</div>
+                </div>
+                <IcArrow size={22} color={T.blu}/>
+                <div style={{flex:1,textAlign:"center"}}>
+                  {lbl("To")}
+                  <div style={{fontSize:14,fontWeight:800,color:T.grn}}>{toAccount||"—"}</div>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div>
+                  {lbl("Transfer Amount (Rs.) *")}
+                  <input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)} placeholder="Enter amount"
+                    style={inp({fontSize:15,fontWeight:700,color:T.blu,borderColor:T.blu+"66",borderWidth:"2px"})}
+                    onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.blu+"66"}/>
+                </div>
+                <div>
+                  {lbl("Reference / Note")}
+                  <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Transfer ref, reason..."
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              PAYMENT TYPES — amount + note
+          ════════════════════════════════════════════════════ */}
+          {isPayment&&(
+            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                {lbl("Amount (Rs.) *")}
+                <input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)} placeholder="Enter amount"
+                  style={inp({fontSize:15,fontWeight:700,color:tc,borderColor:tc+"66",borderWidth:"2px"})}
+                  onFocus={e=>e.target.style.borderColor=tc} onBlur={e=>e.target.style.borderColor=tc+"66"}/>
+              </div>
+              <div>
+                {lbl("Description / Note")}
+                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="What is this payment for?"
+                  style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              MATERIAL PURCHASE BILL — Excel rows
+          ════════════════════════════════════════════════════ */}
+          {isMaterial&&(
+            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:colTpl,padding:"7px 12px",background:T.sb,gap:7}}>
+                {["#","Material Name","Head","Description","Qty","Unit","Rate","Total",""].map((h,i)=>(
+                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+                ))}
+              </div>
+              {rows.map((row,idx)=>(
+                <div key={row.id} style={{display:"grid",gridTemplateColumns:colTpl,gap:7,padding:"7px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:idx%2===0?T.surface:T.surfaceB}}>
+                  <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}</span>
+                  <SearchSelect
+                    inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}}
+                    options={MATERIAL_LIBRARY}
+                    value={row.material}
+                    onChange={v=>updRow(row.id,"material",v)}
+                    placeholder="Search material..."
+                    compact={true}
+                    onAfterSelect={()=>{
+                      // after selecting material, focus the desc field of this row
+                      const rowEl=matRowRefs.current[row.id];
+                      if(rowEl){const next=rowEl.closest('[data-rowid]')?.querySelector('[data-field="desc"]');if(next)next.focus();}
+                    }}
+                  />
+                  <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
+                  <input data-field="desc" value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Grade, spec, brand..."
+                    style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                  <input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0"
+                    style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                  <SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>
+                  <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
+                    style={inp({textAlign:"right"})}
+                    onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}
+                    onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
+                  <div style={{height:30,display:"flex",alignItems:"center",justifyContent:"flex-end",fontWeight:700,fontSize:13,
+                    color:row.total>0?T.grn:T.t4,background:row.total>0?T.grnL:"transparent",
+                    borderRadius:5,padding:"0 7px",border:row.total>0?`1px solid ${T.grnM}`:"1px solid transparent"}}>
+                    {row.total>0?`Rs.${row.total.toLocaleString("en-IN")}`:"—"}
+                  </div>
+                  <button onClick={()=>removeRow(row.id)} style={{background:"none",border:"none",cursor:rows.length>1?"pointer":"not-allowed",color:rows.length>1?T.red:T.b2,display:"flex",padding:0,alignItems:"center",justifyContent:"center"}}>
+                    <IcX size={12} color="currentColor"/>
+                  </button>
+                </div>
+              ))}
+              <div style={{padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
+                <button onClick={addRow}
+                  style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.surface,border:`1.5px dashed ${T.b2}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.color=T.blu;}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
+                  <IcAdd size={12} color="currentColor"/> Add Row
+                </button>
+                <span style={{fontSize:10.5,color:T.t4}}>{rows.length} item{rows.length>1?"s":""}</span>
+                <div style={{flex:1}}/>
+                <TotalBar total={grandTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label="Grand Total"/>
+              </div>
+              <div style={{padding:"8px 12px 11px",borderTop:`1px solid ${T.b1}`}}>
+                {lbl("Remark / Note (optional)")}
+                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Any additional remarks..."
+                  style={{...inp(),marginTop:3}}
+                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              SUB-CON BILL — mode toggle + BOQ / Fresh
+          ════════════════════════════════════════════════════ */}
+          {isSubcon&&(
+            <div>
+              <ModeToggle mode={subMode} setMode={setSubMode} c={T.slt}
+                opts={[["boq","Link with BOQ","Pick work items from project BOQ"],["fresh","Fresh Entry","Enter work items manually"]]}/>
+
+              {subMode==="boq"&&(
+                <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:10}}>
+                  <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 80px 60px 100px 95px 95px",padding:"7px 12px",background:T.sb,gap:7}}>
+                    {["","Work Item","Description","BOQ Qty","Unit","Subcon Rate","Claim Qty","Amount"].map((h,i)=>(
+                      <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+                    ))}
+                  </div>
+                  {SUBCON_BOQ.map(b=><SubBoqRow key={b.id} b={b}/>)}
+                  <div style={{padding:"9px 12px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,display:"flex",alignItems:"center",gap:12}}>
+                    <span style={{fontSize:11,color:T.t3}}>{Object.values(subBoqSel).filter(Boolean).length} item{Object.values(subBoqSel).filter(Boolean).length!==1?"s":""} selected</span>
+                    <div style={{flex:1}}/>
+                    <TotalBar total={subBoqTotal} c={T.slt} bg={T.sltL} brd={T.b2} label="Bill Total"/>
+                  </div>
+                </div>
+              )}
+
+              {subMode==="fresh"&&(
+                <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:10}}>
+                  <div style={{display:"grid",gridTemplateColumns:subColTpl,padding:"7px 12px",background:T.sb,gap:7}}>
+                    {["#","Work Type","Head","Description","Qty","Unit","Rate","Total",""].map((h,i)=>(
+                      <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+                    ))}
+                  </div>
+                  {rows.map((row,idx)=>(
+                    <div key={row.id} style={{display:"grid",gridTemplateColumns:subColTpl,gap:7,padding:"7px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:idx%2===0?T.surface:T.surfaceB}}>
+                      <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}</span>
+                      <SearchSelect
+                        inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}}
+                        options={WORK_TYPES} value={row.material} onChange={v=>updRow(row.id,"material",v)}
+                        compact={true} accent={T.slt} placeholder="Work type..."/>
+                      <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
+                      <input value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Area, location, floor..."
+                        style={inp()} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                      <input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0"
+                        style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                      <SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>
+                      <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
+                        style={inp({textAlign:"right"})}
+                        onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}
+                        onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
+                      <div style={{height:30,display:"flex",alignItems:"center",justifyContent:"flex-end",fontWeight:700,fontSize:13,
+                        color:row.total>0?T.slt:T.t4,background:row.total>0?T.sltL:"transparent",
+                        borderRadius:5,padding:"0 7px",border:row.total>0?`1px solid ${T.b2}`:"1px solid transparent"}}>
+                        {row.total>0?`Rs.${row.total.toLocaleString("en-IN")}`:"—"}
+                      </div>
+                      <button onClick={()=>removeRow(row.id)} style={{background:"none",border:"none",cursor:rows.length>1?"pointer":"not-allowed",color:rows.length>1?T.red:T.b2,display:"flex",padding:0,alignItems:"center",justifyContent:"center"}}>
+                        <IcX size={12} color="currentColor"/>
+                      </button>
+                    </div>
+                  ))}
+                  <div style={{padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
+                    <button onClick={addRow}
+                      style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.surface,border:`1.5px dashed ${T.b2}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.slt;e.currentTarget.style.color=T.slt;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
+                      <IcAdd size={12} color="currentColor"/> Add Row
+                    </button>
+                    <span style={{fontSize:10.5,color:T.t4}}>{rows.length} item{rows.length>1?"s":""}</span>
+                    <div style={{flex:1}}/>
+                    <TotalBar total={grandTotal} c={T.slt} bg={T.sltL} brd={T.b2} label="Bill Total"/>
+                  </div>
+                </div>
+              )}
+
+              {/* Remark */}
+              <div style={{marginBottom:12}}>
+                {lbl("Remark / Note (optional)")}
+                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Any remarks..."
+                  style={{...inp(),marginTop:3}}
+                  onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              </div>
+
+              {/* ── LINKED PAYMENT OUT ── */}
+              <div style={{borderRadius:9,border:`1.5px solid ${payOutLinked?T.slt:T.b1}`,overflow:"hidden",
+                background:payOutLinked?T.sltL:T.surface,transition:"all .2s"}}>
+                <button onClick={()=>{setPayOutLinked(p=>!p);if(!payOutLinked)setPayOutAmt(String(subTotal));}}
+                  style={{width:"100%",padding:"11px 14px",display:"flex",alignItems:"center",gap:10,
+                    background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{width:22,height:22,borderRadius:5,border:`2px solid ${payOutLinked?T.slt:T.b2}`,
+                    background:payOutLinked?T.slt:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {payOutLinked&&<IcChk size={12} color="white"/>}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:payOutLinked?T.slt:T.t2}}>Payment Made to Contractor</div>
+                    <div style={{fontSize:10.5,color:T.t4}}>Mark payment as done at the same time as this bill</div>
+                  </div>
+                  {payOutLinked&&subTotal>0&&(
+                    <span style={{fontSize:12,fontWeight:700,color:T.slt}}>Rs.{subTotal.toLocaleString("en-IN")}</span>
+                  )}
+                </button>
+                {payOutLinked&&(
+                  <div style={{padding:"0 14px 14px",display:"grid",gridTemplateColumns:"1fr 1fr 140px 130px 130px",gap:9}}>
+                    <div>
+                      {lbl("Pay Date *")}
+                      <input type="date" value={payOutDate} onChange={e=>setPayOutDate(e.target.value)}
+                        style={inp()} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                    </div>
+                    <div>
+                      {lbl("Description")}
+                      <input value={payOutDesc} onChange={e=>setPayOutDesc(e.target.value)} placeholder="e.g. March work payment..."
+                        style={inp()} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                    </div>
+                    <div>
+                      {lbl("Amount (Rs.) *",T.slt)}
+                      <input type="number" value={payOutAmt} onChange={e=>setPayOutAmt(e.target.value)}
+                        style={inp({fontSize:13,fontWeight:700,color:T.slt,borderColor:T.slt+"66"})}
+                        onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.slt+"66"}/>
+                    </div>
+                    <div>
+                      {lbl("Account *",T.red)}
+                      <SearchSelect options={ACCOUNTS_LIST} value={payOutAcc} onChange={setPayOutAcc} placeholder="Account..." accent={T.red}/>
+                    </div>
+                    <div>
+                      {lbl("MOP")}
+                      <SearchSelect options={MOPS_LIST} value={payOutMop} onChange={setPayOutMop} placeholder="Mode..."/>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              SALES INVOICE — mode toggle + BOQ / Fresh
+          ════════════════════════════════════════════════════ */}
+          {isInvoice&&(
+            <div>
+              <ModeToggle mode={invMode} setMode={setInvMode} c={T.grn}
+                opts={[["boq","Link with BOQ","Pick items from project BOQ"],["fresh","Fresh Invoice","Enter work items manually"]]}/>
+
+              {invMode==="boq"&&(
+                <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:10}}>
+                  <div style={{display:"grid",gridTemplateColumns:"28px 1fr 1fr 85px 72px 85px 90px 90px",padding:"7px 12px",background:T.sb,gap:7}}>
+                    {["","Work Item","Description","BOQ Qty","Unit","Rate","Bill Qty","Amount"].map((h,i)=>(
+                      <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+                    ))}
+                  </div>
+                  {BOQ_ITEMS.map(b=><BoqRow key={b.id} b={b}/>)}
+                  <div style={{padding:"9px 12px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,display:"flex",alignItems:"center",gap:12}}>
+                    <span style={{fontSize:11,color:T.t3}}>{Object.values(boqSelected).filter(Boolean).length} item{Object.values(boqSelected).filter(Boolean).length!==1?"s":""} selected</span>
+                    <div style={{flex:1}}/>
+                    <TotalBar total={boqGrandTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label="Invoice Total"/>
+                  </div>
+                </div>
+              )}
+
+              {invMode==="fresh"&&(
+                <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:10}}>
+                  <div style={{display:"grid",gridTemplateColumns:invColTpl,padding:"7px 12px",background:T.sb,gap:7}}>
+                    {["#","Work Item","Description","Qty","Unit","Rate Rs.","Total Rs.",""].map((h,i)=>(
+                      <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+                    ))}
+                  </div>
+                  {invRows.map((row,idx)=>(
+                    <div key={row.id} style={{display:"grid",gridTemplateColumns:invColTpl,gap:7,padding:"7px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:idx%2===0?T.surface:T.surfaceB}}>
+                      <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}</span>
+                      <input ref={el=>{if(el) invRowRefs.current[row.id]=el;}}
+                        value={row.work} onChange={e=>updInvRow(row.id,"work",e.target.value)} placeholder="e.g. Foundation Work"
+                        style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                      <input value={row.desc} onChange={e=>updInvRow(row.id,"desc",e.target.value)} placeholder="Scope, location..."
+                        style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                      <input type="number" value={row.qty} onChange={e=>updInvRow(row.id,"qty",e.target.value)} placeholder="0"
+                        style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                      <SearchSelect options={INV_UNITS} value={row.unit} onChange={v=>updInvRow(row.id,"unit",v)} compact={true} accent={T.grn}/>
+                      <input type="number" value={row.rate} onChange={e=>updInvRow(row.id,"rate",e.target.value)} placeholder="0"
+                        style={inp({textAlign:"right"})}
+                        onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}
+                        onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addInvRow();}}}/>
+                      <div style={{height:30,display:"flex",alignItems:"center",justifyContent:"flex-end",fontWeight:700,fontSize:13,
+                        color:row.total>0?T.grn:T.t4,background:row.total>0?T.grnL:"transparent",
+                        borderRadius:5,padding:"0 7px",border:row.total>0?`1px solid ${T.grnM}`:"1px solid transparent"}}>
+                        {row.total>0?`Rs.${row.total.toLocaleString("en-IN")}`:"—"}
+                      </div>
+                      <button onClick={()=>removeInvRow(row.id)} style={{background:"none",border:"none",cursor:invRows.length>1?"pointer":"not-allowed",color:invRows.length>1?T.red:T.b2,display:"flex",padding:0,alignItems:"center",justifyContent:"center"}}>
+                        <IcX size={12} color="currentColor"/>
+                      </button>
+                    </div>
+                  ))}
+                  <div style={{padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
+                    <button onClick={addInvRow}
+                      style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.surface,border:`1.5px dashed ${T.b2}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}
+                      onMouseEnter={e=>{e.currentTarget.style.borderColor=T.grn;e.currentTarget.style.color=T.grn;}}
+                      onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
+                      <IcAdd size={12} color="currentColor"/> Add Work Item
+                    </button>
+                    <span style={{fontSize:10.5,color:T.t4}}>{invRows.length} item{invRows.length>1?"s":""}</span>
+                    <div style={{flex:1}}/>
+                    <TotalBar total={invFreshTotal} c={T.grn} bg={T.grnL} brd={T.grnM} label="Invoice Total"/>
+                  </div>
+                </div>
+              )}
+
+              {/* Note */}
+              <div style={{marginBottom:12}}>
+                {lbl("Note / Terms (optional)")}
+                <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Payment terms, notes for client..."
+                  style={{...inp(),marginTop:3}}
+                  onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              </div>
+
+              {/* ── LINKED PAYMENT IN ── */}
+              <div style={{borderRadius:9,border:`1.5px solid ${payInLinked?T.grn:T.b1}`,overflow:"hidden",
+                background:payInLinked?T.grnL:T.surface,transition:"all .2s"}}>
+                <button onClick={()=>{setPayInLinked(p=>!p);if(!payInLinked)setPayInAmt(String(invTotal));}}
+                  style={{width:"100%",padding:"11px 14px",display:"flex",alignItems:"center",gap:10,
+                    background:"none",border:"none",cursor:"pointer",textAlign:"left"}}>
+                  <div style={{width:22,height:22,borderRadius:5,border:`2px solid ${payInLinked?T.grn:T.b2}`,
+                    background:payInLinked?T.grn:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    {payInLinked&&<IcChk size={12} color="white"/>}
+                  </div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:payInLinked?T.grn:T.t2}}>Payment Received at Same Time</div>
+                    <div style={{fontSize:10.5,color:T.t4}}>Client paid immediately — record payment along with this invoice</div>
+                  </div>
+                  {payInLinked&&invTotal>0&&(
+                    <span style={{fontSize:12,fontWeight:700,color:T.grn}}>Rs.{invTotal.toLocaleString("en-IN")}</span>
+                  )}
+                </button>
+                {payInLinked&&(
+                  <div style={{padding:"0 14px 14px",display:"grid",gridTemplateColumns:"1fr 140px 130px 130px",gap:9}}>
+                    <div>
+                      {lbl("Payment Date *")}
+                      <input type="date" value={payInDate} onChange={e=>setPayInDate(e.target.value)}
+                        style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                    </div>
+                    <div>
+                      {lbl("Amount Received *",T.grn)}
+                      <input type="number" value={payInAmt} onChange={e=>setPayInAmt(e.target.value)}
+                        style={inp({fontSize:13,fontWeight:700,color:T.grn,borderColor:T.grn+"66"})}
+                        onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.grn+"66"}/>
+                    </div>
+                    <div>
+                      {lbl("Account *",T.red)}
+                      <SearchSelect options={ACCOUNTS_LIST} value={payInAcc} onChange={setPayInAcc} placeholder="Account..." accent={T.red}/>
+                    </div>
+                    <div>
+                      {lbl("MOP")}
+                      <SearchSelect options={MOPS_LIST} value={payInMop} onChange={setPayInMop} placeholder="Mode..."/>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* ── Footer ── */}
+        <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,background:T.surfaceB,flexShrink:0,alignItems:"center"}}>
+          <div style={{flex:1,fontSize:13,fontWeight:700}}>
+            {isMaterial&&grandTotal>0&&<span style={{color:T.grn}}>Rs.{grandTotal.toLocaleString("en-IN")} · {rows.filter(r=>r.total>0).length} item{rows.filter(r=>r.total>0).length!==1?"s":""}</span>}
+            {isSubcon&&<span style={{color:T.slt}}>Rs.{subTotal.toLocaleString("en-IN")}
+              {payOutLinked?<span style={{color:T.t4,fontWeight:400,fontSize:11}}> · Payment out: Rs.{Number(payOutAmt||0).toLocaleString("en-IN")}</span>:null}
+            </span>}
+            {isInvoice&&invTotal>0&&<span style={{color:T.grn}}>{invoiceNo} · Rs.{invTotal.toLocaleString("en-IN")}
+              {payInLinked?<span style={{color:T.t4,fontWeight:400,fontSize:11}}> · Received: Rs.{Number(payInAmt||0).toLocaleString("en-IN")}</span>:null}
+            </span>}
+            {isPayment&&payAmt&&<span style={{color:tc}}>Rs.{Number(payAmt).toLocaleString("en-IN")}{type==="Payment Received"?" received":type==="Payment Made"?" paid out":""}</span>}
+            {isBankTransfer&&payAmt&&<span style={{color:T.blu}}>Rs.{Number(payAmt).toLocaleString("en-IN")} — {account} → {toAccount}</span>}
+          </div>
+          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          {!saved?(
+            <button onClick={handleSave} style={{padding:"8px 22px",borderRadius:7,background:tc,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+              <IcChk size={14} color="white"/> Save Entry
+            </button>
+          ):(
+            <div style={{padding:"8px 22px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
+              <IcChk size={14} color={T.grn}/> Saved!
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
+
+// ─── ADD PARTY MODAL ─────────────────────────────────────────
+function AddPartyModal({onClose,onAdd}){
+  const PARTY_TYPES=["Client","Material Supplier","Sub-Con","Other Vendor","Labour Contractor"];
+  const BAL_TYPES=["To Receive","To Pay","Advance Paid","Advance Received","Nil"];
+  const [name,setName]=useState("");
+  const [type,setType]=useState(PARTY_TYPES[0]);
+  const [balType,setBalType]=useState(BAL_TYPES[0]);
+  const [balance,setBalance]=useState("");
+  const [phone,setPhone]=useState("");
+  const [saved,setSaved]=useState(false);
+  const inp=(extra={})=>({height:32,padding:"0 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,
+    fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",
+    background:T.surface,width:"100%",...extra});
+  const lbl=t=><label style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",
+    letterSpacing:".3px",display:"block",marginBottom:4}}>{t}</label>;
+  const handleSave=()=>{
+    if(!name.trim()) return;
+    const newParty={id:Date.now(),name:name.trim(),type,balType,balance:Number(balance)||0,phone};
+    onAdd(newParty);
+    setSaved(true);
+    setTimeout(()=>{setSaved(false);onClose();},800);
+  };
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:400,backdropFilter:"blur(3px)"}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+      background:T.bg,borderRadius:12,width:460,maxWidth:"95vw",zIndex:401,
+      boxShadow:"0 24px 70px rgba(0,0,0,0.28)",display:"flex",flexDirection:"column",
+      fontFamily:"'Segoe UI',sans-serif",overflow:"visible"}}>
+      <div style={{background:T.blu,padding:"12px 16px",display:"flex",alignItems:"center",gap:10,borderRadius:"12px 12px 0 0"}}>
+        <div style={{width:32,height:32,borderRadius:8,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <IcAdd size={16} color="white"/>
+        </div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:14,fontWeight:800,color:"white"}}>Add New Party</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)"}}>Saved to master party library</div>
+        </div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:6,display:"flex"}}><IcX size={14}/></button>
+      </div>
+      <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:11}}>
+        <div>
+          {lbl("Party / Company Name *")}
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Abhay Traders"
+            style={inp({fontSize:13,fontWeight:600})}
+            onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}
+            autoFocus/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11}}>
+          <div>
+            {lbl("Party Type *")}
+            <select value={type} onChange={e=>setType(e.target.value)}
+              style={inp({cursor:"pointer"})}>
+              {PARTY_TYPES.map(t=><option key={t}>{t}</option>)}
+            </select>
+          </div>
+          <div>
+            {lbl("Balance Type")}
+            <select value={balType} onChange={e=>setBalType(e.target.value)}
+              style={inp({cursor:"pointer"})}>
+              {BAL_TYPES.map(b=><option key={b}>{b}</option>)}
+            </select>
+          </div>
+          <div>
+            {lbl("Opening Balance (Rs.)")}
+            <input type="number" value={balance} onChange={e=>setBalance(e.target.value)} placeholder="0"
+              style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+          </div>
+          <div>
+            {lbl("Phone / Contact")}
+            <input value={phone} onChange={e=>setPhone(e.target.value)} placeholder="Mobile number"
+              style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+          </div>
+        </div>
+        <div style={{background:T.bluL,borderRadius:8,padding:"8px 11px",fontSize:11,color:T.blu,border:`1px solid ${T.bluM}`,display:"flex",gap:6,alignItems:"center"}}>
+          <IcChk size={13} color={T.blu}/>
+          Party will be added to the master library and available in all transaction dropdowns.
+        </div>
+      </div>
+      <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,background:T.surfaceB,borderRadius:"0 0 12px 12px"}}>
+        <button onClick={onClose} style={{flex:1,padding:"8px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        {!saved?(
+          <button onClick={handleSave} style={{flex:2,padding:"8px",borderRadius:7,background:!name.trim()?T.b1:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:!name.trim()?"not-allowed":"pointer"}}>
+            Save to Library
+          </button>
+        ):(
+          <div style={{flex:2,padding:"8px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            <IcChk size={14} color={T.grn}/> {name} Added!
+          </div>
+        )}
+      </div>
+    </div>
+  </>);
+}
+
+// ══════════════════════════════════════════════════════════════
+// FINANCE MODULE — with integrated Create Transaction Modal
+// ══════════════════════════════════════════════════════════════
+function FinanceModule(){
+  const [tab,setTab]=useState("party");
+  // Party tab
+  const [masterParties,setMasterParties]=useState(PARTIES);
+  const [showAddParty,setShowAddParty]=useState(false);
+  const [selParty,setSelParty]=useState(null);const [partySearch,setPartySearch]=useState("");const [selBill,setSelBill]=useState(null);
+  // Transaction tab
+  const [txnSearch,setTxnSearch]=useState("");const [fProject,setFProject]=useState("All");const [fType,setFType]=useState("All");const [fAcc,setFAcc]=useState("All");const [fStatus,setFStatus]=useState("All");
+  // Panels
+  const [showUB,setShowUB]=useState(false);const [selUBParty,setSelUBParty]=useState(null);
+  const [showAccPanel,setShowAccPanel]=useState(false);const [accTab,setAccTab]=useState("accounts");
+  const [showCreateTxn,setShowCreateTxn]=useState(false);
+  // ── CREATE TRANSACTION MODAL state ──────────────────────────
+  const [createTxnType,setCreateTxnType]=useState(null);
+  const [createTxnParty,setCreateTxnParty]=useState("");
+  const openTxn=(type,party="")=>{setCreateTxnType(type);setCreateTxnParty(party);};
+  const closeTxn=()=>{setCreateTxnType(null);setCreateTxnParty("");};
+  // PR / Pending
+  const [editReqId,setEditReqId]=useState(null);const [editAmt,setEditAmt]=useState("");
+  const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);const [pendPmts,setPendPmts]=useState(PEND_PMTS_DATA);
+
+  const projects=["All",...new Set(TRANSACTIONS_DATA.map(t=>t.project))];
+  const txnFiltered=TRANSACTIONS_DATA.filter(t=>{
+    if(txnSearch&&!t.party.toLowerCase().includes(txnSearch.toLowerCase())&&!t.sub.toLowerCase().includes(txnSearch.toLowerCase())) return false;
+    if(fProject!=="All"&&t.project!==fProject) return false;
+    if(fType!=="All"&&t.type!==fType) return false;
+    if(fAcc!=="All"&&t.account!==fAcc) return false;
+    if(fStatus!=="All"&&t.status!==fStatus) return false;
+    return true;
+  });
+  const tIn=txnFiltered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
+  const tOut=txnFiltered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  const totalBal=ACCOUNTS.reduce((s,a)=>s+a.balance,0);
+  const totalWalletBal=WALLETS.reduce((s,w)=>s+w.balance,0);
+  const pendPR=payReqs.filter(r=>r.status==="Pending").length;
+  const pendTotal=pendPmts.reduce((s,p)=>s+p.amount,0);
+
+  const allPartyTxns=Object.values(PARTY_TXNS).flat();
+  const partyTotalCR=allPartyTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
+  const partyTotalDR=allPartyTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  const toReceive=masterParties.filter(p=>p.balType==="To Receive").reduce((s,p)=>s+p.balance,0);
+  const toPay=masterParties.filter(p=>p.balType==="To Pay").reduce((s,p)=>s+p.balance,0);
+  const allTxnIn=TRANSACTIONS_DATA.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
+  const allTxnOut=TRANSACTIONS_DATA.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  const unpaidBills=TRANSACTIONS_DATA.filter(t=>t.status==="unpaid").reduce((s,t)=>s+t.amount,0);
+  const netFlow=allTxnIn-allTxnOut;
+  const prPendAmt=payReqs.filter(r=>r.status==="Pending").reduce((s,r)=>s+r.amount,0);
+  const prApprovedAmt=payReqs.filter(r=>r.status==="Approved").reduce((s,r)=>s+r.amount,0);
+  const prRejected=payReqs.filter(r=>r.status==="Rejected").length;
+  const prRejectedAmt=payReqs.filter(r=>r.status==="Rejected").reduce((s,r)=>s+r.amount,0);
+  const pendPRTotal=pendPmts.filter(p=>p.type==="pr").reduce((s,p)=>s+p.amount,0);
+  const pendBillDue=pendPmts.filter(p=>p.type==="bill"&&!p.overdue).reduce((s,p)=>s+p.amount,0);
+  const pendOverdue=pendPmts.filter(p=>p.overdue).reduce((s,p)=>s+p.amount,0);
+
+  const TILE_SETS={
+    party:[
+      {l:"Amount Received",v:`₹${fmt(partyTotalCR)}`,sub:"Payments received",Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:"Amount Paid Out",v:`₹${fmt(partyTotalDR)}`,sub:"Bills & payments",Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
+      {l:"To Receive",v:`₹${fmt(toReceive)}`,sub:"Against invoices raised",Icon:IcFileInv,c:T.blu,bg:T.bluL,brd:T.bluM},
+      {l:"To Pay",v:`₹${fmt(toPay)}`,sub:"Against bills received",Icon:IcBillDue,c:T.amb,bg:T.ambL,brd:T.ambM},
+    ],
+    transaction:[
+      {l:"Total Income",v:`₹${fmt(allTxnIn)}`,sub:"All payment in",Icon:IcTrendUp,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:"Total Expense",v:`₹${fmt(allTxnOut)}`,sub:"All payment out",Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
+      {l:"Unpaid Bills",v:`₹${fmt(unpaidBills)}`,sub:"Pending payment",Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:"Net Cash Flow",v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
+    ],
+    payreq:[
+      {l:"Pending Approval",v:`${pendPR} PRs`,sub:`₹${fmt(prPendAmt)} awaiting`,Icon:IcPendClk,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:"Approved",v:`₹${fmt(prApprovedAmt)}`,sub:"Ready to pay",Icon:IcThumbUp,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:"Rejected",v:`${prRejected} PRs`,sub:`₹${fmt(prRejectedAmt)} blocked`,Icon:IcOverdue,c:T.red,bg:T.redL,brd:T.redM},
+      {l:"Total Submitted",v:`${payReqs.length} PRs`,sub:`₹${fmt(payReqs.reduce((s,r)=>s+r.amount,0))} total`,Icon:IcClip,c:T.slt,bg:T.sltL,brd:"#CBD5E0"},
+    ],
+    pending:[
+      {l:"Approved PR Due",v:`₹${fmt(pendPRTotal)}`,sub:`${pendPmts.filter(p=>p.type==="pr").length} approved, ready`,Icon:IcThumbUp,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:"Bills Due",v:`₹${fmt(pendBillDue)}`,sub:"Upcoming dues",Icon:IcBillDue,c:T.amb,bg:T.ambL,brd:T.ambM},
+      {l:"Overdue",v:`₹${fmt(pendOverdue)}`,sub:`${pendPmts.filter(p=>p.overdue).length} past due date`,Icon:IcOverdue,c:T.red,bg:T.redL,brd:T.redM},
+      {l:"Total Pending",v:`₹${fmt(pendTotal)}`,sub:`${pendPmts.length} items`,Icon:IcClock7,c:T.slt,bg:T.sltL,brd:"#CBD5E0"},
+    ],
+  };
+  const curTiles=TILE_SETS[tab]||TILE_SETS.party;
+
+  // ── Ledger helpers ──────────────────────────────────────────
+  const getLedgerRows=(party)=>{
+    const txns=[...(PARTY_TXNS[party.id]||[])].reverse();
+    let crT=0,drT=0;
+    return txns.map(t=>{if(!t.dr) crT+=t.amount; else drT+=t.amount;return{...t,crT,drT,runBal:Math.abs(drT-crT)};}).reverse();
+  };
+  const downloadLedgerCSV=(party)=>{
+    const rows=getLedgerRows(party);
+    downloadCSV(`${party.name.replace(/\s+/g,"_")}_Ledger.csv`,[
+      ["Party Ledger:",party.name],["Type:",party.type],["Balance:",party.balance,party.balType],[],
+      ["Date","Description","Status","Received (CR)","Bill/Paid Out (DR)","Running Balance"],
+      ...rows.map(t=>[t.date,t.note,t.status||"",!t.dr?t.amount:"",t.dr?t.amount:"",t.runBal]),
+    ]);
+  };
+  const downloadLedgerPDF=(party)=>{
+    const rows=getLedgerRows(party);
+    const rowsHTML=rows.map(t=>`<tr><td style="color:#6B7280;white-space:nowrap">${t.date}</td><td>${t.note}${t.status?` <span style="font-size:10px;padding:1px 5px;border-radius:10px;background:${t.status==="paid"?"#ECFDF5":"#FEF2F2"};color:${t.status==="paid"?"#059669":"#DC2626"}">${t.status}</span>`:""}</td><td style="text-align:right;color:#059669;font-weight:700">${!t.dr?"₹"+fmtN(t.amount):""}</td><td style="text-align:right;color:#DC2626;font-weight:700">${t.dr?"₹"+fmtN(t.amount):""}</td><td style="text-align:right;color:#2563EB;font-weight:700">₹${fmtN(t.runBal)}</td></tr>`).join("");
+    printHTML(`Party Ledger — ${party.name}`,`<h2>Party Ledger — ${party.name}</h2><p>${party.type} &nbsp;|&nbsp; Balance: <strong>₹${fmtN(party.balance)}</strong> (${party.balType})</p><table><tr><th>Date</th><th>Description</th><th style="text-align:right">Received (CR)</th><th style="text-align:right">Bill/Paid Out (DR)</th><th style="text-align:right">Balance</th></tr>${rowsHTML}</table><p class="footer">Generated by GB Buildcon · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
+  };
+
+  // ── Transaction CSV/PDF ──────────────────────────────────────
+  const dlTxnCSV=()=>{
+    downloadCSV("Transactions.csv",[
+      ["GB Buildcon — Transactions"],["Date","Party","Note","Project","Type","Account","Amount","DR/CR","Status"],
+      ...txnFiltered.map(t=>[t.date,t.party,t.sub,t.project,t.type,t.account,t.amount,t.dr?"DR":"CR",t.status]),
+      [],[,"IN",tIn,,"OUT",tOut,,"NET",tIn-tOut],
+    ]);
+  };
+  const dlTxnPDF=()=>{
+    const rowsHTML=txnFiltered.map(t=>`<tr><td>${t.date}</td><td><strong>${t.party}</strong><br/><span style="font-size:10px;color:#6B7280">${t.sub}</span></td><td>${t.project}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:#F1F5F9;color:#64748B">${t.type}</span></td><td>${t.account}</td><td style="font-weight:700;color:${t.dr?"#DC2626":"#059669"}">${t.dr?"−":"+"} ₹${fmtN(t.amount)}</td><td><span style="font-size:10px;padding:1px 6px;border-radius:20px;background:${t.status==="paid"?"#ECFDF5":t.status==="unbilled"?"#F5F3FF":"#FEF2F2"};color:${t.status==="paid"?"#059669":t.status==="unbilled"?"#7C3AED":"#DC2626"}">${t.status}</span></td></tr>`).join("");
+    printHTML("Transactions — GB Buildcon",`<h2>Transactions — GB Buildcon</h2><p>${txnFiltered.length} entries &nbsp;|&nbsp; IN: ₹${fmtN(tIn)} &nbsp;|&nbsp; OUT: ₹${fmtN(tOut)} &nbsp;|&nbsp; NET: ₹${fmtN(tIn-tOut)}</p><table><tr><th>Date</th><th>Party / Note</th><th>Project</th><th>Type</th><th>Account</th><th>Amount</th><th>Status</th></tr>${rowsHTML}</table><p class="footer">Generated by GB Buildcon</p>`);
+  };
+
+  // ── Payment Requests CSV/PDF ──────────────────────────────────
+  const dlPRcsv=()=>{
+    downloadCSV("Payment_Requests.csv",[
+      ["GB Buildcon — Payment Requests"],["PR No.","Date","Party","Project","Amount","Status","Requested By"],
+      ...payReqs.map(r=>[r.no,r.date,r.party,r.project,r.amount,r.status,r.by]),
+    ]);
+  };
+  const dlPRpdf=()=>{
+    const rowsHTML=payReqs.map(r=>`<tr><td><strong>${r.no}</strong></td><td>${r.date}</td><td>${r.party}</td><td>${r.project}</td><td style="font-weight:700">₹${fmtN(r.amount)}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${r.status==="Approved"?"#ECFDF5":r.status==="Rejected"?"#FEF2F2":"#FFFBEB"};color:${r.status==="Approved"?"#059669":r.status==="Rejected"?"#DC2626":"#D97706"}">${r.status}</span></td><td>${r.by}</td></tr>`).join("");
+    printHTML("Payment Requests — GB Buildcon",`<h2>Payment Requests — GB Buildcon</h2><p>Total ${payReqs.length} requests</p><table><tr><th>PR No.</th><th>Date</th><th>Party</th><th>Project</th><th>Amount</th><th>Status</th><th>Requested By</th></tr>${rowsHTML}</table><p class="footer">Generated by GB Buildcon</p>`);
+  };
+
+  // ── Pending Payments CSV/PDF ──────────────────────────────────
+  const dlPendCSV=()=>{
+    downloadCSV("Pending_Payments.csv",[
+      ["GB Buildcon — Pending Payments"],["Ref No.","Type","Party","Project","Amount","Due Date","Overdue"],
+      ...pendPmts.map(p=>[p.no,p.type==="pr"?"Approved PR":"Bill Due",p.party,p.project,p.amount,p.date,p.overdue?"YES":"NO"]),
+      [],[,"","","TOTAL",pendTotal,"",""],
+    ]);
+  };
+  const dlPendPDF=()=>{
+    const rowsHTML=pendPmts.map(p=>`<tr style="${p.overdue?"background:#FEF2F2":""}"><td>${p.no}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${p.type==="pr"?"#ECFDF5":"#FFFBEB"};color:${p.type==="pr"?"#059669":"#D97706"}">${p.type==="pr"?"Approved PR":"Bill Due"}</span></td><td><strong>${p.party}</strong></td><td>${p.project}</td><td style="font-weight:700;color:${p.overdue?"#DC2626":"#111827"}">₹${fmtN(p.amount)}</td><td style="color:${p.overdue?"#DC2626":"#374151"}">${p.date}${p.overdue?" <strong style='color:#DC2626'>OVERDUE</strong>":""}</td></tr>`).join("");
+    printHTML("Pending Payments — GB Buildcon",`<h2>Pending Payments — GB Buildcon</h2><p>${pendPmts.length} items &nbsp;|&nbsp; Total: ₹${fmtN(pendTotal)} &nbsp;|&nbsp; Overdue: ₹${fmtN(pendOverdue)}</p><table><tr><th>Ref No.</th><th>Type</th><th>Party</th><th>Project</th><th>Amount</th><th>Due Date</th></tr>${rowsHTML}<tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td style="font-weight:800;color:#2563EB">₹${fmtN(pendTotal)}</td><td></td></tr></table><p class="footer">Generated by GB Buildcon</p>`);
+  };
+
+  const approveReq=(id)=>{
+    const req=payReqs.find(r=>r.id===id);
+    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved"}:r));
+    if(req) setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:req.amount,date:req.date,overdue:false}]);
+  };
+  const rejectReq=(id)=>setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Rejected"}:r));
+
+  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Transactions"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"}];
+
+  return(
+    <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+
+      {/* ── Stat Tiles ── */}
+      <div style={{padding:"14px 18px 10px",flexShrink:0}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+          {curTiles.map((s,i)=>{const TileIcon=s.Icon;return(
+            <div key={i} style={{padding:"13px 15px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+              <div style={{fontSize:10,color:T.t3,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",marginBottom:5}}>{s.l}</div>
+              <div style={{fontSize:22,fontWeight:700,color:T.t1,letterSpacing:"-.5px",lineHeight:1}}>{s.v}</div>
+              <div style={{fontSize:11,color:T.t4,marginTop:4}}>{s.sub}</div>
+            </div>
+          );})}
+        </div>
+      </div>
+
+      {/* ── Tab bar ── */}
+      <div style={{margin:"8px 18px",flexShrink:0}}>
+        <div style={{background:"#0D1B2A",borderRadius:10,padding:"0 8px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
+          <div style={{display:"flex",flex:1}}>
+            {TABS.map(t=>(
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                style={{padding:"11px 15px",border:"none",background:"none",fontSize:12.5,fontWeight:tab===t.id?600:400,color:tab===t.id?"white":"rgba(255,255,255,0.45)",cursor:"pointer",borderBottom:tab===t.id?"2px solid #2563EB":"2px solid transparent",transition:"all 0.15s",whiteSpace:"nowrap"}}>
+                {t.l}
+              </button>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:6,padding:"6px 0"}}>
+            {/* Accounts dropdown */}
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:6,border:`1px solid ${showAccPanel?"rgba(96,165,250,0.6)":"rgba(255,255,255,0.2)"}`,background:showAccPanel?"rgba(96,165,250,0.15)":"rgba(255,255,255,0.08)",fontSize:11.5,fontWeight:600,color:"rgba(255,255,255,0.85)",cursor:"pointer"}}>
+                <IcBank size={13} color="currentColor"/> Accounts <IcDown size={10} color="currentColor"/>
+              </button>
+              {showAccPanel&&(<>
+                <div onClick={()=>setShowAccPanel(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
+                <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:320,overflow:"hidden"}}>
+                  <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
+                    {[{id:"accounts",l:"Company Accounts"},{id:"wallets",l:"Staff Wallets"}].map(t=>(
+                      <button key={t.id} onClick={()=>setAccTab(t.id)} style={{flex:1,padding:"9px 8px",border:"none",background:"none",color:accTab===t.id?T.blu:T.t3,fontSize:11.5,fontWeight:accTab===t.id?700:400,cursor:"pointer",borderBottom:accTab===t.id?`2px solid ${T.blu}`:"2px solid transparent"}}>{t.l}</button>
+                    ))}
+                  </div>
+                  <div style={{padding:"8px 10px"}}>
+                    {accTab==="accounts"?(
+                      <>
+                        {ACCOUNTS.map(a=>(
+                          <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:7,marginBottom:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${a.color}`}}>
+                            <IcBank size={14} color={a.color}/>
+                            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.t1}}>{a.name}</div><div style={{fontSize:10,color:T.t4}}>{a.no||"Cash"}</div></div>
+                            <div style={{fontSize:12.5,fontWeight:700,color:a.balance<0?T.red:T.grn}}>₹{fmtN(a.balance)}</div>
+                          </div>
+                        ))}
+                        <div style={{height:1,background:T.b1,margin:"6px 0"}}/>
+                        <div style={{display:"flex",justifyContent:"space-between",padding:"5px 10px 3px"}}><span style={{fontSize:10.5,color:T.t4}}>Bank + Cash Total</span><span style={{fontSize:12,fontWeight:700,color:T.blu}}>₹{fmtN(totalBal)}</span></div>
+                        <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,marginTop:3,background:T.grnL,border:`1px solid ${T.grnM}`,borderLeft:`3px solid ${T.grn}`}}>
+                          <IcWallet size={14} color={T.grn}/>
+                          <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.grn}}>Total Staff Wallets</div><div style={{fontSize:10,color:T.t4}}>{WALLETS.length} members</div></div>
+                          <div style={{fontSize:12.5,fontWeight:700,color:T.grn}}>₹{fmtN(totalWalletBal)}</div>
+                        </div>
+                        <div style={{display:"flex",justifyContent:"space-between",padding:"7px 10px 2px",borderTop:`1px solid ${T.b1}`,marginTop:5}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>Grand Total</span><span style={{fontSize:12.5,fontWeight:800,color:T.blu}}>₹{fmtN(totalBal+totalWalletBal)}</span></div>
+                      </>
+                    ):(
+                      WALLETS.map(w=>{const pct=Math.round(w.balance/w.limit*100);return(
+                        <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                            <div style={{width:26,height:26,borderRadius:"50%",background:w.color+"22",border:`1px solid ${w.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:w.color,flexShrink:0}}>{w.initials}</div>
+                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.role}</div></div>
+                            <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(w.balance)}</div><div style={{fontSize:9,color:T.t4}}>/ ₹{fmtN(w.limit)}</div></div>
+                          </div>
+                          <div style={{height:3,background:T.b1,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct>80?T.red:pct>50?T.amb:T.grn,borderRadius:2}}/></div>
+                          <div style={{fontSize:9,color:pct>80?T.red:T.t4,marginTop:2}}>{pct}% used</div>
+                        </div>
+                      );})
+                    )}
+                  </div>
+                </div>
+              </>)}
+            </div>
+            {/* Create Transaction dropdown */}
+            <div style={{position:"relative"}}>
+              <button onClick={()=>setShowCreateTxn(!showCreateTxn)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
+                <IcAdd size={13} color="white"/> Create Transaction <IcDown size={10} color="white"/>
+              </button>
+              {showCreateTxn&&(<>
+                <div onClick={()=>setShowCreateTxn(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
+                <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:260,overflow:"hidden"}}>
+                  {[
+                    {section:"Cash & Bank",items:[
+                      {l:"Payment Received",sub:"Client payment in",Icon:IcRecv,c:T.grn,bg:T.grnL},
+                      {l:"Payment Made",sub:"Pay vendor / labour",Icon:IcSend,c:T.red,bg:T.redL},
+                      {l:"Bank Transfer",sub:"Account to account",Icon:IcBank,c:T.blu,bg:T.bluL},
+                      {l:"Petty Cash Expense",sub:"Site / misc expense",Icon:IcWallet,c:T.amb,bg:T.ambL},
+                    ]},
+                    {section:"Billing & Purchases",items:[
+                      {l:"Material Purchase Bill",sub:"Record supplier bill",Icon:IcBillDue,c:T.blu,bg:T.bluL},
+                      {l:"Sales Invoice",sub:"Raise client invoice",Icon:IcFileInv,c:T.grn,bg:T.grnL},
+                      {l:"Sub-Con Bill",sub:"Labour / subcon work",Icon:IcTeam,c:T.slt,bg:T.sltL},
+                      {l:"Advance Payment",sub:"Advance to party",Icon:IcArrow,c:T.pur,bg:T.purL},
+                    ]},
+                    {section:"Adjustments",items:[
+                      {l:"Journal Entry",sub:"Manual debit / credit",Icon:IcFileInv,c:T.slt,bg:T.sltL},
+                      {l:"Credit Note",sub:"Party balance adjust",Icon:IcCopy,c:T.pur,bg:T.purL},
+                    ]},
+                  ].map((grp,gi)=>(
+                    <div key={gi}>
+                      <div style={{padding:"7px 12px 3px",background:T.surfaceB,borderTop:gi>0?`1px solid ${T.b1}`:"none"}}>
+                        <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.7px"}}>{grp.section}</span>
+                      </div>
+                      {grp.items.map((item,ii)=>{const ItemIcon=item.Icon;return(
+                        <button key={ii}
+                          onClick={()=>{setShowCreateTxn(false);openTxn(item.l);}}
+                          style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",background:"none",cursor:"pointer",textAlign:"left"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                          onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <div style={{width:28,height:28,borderRadius:7,background:item.bg,border:`1px solid ${item.c}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                            <ItemIcon size={13} color={item.c}/>
+                          </div>
+                          <div><div style={{fontSize:12,fontWeight:600,color:T.t1}}>{item.l}</div><div style={{fontSize:10,color:T.t4}}>{item.sub}</div></div>
+                        </button>
+                      );})}
+                    </div>
+                  ))}
+                </div>
+              </>)}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ── Tab Content ── */}
+      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",padding:"12px 18px 14px"}}>
+
+        {/* PARTY LEDGER TAB */}
+        {tab==="party"&&(
+          <div style={{display:"flex",gap:12,flex:1,overflow:"hidden"}}>
+            <div style={{width:selParty?290:420,flexShrink:0,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width 0.2s",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+              <div style={{padding:"9px 12px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
+                <span style={{fontSize:12,fontWeight:700,color:T.t1,flex:1}}>Parties</span>
+                <div style={{position:"relative",flex:1}}>
+                  <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                  <input value={partySearch} onChange={e=>setPartySearch(e.target.value)} placeholder="Search..."
+                    style={{width:"100%",height:28,padding:"0 8px 0 26px",borderRadius:6,border:`1.5px solid ${partySearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:partySearch?T.bluL:T.surfaceB}}/>
+                </div>
+                <button onClick={()=>setShowAddParty(true)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+                  <IcAdd size={12} color="white"/> Party
+                </button>
+              </div>
+              <div style={{flex:1,overflowY:"auto"}}>
+                {masterParties.filter(p=>!partySearch||p.name.toLowerCase().includes(partySearch.toLowerCase())).map(p=>{
+                  const isS=selParty?.id===p.id;
+                  const tc=p.type==="Client"?T.grn:p.type==="Material Supplier"?T.blu:p.type==="Sub-Con"?T.slt:T.amb;
+                  return(
+                    <div key={p.id} onClick={()=>{setSelParty(p);setSelBill(null);}}
+                      style={{padding:"10px 13px",cursor:"pointer",borderBottom:`1px solid ${T.b1}`,background:isS?T.bluL:"none",borderLeft:isS?`3px solid ${T.blu}`:"3px solid transparent",transition:"all 0.12s"}}
+                      onMouseEnter={e=>{if(!isS)e.currentTarget.style.background=T.surfaceB;}}
+                      onMouseLeave={e=>{if(!isS)e.currentTarget.style.background="none";}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:isS?T.blu:T.t1}}>{p.name}</div>
+                        <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>₹{fmt(p.balance)}</div>
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span style={{background:tc+"18",color:tc,fontSize:9.5,fontWeight:600,padding:"1px 7px",borderRadius:20,border:`1px solid ${tc}22`}}>{p.type}</span>
+                        <span style={{fontSize:10,color:T.t4}}>{p.balType}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            {selParty&&(()=>{
+              const ledgerRows=getLedgerRows(selParty);
+              const totalCR=ledgerRows.reduce((s,r)=>s+(!r.dr?r.amount:0),0);
+              const totalDR=ledgerRows.reduce((s,r)=>s+(r.dr?r.amount:0),0);
+              return(
+                <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+                  <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+                    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:T.t1}}>{selParty.name}</div><div style={{fontSize:10.5,color:T.t4}}>{selParty.type}</div></div>
+                    <span style={{background:T.bluL,color:T.blu,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.bluM}`}}>₹{fmtN(selParty.balance)} · {selParty.balType}</span>
+                    <span style={{background:T.grnL,color:T.grn,fontSize:10,fontWeight:600,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.grnM}`}}>CR ₹{fmtN(totalCR)}</span>
+                    <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:600,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.redM}`}}>DR ₹{fmtN(totalDR)}</span>
+                    <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:27,padding:"0 9px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
+                    <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:27,padding:"0 9px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
+                    <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={15}/></button>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"86px 1fr 100px 110px 110px",padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0}}>
+                    {["Date","Description","Received (CR)","Bill / Paid Out (DR)","Balance"].map((h,i)=>(
+                      <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",textAlign:i>=2?"right":"left"}}>{h}</span>
+                    ))}
+                  </div>
+                  <div style={{flex:1,overflowY:"auto"}}>
+                    {ledgerRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
+                    {ledgerRows.map(txn=>(
+                      <div key={txn.id}>
+                        <div onClick={()=>txn.items&&setSelBill(selBill===txn.id?null:txn.id)}
+                          style={{display:"grid",gridTemplateColumns:"86px 1fr 100px 110px 110px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"start",cursor:txn.items?"pointer":"default",transition:"background 0.1s"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                          onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                          <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{txn.date}</span>
+                          <div>
+                            <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{txn.note}</div>
+                            {txn.status&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:20,background:txn.status==="paid"?T.grnL:T.redL,color:txn.status==="paid"?T.grn:T.red,border:`1px solid ${txn.status==="paid"?T.grnM:T.redM}`}}>{txn.status}</span>}
+                            {txn.items&&<span style={{fontSize:9,color:T.blu,marginLeft:4,fontWeight:600}}>{selBill===txn.id?"▲ hide":"▼ "+txn.items.length+" items"}</span>}
+                          </div>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{!txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.red,textAlign:"right"}}>{txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.blu,textAlign:"right"}}>₹{fmtN(txn.runBal)}</span>
+                        </div>
+                        {selBill===txn.id&&txn.items&&(
+                          <div style={{padding:"8px 14px 10px 100px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`}}>
+                            <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 90px",gap:4,marginBottom:5}}>
+                              {["Item","Qty","Rate","Amount"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                            </div>
+                            {txn.items.map((it,ii)=>(
+                              <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 90px",gap:4,padding:"4px 0",borderTop:`1px solid ${T.bluM}`}}>
+                                <span style={{fontSize:12,color:T.t1}}>{it.name}</span>
+                                <span style={{fontSize:11.5,color:T.t3}}>{it.qty}</span>
+                                <span style={{fontSize:11.5,color:T.t3}}>{it.rate}</span>
+                                <span style={{fontSize:12,fontWeight:600,color:T.t1}}>₹{fmtN(it.amt)}</span>
+                              </div>
+                            ))}
+                            <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
+                              <button onClick={()=>openTxn("Payment Made",selParty.name)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>Pay Now</button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  {ledgerRows.length>0&&(
+                    <div style={{display:"grid",gridTemplateColumns:"86px 1fr 100px 110px 110px",padding:"8px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
+                      <span style={{fontSize:11,fontWeight:700,color:T.t1}}>TOTAL</span><span/>
+                      <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.grn}}>₹{fmtN(totalCR)}</span>
+                      <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.red}}>₹{fmtN(totalDR)}</span>
+                      <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.blu}}>₹{fmtN(Math.abs(totalDR-totalCR))}</span>
+                    </div>
+                  )}
+                  {/* ── Integrated action buttons ── */}
+                  <div style={{padding:"9px 14px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:7,flexShrink:0,background:T.surfaceB}}>
+                    <button onClick={()=>openTxn("Payment Received",selParty.name)}
+                      style={{flex:1,padding:"7px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                      <IcRecv size={13} color={T.grn}/> + Payment Received
+                    </button>
+                    <button onClick={()=>openTxn("Payment Made",selParty.name)}
+                      style={{flex:1,padding:"7px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                      <IcSend size={13} color={T.red}/> + Payment Made
+                    </button>
+                    <button onClick={()=>openTxn(selParty.type==="Material Supplier"||selParty.type==="Other Vendor"?"Material Purchase Bill":selParty.type==="Sub-Con"||selParty.type==="Labour Contractor"?"Sub-Con Bill":"Sales Invoice",selParty.name)}
+                      style={{flex:1,padding:"7px",borderRadius:6,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+                      <IcBillDue size={13} color={T.blu}/> + New Bill
+                    </button>
+                  </div>
+                </div>
+              );
+            })()}
+            {!selParty&&<div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{textAlign:"center"}}><IcFileInv size={36} color={T.b2}/><div style={{fontSize:13,fontWeight:600,color:T.t3,marginTop:10}}>Select a party to view ledger</div></div></div>}
+          </div>
+        )}
+
+        {/* TRANSACTION TAB */}
+        {tab==="transaction"&&(
+          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+            <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+              <div style={{position:"relative",flex:1,minWidth:150}}>
+                <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search party or note..."
+                  style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${txnSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:txnSearch?T.bluL:T.surface}}/>
+              </div>
+              {[
+                {val:fProject,set:setFProject,opts:projects,def:"All Projects"},
+                {val:fType,set:setFType,opts:["All",...Object.keys(TXN_TYPE_META)],def:"All Types"},
+                {val:fAcc,set:setFAcc,opts:["All",...ACCOUNTS.map(a=>a.name)],def:"All Accounts"},
+                {val:fStatus,set:setFStatus,opts:["All","paid","unpaid","unbilled"],def:"All Status"},
+              ].map(({val,set,opts,def},i)=>(
+                <div key={i} style={{position:"relative"}}>
+                  <select value={val} onChange={e=>set(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${val!=="All"?T.blu:T.b1}`,background:val!=="All"?T.bluL:T.surface,fontSize:11.5,color:val!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:val!=="All"?600:400,minWidth:90,appearance:"none",WebkitAppearance:"none"}}>
+                    {opts.map(o=><option key={o} value={o}>{o==="All"?def:o}</option>)}
+                  </select>
+                  <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
+                </div>
+              ))}
+              <button onClick={()=>setShowUB(true)} style={{display:"flex",alignItems:"center",gap:5,height:31,padding:"0 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.pur}22`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                <IcUB size={13} color={T.pur}/> Unbilled
+                <span style={{background:T.pur,color:"white",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{UNBILLED_PARTIES.length}</span>
+              </button>
+              <button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
+              <button onClick={dlTxnPDF} style={{height:31,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:8,flexShrink:0}}>
+              {[{l:"IN",v:tIn,c:T.grn,bg:T.grnL,brd:T.grnM},{l:"OUT",v:tOut,c:T.red,bg:T.redL,brd:T.redM},{l:"NET",v:tIn-tOut,c:tIn>=tOut?T.grn:T.red,bg:tIn>=tOut?T.grnL:T.redL,brd:tIn>=tOut?T.grnM:T.redM}].map((x,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",gap:6,background:x.bg,borderRadius:7,padding:"5px 11px",border:`1px solid ${x.brd}`}}>
+                  <span style={{fontSize:10,fontWeight:700,color:x.c,letterSpacing:"0.5px"}}>{x.l}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:x.c}}>₹{fmtN(x.v)}</span>
+                </div>
+              ))}
+              <span style={{fontSize:10.5,color:T.t4,alignSelf:"center",marginLeft:4}}>{txnFiltered.length} transactions</span>
+            </div>
+            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:"80px 1fr 120px 110px 90px 90px 80px",padding:"7px 12px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
+                {["Date","Party / Note","Project","Type","Account","Amount","Status"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px"}}>{h}</span>
+                ))}
+              </div>
+              {txnFiltered.map(txn=>{
+                const typePalette={"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material Purchase":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Party Payment":{c:T.pur,bg:T.purL},"Sub-Con Expense":{c:T.slt,bg:T.sltL},"Material Return":{c:T.grn,bg:T.grnL},"Sales Invoice":{c:T.grn,bg:T.grnL},"Unbilled Material":{c:T.pur,bg:T.purL}};
+                const tp=typePalette[txn.type]||{c:T.slt,bg:T.sltL};
+                return(
+                  <div key={txn.id}
+                    style={{display:"grid",gridTemplateColumns:"80px 1fr 120px 110px 90px 90px 80px",padding:"9px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background 0.1s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                    <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{txn.date}</span>
+                    <div><div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{txn.party}</div><div style={{fontSize:10.5,color:T.t4}}>{txn.sub}</div></div>
+                    <span style={{fontSize:11,color:T.t3}}>{txn.project}</span>
+                    <span style={{background:tp.bg,color:tp.c,fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:20,display:"inline-block",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",border:`1px solid ${tp.c}22`}}>{txn.type}</span>
+                    <span style={{fontSize:11,color:T.t3}}>{txn.account}</span>
+                    <span style={{fontSize:12.5,fontWeight:700,color:txn.dr?T.red:T.grn}}>{txn.dr?"−":"+"} ₹{fmtN(txn.amount)}</span>
+                    <span style={{background:txn.status==="paid"?T.grnL:txn.status==="unbilled"?T.purL:T.redL,color:txn.status==="paid"?T.grn:txn.status==="unbilled"?T.pur:T.red,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:20,display:"inline-block",border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="unbilled"?T.pur+"44":T.redM}`}}>{txn.status}</span>
+                  </div>
+                );
+              })}
+              {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions match filters</div>}
+            </div>
+          </div>
+        )}
+
+        {/* PAYMENT REQUESTS TAB */}
+        {tab==="payreq"&&(
+          <div style={{flex:1,overflowY:"auto"}}>
+            <div style={{display:"flex",justifyContent:"flex-end",gap:7,marginBottom:8}}>
+              <button onClick={dlPRcsv} style={{padding:"6px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
+              <button onClick={dlPRpdf} style={{padding:"6px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
+            </div>
+            {payReqs.map(req=>{
+              const isEditing=editReqId===req.id;
+              const icC=req.status==="Approved"?T.grn:req.status==="Rejected"?T.red:T.amb;
+              const icBg=req.status==="Approved"?T.grnL:req.status==="Rejected"?T.redL:T.ambL;
+              const icBrd=req.status==="Approved"?T.grnM:req.status==="Rejected"?T.redM:T.ambM;
+              const StatusIc=req.status==="Approved"?IcThumbUp:req.status==="Rejected"?IcX:IcPendClk;
+              return(
+                <div key={req.id} style={{background:T.surface,borderRadius:8,border:`1px solid ${isEditing?T.blu:T.b1}`,marginBottom:7,overflow:"hidden",boxShadow:isEditing?`0 0 0 2px ${T.bluM}`:"0 1px 3px rgba(0,0,0,0.05)",transition:"all 0.15s"}}>
+                  <div style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:11}}>
+                    <div style={{width:36,height:36,borderRadius:8,background:icBg,border:`1px solid ${icBrd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><StatusIc size={16} color={icC}/></div>
+                    <div style={{flex:1}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                        <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{req.no}</span>
+                        <span style={{background:icBg,color:icC,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${icBrd}`}}>{req.status}</span>
+                        {req.modified&&<span style={{background:T.ambL,color:T.amb,fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:20,border:`1px solid ${T.ambM}`}}>MODIFIED</span>}
+                      </div>
+                      <div style={{fontSize:11.5,color:T.t3}}>{req.party} · {req.project}</div>
+                      <div style={{fontSize:10.5,color:T.t4}}>by {req.by} · {req.date}</div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:T.t1}}>₹{fmtN(req.amount)}</div>
+                      {req.originalAmt&&<div style={{fontSize:9.5,color:T.t4,textDecoration:"line-through"}}>₹{fmtN(req.originalAmt)}</div>}
+                    </div>
+                    {req.status==="Pending"&&(
+                      <div style={{display:"flex",gap:5,flexShrink:0}}>
+                        <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));}}}
+                          style={{padding:"5px 9px",borderRadius:6,background:isEditing?T.bluL:T.surfaceB,color:isEditing?T.blu:T.t3,border:`1.5px solid ${isEditing?T.blu:T.b1}`,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                          <IcEdit size={13} color="currentColor"/> Edit
+                        </button>
+                        <button onClick={()=>approveReq(req.id)} style={{padding:"5px 11px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11,fontWeight:600,cursor:"pointer"}}>Approve</button>
+                        <button onClick={()=>rejectReq(req.id)} style={{padding:"5px 11px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11,fontWeight:600,cursor:"pointer"}}>Reject</button>
+                      </div>
+                    )}
+                    {req.status==="Approved"&&(
+                      <button onClick={()=>openTxn("Payment Made",req.party)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
+                        <IcSend size={12} color="white"/> Pay Now
+                      </button>
+                    )}
+                  </div>
+                  {isEditing&&req.status==="Pending"&&(
+                    <div style={{borderTop:`1px solid ${T.bluM}`,background:T.bluL,padding:"12px 14px"}}>
+                      <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:10}}>Modify Payment Before Approving</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Requested Amount</label>
+                          <input readOnly value={"₹"+fmtN(req.amount)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t4,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Approve Amount</label>
+                          <input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} placeholder="Enter amount"
+                            style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        </div>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Reason</label>
+                          <select style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                            <option>Partial stock available</option><option>Budget limit</option><option>Price negotiated</option><option>Split payment</option><option>Other</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Note</label>
+                          <input type="text" placeholder="Optional note..." style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
+                        <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+                        <button onClick={()=>{
+                          const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
+                          setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig}:r));
+                          setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:newAmt,date:req.date,overdue:false}]);
+                          setEditReqId(null);
+                        }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                          <IcThumbUp size={13} color="white"/> Approve {Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..."}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* PENDING PAYMENTS TAB */}
+        {tab==="pending"&&(
+          <div style={{flex:1,overflowY:"auto"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{display:"flex",gap:12,alignItems:"center"}}>
+                {[{l:"Approved PR",c:T.grn},{l:"Bill Due",c:T.amb},{l:"Overdue",c:T.red}].map((x,i)=>(
+                  <span key={i} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:T.t3}}>
+                    <span style={{width:8,height:8,borderRadius:2,background:x.c,display:"inline-block"}}/>{x.l}
+                  </span>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:7}}>
+                <button onClick={dlPendCSV} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
+                <button onClick={dlPendPDF} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
+              </div>
+            </div>
+            {pendPmts.map(pmt=>(
+              <div key={pmt.id} style={{background:T.surface,borderRadius:8,border:`1.5px solid ${pmt.overdue?T.red:T.b1}`,marginBottom:7,padding:"11px 14px",display:"flex",alignItems:"center",gap:11,boxShadow:pmt.overdue?`0 2px 8px ${T.red}22`:"0 1px 3px rgba(0,0,0,0.05)"}}>
+                <div style={{width:36,height:36,borderRadius:8,background:pmt.type==="pr"?T.grnL:pmt.overdue?T.redL:T.ambL,border:`1px solid ${pmt.type==="pr"?T.grnM:pmt.overdue?T.redM:T.ambM}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  {pmt.type==="pr"?<IcThumbUp size={16} color={T.grn}/>:<IcCalDue size={16} color={pmt.overdue?T.red:T.amb}/>}
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                    <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{pmt.party}</span>
+                    <span style={{background:pmt.type==="pr"?T.grnL:pmt.overdue?T.redL:T.ambL,color:pmt.type==="pr"?T.grn:pmt.overdue?T.red:T.amb,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${pmt.type==="pr"?T.grnM:pmt.overdue?T.redM:T.ambM}`}}>{pmt.type==="pr"?"Approved PR":"Bill Due"}</span>
+                    {pmt.overdue&&<span style={{background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:3}}>PAST DUE</span>}
+                  </div>
+                  <div style={{fontSize:11.5,color:T.t3}}>{pmt.project} · {pmt.no}</div>
+                  <div style={{fontSize:10.5,color:T.t4}}>Due: {pmt.date}</div>
+                </div>
+                <div style={{textAlign:"right",flexShrink:0}}>
+                  <div style={{fontSize:14,fontWeight:700,color:pmt.overdue?T.red:T.t1,marginBottom:6}}>₹{fmtN(pmt.amount)}</div>
+                  {/* ── Pay Now opens Payment Made modal pre-filled with party ── */}
+                  <button onClick={()=>openTxn("Payment Made",pmt.party)}
+                    style={{padding:"5px 14px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:4}}>
+                    <IcSend size={12} color="white"/> Pay Now
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Unbilled Drawer */}
+      {showUB&&(<>
+        <div onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.14)",display:"flex",flexDirection:"column"}}>
+          <div style={{background:T.surface,padding:"12px 14px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
+            <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>Unbilled Materials</div><div style={{fontSize:10,color:T.t4}}>Received but not yet billed</div></div>
+            <span style={{background:T.purL,color:T.pur,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.pur}33`}}>₹{fmt(UNBILLED_PARTIES.flatMap(p=>p.billItems||[]).reduce((s,i)=>s+i.amt,0))}</span>
+            <button onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex"}}><IcX size={15}/></button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
+            {UNBILLED_PARTIES.map(p=>(
+              <div key={p.id} style={{background:T.surface,borderRadius:8,marginBottom:6,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+                <div onClick={()=>setSelUBParty(selUBParty?.id===p.id?null:p)} style={{padding:"10px 12px",display:"flex",alignItems:"center",gap:10,cursor:"pointer"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                  onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
+                  <div style={{flex:1}}><div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{p.name}</div><div style={{fontSize:10.5,color:T.t4}}>{p.project}</div></div>
+                  <span style={{background:T.purL,color:T.pur,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,border:`1px solid ${T.pur}22`}}>{p.items} item{p.items>1?"s":""}</span>
+                  <IcDown size={13} color={T.t4}/>
+                </div>
+                {selUBParty?.id===p.id&&p.billItems&&(
+                  <div style={{borderTop:`1px solid ${T.b1}`,background:T.surfaceB,padding:"8px 12px"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 50px 60px 70px",gap:4,marginBottom:4}}>
+                      {["Item","Qty","Rate","Amount"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                    </div>
+                    {p.billItems.map((it,ii)=>(
+                      <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 50px 60px 70px",gap:4,padding:"5px 0",borderTop:`1px solid ${T.b1}`}}>
+                        <span style={{fontSize:12,color:T.t1}}>{it.name}</span>
+                        <span style={{fontSize:11.5,color:T.t3}}>{it.qty}</span>
+                        <span style={{fontSize:11.5,color:T.t3}}>₹{it.rate}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:T.t1}}>₹{fmtN(it.amt)}</span>
+                      </div>
+                    ))}
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:8,alignItems:"center"}}>
+                      <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>Total: ₹{fmtN(p.billItems.reduce((s,i)=>s+i.amt,0))}</span>
+                      <button onClick={()=>openTxn("Material Purchase Bill",p.name)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>Create Bill</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      </>)}
+
+      {/* ══ Add Party Modal ══ */}
+      {showAddParty&&(
+        <AddPartyModal
+          onClose={()=>setShowAddParty(false)}
+          onAdd={p=>{setMasterParties(prev=>[...prev,p]);setShowAddParty(false);}}
+        />
+      )}
+
+      {/* ══ Create Transaction Modal ══ */}
+      {createTxnType&&(
+        <CreateTransactionModal
+          type={createTxnType}
+          preParty={createTxnParty}
+          onClose={closeTxn}
+        />
+      )}
+    </div>
+  );
+}
+
+export default FinanceModule;
