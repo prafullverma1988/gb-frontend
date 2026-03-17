@@ -11,6 +11,7 @@ import MasterLibraryModule from "./modules/MasterLibraryModule";
 import WarehouseModule from "./modules/WarehouseModule";
 import ReportsModule from "./modules/ReportsModule";
 import ProjectDetailPage from "./modules/ProjectDetailPage";
+import ProjectsPage from "./modules/ProjectsModule";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -907,120 +908,6 @@ function DashboardModule(){
 
 
 // ── PLACEHOLDER ───────────────────────────────────────────────────────
-
-// ── PROJECTS PAGE ─────────────────────────────────────────────────────
-const statusColors={
-  "Ongoing":   {bg:T.grnL, text:T.grn, bar:T.grn},
-  "Completed": {bg:T.bluL, text:T.blu, bar:T.blu},
-  "Hold":      {bg:T.ambL, text:T.amb, bar:T.amb},
-  "Not Started":{bg:T.sltL, text:T.slt, bar:T.t4},
-};
-
-function ProjectsPage({onSelectProject}){
-  const [search,setSearch]=useState("");
-  const [filterCity,setFilterCity]=useState("All");
-  const [filterStatus,setFilterStatus]=useState("All");
-  
-  const cities=["All",...new Set(PROJECTS_DATA.map(p=>p.city))];
-  const statuses=["All","Ongoing","Hold","Not Started","Completed"];
-  
-  const filtered=PROJECTS_DATA.filter(p=>{
-    if(filterCity!=="All"&&p.city!==filterCity) return false;
-    if(filterStatus!=="All"&&p.status!==filterStatus) return false;
-    if(search&&!p.name.toLowerCase().includes(search.toLowerCase())&&!p.client.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-  
-  const stats={total:filtered.length, ongoing:filtered.filter(p=>p.status==="Ongoing").length, hold:filtered.filter(p=>p.status==="Hold").length, completed:filtered.filter(p=>p.status==="Completed").length};
-  
-  return(
-    <div style={{padding:24,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-      {/* Stats */}
-      <div style={{display:"flex",gap:14,marginBottom:20,flexWrap:"wrap"}}>
-        {[
-          {label:"Total Projects",value:stats.total,color:T.blu},
-          {label:"Ongoing",value:stats.ongoing,color:T.grn},
-          {label:"On Hold",value:stats.hold,color:T.amb},
-          {label:"Completed",value:stats.completed,color:T.blu},
-          {label:"Total BOQ",value:`₹${fmt(filtered.reduce((s,p)=>s+p.boq,0))}`,color:T.pur},
-        ].map((s,i)=>(
-          <div key={i} style={{background:T.surface,borderRadius:12,padding:"16px 20px",boxShadow:"0 1px 4px rgba(0,0,0,.07)",borderTop:`3px solid ${s.color}`,flex:1,minWidth:130}}>
-            <div style={{fontSize:22,fontWeight:800,color:T.t1}}>{s.value}</div>
-            <div style={{fontSize:12,color:T.t3,marginTop:2}}>{s.label}</div>
-          </div>
-        ))}
-      </div>
-      
-      {/* Toolbar */}
-      <div style={{background:T.surface,borderRadius:12,padding:"12px 16px",marginBottom:18,boxShadow:"0 1px 3px rgba(0,0,0,.06)",display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}>
-        <div style={{position:"relative",flex:1,minWidth:180}}>
-          <IcSearch size={15} color={T.t4} />
-          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects or clients..."
-            style={{width:"100%",padding:"8px 12px 8px 8px",borderRadius:8,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-        </div>
-        <select value={filterCity} onChange={e=>setFilterCity(e.target.value)}
-          style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          {cities.map(c=><option key={c}>{c}</option>)}
-        </select>
-        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
-          style={{padding:"8px 12px",borderRadius:8,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-          {statuses.map(s=><option key={s}>{s}</option>)}
-        </select>
-      </div>
-      
-      {/* Project Cards */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(310px,1fr))",gap:14}}>
-        {filtered.map(p=>{
-          const sc=statusColors[p.status]||statusColors["Ongoing"];
-          const margin=p.boq-p.expense;
-          return(
-            <div key={p.id} onClick={()=>onSelectProject(p)}
-              style={{background:T.surface,borderRadius:12,overflow:"hidden",boxShadow:"0 1px 5px rgba(0,0,0,.07)",cursor:"pointer",transition:"transform .15s,box-shadow .15s",border:`1px solid ${T.b1}`,borderLeft:`3px solid ${sc.bar}`}}
-              onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 6px 20px rgba(0,0,0,.12)";}}
-              onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 1px 5px rgba(0,0,0,.07)";}}>
-              <div style={{padding:"14px 16px 10px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:14,fontWeight:700,color:T.t1,lineHeight:1.3,marginBottom:3}}>{p.name}</div>
-                    <div style={{fontSize:11.5,color:T.t4}}>{p.client}</div>
-                  </div>
-                  <span style={{background:sc.bg,color:sc.text,fontSize:10.5,fontWeight:600,padding:"3px 9px",borderRadius:16,whiteSpace:"nowrap"}}>{p.status}</span>
-                </div>
-                <div style={{display:"flex",gap:12,marginTop:8,fontSize:11.5,color:T.t3}}>
-                  <span>{p.city}</span><span>{p.type}</span><span>PM: {p.pm}</span>
-                </div>
-              </div>
-              <div style={{padding:"10px 16px 14px"}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:5}}>
-                  <span style={{fontSize:11.5,color:T.t3}}>Progress</span>
-                  <span style={{fontSize:12.5,fontWeight:700,color:p.progress===100?T.grn:T.t1}}>{p.progress}%</span>
-                </div>
-                <div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${p.progress}%`,background:sc.bar,borderRadius:3,transition:"width .5s"}}/>
-                </div>
-                <div style={{display:"flex",gap:14,marginTop:10,fontSize:11}}>
-                  <div><div style={{color:T.t4,marginBottom:1}}>BOQ</div><div style={{fontWeight:700,color:T.t1}}>₹{fmt(p.boq)}</div></div>
-                  <div><div style={{color:T.t4,marginBottom:1}}>Expense</div><div style={{fontWeight:700,color:T.amb}}>₹{fmt(p.expense)}</div></div>
-                  <div><div style={{color:T.t4,marginBottom:1}}>Margin</div><div style={{fontWeight:700,color:margin>0?T.grn:T.red}}>₹{fmt(Math.abs(margin))}</div></div>
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between",marginTop:10,paddingTop:8,borderTop:`1px solid ${T.b1}`}}>
-                  <span style={{fontSize:11,color:T.t4}}>{p.start} → {p.end}</span>
-                  <span style={{fontSize:12,fontWeight:600,color:T.blu}}>Open →</span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      {filtered.length===0&&(
-        <div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}>
-          <div style={{fontSize:16,fontWeight:600,color:T.t3}}>No projects found</div>
-          <div style={{fontSize:13,marginTop:4}}>Try changing filters or search term</div>
-        </div>
-      )}
-    </div>
-  );
-}
 
 // ── PROJECTS WRAPPER (List + Detail hierarchy) ────────────────────────
 function ProjectsWrapper(){

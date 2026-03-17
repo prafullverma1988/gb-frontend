@@ -1,0 +1,631 @@
+import { useState } from "react";
+
+const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
+  <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+);
+
+const IcHome  =(p)=><Ic {...p} d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/>;
+const IcProj  =(p)=><Ic {...p} d="M3 7h18M3 12h18M3 17h18"/>;
+const IcFin   =(p)=><Ic {...p} d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>;
+const IcDes   =(p)=><Ic {...p} d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/>;
+const IcRep   =(p)=><Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/>;
+const IcSet   =(p)=><Ic {...p} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0"/>;
+const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
+const IcProc  =(p)=><Ic {...p} d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/>;
+const IcMenu  =(p)=><Ic {...p} d="M4 6h16M4 12h16M4 18h16"/>;
+const IcBell  =(p)=><Ic {...p} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>;
+const IcSrch  =(p)=><Ic {...p} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>;
+const IcLoc   =(p)=><Ic {...p} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0"/>;
+const IcAdd   =(p)=><Ic {...p} d="M12 5v14M5 12h14"/>;
+const IcEye   =(p)=><Ic {...p} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0"/>;
+const IcEyeX  =(p)=><Ic {...p} d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/>;
+const IcTeam  =(p)=><Ic {...p} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M9 7a4 4 0 100 8 4 4 0 000-8z"/>;
+const IcCRM   =(p)=><Ic {...p} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a3 3 0 00-3-3M16 3.13a4 4 0 010 7.75"/>;
+const IcMOM   =(p)=><Ic {...p} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>;
+const IcPay   =(p)=><Ic {...p} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>;
+const IcLib   =(p)=><Ic {...p} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>;
+const IcX     =(p)=><Ic {...p} d="M18 6L6 18M6 6l12 12"/>;
+const IcCopy  =(p)=><Ic {...p} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>;
+const IcChk   =(p)=><Ic {...p} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>;
+const IcHeart =(p)=><Ic {...p} d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill="currentColor"/>;
+const IcMsg   =(p)=><Ic {...p} d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>;
+const IcWarn  =(p)=><Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01"/>;
+const IcDown  =(p)=><Ic {...p} d="M6 9l6 6 6-6"/>;
+const IcBank  =(p)=><Ic {...p} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11"/>;
+const IcWallet=(p)=><Ic {...p} d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 13a1 1 0 100 2 1 1 0 000-2zM2 9h20"/>;
+const IcArrow =(p)=><Ic {...p} d="M5 12h14M12 5l7 7-7 7"/>;
+const IcBack  =(p)=><Ic {...p} d="M19 12H5M12 19l-7-7 7-7"/>;
+const IcFilter=(p)=><Ic {...p} d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>;
+const IcUB    =(p)=><Ic {...p} d="M9 14l2 2 4-4M7 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V8l-5-5H7zM15 3v5h5"/>;
+const IcGrid  =(p)=><Ic {...p} d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>;
+const IcListV =(p)=><Ic {...p} d="M9 5h11M9 12h11M9 19h11M4 5h.01M4 12h.01M4 19h.01"/>;
+const IcPulse =(p)=><Ic {...p} d="M22 12h-4l-3 9L9 3l-3 9H2"/>;
+const IcClip  =(p)=><Ic {...p} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>;
+
+// ── COLORS ───────────────────────────────────────────────────────────
+const C={
+  p:"#1565C0",p2:"#1976D2",a:"#FF6F00",a2:"#FFA726",
+  sb:"#0D1B2A",sbH:"#1E2E42",
+  w:"#FFFFFF",bg:"#F1F4F8",t:"#1A2332",tm:"#4A5568",tl:"#8896A6",b:"#E2E8F0",
+  g:"#2E7D32",gl:"#E8F5E9",o:"#E65100",ol:"#FFF3E0",
+  r:"#C62828",rl:"#FFEBEE",bl:"#E3F2FD",
+  pur:"#6A1B9A",purl:"#F3E5F5",teal:"#00695C",tealL:"#E0F2F1",
+  pink:"#AD1457",pinkL:"#FCE4EC",
+};
+const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:`${(n/1000).toFixed(0)}K`;
+const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
+// ── BALANCED THEME TOKENS (used in ProjectsPage + ProjectDetail) ───────
+const T={
+  bg:"#F4F6F9",surface:"#FFFFFF",surfaceB:"#F8F9FB",
+  t1:"#111827",t2:"#374151",t3:"#6B7280",t4:"#9CA3AF",
+  b1:"#E5E7EB",b2:"#D1D5DB",
+  blu:"#2563EB",bluL:"#EFF6FF",bluM:"#BFDBFE",
+  grn:"#059669",grnL:"#ECFDF5",grnM:"#A7F3D0",
+  amb:"#D97706",ambL:"#FFFBEB",ambM:"#FDE68A",
+  red:"#DC2626",redL:"#FEF2F2",redM:"#FECACA",
+  slt:"#64748B",sltL:"#F1F5F9",
+  pur:"#7C3AED",purL:"#F5F3FF",
+};
+
+// ── NAV GROUPS ───────────────────────────────────────────────────────
+const NAV_GROUPS=[
+  {section:null,items:[
+    {id:"dashboard",label:"Dashboard",Icon:IcHome},
+    {id:"projects",label:"Projects",Icon:IcProj},
+    {id:"crm",label:"CRM",Icon:IcCRM},
+    {id:"mom",label:"MOM",Icon:IcMOM},
+    {id:"team",label:"Team Schedule",Icon:IcTeam},
+    {id:"design",label:"Design",Icon:IcDes,badge:"NEW",bc:C.a},
+  ]},
+  {section:"FINANCE & OPS",items:[
+    {id:"finance",label:"Finance",Icon:IcFin},
+    {id:"procurement",label:"Procurement",Icon:IcProc,badge:11,bc:C.p},
+    {id:"warehouse",label:"Warehouse",Icon:IcWH},
+    {id:"payroll",label:"Payroll",Icon:IcPay},
+  ]},
+  {section:"REPORTS",items:[
+    {id:"reports",label:"Reports",Icon:IcRep},
+    {id:"library",label:"Library",Icon:IcLib},
+    {id:"settings",label:"Settings",Icon:IcSet},
+  ]},
+];
+
+// ── PROJECTS DATA ────────────────────────────────────────────────────
+
+const PROJECTS_DATA=[
+  {id:1,name:"Shubham & Nand Kishor 623",client:"Nand Kishor Agrawal",city:"Raipur",type:"Residential",progress:68,status:"Ongoing",boq:4250000,expense:2890000,pm:"Vijay Sahu",start:"Jan 2025",end:"Aug 2025"},
+  {id:2,name:"Tikendra Banchhor Residence",client:"Tikendra Banchhor",city:"Raipur",type:"Residential",progress:42,status:"Ongoing",boq:3100000,expense:1302000,pm:"Niranjan",start:"Mar 2025",end:"Dec 2025"},
+  {id:3,name:"Esther Risali Commercial",client:"Esther Group",city:"Bilaspur",type:"Commercial",progress:91,status:"Ongoing",boq:8750000,expense:7963000,pm:"Harsh Sahu",start:"Jun 2024",end:"Apr 2025"},
+  {id:4,name:"Amarendra Shrivastava Villa",client:"Amarendra Shrivastava",city:"Raipur",type:"Residential",progress:23,status:"Ongoing",boq:5600000,expense:1288000,pm:"Vijay Sahu",start:"May 2025",end:"Feb 2026"},
+  {id:5,name:"Shyam Ji Township Phase 1",client:"Shyam Developers",city:"Bhilai",type:"Commercial",progress:100,status:"Completed",boq:12000000,expense:11200000,pm:"Niranjan",start:"Jan 2024",end:"Dec 2024"},
+  {id:6,name:"Simran Kaur Bungalow",client:"Simran Kaur",city:"Raipur",type:"Residential",progress:0,status:"Not Started",boq:2800000,expense:0,pm:"Priyanka",start:"Jun 2025",end:"Mar 2026"},
+  {id:7,name:"Neha Sagar Office Complex",client:"Neha Sagar Ltd",city:"Durg",type:"Commercial",progress:55,status:"Hold",boq:6400000,expense:3520000,pm:"Harsh Sahu",start:"Feb 2025",end:"Nov 2025"},
+  {id:8,name:"Bablu Mehta Farmhouse",client:"Bablu Mehta",city:"Raipur",type:"Residential",progress:78,status:"Ongoing",boq:1900000,expense:1482000,pm:"Vijay Sahu",start:"Nov 2024",end:"May 2025"},
+];
+const TEAM=[
+  {id:1,name:"Vijay Sahu",role:"Project Manager",color:"#1565C0",initials:"VS"},
+  {id:2,name:"Harsh Sahu",role:"Project Manager",color:"#2E7D32",initials:"HS"},
+  {id:3,name:"Niranjan",role:"Site Supervisor",color:"#6A1B9A",initials:"NJ"},
+  {id:4,name:"Priyanka",role:"Project Manager",color:"#AD1457",initials:"PK"},
+  {id:5,name:"Sunny",role:"Site Engineer",color:"#00695C",initials:"SN"},
+];
+const PULSE_FEED=[
+  {id:1,type:"photo",user:"Vijay Sahu",role:"PM",site:"Shubham 623",time:"2h ago",img:"https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=260&fit=crop",caption:"Slab casting complete — 3rd floor RCC done ✅",likes:12,comments:3,tag:"progress",ac:"#1565C0"},
+  {id:2,type:"material",user:"Niranjan",role:"Supervisor",site:"Tikendra Residence",time:"3h ago",img:null,caption:"50 bags cement received from Abhay Traders 📦",likes:4,comments:1,tag:"material",ac:"#6A1B9A"},
+  {id:3,type:"photo",user:"Harsh Sahu",role:"PM",site:"Esther Risali",time:"5h ago",img:"https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=400&h=260&fit=crop",caption:"Brickwork 2nd floor 80% done, pace is great 💪",likes:18,comments:5,tag:"progress",ac:"#2E7D32"},
+  {id:4,type:"issue",user:"Priyanka",role:"PM",site:"Simran Bungalow",time:"6h ago",img:null,caption:"⚠️ Design approval pending — client revision awaited",likes:0,comments:2,tag:"issue",ac:"#AD1457"},
+  {id:5,type:"photo",user:"Vijay Sahu",role:"PM",site:"Amarendra Villa",time:"1d ago",img:"https://images.unsplash.com/photo-1590725140246-20acddc1ec6d?w=400&h=260&fit=crop",caption:"Foundation waterproofing in progress 🏗️",likes:9,comments:2,tag:"progress",ac:"#1565C0"},
+  {id:6,type:"photo",user:"Harsh Sahu",role:"PM",site:"Neha Sagar Office",time:"1d ago",img:"https://images.unsplash.com/photo-1486325212027-8081e485255e?w=400&h=260&fit=crop",caption:"False ceiling installation started — ground floor",likes:14,comments:4,tag:"progress",ac:"#2E7D32"},
+  {id:7,type:"approval",user:"Niranjan",role:"Supervisor",site:"Tikendra Residence",time:"2d ago",img:null,caption:"✅ Labour payment PR-12 approved — ₹30,000",likes:2,comments:0,tag:"approval",ac:"#6A1B9A"},
+  {id:8,type:"photo",user:"Vijay Sahu",role:"PM",site:"Bablu Farmhouse",time:"2d ago",img:"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=260&fit=crop",caption:"Exterior plastering 90% done, paint starts Monday 🎨",likes:21,comments:7,tag:"progress",ac:"#1565C0"},
+];
+const STATUS_META={"Ongoing":{bg:C.gl,text:C.g},"Completed":{bg:C.bl,text:C.p},"Hold":{bg:C.ol,text:C.o},"Not Started":{bg:C.b,text:C.tl}};
+
+// ── FINANCE DATA ─────────────────────────────────────────────────────
+const ACCOUNTS=[
+  {id:1,name:"HDFC Current",no:"••4821",balance:1823540,color:C.p,icon:"🏦"},
+  {id:2,name:"SBI Current",no:"••2204",balance:945200,color:C.teal,icon:"🏦"},
+  {id:3,name:"Petty Cash",no:null,balance:18500,color:C.g,icon:"💵"},
+  {id:4,name:"ICICI OD",no:"••9012",balance:-230000,color:C.o,icon:"🏦"},
+];
+const WALLETS=[
+  {id:1,name:"Vijay Sahu",role:"PM",balance:12500,limit:25000,initials:"VS",color:"#1565C0"},
+  {id:2,name:"Harsh Sahu",role:"PM",balance:8200,limit:25000,initials:"HS",color:"#2E7D32"},
+  {id:3,name:"Niranjan",role:"Supervisor",balance:4500,limit:10000,initials:"NJ",color:"#6A1B9A"},
+  {id:4,name:"Priyanka",role:"PM",balance:6800,limit:15000,initials:"PK",color:"#AD1457"},
+];
+const PARTIES=[
+  {id:1,name:"3 Eye CCTV Solution",type:"Other Vendor",balance:82166,balType:"Advance Paid"},
+  {id:2,name:"Abhay Traders",type:"Material Supplier",balance:114328,balType:"To Pay"},
+  {id:3,name:"Akashdeep Raipur",type:"Client",balance:2896400,balType:"Advance Received"},
+  {id:4,name:"Amarendra Shrivastava",type:"Client",balance:542790,balType:"To Receive"},
+  {id:5,name:"Amrit Builders",type:"Client",balance:770294,balType:"To Receive"},
+  {id:6,name:"Ramesh Labour Cont.",type:"Sub-Con",balance:38000,balType:"To Pay"},
+  {id:7,name:"Vaibhav Traders",type:"Material Supplier",balance:22500,balType:"To Pay"},
+  {id:8,name:"Shyam Ji Raipur",type:"Client",balance:180000,balType:"To Receive"},
+];
+const PARTY_TXNS={
+  3:[
+    {id:1,date:"02 Feb 2026",note:"70 param account cash + phone pay to vijay",amount:100000,dr:false},
+    {id:2,date:"12 Jan 2026",note:"by naveen sir to vijay",amount:50000,dr:false},
+    {id:3,date:"31 Dec 2025",note:"Cash received at anand fashion",amount:250000,dr:false},
+  ],
+  2:[
+    {id:1,date:"08 Mar 2026",note:"TMT Steel 2 MT — Esther Risali",amount:126775,dr:true,status:"unpaid",items:[{name:"TMT Steel Fe500",rate:"₹63,000/MT",qty:"2 MT",amt:126000},{name:"Binding Wire",rate:"₹80/kg",qty:"10 kg",amt:800}]},
+    {id:2,date:"01 Mar 2026",note:"Cement 100 bags — Esther Risali",amount:38500,dr:true,status:"paid"},
+    {id:3,date:"20 Feb 2026",note:"Sand 5 loads — Shubham 623",amount:17500,dr:true,status:"paid"},
+  ],
+};
+const TXN_TYPE_META={
+  "Payment In":{color:C.g,bg:C.gl},
+  "Payment Out":{color:C.r,bg:C.rl},
+  "Material Purchase":{color:C.p,bg:C.bl},
+  "Site Expense":{color:C.o,bg:C.ol},
+  "Party Payment":{color:C.pur,bg:C.purl},
+  "Sub-Con Expense":{color:C.teal,bg:C.tealL},
+  "Material Return":{color:C.a,bg:"#FFF8E1"},
+  "Sales Invoice":{color:C.g,bg:C.gl},
+  "Unbilled Material":{color:C.pink,bg:C.pinkL},
+};
+const TRANSACTIONS_DATA=[
+  {id:1,date:"09 Mar",ds:20260309,party:"Vijay Sahu → Hukumchand Trilok",sub:"Labour payment at slab casting",project:"Amarendra Villa",type:"Party Payment",account:"HDFC",amount:50000,dr:true,status:"paid"},
+  {id:2,date:"08 Mar",ds:20260308,party:"Vijay Sahu",sub:"Murga jali for plaster",project:"Shubham 623",type:"Site Expense",account:"Petty Cash",amount:500,dr:true,status:"paid"},
+  {id:3,date:"08 Mar",ds:20260308,party:"Abhay Traders",sub:"TMT Steel 2 MT",project:"Esther Risali",type:"Material Purchase",account:"HDFC",amount:126775,dr:true,status:"unpaid"},
+  {id:4,date:"07 Mar",ds:20260307,party:"Shyam Ji Raipur",sub:"Client advance payment",project:"Shyam Township",type:"Payment In",account:"SBI",amount:500000,dr:false,status:"paid"},
+  {id:5,date:"06 Mar",ds:20260306,party:"GBC Sunny",sub:"Harish tile vala",project:"Neha Sagar",type:"Site Expense",account:"Petty Cash",amount:5000,dr:true,status:"paid"},
+  {id:6,date:"05 Mar",ds:20260305,party:"GBC Sunny",sub:"Granite vala",project:"Bablu Farmhouse",type:"Site Expense",account:"Petty Cash",amount:5000,dr:true,status:"paid"},
+  {id:7,date:"04 Mar",ds:20260304,party:"Ramesh Labour Cont.",sub:"Brickwork 2nd floor",project:"Tikendra Residence",type:"Sub-Con Expense",account:"HDFC",amount:38000,dr:true,status:"unpaid"},
+  {id:8,date:"03 Mar",ds:20260303,party:"Rajesh Electrical",sub:"Wiring materials",project:"Amarendra Villa",type:"Material Purchase",account:"HDFC",amount:22500,dr:true,status:"paid"},
+  {id:9,date:"02 Mar",ds:20260302,party:"Abhay Traders",sub:"To be billed — unbilled",project:"Shubham 623",type:"Unbilled Material",account:"—",amount:18000,dr:true,status:"unbilled"},
+  {id:10,date:"01 Mar",ds:20260301,party:"Akashdeep Raipur",sub:"Client payment received",project:"Shyam Township",type:"Payment In",account:"SBI",amount:200000,dr:false,status:"paid"},
+];
+const UNBILLED_PARTIES=[
+  {id:1,name:"AAA Traders",items:1,project:"Shubham 623",billItems:[{name:"Bricks",qty:5000,unit:"Nos",rate:8,amt:40000}]},
+  {id:2,name:"Shyam Ji Raipur",items:1,project:"Shubham 623",billItems:[{name:"Sand",qty:10,unit:"Loads",rate:3500,amt:35000}]},
+  {id:3,name:"Shubham & NK 623",items:9,project:"Shubham 623",billItems:[{name:"Cement OPC",qty:120,unit:"Bags",rate:380,amt:45600},{name:"Sand",qty:5,unit:"Loads",rate:3200,amt:16000}]},
+  {id:4,name:"Akashdeep",items:2,project:"Esther Risali",billItems:[{name:"Tiles 2x2",qty:200,unit:"Sqft",rate:65,amt:13000}]},
+];
+const PAY_REQS_DATA=[
+  {id:12,no:"PR-12",date:"27 Feb",party:"Laxmi Electrical",project:"Neha Sagar",amount:1750,status:"Pending",by:"Harsh Sahu"},
+  {id:10,no:"PR-10",date:"21 Feb",party:"Chandra Shekhar",project:"Tikendra",amount:30000,status:"Pending",by:"Niranjan"},
+  {id:8,no:"PR-8",date:"24 Jan",party:"Vaibhav Traders",project:"Amarendra Villa",amount:22500,status:"Pending",by:"Vijay Sahu"},
+  {id:11,no:"PR-11",date:"21 Feb",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,status:"Approved",by:"Harsh Sahu"},
+  {id:9,no:"PR-9",date:"30 Jan",party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,status:"Approved",by:"Vijay Sahu"},
+];
+const PEND_PMTS_DATA=[
+  {id:1,type:"pr",no:"PR-11",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,date:"21 Feb",overdue:false},
+  {id:2,type:"pr",no:"PR-9",party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,date:"30 Jan",overdue:false},
+  {id:3,type:"bill",no:"MP-38",party:"Abhay Traders",project:"Esther Risali",amount:126775,date:"10 Mar",overdue:true},
+  {id:4,type:"bill",no:"SUB-22",party:"Ramesh Labour",project:"Tikendra",amount:38000,date:"15 Mar",overdue:false},
+  {id:5,type:"bill",no:"MP-41",party:"Vaibhav Traders",project:"Amarendra Villa",amount:31200,date:"20 Mar",overdue:false},
+];
+
+function SitePulseDrawer({onClose}){
+  const [site,setSite]=useState("All");const [type,setType]=useState("All");const [liked,setLiked]=useState({});
+  const tagMeta={"progress":{c:C.g,b:C.gl},"material":{c:C.p,b:C.bl},"issue":{c:C.r,b:C.rl},"approval":{c:C.teal,b:C.tealL}};
+  const filtered=PULSE_FEED.filter(f=>(site==="All"||f.site.includes(site))&&(type==="All"||f.type===type));
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:200,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:390,background:C.bg,zIndex:201,boxShadow:"-8px 0 40px rgba(0,0,0,0.24)",display:"flex",flexDirection:"column",animation:"slideIn 0.22s ease",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
+          <div style={{display:"flex",alignItems:"center",gap:7}}>
+            <div style={{width:9,height:9,borderRadius:"50%",background:C.g,boxShadow:`0 0 0 3px ${C.gl}`,animation:"livePulse 1.5s infinite"}}/>
+            <span style={{fontSize:14,fontWeight:800,color:C.t}}>Site Pulse</span>
+            <span style={{background:C.r,color:"white",fontSize:8,fontWeight:800,padding:"2px 5px",borderRadius:4,letterSpacing:"0.6px"}}>LIVE</span>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}><IcX size={15}/></button>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <select value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
+            <option>All</option>{["Shubham 623","Esther Risali","Amarendra Villa","Tikendra Residence","Neha Sagar Office","Bablu Farmhouse"].map(s=><option key={s}>{s}</option>)}
+          </select>
+          <select value={type} onChange={e=>setType(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
+            {["All","photo","material","issue","approval"].map(t=><option key={t} value={t}>{t==="All"?"All Types":t[0].toUpperCase()+t.slice(1)}</option>)}
+          </select>
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
+        {filtered.map(f=>{
+          const tm=tagMeta[f.tag]||{c:C.tm,b:C.b};const isL=liked[f.id];
+          return(
+            <div key={f.id} style={{background:C.w,borderRadius:12,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.08)"}}>
+              <div style={{display:"flex",alignItems:"center",gap:9,padding:"10px 12px 7px"}}>
+                <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${f.ac},${f.ac}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"white",flexShrink:0,boxShadow:`0 0 0 2px ${f.ac}44`}}>{f.user.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
+                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.t}}>{f.user} <span style={{fontSize:10,fontWeight:400,color:C.tl}}>· {f.role}</span></div><div style={{fontSize:10,color:C.tl}}>📍 {f.site} · {f.time}</div></div>
+                <span style={{background:tm.b,color:tm.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:20,textTransform:"capitalize"}}>{f.tag}</span>
+              </div>
+              {f.img&&<img src={f.img} alt="site" style={{width:"100%",height:180,objectFit:"cover",display:"block"}} onError={e=>{e.target.parentElement.innerHTML='<div style="height:180px;background:linear-gradient(135deg,#E3F2FD,#BBDEFB);display:flex;align-items:center;justify-content:center;font-size:40px">🏗️</div>';}}/>}
+              {!f.img&&f.type==="issue"&&<div style={{margin:"0 12px 6px",background:C.rl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.r}`,display:"flex",gap:7,alignItems:"center"}}><IcWarn size={13} color={C.r}/><span style={{fontSize:11.5,color:C.r,fontWeight:500}}>Issue Flagged</span></div>}
+              {!f.img&&f.type==="approval"&&<div style={{margin:"0 12px 6px",background:C.tealL,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.teal}`,display:"flex",gap:7,alignItems:"center"}}><IcChk size={13} color={C.teal}/><span style={{fontSize:11.5,color:C.teal,fontWeight:500}}>Payment Approved</span></div>}
+              {!f.img&&f.type==="material"&&<div style={{margin:"0 12px 6px",background:C.bl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.p}`,display:"flex",gap:7,alignItems:"center"}}><span style={{fontSize:16}}>📦</span><span style={{fontSize:11.5,color:C.p,fontWeight:500}}>Material Received</span></div>}
+              <div style={{padding:"7px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user}</strong> {f.caption}</span></div>
+              <div style={{padding:"5px 12px 10px",display:"flex",gap:14,alignItems:"center"}}>
+                <button onClick={()=>setLiked(p=>({...p,[f.id]:!p[f.id]}))} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:isL?C.r:C.tl,padding:0,transition:"transform 0.15s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.18)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
+                  <IcHeart size={16} color={isL?C.r:C.tl} fill={isL?C.r:"none"}/><span style={{fontSize:11,fontWeight:600}}>{f.likes+(isL?1:0)}</span>
+                </button>
+                <button style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:C.tl,padding:0}}><IcMsg size={15} color={C.tl}/><span style={{fontSize:11,fontWeight:600}}>{f.comments}</span></button>
+                <div style={{flex:1}}/><span style={{fontSize:9.5,color:C.tl}}>{f.time}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div style={{padding:"10px 12px",background:C.w,borderTop:`1px solid ${C.b}`}}>
+        <button style={{width:"100%",padding:"9px",borderRadius:8,background:`linear-gradient(135deg,${C.pur},#8E24AA)`,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>View Full Site Pulse →</button>
+      </div>
+    </div>
+  </>);
+}
+
+// ── DUPLICATE MODAL ───────────────────────────────────────────────────
+
+function DuplicateModal({project,onClose,onConfirm}){
+  const [step,setStep]=useState(1);const [done,setDone]=useState(false);
+  const [form,setForm]=useState({name:`${project.name} — Copy`,city:project.city,boq:project.boq,start:"",end:""});
+  const [pm,setPM]=useState(project.pm);const [sup,setSup]=useState("Niranjan");
+  const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const handleCreate=()=>{setDone(true);setTimeout(()=>{onConfirm({...project,id:Date.now(),name:form.name,city:form.city,boq:Number(form.boq),pm,progress:0,status:"Not Started",expense:0,start:form.start||"TBD",end:form.end||"TBD"});onClose();},1400);};
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:C.w,borderRadius:16,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{background:`linear-gradient(135deg,${C.p},${C.p2})`,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
+        <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}><IcCopy size={17} color="white"/></div>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"white"}}>Duplicate Project</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.72)"}}>Tasks, dependencies & BOQ carry over automatically</div></div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:7,display:"flex"}}><IcX size={14}/></button>
+      </div>
+      {/* Steps */}
+      <div style={{display:"flex",alignItems:"center",padding:"10px 20px",borderBottom:`1px solid ${C.b}`,background:"#FAFBFF"}}>
+        {["Project Details","Team Assignment","Review"].map((s,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",flex:i<2?1:"auto"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <div style={{width:24,height:24,borderRadius:"50%",background:step>i+1?C.g:step===i+1?C.p:C.b,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:step>=i+1?"white":C.tl,transition:"all 0.3s",flexShrink:0}}>{step>i+1?"✓":i+1}</div>
+              <span style={{fontSize:11,fontWeight:step===i+1?700:400,color:step===i+1?C.p:step>i+1?C.g:C.tl,whiteSpace:"nowrap"}}>{s}</span>
+            </div>
+            {i<2&&<div style={{flex:1,height:2,background:step>i+1?C.g:C.b,margin:"0 10px",borderRadius:2,transition:"background 0.3s"}}/>}
+          </div>
+        ))}
+      </div>
+      <div style={{padding:"16px 20px",maxHeight:340,overflowY:"auto"}}>
+        {step===1&&<div>
+          <div style={{background:C.bg,borderRadius:8,padding:"9px 12px",marginBottom:12,display:"flex",alignItems:"center",gap:8,border:`1px solid ${C.b}`}}>
+            <span style={{fontSize:11,color:C.tl}}>Copying from:</span><strong style={{fontSize:11.5,color:C.t,flex:1}}>{project.name}</strong>
+            <span style={{background:C.bl,color:C.p,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>Template</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {[["New Project Name *",form.name,"name","text",true],["City *",form.city,"city","text",false],["BOQ Value (₹) *",form.boq,"boq","number",false],["Type",project.type,"_type","text",false],["Start Date",form.start,"start","date",false],["End Date",form.end,"end","date",false]].map(([lbl,val,key,type,full])=>(
+              <div key={key} style={{gridColumn:full?"1 / -1":"auto"}}>
+                <label style={{fontSize:10,fontWeight:700,color:C.tm,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{lbl}</label>
+                <input type={type} value={val} onChange={e=>setF(key,e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:12.5,color:C.t,background:C.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=C.p} onBlur={e=>e.target.style.borderColor=C.b}/>
+              </div>
+            ))}
+          </div>
+          <div style={{background:C.gl,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.g,display:"flex",gap:6,marginTop:12}}><span>✅</span><span>All tasks, BOQ items, dependencies & phases will be copied automatically.</span></div>
+        </div>}
+        {step===2&&<div>
+          <p style={{fontSize:11.5,color:C.tl,margin:"0 0 14px"}}>Click to assign team for the new project.</p>
+          {[{role:"Project Manager",val:pm,setter:setPM,prev:project.pm},{role:"Site Supervisor",val:sup,setter:setSup,prev:"Niranjan"}].map(({role,val,setter,prev})=>(
+            <div key={role} style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:C.tm,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:7}}>{role}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {TEAM.map(t=><button key={t.id} onClick={()=>setter(t.name)} style={{padding:"6px 11px",borderRadius:7,border:`1.5px solid ${val===t.name?t.color:C.b}`,background:val===t.name?t.color+"14":C.bg,fontSize:11.5,color:val===t.name?t.color:C.tm,fontWeight:val===t.name?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all 0.15s"}}>
+                  <div style={{width:20,height:20,borderRadius:"50%",background:val===t.name?t.color:C.b,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:val===t.name?"white":C.tl}}>{t.initials}</div>
+                  {t.name}{prev===t.name&&<span style={{fontSize:8.5,color:C.tl}}>(prev)</span>}
+                </button>)}
+              </div>
+            </div>
+          ))}
+        </div>}
+        {step===3&&(!done
+          ?<div>
+            <div style={{fontSize:12,fontWeight:700,color:C.t,marginBottom:10}}>Review before creating:</div>
+            {[["Project Name",form.name],["City",form.city],["BOQ",`₹${Number(form.boq).toLocaleString("en-IN")}`],["PM",pm],["Supervisor",sup],["Timeline",`${form.start||"TBD"} → ${form.end||"TBD"}`],["Initial Status","Not Started · 0%"],["Carry Over","Tasks · BOQ · Phases · Dependencies"]].map(([k,v])=>(
+              <div key={k} style={{display:"flex",padding:"7px 0",borderBottom:`1px solid ${C.b}`}}><span style={{width:140,fontSize:11.5,color:C.tl,flexShrink:0}}>{k}</span><span style={{fontSize:11.5,fontWeight:600,color:C.t}}>{v}</span></div>
+            ))}
+          </div>
+          :<div style={{textAlign:"center",padding:"28px 0"}}><div style={{fontSize:44,marginBottom:10}}>✅</div><div style={{fontSize:15,fontWeight:800,color:C.g}}>Project Created!</div><div style={{fontSize:12,color:C.tl,marginTop:4}}>{form.name} added.</div></div>
+        )}
+      </div>
+      {!done&&<div style={{padding:"12px 20px",borderTop:`1px solid ${C.b}`,display:"flex",gap:8,background:"#FAFBFF"}}>
+        {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"9px",borderRadius:8,border:`1.5px solid ${C.b}`,background:C.bg,fontSize:12,fontWeight:600,color:C.tm,cursor:"pointer"}}>← Back</button>}
+        <button onClick={step<3?()=>setStep(s=>s+1):handleCreate} style={{flex:2,padding:"9px",borderRadius:8,background:step===3?`linear-gradient(135deg,${C.g},#388E3C)`:`linear-gradient(135deg,${C.p},${C.p2})`,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+          {step===1?"Next: Team →":step===2?"Next: Review →":"✓ Create Duplicate"}
+        </button>
+      </div>}
+    </div>
+  </>);
+}
+
+
+function ProjectsPage({onSelectProject}){
+  const [allProjects,setAllProjects]=useState(PROJECTS_DATA);
+  const [view,setView]=useState("tile");
+  const [search,setSearch]=useState("");
+  const [filterCity,setFilterCity]=useState("All");
+  const [filterStatus,setFilterStatus]=useState("All");
+  const [hideCompleted,setHideCompleted]=useState(true);
+  const [sortBy,setSortBy]=useState("Default");
+  const [showPulse,setShowPulse]=useState(false);
+  const [dupOf,setDupOf]=useState(null);
+  const [cardMenu,setCardMenu]=useState(null); // project id with open menu
+
+  const cities=["All",...new Set(allProjects.map(p=>p.city))];
+  const progClr=pct=>pct===100?T.grn:pct>60?T.blu:pct>30?T.amb:T.red;
+
+  const filtered=allProjects.filter(p=>{
+    if(hideCompleted&&p.status==="Completed") return false;
+    if(filterCity!=="All"&&p.city!==filterCity) return false;
+    if(filterStatus!=="All"&&p.status!==filterStatus) return false;
+    if(search&&!p.name.toLowerCase().includes(search.toLowerCase())&&!p.client.toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  }).sort((a,b)=>sortBy==="A→Z"?a.name.localeCompare(b.name):sortBy==="End"?(a.end||"").localeCompare(b.end||""):sortBy==="↓%"?b.progress-a.progress:sortBy==="↑%"?a.progress-b.progress:0);
+
+  const stats={total:allProjects.length,ongoing:allProjects.filter(p=>p.status==="Ongoing").length,hold:allProjects.filter(p=>p.status==="Hold").length,notStarted:allProjects.filter(p=>p.status==="Not Started").length,completed:allProjects.filter(p=>p.status==="Completed").length};
+
+  const SM={"Ongoing":{c:T.grn,bg:T.grnL},"Completed":{c:T.blu,bg:T.bluL},"Hold":{c:T.amb,bg:T.ambL},"Not Started":{c:T.slt,bg:T.sltL}};
+
+  const ACTION_TILES=[
+    {label:"Pending Approvals",val:7,   Icon:IcWarn,  color:T.amb,bg:T.ambL,bdr:T.ambM},
+    {label:"Material Requests", val:11,  Icon:IcProc,  color:T.blu,bg:T.bluL,bdr:T.bluM},
+    {label:"My To-Do",          val:5,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
+    {label:"Open Issues",       val:3,   Icon:IcWarn,  color:T.red,bg:T.redL,bdr:T.redM},
+    {label:"Site Pulse",        val:"LIVE",Icon:IcPulse,color:T.pur,bg:T.purL,bdr:"#C4B5FD",live:true,onClick:()=>setShowPulse(true)},
+  ];
+
+  const Pill=({label,c,bg})=>(
+    <span style={{display:"inline-block",background:bg,color:c,fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap",border:`1px solid ${c}33`,lineHeight:1.5}}>{label}</span>
+  );
+  const PBar=({pct,color,h=3})=>(
+    <div style={{height:h,background:T.b1,borderRadius:h,overflow:"hidden"}}>
+      <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:color,borderRadius:h,transition:"width .5s"}}/>
+    </div>
+  );
+
+  return(
+    <div style={{padding:"14px 18px",fontFamily:"'Segoe UI',system-ui,sans-serif",background:T.bg,minHeight:"100%"}} onClick={()=>setCardMenu(null)}>
+
+      {/* ── COUNT PILLS ── */}
+      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:10,flexWrap:"wrap"}}>
+        {[{l:"Total",v:stats.total,c:T.blu},{l:"Ongoing",v:stats.ongoing,c:T.grn},{l:"Hold",v:stats.hold,c:T.amb},{l:"Not Started",v:stats.notStarted,c:T.slt},{l:"Completed",v:stats.completed,c:T.t4}].map((p,i)=>(
+          <div key={i} style={{display:"inline-flex",alignItems:"center",gap:5,background:T.surface,borderRadius:20,padding:"4px 11px 4px 8px",border:`1px solid ${T.b1}`,boxShadow:"0 1px 2px rgba(0,0,0,.04)",flexShrink:0,cursor:"default"}} onMouseEnter={e=>e.currentTarget.style.borderColor=p.c+"55"} onMouseLeave={e=>e.currentTarget.style.borderColor=T.b1}>
+            <span style={{width:7,height:7,borderRadius:"50%",background:p.c,display:"inline-block",flexShrink:0}}/>
+            <span style={{fontSize:14,fontWeight:800,color:T.t1}}>{p.v}</span>
+            <span style={{fontSize:10.5,color:T.t3}}>{p.l}</span>
+          </div>
+        ))}
+        <div style={{flex:1}}/>
+        <button onClick={()=>setHideCompleted(h=>!h)} style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:20,border:`1.5px solid ${!hideCompleted?T.blu:T.b1}`,background:!hideCompleted?T.bluL:T.surface,fontSize:11,fontWeight:600,color:!hideCompleted?T.blu:T.t3,cursor:"pointer",transition:"all .18s"}}>
+          {!hideCompleted?<IcEyeX size={13} color={T.blu}/>:<IcEye size={13} color={T.t4}/>}
+          {!hideCompleted?"Hide Completed":"Show Completed"}
+          {hideCompleted&&stats.completed>0&&<span style={{background:T.bluL,color:T.blu,fontSize:9,fontWeight:700,padding:"0 5px",borderRadius:10}}>{stats.completed}</span>}
+        </button>
+      </div>
+
+      {/* ── ACTION TILES ── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:9,marginBottom:12}}>
+        {ACTION_TILES.map((tile,i)=>(
+          <div key={i} onClick={tile.onClick}
+            style={{background:tile.bg,borderRadius:9,padding:"11px 13px 10px",border:`1px solid ${tile.bdr}`,cursor:tile.onClick?"pointer":"default",transition:"transform .15s,box-shadow .15s",position:"relative",overflow:"hidden"}}
+            onMouseEnter={e=>{if(tile.onClick){e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow=`0 6px 16px ${tile.color}22`;}}}
+            onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="none";}}>
+            {/* ghost bg icon */}
+            <div style={{position:"absolute",right:-6,top:-6,opacity:.06,transform:"scale(2.6) rotate(8deg)",pointerEvents:"none"}}><tile.Icon size={20} color={tile.color}/></div>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}>
+              <tile.Icon size={16} color={tile.color}/>
+              {tile.live&&<span style={{background:T.red,color:"white",fontSize:7,fontWeight:800,padding:"1px 4px",borderRadius:3,letterSpacing:".5px"}}>LIVE</span>}
+            </div>
+            <div style={{fontSize:typeof tile.val==="number"?21:13,fontWeight:800,color:tile.color,lineHeight:1,marginBottom:2}}>{tile.val}</div>
+            <div style={{fontSize:10.5,fontWeight:600,color:tile.color,opacity:.8,lineHeight:1.3}}>{tile.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── TOOLBAR — single line, inline search ── */}
+      <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",boxShadow:"0 1px 3px rgba(0,0,0,.04)"}}>
+
+        {/* Search — icon inside input, perfectly inline */}
+        <div style={{position:"relative",flex:1,minWidth:180}}>
+          <div style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",alignItems:"center",lineHeight:0}}>
+            <IcSrch size={13} color={T.t4}/>
+          </div>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search projects or clients..."
+            style={{width:"100%",height:32,padding:"0 9px 0 28px",borderRadius:6,border:`1.5px solid ${search?T.blu:T.b1}`,fontSize:12.5,color:T.t1,background:search?T.bluL:T.surfaceB,outline:"none",boxSizing:"border-box",fontFamily:"inherit",transition:"border-color .15s,background .15s"}}
+            onFocus={e=>{e.target.style.borderColor=T.blu;e.target.style.background=T.bluL;}}
+            onBlur={e=>{if(!search){e.target.style.borderColor=T.b1;e.target.style.background=T.surfaceB;}}}/>
+        </div>
+
+        {/* City */}
+        <div style={{position:"relative"}}>
+          <select value={filterCity} onChange={e=>setFilterCity(e.target.value)}
+            style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterCity!=="All"?T.blu:T.b1}`,background:filterCity!=="All"?T.bluL:T.surfaceB,fontSize:12,color:filterCity!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterCity!=="All"?600:400,minWidth:90,appearance:"none",WebkitAppearance:"none"}}>
+            {cities.map(c=><option key={c} value={c}>{c==="All"?"All Cities":c}</option>)}
+          </select>
+          <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
+        </div>
+
+        {/* Status */}
+        <div style={{position:"relative"}}>
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+            style={{height:32,padding:"0 24px 0 9px",borderRadius:6,border:`1.5px solid ${filterStatus!=="All"?T.blu:T.b1}`,background:filterStatus!=="All"?T.bluL:T.surfaceB,fontSize:12,color:filterStatus!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:filterStatus!=="All"?600:400,minWidth:90,appearance:"none",WebkitAppearance:"none"}}>
+            {["All","Ongoing","Hold","Not Started"].map(s=><option key={s} value={s}>{s==="All"?"All Status":s}</option>)}
+          </select>
+          <div style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcDown size={11} color={T.t4}/></div>
+        </div>
+
+        {/* Sort */}
+        <div style={{display:"flex",alignItems:"center",gap:3}}>
+          <span style={{fontSize:10.5,color:T.t4}}>Sort:</span>
+          {["Default","A→Z","End","↓%","↑%"].map(s=>(
+            <button key={s} onClick={()=>setSortBy(s)}
+              style={{height:32,padding:"0 8px",borderRadius:6,border:`1.5px solid ${sortBy===s?T.blu:T.b1}`,background:sortBy===s?T.bluL:T.surfaceB,fontSize:11.5,fontWeight:sortBy===s?700:400,color:sortBy===s?T.blu:T.t3,cursor:"pointer",transition:"all .12s"}}>
+              {s}
+            </button>
+          ))}
+        </div>
+
+        {/* Divider */}
+        <div style={{width:1,height:20,background:T.b1,flexShrink:0}}/>
+
+        {/* View toggle */}
+        <div style={{display:"flex",borderRadius:6,border:`1.5px solid ${T.b1}`,overflow:"hidden",flexShrink:0}}>
+          {[["tile",<IcGrid size={14}/>],["list",<IcListV size={14}/>]].map(([id,icon])=>(
+            <button key={id} onClick={()=>setView(id)}
+              style={{width:32,height:32,border:"none",background:view===id?T.blu:T.surfaceB,color:view===id?"white":T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
+              {icon}
+            </button>
+          ))}
+        </div>
+
+        {/* New Project */}
+        <button style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
+          onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 5px 14px ${T.blu}55`}
+          onMouseLeave={e=>e.currentTarget.style.boxShadow=`0 3px 8px ${T.blu}44`}>
+          <IcAdd size={13} color="white"/> New Project
+        </button>
+      </div>
+
+      {/* Results hint */}
+      <div style={{fontSize:10.5,color:T.t4,marginBottom:9,display:"flex",alignItems:"center",gap:7}}>
+        <span>{filtered.length} projects shown</span>
+        {hideCompleted&&stats.completed>0&&<span onClick={()=>setHideCompleted(false)} style={{background:T.bluL,color:T.blu,fontSize:9.5,fontWeight:700,padding:"1px 8px",borderRadius:20,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:3}}>
+          <IcEye size={10} color={T.blu}/> {stats.completed} completed hidden
+        </span>}
+      </div>
+
+      {/* ── TILE VIEW ── */}
+      {view==="tile"&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10}}>
+          {filtered.map(p=>{
+            const sm=SM[p.status]||SM["Ongoing"];
+            const margin=p.boq-p.expense;
+            const isOpen=cardMenu===p.id;
+            return(
+              <div key={p.id}
+                style={{background:T.surface,borderRadius:8,overflow:"visible",border:`1px solid ${T.b1}`,transition:"transform .14s,box-shadow .14s,border-color .14s",boxShadow:"0 1px 3px rgba(0,0,0,.05)",position:"relative",cursor:"pointer"}}
+                onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 5px 16px rgba(0,0,0,.1)";e.currentTarget.style.borderColor=T.b2;}}
+                onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,.05)";e.currentTarget.style.borderColor=T.b1;}}>
+                {/* Left accent border */}
+                <div style={{position:"absolute",left:0,top:0,bottom:0,width:3,borderRadius:"8px 0 0 8px",background:sm.c}}/>
+                {/* Top progress strip */}
+                <div style={{height:3,background:T.b1,borderRadius:"0 8px 0 0",overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${p.progress}%`,background:progClr(p.progress),transition:"width .6s"}}/>
+                </div>
+
+                <div style={{padding:"8px 10px 8px 14px"}}>
+                  {/* Name + Status + menu */}
+                  <div style={{display:"flex",alignItems:"flex-start",gap:5,marginBottom:3}}>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1,lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div>
+                      <div style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.client}</div>
+                    </div>
+                    <Pill label={p.status} c={sm.c} bg={sm.bg}/>
+                    {/* 3-dot menu */}
+                    <div style={{position:"relative",flexShrink:0}}>
+                      <button onClick={e=>{e.stopPropagation();setCardMenu(isOpen?null:p.id);}}
+                        style={{width:22,height:22,borderRadius:5,border:`1px solid ${isOpen?T.blu:T.b1}`,background:isOpen?T.bluL:T.surfaceB,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",transition:"all .12s"}}
+                        onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.background=T.bluL;}}
+                        onMouseLeave={e=>{if(!isOpen){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background=T.surfaceB;}}}>
+                        <Ic d="M12 5h.01M12 12h.01M12 19h.01" size={13} sw={2.8} color={T.t3}/>
+                      </button>
+                      {isOpen&&(
+                        <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:26,right:0,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,boxShadow:"0 6px 18px rgba(0,0,0,.12)",zIndex:99,minWidth:135,overflow:"hidden"}}>
+                          <button onClick={()=>{setCardMenu(null);onSelectProject&&onSelectProject(p);}}
+                            style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:`1px solid ${T.b1}`}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.bluL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            <IcArrow size={13} color={T.blu}/> Open Project
+                          </button>
+                          <button onClick={()=>{setCardMenu(null);setDupOf(p);}}
+                            style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.ambL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            <IcCopy size={13} color={T.amb}/> Copy Project
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Meta */}
+                  <div style={{display:"flex",gap:8,marginBottom:5}}>
+                    <span style={{display:"flex",alignItems:"center",gap:3,fontSize:10.5,color:T.t3}}><IcLoc size={10} color={T.t4}/>{p.city}</span>
+                    <span style={{fontSize:10.5,color:T.t3}}>{p.type}</span>
+                    <span style={{fontSize:10.5,color:T.t3}}>PM: <b style={{color:T.t2,fontWeight:600}}>{p.pm}</b></span>
+                  </div>
+
+                  {/* Progress */}
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:10,color:T.t4}}>Progress</span>
+                    <span style={{fontSize:10.5,fontWeight:700,color:progClr(p.progress)}}>{p.progress}%</span>
+                  </div>
+                  <PBar pct={p.progress} color={progClr(p.progress)} h={3}/>
+
+                  {/* Finance */}
+                  <div style={{display:"flex",gap:0,marginTop:7,paddingTop:7,borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
+                    {[["BOQ",`₹${fmt(p.boq)}`,T.t1],["Spent",`₹${fmt(p.expense)}`,T.amb],["Margin",`${margin>0?"+":""}₹${fmt(Math.abs(margin))}`,margin>0?T.grn:T.red]].map(([lbl,val,vc],i)=>(
+                      <div key={lbl} style={{flex:1,paddingRight:6,borderRight:i<2?`1px solid ${T.b1}`:"none",paddingLeft:i>0?8:0}}>
+                        <div style={{fontSize:8.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:1}}>{lbl}</div>
+                        <div style={{fontSize:11,fontWeight:700,color:vc,fontVariantNumeric:"tabular-nums"}}>{val}</div>
+                      </div>
+                    ))}
+                    <div style={{paddingLeft:8,flexShrink:0,textAlign:"right"}}>
+                      <div style={{fontSize:9,color:T.t4,marginBottom:3,whiteSpace:"nowrap"}}>{p.end}</div>
+                      <button onClick={e=>{e.stopPropagation();onSelectProject&&onSelectProject(p);}} style={{fontSize:10.5,fontWeight:600,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",padding:"2px 8px",borderRadius:5,whiteSpace:"nowrap"}}>Open →</button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ── LIST VIEW ── */}
+      {view==="list"&&(
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"2.6fr 80px 110px 110px 150px 95px 95px 95px 80px",padding:"7px 16px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,borderLeft:"3px solid transparent"}}>
+            {["Project / Client","City","PM","Status","Progress","BOQ","Spent","Margin","End"].map((h,i)=>(
+              <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px"}}>{h}</span>
+            ))}
+          </div>
+          {filtered.map(p=>{
+            const sm=SM[p.status]||SM["Ongoing"];
+            const margin=p.boq-p.expense;
+            return(
+              <div key={p.id}
+                style={{display:"grid",gridTemplateColumns:"2.6fr 80px 110px 110px 150px 95px 95px 95px 80px",padding:"0 16px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",minHeight:44,transition:"background .12s",borderLeft:`3px solid ${sm.c}55`}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{paddingRight:12,paddingTop:3,paddingBottom:3}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                  <div style={{fontSize:10.5,color:T.t4}}>{p.client}</div>
+                </div>
+                <span style={{fontSize:12,color:T.t2}}>{p.city}</span>
+                <span style={{fontSize:12,color:T.t2}}>{p.pm}</span>
+                <div><span style={{display:"inline-block",background:sm.bg,color:sm.c,fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:20,border:`1px solid ${sm.c}33`}}>{p.status}</span></div>
+                <div style={{paddingRight:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:10.5,color:T.t4}}>{p.progress}%</span>
+                  </div>
+                  <div style={{height:4,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:progClr(p.progress),borderRadius:4}}/></div>
+                </div>
+                <span style={{fontSize:12,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmt(p.boq)}</span>
+                <span style={{fontSize:12,fontWeight:600,color:T.amb,fontVariantNumeric:"tabular-nums"}}>₹{fmt(p.expense)}</span>
+                <span style={{fontSize:12,fontWeight:700,color:margin>0?T.grn:T.red,fontVariantNumeric:"tabular-nums"}}>{margin>0?"+":""}₹{fmt(Math.abs(margin))}</span>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}>
+                  <span style={{fontSize:10.5,color:T.t4}}>{p.end}</span>
+                  <button onClick={e=>{e.stopPropagation();setDupOf(p);}} style={{background:"none",border:`1px solid ${T.b1}`,borderRadius:5,padding:"2px 6px",cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontSize:9.5,color:T.t3,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=T.ambL;e.currentTarget.style.color=T.amb;e.currentTarget.style.borderColor=T.ambM;}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}><IcCopy size={10} color="currentColor"/> Copy</button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
+      {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
+      {dupOf&&<DuplicateModal project={dupOf} onClose={()=>setDupOf(null)} onConfirm={np=>setAllProjects(prev=>[...prev,np])}/>}
+    </div>
+  );
+}
+
+
+export default ProjectsPage;
