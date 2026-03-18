@@ -438,17 +438,18 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
 }
 
 // ─── CREATE TRANSACTION MODAL ─────────────────────────────────
-function CreateTransactionModal({type,onClose,preParty}){
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects}){
   const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
   const UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"];
   const INV_UNITS=["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"];
-  const ACCOUNTS_LIST=["HDFC Current","SBI Current","Petty Cash","ICICI OD"];
+  const ACCOUNTS_LIST=dbAccounts?.length?dbAccounts.map(a=>a.name):["HDFC Current","SBI Current","Petty Cash","ICICI OD"];
   const MOPS_LIST=["Cash","Cheque","Bank Transfer","UPI","NEFT"];
   const WORK_TYPES=["Plastering","Brickwork","Concrete Casting","Tile Laying","Electrical Work","Plumbing","Bar Bending","Painting","Waterproofing","Flooring","Carpentry","False Ceiling","Other"];
-  const PROJECTS_LIST=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Company Level"];
-  const CLIENT_LIST=["Nand Kishor Agrawal","Tikendra Banchhor","Esther Group","Amarendra Shrivastava","Neha Sagar Ltd","Shyam Developers","Simran Kaur","Bablu Mehta"];
-  const SUPPLIER_LIST=["Abhay Traders","Tata Steel","Ambuja Cement","National Bricks","Laxmi Electrical","Dr. Fixit Suppliers","Somany Tiles","Asian Paints","Other"];
-  const SUBCON_LIST=["Ramesh Labour Cont.","Rupesh Sahu","Naresh","Laxmikant","Plumber Arun","Laxmi Electrical","Chandra Shekhar","Other"];
+  const PROJECTS_LIST=dbProjects?.length?dbProjects:["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Company Level"];
+  const CLIENT_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Client").map(p=>p.name):["Nand Kishor Agrawal","Tikendra Banchhor","Esther Group"];
+  const SUPPLIER_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Material Supplier"||p.type==="material_supplier").map(p=>p.name):["Abhay Traders","Tata Steel","Ambuja Cement"];
+  const SUBCON_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Sub-Con"||p.type==="contractor"||p.type==="subcontractor").map(p=>p.name):["Ramesh Labour Cont.","Rupesh Sahu"];
+  const ALL_PARTIES=dbParties?.length?dbParties.map(p=>p.name):[...CLIENT_LIST,...SUPPLIER_LIST,...SUBCON_LIST];
 
   // Pre-defined material library (used in Material Purchase Bill)
   const MATERIAL_LIBRARY=[
@@ -478,7 +479,7 @@ function CreateTransactionModal({type,onClose,preParty}){
   const isSubcon=type==="Sub-Con Bill";
   const isInvoice=type==="Sales Invoice";
 
-  const partyOptions=type==="Payment Received"?CLIENT_LIST:isInvoice?CLIENT_LIST:isMaterial?SUPPLIER_LIST:isSubcon?SUBCON_LIST:SUPPLIER_LIST;
+  const partyOptions=type==="Payment Received"?CLIENT_LIST:isInvoice?CLIENT_LIST:isMaterial?SUPPLIER_LIST:isSubcon?SUBCON_LIST:ALL_PARTIES;
 
   // ── core state ──────────────────────────────────────────────
   const [billDate,setBillDate]=useState("2026-03-16");
@@ -1405,6 +1406,7 @@ function FinanceModule(){
   const [masterParties,setMasterParties]=useState(PARTIES);
   const [showAddParty,setShowAddParty]=useState(false);
   const [selParty,setSelParty]=useState(null);const [partySearch,setPartySearch]=useState("");const [selBill,setSelBill]=useState(null);
+  const [apiLedger,setApiLedger]=useState({});
   // Transaction tab
   const [txnSearch,setTxnSearch]=useState("");const [fProject,setFProject]=useState("All");const [fType,setFType]=useState("All");const [fAcc,setFAcc]=useState("All");const [fStatus,setFStatus]=useState("All");
   // Panels
@@ -1548,14 +1550,17 @@ function FinanceModule(){
 
   // ── Ledger helpers ──────────────────────────────────────────
   const getLedgerRows=(party)=>{
-    // Try hardcoded first, then fall back to API transactions filtered by party
-    let txns=[...(PARTY_TXNS[party.id]||[])];
+    // Priority: API ledger → API transactions filtered → hardcoded
+    let txns=apiLedger[party.id]||[];
+    if(txns.length===0){
+      txns=[...(PARTY_TXNS[party.id]||[])];
+    }
     if(txns.length===0&&activeTxns.length>0){
       txns=activeTxns.filter(t=>t.party===party.name).map(t=>({
         id:t.id,date:t.date,note:t.sub||t.type,amount:t.amount,dr:t.dr,status:t.status,
       }));
     }
-    txns=txns.reverse();
+    txns=[...txns].reverse();
     let crT=0,drT=0;
     return txns.map(t=>{if(!t.dr) crT+=t.amount; else drT+=t.amount;return{...t,crT,drT,runBal:Math.abs(drT-crT)};}).reverse();
   };
@@ -1777,7 +1782,19 @@ function FinanceModule(){
                   const isS=selParty?.id===p.id;
                   const tc=p.type==="Client"?T.grn:p.type==="Material Supplier"?T.blu:p.type==="Sub-Con"?T.slt:T.amb;
                   return(
-                    <div key={p.id} onClick={()=>{setSelParty(p);setSelBill(null);}}
+                    <div key={p.id} onClick={async()=>{
+                      setSelParty(p);setSelBill(null);
+                      try{
+                        const res=await api.get(`/finance/parties/${p.id}/ledger`);
+                        if(res.success&&res.data){
+                          setApiLedger(prev=>({...prev,[p.id]:res.data.map(t=>({
+                            id:t.id,date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+                            note:t.description||"",amount:parseFloat(t.amount)||0,
+                            dr:t.type==="payment",status:t.status||"approved",
+                          }))}));
+                        }
+                      }catch(e){console.log("Ledger fetch error");}
+                    }}
                       style={{padding:"10px 13px",cursor:"pointer",borderBottom:`1px solid ${T.b1}`,background:isS?T.bluL:"none",borderLeft:isS?`3px solid ${T.blu}`:"3px solid transparent",transition:"all 0.12s"}}
                       onMouseEnter={e=>{if(!isS)e.currentTarget.style.background=T.surfaceB;}}
                       onMouseLeave={e=>{if(!isS)e.currentTarget.style.background="none";}}>
@@ -2153,6 +2170,9 @@ function FinanceModule(){
           type={createTxnType}
           preParty={createTxnParty}
           onClose={closeTxn}
+          dbParties={masterParties}
+          dbAccounts={activeAccounts}
+          dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
         />
       )}
     </div>
