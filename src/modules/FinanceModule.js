@@ -1415,8 +1415,9 @@ function FinanceModule(){
         if(pRes.success&&pRes.data?.length){
           setMasterParties(pRes.data.map(p=>({
             id:p.id,name:p.name,type:p.type||"Other Vendor",
-            balance:parseFloat(p.balance)||0,
-            balType:p.balance_type||"To Pay",
+            balance:parseFloat(p.opening_balance)||0,
+            balType:parseFloat(p.opening_balance)>=0?"To Receive":"To Pay",
+            phone:p.phone||"",city:p.city||"",
           })));
         }
       }catch(e){console.log("Parties fallback to hardcoded");}
@@ -1425,13 +1426,13 @@ function FinanceModule(){
         const tRes=await api.get("/finance/transactions");
         if(tRes.success&&tRes.data?.length){
           setApiTransactions(tRes.data.map(t=>({
-            id:t.id,date:new Date(t.transaction_date||t.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
-            ds:parseInt((t.transaction_date||t.created_at||"").replace(/\D/g,"").slice(0,8))||0,
-            party:t.party_name||"",sub:t.description||t.notes||"",
-            project:t.project_name||"",type:t.type||"Site Expense",
+            id:t.id,date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+            ds:parseInt((t.date||"").replace(/\D/g,"").slice(0,8))||0,
+            party:t.party_name||"",sub:t.description||"",
+            project:t.project_name||"",type:t.type==="receipt"?"Payment In":"Payment Out",
             account:t.account_name||"",amount:parseFloat(t.amount)||0,
-            dr:t.direction==="out"||t.is_debit===1,
-            status:t.status||"paid",
+            dr:t.type==="payment",
+            status:t.status||"approved",
           })));
         }
       }catch(e){console.log("Transactions fallback to hardcoded");}
@@ -1440,8 +1441,10 @@ function FinanceModule(){
         const aRes=await api.get("/finance/accounts");
         if(aRes.success&&aRes.data?.length){
           setApiAccounts(aRes.data.map(a=>({
-            id:a.id,name:a.name,no:a.account_number?"••"+a.account_number.slice(-4):null,
-            balance:parseFloat(a.balance)||0,color:C.p,
+            id:a.id,name:a.name,
+            no:a.account_number?("••"+a.account_number.slice(-4)):null,
+            balance:parseFloat(a.current_balance||a.opening_balance)||0,
+            color:a.type==="bank"?C.p:a.type==="cash"?C.g:C.teal,
           })));
         }
       }catch(e){console.log("Accounts fallback to hardcoded");}
