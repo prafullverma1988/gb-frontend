@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import api from "../config/api";
 
 // ── ICON BASE ────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -1400,9 +1401,71 @@ function FinanceModule(){
   // PR / Pending
   const [editReqId,setEditReqId]=useState(null);const [editAmt,setEditAmt]=useState("");
   const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);const [pendPmts,setPendPmts]=useState(PEND_PMTS_DATA);
+  // API data
+  const [apiAccounts,setApiAccounts]=useState(null);
+  const [apiTransactions,setApiTransactions]=useState(null);
+  const [apiPartyTxns,setApiPartyTxns]=useState(null);
 
-  const projects=["All",...new Set(TRANSACTIONS_DATA.map(t=>t.project))];
-  const txnFiltered=TRANSACTIONS_DATA.filter(t=>{
+  // ── FETCH DATA FROM API ─────────────────────────────────────
+  useEffect(()=>{
+    const load=async()=>{
+      try{
+        // Fetch parties
+        const pRes=await api.get("/finance/parties");
+        if(pRes.success&&pRes.data?.length){
+          setMasterParties(pRes.data.map(p=>({
+            id:p.id,name:p.name,type:p.type||"Other Vendor",
+            balance:parseFloat(p.balance)||0,
+            balType:p.balance_type||"To Pay",
+          })));
+        }
+      }catch(e){console.log("Parties fallback to hardcoded");}
+      try{
+        // Fetch transactions
+        const tRes=await api.get("/finance/transactions");
+        if(tRes.success&&tRes.data?.length){
+          setApiTransactions(tRes.data.map(t=>({
+            id:t.id,date:new Date(t.transaction_date||t.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+            ds:parseInt((t.transaction_date||t.created_at||"").replace(/\D/g,"").slice(0,8))||0,
+            party:t.party_name||"",sub:t.description||t.notes||"",
+            project:t.project_name||"",type:t.type||"Site Expense",
+            account:t.account_name||"",amount:parseFloat(t.amount)||0,
+            dr:t.direction==="out"||t.is_debit===1,
+            status:t.status||"paid",
+          })));
+        }
+      }catch(e){console.log("Transactions fallback to hardcoded");}
+      try{
+        // Fetch accounts
+        const aRes=await api.get("/finance/accounts");
+        if(aRes.success&&aRes.data?.length){
+          setApiAccounts(aRes.data.map(a=>({
+            id:a.id,name:a.name,no:a.account_number?"••"+a.account_number.slice(-4):null,
+            balance:parseFloat(a.balance)||0,color:C.p,
+          })));
+        }
+      }catch(e){console.log("Accounts fallback to hardcoded");}
+      try{
+        // Fetch payment requests
+        const prRes=await api.get("/finance/payment-requests");
+        if(prRes.success&&prRes.data?.length){
+          setPayReqs(prRes.data.map(r=>({
+            id:r.id,no:`PR-${r.id}`,date:new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+            party:r.party_name||"",project:r.project_name||"",
+            amount:parseFloat(r.amount)||0,status:r.status||"Pending",by:r.requested_by_name||"",
+          })));
+        }
+      }catch(e){console.log("PayReqs fallback to hardcoded");}
+    };
+    load();
+  },[]);
+
+  // Use API data if available, fallback to hardcoded
+  const activeAccounts=apiAccounts||ACCOUNTS;
+  const activeTxns=apiTransactions||TRANSACTIONS_DATA;
+
+  const projects=["All",...new Set(activeTxns.map(t=>t.project))];
+  const txnFiltered=activeTxns.filter(t=>{
     if(txnSearch&&!t.party.toLowerCase().includes(txnSearch.toLowerCase())&&!t.sub.toLowerCase().includes(txnSearch.toLowerCase())) return false;
     if(fProject!=="All"&&t.project!==fProject) return false;
     if(fType!=="All"&&t.type!==fType) return false;
@@ -1412,7 +1475,7 @@ function FinanceModule(){
   });
   const tIn=txnFiltered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
   const tOut=txnFiltered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
-  const totalBal=ACCOUNTS.reduce((s,a)=>s+a.balance,0);
+  const totalBal=activeAccounts.reduce((s,a)=>s+a.balance,0);
   const totalWalletBal=WALLETS.reduce((s,w)=>s+w.balance,0);
   const pendPR=payReqs.filter(r=>r.status==="Pending").length;
   const pendTotal=pendPmts.reduce((s,p)=>s+p.amount,0);
@@ -1422,9 +1485,9 @@ function FinanceModule(){
   const partyTotalDR=allPartyTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const toReceive=masterParties.filter(p=>p.balType==="To Receive").reduce((s,p)=>s+p.balance,0);
   const toPay=masterParties.filter(p=>p.balType==="To Pay").reduce((s,p)=>s+p.balance,0);
-  const allTxnIn=TRANSACTIONS_DATA.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-  const allTxnOut=TRANSACTIONS_DATA.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
-  const unpaidBills=TRANSACTIONS_DATA.filter(t=>t.status==="unpaid").reduce((s,t)=>s+t.amount,0);
+  const allTxnIn=activeTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
+  const allTxnOut=activeTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  const unpaidBills=activeTxns.filter(t=>t.status==="unpaid").reduce((s,t)=>s+t.amount,0);
   const netFlow=allTxnIn-allTxnOut;
   const prPendAmt=payReqs.filter(r=>r.status==="Pending").reduce((s,r)=>s+r.amount,0);
   const prApprovedAmt=payReqs.filter(r=>r.status==="Approved").reduce((s,r)=>s+r.amount,0);
@@ -1573,7 +1636,7 @@ function FinanceModule(){
                   <div style={{padding:"8px 10px"}}>
                     {accTab==="accounts"?(
                       <>
-                        {ACCOUNTS.map(a=>(
+                        {activeAccounts.map(a=>(
                           <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:7,marginBottom:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${a.color}`}}>
                             <IcBank size={14} color={a.color}/>
                             <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.t1}}>{a.name}</div><div style={{fontSize:10,color:T.t4}}>{a.no||"Cash"}</div></div>
@@ -1798,7 +1861,7 @@ function FinanceModule(){
               {[
                 {val:fProject,set:setFProject,opts:projects,def:"All Projects"},
                 {val:fType,set:setFType,opts:["All",...Object.keys(TXN_TYPE_META)],def:"All Types"},
-                {val:fAcc,set:setFAcc,opts:["All",...ACCOUNTS.map(a=>a.name)],def:"All Accounts"},
+                {val:fAcc,set:setFAcc,opts:["All",...activeAccounts.map(a=>a.name)],def:"All Accounts"},
                 {val:fStatus,set:setFStatus,opts:["All","paid","unpaid","unbilled"],def:"All Status"},
               ].map(({val,set,opts,def},i)=>(
                 <div key={i} style={{position:"relative"}}>
@@ -2036,7 +2099,17 @@ function FinanceModule(){
       {showAddParty&&(
         <AddPartyModal
           onClose={()=>setShowAddParty(false)}
-          onAdd={p=>{setMasterParties(prev=>[...prev,p]);setShowAddParty(false);}}
+          onAdd={async(p)=>{
+            try{
+              const res=await api.post("/finance/parties",{name:p.name,type:p.type,balance_type:p.balType,balance:p.balance,phone:p.phone});
+              if(res.success&&res.data){
+                setMasterParties(prev=>[...prev,{id:res.data.id,name:res.data.name,type:res.data.type||p.type,balance:parseFloat(res.data.balance)||p.balance,balType:res.data.balance_type||p.balType}]);
+              }else{
+                setMasterParties(prev=>[...prev,p]);
+              }
+            }catch(e){setMasterParties(prev=>[...prev,p]);}
+            setShowAddParty(false);
+          }}
         />
       )}
 
