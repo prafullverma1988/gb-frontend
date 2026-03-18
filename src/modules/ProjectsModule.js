@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import api from "../config/api";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -337,8 +338,26 @@ function DuplicateModal({project,onClose,onConfirm}){
 }
 
 
+// ── Map API data to frontend format ──────────────────────────────────
+const STATUS_MAP={"ongoing":"Ongoing","completed":"Completed","hold":"Hold","not_started":"Not Started"};
+const TYPE_MAP={"residential":"Residential","commercial":"Commercial","industrial":"Industrial"};
+const fmtDate=(iso)=>{if(!iso)return"";const d=new Date(iso);const m=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];return`${m[d.getMonth()]} ${d.getFullYear()}`;};
+const mapProject=(p)=>({
+  id:p.id, name:p.name, client:p.client_name||"", city:p.city||"",
+  type:TYPE_MAP[p.type]||p.type||"Residential",
+  progress:p.progress_pct||0,
+  status:STATUS_MAP[p.status]||p.status||"Not Started",
+  boq:parseFloat(p.boq_value)||0,
+  expense:parseFloat(p.total_expense)||0,
+  pm:p.pm_name||"",
+  start:fmtDate(p.start_date),
+  end:fmtDate(p.end_date),
+  _raw:p,
+});
+
 function ProjectsPage({onSelectProject}){
-  const [allProjects,setAllProjects]=useState(PROJECTS_DATA);
+  const [allProjects,setAllProjects]=useState([]);
+  const [loading,setLoading]=useState(true);
   const [view,setView]=useState("tile");
   const [search,setSearch]=useState("");
   const [filterCity,setFilterCity]=useState("All");
@@ -348,6 +367,28 @@ function ProjectsPage({onSelectProject}){
   const [showPulse,setShowPulse]=useState(false);
   const [dupOf,setDupOf]=useState(null);
   const [cardMenu,setCardMenu]=useState(null); // project id with open menu
+
+  // Fetch projects from backend
+  useEffect(()=>{
+    const fetchProjects=async()=>{
+      try{
+        setLoading(true);
+        const res=await api.get("/projects");
+        if(res.success&&res.data){
+          setAllProjects(res.data.map(mapProject));
+        }else{
+          // Fallback to hardcoded data
+          setAllProjects(PROJECTS_DATA);
+        }
+      }catch(err){
+        console.error("Failed to fetch projects:",err);
+        setAllProjects(PROJECTS_DATA);
+      }finally{
+        setLoading(false);
+      }
+    };
+    fetchProjects();
+  },[]);
 
   const cities=["All",...new Set(allProjects.map(p=>p.city))];
   const progClr=pct=>pct===100?T.grn:pct>60?T.blu:pct>30?T.amb:T.red;
@@ -378,6 +419,15 @@ function ProjectsPage({onSelectProject}){
   const PBar=({pct,color,h=3})=>(
     <div style={{height:h,background:T.b1,borderRadius:h,overflow:"hidden"}}>
       <div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:color,borderRadius:h,transition:"width .5s"}}/>
+    </div>
+  );
+
+  if(loading) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{textAlign:"center",color:T.t3}}>
+        <div style={{fontSize:16,fontWeight:600}}>Loading Projects...</div>
+        <div style={{fontSize:12,marginTop:6,color:T.t4}}>Fetching from server</div>
+      </div>
     </div>
   );
 
