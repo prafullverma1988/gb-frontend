@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import api, { getUser, getToken, clearAuth } from "./config/api";
 import FinanceModule from "./modules/FinanceModule";
 import ProcurementModule from "./modules/ProcurementModule";
 import DesignModule from "./modules/DesignModule";
@@ -256,7 +257,27 @@ function ProjectMiniCard({p,onClick}){
 
 // ── LOGIN ─────────────────────────────────────────────────────────────
 function LoginScreen({onLogin}){
-  const [show,setShow]=useState(false);const [loading,setLoading]=useState(false);
+  const [email,setEmail]=useState("admin@gbbuildcon.com");
+  const [pass,setPass]=useState("Admin@123");
+  const [show,setShow]=useState(false);
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+
+  const handleLogin=async()=>{
+    setLoading(true);setError("");
+    try{
+      const res=await api.login(email,pass);
+      if(res.success){
+        onLogin(res.user);
+      }else{
+        setError(res.message||"Login failed");
+      }
+    }catch(err){
+      setError("Server not reachable. Please try again.");
+    }
+    setLoading(false);
+  };
+
   return(
     <div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.sb} 0%,#1B3A5C 50%,${C.p} 100%)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <div style={{background:"rgba(255,255,255,0.97)",borderRadius:20,padding:"44px 40px",width:400,boxShadow:"0 32px 80px rgba(0,0,0,0.35)"}}>
@@ -265,16 +286,23 @@ function LoginScreen({onLogin}){
           <div style={{fontSize:21,fontWeight:800,color:C.t}}>GB Buildcon</div>
           <div style={{fontSize:12,color:C.tl,marginTop:3}}>Construction Management Platform</div>
         </div>
-        {[["Email","admin@gbuildcon.com"],["Password","••••••••"]].map(([lbl,def],i)=>(
-          <div key={lbl} style={{marginBottom:i===0?14:26}}>
-            <label style={{fontSize:11,fontWeight:600,color:C.tm,letterSpacing:"0.6px",textTransform:"uppercase",display:"block",marginBottom:6}}>{lbl}</label>
-            <div style={{position:"relative"}}>
-              <input type={i===1&&!show?"password":"text"} defaultValue={def} style={{width:"100%",padding:`11px ${i===1?"40px":"14px"} 11px 14px`,borderRadius:9,border:`1.5px solid ${C.b}`,fontSize:13,color:C.t,background:T.sltL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              {i===1&&<button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}>{show?<IcEyeX size={17}/>:<IcEye size={17}/>}</button>}
-            </div>
+        {error&&<div style={{background:T.redL,color:T.red,padding:"10px 14px",borderRadius:8,fontSize:12.5,marginBottom:16,border:`1px solid ${T.redM}`}}>{error}</div>}
+        <div style={{marginBottom:14}}>
+          <label style={{fontSize:11,fontWeight:600,color:C.tm,letterSpacing:"0.6px",textTransform:"uppercase",display:"block",marginBottom:6}}>Email</label>
+          <input type="text" value={email} onChange={e=>setEmail(e.target.value)}
+            style={{width:"100%",padding:"11px 14px",borderRadius:9,border:`1.5px solid ${C.b}`,fontSize:13,color:C.t,background:T.sltL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+            onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+        </div>
+        <div style={{marginBottom:26}}>
+          <label style={{fontSize:11,fontWeight:600,color:C.tm,letterSpacing:"0.6px",textTransform:"uppercase",display:"block",marginBottom:6}}>Password</label>
+          <div style={{position:"relative"}}>
+            <input type={show?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)}
+              style={{width:"100%",padding:"11px 40px 11px 14px",borderRadius:9,border:`1.5px solid ${C.b}`,fontSize:13,color:C.t,background:T.sltL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+              onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+            <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}>{show?<IcEyeX size={17}/>:<IcEye size={17}/>}</button>
           </div>
-        ))}
-        <button onClick={()=>{setLoading(true);setTimeout(()=>{setLoading(false);onLogin();},1100);}} disabled={loading}
+        </div>
+        <button onClick={handleLogin} disabled={loading}
           style={{width:"100%",padding:"13px",borderRadius:9,background:loading?C.tl:`linear-gradient(135deg,${C.p},${C.p2})`,color:"white",fontSize:14,fontWeight:700,border:"none",cursor:loading?"not-allowed":"pointer"}}>{loading?"Logging in...":"Login to Dashboard"}</button>
       </div>
     </div>
@@ -282,7 +310,7 @@ function LoginScreen({onLogin}){
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────
-function Sidebar({active,setActive,collapsed,setCollapsed}){
+function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout}){
   return(
     <div style={{width:collapsed?62:232,minHeight:"100vh",background:C.sb,display:"flex",flexDirection:"column",transition:"width 0.25s cubic-bezier(.4,0,.2,1)",overflow:"hidden",flexShrink:0,boxShadow:"2px 0 16px rgba(0,0,0,0.28)",zIndex:100}}>
       <div style={{padding:collapsed?"18px 0":"18px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.07)",minHeight:66,justifyContent:collapsed?"center":"flex-start"}}>
@@ -312,14 +340,15 @@ function Sidebar({active,setActive,collapsed,setCollapsed}){
       </nav>
       <div style={{padding:collapsed?"10px 0":"10px 14px",borderTop:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",gap:9,justifyContent:collapsed?"center":"flex-start"}}>
         <div style={{width:30,height:30,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:12,fontWeight:700,color:"white"}}>P</div>
-        {!collapsed&&<div><div style={{color:"white",fontSize:12.5,fontWeight:600}}>Prafull</div><div style={{color:"rgba(255,255,255,0.32)",fontSize:10}}>Admin</div></div>}
+        {!collapsed&&<div style={{flex:1,overflow:"hidden"}}><div style={{color:"white",fontSize:12.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.name||"User"}</div><div style={{color:"rgba(255,255,255,0.32)",fontSize:10}}>{user?.role||"User"}</div></div>}
+        {!collapsed&&onLogout&&<button onClick={onLogout} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.4)",padding:4,display:"flex"}} title="Logout"><IcX size={16}/></button>}
       </div>
     </div>
   );
 }
 
 // ── TOPBAR ────────────────────────────────────────────────────────────
-function TopBar({title,sub,collapsed,setCollapsed,alertCount}){
+function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout}){
   return(
     <div style={{height:60,background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",padding:"0 20px",gap:14,flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
       <button onClick={()=>setCollapsed(!collapsed)} style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}><IcMenu size={19}/></button>
@@ -918,10 +947,23 @@ function ProjectsWrapper(){
 
 // ── APP ───────────────────────────────────────────────────────────────
 export default function App(){
-  const [loggedIn,setLoggedIn]=useState(false);
+  const [user,setUser]=useState(()=>getUser());
   const [nav,setNav]=useState("dashboard");
   const [collapsed,setCollapsed]=useState(false);
-  if(!loggedIn) return <LoginScreen onLogin={()=>setLoggedIn(true)}/>;
+
+  // Check if token exists on load
+  const loggedIn=!!user&&!!getToken();
+
+  const handleLogin=(userData)=>{
+    setUser(userData);
+  };
+
+  const handleLogout=()=>{
+    clearAuth();
+    setUser(null);
+  };
+
+  if(!loggedIn) return <LoginScreen onLogin={handleLogin}/>;
   const PAGES={
     dashboard:{title:"Dashboard",sub:"Company Overview"},
     projects:{title:"Projects",sub:"All Construction Projects"},
@@ -960,9 +1002,9 @@ export default function App(){
         ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#CBD5E0;border-radius:10px}
         select,input{font-family:'Segoe UI',system-ui,sans-serif}
       `}</style>
-      <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed}/>
+      <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout}/>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={ALERTS.length}/>
+        <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={ALERTS.length} user={user} onLogout={handleLogout}/>
         <div style={{flex:1,overflowY:"auto"}}>
           {MODULE_MAP[nav]||<DashboardModule/>}
         </div>
