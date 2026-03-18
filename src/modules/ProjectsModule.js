@@ -550,7 +550,7 @@ function ProjectsPage({onSelectProject}){
             const margin=p.boq-p.expense;
             const isOpen=cardMenu===p.id;
             return(
-              <div key={p.id}
+              <div key={p.id} onClick={()=>onSelectProject&&onSelectProject(p)}
                 style={{background:T.surface,borderRadius:8,overflow:"visible",border:`1px solid ${T.b1}`,transition:"transform .14s,box-shadow .14s,border-color .14s",boxShadow:"0 1px 3px rgba(0,0,0,.05)",position:"relative",cursor:"pointer"}}
                 onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 5px 16px rgba(0,0,0,.1)";e.currentTarget.style.borderColor=T.b2;}}
                 onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,.05)";e.currentTarget.style.borderColor=T.b1;}}>
@@ -640,7 +640,7 @@ function ProjectsPage({onSelectProject}){
             const sm=SM[p.status]||SM["Ongoing"];
             const margin=p.boq-p.expense;
             return(
-              <div key={p.id}
+              <div key={p.id} onClick={()=>onSelectProject&&onSelectProject(p)}
                 style={{display:"grid",gridTemplateColumns:"2.6fr 80px 110px 110px 150px 95px 95px 95px 80px",padding:"0 16px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",minHeight:44,transition:"background .12s",borderLeft:`3px solid ${sm.c}55`}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
