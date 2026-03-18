@@ -261,6 +261,86 @@ function SitePulseDrawer({onClose}){
 
 // ── DUPLICATE MODAL ───────────────────────────────────────────────────
 
+function NewProjectModal({onClose,onCreated}){
+  const [form,setForm]=useState({name:"",client_name:"",city:"Raipur",type:"residential",boq_value:"",start_date:"",end_date:""});
+  const [loading,setLoading]=useState(false);
+  const [error,setError]=useState("");
+  const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  const handleCreate=async()=>{
+    if(!form.name.trim()) return setError("Project name required");
+    setLoading(true);setError("");
+    try{
+      const res=await api.post("/projects",{
+        name:form.name.trim(),
+        client_name:form.client_name.trim(),
+        city:form.city,
+        type:form.type,
+        status:"not_started",
+        boq_value:Number(form.boq_value)||0,
+        start_date:form.start_date||null,
+        end_date:form.end_date||null,
+      });
+      if(res.success&&res.data){
+        onCreated(mapProject(res.data));
+        onClose();
+      }else{
+        setError(res.message||"Failed to create project");
+      }
+    }catch(err){
+      setError("Server error. Try again.");
+    }
+    setLoading(false);
+  };
+
+  const FIELDS=[
+    {label:"Project Name *",key:"name",type:"text",full:true,ph:"e.g. Sharma Residence"},
+    {label:"Client Name",key:"client_name",type:"text",full:false,ph:"Client full name"},
+    {label:"City",key:"city",type:"text",full:false,ph:"City"},
+    {label:"Type",key:"type",type:"select",opts:["residential","commercial","industrial"],full:false},
+    {label:"BOQ Value (₹)",key:"boq_value",type:"number",full:false,ph:"e.g. 5000000"},
+    {label:"Start Date",key:"start_date",type:"date",full:false},
+    {label:"End Date",key:"end_date",type:"date",full:false},
+  ];
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:998}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:460,background:T.surface,borderRadius:14,boxShadow:"0 20px 60px rgba(0,0,0,.25)",zIndex:999,overflow:"hidden"}}>
+      <div style={{padding:"18px 22px",background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:34,height:34,borderRadius:9,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}><IcAdd size={17} color="white"/></div>
+            <div><div style={{fontSize:16,fontWeight:700}}>New Project</div><div style={{fontSize:11,opacity:0.7}}>Add a new construction project</div></div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"white",opacity:0.7}}><IcX size={18}/></button>
+        </div>
+      </div>
+      <div style={{padding:"18px 22px",maxHeight:"60vh",overflowY:"auto"}}>
+        {error&&<div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:12,border:`1px solid ${T.redM}`}}>{error}</div>}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          {FIELDS.map(f=>(
+            <div key={f.key} style={{gridColumn:f.full?"1/3":"auto"}}>
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{f.label}</label>
+              {f.type==="select"?(
+                <select value={form[f.key]} onChange={e=>setF(f.key,e.target.value)} style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                  {f.opts.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+                </select>
+              ):(
+                <input type={f.type} value={form[f.key]} onChange={e=>setF(f.key,e.target.value)} placeholder={f.ph||""}
+                  style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{padding:"14px 22px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:10}}>
+        <button onClick={onClose} style={{padding:"9px 18px",borderRadius:7,border:`1px solid ${T.b1}`,background:"none",fontSize:13,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+        <button onClick={handleCreate} disabled={loading} style={{padding:"9px 22px",borderRadius:7,border:"none",background:loading?T.t4:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:13,fontWeight:600,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit"}}>{loading?"Creating...":"Create Project"}</button>
+      </div>
+    </div>
+  </>);
+}
+
 function DuplicateModal({project,onClose,onConfirm}){
   const [step,setStep]=useState(1);const [done,setDone]=useState(false);
   const [form,setForm]=useState({name:`${project.name} — Copy`,city:project.city,boq:project.boq,start:"",end:""});
@@ -366,6 +446,7 @@ function ProjectsPage({onSelectProject}){
   const [sortBy,setSortBy]=useState("Default");
   const [showPulse,setShowPulse]=useState(false);
   const [dupOf,setDupOf]=useState(null);
+  const [showNew,setShowNew]=useState(false);
   const [cardMenu,setCardMenu]=useState(null); // project id with open menu
 
   // Fetch projects from backend
@@ -527,7 +608,7 @@ function ProjectsPage({onSelectProject}){
         </div>
 
         {/* New Project */}
-        <button style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
+        <button onClick={()=>setShowNew(true)} style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
           onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 5px 14px ${T.blu}55`}
           onMouseLeave={e=>e.currentTarget.style.boxShadow=`0 3px 8px ${T.blu}44`}>
           <IcAdd size={13} color="white"/> New Project
@@ -672,7 +753,30 @@ function ProjectsPage({onSelectProject}){
 
       {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
-      {dupOf&&<DuplicateModal project={dupOf} onClose={()=>setDupOf(null)} onConfirm={np=>setAllProjects(prev=>[...prev,np])}/>}
+      {dupOf&&<DuplicateModal project={dupOf} onClose={()=>setDupOf(null)} onConfirm={async(np)=>{
+        try{
+          const res=await api.post("/projects",{
+            name:np.name,
+            client_name:np.client||dupOf._raw?.client_name||"",
+            city:np.city,
+            type:dupOf._raw?.type||"residential",
+            status:"not_started",
+            boq_value:np.boq||0,
+            pm_user_id:dupOf._raw?.pm_user_id||1,
+            start_date:np.start&&np.start!=="TBD"?np.start:null,
+            end_date:np.end&&np.end!=="TBD"?np.end:null,
+          });
+          if(res.success&&res.data){
+            setAllProjects(prev=>[...prev,mapProject(res.data)]);
+          }else{
+            setAllProjects(prev=>[...prev,np]);
+          }
+        }catch(err){
+          console.error("Create project error:",err);
+          setAllProjects(prev=>[...prev,np]);
+        }
+      }}/>}
+      {showNew&&<NewProjectModal onClose={()=>setShowNew(false)} onCreated={np=>setAllProjects(prev=>[...prev,np])}/>}
     </div>
   );
 }
