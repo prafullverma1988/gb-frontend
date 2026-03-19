@@ -170,6 +170,19 @@ const WALLETS=[
   {id:3,name:"Niranjan",role:"Supervisor",balance:4500,limit:10000,initials:"NJ",color:"#6A1B9A"},
   {id:4,name:"Priyanka",role:"PM",balance:6800,limit:15000,initials:"PK",color:"#AD1457"},
 ];
+const WALLET_TXNS=[
+  {id:101,date:"16 Mar",ds:20260316,party:"Vijay Sahu",sub:"Labour payment at slab casting",project:"Amarendra Villa",type:"Wallet Payment",account:"Vijay Wallet",amount:50000,dr:true,status:"paid"},
+  {id:102,date:"16 Mar",ds:20260316,party:"Vijay Sahu",sub:"Murga jali for plaster",project:"Shubham 623",type:"Wallet Payment",account:"Vijay Wallet",amount:500,dr:true,status:"paid"},
+  {id:103,date:"14 Mar",ds:20260314,party:"Harsh Sahu",sub:"Harish tile vala – Neha Sagar",project:"Neha Sagar",type:"Wallet Payment",account:"Harsh Wallet",amount:5000,dr:true,status:"paid"},
+  {id:104,date:"13 Mar",ds:20260313,party:"Harsh Sahu",sub:"Granite vala – Bablu Farmhouse",project:"Bablu Farmhouse",type:"Wallet Payment",account:"Harsh Wallet",amount:5000,dr:true,status:"paid"},
+  {id:105,date:"10 Mar",ds:20260310,party:"Niranjan",sub:"Site petty cash – Tikendra",project:"Tikendra Residence",type:"Wallet Payment",account:"Niranjan Wallet",amount:3200,dr:true,status:"paid"},
+  {id:106,date:"08 Mar",ds:20260308,party:"Vijay Sahu",sub:"Top-up – wallet recharge",project:"Company Level",type:"Wallet Top-up",account:"HDFC Current",amount:15000,dr:false,status:"paid"},
+  {id:107,date:"07 Mar",ds:20260307,party:"Harsh Sahu",sub:"Top-up – wallet recharge",project:"Company Level",type:"Wallet Top-up",account:"HDFC Current",amount:10000,dr:false,status:"paid"},
+  {id:108,date:"05 Mar",ds:20260305,party:"Priyanka",sub:"Site material advance",project:"Simran Bungalow",type:"Wallet Payment",account:"Priyanka Wallet",amount:4800,dr:true,status:"paid"},
+  {id:109,date:"03 Mar",ds:20260303,party:"Niranjan",sub:"Top-up – wallet recharge",project:"Company Level",type:"Wallet Top-up",account:"SBI Current",amount:8000,dr:false,status:"paid"},
+  {id:110,date:"01 Mar",ds:20260301,party:"Priyanka",sub:"Top-up – wallet recharge",project:"Company Level",type:"Wallet Top-up",account:"HDFC Current",amount:12000,dr:false,status:"paid"},
+];
+
 const PARTIES=[
   {id:1,name:"3 Eye CCTV Solution",type:"Other Vendor",balance:82166,balType:"Advance Paid"},
   {id:2,name:"Abhay Traders",type:"Material Supplier",balance:114328,balType:"To Pay"},
@@ -192,7 +205,7 @@ const PARTY_TXNS={
     {id:3,date:"20 Feb 2026",note:"Sand 5 loads — Shubham 623",amount:17500,dr:true,status:"paid"},
   ],
 };
-const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL}};
+const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL},"Wallet Payment":{color:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{color:C.p,bg:C.bl}};
 const TRANSACTIONS_DATA=[
   {id:1,date:"09 Mar",ds:20260309,party:"Vijay Sahu → Hukumchand Trilok",sub:"Labour payment at slab casting",project:"Amarendra Villa",type:"Party Payment",account:"HDFC",amount:50000,dr:true,status:"paid"},
   {id:2,date:"08 Mar",ds:20260308,party:"Vijay Sahu",sub:"Murga jali for plaster",project:"Shubham 623",type:"Site Expense",account:"Petty Cash",amount:500,dr:true,status:"paid"},
@@ -212,11 +225,11 @@ const UNBILLED_PARTIES=[
   {id:4,name:"Akashdeep",items:2,project:"Esther Risali",billItems:[{name:"Tiles 2x2",qty:200,unit:"Sqft",rate:65,amt:13000}]},
 ];
 const PAY_REQS_DATA=[
-  {id:12,no:"PR-12",date:"27 Feb",party:"Laxmi Electrical",project:"Neha Sagar",amount:1750,status:"Pending",by:"Harsh Sahu"},
-  {id:10,no:"PR-10",date:"21 Feb",party:"Chandra Shekhar",project:"Tikendra",amount:30000,status:"Pending",by:"Niranjan"},
-  {id:8,no:"PR-8",date:"24 Jan",party:"Vaibhav Traders",project:"Amarendra Villa",amount:22500,status:"Pending",by:"Vijay Sahu"},
-  {id:11,no:"PR-11",date:"21 Feb",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,status:"Approved",by:"Harsh Sahu"},
-  {id:9,no:"PR-9",date:"30 Jan",party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,status:"Approved",by:"Vijay Sahu"},
+  {id:12,no:"PR-12",date:"27 Feb",ds:20260227,party:"Laxmi Electrical",project:"Neha Sagar",amount:1750,status:"Pending",by:"Harsh Sahu",approvedBy:"",purpose:"Electrical wiring materials – Neha Sagar site"},
+  {id:10,no:"PR-10",date:"21 Feb",ds:20260221,party:"Chandra Shekhar",project:"Tikendra",amount:30000,status:"Pending",by:"Niranjan",approvedBy:"",purpose:"Labour payment – brickwork 2nd floor"},
+  {id:8,no:"PR-8",date:"24 Jan",ds:20260124,party:"Vaibhav Traders",project:"Amarendra Villa",amount:22500,status:"Pending",by:"Vijay Sahu",approvedBy:"",purpose:"Plumbing fittings & pipe material"},
+  {id:11,no:"PR-11",date:"21 Feb",ds:20260221,party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,status:"Approved",by:"Harsh Sahu",approvedBy:"Prafull",purpose:"Tile fixing labour – ground floor"},
+  {id:9,no:"PR-9",date:"30 Jan",ds:20260130,party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,status:"Approved",by:"Vijay Sahu",approvedBy:"Prafull",purpose:"Sand supply – 5 loads for plastering"},
 ];
 const PEND_PMTS_DATA=[
   {id:1,type:"pr",no:"PR-11",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,date:"21 Feb",overdue:false},
@@ -1558,7 +1571,8 @@ function FinanceModule(){
 
   // Use API data if available, fallback to hardcoded
   const activeAccounts=apiAccounts||ACCOUNTS;
-  const activeTxns=apiTransactions||TRANSACTIONS_DATA;
+  // Merge wallet transactions into activeTxns
+  const activeTxns=[...(apiTransactions||TRANSACTIONS_DATA),...WALLET_TXNS];
 
   // Chip filters applied to data
   const filteredParties=masterParties.filter(p=>chipParty==="All"||p.type===chipParty);
@@ -1577,6 +1591,8 @@ function FinanceModule(){
     if(chipTxn==="Site Expense"&&t.type!=="Site Expense") return false;
     if(chipTxn==="Sub-Con"&&t.type!=="Sub-Con Expense") return false;
     if(chipTxn==="Party Payment"&&t.type!=="Party Payment") return false;
+    if(chipTxn==="Wallet Payment"&&t.type!=="Wallet Payment") return false;
+    if(chipTxn==="Wallet Top-up"&&t.type!=="Wallet Top-up") return false;
     if(chipTxn==="Unpaid"&&t.status==="paid") return false;
     return true;
   });
@@ -1721,12 +1737,13 @@ function FinanceModule(){
     printHTML("Pending Payments — GB Buildcon",`<h2>Pending Payments — GB Buildcon</h2><p>${pendPmts.length} items &nbsp;|&nbsp; Total: ₹${fmtN(pendTotal)} &nbsp;|&nbsp; Overdue: ₹${fmtN(pendOverdue)}</p><table><tr><th>Ref No.</th><th>Type</th><th>Party</th><th>Project</th><th>Amount</th><th>Due Date</th></tr>${rowsHTML}<tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td style="font-weight:800;color:#2563EB">₹${fmtN(pendTotal)}</td><td></td></tr></table><p class="footer">Generated by GB Buildcon</p>`);
   };
 
+  const APPROVER_NAME="Prafull"; // logged-in admin
   const approveReq=async(id)=>{
     const req=payReqs.find(r=>r.id===id);
     try{
       await api.put(`/finance/payment-requests/${id}/approve`,{approved_amount:req?.amount||0});
     }catch(e){console.error("Approve PR error:",e);}
-    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved"}:r));
+    setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved",approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}:r));
     if(req) setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:req.amount,date:req.date,overdue:false}]);
   };
   const rejectReq=async(id)=>{
@@ -1752,78 +1769,9 @@ function FinanceModule(){
         </div>
       </div>
 
-      {/* ── Filter Bar ── */}
-      {(()=>{
-        const FILTER_CONFIGS={
-          party:{
-            chips:["All","Client","Vendor","Labour","Sub-Con","Material Supplier"],
-            active:chipParty, set:setChipParty,
-            colors:{"Client":{c:T.grn,bg:T.grnL},"Vendor":{c:T.amb,bg:T.ambL},"Labour":{c:T.blu,bg:T.bluL},"Sub-Con":{c:T.slt,bg:T.sltL},"Material Supplier":{c:T.pur,bg:T.purL}},
-          },
-          transaction:{
-            chips:["All","Payment In","Payment Out","Material","Site Expense","Sub-Con","Party Payment","Unpaid"],
-            active:chipTxn, set:setChipTxn,
-            colors:{"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Sub-Con":{c:T.slt,bg:T.sltL},"Party Payment":{c:T.pur,bg:T.purL},"Unpaid":{c:T.red,bg:T.redL}},
-          },
-          cashbook:{
-            chips:["All","Receipts","Payments"],
-            active:chipCB, set:setChipCB,
-            colors:{"Receipts":{c:T.grn,bg:T.grnL},"Payments":{c:T.red,bg:T.redL}},
-          },
-          payreq:{
-            chips:["All","Pending","Approved","Rejected"],
-            active:chipPR, set:setChipPR,
-            colors:{"Pending":{c:T.amb,bg:T.ambL},"Approved":{c:T.grn,bg:T.grnL},"Rejected":{c:T.red,bg:T.redL}},
-          },
-          pending:{
-            chips:["All","Overdue","High","Medium","Low"],
-            active:chipPend, set:setChipPend,
-            colors:{"Overdue":{c:T.red,bg:T.redL},"High":{c:T.red,bg:T.redL},"Medium":{c:T.amb,bg:T.ambL},"Low":{c:T.grn,bg:T.grnL}},
-          },
-        };
-        const cfg=FILTER_CONFIGS[tab];
-        if(!cfg) return null;
-        return(
-          <div style={{margin:"0 18px 0",padding:"7px 12px",background:T.surface,borderRadius:"8px 8px 0 0",border:`1px solid ${T.b1}`,borderBottom:"none",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",flexShrink:0}}>
-            <span style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.6px",marginRight:4}}>Filter</span>
-            {cfg.chips.map(chip=>{
-              const isActive=cfg.active===chip;
-              const col=cfg.colors[chip]||{c:T.slt,bg:T.sltL};
-              return(
-                <button key={chip} onClick={()=>{cfg.set(chip);}}
-                  style={{
-                    padding:"4px 12px",borderRadius:20,border:`1.5px solid ${isActive?col.c:T.b1}`,
-                    background:isActive?col.bg:T.surfaceB,
-                    color:isActive?col.c:T.t3,
-                    fontSize:11.5,fontWeight:isActive?700:500,cursor:"pointer",
-                    transition:"all 0.15s",fontFamily:"inherit",
-                    boxShadow:isActive?`0 1px 4px ${col.c}33`:"none",
-                  }}
-                  onMouseEnter={e=>{if(!isActive){e.currentTarget.style.borderColor=col.c;e.currentTarget.style.color=col.c;e.currentTarget.style.background=col.bg+"88";}}}
-                  onMouseLeave={e=>{if(!isActive){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.color=T.t3;e.currentTarget.style.background=T.surfaceB;}}}>
-                  {chip}
-                  {/* count badges */}
-                  {tab==="transaction"&&chip==="Unpaid"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{activeTxns.filter(t=>t.status!=="paid").length}</span>)}
-                  {tab==="payreq"&&chip==="Pending"&&pendPR>0&&(<span style={{marginLeft:5,background:T.amb,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{pendPR}</span>)}
-                  {tab==="pending"&&chip==="Overdue"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{pendPmts.filter(p=>p.overdue).length}</span>)}
-                </button>
-              );
-            })}
-            {cfg.active!=="All"&&(
-              <button onClick={()=>cfg.set("All")}
-                style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontFamily:"inherit"}}
-                onMouseEnter={e=>e.currentTarget.style.color=T.red}
-                onMouseLeave={e=>e.currentTarget.style.color=T.t4}>
-                <IcX size={10} color="currentColor"/> Clear
-              </button>
-            )}
-          </div>
-        );
-      })()}
-
       {/* ── Tab bar ── */}
-      <div style={{margin:"0 18px 8px",flexShrink:0}}>
-        <div style={{background:"#0D1B2A",borderRadius:"0 0 10px 10px",padding:"0 8px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
+      <div style={{margin:"8px 18px 0",flexShrink:0}}>
+        <div style={{background:"#0D1B2A",borderRadius:10,padding:"0 8px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
           <div style={{display:"flex",flex:1}}>
             {TABS.map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)}
@@ -1932,6 +1880,75 @@ function FinanceModule(){
           </div>
         </div>
       </div>
+
+      {/* ── Filter Bar ── */}
+      {(()=>{
+        const FILTER_CONFIGS={
+          party:{
+            chips:["All","Client","Vendor","Labour","Sub-Con","Material Supplier"],
+            active:chipParty, set:setChipParty,
+            colors:{"Client":{c:T.grn,bg:T.grnL},"Vendor":{c:T.amb,bg:T.ambL},"Labour":{c:T.blu,bg:T.bluL},"Sub-Con":{c:T.slt,bg:T.sltL},"Material Supplier":{c:T.pur,bg:T.purL}},
+          },
+          transaction:{
+            chips:["All","Payment In","Payment Out","Material","Site Expense","Sub-Con","Party Payment","Wallet Payment","Wallet Top-up","Unpaid"],
+            active:chipTxn, set:setChipTxn,
+            colors:{"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Sub-Con":{c:T.slt,bg:T.sltL},"Party Payment":{c:T.pur,bg:T.purL},"Wallet Payment":{c:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{c:"#1565C0",bg:"#E3F2FD"},"Unpaid":{c:T.red,bg:T.redL}},
+          },
+          cashbook:{
+            chips:["All","Receipts","Payments"],
+            active:chipCB, set:setChipCB,
+            colors:{"Receipts":{c:T.grn,bg:T.grnL},"Payments":{c:T.red,bg:T.redL}},
+          },
+          payreq:{
+            chips:["All","Pending","Approved","Rejected"],
+            active:chipPR, set:setChipPR,
+            colors:{"Pending":{c:T.amb,bg:T.ambL},"Approved":{c:T.grn,bg:T.grnL},"Rejected":{c:T.red,bg:T.redL}},
+          },
+          pending:{
+            chips:["All","Overdue","High","Medium","Low"],
+            active:chipPend, set:setChipPend,
+            colors:{"Overdue":{c:T.red,bg:T.redL},"High":{c:T.red,bg:T.redL},"Medium":{c:T.amb,bg:T.ambL},"Low":{c:T.grn,bg:T.grnL}},
+          },
+        };
+        const cfg=FILTER_CONFIGS[tab];
+        if(!cfg) return null;
+        return(
+          <div style={{margin:"0 18px 8px",padding:"7px 12px",background:T.surface,borderRadius:"0 0 8px 8px",border:`1px solid ${T.b1}`,borderTop:"none",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",flexShrink:0}}>
+            <span style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.6px",marginRight:4}}>Filter</span>
+            {cfg.chips.map(chip=>{
+              const isActive=cfg.active===chip;
+              const col=cfg.colors[chip]||{c:T.slt,bg:T.sltL};
+              return(
+                <button key={chip} onClick={()=>{cfg.set(chip);}}
+                  style={{
+                    padding:"4px 12px",borderRadius:20,border:`1.5px solid ${isActive?col.c:T.b1}`,
+                    background:isActive?col.bg:T.surfaceB,
+                    color:isActive?col.c:T.t3,
+                    fontSize:11.5,fontWeight:isActive?700:500,cursor:"pointer",
+                    transition:"all 0.15s",fontFamily:"inherit",
+                    boxShadow:isActive?`0 1px 4px ${col.c}33`:"none",
+                  }}
+                  onMouseEnter={e=>{if(!isActive){e.currentTarget.style.borderColor=col.c;e.currentTarget.style.color=col.c;e.currentTarget.style.background=col.bg+"88";}}}
+                  onMouseLeave={e=>{if(!isActive){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.color=T.t3;e.currentTarget.style.background=T.surfaceB;}}}>
+                  {chip}
+                  {/* count badges */}
+                  {tab==="transaction"&&chip==="Unpaid"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{activeTxns.filter(t=>t.status!=="paid").length}</span>)}
+                  {tab==="payreq"&&chip==="Pending"&&pendPR>0&&(<span style={{marginLeft:5,background:T.amb,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{pendPR}</span>)}
+                  {tab==="pending"&&chip==="Overdue"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{pendPmts.filter(p=>p.overdue).length}</span>)}
+                </button>
+              );
+            })}
+            {cfg.active!=="All"&&(
+              <button onClick={()=>cfg.set("All")}
+                style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontFamily:"inherit"}}
+                onMouseEnter={e=>e.currentTarget.style.color=T.red}
+                onMouseLeave={e=>e.currentTarget.style.color=T.t4}>
+                <IcX size={10} color="currentColor"/> Clear
+              </button>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ── Tab Content ── */}
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",padding:"12px 18px 14px"}}>
@@ -2276,7 +2293,7 @@ function FinanceModule(){
                 ))}
               </div>
 
-              {payReqs.filter(r=>chipPR==="All"||r.status===chipPR).map((req,i)=>{
+              {[...payReqs].sort((a,b)=>(b.ds||0)-(a.ds||0)).filter(r=>chipPR==="All"||r.status===chipPR).map((req,i)=>{
                 const isEditing=editReqId===req.id;
                 const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:{c:T.amb,bg:T.ambL,brd:T.ambM};
                 return(
@@ -2291,7 +2308,14 @@ function FinanceModule(){
                         <span style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.party}</span>
                       </div>
                       <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.project}</span>
-                      <span style={{fontSize:11.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>by {req.by}</span>
+                      <div style={{overflow:"hidden"}}>
+                        <div style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.purpose||"—"}</div>
+                        <div style={{fontSize:10,color:T.t4,marginTop:1}}>
+                          Req by: <span style={{fontWeight:600}}>{req.by}</span>
+                          {req.status==="Approved"&&req.approvedBy&&<span style={{color:T.grn,marginLeft:6}}>✓ Approved by: <span style={{fontWeight:600}}>{req.approvedBy}</span>{req.approvedDate?` · ${req.approvedDate}`:""}</span>}
+                          {req.status==="Rejected"&&<span style={{color:T.red,marginLeft:6}}>✗ Rejected</span>}
+                        </div>
+                      </div>
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:13,fontWeight:700,color:T.t1}}>₹{fmtN(req.amount)}</div>
                         {req.originalAmt&&<div style={{fontSize:10,color:T.t4,textDecoration:"line-through"}}>₹{fmtN(req.originalAmt)}</div>}
@@ -2345,7 +2369,7 @@ function FinanceModule(){
                           <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
                           <button onClick={()=>{
                             const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
-                            setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig}:r));
+                            setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}:r));
                             setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:newAmt,date:req.date,overdue:false}]);
                             setEditReqId(null);
                           }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
@@ -2368,11 +2392,6 @@ function FinanceModule(){
             <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
               <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Pending Payments</div>
               <div style={{display:"flex",gap:7,alignItems:"center"}}>
-                {["All","High","Medium","Low"].map(p=>(
-                  <span key={p} style={{fontSize:11.5,fontWeight:600,padding:"4px 13px",borderRadius:7,background:T.surfaceB,color:T.t3,cursor:"pointer",border:`1px solid ${T.b1}`,transition:"all 0.12s"}}
-                    onMouseEnter={e=>{e.currentTarget.style.background=T.blu;e.currentTarget.style.color="white";e.currentTarget.style.borderColor=T.blu;}}
-                    onMouseLeave={e=>{e.currentTarget.style.background=T.surfaceB;e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}>{p}</span>
-                ))}
                 <button onClick={dlPendCSV} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
                 <button onClick={dlPendPDF} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
               </div>
@@ -2387,7 +2406,12 @@ function FinanceModule(){
                 ))}
               </div>
 
-              {pendPmts.filter(pmt=>{
+              {[...pendPmts].sort((a,b)=>{
+                // overdue first, then by date desc
+                if(a.overdue&&!b.overdue) return -1;
+                if(!a.overdue&&b.overdue) return 1;
+                return 0;
+              }).filter(pmt=>{
                 if(chipPend==="All") return true;
                 const pri=pmt.overdue?"High":pmt.type==="pr"?"Medium":"Low";
                 if(chipPend==="Overdue") return pmt.overdue;
