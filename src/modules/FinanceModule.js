@@ -1711,6 +1711,10 @@ function FinanceModule(){
   const [chipCB,setChipCB]=useState("All");
   const [chipPR,setChipPR]=useState("All");
   const [chipPend,setChipPend]=useState("All");
+  // Sort states for each tab
+  const [sortPend,setSortPend]=useState({col:"overdue",dir:"desc"});
+  const [sortPR,setSortPR]=useState({col:"date",dir:"desc"});
+  const [sortCB,setSortCB]=useState({col:"date",dir:"desc"});
   // PR / Pending
   const [editReqId,setEditReqId]=useState(null);const [editAmt,setEditAmt]=useState("");
   const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);const [pendPmts,setPendPmts]=useState(PEND_PMTS_DATA);
@@ -2755,7 +2759,16 @@ function FinanceModule(){
                   if(chipCB==="Receipts") return !t.dr;
                   if(chipCB==="Payments") return t.dr;
                   return true;
-                }).sort((a,b)=>a.ds-b.ds);
+                }).sort((a,b)=>{
+                  const {col,dir}=sortCB; const mul=dir==="asc"?1:-1;
+                  if(col==="party2") return ((a.party||"")>(b.party||"")? 1:-1)*mul;
+                  if(col==="project3") return ((a.project||"")>(b.project||"")? 1:-1)*mul;
+                  if(col==="account8") return ((a.account||"")>(b.account||"")? 1:-1)*mul;
+                  if(col==="mop9") return ((a.mop||"")>(b.mop||"")? 1:-1)*mul;
+                  if(col==="entryBy10") return ((a.entryBy||"")>(b.entryBy||"")? 1:-1)*mul;
+                  // default: date asc for running balance
+                  return (a.ds-b.ds)*(sortCB.col==="date0"?mul:1);
+                });
                 return cbAll.map((txn,i)=>{
                   const meta=CB_TYPE_META[txn.type]||{label:txn.type||"Transaction",color:T.t3,bg:T.b1,dir:txn.dr?"out":"in"};
                   const isBT=txn.txnType==="bank_transfer"||txn.type==="Bank Transfer";
@@ -2831,14 +2844,42 @@ function FinanceModule(){
 
             {/* Table — new cols: ReqNo | Date | Party | Project | Purpose | Req By | Priority | Amount | Status | Action */}
             <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-              {/* Sticky header */}
-              <div style={{display:"grid",gridTemplateColumns:"80px 72px 160px 140px 1fr 120px 80px 90px 100px 140px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10,gap:6}}>
-                {["Req No","Date","Party","Project","Purpose","Req By","Priority","Amount","Status","Action"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===7?"right":"left",whiteSpace:"nowrap"}}>{h}</span>
-                ))}
-              </div>
+              {/* Sticky header with sort */}
+              {(()=>{
+                const SortH=({label,col,align="left"})=>{
+                  const active=sortPR.col===col;
+                  return(<span onClick={()=>setSortPR(s=>({col,dir:s.col===col&&s.dir==="asc"?"desc":"asc"}))}
+                    style={{fontSize:9,fontWeight:700,color:active?T.blu:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",cursor:"pointer",display:"flex",alignItems:"center",gap:2,justifyContent:align==="right"?"flex-end":"flex-start",userSelect:"none",whiteSpace:"nowrap"}}>
+                    {label}<span style={{opacity:active?1:0.3}}>{active&&sortPR.dir==="asc"?"↑":"↓"}</span>
+                  </span>);
+                };
+                return(
+                <div style={{display:"grid",gridTemplateColumns:"80px 72px 160px 140px 1fr 120px 80px 90px 100px 140px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10,gap:6}}>
+                  <SortH label="Req No" col="no"/>
+                  <SortH label="Date" col="date"/>
+                  <SortH label="Party" col="party"/>
+                  <SortH label="Project" col="project"/>
+                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Purpose</span>
+                  <SortH label="Req By" col="by"/>
+                  <SortH label="Priority" col="priority"/>
+                  <SortH label="Amount" col="amount" align="right"/>
+                  <SortH label="Status" col="status"/>
+                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Action</span>
+                </div>
+                );
+              })()}
               <div style={{flex:1,overflowY:"auto"}}>
-              {[...payReqs].sort((a,b)=>(b.ds||0)-(a.ds||0)).filter(r=>chipPR==="All"||r.status===chipPR).map((req,i)=>{
+              {[...payReqs].sort((a,b)=>{
+                const {col,dir}=sortPR; const mul=dir==="asc"?1:-1;
+                if(col==="amount") return (a.amount-b.amount)*mul;
+                if(col==="date"||col==="no") return ((b.ds||0)-(a.ds||0))*mul;
+                if(col==="party") return ((a.party||"")>(b.party||"")? 1:-1)*mul;
+                if(col==="project") return ((a.project||"")>(b.project||"")? 1:-1)*mul;
+                if(col==="status") return ((a.status||"")>(b.status||"")? 1:-1)*mul;
+                if(col==="by") return ((a.by||"")>(b.by||"")? 1:-1)*mul;
+                if(col==="priority"){const pw={High:3,Medium:2,Low:1};return((pw[a.priority||"Medium"]||2)-(pw[b.priority||"Medium"]||2))*mul;}
+                return (b.ds||0)-(a.ds||0);
+              }).filter(r=>chipPR==="All"||r.status===chipPR).map((req,i)=>{
                 const isEditing=editReqId===req.id;
                 const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:{c:T.amb,bg:T.ambL,brd:T.ambM};
                 const pri=req.priority||"Medium";
@@ -2953,68 +2994,115 @@ function FinanceModule(){
               </div>
             </div>
 
-            {/* Table */}
-            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              {/* Header */}
-              <div style={{display:"grid",gridTemplateColumns:"110px 200px 160px 110px 90px 100px 130px 100px 110px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
-                {["Invoice No","Party","Project","Invoice Amt","Paid","Balance","Due Date","Priority","Action"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:i===5?T.red:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",textAlign:i>=3&&i<=5?"right":"left"}}>{h}</span>
-                ))}
-              </div>
-
-              {[...pendPmts].sort((a,b)=>{
-                // overdue first, then by date desc
-                if(a.overdue&&!b.overdue) return -1;
-                if(!a.overdue&&b.overdue) return 1;
+            {/* Table — cols: Invoice No | Type | Party Name | Invoice Amt | Balance Due | Due Date | Priority | Action */}
+            {(()=>{
+              // Sort helper
+              const sortFn=(a,b)=>{
+                const {col,dir}=sortPend;
+                const mul=dir==="asc"?1:-1;
+                if(col==="overdue") return ((b.overdue?1:0)-(a.overdue?1:0))*mul;
+                if(col==="amount") return (a.amount-b.amount)*mul;
+                if(col==="date") return ((a.date||"")>(b.date||"")? 1:-1)*mul;
+                if(col==="priority"){
+                  const pw={High:3,Medium:2,Low:1};
+                  const ap=a.overdue?"High":a.type==="pr"?"Medium":"Low";
+                  const bp=b.overdue?"High":b.type==="pr"?"Medium":"Low";
+                  return (pw[ap]-pw[bp])*mul;
+                }
+                if(col==="party") return ((a.party||"")>(b.party||"")? 1:-1)*mul;
                 return 0;
-              }).filter(pmt=>{
+              };
+              const SortHdr=({label,col,align="left"})=>{
+                const active=sortPend.col===col;
+                const dir=sortPend.dir;
+                return(
+                  <span onClick={()=>setSortPend(s=>({col,dir:s.col===col&&s.dir==="asc"?"desc":"asc"}))}
+                    style={{fontSize:9,fontWeight:700,color:active?T.blu:T.t4,textTransform:"uppercase",
+                      letterSpacing:"0.3px",textAlign:align,cursor:"pointer",display:"flex",
+                      alignItems:"center",gap:3,justifyContent:align==="right"?"flex-end":"flex-start",
+                      userSelect:"none"}}>
+                    {label}
+                    <span style={{fontSize:9,opacity:active?1:0.3}}>{active&&dir==="asc"?"↑":"↓"}</span>
+                  </span>
+                );
+              };
+              const COLS="90px 110px 1fr 100px 100px 110px 90px 110px";
+              const filtered=[...pendPmts].filter(pmt=>{
                 if(chipPend==="All") return true;
                 const pri=pmt.overdue?"High":pmt.type==="pr"?"Medium":"Low";
                 if(chipPend==="Overdue") return pmt.overdue;
                 if(chipPend==="High"||chipPend==="Medium"||chipPend==="Low") return pri===chipPend;
                 return true;
-              }).map((pmt,i)=>{
-                const priority=pmt.overdue?"High":pmt.type==="pr"?"Medium":"Low";
-                const pm=priority==="High"?{c:T.red,bg:T.redL,brd:T.redM}:priority==="Medium"?{c:T.amb,bg:T.ambL,brd:T.ambM}:{c:T.grn,bg:T.grnL,brd:T.grnM};
-                const partyType=pmt.type==="pr"?"Approved PR":"Vendor";
-                const ptC=pmt.type==="pr"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
-                return(
-                  <div key={pmt.id}
-                    style={{display:"grid",gridTemplateColumns:"110px 200px 160px 110px 90px 100px 130px 100px 110px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",borderLeft:pmt.overdue?`3px solid ${T.red}`:"3px solid transparent"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
-                    onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
-                    <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{pmt.no}</span></span>
-                    <div style={{display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
-                      <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:8,background:ptC.bg,color:ptC.c,flexShrink:0}}>{partyType}</span>
-                      <span style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pmt.party}</span>
-                    </div>
-                    <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pmt.project}</span>
-                    <span style={{fontSize:12.5,color:T.t2,textAlign:"right"}}>₹{fmtN(pmt.amount)}</span>
-                    <span style={{fontSize:12.5,color:T.t4,textAlign:"right"}}>—</span>
-                    <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(pmt.amount)}</span>
-                    <div style={{textAlign:"left"}}>
-                      <div style={{fontSize:12,color:pmt.overdue?T.red:T.t2,fontWeight:pmt.overdue?700:400}}>{pmt.date}</div>
-                      {pmt.overdue&&<div style={{fontSize:10,color:T.red,fontWeight:600}}>overdue</div>}
-                      {!pmt.overdue&&<div style={{fontSize:10,color:T.grn}}>Upcoming</div>}
-                    </div>
-                    <span><span style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:12,background:pm.bg,color:pm.c,border:`1px solid ${pm.brd}`}}>{priority}</span></span>
-                    <button onClick={()=>openTxn("Payment Made",pmt.party)}
-                      style={{padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:600,display:"flex",alignItems:"center",gap:4,boxShadow:`0 2px 6px ${T.blu}44`}}>
-                      <IcSend size={11} color="white"/> Pay Now
-                    </button>
-                  </div>
-                );
-              })}
-              {pendPmts.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No pending payments</div>}
-              {/* Total row */}
-              {pendPmts.length>0&&(
-                <div style={{display:"grid",gridTemplateColumns:"110px 200px 160px 110px 90px 100px 130px 100px 110px",padding:"10px 14px",background:"#EEF2FF",borderTop:`2px solid ${T.b1}`}}>
-                  <span style={{gridColumn:"1/6",fontSize:13,fontWeight:700,color:T.t1}}>Total Outstanding</span>
-                  <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(pendTotal)}</span>
-                  <span/><span/><span/>
+              }).sort(sortFn);
+              return(
+              <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+                {/* Sticky header */}
+                <div style={{display:"grid",gridTemplateColumns:COLS,padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10,gap:6,flexShrink:0}}>
+                  <SortHdr label="Invoice No" col="no"/>
+                  <SortHdr label="Type" col="type"/>
+                  <SortHdr label="Party Name" col="party"/>
+                  <SortHdr label="Invoice Amt" col="amount" align="right"/>
+                  <SortHdr label="Balance Due" col="amount" align="right"/>
+                  <SortHdr label="Due Date" col="date"/>
+                  <SortHdr label="Priority" col="priority"/>
+                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Action</span>
                 </div>
-              )}
-            </div>
+                <div style={{flex:1,overflowY:"auto"}}>
+                {filtered.map((pmt,i)=>{
+                  const pri=pmt.overdue?"High":pmt.priority||pmt.type==="pr"?"Medium":"Low";
+                  const pm=pri==="High"?{c:T.red,bg:T.redL}:pri==="Medium"?{c:T.amb,bg:T.ambL}:{c:T.grn,bg:T.grnL};
+                  // Type label
+                  const typeLabel=pmt.type==="pr"?"Approved PR":
+                    pmt.subType==="subcon"?"Sub-Con":
+                    pmt.subType==="staff"?"Staff":
+                    pmt.party?.toLowerCase().includes("labour")?"Labour":"Vendor";
+                  const typeC=pmt.type==="pr"?{c:T.grn,bg:T.grnL}:
+                    typeLabel==="Sub-Con"?{c:T.slt,bg:T.sltL}:
+                    typeLabel==="Staff"?{c:T.pur,bg:T.purL}:{c:T.amb,bg:T.ambL};
+                  return(
+                    <div key={pmt.id}
+                      style={{display:"grid",gridTemplateColumns:COLS,padding:"10px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",borderLeft:pmt.overdue?`3px solid ${T.red}`:"3px solid transparent",transition:"background 0.1s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
+                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
+                      {/* Invoice No */}
+                      <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{pmt.no}</span></span>
+                      {/* Type */}
+                      <span style={{fontSize:10,fontWeight:700,color:typeC.c,background:typeC.bg,padding:"2px 7px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{typeLabel}</span>
+                      {/* Party Name */}
+                      <span style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pmt.party||"—"}</span>
+                      {/* Invoice Amt */}
+                      <span style={{fontSize:12.5,color:T.t2,textAlign:"right",fontWeight:500}}>₹{fmtN(pmt.amount)}</span>
+                      {/* Balance Due */}
+                      <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(pmt.amount)}</span>
+                      {/* Due Date */}
+                      <div>
+                        <div style={{fontSize:12,color:pmt.overdue?T.red:T.t2,fontWeight:pmt.overdue?700:400}}>{pmt.date||"—"}</div>
+                        <div style={{fontSize:9.5,color:pmt.overdue?T.red:T.grn,fontWeight:600}}>{pmt.overdue?"OVERDUE":"Upcoming"}</div>
+                      </div>
+                      {/* Priority */}
+                      <span style={{fontSize:10,fontWeight:700,color:pm.c,background:pm.bg,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{pri}</span>
+                      {/* Action */}
+                      <button onClick={()=>openTxn("Payment Made",pmt.party)}
+                        style={{padding:"6px 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:3,boxShadow:`0 2px 6px ${T.blu}44`}}>
+                        <IcSend size={10} color="white"/> Pay
+                      </button>
+                    </div>
+                  );
+                })}
+                {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No pending payments</div>}
+                </div>
+                {/* Total footer */}
+                {filtered.length>0&&(
+                  <div style={{display:"grid",gridTemplateColumns:COLS,padding:"9px 14px",gap:6,background:"#EEF2FF",borderTop:`2px solid ${T.b1}`,flexShrink:0}}>
+                    <span style={{gridColumn:"1/4",fontSize:12,fontWeight:700,color:T.t1}}>Total Outstanding — {filtered.length} items</span>
+                    <span/>
+                    <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(filtered.reduce((s,p)=>s+p.amount,0))}</span>
+                    <span/><span/><span/>
+                  </div>
+                )}
+              </div>
+              );
+            })()}
           </div>
         )}
       </div>
