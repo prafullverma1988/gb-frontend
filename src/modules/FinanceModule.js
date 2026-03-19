@@ -1861,12 +1861,40 @@ function FinanceModule(){
     }
     if(txns.length===0&&activeTxns.length>0){
       txns=activeTxns.filter(t=>t.party===party.name).map(t=>({
-        id:t.id,date:t.date,note:t.sub||t.type,amount:t.amount,dr:t.dr,status:t.status,
+        id:t.id,date:t.date,note:t.sub||t.type,amount:t.amount,
+        dr:t.dr,status:t.status,txnType:t.txnType||"",
       }));
     }
-    txns=[...txns].reverse();
+
+    const isVendor=["Material Supplier","Sub-Con","Labour","Other Vendor","contractor","subcontractor"].includes(party.type);
+    const VENDOR_BILL_TYPES=["material_purchase","subcon_expense","site_expense","Material Purchase","Sub-Con Expense","Site Expense"];
+    const VENDOR_PAY_TYPES=["payment","party_payment","Payment Made","Payment Out","wallet_payment"];
+    const CLIENT_RECEIPT_TYPES=["receipt","payment","Payment Received","Payment In"];
+    const CLIENT_BILL_TYPES=["sales_invoice","Sales Invoice"];
+
+    // Remap dr flag based on party type for correct ledger accounting
+    const remapped=txns.map(t=>{
+      const tType=t.txnType||t.type||"";
+      let partyDr=t.dr;
+      if(isVendor){
+        // Vendor ledger: purchase/bill = CR (we owe them), payment to vendor = DR (we paid)
+        if(VENDOR_BILL_TYPES.some(x=>tType.includes(x)||t.note?.includes("Purchase")||t.note?.includes("Bill")))
+          partyDr=false; // CR — vendor gave us goods
+        else if(VENDOR_PAY_TYPES.some(x=>tType.includes(x)||t.note?.includes("Payment Made")))
+          partyDr=true;  // DR — we paid vendor
+      } else {
+        // Client ledger: receipt = CR (client paid us), invoice = DR (we billed them)
+        if(CLIENT_RECEIPT_TYPES.some(x=>tType.includes(x)||t.note?.includes("Payment Received")))
+          partyDr=false; // CR — client paid us
+        else if(CLIENT_BILL_TYPES.some(x=>tType.includes(x)))
+          partyDr=true;  // DR — we billed client
+      }
+      return {...t,dr:partyDr};
+    });
+
+    const sorted=[...remapped].reverse();
     let runBal=0;
-    return txns.reduce((acc,t)=>{
+    return sorted.reduce((acc,t)=>{
       runBal += t.dr ? -t.amount : t.amount;
       return [...acc,{...t,runBal}];
     },[]).reverse();
@@ -2216,7 +2244,7 @@ function FinanceModule(){
                       onMouseLeave={e=>{if(!isS)e.currentTarget.style.background="none";}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
                         <div style={{fontSize:12.5,fontWeight:600,color:isS?T.blu:T.t1}}>{p.name}</div>
-                        <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>₹{fmt(p.balance)}</div>
+                        <div style={{fontSize:12.5,fontWeight:700,color:["To Pay","Advance Received"].includes(p.balType)?T.red:T.grn}}>₹{fmt(p.balance)}</div>
                       </div>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                         <span style={{background:tc+"18",color:tc,fontSize:9.5,fontWeight:600,padding:"1px 7px",borderRadius:20,border:`1px solid ${tc}22`}}>{p.type}</span>
@@ -2231,11 +2259,18 @@ function FinanceModule(){
               const ledgerRows=getLedgerRows(selParty);
               const totalCR=ledgerRows.reduce((s,r)=>s+(!r.dr?r.amount:0),0);
               const totalDR=ledgerRows.reduce((s,r)=>s+(r.dr?r.amount:0),0);
+              // Compute balance from ledger rows (more accurate than opening_balance)
+              const ledgerClosing=totalCR-totalDR; // positive = we owe them (vendor) or they owe us (client)
+              const isVendorPty=["Material Supplier","Sub-Con","Labour","Other Vendor","contractor"].includes(selParty.type);
+              const computedBalType=isVendorPty
+                ?(ledgerClosing>0?"To Pay":"Advance Paid")
+                :(ledgerClosing>0?"To Receive":"Advance Received");
+              const computedBal=Math.abs(ledgerClosing);
               return(
                 <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
                   <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
                     <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:T.t1}}>{selParty.name}</div><div style={{fontSize:10.5,color:T.t4}}>{selParty.type}</div></div>
-                    <span style={{background:T.bluL,color:T.blu,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.bluM}`}}>₹{fmtN(selParty.balance)} · {selParty.balType}</span>
+                    <span style={{background:ledgerClosing>0?T.ambL:T.grnL,color:ledgerClosing>0?T.amb:T.grn,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${ledgerClosing>0?T.ambM:T.grnM}`}}>₹{fmtN(computedBal)} · {computedBalType}</span>
                     <span style={{background:T.grnL,color:T.grn,fontSize:10,fontWeight:600,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.grnM}`}}>CR ₹{fmtN(totalCR)}</span>
                     <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:600,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.redM}`}}>DR ₹{fmtN(totalDR)}</span>
                     <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:27,padding:"0 9px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
@@ -2326,7 +2361,7 @@ function FinanceModule(){
                       <span style={{fontSize:11,fontWeight:700,color:T.t1}}>TOTAL</span><span/>
                       <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.grn}}>₹{fmtN(totalCR)}</span>
                       <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.red}}>₹{fmtN(totalDR)}</span>
-                      <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.blu}}>₹{fmtN(Math.abs(totalDR-totalCR))}</span>
+                      <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:ledgerClosing>0?T.amb:T.grn}}>₹{fmtN(computedBal)} <span style={{fontSize:10}}>{computedBalType}</span></span>
                     </div>
                   )}
                   {/* ── Integrated action buttons ── */}
