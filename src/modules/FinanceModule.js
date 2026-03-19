@@ -1603,13 +1603,25 @@ function FinanceModule(){
   };
 
   // ── MAP HELPERS ───────────────────────────────────────────────
-  const mapParty=p=>({
-    id:p.id,name:p.name,
-    type:p.type||(p.party_type)||(p.category)||"Other Vendor",
-    balance:parseFloat(p.opening_balance||p.balance)||0,
-    balType:p.balance_type||(parseFloat(p.opening_balance||p.balance)>=0?"To Receive":"To Pay"),
-    phone:p.phone||p.mobile||"",city:p.city||"",
-  });
+  const mapParty=p=>{
+    const rawBal=parseFloat(p.opening_balance||p.balance)||0;
+    const pType=p.type||(p.party_type)||(p.category)||"Other Vendor";
+    // Vendors/Labour/Sub-Con: negative balance means we OWE them (To Pay)
+    // Clients: positive balance means they OWE us (To Receive)
+    let balType=p.balance_type||"";
+    if(!balType){
+      const isVendor=["Material Supplier","Sub-Con","Labour","Other Vendor","contractor","subcontractor"].includes(pType);
+      if(isVendor) balType=rawBal<=0?"To Pay":"Advance Paid";
+      else balType=rawBal>=0?"To Receive":"Advance Received";
+    }
+    return {
+      id:p.id, name:p.name, type:pType,
+      balance:Math.abs(rawBal),          // always positive display
+      rawBalance:rawBal,                 // keep original for calculations
+      balType,
+      phone:p.phone||p.mobile||"",city:p.city||"",
+    };
+  };
 
   const mapTxn=t=>{
     const rawDate=t.date||t.transaction_date||t.created_at||"";
@@ -1617,6 +1629,10 @@ function FinanceModule(){
     const ds=parseInt(rawDate.replace(/\D/g,"").slice(0,8))||
       (d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate());
     const frontType=TXN_TYPE_MAP[t.type]||(t.dr?"Payment Out":"Payment In");
+    // All expense/purchase types are debit (money going out)
+    const BACK_DEBIT=["payment","material_purchase","site_expense","party_payment",
+      "subcon_expense","wallet_payment","wallet_topup","bank_transfer"];
+    const isDebit=BACK_DEBIT.includes(t.type)||t.dr===true||(!t.type&&t.dr);
     return {
       id:t.id,
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
@@ -1627,8 +1643,9 @@ function FinanceModule(){
       type:frontType,
       account:t.account_name||t.account||"",
       amount:parseFloat(t.amount)||0,
-      dr:t.type==="payment"||t.dr===true||(!t.type&&t.dr),
+      dr:isDebit,
       status:t.status||"paid",
+      txnType:t.type||"",          // keep raw type for line items fetch
     };
   };
 
@@ -2179,10 +2196,17 @@ function FinanceModule(){
                       try{
                         const res=await api.get(`/finance/parties/${p.id}/ledger`);
                         if(res.success&&res.data){
+                          const BACK_DEBIT_L=["payment","material_purchase","site_expense",
+                            "party_payment","subcon_expense","wallet_payment","wallet_topup"];
                           setApiLedger(prev=>({...prev,[p.id]:res.data.map(t=>({
-                            id:t.id,date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
-                            note:t.description||"",amount:parseFloat(t.amount)||0,
-                            dr:t.type==="payment",status:t.status||"approved",
+                            id:t.id,
+                            date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+                            note:t.description||"",
+                            amount:parseFloat(t.amount)||0,
+                            dr:BACK_DEBIT_L.includes(t.type)||t.dr===true,
+                            status:t.status||"approved",
+                            txnType:t.type||"",
+                            items:t.line_items||null,  // line items if backend returns them
                           }))}));
                         }
                       }catch(e){console.log("Ledger fetch error");}
@@ -2227,38 +2251,73 @@ function FinanceModule(){
                     {ledgerRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
                     {ledgerRows.map(txn=>(
                       <div key={txn.id}>
-                        <div onClick={()=>txn.items&&setSelBill(selBill===txn.id?null:txn.id)}
-                          style={{display:"grid",gridTemplateColumns:"86px 1fr 100px 110px 110px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"start",cursor:txn.items?"pointer":"default",transition:"background 0.1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                          onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                          <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{txn.date}</span>
-                          <div>
-                            <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{txn.note}</div>
-                            {txn.status&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:20,background:txn.status==="paid"?T.grnL:T.redL,color:txn.status==="paid"?T.grn:T.red,border:`1px solid ${txn.status==="paid"?T.grnM:T.redM}`}}>{txn.status}</span>}
-                            {txn.items&&<span style={{fontSize:9,color:T.blu,marginLeft:4,fontWeight:600}}>{selBill===txn.id?"▲ hide":"▼ "+txn.items.length+" items"}</span>}
-                          </div>
-                          <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{!txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
-                          <span style={{fontSize:12.5,fontWeight:700,color:T.red,textAlign:"right"}}>{txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
-                          <span style={{fontSize:12.5,fontWeight:700,color:txn.runBal>=0?T.grn:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(txn.runBal))} <span style={{fontSize:9,fontWeight:600}}>{txn.runBal>=0?"CR":"DR"}</span></span>
-                        </div>
-                        {selBill===txn.id&&txn.items&&(
-                          <div style={{padding:"8px 14px 10px 100px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`}}>
-                            <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 90px",gap:4,marginBottom:5}}>
-                              {["Item","Qty","Rate","Amount"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
-                            </div>
-                            {txn.items.map((it,ii)=>(
-                              <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 90px",gap:4,padding:"4px 0",borderTop:`1px solid ${T.bluM}`}}>
-                                <span style={{fontSize:12,color:T.t1}}>{it.name}</span>
-                                <span style={{fontSize:11.5,color:T.t3}}>{it.qty}</span>
-                                <span style={{fontSize:11.5,color:T.t3}}>{it.rate}</span>
-                                <span style={{fontSize:12,fontWeight:600,color:T.t1}}>₹{fmtN(it.amt)}</span>
+                        {(()=>{
+                          const isBillType=["material_purchase","site_expense","subcon_expense","Material Purchase","Site Expense","Sub-Con Expense"].includes(txn.txnType||txn.type||"");
+                          const isExpanded=selBill===txn.id;
+                          const hasItems=txn.items&&txn.items.length>0;
+                          return(<>
+                          <div onClick={()=>isBillType&&setSelBill(isExpanded?null:txn.id)}
+                            style={{display:"grid",gridTemplateColumns:"86px 1fr 100px 110px 110px",padding:"9px 14px",borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"start",cursor:isBillType?"pointer":"default",background:isExpanded?T.bluL+"44":"none",transition:"background 0.1s"}}
+                            onMouseEnter={e=>{if(!isExpanded)e.currentTarget.style.background=T.surfaceB;}}
+                            onMouseLeave={e=>{if(!isExpanded)e.currentTarget.style.background="none";}}>
+                            <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{txn.date}</span>
+                            <div>
+                              <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{txn.note}</div>
+                              <div style={{display:"flex",gap:5,marginTop:2,flexWrap:"wrap",alignItems:"center"}}>
+                                {txn.status&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:20,background:txn.status==="paid"?T.grnL:txn.status==="approved"?T.bluL:T.redL,color:txn.status==="paid"?T.grn:txn.status==="approved"?T.blu:T.red,border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="approved"?T.bluM:T.redM}`}}>{txn.status}</span>}
+                                {isBillType&&<span style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer"}}>{isExpanded?"▲ hide details":"▼ view bill"}{hasItems?` · ${txn.items.length} items`:""}</span>}
                               </div>
-                            ))}
-                            <div style={{display:"flex",justifyContent:"flex-end",marginTop:8}}>
-                              <button onClick={()=>openTxn("Payment Made",selParty.name)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>Pay Now</button>
                             </div>
+                            <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{!txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
+                            <span style={{fontSize:12.5,fontWeight:700,color:T.red,textAlign:"right"}}>{txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
+                            <span style={{fontSize:12.5,fontWeight:700,color:txn.runBal>=0?T.grn:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(txn.runBal))} <span style={{fontSize:9,fontWeight:600}}>{txn.runBal>=0?"CR":"DR"}</span></span>
                           </div>
-                        )}
+                          {isExpanded&&(
+                            <div style={{background:T.bluL,borderBottom:`1px solid ${T.bluM}`,padding:"10px 14px"}}>
+                              {/* Bill header */}
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                                <div>
+                                  <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{txn.note}</div>
+                                  <div style={{fontSize:10.5,color:T.t3}}>{selParty.name} · {txn.date} · {txn.status}</div>
+                                </div>
+                                <div style={{display:"flex",gap:6}}>
+                                  <button onClick={()=>{
+                                    const lines=hasItems?txn.items.map(it=>`<tr><td>${it.name||it.item||""}</td><td style="text-align:center">${it.qty||""} ${it.unit||""}</td><td style="text-align:right">₹${fmtN(it.rate||it.amt/it.qty||0)}</td><td style="text-align:right;font-weight:700">₹${fmtN(it.amt||it.amount||0)}</td></tr>`).join(""):`<tr><td colspan="4" style="text-align:center;color:#6B7280">No line items recorded</td></tr>`;
+                                    printHTML(`Bill — ${selParty.name}`,`<h2>Purchase Bill</h2><p><strong>Supplier:</strong> ${selParty.name} &nbsp;|&nbsp; <strong>Date:</strong> ${txn.date} &nbsp;|&nbsp; <strong>Status:</strong> ${txn.status}</p><p>${txn.note}</p><table><tr><th>Item</th><th style="text-align:center">Qty / Unit</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th></tr>${lines}<tr><td colspan="3" style="text-align:right;font-weight:700;border-top:2px solid #E5E7EB">TOTAL</td><td style="text-align:right;font-weight:800;color:#2563EB">₹${fmtN(txn.amount)}</td></tr></table><p class="footer">Generated by GB Buildcon · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
+                                  }} style={{padding:"4px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
+                                    Print Bill
+                                  </button>
+                                  {txn.status!=="paid"&&<button onClick={()=>openTxn("Payment Made",selParty.name)} style={{padding:"4px 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700}}>Pay Now</button>}
+                                </div>
+                              </div>
+                              {/* Line items table */}
+                              {hasItems?(
+                                <>
+                                  <div style={{display:"grid",gridTemplateColumns:"1fr 90px 80px 90px 90px",gap:4,padding:"5px 0",borderBottom:`1px solid ${T.bluM}`}}>
+                                    {["Item","Qty / Unit","Rate","Amount","Head"].map((h,i)=><span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:i>=2?"right":"left"}}>{h}</span>)}
+                                  </div>
+                                  {txn.items.map((it,ii)=>(
+                                    <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 90px 80px 90px 90px",gap:4,padding:"5px 0",borderBottom:`1px solid ${T.bluM}44`}}>
+                                      <span style={{fontSize:12,fontWeight:500,color:T.t1}}>{it.name||it.item||it.item_name||"—"}</span>
+                                      <span style={{fontSize:11.5,color:T.t3,textAlign:"right"}}>{it.qty||"—"} {it.unit||""}</span>
+                                      <span style={{fontSize:11.5,color:T.t3,textAlign:"right"}}>{it.rate?`₹${fmtN(it.rate)}`:"—"}</span>
+                                      <span style={{fontSize:12,fontWeight:600,color:T.t1,textAlign:"right"}}>₹{fmtN(it.amt||it.amount||0)}</span>
+                                      <span style={{fontSize:10.5,color:T.t4,textAlign:"right"}}>{it.head||"—"}</span>
+                                    </div>
+                                  ))}
+                                  <div style={{display:"flex",justifyContent:"flex-end",padding:"6px 0",borderTop:`1px solid ${T.bluM}`}}>
+                                    <span style={{fontSize:12.5,fontWeight:800,color:T.blu}}>Total: ₹{fmtN(txn.amount)}</span>
+                                  </div>
+                                </>
+                              ):(
+                                <div style={{textAlign:"center",padding:"12px",fontSize:11.5,color:T.t4}}>
+                                  Line items not recorded for this bill
+                                </div>
+                              )}
+                            </div>
+                          )}
+                          </>);
+                        })()}
                       </div>
                     ))}
                   </div>
