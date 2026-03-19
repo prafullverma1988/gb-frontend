@@ -678,9 +678,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const lbl=(text,color)=>(
     <label style={{fontSize:9.5,fontWeight:700,color:color||T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{text}</label>
   );
+  const [saveErr,setSaveErr]=useState("");
   const handleSave=async()=>{
     const amt=isMaterial||isSubcon||isInvoice?grandTotal:Number(payAmt)||0;
-    if(!amt){setSaved(false);return;}
+    if(!amt){setSaveErr("Amount is required.");return;}
+    setSaveErr("");
     try{
       // Map type to backend enum
       const TXN_TYPE_BACK={
@@ -693,11 +695,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       const mopMap={"Cash":"cash","Cheque":"cheque","Bank Transfer":"neft","UPI":"upi","NEFT":"neft"};
       const backType=TXN_TYPE_BACK[type]||(type==="Payment Received"?"receipt":"payment");
 
-      // Resolve IDs from dbParties / dbAccounts
-      const partyObj=dbParties?.find(p=>p.name===party);
-      const accObj=dbAccounts?.find(a=>a.name===account);
-      const projList=dbProjects||[];
-      const projId=projList.findIndex(p=>p===project);
+      // Case-insensitive ID resolution
+      const partyLower=(party||"").toLowerCase().trim();
+      const partyObj=dbParties?.find(p=>p.name.toLowerCase().trim()===partyLower);
+      const accLower=(account||"").toLowerCase().trim();
+      const accObj=dbAccounts?.find(a=>a.name.toLowerCase().trim()===accLower);
 
       const payload={
         type:backType,
@@ -714,7 +716,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         status:"paid",
       };
 
-      // Add line items for material/subcon/invoice types
+      // Line items for material/subcon/invoice
       if(isMaterial&&rows?.length){
         payload.line_items=rows.filter(r=>r.item&&r.qty&&r.rate).map(r=>({
           item:r.item,qty:parseFloat(r.qty),unit:r.unit,
@@ -730,10 +732,30 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         });
       }
 
-      await api.post("/finance/transactions",payload);
-    }catch(e){console.error("Save txn error:",e);}
-    setSaved(true);
-    setTimeout(()=>{setSaved(false);onClose();},900);
+      // Debug log — visible in browser console
+      console.log("[FinanceModule] Saving transaction:", JSON.stringify(payload,null,2));
+
+      const res=await api.post("/finance/transactions",payload);
+
+      // Check server response explicitly
+      if(res&&res.success===false){
+        const errMsg=res.message||res.error||"Server rejected the entry.";
+        console.error("[FinanceModule] Server error:", errMsg, res);
+        setSaveErr(`Save failed: ${errMsg}`);
+        return; // ← DO NOT close modal on failure
+      }
+
+      console.log("[FinanceModule] Save success:", res);
+      if(onSaved) onSaved(); // refresh parent
+      setSaved(true);
+      setTimeout(()=>{setSaved(false);onClose();},900);
+
+    }catch(e){
+      console.error("[FinanceModule] Save exception:", e);
+      const msg=e?.message||e?.response?.data?.message||"Network error. Check connection.";
+      setSaveErr(`Error: ${msg}`);
+      // ← Modal stays open so user can retry
+    }
   };
 
   const colTpl="28px 1fr 95px 1fr 70px 70px 80px 88px 22px";
@@ -1407,9 +1429,17 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             {isPayment&&payAmt&&<span style={{color:tc}}>Rs.{Number(payAmt).toLocaleString("en-IN")}{type==="Payment Received"?" received":type==="Payment Made"?" paid out":""}</span>}
             {isBankTransfer&&payAmt&&<span style={{color:T.blu}}>Rs.{Number(payAmt).toLocaleString("en-IN")} — {account} → {toAccount}</span>}
           </div>
+          {/* Error message */}
+          {saveErr&&(
+            <div style={{flex:1,padding:"7px 12px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+              {saveErr}
+              <span onClick={()=>setSaveErr("")} style={{marginLeft:"auto",cursor:"pointer",opacity:0.6,fontSize:13}}>✕</span>
+            </div>
+          )}
           <button onClick={onClose} style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
           {!saved?(
-            <button onClick={handleSave} style={{padding:"8px 22px",borderRadius:7,background:tc,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+            <button onClick={handleSave} style={{padding:"8px 22px",borderRadius:7,background:tc,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,opacity:saveErr?0.85:1}}>
               <IcChk size={14} color="white"/> Save Entry
             </button>
           ):(
