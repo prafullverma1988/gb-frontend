@@ -2146,7 +2146,7 @@ function FinanceModule(){
     }catch(e){console.error("Reject PR error:",e);}
   };
 
-  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Transactions"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"}];
+  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"}];
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -2579,8 +2579,8 @@ function FinanceModule(){
         {/* CASH BOOK TAB */}
         {tab==="transaction"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-            {/* Toolbar */}
-            <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+            {/* Toolbar — tight against filter bar */}
+            <div style={{background:T.surface,borderRadius:8,padding:"6px 10px",marginBottom:6,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
               <div style={{position:"relative",flex:1,minWidth:160}}>
                 <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
                 <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search narration or party..."
@@ -2598,31 +2598,15 @@ function FinanceModule(){
               </button>
               <button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
               <button onClick={dlTxnPDF} style={{height:31,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>
-              <button onClick={()=>openTxn("Payment In")} style={{height:31,padding:"0 13px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:5,flexShrink:0,boxShadow:`0 2px 6px ${T.blu}44`}}>
-                <IcAdd size={13} color="white"/> Add Entry
-              </button>
+
             </div>
 
-            {/* Summary bar */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8,flexShrink:0}}>
-              {[
-                {l:"Opening Balance",v:totalBal,c:T.blu,sub:"As at 01 Jan 2025"},
-                {l:"Total Receipts",v:tIn,c:T.grn,sub:`${txnFiltered.filter(t=>!t.dr).length} entries`},
-                {l:"Total Payments",v:tOut,c:T.red,sub:`${txnFiltered.filter(t=>t.dr).length} entries`},
-                {l:"Closing Balance",v:totalBal+tIn-tOut,c:(totalBal+tIn-tOut)>=0?T.blu:T.red,sub:"Net balance"},
-              ].map((x,i)=>(
-                <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderLeft:`3px solid ${x.c}`}}>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:3}}>{x.l}</div>
-                  <div style={{fontSize:18,fontWeight:800,color:T.t1}}>₹{fmtN(x.v)}</div>
-                  <div style={{fontSize:10,color:T.t4,marginTop:2}}>{x.sub}</div>
-                </div>
-              ))}
-            </div>
+
 
             {/* Transactions Table — new 7-col layout */}
             <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
               {/* Sticky header */}
-              <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 120px 1fr 120px 80px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,flexShrink:0,gap:6}}>
+              <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,flexShrink:0,gap:6}}>
                 {["Date","Type","Party","Site","Note","Amount","Status"].map((h,i)=>(
                   <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===5?"right":"left"}}>{h}</span>
                 ))}
@@ -2639,7 +2623,7 @@ function FinanceModule(){
                   "Party Payment": {label:"Party Payment",  color:T.red,  bg:T.redL,  dir:"out"},
                   "Sub-Con Expense":{label:"Sub-Con",       color:T.red,  bg:T.redL,  dir:"out"},
                   "Sales Invoice": {label:"Sales Invoice",  color:T.grn,  bg:T.grnL,  dir:"in"},
-                  "Bank Transfer": {label:"Bank Transfer",  color:T.t3,   bg:T.b1,    dir:"internal"},
+                  "Bank Transfer": {label:"Bank Transfer",  color:T.t3,   bg:T.b1,    dir:"transfer"},
                   "Wallet Payment":{label:"Wallet Out",     color:T.red,  bg:T.redL,  dir:"out"},
                   "Wallet Top-up": {label:"Wallet Top-up",  color:T.slt,  bg:T.sltL,  dir:"internal"},
                   "Material Return":{label:"Material Return",color:T.grn, bg:T.grnL,  dir:"in"},
@@ -2647,8 +2631,14 @@ function FinanceModule(){
                 const sorted=[...txnFiltered].sort((a,b)=>b.ds-a.ds);
                 return sorted.map((txn,i)=>{
                   const meta=TYPE_META[txn.type]||{label:txn.type||"Transaction",color:T.t3,bg:T.b1,dir:txn.dr?"out":"in"};
-                  const amtColor=meta.dir==="in"?T.grn:meta.dir==="out"?T.red:T.t2;
-                  const amtPrefix=meta.dir==="in"?"+":meta.dir==="out"?"-":"";
+                  // Bank Transfer: source account = DR (red), to_account = CR (green)
+                  const isBTrow=meta.dir==="transfer";
+                  const btIsSource=isBTrow&&!txn.to_account_name; // source leg has no to_account
+                  const btIsDest=isBTrow&&!!txn.to_account_name;   // dest leg has to_account
+                  const amtColor=meta.dir==="in"?T.grn:meta.dir==="out"?T.red:
+                    isBTrow?(txn.dr?T.red:T.grn):T.t2;
+                  const amtPrefix=meta.dir==="in"?"+":meta.dir==="out"?"-":
+                    isBTrow?(txn.dr?"-":"+"):"";
                   // Note: show ONLY user-typed note, never auto-generated description
                   // Extract note: prefer txn.note field; fallback: parse from description (last segment after " — ")
                   const _rawNote=txn.note&&txn.note.trim()?txn.note.trim():"";
@@ -2663,7 +2653,7 @@ function FinanceModule(){
                     :(txn.party||"—");
                   return(
                     <div key={txn.id||i}
-                      style={{display:"grid",gridTemplateColumns:"72px 130px 140px 120px 1fr 120px 80px",padding:"9px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"default"}}
+                      style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"default"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
                       onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
                       {/* 1. Date */}
@@ -2690,7 +2680,7 @@ function FinanceModule(){
               </div>
               {/* Footer totals */}
               {txnFiltered.length>0&&(()=>{const cl=totalBal+tIn-tOut;return(
-                <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 120px 1fr 120px 80px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
+                <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
                   <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {txnFiltered.length} entries</span>
                   <span style={{fontSize:13,fontWeight:800,color:cl>=0?T.grn:T.red,textAlign:"right"}}>₹{fmtN(tIn-tOut)}</span>
                   <span style={{fontSize:13,fontWeight:800,color:cl>=0?T.blu:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(cl))}</span>
@@ -2748,7 +2738,7 @@ function FinanceModule(){
                   "Party Payment":  {label:"Party Payment",   color:T.red, bg:T.redL, dir:"out"},
                   "Sub-Con Expense":{label:"Sub-Con",         color:T.red, bg:T.redL, dir:"out"},
                   "Sales Invoice":  {label:"Sales Invoice",   color:T.grn, bg:T.grnL, dir:"in"},
-                  "Bank Transfer":  {label:"Bank Transfer",   color:T.t3,  bg:T.b1,   dir:"internal"},
+                  "Bank Transfer":  {label:"Bank Transfer",   color:T.t3,  bg:T.b1,   dir:"transfer"},
                   "Wallet Payment": {label:"Wallet Out",      color:T.red, bg:T.redL, dir:"out"},
                   "Wallet Top-up":  {label:"Wallet Top-up",   color:T.slt, bg:T.sltL, dir:"internal"},
                   "Material Return":{label:"Material Return", color:T.grn, bg:T.grnL, dir:"in"},
