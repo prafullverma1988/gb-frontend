@@ -409,7 +409,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
       const el=ownInputRef.current;
       if(el){
         const r=el.getBoundingClientRect();
-        setDropPos({top:r.bottom+window.scrollY+2,left:r.left+window.scrollX,width:Math.max(r.width,180)});
+        setDropPos({top:r.bottom+2,left:r.left,width:Math.max(r.width,180)});
       }
     };
     recalc();
@@ -438,7 +438,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
     const el=ownInputRef.current;
     if(el){
       const r=el.getBoundingClientRect();
-      setDropPos({top:r.bottom+window.scrollY+2,left:r.left+window.scrollX,width:Math.max(r.width,180)});
+      setDropPos({top:r.bottom+2,left:r.left,width:Math.max(r.width,180)});
     }
     setQ("");setHi(-1);setOpen(true);
   };
