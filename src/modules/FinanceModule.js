@@ -368,69 +368,136 @@ function DuplicateModal({project,onClose,onConfirm}){
 function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfterSelect,inputRef}){
   const [open,setOpen]=useState(false);
   const [q,setQ]=useState("");
+  const [hi,setHi]=useState(-1);
   const [dropPos,setDropPos]=useState({top:0,left:0,width:180});
   const wrapRef=useRef(null);
   const ownInputRef=useRef(null);
+  const listRef=useRef(null);
+  const ac=accent||T.blu;
+  const ht=compact?28:30;
+  const opts=Array.isArray(options)?options:[];
+  const filtered=q?opts.filter(o=>(typeof o==="string"?o:o.label).toLowerCase().includes(q.toLowerCase())):opts;
+
+  // close on outside click
   useEffect(()=>{
-    const h=e=>{if(wrapRef.current&&!wrapRef.current.contains(e.target)){setOpen(false);setQ("");}};
+    const h=e=>{
+      if(wrapRef.current&&!wrapRef.current.contains(e.target)){
+        setOpen(false);setQ("");setHi(-1);
+      }
+    };
     document.addEventListener("mousedown",h);
     return()=>document.removeEventListener("mousedown",h);
   },[]);
-  const ac=accent||T.blu;
-  const opts=Array.isArray(options)?options:[];
-  const filtered=q?opts.filter(o=>(typeof o==="string"?o:o.label).toLowerCase().includes(q.toLowerCase())):opts;
-  const h=compact?28:30;
+
+  // reposition when open changes
+  useEffect(()=>{
+    if(!open) return;
+    const recalc=()=>{
+      const el=ownInputRef.current;
+      if(el){
+        const r=el.getBoundingClientRect();
+        setDropPos({top:r.bottom+window.scrollY+2,left:r.left+window.scrollX,width:Math.max(r.width,180)});
+      }
+    };
+    recalc();
+    window.addEventListener("scroll",recalc,true);
+    window.addEventListener("resize",recalc);
+    return()=>{
+      window.removeEventListener("scroll",recalc,true);
+      window.removeEventListener("resize",recalc);
+    };
+  },[open]);
+
+  // scroll highlighted item into view
+  useEffect(()=>{
+    if(hi>=0&&listRef.current){
+      const items=listRef.current.querySelectorAll("[data-opt]");
+      if(items[hi]) items[hi].scrollIntoView({block:"nearest"});
+    }
+  },[hi]);
+
   const handleSelect=(val)=>{
-    onChange(val);setQ("");setOpen(false);
+    onChange(val);setQ("");setOpen(false);setHi(-1);
     if(onAfterSelect) setTimeout(()=>onAfterSelect(),30);
   };
+
   const openDrop=()=>{
     const el=ownInputRef.current;
-    if(el){const r=el.getBoundingClientRect();setDropPos({top:r.bottom+2,left:r.left,width:Math.max(r.width,180)});}
-    setQ("");setOpen(true);
+    if(el){
+      const r=el.getBoundingClientRect();
+      setDropPos({top:r.bottom+window.scrollY+2,left:r.left+window.scrollX,width:Math.max(r.width,180)});
+    }
+    setQ("");setHi(-1);setOpen(true);
   };
+
   const assignRef=el=>{
     ownInputRef.current=el;
     if(inputRef){if(typeof inputRef==="function") inputRef(el); else inputRef.current=el;}
   };
+
+  const onKeyDown=e=>{
+    if(!open){if(e.key==="ArrowDown"||e.key==="Enter") openDrop(); return;}
+    if(e.key==="Escape"){setOpen(false);setQ("");setHi(-1);e.preventDefault();return;}
+    if(e.key==="ArrowDown"){
+      e.preventDefault();
+      setHi(p=>p<filtered.length-1?p+1:0);
+    } else if(e.key==="ArrowUp"){
+      e.preventDefault();
+      setHi(p=>p>0?p-1:filtered.length-1);
+    } else if(e.key==="Enter"){
+      e.preventDefault();
+      const idx=hi>=0?hi:0;
+      if(filtered[idx]){const v=typeof filtered[idx]==="string"?filtered[idx]:filtered[idx].value; handleSelect(v);}
+    }
+  };
+
   return(
     <div ref={wrapRef} style={{position:"relative"}}>
-      <input ref={assignRef} value={open?q:value||""}
-        onChange={e=>{setQ(e.target.value);if(!open)openDrop();}}
-        onFocus={openDrop}
-        onKeyDown={e=>{
-          if(e.key==="Escape"){setOpen(false);setQ("");}
-          if(e.key==="Enter"&&filtered.length>0){handleSelect(typeof filtered[0]==="string"?filtered[0]:filtered[0].value);}
-        }}
+      <input
+        ref={assignRef}
+        value={open?q:value||""}
+        onChange={e=>{setQ(e.target.value);setHi(-1);if(!open)openDrop();}}
+        onFocus={()=>{if(!open)openDrop();}}
+        onMouseDown={e=>{if(open){e.preventDefault();setOpen(false);setQ("");setHi(-1);}}}
+        onKeyDown={onKeyDown}
         placeholder={placeholder||"Type or select..."}
-        style={{height:h,padding:`0 22px 0 7px`,borderRadius:5,
+        autoComplete="off"
+        style={{height:ht,padding:`0 22px 0 7px`,borderRadius:5,
           border:`1.5px solid ${open?ac:T.b1}`,fontSize:compact?11:12,outline:"none",
-          boxSizing:"border-box",fontFamily:"inherit",background:T.surface,width:"100%"}}/>
-      <span style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none",display:"flex",color:T.t4}}>
+          boxSizing:"border-box",fontFamily:"inherit",background:T.surface,width:"100%",
+          cursor:"pointer"}}/>
+      <span style={{position:"absolute",right:5,top:"50%",transform:`translateY(-50%) rotate(${open?180:0}deg)`,
+        pointerEvents:"none",display:"flex",color:T.t4,transition:"transform 0.18s"}}>
         <IcDown size={10} color="currentColor"/>
       </span>
       {open&&(
-        <div style={{position:"fixed",top:dropPos.top,left:dropPos.left,minWidth:dropPos.width,
-          background:T.surface,borderRadius:7,border:`1.5px solid ${ac}`,
-          boxShadow:"0 8px 28px rgba(0,0,0,0.18)",zIndex:9999,maxHeight:200,overflowY:"auto"}}>
+        <div ref={listRef}
+          style={{position:"fixed",top:dropPos.top,left:dropPos.left,minWidth:dropPos.width,
+            background:T.surface,borderRadius:8,border:`1.5px solid ${ac}`,
+            boxShadow:"0 8px 28px rgba(0,0,0,0.2)",zIndex:9999,maxHeight:220,overflowY:"auto",
+            animation:"fadeSlideIn 0.12s ease"}}>
+          {filtered.length===0&&(
+            <div style={{padding:"12px 10px",fontSize:11,color:T.t4,textAlign:"center"}}>No match found</div>
+          )}
           {filtered.map((opt,i)=>{
             const label=typeof opt==="string"?opt:opt.label;
             const val=typeof opt==="string"?opt:opt.value;
-            const cur=val===value;
+            const isCur=val===value;
+            const isHi=i===hi;
             return(
-              <div key={i} onMouseDown={e=>{e.preventDefault();handleSelect(val);}}
-                style={{padding:"7px 10px",fontSize:12,cursor:"pointer",color:cur?ac:T.t1,
-                  fontWeight:cur?700:400,background:cur?ac+"14":"transparent",
-                  borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none",whiteSpace:"nowrap"}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
-                onMouseLeave={e=>e.currentTarget.style.background=cur?ac+"14":"transparent"}>
+              <div key={i} data-opt={i}
+                onMouseDown={e=>{e.preventDefault();handleSelect(val);}}
+                onMouseEnter={()=>setHi(i)}
+                style={{padding:"7px 11px",fontSize:12,cursor:"pointer",
+                  color:isCur?ac:T.t1,fontWeight:isCur?700:400,
+                  background:isHi?(isCur?ac+"28":T.sltL):isCur?ac+"14":"transparent",
+                  borderBottom:i<filtered.length-1?`1px solid ${T.b1}`:"none",
+                  whiteSpace:"nowrap",outline:isHi?`2px solid ${ac}44`:"none",
+                  outlineOffset:"-2px"}}>
                 {label}
               </div>
             );
           })}
-          {!filtered.length&&(
-            <div style={{padding:"10px",fontSize:11,color:T.t4,textAlign:"center"}}>No match found</div>
-          )}
         </div>
       )}
     </div>
@@ -1418,6 +1485,12 @@ function FinanceModule(){
   const [createTxnParty,setCreateTxnParty]=useState("");
   const openTxn=(type,party="")=>{setCreateTxnType(type);setCreateTxnParty(party);};
   const closeTxn=()=>{setCreateTxnType(null);setCreateTxnParty("");};
+  // Filter chips (one per tab)
+  const [chipParty,setChipParty]=useState("All");
+  const [chipTxn,setChipTxn]=useState("All");
+  const [chipCB,setChipCB]=useState("All");
+  const [chipPR,setChipPR]=useState("All");
+  const [chipPend,setChipPend]=useState("All");
   // PR / Pending
   const [editReqId,setEditReqId]=useState(null);const [editAmt,setEditAmt]=useState("");
   const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);const [pendPmts,setPendPmts]=useState(PEND_PMTS_DATA);
@@ -1487,6 +1560,9 @@ function FinanceModule(){
   const activeAccounts=apiAccounts||ACCOUNTS;
   const activeTxns=apiTransactions||TRANSACTIONS_DATA;
 
+  // Chip filters applied to data
+  const filteredParties=masterParties.filter(p=>chipParty==="All"||p.type===chipParty);
+
   const projects=["All",...new Set(activeTxns.map(t=>t.project))];
   const txnFiltered=activeTxns.filter(t=>{
     if(txnSearch&&!t.party.toLowerCase().includes(txnSearch.toLowerCase())&&!t.sub.toLowerCase().includes(txnSearch.toLowerCase())) return false;
@@ -1494,6 +1570,14 @@ function FinanceModule(){
     if(fType!=="All"&&t.type!==fType) return false;
     if(fAcc!=="All"&&t.account!==fAcc) return false;
     if(fStatus!=="All"&&t.status!==fStatus) return false;
+    // chip filter
+    if(chipTxn==="Payment In"&&t.type!=="Payment In") return false;
+    if(chipTxn==="Payment Out"&&t.type!=="Payment Out") return false;
+    if(chipTxn==="Material"&&t.type!=="Material Purchase") return false;
+    if(chipTxn==="Site Expense"&&t.type!=="Site Expense") return false;
+    if(chipTxn==="Sub-Con"&&t.type!=="Sub-Con Expense") return false;
+    if(chipTxn==="Party Payment"&&t.type!=="Party Payment") return false;
+    if(chipTxn==="Unpaid"&&t.status==="paid") return false;
     return true;
   });
   const tIn=txnFiltered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
@@ -1520,6 +1604,18 @@ function FinanceModule(){
   const pendBillDue=pendPmts.filter(p=>p.type==="bill"&&!p.overdue).reduce((s,p)=>s+p.amount,0);
   const pendOverdue=pendPmts.filter(p=>p.overdue).reduce((s,p)=>s+p.amount,0);
 
+  // ── Cash Book computed ──────────────────────────────────────
+  const cbTxnsBase=activeTxns.length>0
+    ? activeTxns.filter(t=>t.type==="Payment In"||t.type==="Payment Out")
+    : TRANSACTIONS_DATA.filter(t=>t.type==="Payment In"||t.type==="Payment Out");
+  const cbTxns=cbTxnsBase.filter(t=>{
+    if(chipCB==="Receipts") return !t.dr;
+    if(chipCB==="Payments") return t.dr;
+    return true;
+  });
+  const cbIn=cbTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
+  const cbOut=cbTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+
   const TILE_SETS={
     party:[
       {l:"Amount Received",v:`₹${fmt(partyTotalCR)}`,sub:"Payments received",Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
@@ -1532,6 +1628,12 @@ function FinanceModule(){
       {l:"Total Expense",v:`₹${fmt(allTxnOut)}`,sub:"All payment out",Icon:IcTrendDn,c:T.red,bg:T.redL,brd:T.redM},
       {l:"Unpaid Bills",v:`₹${fmt(unpaidBills)}`,sub:"Pending payment",Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
       {l:"Net Cash Flow",v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
+    ],
+    cashbook:[
+      {l:"Opening Balance",v:`₹${fmt(totalBal)}`,sub:"Company accounts",Icon:IcBank,c:T.blu,bg:T.bluL,brd:T.bluM},
+      {l:"Total Receipts",v:`₹${fmt(cbIn)}`,sub:`${cbTxns.filter(t=>!t.dr).length} entries`,Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
+      {l:"Total Payments",v:`₹${fmt(cbOut)}`,sub:`${cbTxns.filter(t=>t.dr).length} entries`,Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
+      {l:"Closing Balance",v:`₹${fmt(totalBal+cbIn-cbOut)}`,sub:(totalBal+cbIn-cbOut)>=0?"Surplus":"Deficit",Icon:IcWallet,c:(totalBal+cbIn-cbOut)>=0?T.blu:T.red,bg:(totalBal+cbIn-cbOut)>=0?T.bluL:T.redL,brd:(totalBal+cbIn-cbOut)>=0?T.bluM:T.redM},
     ],
     payreq:[
       {l:"Pending Approval",v:`${pendPR} PRs`,sub:`₹${fmt(prPendAmt)} awaiting`,Icon:IcPendClk,c:T.amb,bg:T.ambL,brd:T.ambM},
@@ -1632,7 +1734,7 @@ function FinanceModule(){
     setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Rejected"}:r));
   };
 
-  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Transactions"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"}];
+  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Transactions"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"}];
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -1650,9 +1752,78 @@ function FinanceModule(){
         </div>
       </div>
 
+      {/* ── Filter Bar ── */}
+      {(()=>{
+        const FILTER_CONFIGS={
+          party:{
+            chips:["All","Client","Vendor","Labour","Sub-Con","Material Supplier"],
+            active:chipParty, set:setChipParty,
+            colors:{"Client":{c:T.grn,bg:T.grnL},"Vendor":{c:T.amb,bg:T.ambL},"Labour":{c:T.blu,bg:T.bluL},"Sub-Con":{c:T.slt,bg:T.sltL},"Material Supplier":{c:T.pur,bg:T.purL}},
+          },
+          transaction:{
+            chips:["All","Payment In","Payment Out","Material","Site Expense","Sub-Con","Party Payment","Unpaid"],
+            active:chipTxn, set:setChipTxn,
+            colors:{"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Sub-Con":{c:T.slt,bg:T.sltL},"Party Payment":{c:T.pur,bg:T.purL},"Unpaid":{c:T.red,bg:T.redL}},
+          },
+          cashbook:{
+            chips:["All","Receipts","Payments"],
+            active:chipCB, set:setChipCB,
+            colors:{"Receipts":{c:T.grn,bg:T.grnL},"Payments":{c:T.red,bg:T.redL}},
+          },
+          payreq:{
+            chips:["All","Pending","Approved","Rejected"],
+            active:chipPR, set:setChipPR,
+            colors:{"Pending":{c:T.amb,bg:T.ambL},"Approved":{c:T.grn,bg:T.grnL},"Rejected":{c:T.red,bg:T.redL}},
+          },
+          pending:{
+            chips:["All","Overdue","High","Medium","Low"],
+            active:chipPend, set:setChipPend,
+            colors:{"Overdue":{c:T.red,bg:T.redL},"High":{c:T.red,bg:T.redL},"Medium":{c:T.amb,bg:T.ambL},"Low":{c:T.grn,bg:T.grnL}},
+          },
+        };
+        const cfg=FILTER_CONFIGS[tab];
+        if(!cfg) return null;
+        return(
+          <div style={{margin:"0 18px 0",padding:"7px 12px",background:T.surface,borderRadius:"8px 8px 0 0",border:`1px solid ${T.b1}`,borderBottom:"none",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",flexShrink:0}}>
+            <span style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.6px",marginRight:4}}>Filter</span>
+            {cfg.chips.map(chip=>{
+              const isActive=cfg.active===chip;
+              const col=cfg.colors[chip]||{c:T.slt,bg:T.sltL};
+              return(
+                <button key={chip} onClick={()=>{cfg.set(chip);}}
+                  style={{
+                    padding:"4px 12px",borderRadius:20,border:`1.5px solid ${isActive?col.c:T.b1}`,
+                    background:isActive?col.bg:T.surfaceB,
+                    color:isActive?col.c:T.t3,
+                    fontSize:11.5,fontWeight:isActive?700:500,cursor:"pointer",
+                    transition:"all 0.15s",fontFamily:"inherit",
+                    boxShadow:isActive?`0 1px 4px ${col.c}33`:"none",
+                  }}
+                  onMouseEnter={e=>{if(!isActive){e.currentTarget.style.borderColor=col.c;e.currentTarget.style.color=col.c;e.currentTarget.style.background=col.bg+"88";}}}
+                  onMouseLeave={e=>{if(!isActive){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.color=T.t3;e.currentTarget.style.background=T.surfaceB;}}}>
+                  {chip}
+                  {/* count badges */}
+                  {tab==="transaction"&&chip==="Unpaid"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{activeTxns.filter(t=>t.status!=="paid").length}</span>)}
+                  {tab==="payreq"&&chip==="Pending"&&pendPR>0&&(<span style={{marginLeft:5,background:T.amb,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{pendPR}</span>)}
+                  {tab==="pending"&&chip==="Overdue"&&(<span style={{marginLeft:5,background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{pendPmts.filter(p=>p.overdue).length}</span>)}
+                </button>
+              );
+            })}
+            {cfg.active!=="All"&&(
+              <button onClick={()=>cfg.set("All")}
+                style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontFamily:"inherit"}}
+                onMouseEnter={e=>e.currentTarget.style.color=T.red}
+                onMouseLeave={e=>e.currentTarget.style.color=T.t4}>
+                <IcX size={10} color="currentColor"/> Clear
+              </button>
+            )}
+          </div>
+        );
+      })()}
+
       {/* ── Tab bar ── */}
-      <div style={{margin:"8px 18px",flexShrink:0}}>
-        <div style={{background:"#0D1B2A",borderRadius:10,padding:"0 8px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
+      <div style={{margin:"0 18px 8px",flexShrink:0}}>
+        <div style={{background:"#0D1B2A",borderRadius:"0 0 10px 10px",padding:"0 8px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
           <div style={{display:"flex",flex:1}}>
             {TABS.map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)}
@@ -1781,7 +1952,7 @@ function FinanceModule(){
                 </button>
               </div>
               <div style={{flex:1,overflowY:"auto"}}>
-                {masterParties.filter(p=>!partySearch||p.name.toLowerCase().includes(partySearch.toLowerCase())).map(p=>{
+                {filteredParties.filter(p=>!partySearch||p.name.toLowerCase().includes(partySearch.toLowerCase())).map(p=>{
                   const isS=selParty?.id===p.id;
                   const tc=p.type==="Client"?T.grn:p.type==="Material Supplier"?T.blu:p.type==="Sub-Con"?T.slt:T.amb;
                   return(
@@ -1999,6 +2170,88 @@ function FinanceModule(){
             </div>
           </div>
         )}
+        {/* CASH BOOK TAB */}
+        {tab==="cashbook"&&(
+          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+            {/* Toolbar */}
+            <div style={{background:T.surface,borderRadius:8,padding:"8px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+              <div style={{position:"relative",flex:1,minWidth:160}}>
+                <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                <input placeholder="Search narration or party..." style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}/>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <IcCalDue size={13} color={T.t4}/>
+                <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
+                <span style={{fontSize:11,color:T.t4}}>to</span>
+                <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              <button onClick={()=>openTxn("Payment In")} style={{height:31,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,cursor:"pointer",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
+                <IcRecv size={13} color={T.grn}/> Receipt
+              </button>
+              <button onClick={()=>openTxn("Payment Made")} style={{height:31,padding:"0 12px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,cursor:"pointer",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
+                <IcSend size={13} color={T.red}/> Payment
+              </button>
+              <button onClick={()=>{
+                const rows=[["#","Date","Voucher","Narration","Party","Receipt(Dr)","Payment(Cr)","Balance"]];
+                const sorted=[...cbTxns].sort((a,b)=>a.ds-b.ds);
+                let rb=totalBal;
+                sorted.forEach((t,i)=>{rb+=t.dr?-t.amount:t.amount;rows.push([i+1,t.date,`CB-${String(t.id).padStart(3,"0")}`,t.sub||t.type,t.party,!t.dr?t.amount:"",t.dr?t.amount:"",rb]);});
+                downloadCSV("CashBook.csv",rows);
+              }} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
+            </div>
+
+            {/* Table */}
+            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+              {/* Header */}
+              <div style={{display:"grid",gridTemplateColumns:"36px 90px 90px 1fr 150px 110px 115px 110px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
+                {["#","Date","Voucher","Narration","Party","Receipt (Dr)","Payment (Cr)","Balance"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:i===5?T.grn:i===6?T.red:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",textAlign:i>=5?"right":"left"}}>{h}</span>
+                ))}
+              </div>
+              {/* Opening balance row */}
+              <div style={{display:"grid",gridTemplateColumns:"36px 90px 90px 1fr 150px 110px 115px 110px",padding:"9px 14px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`}}>
+                <span/><span style={{fontSize:12,fontWeight:700,color:T.blu,gridColumn:"2/6"}}>Opening Balance</span>
+                <span/><span/><span style={{fontSize:13,fontWeight:800,color:T.blu,textAlign:"right"}}>₹{fmtN(totalBal)}</span>
+              </div>
+              {(()=>{
+                const sorted=[...cbTxns].sort((a,b)=>a.ds-b.ds);
+                let runBal=totalBal;
+                return sorted.map((txn,i)=>{
+                  runBal+=txn.dr?-txn.amount:txn.amount;
+                  const vchr=`CB-${String(txn.id).padStart(3,"0")}`;
+                  return(
+                    <div key={txn.id}
+                      style={{display:"grid",gridTemplateColumns:"36px 90px 90px 1fr 150px 110px 115px 110px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
+                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
+                      <span style={{fontSize:11,color:T.t4}}>{i+1}</span>
+                      <span style={{fontSize:11.5,color:T.t3,whiteSpace:"nowrap"}}>{txn.date}</span>
+                      <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{vchr}</span></span>
+                      <div>
+                        <div style={{fontSize:12.5,color:T.t1,fontWeight:500}}>{txn.sub||txn.type}</div>
+                        <div style={{fontSize:10,color:T.t4}}>{txn.type}</div>
+                      </div>
+                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.party}</span>
+                      <span style={{fontSize:12.5,fontWeight:!txn.dr?700:400,color:!txn.dr?T.grn:T.t4,textAlign:"right"}}>{!txn.dr?`₹${fmtN(txn.amount)}`:"—"}</span>
+                      <span style={{fontSize:12.5,fontWeight:txn.dr?700:400,color:txn.dr?T.red:T.t4,textAlign:"right"}}>{txn.dr?`₹${fmtN(txn.amount)}`:"—"}</span>
+                      <span style={{fontSize:12.5,fontWeight:700,color:runBal>=0?T.t1:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(runBal))}</span>
+                    </div>
+                  );
+                });
+              })()}
+              {cbTxns.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No receipts or payments recorded</div>}
+              {cbTxns.length>0&&(()=>{const cl=totalBal+cbIn-cbOut;return(
+                <div style={{display:"grid",gridTemplateColumns:"36px 90px 90px 1fr 150px 110px 115px 110px",padding:"10px 14px",background:"#EEF2FF",borderTop:`2px solid ${T.b1}`}}>
+                  <span style={{gridColumn:"1/6",fontSize:13,fontWeight:700,color:T.t1}}>Closing Balance</span>
+                  <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(cbIn)}</span>
+                  <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(cbOut)}</span>
+                  <span style={{fontSize:13,fontWeight:800,color:cl>=0?T.blu:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(cl))}</span>
+                </div>
+              );})()}
+            </div>
+          </div>
+        )}
+
         {/* PAYMENT REQUESTS TAB */}
         {tab==="payreq"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
@@ -2023,7 +2276,7 @@ function FinanceModule(){
                 ))}
               </div>
 
-              {payReqs.map((req,i)=>{
+              {payReqs.filter(r=>chipPR==="All"||r.status===chipPR).map((req,i)=>{
                 const isEditing=editReqId===req.id;
                 const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:{c:T.amb,bg:T.ambL,brd:T.ambM};
                 return(
@@ -2134,7 +2387,13 @@ function FinanceModule(){
                 ))}
               </div>
 
-              {pendPmts.map((pmt,i)=>{
+              {pendPmts.filter(pmt=>{
+                if(chipPend==="All") return true;
+                const pri=pmt.overdue?"High":pmt.type==="pr"?"Medium":"Low";
+                if(chipPend==="Overdue") return pmt.overdue;
+                if(chipPend==="High"||chipPend==="Medium"||chipPend==="Low") return pri===chipPend;
+                return true;
+              }).map((pmt,i)=>{
                 const priority=pmt.overdue?"High":pmt.type==="pr"?"Medium":"Low";
                 const pm=priority==="High"?{c:T.red,bg:T.redL,brd:T.redM}:priority==="Medium"?{c:T.amb,bg:T.ambL,brd:T.ambM}:{c:T.grn,bg:T.grnL,brd:T.grnM};
                 const partyType=pmt.type==="pr"?"Approved PR":"Vendor";
