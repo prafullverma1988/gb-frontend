@@ -1761,7 +1761,37 @@ function FinanceModule(){
     : [...TRANSACTIONS_DATA,...WALLET_TXNS];
 
   // Chip filters applied to data
-  const filteredParties=masterParties.filter(p=>chipParty==="All"||p.type===chipParty);
+  // Compute real-time party balances from transactions
+  const partyBalanceMap=useMemo?undefined:null; // useMemo not imported, use direct compute
+  const computePartyBalance=(partyId,partyName,partyType)=>{
+    const txns=apiLedger[partyId]||activeTxns.filter(t=>t.party===partyName);
+    if(txns.length===0) return null;
+    const isVendorP=["Material Supplier","Sub-Con","Labour","Other Vendor","contractor"].includes(partyType);
+    const VENDOR_BILLS=["material_purchase","subcon_expense","site_expense","Material Purchase","Sub-Con Expense","Site Expense"];
+    const VENDOR_PAYS=["payment","party_payment","Payment Made","Payment Out"];
+    const CLIENT_RCPTS=["receipt","Payment Received","Payment In"];
+    let cr=0,dr=0;
+    txns.forEach(t=>{
+      const tType=t.txnType||t.type||"";
+      const note=t.note||t.sub||"";
+      let isCR=false;
+      if(isVendorP){
+        isCR=VENDOR_BILLS.some(x=>tType.includes(x)||note.includes("Purchase")||note.includes("Bill"));
+      } else {
+        isCR=CLIENT_RCPTS.some(x=>tType.includes(x)||note.includes("Payment Received"));
+      }
+      if(isCR) cr+=parseFloat(t.amount)||0;
+      else dr+=parseFloat(t.amount)||0;
+    });
+    const net=cr-dr;
+    const balType=isVendorP?(net>0?"To Pay":"Advance Paid"):(net>0?"To Receive":"Advance Received");
+    return {balance:Math.abs(net),balType,cr,dr};
+  };
+  const partiesWithBalance=masterParties.map(p=>{
+    const computed=computePartyBalance(p.id,p.name,p.type);
+    return computed?{...p,...computed}:p;
+  });
+  const filteredParties=partiesWithBalance.filter(p=>chipParty==="All"||p.type===chipParty);
 
   const projects=["All",...new Set(activeTxns.map(t=>t.project))];
   const txnFiltered=activeTxns.filter(t=>{
@@ -1792,8 +1822,8 @@ function FinanceModule(){
   const allPartyTxns=activeTxns.length>0?activeTxns:Object.values(PARTY_TXNS).flat();
   const partyTotalCR=allPartyTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
   const partyTotalDR=allPartyTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
-  const toReceive=masterParties.filter(p=>p.balType==="To Receive").reduce((s,p)=>s+p.balance,0);
-  const toPay=masterParties.filter(p=>p.balType==="To Pay").reduce((s,p)=>s+p.balance,0);
+  const toReceive=partiesWithBalance.filter(p=>p.balType==="To Receive").reduce((s,p)=>s+p.balance,0);
+  const toPay=partiesWithBalance.filter(p=>p.balType==="To Pay").reduce((s,p)=>s+p.balance,0);
   const allTxnIn=activeTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
   const allTxnOut=activeTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const unpaidBills=activeTxns.filter(t=>t.status==="unpaid").reduce((s,t)=>s+t.amount,0);
