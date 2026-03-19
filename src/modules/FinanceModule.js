@@ -680,20 +680,58 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     const amt=isMaterial||isSubcon||isInvoice?grandTotal:Number(payAmt)||0;
     if(!amt){setSaved(false);return;}
     try{
-      const txnType=(type==="Payment Received"||type==="Sales Invoice")?"receipt":"payment";
+      // Map type to backend enum
+      const TXN_TYPE_BACK={
+        "Payment Received":"receipt","Sales Invoice":"receipt","Payment In":"receipt",
+        "Payment Made":"payment","Petty Cash Expense":"site_expense",
+        "Advance Payment":"party_payment","Material Purchase Bill":"material_purchase",
+        "Sub-Con Bill":"subcon_expense","Bank Transfer":"bank_transfer",
+        "Journal Entry":"payment","Credit Note":"material_return",
+      };
       const mopMap={"Cash":"cash","Cheque":"cheque","Bank Transfer":"neft","UPI":"upi","NEFT":"neft"};
-      await api.post("/finance/transactions",{
-        project_id:null,
-        party_id:null,
-        account_id:null,
-        type:txnType,
+      const backType=TXN_TYPE_BACK[type]||(type==="Payment Received"?"receipt":"payment");
+
+      // Resolve IDs from dbParties / dbAccounts
+      const partyObj=dbParties?.find(p=>p.name===party);
+      const accObj=dbAccounts?.find(a=>a.name===account);
+      const projList=dbProjects||[];
+      const projId=projList.findIndex(p=>p===project);
+
+      const payload={
+        type:backType,
         amount:amt,
         date:billDate||new Date().toISOString().slice(0,10),
         description:`${type} — ${party||"N/A"} — ${project||""}${note?" — "+note:""}`,
         mop:mopMap[mop]||"cash",
-      });
+        party_id:partyObj?.id||null,
+        party_name:party||null,
+        account_id:accObj?.id||null,
+        account_name:account||null,
+        project_name:project||null,
+        note:note||null,
+        status:"paid",
+      };
+
+      // Add line items for material/subcon/invoice types
+      if(isMaterial&&rows?.length){
+        payload.line_items=rows.filter(r=>r.item&&r.qty&&r.rate).map(r=>({
+          item:r.item,qty:parseFloat(r.qty),unit:r.unit,
+          rate:parseFloat(r.rate),amount:parseFloat(r.qty)*parseFloat(r.rate),
+          head:r.head||"",
+        }));
+      }
+      if(isSubcon&&Object.keys(subBoqSel).length){
+        payload.subcon_items=Object.keys(subBoqSel).map(bid=>{
+          const b=BOQ_ITEMS.find(x=>x.id===parseInt(bid));
+          const qty=Number(subBoqQty[bid]||b?.boqQty||0);
+          return {work:b?.work,qty,unit:b?.unit,rate:b?.subRate,amount:qty*(b?.subRate||0)};
+        });
+      }
+
+      await api.post("/finance/transactions",payload);
     }catch(e){console.error("Save txn error:",e);}
-    setSaved(true);setTimeout(()=>{setSaved(false);onClose();},900);
+    setSaved(true);
+    setTimeout(()=>{setSaved(false);onClose();},900);
   };
 
   const colTpl="28px 1fr 95px 1fr 70px 70px 80px 88px 22px";
@@ -1497,7 +1535,11 @@ function FinanceModule(){
   const [createTxnType,setCreateTxnType]=useState(null);
   const [createTxnParty,setCreateTxnParty]=useState("");
   const openTxn=(type,party="")=>{setCreateTxnType(type);setCreateTxnParty(party);};
-  const closeTxn=()=>{setCreateTxnType(null);setCreateTxnParty("");};
+  const closeTxn=async()=>{
+    setCreateTxnType(null);setCreateTxnParty("");
+    // Refresh all data after any transaction is saved
+    await refreshAll();
+  };
   // Filter chips (one per tab)
   const [chipParty,setChipParty]=useState("All");
   const [chipTxn,setChipTxn]=useState("All");
@@ -1511,68 +1553,153 @@ function FinanceModule(){
   const [apiAccounts,setApiAccounts]=useState(null);
   const [apiTransactions,setApiTransactions]=useState(null);
   const [apiPartyTxns,setApiPartyTxns]=useState(null);
+  const [loading,setLoading]=useState({parties:false,txns:false,accounts:false,payreqs:false,pendpmts:false});
+  const [apiError,setApiError]=useState({});
 
-  // ── FETCH DATA FROM API ─────────────────────────────────────
-  useEffect(()=>{
-    const load=async()=>{
-      try{
-        // Fetch parties
-        const pRes=await api.get("/finance/parties");
-        if(pRes.success&&pRes.data?.length){
-          setMasterParties(pRes.data.map(p=>({
-            id:p.id,name:p.name,type:p.type||"Other Vendor",
-            balance:parseFloat(p.opening_balance)||0,
-            balType:parseFloat(p.opening_balance)>=0?"To Receive":"To Pay",
-            phone:p.phone||"",city:p.city||"",
-          })));
-        }
-      }catch(e){console.log("Parties fallback to hardcoded");}
-      try{
-        // Fetch transactions
-        const tRes=await api.get("/finance/transactions");
-        if(tRes.success&&tRes.data?.length){
-          setApiTransactions(tRes.data.map(t=>({
-            id:t.id,date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
-            ds:parseInt((t.date||"").replace(/\D/g,"").slice(0,8))||0,
-            party:t.party_name||"",sub:t.description||"",
-            project:t.project_name||"",type:t.type==="receipt"?"Payment In":"Payment Out",
-            account:t.account_name||"",amount:parseFloat(t.amount)||0,
-            dr:t.type==="payment",
-            status:t.status||"approved",
-          })));
-        }
-      }catch(e){console.log("Transactions fallback to hardcoded");}
-      try{
-        // Fetch accounts
-        const aRes=await api.get("/finance/accounts");
-        if(aRes.success&&aRes.data?.length){
-          setApiAccounts(aRes.data.map(a=>({
-            id:a.id,name:a.name,
-            no:a.account_number?("••"+a.account_number.slice(-4)):null,
-            balance:parseFloat(a.current_balance||a.opening_balance)||0,
-            color:a.type==="bank"?C.p:a.type==="cash"?C.g:C.teal,
-          })));
-        }
-      }catch(e){console.log("Accounts fallback to hardcoded");}
-      try{
-        // Fetch payment requests
-        const prRes=await api.get("/finance/payment-requests");
-        if(prRes.success&&prRes.data?.length){
-          setPayReqs(prRes.data.map(r=>({
-            id:r.id,no:`PR-${r.id}`,date:new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
-            party:r.party_name||"",project:r.project_name||"",
-            amount:parseFloat(r.amount)||0,status:r.status||"Pending",by:r.requested_by_name||"",
-          })));
-        }
-      }catch(e){console.log("PayReqs fallback to hardcoded");}
+  // ── TYPE MAP: backend type string → frontend display type ─────
+  const TXN_TYPE_MAP={
+    "receipt":"Payment In","payment":"Payment Out",
+    "material_purchase":"Material Purchase","site_expense":"Site Expense",
+    "party_payment":"Party Payment","subcon_expense":"Sub-Con Expense",
+    "material_return":"Material Return","sales_invoice":"Sales Invoice",
+    "unbilled_material":"Unbilled Material","wallet_payment":"Wallet Payment",
+    "wallet_topup":"Wallet Top-up","bank_transfer":"Bank Transfer",
+  };
+
+  // ── MAP HELPERS ───────────────────────────────────────────────
+  const mapParty=p=>({
+    id:p.id,name:p.name,
+    type:p.type||(p.party_type)||(p.category)||"Other Vendor",
+    balance:parseFloat(p.opening_balance||p.balance)||0,
+    balType:p.balance_type||(parseFloat(p.opening_balance||p.balance)>=0?"To Receive":"To Pay"),
+    phone:p.phone||p.mobile||"",city:p.city||"",
+  });
+
+  const mapTxn=t=>{
+    const rawDate=t.date||t.transaction_date||t.created_at||"";
+    const d=rawDate?new Date(rawDate):new Date();
+    const ds=parseInt(rawDate.replace(/\D/g,"").slice(0,8))||
+      (d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate());
+    const frontType=TXN_TYPE_MAP[t.type]||(t.dr?"Payment Out":"Payment In");
+    return {
+      id:t.id,
+      date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+      ds,
+      party:t.party_name||t.party||"",
+      sub:t.description||t.note||t.narration||"",
+      project:t.project_name||t.project||"",
+      type:frontType,
+      account:t.account_name||t.account||"",
+      amount:parseFloat(t.amount)||0,
+      dr:t.type==="payment"||t.dr===true||(!t.type&&t.dr),
+      status:t.status||"paid",
     };
-    load();
-  },[]);
+  };
+
+  const mapPayReq=r=>{
+    const rawDate=r.created_at||r.date||"";
+    const d=rawDate?new Date(rawDate):new Date();
+    return {
+      id:r.id,
+      no:r.pr_number||`PR-${r.id}`,
+      date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+      ds:parseInt(rawDate.replace(/\D/g,"").slice(0,8))||
+        (d.getFullYear()*10000+(d.getMonth()+1)*100+d.getDate()),
+      party:r.party_name||r.party||"",
+      project:r.project_name||r.project||"",
+      amount:parseFloat(r.amount)||0,
+      status:r.status==="approved"?"Approved":r.status==="rejected"?"Rejected":"Pending",
+      by:r.requested_by_name||r.requested_by||r.created_by_name||"",
+      purpose:r.purpose||r.description||r.note||"",
+      approvedBy:r.approved_by_name||r.approved_by||"",
+      approvedDate:r.approved_at?new Date(r.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+      originalAmt:r.original_amount?parseFloat(r.original_amount):undefined,
+      modified:!!r.original_amount,
+    };
+  };
+
+  const mapPendPmt=p=>({
+    id:p.id,
+    type:p.type==="payment_request"||p.type==="pr"?"pr":"bill",
+    no:p.reference_no||p.pr_number||`PP-${p.id}`,
+    party:p.party_name||p.party||"",
+    project:p.project_name||p.project||"",
+    amount:parseFloat(p.amount||p.balance)||0,
+    date:p.due_date?new Date(p.due_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):p.date||"",
+    overdue:p.overdue===true||(p.due_date&&new Date(p.due_date)<new Date()),
+  });
+
+  const mapAccount=a=>({
+    id:a.id,name:a.name||a.account_name||"",
+    no:a.account_number?("••"+String(a.account_number).slice(-4)):null,
+    balance:parseFloat(a.current_balance||a.opening_balance||a.balance)||0,
+    color:a.type==="bank"||a.account_type==="bank"?C.p:
+          a.type==="cash"||a.account_type==="cash"?C.g:C.teal,
+  });
+
+  // ── REFRESH FUNCTIONS (called after mutations) ────────────────
+  const refreshTxns=async()=>{
+    try{
+      setLoading(l=>({...l,txns:true}));
+      const r=await api.get("/finance/transactions");
+      if(r.success&&r.data?.length) setApiTransactions(r.data.map(mapTxn));
+    }catch(e){console.error("Refresh txns:",e);}
+    finally{setLoading(l=>({...l,txns:false}));}
+  };
+
+  const refreshPayReqs=async()=>{
+    try{
+      setLoading(l=>({...l,payreqs:true}));
+      const r=await api.get("/finance/payment-requests");
+      if(r.success&&r.data?.length) setPayReqs(r.data.map(mapPayReq));
+    }catch(e){console.error("Refresh payreqs:",e);}
+    finally{setLoading(l=>({...l,payreqs:false}));}
+  };
+
+  const refreshPendPmts=async()=>{
+    try{
+      setLoading(l=>({...l,pendpmts:true}));
+      const r=await api.get("/finance/pending-payments");
+      if(r.success&&r.data?.length) setPendPmts(r.data.map(mapPendPmt));
+    }catch(e){console.error("Refresh pending:",e);}
+    finally{setLoading(l=>({...l,pendpmts:false}));}
+  };
+
+  const refreshParties=async()=>{
+    try{
+      setLoading(l=>({...l,parties:true}));
+      const r=await api.get("/finance/parties");
+      if(r.success&&r.data?.length) setMasterParties(r.data.map(mapParty));
+    }catch(e){console.error("Refresh parties:",e);}
+    finally{setLoading(l=>({...l,parties:false}));}
+  };
+
+  const refreshAccounts=async()=>{
+    try{
+      setLoading(l=>({...l,accounts:true}));
+      const r=await api.get("/finance/accounts");
+      if(r.success&&r.data?.length) setApiAccounts(r.data.map(mapAccount));
+    }catch(e){console.error("Refresh accounts:",e);}
+    finally{setLoading(l=>({...l,accounts:false}));}
+  };
+
+  // Refresh all at once (parallel)
+  const refreshAll=async()=>{
+    await Promise.allSettled([
+      refreshParties(),refreshTxns(),refreshAccounts(),
+      refreshPayReqs(),refreshPendPmts(),
+    ]);
+  };
+
+  // ── INITIAL LOAD ──────────────────────────────────────────────
+  useEffect(()=>{ refreshAll(); },[]);
 
   // Use API data if available, fallback to hardcoded
-  const activeAccounts=apiAccounts||ACCOUNTS;
-  // Merge wallet transactions into activeTxns
-  const activeTxns=[...(apiTransactions||TRANSACTIONS_DATA),...WALLET_TXNS];
+  const activeAccounts=apiAccounts||ACCOUNTS.map(mapAccount);
+  // Merge wallet transactions into activeTxns (wallet txns only when no API data)
+  const activeTxns=apiTransactions
+    ? [...apiTransactions,...WALLET_TXNS]
+    : [...TRANSACTIONS_DATA,...WALLET_TXNS];
 
   // Chip filters applied to data
   const filteredParties=masterParties.filter(p=>chipParty==="All"||p.type===chipParty);
@@ -1740,15 +1867,29 @@ function FinanceModule(){
   const APPROVER_NAME="Prafull"; // logged-in admin
   const approveReq=async(id)=>{
     const req=payReqs.find(r=>r.id===id);
-    try{
-      await api.put(`/finance/payment-requests/${id}/approve`,{approved_amount:req?.amount||0});
-    }catch(e){console.error("Approve PR error:",e);}
+    // Optimistic update
     setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved",approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}:r));
     if(req) setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:req.amount,date:req.date,overdue:false}]);
+    try{
+      await api.put(`/finance/payment-requests/${id}/approve`,{
+        approved_amount:req?.amount||0,
+        approved_by:APPROVER_NAME,
+        status:"approved",
+      });
+      // Refresh from server after API success
+      await Promise.allSettled([refreshPayReqs(),refreshPendPmts()]);
+    }catch(e){console.error("Approve PR error:",e);}
   };
   const rejectReq=async(id)=>{
-    try{await api.put(`/finance/payment-requests/${id}/approve`,{approved_amount:0});}catch(e){}
+    // Optimistic update
     setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Rejected"}:r));
+    try{
+      await api.put(`/finance/payment-requests/${id}/approve`,{
+        approved_amount:0,
+        status:"rejected",
+      });
+      await refreshPayReqs();
+    }catch(e){console.error("Reject PR error:",e);}
   };
 
   const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Transactions"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"}];
@@ -1780,7 +1921,19 @@ function FinanceModule(){
               </button>
             ))}
           </div>
-          <div style={{display:"flex",gap:6,padding:"6px 0"}}>
+          <div style={{display:"flex",gap:6,padding:"6px 0",alignItems:"center"}}>
+            {/* Manual refresh */}
+            <button onClick={refreshAll} title="Refresh all data"
+              style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",borderRadius:6,
+                border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.07)",
+                fontSize:11,color:"rgba(255,255,255,0.7)",cursor:"pointer",fontFamily:"inherit",
+                opacity:(loading.txns||loading.payreqs||loading.pendpmts)?0.5:1}}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
+                style={{animation:(loading.txns||loading.payreqs||loading.pendpmts)?"spin 1s linear infinite":"none"}}>
+                <path d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/>
+              </svg>
+              Refresh
+            </button>
             {/* Accounts dropdown */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:6,border:`1px solid ${showAccPanel?"rgba(96,165,250,0.6)":"rgba(255,255,255,0.2)"}`,background:showAccPanel?"rgba(96,165,250,0.15)":"rgba(255,255,255,0.08)",fontSize:11.5,fontWeight:600,color:"rgba(255,255,255,0.85)",cursor:"pointer"}}>
@@ -1951,7 +2104,13 @@ function FinanceModule(){
       })()}
 
       {/* ── Tab Content ── */}
-      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",padding:"12px 18px 14px"}}>
+      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",padding:"12px 18px 14px",position:"relative"}}>
+        {/* Loading overlay */}
+        {(loading.txns||loading.payreqs||loading.pendpmts||loading.parties)&&(
+          <div style={{position:"absolute",top:0,left:0,right:0,height:2,zIndex:50,overflow:"hidden",borderRadius:2}}>
+            <div style={{height:"100%",background:`linear-gradient(90deg,${T.blu},${T.grn},${T.blu})`,backgroundSize:"200% 100%",animation:"shimmer 1.2s infinite linear"}}/>
+          </div>
+        )}
 
         {/* PARTY LEDGER TAB */}
         {tab==="party"&&(
@@ -2533,8 +2692,16 @@ function FinanceModule(){
           dbParties={masterParties}
           dbAccounts={activeAccounts}
           dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
+          onSaved={refreshAll}
         />
       )}
+      {/* Shimmer CSS */}
+      <style>{`
+        @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+        @keyframes fadeSlideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
+        @keyframes livePulse{0%,100%{opacity:1}50%{opacity:0.4}}
+        @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
+      `}</style>
     </div>
   );
 }
