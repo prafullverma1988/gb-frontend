@@ -1762,7 +1762,6 @@ function FinanceModule(){
 
   // Chip filters applied to data
   // Compute real-time party balances from transactions
-  const partyBalanceMap=useMemo?undefined:null; // useMemo not imported, use direct compute
   const computePartyBalance=(partyId,partyName,partyType)=>{
     const txns=apiLedger[partyId]||activeTxns.filter(t=>t.party===partyName);
     if(txns.length===0) return null;
