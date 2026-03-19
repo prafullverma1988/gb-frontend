@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import api from "../config/api";
 
 // ── ICON BASE ────────────────────────────────────────────────────────
@@ -483,11 +484,11 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
         pointerEvents:"none",display:"flex",color:T.t4,transition:"transform 0.18s"}}>
         <IcDown size={10} color="currentColor"/>
       </span>
-      {open&&(
+      {open&&createPortal(
         <div ref={listRef}
           style={{position:"fixed",top:dropPos.top,left:dropPos.left,minWidth:dropPos.width,
             background:T.surface,borderRadius:8,border:`1.5px solid ${ac}`,
-            boxShadow:"0 8px 28px rgba(0,0,0,0.2)",zIndex:9999,maxHeight:220,overflowY:"auto",
+            boxShadow:"0 8px 28px rgba(0,0,0,0.2)",zIndex:99999,maxHeight:220,overflowY:"auto",
             animation:"fadeSlideIn 0.12s ease"}}>
           {filtered.length===0&&(
             <div style={{padding:"12px 10px",fontSize:11,color:T.t4,textAlign:"center"}}>No match found</div>
@@ -511,7 +512,8 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
               </div>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
