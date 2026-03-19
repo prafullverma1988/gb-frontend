@@ -520,7 +520,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
 }
 
 // ─── CREATE TRANSACTION MODAL ─────────────────────────────────
-function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects}){
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved}){
   const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
   const UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"];
   const INV_UNITS=["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"];
