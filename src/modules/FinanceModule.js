@@ -1661,7 +1661,10 @@ function FinanceModule(){
       dr:isDebit,
       status:t.status||"paid",
       txnType:t.type||"",
-      to_account_name:t.to_account_name||null,  // for bank transfer display
+      note:t.note||null,
+      to_account_name:t.to_account_name||null,
+      mop:t.mop||"",
+      entryBy:t.created_by_name||t.entry_by||"",
     };
   };
 
@@ -2528,7 +2531,12 @@ function FinanceModule(){
                   const amtColor=meta.dir==="in"?T.grn:meta.dir==="out"?T.red:T.t2;
                   const amtPrefix=meta.dir==="in"?"+":meta.dir==="out"?"-":"";
                   // Note: show ONLY user-typed note, never auto-generated description
-                  const noteText=(txn.note&&txn.note.trim()&&!txn.note.includes(" — "))?txn.note.trim():"";
+                  // Extract note: prefer txn.note field; fallback: parse from description (last segment after " — ")
+                  const _rawNote=txn.note&&txn.note.trim()?txn.note.trim():"";
+                  const _descParts=(txn.sub||"").split(" — ");
+                  const _descNote=_descParts.length>=4?_descParts[_descParts.length-1].trim():"";
+                  const noteText=_rawNote||_descNote||"";
+
                   // Bank Transfer party: show "From → To" accounts
                   const isBT=txn.txnType==="bank_transfer"||txn.type==="Bank Transfer";
                   const partyLabel=isBT
@@ -2602,12 +2610,12 @@ function FinanceModule(){
               }} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
             </div>
 
-            {/* Table — same layout as party ledger: Date|Type|Party|Site|Note|Amount|Status */}
+            {/* Table — Books of Account format: Date|Type|Party|Site|Note|Received|Payment|Balance|Status */}
             <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
               {/* Sticky header */}
-              <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 120px 1fr 120px 80px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,flexShrink:0,gap:6}}>
-                {["Date","Type","Party","Site","Note","Amount","Status"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===5?"right":"left"}}>{h}</span>
+              <div style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,flexShrink:0,gap:4}}>
+                {["Date","Type","Party","Site","Note","Received (CR)","Payment (DR)","Balance","Account","MOP","Entry By"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9,fontWeight:700,color:i===5?T.grn:i===6?T.red:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i>=5&&i<=7?"right":"left",whiteSpace:"nowrap"}}>{h}</span>
                 ))}
               </div>
               {/* Scrollable body — ALL transactions including internal */}
@@ -2626,49 +2634,67 @@ function FinanceModule(){
                   "Wallet Top-up":  {label:"Wallet Top-up",   color:T.slt, bg:T.sltL, dir:"internal"},
                   "Material Return":{label:"Material Return", color:T.grn, bg:T.grnL, dir:"in"},
                 };
-                // Cash book shows ALL activeTxns (not just Payment In/Out)
+                // Cash book — chronological with running balance
+                let runBal=totalBal;
                 const cbAll=[...activeTxns].filter(t=>{
                   if(chipCB==="Receipts") return !t.dr;
                   if(chipCB==="Payments") return t.dr;
                   return true;
-                }).sort((a,b)=>b.ds-a.ds);
+                }).sort((a,b)=>a.ds-b.ds);
                 return cbAll.map((txn,i)=>{
                   const meta=CB_TYPE_META[txn.type]||{label:txn.type||"Transaction",color:T.t3,bg:T.b1,dir:txn.dr?"out":"in"};
-                  const amtColor=meta.dir==="in"?T.grn:meta.dir==="out"?T.red:T.t2;
-                  const amtPrefix=meta.dir==="in"?"+":meta.dir==="out"?"-":"";
-                  // Note: show ONLY user-typed note, never auto-generated description
-                  const noteText=(txn.note&&txn.note.trim()&&!txn.note.includes(" — "))?txn.note.trim():"";
-                  // Bank Transfer party: show "From → To" accounts
                   const isBT=txn.txnType==="bank_transfer"||txn.type==="Bank Transfer";
+                  // Extract note: prefer txn.note field; fallback: parse from description (last segment after " — ")
+                  const _rawNote=txn.note&&txn.note.trim()?txn.note.trim():"";
+                  const _descParts=(txn.sub||"").split(" — ");
+                  const _descNote=_descParts.length>=4?_descParts[_descParts.length-1].trim():"";
+                  const noteText=_rawNote||_descNote||"";
+
                   const partyLabel=isBT
                     ?(txn.account?(txn.account+(txn.to_account_name?" → "+txn.to_account_name:"")):"Internal Transfer")
                     :(txn.party||"—");
+                  // Bank Transfer: source = DR (payment out), internal = neutral
+                  // For cash book running balance: BT debits source account
+                  const isCR=isBT?false:!txn.dr;
+                  const isInternal=isBT&&!txn.to_account_name; // BT with no destination = just show neutral
+                  if(!isInternal){if(isCR) runBal+=txn.amount; else runBal-=txn.amount;}
                   return(
                     <div key={txn.id||i}
-                      style={{display:"grid",gridTemplateColumns:"72px 130px 140px 120px 1fr 120px 80px",padding:"9px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s"}}
+                      style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"8px 14px",gap:4,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
                       onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
                       <span style={{fontSize:11.5,color:T.t3,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
-                      <span style={{fontSize:11,fontWeight:700,color:meta.color,background:meta.bg,padding:"2px 8px",borderRadius:20,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"inline-block",maxWidth:"100%"}}>{meta.label}</span>
-                      <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{partyLabel}</span>
+                      <span style={{fontSize:10.5,fontWeight:700,color:meta.color,background:meta.bg,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"inline-block",maxWidth:"100%"}}>{meta.label}</span>
+                      <span style={{fontSize:11.5,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{partyLabel}</span>
                       <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isBT?"—":(txn.project||"—")}</span>
                       <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{noteText||"—"}</span>
-                      <span style={{fontSize:13,fontWeight:800,color:amtColor,textAlign:"right",whiteSpace:"nowrap"}}>{amtPrefix}₹{fmtN(txn.amount)}</span>
-                      <div style={{display:"flex",justifyContent:"center"}}>
-                        <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:10,background:txn.status==="paid"?T.grnL:txn.status==="approved"?T.bluL:T.ambL,color:txn.status==="paid"?T.grn:txn.status==="approved"?T.blu:T.amb,whiteSpace:"nowrap"}}>{txn.status||"—"}</span>
-                      </div>
+                      <span style={{fontSize:12.5,fontWeight:isCR?700:400,color:isCR?T.grn:T.t4,textAlign:"right"}}>{isCR?`₹${fmtN(txn.amount)}`:"—"}</span>
+                      <span style={{fontSize:12.5,fontWeight:!isCR?700:400,color:!isCR?T.red:T.t4,textAlign:"right"}}>{!isCR?`₹${fmtN(txn.amount)}`:"—"}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:runBal>=0?T.t1:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(runBal))}</span>
+                      <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.account||"—"}</span>
+                      <span style={{fontSize:10.5,fontWeight:600,color:T.t2,background:T.surfaceB,padding:"1px 5px",borderRadius:5,whiteSpace:"nowrap",textTransform:"uppercase"}}>{(txn.mop||"").replace("_"," ")||"—"}</span>
+                      <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.entryBy||"—"}</span>
                     </div>
                   );
                 });
               })()}
               {activeTxns.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
               </div>
-              {/* Footer */}
-              <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 120px 1fr 120px 80px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
+              {/* Footer totals */}
+              {(()=>{
+                const cbAllTotal=[...activeTxns];
+                const cbTotalIn=cbAllTotal.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
+                const cbTotalOut=cbAllTotal.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+                const cbClosing=totalBal+cbTotalIn-cbTotalOut;
+                return(
+                <div style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"9px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
                 <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {activeTxns.length} entries</span>
-                <span style={{fontSize:13,fontWeight:800,color:(cbIn-cbOut)>=0?T.grn:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(cbIn-cbOut))}</span>
-                <span/>
+                <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(cbIn)}</span>
+                <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(cbOut)}</span>
+                <span/><span/><span/><span/>
               </div>
+                );
+              })()}
             </div>
           </div>
         )}
