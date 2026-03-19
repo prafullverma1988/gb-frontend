@@ -714,6 +714,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         project_name:project||null,
         note:note||null,
         status:"paid",
+        // Bank Transfer: destination account (always include, null for non-transfer)
+        to_account_id:(()=>{
+          if(type!=="Bank Transfer"||!toAccount) return null;
+          const toLower=toAccount.toLowerCase().trim();
+          const found=dbAccounts?.find(a=>a.name.toLowerCase().trim()===toLower);
+          console.log("[BankTransfer] from:",account,"(id:",accObj?.id,") to:",toAccount,"(id:",found?.id,")");
+          return found?.id||null;
+        })(),
+        to_account_name:type==="Bank Transfer"?toAccount:null,
       };
 
       // Line items for material/subcon/invoice
@@ -737,6 +746,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       }
 
       // Debug log — visible in browser console
+      // Extra debug for bank transfer
+      if(isBankTransfer){
+        console.log("[BankTransfer] account state:", account, "→ id:", accObj?.id);
+        console.log("[BankTransfer] toAccount state:", toAccount, "→ id:", dbAccounts?.find(a=>a.name.toLowerCase().trim()===toAccount.toLowerCase().trim())?.id);
+        console.log("[BankTransfer] dbAccounts available:", dbAccounts?.map(a=>({id:a.id,name:a.name})));
+      }
       console.log("[FinanceModule] Saving transaction:", JSON.stringify(payload,null,2));
 
       const res=await api.post("/finance/transactions",payload);
@@ -2258,12 +2273,14 @@ function FinanceModule(){
                           setApiLedger(prev=>({...prev,[p.id]:res.data.map(t=>({
                             id:t.id,
                             date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
-                            note:t.description||"",
+                            note:t.note||t.narration||"",         // actual note field
+                            sub:t.description||"",                // full description
+                            project:t.project_name||t.project||"",// site/project
                             amount:parseFloat(t.amount)||0,
                             dr:BACK_DEBIT_L.includes(t.type)||t.dr===true,
                             status:t.status||"approved",
                             txnType:t.type||"",
-                            items:t.line_items||null,  // line items if backend returns them
+                            items:t.line_items||null,
                           }))}));
                         }
                       }catch(e){console.log("Ledger fetch error");}
@@ -2322,9 +2339,11 @@ function FinanceModule(){
                           return(<>
                           {/* Type label from txnType */}
                           {(()=>{
-                            const typeLabel=txn.txnType==="material_purchase"?"Material Purchase":txn.txnType==="payment"||txn.txnType==="party_payment"?"Payment Made":txn.txnType==="receipt"?"Payment Received":txn.txnType==="subcon_expense"?"Sub-Con Bill":txn.txnType==="site_expense"?"Site Expense":txn.type||txn.txnType||"Transaction";
-                            const siteLabel=txn.project||txn.project_name||"—";
-                            const noteLabel=txn.note||txn.sub||"";
+                            const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
+                            const typeLabel=TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
+                            const siteLabel=txn.project||txn.project_name||"";
+                            // note = user's remark, sub/description = auto-generated full text
+                            const noteLabel=txn.note&&txn.note.trim()&&txn.note!==txn.sub?txn.note.trim():(txn.sub||"");
                             return(
                           <div onClick={()=>isBillType&&setSelBill(isExpanded?null:txn.id)}
                             style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"8px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:isBillType?"pointer":"default",background:isExpanded?T.bluL+"44":"none",transition:"background 0.1s"}}
