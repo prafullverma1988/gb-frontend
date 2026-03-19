@@ -1903,208 +1903,282 @@ function FinanceModule(){
           </div>
         )}
 
-        {/* TRANSACTION TAB */}
+        {/* CASH BOOK TAB */}
         {tab==="transaction"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+            {/* Toolbar */}
             <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
-              <div style={{position:"relative",flex:1,minWidth:150}}>
+              <div style={{position:"relative",flex:1,minWidth:160}}>
                 <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search party or note..."
+                <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search narration or party..."
                   style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${txnSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:txnSearch?T.bluL:T.surface}}/>
               </div>
-              {[
-                {val:fProject,set:setFProject,opts:projects,def:"All Projects"},
-                {val:fType,set:setFType,opts:["All",...Object.keys(TXN_TYPE_META)],def:"All Types"},
-                {val:fAcc,set:setFAcc,opts:["All",...activeAccounts.map(a=>a.name)],def:"All Accounts"},
-                {val:fStatus,set:setFStatus,opts:["All","paid","unpaid","unbilled"],def:"All Status"},
-              ].map(({val,set,opts,def},i)=>(
-                <div key={i} style={{position:"relative"}}>
-                  <select value={val} onChange={e=>set(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${val!=="All"?T.blu:T.b1}`,background:val!=="All"?T.bluL:T.surface,fontSize:11.5,color:val!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:val!=="All"?600:400,minWidth:90,appearance:"none",WebkitAppearance:"none"}}>
-                    {opts.map(o=><option key={o} value={o}>{o==="All"?def:o}</option>)}
-                  </select>
-                  <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
-                </div>
-              ))}
+              <div style={{display:"flex",alignItems:"center",gap:5}}>
+                <IcCalDue size={13} color={T.t4}/>
+                <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
+                <span style={{fontSize:11,color:T.t4}}>to</span>
+                <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
+              </div>
               <button onClick={()=>setShowUB(true)} style={{display:"flex",alignItems:"center",gap:5,height:31,padding:"0 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.pur}22`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
                 <IcUB size={13} color={T.pur}/> Unbilled
                 <span style={{background:T.pur,color:"white",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{UNBILLED_PARTIES.length}</span>
               </button>
               <button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
               <button onClick={dlTxnPDF} style={{height:31,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>
+              <button onClick={()=>openTxn("Payment In")} style={{height:31,padding:"0 13px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:5,flexShrink:0,boxShadow:`0 2px 6px ${T.blu}44`}}>
+                <IcAdd size={13} color="white"/> Add Entry
+              </button>
             </div>
-            <div style={{display:"flex",gap:8,marginBottom:8,flexShrink:0}}>
-              {[{l:"IN",v:tIn,c:T.grn,bg:T.grnL,brd:T.grnM},{l:"OUT",v:tOut,c:T.red,bg:T.redL,brd:T.redM},{l:"NET",v:tIn-tOut,c:tIn>=tOut?T.grn:T.red,bg:tIn>=tOut?T.grnL:T.redL,brd:tIn>=tOut?T.grnM:T.redM}].map((x,i)=>(
-                <div key={i} style={{display:"flex",alignItems:"center",gap:6,background:x.bg,borderRadius:7,padding:"5px 11px",border:`1px solid ${x.brd}`}}>
-                  <span style={{fontSize:10,fontWeight:700,color:x.c,letterSpacing:"0.5px"}}>{x.l}</span>
-                  <span style={{fontSize:12,fontWeight:700,color:x.c}}>₹{fmtN(x.v)}</span>
+
+            {/* Summary bar */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8,flexShrink:0}}>
+              {[
+                {l:"Opening Balance",v:totalBal,c:T.blu,sub:"As at 01 Jan 2025"},
+                {l:"Total Receipts",v:tIn,c:T.grn,sub:`${txnFiltered.filter(t=>!t.dr).length} entries`},
+                {l:"Total Payments",v:tOut,c:T.red,sub:`${txnFiltered.filter(t=>t.dr).length} entries`},
+                {l:"Closing Balance",v:totalBal+tIn-tOut,c:(totalBal+tIn-tOut)>=0?T.blu:T.red,sub:"Net balance"},
+              ].map((x,i)=>(
+                <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderLeft:`3px solid ${x.c}`}}>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:3}}>{x.l}</div>
+                  <div style={{fontSize:18,fontWeight:800,color:T.t1}}>₹{fmtN(x.v)}</div>
+                  <div style={{fontSize:10,color:T.t4,marginTop:2}}>{x.sub}</div>
                 </div>
               ))}
-              <span style={{fontSize:10.5,color:T.t4,alignSelf:"center",marginLeft:4}}>{txnFiltered.length} transactions</span>
             </div>
+
+            {/* Cash Book Table */}
             <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"80px 1fr 120px 110px 90px 90px 80px",padding:"7px 12px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
-                {["Date","Party / Note","Project","Type","Account","Amount","Status"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px"}}>{h}</span>
+              <div style={{display:"grid",gridTemplateColumns:"36px 90px 90px 1fr 140px 110px 115px 110px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
+                {["#","Date","Voucher","Narration","Party","Receipt (Dr)","Payment (Cr)","Balance"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:i===5?T.grn:i===6?T.red:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",textAlign:i>=5?"right":"left"}}>{h}</span>
                 ))}
               </div>
-              {txnFiltered.map(txn=>{
-                const typePalette={"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material Purchase":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Party Payment":{c:T.pur,bg:T.purL},"Sub-Con Expense":{c:T.slt,bg:T.sltL},"Material Return":{c:T.grn,bg:T.grnL},"Sales Invoice":{c:T.grn,bg:T.grnL},"Unbilled Material":{c:T.pur,bg:T.purL}};
-                const tp=typePalette[txn.type]||{c:T.slt,bg:T.sltL};
+              {/* Opening balance row */}
+              <div style={{display:"grid",gridTemplateColumns:"36px 90px 90px 1fr 140px 110px 115px 110px",padding:"9px 14px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`}}>
+                <span/>
+                <span style={{fontSize:12,fontWeight:700,color:T.blu,gridColumn:"2 / 6"}}>Opening Balance</span>
+                <span/><span/>
+                <span style={{fontSize:13,fontWeight:800,color:T.blu,textAlign:"right"}}>₹{fmtN(totalBal)}</span>
+              </div>
+              {(()=>{
+                const vPfx={"Payment In":"RCV","Payment Out":"PAY","Material Purchase":"MP","Site Expense":"SE","Party Payment":"PP","Sub-Con Expense":"SC","Material Return":"MR","Sales Invoice":"SI","Unbilled Material":"UB"};
+                const sorted=[...txnFiltered].sort((a,b)=>a.ds-b.ds);
+                let runBal=totalBal;
+                return sorted.map((txn,i)=>{
+                  runBal += txn.dr?-txn.amount:txn.amount;
+                  const vchr=`${vPfx[txn.type]||"TXN"}-${String(txn.id).padStart(3,"0")}`;
+                  return(
+                    <div key={txn.id}
+                      style={{display:"grid",gridTemplateColumns:"36px 90px 90px 1fr 140px 110px 115px 110px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"88"}
+                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
+                      <span style={{fontSize:11,color:T.t4}}>{i+1}</span>
+                      <span style={{fontSize:11.5,color:T.t3,whiteSpace:"nowrap"}}>{txn.date}</span>
+                      <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{vchr}</span></span>
+                      <div>
+                        <div style={{fontSize:12.5,color:T.t1,fontWeight:500}}>{txn.sub||txn.party}</div>
+                        <div style={{fontSize:10,color:T.t4}}>{txn.type}</div>
+                      </div>
+                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.party}</span>
+                      <span style={{fontSize:12.5,fontWeight:!txn.dr?700:400,color:!txn.dr?T.grn:T.t4,textAlign:"right"}}>{!txn.dr?`₹${fmtN(txn.amount)}`:"—"}</span>
+                      <span style={{fontSize:12.5,fontWeight:txn.dr?700:400,color:txn.dr?T.red:T.t4,textAlign:"right"}}>{txn.dr?`₹${fmtN(txn.amount)}`:"—"}</span>
+                      <span style={{fontSize:12.5,fontWeight:700,color:runBal>=0?T.t1:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(runBal))}</span>
+                    </div>
+                  );
+                });
+              })()}
+              {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No entries found</div>}
+              {txnFiltered.length>0&&(()=>{const cl=totalBal+tIn-tOut;return(
+                <div style={{display:"grid",gridTemplateColumns:"36px 90px 90px 1fr 140px 110px 115px 110px",padding:"10px 14px",background:"#EEF2FF",borderTop:`2px solid ${T.b1}`}}>
+                  <span style={{gridColumn:"1/6",fontSize:13,fontWeight:700,color:T.t1}}>Closing Balance</span>
+                  <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(tIn)}</span>
+                  <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(tOut)}</span>
+                  <span style={{fontSize:13,fontWeight:800,color:cl>=0?T.blu:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(cl))}</span>
+                </div>
+              );})()}
+            </div>
+          </div>
+        )}
+        {/* PAYMENT REQUESTS TAB */}
+        {tab==="payreq"&&(
+          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+            {/* Toolbar */}
+            <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.t1}}>All Payment Requests</div>
+              <div style={{display:"flex",gap:7}}>
+                <button onClick={dlPRcsv} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
+                <button onClick={dlPRpdf} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
+                <button onClick={()=>openTxn("Payment Request")} style={{padding:"5px 13px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:5,boxShadow:`0 2px 6px ${T.blu}44`}}>
+                  <IcAdd size={13} color="white"/> New Request
+                </button>
+              </div>
+            </div>
+
+            {/* Table */}
+            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+              {/* Header */}
+              <div style={{display:"grid",gridTemplateColumns:"100px 80px 200px 160px 1fr 100px 100px 160px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
+                {["Req No","Date","Party","Project","Purpose","Amount","Status","Action"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",textAlign:i===5?"right":"left"}}>{h}</span>
+                ))}
+              </div>
+
+              {payReqs.map((req,i)=>{
+                const isEditing=editReqId===req.id;
+                const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:{c:T.amb,bg:T.ambL,brd:T.ambM};
                 return(
-                  <div key={txn.id}
-                    style={{display:"grid",gridTemplateColumns:"80px 1fr 120px 110px 90px 90px 80px",padding:"9px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background 0.1s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{txn.date}</span>
-                    <div><div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{txn.party}</div><div style={{fontSize:10.5,color:T.t4}}>{txn.sub}</div></div>
-                    <span style={{fontSize:11,color:T.t3}}>{txn.project}</span>
-                    <span style={{background:tp.bg,color:tp.c,fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:20,display:"inline-block",maxWidth:"100%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",border:`1px solid ${tp.c}22`}}>{txn.type}</span>
-                    <span style={{fontSize:11,color:T.t3}}>{txn.account}</span>
-                    <span style={{fontSize:12.5,fontWeight:700,color:txn.dr?T.red:T.grn}}>{txn.dr?"−":"+"} ₹{fmtN(txn.amount)}</span>
-                    <span style={{background:txn.status==="paid"?T.grnL:txn.status==="unbilled"?T.purL:T.redL,color:txn.status==="paid"?T.grn:txn.status==="unbilled"?T.pur:T.red,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:20,display:"inline-block",border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="unbilled"?T.pur+"44":T.redM}`}}>{txn.status}</span>
+                  <div key={req.id} style={{borderBottom:`1px solid ${T.b1}`,background:isEditing?T.bluL+"44":i%2===0?T.surface:"#FAFBFD",boxShadow:isEditing?`inset 0 0 0 1.5px ${T.blu}`:undefined,transition:"all 0.12s"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"100px 80px 200px 160px 1fr 100px 100px 160px",padding:"10px 14px",alignItems:"center",cursor:"default"}}
+                      onMouseEnter={e=>{if(!isEditing)e.currentTarget.parentElement.style.background=T.bluL+"66"}}
+                      onMouseLeave={e=>{if(!isEditing)e.currentTarget.parentElement.style.background=i%2===0?T.surface:"#FAFBFD"}}>
+                      <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 8px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{req.no}</span></span>
+                      <span style={{fontSize:11.5,color:T.t3}}>{req.date}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
+                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:8,background:T.ambL,color:T.amb,flexShrink:0,border:`1px solid ${T.ambM}`}}>PM</span>
+                        <span style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.party}</span>
+                      </div>
+                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.project}</span>
+                      <span style={{fontSize:11.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>by {req.by}</span>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:13,fontWeight:700,color:T.t1}}>₹{fmtN(req.amount)}</div>
+                        {req.originalAmt&&<div style={{fontSize:10,color:T.t4,textDecoration:"line-through"}}>₹{fmtN(req.originalAmt)}</div>}
+                      </div>
+                      <span><span style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:12,background:sc.bg,color:sc.c,border:`1px solid ${sc.brd}`}}>{req.status}</span></span>
+                      <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                        {req.status==="Pending"&&(<>
+                          <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));}}}
+                            style={{padding:"4px 8px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
+                            <IcEdit size={11} color="currentColor"/> Edit
+                          </button>
+                          <button onClick={()=>approveReq(req.id)} style={{padding:"4px 9px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Approve</button>
+                          <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Reject</button>
+                        </>)}
+                        {req.status==="Approved"&&(
+                          <button onClick={()=>openTxn("Payment Made",req.party)} style={{padding:"5px 11px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:4}}>
+                            <IcSend size={11} color="white"/> Pay Now
+                          </button>
+                        )}
+                        {req.status==="Rejected"&&<span style={{fontSize:11,color:T.t4}}>Not approved</span>}
+                      </div>
+                    </div>
+                    {/* Edit panel */}
+                    {isEditing&&req.status==="Pending"&&(
+                      <div style={{borderTop:`1px solid ${T.bluM}`,background:T.bluL,padding:"12px 14px"}}>
+                        <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:10}}>Modify Payment Before Approving</div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                          <div>
+                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Requested Amount</label>
+                            <input readOnly value={"₹"+fmtN(req.amount)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t4,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Approve Amount</label>
+                            <input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} placeholder="Enter amount"
+                              style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                          </div>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                          <div>
+                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Reason</label>
+                            <select style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                              <option>Partial stock available</option><option>Budget limit</option><option>Price negotiated</option><option>Split payment</option><option>Other</option>
+                            </select>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Note</label>
+                            <input type="text" placeholder="Optional note..." style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                          </div>
+                        </div>
+                        <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
+                          <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+                          <button onClick={()=>{
+                            const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
+                            setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig}:r));
+                            setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:newAmt,date:req.date,overdue:false}]);
+                            setEditReqId(null);
+                          }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                            <IcThumbUp size={13} color="white"/> Approve {Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..."}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 );
               })}
-              {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions match filters</div>}
+              {payReqs.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No payment requests found</div>}
             </div>
           </div>
         )}
-
-        {/* PAYMENT REQUESTS TAB */}
-        {tab==="payreq"&&(
-          <div style={{flex:1,overflowY:"auto"}}>
-            <div style={{display:"flex",justifyContent:"flex-end",gap:7,marginBottom:8}}>
-              <button onClick={dlPRcsv} style={{padding:"6px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
-              <button onClick={dlPRpdf} style={{padding:"6px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
-            </div>
-            {payReqs.map(req=>{
-              const isEditing=editReqId===req.id;
-              const icC=req.status==="Approved"?T.grn:req.status==="Rejected"?T.red:T.amb;
-              const icBg=req.status==="Approved"?T.grnL:req.status==="Rejected"?T.redL:T.ambL;
-              const icBrd=req.status==="Approved"?T.grnM:req.status==="Rejected"?T.redM:T.ambM;
-              const StatusIc=req.status==="Approved"?IcThumbUp:req.status==="Rejected"?IcX:IcPendClk;
-              return(
-                <div key={req.id} style={{background:T.surface,borderRadius:8,border:`1px solid ${isEditing?T.blu:T.b1}`,marginBottom:7,overflow:"hidden",boxShadow:isEditing?`0 0 0 2px ${T.bluM}`:"0 1px 3px rgba(0,0,0,0.05)",transition:"all 0.15s"}}>
-                  <div style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:11}}>
-                    <div style={{width:36,height:36,borderRadius:8,background:icBg,border:`1px solid ${icBrd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><StatusIc size={16} color={icC}/></div>
-                    <div style={{flex:1}}>
-                      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
-                        <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{req.no}</span>
-                        <span style={{background:icBg,color:icC,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${icBrd}`}}>{req.status}</span>
-                        {req.modified&&<span style={{background:T.ambL,color:T.amb,fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:20,border:`1px solid ${T.ambM}`}}>MODIFIED</span>}
-                      </div>
-                      <div style={{fontSize:11.5,color:T.t3}}>{req.party} · {req.project}</div>
-                      <div style={{fontSize:10.5,color:T.t4}}>by {req.by} · {req.date}</div>
-                    </div>
-                    <div style={{textAlign:"right",flexShrink:0}}>
-                      <div style={{fontSize:14,fontWeight:700,color:T.t1}}>₹{fmtN(req.amount)}</div>
-                      {req.originalAmt&&<div style={{fontSize:9.5,color:T.t4,textDecoration:"line-through"}}>₹{fmtN(req.originalAmt)}</div>}
-                    </div>
-                    {req.status==="Pending"&&(
-                      <div style={{display:"flex",gap:5,flexShrink:0}}>
-                        <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));}}}
-                          style={{padding:"5px 9px",borderRadius:6,background:isEditing?T.bluL:T.surfaceB,color:isEditing?T.blu:T.t3,border:`1.5px solid ${isEditing?T.blu:T.b1}`,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-                          <IcEdit size={13} color="currentColor"/> Edit
-                        </button>
-                        <button onClick={()=>approveReq(req.id)} style={{padding:"5px 11px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11,fontWeight:600,cursor:"pointer"}}>Approve</button>
-                        <button onClick={()=>rejectReq(req.id)} style={{padding:"5px 11px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11,fontWeight:600,cursor:"pointer"}}>Reject</button>
-                      </div>
-                    )}
-                    {req.status==="Approved"&&(
-                      <button onClick={()=>openTxn("Payment Made",req.party)} style={{padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:4,flexShrink:0}}>
-                        <IcSend size={12} color="white"/> Pay Now
-                      </button>
-                    )}
-                  </div>
-                  {isEditing&&req.status==="Pending"&&(
-                    <div style={{borderTop:`1px solid ${T.bluM}`,background:T.bluL,padding:"12px 14px"}}>
-                      <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:10}}>Modify Payment Before Approving</div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Requested Amount</label>
-                          <input readOnly value={"₹"+fmtN(req.amount)} style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t4,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Approve Amount</label>
-                          <input type="number" value={editAmt} onChange={e=>setEditAmt(e.target.value)} placeholder="Enter amount"
-                            style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Reason</label>
-                          <select style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                            <option>Partial stock available</option><option>Budget limit</option><option>Price negotiated</option><option>Split payment</option><option>Other</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Note</label>
-                          <input type="text" placeholder="Optional note..." style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                      </div>
-                      <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
-                        <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-                        <button onClick={()=>{
-                          const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
-                          setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig}:r));
-                          setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:newAmt,date:req.date,overdue:false}]);
-                          setEditReqId(null);
-                        }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                          <IcThumbUp size={13} color="white"/> Approve {Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..."}
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
         {/* PENDING PAYMENTS TAB */}
         {tab==="pending"&&(
-          <div style={{flex:1,overflowY:"auto"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-              <div style={{display:"flex",gap:12,alignItems:"center"}}>
-                {[{l:"Approved PR",c:T.grn},{l:"Bill Due",c:T.amb},{l:"Overdue",c:T.red}].map((x,i)=>(
-                  <span key={i} style={{display:"flex",alignItems:"center",gap:5,fontSize:11,color:T.t3}}>
-                    <span style={{width:8,height:8,borderRadius:2,background:x.c,display:"inline-block"}}/>{x.l}
-                  </span>
+          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+            {/* Toolbar */}
+            <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Pending Payments</div>
+              <div style={{display:"flex",gap:7,alignItems:"center"}}>
+                {["All","High","Medium","Low"].map(p=>(
+                  <span key={p} style={{fontSize:11.5,fontWeight:600,padding:"4px 13px",borderRadius:7,background:T.surfaceB,color:T.t3,cursor:"pointer",border:`1px solid ${T.b1}`,transition:"all 0.12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=T.blu;e.currentTarget.style.color="white";e.currentTarget.style.borderColor=T.blu;}}
+                    onMouseLeave={e=>{e.currentTarget.style.background=T.surfaceB;e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}>{p}</span>
                 ))}
-              </div>
-              <div style={{display:"flex",gap:7}}>
                 <button onClick={dlPendCSV} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
                 <button onClick={dlPendPDF} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
               </div>
             </div>
-            {pendPmts.map(pmt=>(
-              <div key={pmt.id} style={{background:T.surface,borderRadius:8,border:`1.5px solid ${pmt.overdue?T.red:T.b1}`,marginBottom:7,padding:"11px 14px",display:"flex",alignItems:"center",gap:11,boxShadow:pmt.overdue?`0 2px 8px ${T.red}22`:"0 1px 3px rgba(0,0,0,0.05)"}}>
-                <div style={{width:36,height:36,borderRadius:8,background:pmt.type==="pr"?T.grnL:pmt.overdue?T.redL:T.ambL,border:`1px solid ${pmt.type==="pr"?T.grnM:pmt.overdue?T.redM:T.ambM}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  {pmt.type==="pr"?<IcThumbUp size={16} color={T.grn}/>:<IcCalDue size={16} color={pmt.overdue?T.red:T.amb}/>}
-                </div>
-                <div style={{flex:1}}>
-                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
-                    <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{pmt.party}</span>
-                    <span style={{background:pmt.type==="pr"?T.grnL:pmt.overdue?T.redL:T.ambL,color:pmt.type==="pr"?T.grn:pmt.overdue?T.red:T.amb,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${pmt.type==="pr"?T.grnM:pmt.overdue?T.redM:T.ambM}`}}>{pmt.type==="pr"?"Approved PR":"Bill Due"}</span>
-                    {pmt.overdue&&<span style={{background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:3}}>PAST DUE</span>}
-                  </div>
-                  <div style={{fontSize:11.5,color:T.t3}}>{pmt.project} · {pmt.no}</div>
-                  <div style={{fontSize:10.5,color:T.t4}}>Due: {pmt.date}</div>
-                </div>
-                <div style={{textAlign:"right",flexShrink:0}}>
-                  <div style={{fontSize:14,fontWeight:700,color:pmt.overdue?T.red:T.t1,marginBottom:6}}>₹{fmtN(pmt.amount)}</div>
-                  {/* ── Pay Now opens Payment Made modal pre-filled with party ── */}
-                  <button onClick={()=>openTxn("Payment Made",pmt.party)}
-                    style={{padding:"5px 14px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:4}}>
-                    <IcSend size={12} color="white"/> Pay Now
-                  </button>
-                </div>
+
+            {/* Table */}
+            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+              {/* Header */}
+              <div style={{display:"grid",gridTemplateColumns:"110px 200px 160px 110px 90px 100px 130px 100px 110px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
+                {["Invoice No","Party","Project","Invoice Amt","Paid","Balance","Due Date","Priority","Action"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:i===5?T.red:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",textAlign:i>=3&&i<=5?"right":"left"}}>{h}</span>
+                ))}
               </div>
-            ))}
+
+              {pendPmts.map((pmt,i)=>{
+                const priority=pmt.overdue?"High":pmt.type==="pr"?"Medium":"Low";
+                const pm=priority==="High"?{c:T.red,bg:T.redL,brd:T.redM}:priority==="Medium"?{c:T.amb,bg:T.ambL,brd:T.ambM}:{c:T.grn,bg:T.grnL,brd:T.grnM};
+                const partyType=pmt.type==="pr"?"Approved PR":"Vendor";
+                const ptC=pmt.type==="pr"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
+                return(
+                  <div key={pmt.id}
+                    style={{display:"grid",gridTemplateColumns:"110px 200px 160px 110px 90px 100px 130px 100px 110px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",borderLeft:pmt.overdue?`3px solid ${T.red}`:"3px solid transparent"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
+                    onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
+                    <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{pmt.no}</span></span>
+                    <div style={{display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
+                      <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:8,background:ptC.bg,color:ptC.c,flexShrink:0}}>{partyType}</span>
+                      <span style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pmt.party}</span>
+                    </div>
+                    <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pmt.project}</span>
+                    <span style={{fontSize:12.5,color:T.t2,textAlign:"right"}}>₹{fmtN(pmt.amount)}</span>
+                    <span style={{fontSize:12.5,color:T.t4,textAlign:"right"}}>—</span>
+                    <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(pmt.amount)}</span>
+                    <div style={{textAlign:"left"}}>
+                      <div style={{fontSize:12,color:pmt.overdue?T.red:T.t2,fontWeight:pmt.overdue?700:400}}>{pmt.date}</div>
+                      {pmt.overdue&&<div style={{fontSize:10,color:T.red,fontWeight:600}}>overdue</div>}
+                      {!pmt.overdue&&<div style={{fontSize:10,color:T.grn}}>Upcoming</div>}
+                    </div>
+                    <span><span style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:12,background:pm.bg,color:pm.c,border:`1px solid ${pm.brd}`}}>{priority}</span></span>
+                    <button onClick={()=>openTxn("Payment Made",pmt.party)}
+                      style={{padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:600,display:"flex",alignItems:"center",gap:4,boxShadow:`0 2px 6px ${T.blu}44`}}>
+                      <IcSend size={11} color="white"/> Pay Now
+                    </button>
+                  </div>
+                );
+              })}
+              {pendPmts.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No pending payments</div>}
+              {/* Total row */}
+              {pendPmts.length>0&&(
+                <div style={{display:"grid",gridTemplateColumns:"110px 200px 160px 110px 90px 100px 130px 100px 110px",padding:"10px 14px",background:"#EEF2FF",borderTop:`2px solid ${T.b1}`}}>
+                  <span style={{gridColumn:"1/6",fontSize:13,fontWeight:700,color:T.t1}}>Total Outstanding</span>
+                  <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(pendTotal)}</span>
+                  <span/><span/><span/>
+                </div>
+              )}
+            </div>
           </div>
         )}
       </div>
-
       {/* Unbilled Drawer */}
       {showUB&&(<>
         <div onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
