@@ -1932,8 +1932,8 @@ function FinanceModule(){
     const rows=getLedgerRows(party);
     downloadCSV(`${party.name.replace(/\s+/g,"_")}_Ledger.csv`,[
       ["Party Ledger:",party.name],["Type:",party.type],["Balance:",party.balance,party.balType],[],
-      ["Date","Description","Status","Received (CR)","Bill/Paid Out (DR)","Running Balance"],
-      ...rows.map(t=>[t.date,t.note,t.status||"",!t.dr?t.amount:"",t.dr?t.amount:"",`${Math.abs(t.runBal)} ${t.runBal>=0?"CR":"DR"}`]),
+      ["Date","Type","Site","Note","Received (CR)","Payment (DR)","Balance","Status"],
+      ...rows.map(t=>[t.date,t.txnType||t.type||"",t.project||"",t.note||"",!t.dr?t.amount:"",t.dr?t.amount:"",`${Math.abs(t.runBal)} ${t.runBal>=0?"CR":"DR"}`,t.status||""]),
     ]);
   };
   const downloadLedgerPDF=(party)=>{
@@ -2306,9 +2306,9 @@ function FinanceModule(){
                     <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:27,padding:"0 9px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
                     <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={15}/></button>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"86px 1fr 100px 110px 110px",padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0}}>
-                    {["Date","Description","Received (CR)","Bill / Paid Out (DR)","Balance"].map((h,i)=>(
-                      <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",textAlign:i>=2?"right":"left"}}>{h}</span>
+                  <div style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0,gap:4}}>
+                    {["Date","Type","Site","Note","Received (CR)","Payment (DR)","Balance","Status"].map((h,i)=>(
+                      <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i>=4?"right":"left",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h}</span>
                     ))}
                   </div>
                   <div style={{flex:1,overflowY:"auto"}}>
@@ -2320,22 +2320,40 @@ function FinanceModule(){
                           const isExpanded=selBill===txn.id;
                           const hasItems=txn.items&&txn.items.length>0;
                           return(<>
+                          {/* Type label from txnType */}
+                          {(()=>{
+                            const typeLabel=txn.txnType==="material_purchase"?"Material Purchase":txn.txnType==="payment"||txn.txnType==="party_payment"?"Payment Made":txn.txnType==="receipt"?"Payment Received":txn.txnType==="subcon_expense"?"Sub-Con Bill":txn.txnType==="site_expense"?"Site Expense":txn.type||txn.txnType||"Transaction";
+                            const siteLabel=txn.project||txn.project_name||"—";
+                            const noteLabel=txn.note||txn.sub||"";
+                            return(
                           <div onClick={()=>isBillType&&setSelBill(isExpanded?null:txn.id)}
-                            style={{display:"grid",gridTemplateColumns:"86px 1fr 100px 110px 110px",padding:"9px 14px",borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"start",cursor:isBillType?"pointer":"default",background:isExpanded?T.bluL+"44":"none",transition:"background 0.1s"}}
+                            style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"8px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:isBillType?"pointer":"default",background:isExpanded?T.bluL+"44":"none",transition:"background 0.1s"}}
                             onMouseEnter={e=>{if(!isExpanded)e.currentTarget.style.background=T.surfaceB;}}
                             onMouseLeave={e=>{if(!isExpanded)e.currentTarget.style.background="none";}}>
-                            <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{txn.date}</span>
-                            <div>
-                              <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{txn.note}</div>
-                              <div style={{display:"flex",gap:5,marginTop:2,flexWrap:"wrap",alignItems:"center"}}>
-                                {txn.status&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:20,background:txn.status==="paid"?T.grnL:txn.status==="approved"?T.bluL:T.redL,color:txn.status==="paid"?T.grn:txn.status==="approved"?T.blu:T.red,border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="approved"?T.bluM:T.redM}`}}>{txn.status}</span>}
-                                {isBillType&&<span style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer"}}>{isExpanded?"▲ hide details":"▼ view bill"}{hasItems?` · ${txn.items.length} items`:""}</span>}
-                              </div>
+                            {/* 1. Date */}
+                            <span style={{fontSize:11,color:T.t4,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
+                            {/* 2. Type */}
+                            <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                              <span style={{fontSize:11.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{typeLabel}</span>
+                              {isBillType&&<span style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer"}}>{isExpanded?"▲ hide":"▼ view bill"}{hasItems?` (${txn.items.length})`:""}</span>}
                             </div>
+                            {/* 3. Site/Project */}
+                            <span style={{fontSize:11,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{siteLabel}</span>
+                            {/* 4. Note */}
+                            <span style={{fontSize:11,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{noteLabel||"—"}</span>
+                            {/* 5. Received CR */}
                             <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{!txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
+                            {/* 6. Payment DR */}
                             <span style={{fontSize:12.5,fontWeight:700,color:T.red,textAlign:"right"}}>{txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
-                            <span style={{fontSize:12.5,fontWeight:700,color:txn.runBal>=0?T.grn:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(txn.runBal))} <span style={{fontSize:9,fontWeight:600}}>{txn.runBal>=0?"CR":"DR"}</span></span>
+                            {/* 7. Balance */}
+                            <span style={{fontSize:12,fontWeight:700,color:txn.runBal>=0?T.grn:T.red,textAlign:"right",whiteSpace:"nowrap"}}>₹{fmtN(Math.abs(txn.runBal))} <span style={{fontSize:9}}>{txn.runBal>=0?"CR":"DR"}</span></span>
+                            {/* 8. Status */}
+                            <div style={{display:"flex",justifyContent:"center"}}>
+                              {txn.status&&<span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:10,background:txn.status==="paid"?T.grnL:txn.status==="approved"?T.bluL:T.ambL,color:txn.status==="paid"?T.grn:txn.status==="approved"?T.blu:T.amb,border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="approved"?T.bluM:T.ambM}`,whiteSpace:"nowrap"}}>{txn.status}</span>}
+                            </div>
                           </div>
+                            );
+                          })()}
                           {isExpanded&&(
                             <div style={{background:T.bluL,borderBottom:`1px solid ${T.bluM}`,padding:"10px 14px"}}>
                               {/* Bill header */}
@@ -2386,11 +2404,12 @@ function FinanceModule(){
                     ))}
                   </div>
                   {ledgerRows.length>0&&(
-                    <div style={{display:"grid",gridTemplateColumns:"86px 1fr 100px 110px 110px",padding:"8px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
-                      <span style={{fontSize:11,fontWeight:700,color:T.t1}}>TOTAL</span><span/>
+                    <div style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"8px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
+                      <span style={{fontSize:11,fontWeight:700,color:T.t1,gridColumn:"1/5"}}>TOTAL</span>
                       <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.grn}}>₹{fmtN(totalCR)}</span>
                       <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.red}}>₹{fmtN(totalDR)}</span>
                       <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:ledgerClosing>0?T.amb:T.grn}}>₹{fmtN(computedBal)} <span style={{fontSize:10}}>{computedBalType}</span></span>
+                      <span/>
                     </div>
                   )}
                   {/* ── Integrated action buttons ── */}
