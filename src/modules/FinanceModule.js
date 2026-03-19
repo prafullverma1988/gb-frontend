@@ -1569,6 +1569,120 @@ function AddPartyModal({onClose,onAdd}){
 // ══════════════════════════════════════════════════════════════
 // FINANCE MODULE — with integrated Create Transaction Modal
 // ══════════════════════════════════════════════════════════════
+// ─── NEW PAYMENT REQUEST MODAL ───────────────────────────────
+function NewPRModal({onClose,onSave,dbParties,dbProjects}){
+  const PROJECTS=dbProjects?.length?dbProjects:["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa"];
+  const ALL_PARTIES=dbParties?.length?dbParties.map(p=>p.name):["Abhay Traders","Laxmi Electrical","Ramesh Labour"];
+  const PRIORITIES=["Low","Medium","High","Urgent"];
+  const [party,setParty]=useState("");
+  const [project,setProject]=useState(PROJECTS[0]||"");
+  const [purpose,setPurpose]=useState("");
+  const [note,setNote]=useState("");
+  const [amount,setAmount]=useState("");
+  const [priority,setPriority]=useState("Medium");
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const PRIC={
+    "Low":   {c:T.grn, bg:T.grnL, brd:T.grnM},
+    "Medium":{c:T.amb, bg:T.ambL, brd:T.ambM},
+    "High":  {c:T.red, bg:T.redL, brd:T.redM},
+    "Urgent":{c:"#7C3AED",bg:"#F5F3FF",brd:"#DDD6FE"},
+  };
+  const handleSave=async()=>{
+    if(!party||!purpose||!amount){setErr("Party, Purpose & Amount are required");return;}
+    setSaving(true);setErr("");
+    try{
+      const res=await api.post("/finance/payment-requests",{
+        party_id:dbParties?.find(p=>p.name===party)?.id||null,
+        party_name:party,
+        project_name:project,
+        amount:parseFloat(amount)||0,
+        purpose,
+        description:purpose+(note?" — "+note:""),
+        priority,
+        note:note||null,
+      });
+      if(res?.success===false){setErr(res.message||"Save failed");setSaving(false);return;}
+      onSave&&onSave();
+      onClose();
+    }catch(e){setErr(e?.message||"Network error");setSaving(false);}
+  };
+  const inp={height:34,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,width:"100%"};
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:T.surface,borderRadius:14,width:520,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{padding:"14px 20px",background:T.blu,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>New Payment Request</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2}}>Request will be sent for admin approval</div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:6,cursor:"pointer",color:"white",padding:"4px 8px",fontSize:13}}>✕</button>
+        </div>
+        {/* Body */}
+        <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:14}}>
+          {/* Party + Project */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Party / Vendor *</label>
+              <SearchSelect options={ALL_PARTIES} value={party} onChange={setParty} placeholder="Select party..." accent={T.blu} compact/>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Project / Site</label>
+              <SearchSelect options={PROJECTS} value={project} onChange={setProject} placeholder="Select project..." accent={T.blu} compact/>
+            </div>
+          </div>
+          {/* Purpose */}
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Purpose *</label>
+            <input value={purpose} onChange={e=>setPurpose(e.target.value)} placeholder="What is this payment for? e.g. TMT Steel purchase for slab casting" style={{...inp}}
+              onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+          </div>
+          {/* Amount + Priority */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Amount (₹) *</label>
+              <input type="number" value={amount} onChange={e=>setAmount(e.target.value)} placeholder="0" style={{...inp}}
+                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Priority Level</label>
+              <div style={{display:"flex",gap:6,marginTop:2}}>
+                {PRIORITIES.map(p=>{
+                  const pc=PRIC[p];const sel=priority===p;
+                  return(
+                    <button key={p} onClick={()=>setPriority(p)}
+                      style={{flex:1,padding:"5px 0",borderRadius:7,border:`1.5px solid ${sel?pc.brd:T.b1}`,background:sel?pc.bg:T.surface,color:sel?pc.c:T.t4,fontSize:10.5,fontWeight:sel?700:500,cursor:"pointer",transition:"all 0.15s"}}>
+                      {p}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+          {/* Note */}
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Additional Note (Optional)</label>
+            <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Any additional details, urgency reason, specifications..."
+              style={{width:"100%",height:70,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,resize:"none"}}
+              onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+          </div>
+          {/* Error */}
+          {err&&<div style={{padding:"8px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,color:T.red,fontSize:12,fontWeight:600}}>{err}</div>}
+        </div>
+        {/* Footer */}
+        <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.surfaceB}}>
+          <button onClick={onClose} style={{padding:"8px 18px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={handleSave} disabled={saving}
+            style={{padding:"8px 22px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6}}>
+            {saving?"Submitting...":"Submit Request"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FinanceModule(){
   const [tab,setTab]=useState("party");
   // Party tab
@@ -1600,6 +1714,7 @@ function FinanceModule(){
   // PR / Pending
   const [editReqId,setEditReqId]=useState(null);const [editAmt,setEditAmt]=useState("");
   const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);const [pendPmts,setPendPmts]=useState(PEND_PMTS_DATA);
+  const [showNewPR,setShowNewPR]=useState(false);
   // API data
   const [apiAccounts,setApiAccounts]=useState(null);
   const [apiTransactions,setApiTransactions]=useState(null);
@@ -2708,64 +2823,74 @@ function FinanceModule(){
               <div style={{display:"flex",gap:7}}>
                 <button onClick={dlPRcsv} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
                 <button onClick={dlPRpdf} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
-                <button onClick={()=>openTxn("Payment Request")} style={{padding:"5px 13px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:5,boxShadow:`0 2px 6px ${T.blu}44`}}>
+                <button onClick={()=>setShowNewPR(true)} style={{padding:"5px 13px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:5,boxShadow:`0 2px 6px ${T.blu}44`}}>
                   <IcAdd size={13} color="white"/> New Request
                 </button>
               </div>
             </div>
 
-            {/* Table */}
-            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              {/* Header */}
-              <div style={{display:"grid",gridTemplateColumns:"100px 80px 200px 160px 1fr 100px 100px 160px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
-                {["Req No","Date","Party","Project","Purpose","Amount","Status","Action"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",textAlign:i===5?"right":"left"}}>{h}</span>
+            {/* Table — new cols: ReqNo | Date | Party | Project | Purpose | Req By | Priority | Amount | Status | Action */}
+            <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+              {/* Sticky header */}
+              <div style={{display:"grid",gridTemplateColumns:"80px 72px 160px 140px 1fr 120px 80px 90px 100px 140px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10,gap:6}}>
+                {["Req No","Date","Party","Project","Purpose","Req By","Priority","Amount","Status","Action"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===7?"right":"left",whiteSpace:"nowrap"}}>{h}</span>
                 ))}
               </div>
-
+              <div style={{flex:1,overflowY:"auto"}}>
               {[...payReqs].sort((a,b)=>(b.ds||0)-(a.ds||0)).filter(r=>chipPR==="All"||r.status===chipPR).map((req,i)=>{
                 const isEditing=editReqId===req.id;
                 const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:{c:T.amb,bg:T.ambL,brd:T.ambM};
+                const pri=req.priority||"Medium";
+                const pm=pri==="High"?{c:T.red,bg:T.redL}:pri==="Low"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
                 return(
-                  <div key={req.id} style={{borderBottom:`1px solid ${T.b1}`,background:isEditing?T.bluL+"44":i%2===0?T.surface:"#FAFBFD",boxShadow:isEditing?`inset 0 0 0 1.5px ${T.blu}`:undefined,transition:"all 0.12s"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"100px 80px 200px 160px 1fr 100px 100px 160px",padding:"10px 14px",alignItems:"center",cursor:"default"}}
-                      onMouseEnter={e=>{if(!isEditing)e.currentTarget.parentElement.style.background=T.bluL+"66"}}
+                  <div key={req.id} style={{borderBottom:`1px solid ${T.b1}`,background:isEditing?T.bluL+"44":i%2===0?T.surface:"#FAFBFD",transition:"all 0.12s"}}>
+                    <div style={{display:"grid",gridTemplateColumns:"80px 72px 160px 140px 1fr 120px 80px 90px 100px 140px",padding:"10px 14px",gap:6,alignItems:"center"}}
+                      onMouseEnter={e=>{if(!isEditing)e.currentTarget.parentElement.style.background=T.bluL+"55"}}
                       onMouseLeave={e=>{if(!isEditing)e.currentTarget.parentElement.style.background=i%2===0?T.surface:"#FAFBFD"}}>
-                      <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 8px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{req.no}</span></span>
-                      <span style={{fontSize:11.5,color:T.t3}}>{req.date}</span>
-                      <div style={{display:"flex",alignItems:"center",gap:6,overflow:"hidden"}}>
-                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:8,background:T.ambL,color:T.amb,flexShrink:0,border:`1px solid ${T.ambM}`}}>PM</span>
-                        <span style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.party}</span>
-                      </div>
-                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.project}</span>
+                      {/* Req No */}
+                      <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{req.no}</span></span>
+                      {/* Date */}
+                      <span style={{fontSize:11.5,color:T.t3,whiteSpace:"nowrap"}}>{req.date}</span>
+                      {/* Party */}
+                      <span style={{fontSize:12,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.party||"—"}</span>
+                      {/* Project */}
+                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.project||"—"}</span>
+                      {/* Purpose */}
                       <div style={{overflow:"hidden"}}>
-                        <div style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.purpose||"—"}</div>
-                        <div style={{fontSize:10,color:T.t4,marginTop:1}}>
-                          Req by: <span style={{fontWeight:600}}>{req.by}</span>
-                          {req.status==="Approved"&&req.approvedBy&&<span style={{color:T.grn,marginLeft:6}}>✓ Approved by: <span style={{fontWeight:600}}>{req.approvedBy}</span>{req.approvedDate?` · ${req.approvedDate}`:""}</span>}
-                          {req.status==="Rejected"&&<span style={{color:T.red,marginLeft:6}}>✗ Rejected</span>}
-                        </div>
+                        <div style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{req.purpose||"—"}</div>
+                        {req.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>📝 {req.note}</div>}
                       </div>
+                      {/* Req By */}
+                      <span style={{fontSize:11.5,color:T.t2,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.by||"—"}</span>
+                      {/* Priority */}
+                      <span style={{fontSize:10,fontWeight:700,color:pm.c,background:pm.bg,padding:"2px 7px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{pri}</span>
+                      {/* Amount */}
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:13,fontWeight:700,color:T.t1}}>₹{fmtN(req.amount)}</div>
                         {req.originalAmt&&<div style={{fontSize:10,color:T.t4,textDecoration:"line-through"}}>₹{fmtN(req.originalAmt)}</div>}
                       </div>
-                      <span><span style={{fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:12,background:sc.bg,color:sc.c,border:`1px solid ${sc.brd}`}}>{req.status}</span></span>
-                      <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                      {/* Status */}
+                      <span><span style={{fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:10,background:sc.bg,color:sc.c,border:`1px solid ${sc.brd}`,whiteSpace:"nowrap"}}>{req.status}</span></span>
+                      {/* Action */}
+                      <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
                         {req.status==="Pending"&&(<>
                           <button onClick={()=>{if(isEditing){setEditReqId(null);}else{setEditReqId(req.id);setEditAmt(String(req.amount));}}}
-                            style={{padding:"4px 8px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
-                            <IcEdit size={11} color="currentColor"/> Edit
+                            style={{padding:"4px 7px",borderRadius:5,background:isEditing?T.bluL:T.sltL,color:isEditing?T.blu:T.t3,border:`1px solid ${isEditing?T.blu:T.b1}`,fontSize:10,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
+                            <IcEdit size={10} color="currentColor"/> Edit
                           </button>
-                          <button onClick={()=>approveReq(req.id)} style={{padding:"4px 9px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Approve</button>
-                          <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Reject</button>
+                          <button onClick={()=>approveReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✓</button>
+                          <button onClick={()=>rejectReq(req.id)} style={{padding:"4px 8px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:10,fontWeight:700,cursor:"pointer"}}>✗</button>
                         </>)}
                         {req.status==="Approved"&&(
-                          <button onClick={()=>openTxn("Payment Made",req.party)} style={{padding:"5px 11px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:4}}>
-                            <IcSend size={11} color="white"/> Pay Now
-                          </button>
+                          <div style={{display:"flex",flexDirection:"column",gap:1}}>
+                            <span style={{fontSize:10,color:T.grn,fontWeight:600}}>✓ {req.approvedBy||APPROVER_NAME}</span>
+                            {req.approvedDate&&<span style={{fontSize:9.5,color:T.t4}}>{req.approvedDate}</span>}
+                          </div>
                         )}
-                        {req.status==="Rejected"&&<span style={{fontSize:11,color:T.t4}}>Not approved</span>}
+                        {req.status==="Rejected"&&(
+                          <span style={{fontSize:10.5,color:T.red,fontWeight:600}}>✗ Rejected</span>
+                        )}
                       </div>
                     </div>
                     {/* Edit panel */}
@@ -2812,6 +2937,7 @@ function FinanceModule(){
                 );
               })}
               {payReqs.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No payment requests found</div>}
+              </div>{/* /scrollable */}
             </div>
           </div>
         )}
@@ -2964,6 +3090,14 @@ function FinanceModule(){
           dbAccounts={activeAccounts}
           dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
           onSaved={refreshAll}
+        />
+      )}
+      {showNewPR&&(
+        <NewPRModal
+          onClose={()=>setShowNewPR(false)}
+          onSave={async()=>{await refreshPayReqs();}}
+          dbParties={masterParties}
+          dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
         />
       )}
       {/* Shimmer CSS */}
