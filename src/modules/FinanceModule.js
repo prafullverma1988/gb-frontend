@@ -718,9 +718,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
       // Line items for material/subcon/invoice
       if(isMaterial&&rows?.length){
-        payload.line_items=rows.filter(r=>r.item&&r.qty&&r.rate).map(r=>({
-          item:r.item,qty:parseFloat(r.qty),unit:r.unit,
-          rate:parseFloat(r.rate),amount:parseFloat(r.qty)*parseFloat(r.rate),
+        payload.line_items=rows.filter(r=>r.material&&r.qty&&r.rate).map(r=>({
+          item:r.material,           // row field is 'material' not 'item'
+          description:r.desc||"",
+          qty:parseFloat(r.qty)||0,
+          unit:r.unit||"",
+          rate:parseFloat(r.rate)||0,
+          amount:(parseFloat(r.qty)||0)*(parseFloat(r.rate)||0),
           head:r.head||"",
         }));
       }
@@ -1689,11 +1693,17 @@ function FinanceModule(){
   };
 
   const refreshPendPmts=async()=>{
+    // /finance/pending-payments endpoint not yet available on backend
+    // Pending payments are managed locally (from approved PRs + hardcoded bills)
+    // TODO: enable when backend endpoint is ready
     try{
       setLoading(l=>({...l,pendpmts:true}));
       const r=await api.get("/finance/pending-payments");
       if(r.success&&r.data?.length) setPendPmts(r.data.map(mapPendPmt));
-    }catch(e){console.error("Refresh pending:",e);}
+    }catch(e){
+      // 404 expected — backend endpoint not yet implemented, use local state
+      if(!e?.message?.includes("404")) console.error("Refresh pending:",e);
+    }
     finally{setLoading(l=>({...l,pendpmts:false}));}
   };
 
