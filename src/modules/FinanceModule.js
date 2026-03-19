@@ -2844,10 +2844,11 @@ function FinanceModule(){
                   </span>);
                 };
                 return(
-                <div style={{display:"grid",gridTemplateColumns:"80px 72px 160px 140px 1fr 120px 80px 90px 100px 140px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10,gap:6}}>
+                <div style={{display:"grid",gridTemplateColumns:"80px 72px 140px 100px 130px 1fr 110px 75px 90px 95px 130px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,position:"sticky",top:0,zIndex:10,gap:6}}>
                   <SortH label="Req No" col="no"/>
                   <SortH label="Date" col="date"/>
                   <SortH label="Party" col="party"/>
+                  <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",whiteSpace:"nowrap"}}>Type</span>
                   <SortH label="Project" col="project"/>
                   <span style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Purpose</span>
                   <SortH label="Req By" col="by"/>
@@ -2876,7 +2877,7 @@ function FinanceModule(){
                 const pm=pri==="High"?{c:T.red,bg:T.redL}:pri==="Low"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
                 return(
                   <div key={req.id} style={{borderBottom:`1px solid ${T.b1}`,background:isEditing?T.bluL+"44":i%2===0?T.surface:"#FAFBFD",transition:"all 0.12s"}}>
-                    <div style={{display:"grid",gridTemplateColumns:"80px 72px 160px 140px 1fr 120px 80px 90px 100px 140px",padding:"10px 14px",gap:6,alignItems:"center"}}
+                    <div style={{display:"grid",gridTemplateColumns:"80px 72px 140px 100px 130px 1fr 110px 75px 90px 95px 130px",padding:"10px 14px",gap:6,alignItems:"center"}}
                       onMouseEnter={e=>{if(!isEditing)e.currentTarget.parentElement.style.background=T.bluL+"55"}}
                       onMouseLeave={e=>{if(!isEditing)e.currentTarget.parentElement.style.background=i%2===0?T.surface:"#FAFBFD"}}>
                       {/* Req No */}
@@ -2885,6 +2886,14 @@ function FinanceModule(){
                       <span style={{fontSize:11.5,color:T.t3,whiteSpace:"nowrap"}}>{req.date}</span>
                       {/* Party */}
                       <span style={{fontSize:12,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.party||"—"}</span>
+                      {/* Party Type */}
+                      {(()=>{
+                        const pi=masterParties.find(p=>p.name===req.party);
+                        const pt=pi?.type||"Vendor";
+                        const ptMap={"Material Supplier":{c:"#0277BD",bg:"#E1F5FE",s:"Mat. Supplier"},"Sub-Con":{c:T.slt,bg:T.sltL,s:"Sub-Con"},"Labour":{c:T.pur,bg:T.purL,s:"Labour"},"Client":{c:T.grn,bg:T.grnL,s:"Client"}};
+                        const ptc=ptMap[pt]||{c:T.amb,bg:T.ambL,s:pt};
+                        return <span style={{fontSize:10,fontWeight:700,color:ptc.c,background:ptc.bg,padding:"2px 6px",borderRadius:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"inline-block",maxWidth:"100%"}}>{ptc.s}</span>;
+                      })()}
                       {/* Project */}
                       <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.project||"—"}</span>
                       {/* Purpose */}
