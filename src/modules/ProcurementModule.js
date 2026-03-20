@@ -727,7 +727,7 @@ export default function ProcurementModule(){
   const filteredGRNs=apiGRNs.filter(g=>!grSearch||(g.grn_number||"").toLowerCase().includes(grSearch.toLowerCase())||(g.vendor_name||g.party_name||"").toLowerCase().includes(grSearch.toLowerCase()));
 
   const TILE_SETS={
-    po:[{l:"Total POs",v:apiPOs.length,sub:`${apiPOs.filter(p=>p.status==="Open"||p.status==="approved").length} active`,c:T.blu},{l:"Pending Approval",v:pendingPOs,sub:"Need your sign-off",c:T.amb},{l:"Total PO Value",v:`₹${fmt(apiPOs.reduce((s,p)=>s+parseFloat(p.po_value||0),0))}`,sub:"All orders",c:T.grn},{l:"Open MR Requests",v:pendingMRs,sub:"Awaiting procurement",c:T.red}],
+    po:[{l:"Total POs",v:apiPOs.length,sub:apiPOs.filter(p=>p.status==="Open"||p.status==="approved").length+" active",c:T.blu},{l:"Pending Approval",v:pendingPOs,sub:"Need your sign-off",c:T.amb},{l:"Total PO Value",v:"₹"+fmt(apiPOs.reduce((s,p)=>s+parseFloat(p.po_value||0),0)),sub:"All orders",c:T.grn},{l:"Open MR Requests",v:pendingMRs,sub:"Awaiting procurement",c:T.red}],
     rfq:[{l:"Active RFQs",v:rfqs.filter(r=>r.status==="Published").length,sub:"Live bidding",c:T.blu},{l:"Draft RFQs",v:rfqs.filter(r=>r.status==="Draft").length,sub:"Not published yet",c:T.slt},{l:"Locked Quotes",v:rfqs.filter(r=>r.locked).length,sub:"Ready for PO",c:T.grn},{l:"Pending Responses",v:rfqs.flatMap(r=>r.vendors).filter(v=>v.status==="Pending").length,sub:"Awaiting rates",c:T.amb}],
     mr:[{l:"Total MRs",v:apiMRs.length,sub:"All requests",c:T.blu},{l:"Pending",v:apiMRs.filter(m=>m.status==="pending").length,sub:"Need to be ordered",c:T.amb},{l:"Approved",v:apiMRs.filter(m=>m.status==="approved").length,sub:"Ready for PO",c:T.blu},{l:"Ordered/Received",v:apiMRs.filter(m=>["ordered","received"].includes(m.status)).length,sub:"In progress",c:T.grn}],
     grn:[{l:"Total GRNs",v:apiGRNs.length,sub:"All receipts",c:T.grn},{l:"Direct Receipts",v:apiGRNs.filter(g=>g.receipt_type==="direct").length,sub:"No PO",c:T.amb},{l:"Partial",v:apiGRNs.filter(g=>g.is_partial).length,sub:"Partial deliveries",c:T.pur},{l:"Rate Alerts",v:rateAlerts.length,sub:rateAlerts.length>0?"Needs approval":"All clear",c:rateAlerts.length>0?T.red:T.t4}],
@@ -735,9 +735,9 @@ export default function ProcurementModule(){
   const curTiles=TILE_SETS[tab]||TILE_SETS.po;
 
   const TABS=[
-    {id:"po",l:`Purchase Orders${pendingPOs>0?` · ${pendingPOs} Pending`:""`},
-    {id:"rfq",l:`RFQ${rfqs.filter(r=>r.status==="Published").length>0?` · ${rfqs.filter(r=>r.status==="Published").length} Active`:""`},
-    {id:"mr",l:`Material Requests${pendingMRs>0?` · ${pendingMRs} Pending`:""`},
+    {id:"po",l:"Purchase Orders"+(pendingPOs>0?" · "+pendingPOs+" Pending":"")},
+    {id:"rfq",l:"RFQ"+(rfqs.filter(r=>r.status==="Published").length>0?" · "+rfqs.filter(r=>r.status==="Published").length+" Active":"")},
+    {id:"mr",l:"Material Requests"+(pendingMRs>0?" · "+pendingMRs+" Pending":"")},
     {id:"grn",l:"GRN / Receipts"},
   ];
   const COL_HDR={fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px"};
