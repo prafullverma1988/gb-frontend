@@ -3,6 +3,7 @@ import api, { getUser, getToken, clearAuth } from "./config/api";
 import FinanceModule from "./modules/FinanceModule";
 import ProcurementModule from "./modules/ProcurementModule";
 import DesignModule from "./modules/DesignModule";
+import ClientPreview3D from "./pages/ClientPreview3D";
 import PayrollModule from "./modules/PayrollModule";
 import SettingsModule from "./modules/SettingsModule";
 import CRMModule from "./modules/CRMModule";
@@ -947,6 +948,11 @@ function ProjectsWrapper(){
 
 // ── APP ───────────────────────────────────────────────────────────────
 export default function App(){
+  // 3D Client Preview — public route (no login needed)
+  if(window.location.pathname.startsWith("/3d-preview/")){
+    return <ClientPreview3D/>;
+  }
+
   const [user,setUser]=useState(()=>getUser());
   const [nav,setNav]=useState("dashboard");
   const [collapsed,setCollapsed]=useState(false);

@@ -93,14 +93,14 @@ const DRAWINGS=[
   {id:2,title:"RCC Column Layout",project:"Shubham & NK 623",cat:"Structural",type:"2D",status:"Approved",ver:"v2",by:"Vijay Sahu",date:"05 Mar",size:"1.8 MB",pins:1,note:""},
   {id:3,title:"First Floor Elevation",project:"Shubham & NK 623",cat:"Architectural",type:"2D",status:"Revision",ver:"v2",by:"Harsh Sahu",date:"10 Mar",size:"3.1 MB",pins:2,note:"Client wants window size change on east side"},
   {id:4,title:"Electrical Wiring Schematic",project:"Tikendra Residence",cat:"Electrical",type:"2D",status:"Pending",ver:"v1",by:"Priyanka",date:"11 Mar",size:"890 KB",pins:0,note:"Awaiting review from client"},
-  {id:5,title:"3D Exterior Render",project:"Tikendra Residence",cat:"Architectural",type:"3D",status:"Approved",ver:"v4",by:"Harsh Sahu",date:"01 Mar",size:"18 MB",pins:0,note:""},
+  {id:5,title:"3D Exterior Render",project:"Tikendra Residence",cat:"Architectural",type:"3D",status:"Approved",ver:"v4",by:"Harsh Sahu",date:"01 Mar",size:"18 MB",pins:0,note:"",clientStatus:"Pending",clientNote:""},
   {id:6,title:"Plumbing Layout GF",project:"Esther Risali",cat:"Plumbing",type:"2D",status:"Rejected",ver:"v1",by:"Niranjan",date:"28 Feb",size:"1.2 MB",pins:4,note:"Pipe routing conflicts with structural beam — redo"},
-  {id:7,title:"Commercial Lobby 3D",project:"Esther Risali",cat:"Architectural",type:"3D",status:"Approved",ver:"v2",by:"Harsh Sahu",date:"20 Feb",size:"24 MB",pins:0,note:""},
+  {id:7,title:"Commercial Lobby 3D",project:"Esther Risali",cat:"Architectural",type:"3D",status:"Approved",ver:"v2",by:"Harsh Sahu",date:"20 Feb",size:"24 MB",pins:0,note:"",clientStatus:"Approved",clientNote:"Looks great, approved by client on 22 Feb"},
   {id:8,title:"Foundation Detail",project:"Amarendra Villa",cat:"Structural",type:"2D",status:"Pending",ver:"v1",by:"Vijay Sahu",date:"12 Mar",size:"1.5 MB",pins:0,note:"Pending structural engineer review"},
   {id:9,title:"Villa Floor Plan",project:"Amarendra Villa",cat:"Architectural",type:"2D",status:"Revision",ver:"v3",by:"Harsh Sahu",date:"09 Mar",size:"2.9 MB",pins:5,note:"Add servant quarter as per client request"},
   {id:10,title:"Office False Ceiling",project:"Neha Sagar Office",cat:"Interior",type:"2D",status:"Approved",ver:"v1",by:"Priyanka",date:"15 Feb",size:"980 KB",pins:1,note:""},
   {id:11,title:"Staircase Detail",project:"Bablu Farmhouse",cat:"Structural",type:"2D",status:"Pending",ver:"v1",by:"Vijay Sahu",date:"13 Mar",size:"760 KB",pins:0,note:""},
-  {id:12,title:"Farmhouse 3D View",project:"Bablu Farmhouse",cat:"Architectural",type:"3D",status:"Approved",ver:"v2",by:"Harsh Sahu",date:"07 Mar",size:"21 MB",pins:2,note:""},
+  {id:12,title:"Farmhouse 3D View",project:"Bablu Farmhouse",cat:"Architectural",type:"3D",status:"Approved",ver:"v2",by:"Harsh Sahu",date:"07 Mar",size:"21 MB",pins:2,note:"",clientStatus:"Revision",clientNote:"Client wants darker stone texture on exterior walls"},
 ];
 
 // ── REVISION PINS DATA ── (pre-loaded pins for Revision drawings)
@@ -635,6 +635,9 @@ function DesignModule(){
     return 0;
   });
 
+  const drawings3D=drawings.filter(d=>d.type==="3D");
+  const pending3DApprovals=drawings3D.filter(d=>d.clientStatus==="Pending"||!d.clientStatus);
+
   const TILES={
     drawings:[
       {l:"Total Drawings",v:drawings.length,sub:`${[...new Set(drawings.map(d=>d.project))].length} projects`,c:T.blu},
@@ -659,6 +662,12 @@ function DesignModule(){
       {l:"Approved",v:drawings.filter(d=>d.status==="Approved").length,sub:"Finalised",c:T.grn},
       {l:"Revision Sent",v:revCount,sub:"Rework in progress",c:T.pur},
       {l:"Rejected",v:drawings.filter(d=>d.status==="Rejected").length,sub:"Rejected drawings",c:T.red},
+    ],
+    preview3d:[
+      {l:"3D Renders Total",v:drawings3D.length,sub:"All 3D drawings",c:T.pur},
+      {l:"Pending Client Approval",v:pending3DApprovals.length,sub:"Awaiting client",c:T.amb},
+      {l:"Client Approved",v:drawings3D.filter(d=>d.clientStatus==="Approved").length,sub:"Sign-off done",c:T.grn},
+      {l:"Revision Requested",v:drawings3D.filter(d=>d.clientStatus==="Revision").length,sub:"Client wants changes",c:T.red},
     ],
     versions:[
       {l:"Total Versions",v:VERSION_HISTORY.length,sub:"Across all drawings",c:T.blu},
@@ -695,6 +704,8 @@ function DesignModule(){
   };
 
   const [seedComments,setSeedComments]=useState({});
+  const [show3DShare,setShow3DShare]=useState(null); // drawing obj
+  const [copiedLink,setCopiedLink]=useState(null);
 
   const TABS=[
     {id:"drawings",l:"All Drawings"},
@@ -925,6 +936,134 @@ function DesignModule(){
           </div>
         )}
 
+        {/* ── 3D CLIENT PREVIEW TAB ── */}
+        {tab==="preview3d"&&(
+          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+            {/* Toolbar */}
+            <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+              <div style={{position:"relative"}}>
+                <select value={dProject} onChange={e=>setDProject(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${dProject!=="All"?T.pur:T.b1}`,background:dProject!=="All"?"#F5F3FF":T.surface,fontSize:11.5,color:dProject!=="All"?"#7C3AED":T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:dProject!=="All"?600:400,minWidth:140,appearance:"none",WebkitAppearance:"none"}}>
+                  <option value="All">All Projects</option>{PROJECTS.map(p=><option key={p}>{p}</option>)}
+                </select>
+                <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
+              </div>
+              <div style={{position:"relative"}}>
+                <select style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,fontSize:11.5,color:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:140,appearance:"none",WebkitAppearance:"none"}}
+                  onChange={e=>{const v=e.target.value;setDrawings(p=>p.map(d=>d.id===parseInt(v)||v==="All"?d:d));}}>
+                  <option value="All">All Client Status</option>
+                  <option value="Pending">Pending Approval</option>
+                  <option value="Approved">Client Approved</option>
+                  <option value="Revision">Revision Requested</option>
+                </select>
+                <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
+              </div>
+              <span style={{fontSize:11,color:T.t4}}>{drawings3D.filter(d=>dProject==="All"||d.project===dProject).length} 3D renders</span>
+              <div style={{flex:1}}/>
+              <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:7,fontSize:11.5,color:"#7C3AED",fontWeight:600}}>
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+                Share link → client approves directly on their screen
+              </div>
+            </div>
+
+            {/* 3D Cards Grid */}
+            <div style={{flex:1,overflowY:"auto"}}>
+              {drawings3D.filter(d=>dProject==="All"||d.project===dProject).length===0&&(
+                <div style={{textAlign:"center",padding:"60px",color:T.t4}}>
+                  <div style={{fontSize:40,marginBottom:12}}>🎨</div>
+                  <div style={{fontSize:14,fontWeight:600,color:T.t3}}>No 3D renders found</div>
+                  <div style={{fontSize:12,marginTop:4}}>Upload a 3D drawing to get started</div>
+                </div>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:14}}>
+                {drawings3D.filter(d=>dProject==="All"||d.project===dProject).map(d=>{
+                  const cs=d.clientStatus||"Pending";
+                  const csm={
+                    Pending:{c:T.amb,bg:T.ambL,brd:T.ambM,label:"Awaiting Client"},
+                    Approved:{c:T.grn,bg:T.grnL,brd:T.grnM,label:"Client Approved"},
+                    Revision:{c:T.red,bg:T.redL,brd:T.redM,label:"Revision Requested"},
+                  }[cs]||{c:T.slt,bg:T.sltL,brd:T.b2,label:cs};
+                  const shareLink="https://gbuildcon.in/3d-preview/"+d.id+"?token=tk"+d.id+"x9m";
+                  return(
+                    <div key={d.id} style={{background:T.surface,borderRadius:12,border:`1px solid ${T.b1}`,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",transition:"transform 0.15s,box-shadow 0.15s"}}
+                      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,0.12)";}}
+                      onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.07)";}}>
+                      {/* 3D Render Preview Area */}
+                      <div style={{height:160,background:"linear-gradient(135deg,#1E293B 0%,#334155 50%,#1E3A5F 100%)",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden"}}>
+                        {/* Grid pattern bg */}
+                        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px)",backgroundSize:"24px 24px"}}/>
+                        <div style={{textAlign:"center",position:"relative",zIndex:1}}>
+                          <div style={{width:56,height:56,borderRadius:12,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 8px"}}>
+                            <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth={1.5} strokeLinecap="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+                          </div>
+                          <div style={{fontSize:12,color:"rgba(255,255,255,0.7)",fontWeight:500}}>{d.title}</div>
+                          <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}}>{d.size} · {d.ver}</div>
+                        </div>
+                        {/* Status badge top-right */}
+                        <div style={{position:"absolute",top:10,right:10,background:csm.bg,border:`1px solid ${csm.brd}`,color:csm.c,fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20}}>{csm.label}</div>
+                        {/* Category badge top-left */}
+                        <div style={{position:"absolute",top:10,left:10,background:"rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.8)",fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:5,letterSpacing:"0.3px",textTransform:"uppercase"}}>3D · {d.cat}</div>
+                      </div>
+
+                      {/* Card Body */}
+                      <div style={{padding:"12px 14px"}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                          <div>
+                            <div style={{fontSize:13.5,fontWeight:700,color:T.t1,marginBottom:2}}>{d.title}</div>
+                            <div style={{fontSize:11,color:T.t3}}>{d.project} · {d.by.split(" ")[0]} · {d.date}</div>
+                          </div>
+                        </div>
+                        {/* Client feedback note */}
+                        {d.clientNote&&(
+                          <div style={{padding:"7px 10px",background:csm.bg,border:`1px solid ${csm.brd}`,borderRadius:7,marginBottom:10,fontSize:11.5,color:csm.c,lineHeight:1.5}}>
+                            <span style={{fontWeight:600}}>Client: </span>{d.clientNote}
+                          </div>
+                        )}
+                        {/* Share link box */}
+                        <div style={{background:"#F8F4FF",borderRadius:7,border:"1px solid #DDD6FE",padding:"8px 10px",marginBottom:10}}>
+                          <div style={{fontSize:9.5,fontWeight:700,color:"#7C3AED",textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:4}}>Client Share Link</div>
+                          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                            <span style={{flex:1,fontSize:10.5,color:"#6B7280",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{shareLink}</span>
+                            <button onClick={()=>{navigator.clipboard?.writeText(shareLink);setCopiedLink(d.id);setTimeout(()=>setCopiedLink(null),2000);}}
+                              style={{padding:"3px 9px",borderRadius:5,background:copiedLink===d.id?"#059669":"#7C3AED",color:"white",border:"none",cursor:"pointer",fontSize:10,fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
+                              {copiedLink===d.id?"✓ Copied":"Copy"}
+                            </button>
+                          </div>
+                        </div>
+                        {/* Action buttons */}
+                        <div style={{display:"flex",gap:6}}>
+                          <button onClick={()=>setShow3DShare(d)}
+                            style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"7px",borderRadius:7,background:"#7C3AED",color:"white",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:700}}>
+                            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
+                            Share to Client
+                          </button>
+                          {cs==="Pending"&&(
+                            <>
+                              <button onClick={()=>setDrawings(p=>p.map(x=>x.id===d.id?{...x,clientStatus:"Approved",clientNote:"Approved by admin (override)"}:x))}
+                                style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"7px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,cursor:"pointer",fontSize:11,fontWeight:700}}>
+                                ✓ Mark Approved
+                              </button>
+                              <button onClick={()=>{const note=window.prompt("Client feedback/revision note:");if(note)setDrawings(p=>p.map(x=>x.id===d.id?{...x,clientStatus:"Revision",clientNote:note}:x));}}
+                                style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"7px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,cursor:"pointer",fontSize:11,fontWeight:700}}>
+                                ✗ Revision
+                              </button>
+                            </>
+                          )}
+                          {cs!=="Pending"&&(
+                            <button onClick={()=>setDrawings(p=>p.map(x=>x.id===d.id?{...x,clientStatus:"Pending",clientNote:""}:x))}
+                              style={{flex:1,padding:"7px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t3,cursor:"pointer",fontSize:11,fontWeight:600}}>
+                              Reset
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* ── VERSION HISTORY TAB ── */}
         {tab==="versions"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
@@ -1026,6 +1165,78 @@ function DesignModule(){
           </div>
         </div>
       </>)}
+
+      {/* ── 3D Share Modal ── */}
+      {show3DShare&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
+          <div style={{background:T.surface,borderRadius:14,width:520,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",overflow:"hidden"}}>
+            {/* Header */}
+            <div style={{background:"linear-gradient(135deg,#5B21B6,#7C3AED)",padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:40,height:40,borderRadius:10,background:"rgba(255,255,255,0.15)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.8} strokeLinecap="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:15,fontWeight:700,color:"white"}}>Share 3D Preview with Client</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2}}>{show3DShare.title} · {show3DShare.project}</div>
+              </div>
+              <button onClick={()=>setShow3DShare(null)} style={{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:7,cursor:"pointer",color:"white",padding:"5px 10px",fontSize:14}}>✕</button>
+            </div>
+            {/* Body */}
+            <div style={{padding:"20px"}}>
+              {/* Link box */}
+              <div style={{background:"#F8F4FF",borderRadius:10,border:"1.5px solid #DDD6FE",padding:"14px 16px",marginBottom:16}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#7C3AED",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>Client Preview Link</div>
+                <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                  <div style={{flex:1,padding:"9px 12px",background:"white",borderRadius:7,border:"1px solid #EDE9FE",fontSize:12,color:"#4B5563",fontFamily:"monospace",wordBreak:"break-all"}}>
+                    {"https://gbuildcon.in/3d-preview/"+show3DShare.id+"?token=tk"+show3DShare.id+"x9m"}
+                  </div>
+                  <button onClick={()=>{navigator.clipboard?.writeText("https://gbuildcon.in/3d-preview/"+show3DShare.id+"?token=tk"+show3DShare.id+"x9m");setCopiedLink(show3DShare.id);setTimeout(()=>setCopiedLink(null),2000);}}
+                    style={{height:40,padding:"0 16px",borderRadius:7,background:copiedLink===show3DShare.id?"#059669":"#7C3AED",color:"white",border:"none",cursor:"pointer",fontSize:12.5,fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
+                    {copiedLink===show3DShare.id?"✓ Copied!":"Copy Link"}
+                  </button>
+                </div>
+              </div>
+              {/* What client can do */}
+              <div style={{marginBottom:16}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Client Can</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                  {[
+                    {icon:"👁",label:"View 3D render",desc:"See the full image"},
+                    {icon:"✓",label:"Approve",desc:"One click approval"},
+                    {icon:"✎",label:"Request revision",desc:"Add feedback note"},
+                  ].map((item,i)=>(
+                    <div key={i} style={{padding:"10px 12px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,textAlign:"center"}}>
+                      <div style={{fontSize:20,marginBottom:6}}>{item.icon}</div>
+                      <div style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{item.label}</div>
+                      <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Share via */}
+              <div style={{marginBottom:4}}>
+                <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Share Via</div>
+                <div style={{display:"flex",gap:8}}>
+                  {[
+                    {label:"WhatsApp",color:"#25D366",bg:"#F0FDF4",icon:<svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#25D366" strokeWidth={1.8} strokeLinecap="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>},
+                    {label:"Email",color:T.blu,bg:T.bluL,icon:<svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={1.8} strokeLinecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6"/></svg>},
+                    {label:"Copy & SMS",color:T.pur,bg:T.purL,icon:<svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={T.pur} strokeWidth={1.8} strokeLinecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>},
+                  ].map((s,i)=>(
+                    <button key={i} onClick={()=>{navigator.clipboard?.writeText("https://gbuildcon.in/3d-preview/"+show3DShare.id+"?token=tk"+show3DShare.id+"x9m");}}
+                      style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",borderRadius:8,background:s.bg,border:`1px solid ${s.color}22`,color:s.color,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      {s.icon} {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+            {/* Footer */}
+            <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",justifyContent:"flex-end"}}>
+              <button onClick={()=>setShow3DShare(null)} style={{padding:"8px 20px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Drawers */}
       {showVersions&&selDrawing&&<VersionDrawer drawing={selDrawing} allVersions={VERSION_HISTORY} onClose={()=>setShowVersions(false)}/>}
