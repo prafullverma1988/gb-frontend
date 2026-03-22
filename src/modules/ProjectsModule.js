@@ -32,6 +32,10 @@ const IcHeart =(p)=><Ic {...p} d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-
 const IcMsg   =(p)=><Ic {...p} d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>;
 const IcWarn  =(p)=><Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01"/>;
 const IcDown  =(p)=><Ic {...p} d="M6 9l6 6 6-6"/>;
+const IcEdit2 =(p)=><Ic {...p} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>;
+const IcTrash =(p)=><Ic {...p} d="M3 6h18M8 6V4h8v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6"/>;
+const IcArchive=(p)=><Ic {...p} d="M21 8v13H3V8M1 3h22v5H1zM10 12h4"/>;
+const IcSave  =(p)=><Ic {...p} d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21v-8H7v8M7 3v5h8"/>;
 const IcBank  =(p)=><Ic {...p} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11"/>;
 const IcWallet=(p)=><Ic {...p} d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 13a1 1 0 100 2 1 1 0 000-2zM2 9h20"/>;
 const IcArrow =(p)=><Ic {...p} d="M5 12h14M12 5l7 7-7 7"/>;
@@ -435,6 +439,304 @@ const mapProject=(p)=>({
   _raw:p,
 });
 
+
+// ═══════════════════════════════════════════════════════════════════
+// PROJECT SETTINGS MODAL
+// ═══════════════════════════════════════════════════════════════════
+const STATUS_OPTIONS = ["Not Started","Ongoing","Hold","Completed"];
+const TYPE_OPTIONS   = ["Residential","Commercial","Industrial","Interior"];
+const CITIES         = ["Raipur","Bhilai","Bilaspur","Durg","Rajnandgaon","Other"];
+
+function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
+  const [section, setSection] = useState("basic"); // basic | team | status | danger
+  const [saving,  setSaving]  = useState(false);
+  const [error,   setError]   = useState("");
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [deleteText, setDeleteText] = useState("");
+
+  // Form state
+  const [form, setForm] = useState({
+    name:         project.name       || "",
+    client_name:  project.client     || "",
+    city:         project.city       || "",
+    type:         project._raw?.type || project.type || "Residential",
+    pm_name:      project.pm         || "",
+    start_date:   project._raw?.start_date ? project._raw.start_date.split("T")[0] : "",
+    end_date:     project._raw?.end_date   ? project._raw.end_date.split("T")[0]   : "",
+    boq_value:    String(project.boq   || ""),
+    progress_pct: String(project.progress || ""),
+    status:       project._raw?.status || project.status || "Not Started",
+  });
+  const upd = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const handleSave = async () => {
+    if(!form.name.trim()) return setError("Project name required");
+    setSaving(true); setError("");
+    try {
+      // Reverse map display values → DB values
+      const STATUS_R={"Ongoing":"ongoing","Completed":"completed","Hold":"hold","Not Started":"not_started"};
+      const TYPE_R={"Residential":"residential","Commercial":"commercial","Industrial":"industrial","Interior":"interior"};
+      const payload = {
+        name:         form.name,
+        client_name:  form.client_name,
+        city:         form.city,
+        type:         TYPE_R[form.type]||form.type,
+        pm_name:      form.pm_name,
+        start_date:   form.start_date || null,
+        end_date:     form.end_date   || null,
+        boq_value:    form.boq_value  ? parseFloat(form.boq_value)  : null,
+        progress_pct: form.progress_pct ? parseInt(form.progress_pct) : null,
+        status:       STATUS_R[form.status]||form.status,
+      };
+      const res = await api.put("/projects/"+project.id, payload);
+      if(res.success) {
+        onUpdated(mapProject(res.data));
+        onClose();
+      } else {
+        setError(res.message || "Save failed");
+      }
+    } catch(e) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const handleArchive = async () => {
+    setSaving(true);
+    try {
+      const res = await api.patch("/projects/"+project.id+"/archive", { archived: true });
+      if(res.success){ onDeleted(project.id,"archived"); onClose(); }
+      else setError(res.message||"Archive failed");
+    } catch(e) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const handleDelete = async () => {
+    if(deleteText !== project.name) return setError("Project naam match nahi kiya");
+    setSaving(true);
+    try {
+      const res = await api.del("/projects/"+project.id);
+      if(res.success){ onDeleted(project.id,"deleted"); onClose(); }
+      else setError(res.message||"Delete failed");
+    } catch(e) { setError(e.message); }
+    finally { setSaving(false); }
+  };
+
+  const SECTIONS = [
+    {id:"basic",  label:"Basic Info",    icon:"M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"},
+    {id:"team",   label:"Team & Roles",  icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"},
+    {id:"status", label:"Status & Dates",icon:"M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"},
+    {id:"danger", label:"Danger Zone",   icon:"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"},
+  ];
+
+  const inp = (k,ph,type="text",min,max) => (
+    <input type={type} value={form[k]} onChange={e=>upd(k,e.target.value)}
+      placeholder={ph} min={min} max={max}
+      style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+      onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+  );
+  const sel = (k,opts) => (
+    <select value={form[k]} onChange={e=>upd(k,e.target.value)}
+      style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+      {opts.map(o=><option key={o}>{o}</option>)}
+    </select>
+  );
+  const lbl = (txt,req) => (
+    <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>
+      {txt}{req&&<span style={{color:T.red}}> *</span>}
+    </label>
+  );
+
+  return (<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:998,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:999,width:640,maxHeight:"88vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
+
+      {/* Header */}
+      <div style={{background:"#0D1B2A",padding:"14px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+        <div>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>Project Settings</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:2,maxWidth:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{project.name}</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}>
+          <IcX size={15}/>
+        </button>
+      </div>
+
+      <div style={{display:"flex",flex:1,overflow:"hidden"}}>
+        {/* Left sidebar nav */}
+        <div style={{width:160,background:"#F8F9FB",borderRight:"1px solid "+T.b1,flexShrink:0,padding:"10px 8px",display:"flex",flexDirection:"column",gap:2}}>
+          {SECTIONS.map(s=>(
+            <button key={s.id} onClick={()=>{setSection(s.id);setError("");setConfirmDelete(false);setConfirmArchive(false);}}
+              style={{display:"flex",alignItems:"center",gap:8,padding:"9px 10px",borderRadius:7,border:"none",background:section===s.id?T.bluL:"none",color:section===s.id?T.blu:T.t3,fontSize:12,fontWeight:section===s.id?600:400,cursor:"pointer",textAlign:"left",width:"100%",transition:"all 0.12s",borderLeft:section===s.id?"3px solid "+T.blu:"3px solid transparent"}}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={s.icon}/></svg>
+              {s.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Right content */}
+        <div style={{flex:1,overflowY:"auto",padding:"18px 20px"}}>
+
+          {/* ── BASIC INFO ── */}
+          {section==="basic"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Basic Information</div>
+              <div>
+                {lbl("Project Name",true)}
+                {inp("name","e.g. Tikendra Banchhor Residence")}
+              </div>
+              <div>
+                {lbl("Client Name",true)}
+                {inp("client_name","e.g. Tikendra Banchhor")}
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  {lbl("City")}
+                  {sel("city",CITIES)}
+                </div>
+                <div>
+                  {lbl("Project Type")}
+                  {sel("type",TYPE_OPTIONS)}
+                </div>
+              </div>
+              <div>
+                {lbl("BOQ Value (₹)")}
+                {inp("boq_value","e.g. 4250000","number")}
+              </div>
+            </div>
+          )}
+
+          {/* ── TEAM & ROLES ── */}
+          {section==="team"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Team & Roles</div>
+              <div>
+                {lbl("Project Manager (PM)")}
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {TEAM.map(t=>(
+                    <button key={t.id} onClick={()=>upd("pm_name",t.name)}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(form.pm_name===t.name?t.color:T.b1),background:form.pm_name===t.name?t.color+"12":T.surface,cursor:"pointer",textAlign:"left",transition:"all 0.12s"}}>
+                      <div style={{width:32,height:32,borderRadius:"50%",background:t.color,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:700,color:"white",flexShrink:0}}>{t.initials}</div>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:600,color:form.pm_name===t.name?t.color:T.t1}}>{t.name}</div>
+                        <div style={{fontSize:11,color:T.t4}}>{t.role}</div>
+                      </div>
+                      {form.pm_name===t.name&&<div style={{width:18,height:18,borderRadius:"50%",background:t.color,display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={11} color="white"/></div>}
+                    </button>
+                  ))}
+                  <div style={{marginTop:4}}>
+                    {lbl("Or type custom name")}
+                    <input value={form.pm_name} onChange={e=>upd("pm_name",e.target.value)} placeholder="Type PM name..."
+                      style={{width:"100%",padding:"8px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── STATUS & DATES ── */}
+          {section==="status"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Status & Timeline</div>
+              <div>
+                {lbl("Project Status")}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                  {STATUS_OPTIONS.map(s=>{
+                    const sc={Ongoing:{c:T.grn,bg:T.grnL,brd:T.grnM},"Not Started":{c:T.slt,bg:T.sltL,brd:T.b2},Hold:{c:T.amb,bg:T.ambL,brd:T.ambM},Completed:{c:T.blu,bg:T.bluL,brd:T.bluM}}[s];
+                    return(
+                      <button key={s} onClick={()=>upd("status",s)}
+                        style={{padding:"10px 12px",borderRadius:8,border:"1.5px solid "+(form.status===s?sc.brd:T.b1),background:form.status===s?sc.bg:T.surface,color:form.status===s?sc.c:T.t3,fontSize:12.5,fontWeight:form.status===s?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:7,transition:"all 0.12s"}}>
+                        <div style={{width:8,height:8,borderRadius:"50%",background:form.status===s?sc.c:T.b2,flexShrink:0}}/>
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                {lbl("Progress (%)")}
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <input type="range" min={0} max={100} value={form.progress_pct||0} onChange={e=>upd("progress_pct",e.target.value)}
+                    style={{flex:1,accentColor:T.blu}}/>
+                  <div style={{width:48,textAlign:"center",fontSize:15,fontWeight:700,color:T.blu}}>{form.progress_pct||0}%</div>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  {lbl("Start Date")}
+                  {inp("start_date","","date")}
+                </div>
+                <div>
+                  {lbl("End Date")}
+                  {inp("end_date","","date")}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── DANGER ZONE ── */}
+          {section==="danger"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.red,marginBottom:4}}>Danger Zone</div>
+
+              {/* Archive */}
+              <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:8,padding:"14px 16px"}}>
+                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:12}}>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.amb,marginBottom:4}}>Archive Project</div>
+                    <div style={{fontSize:12,color:T.t3,lineHeight:1.5}}>Project list se hat jaayega, data safe rahega. Baad mein unarchive kar sakte ho.</div>
+                  </div>
+                  {!confirmArchive
+                    ?<button onClick={()=>setConfirmArchive(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.ambM,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>Archive</button>
+                    :<div style={{display:"flex",gap:6,flexShrink:0}}>
+                      <button onClick={()=>setConfirmArchive(false)} style={{padding:"7px 12px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                      <button onClick={handleArchive} disabled={saving} style={{padding:"7px 14px",borderRadius:7,background:T.amb,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}>Confirm Archive</button>
+                    </div>
+                  }
+                </div>
+              </div>
+
+              {/* Delete */}
+              <div style={{background:T.redL,border:"1px solid "+T.redM,borderRadius:8,padding:"14px 16px"}}>
+                <div style={{fontSize:13,fontWeight:600,color:T.red,marginBottom:4}}>Delete Project</div>
+                <div style={{fontSize:12,color:T.t3,lineHeight:1.5,marginBottom:12}}>Permanently delete karo. Agar transactions hain toh pehle unhe hatana hoga. Yeh action undo nahi hoga.</div>
+                {!confirmDelete
+                  ?<button onClick={()=>setConfirmDelete(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>Delete Project</button>
+                  :<div>
+                    <div style={{fontSize:12,color:T.red,marginBottom:8}}>Confirm karne ke liye project ka naam type karo: <strong>{project.name}</strong></div>
+                    <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder={project.name}
+                      style={{width:"100%",padding:"8px 11px",borderRadius:7,border:"1.5px solid "+T.redM,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:10}}/>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>{setConfirmDelete(false);setDeleteText("");}} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                      <button onClick={handleDelete} disabled={saving||deleteText!==project.name}
+                        style={{flex:2,padding:"8px",borderRadius:7,background:deleteText===project.name?T.red:T.b1,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:deleteText===project.name?"pointer":"not-allowed"}}>
+                        {saving?"Deleting...":"Permanently Delete"}
+                      </button>
+                    </div>
+                  </div>
+                }
+              </div>
+            </div>
+          )}
+
+          {error&&<div style={{padding:"8px 12px",background:T.redL,border:"1px solid "+T.redM,borderRadius:7,fontSize:12,color:T.red,marginTop:8}}>{error}</div>}
+        </div>
+      </div>
+
+      {/* Footer — Save / Cancel */}
+      {section!=="danger"&&(
+        <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:13,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={handleSave} disabled={saving}
+            style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.b1:T.blu,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:saving?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            <IcSave size={14} color="white"/>
+            {saving?"Saving...":"Save Changes"}
+          </button>
+        </div>
+      )}
+    </div>
+  </>);
+}
+
 function ProjectsPage({onSelectProject}){
   const [allProjects,setAllProjects]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -448,6 +750,7 @@ function ProjectsPage({onSelectProject}){
   const [dupOf,setDupOf]=useState(null);
   const [showNew,setShowNew]=useState(false);
   const [cardMenu,setCardMenu]=useState(null); // project id with open menu
+  const [settingsOf,setSettingsOf]=useState(null); // project object for settings
 
   // Fetch projects from backend
   useEffect(()=>{
@@ -666,9 +969,14 @@ function ProjectsPage({onSelectProject}){
                             <IcArrow size={13} color={T.blu}/> Open Project
                           </button>
                           <button onClick={()=>{setCardMenu(null);setDupOf(p);}}
-                            style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
+                            style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid "+T.b1}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.ambL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                             <IcCopy size={13} color={T.amb}/> Copy Project
+                          </button>
+                          <button onClick={()=>{setCardMenu(null);setSettingsOf(p);}}
+                            style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                            <IcSet size={13} color={T.slt}/> Settings
                           </button>
                         </div>
                       )}
@@ -753,6 +1061,19 @@ function ProjectsPage({onSelectProject}){
 
       {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
+      {settingsOf&&<ProjectSettingsModal
+        project={settingsOf}
+        onClose={()=>setSettingsOf(null)}
+        onUpdated={(updated)=>{
+          setAllProjects(prev=>prev.map(p=>p.id===updated.id?updated:p));
+          setSettingsOf(null);
+        }}
+        onDeleted={(id,action)=>{
+          if(action==="deleted") setAllProjects(prev=>prev.filter(p=>p.id!==id));
+          else setAllProjects(prev=>prev.filter(p=>p.id!==id)); // archived = hide
+          setSettingsOf(null);
+        }}
+      />}
       {dupOf&&<DuplicateModal project={dupOf} onClose={()=>setDupOf(null)} onConfirm={async(np)=>{
         try{
           const res=await api.post("/projects",{
