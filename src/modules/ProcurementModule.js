@@ -603,26 +603,58 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
 }
 
 // ── CREATE PO MODAL ───────────────────────────────────────────────────
-function CreatePOModal({onClose,onSave,prefillItems}){
+function CreatePOModal({onClose,onSave,prefillItems,dbProjects}){
+  // Auto-fill project from first MR item
+  const firstMR = prefillItems?.[0];
+  const autoProjectId   = firstMR?.project_id   || "";
+  const autoProjectName = firstMR?.project       || "";
+  const autoSite        = firstMR?.site          || firstMR?.project || "";
+
   const [form,setForm]=useState({
-    vendor:"",project:prefillItems?.[0]?.project||PROJECTS[0],deliverySite:"",delivery:"",notes:"",
-    items:prefillItems?prefillItems.map(m=>({desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:""})):[{desc:"",hsn:"",qty:"",unit:"Bags",rate:""}]
+    vendor:"",
+    projectId:   String(autoProjectId),
+    project:     autoProjectName,
+    deliverySite:autoSite,
+    delivery:"",notes:"",
+    items:prefillItems
+      ?prefillItems.map(m=>({desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:""}))
+      :[{desc:"",hsn:"",qty:"",unit:"Bags",rate:""}]
   });
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
   const updItem=(i,k,v)=>{const its=[...form.items];its[i]={...its[i],[k]:v};setForm(p=>({...p,items:its}));};
   const addItem=()=>setForm(p=>({...p,items:[...p.items,{desc:"",hsn:"",qty:"",unit:"Bags",rate:""}]}));
   const removeItem=(i)=>{if(form.items.length===1)return;const its=[...form.items];its.splice(i,1);setForm(p=>({...p,items:its}));};
   const total=form.items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
+
+  // When project dropdown changes, update both id and name
+  const handleProjectChange=(e)=>{
+    const selId=e.target.value;
+    const proj=dbProjects.find(p=>String(p.id)===selId);
+    upd("projectId",selId);
+    upd("project",proj?.name||selId);
+    if(!form.deliverySite||form.deliverySite===autoSite){
+      upd("deliverySite",proj?.name||"");
+    }
+  };
   return(
     <Modal onClose={onClose} width={600}>
       <MHead title="Create Purchase Order" sub="Direct PO — no RFQ required" onClose={onClose}/>
       <MBody>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
           <Fld label="Vendor" required><Sel value={form.vendor} onChange={e=>upd("vendor",e.target.value)}><option value="">Select vendor...</option>{VENDORS.map(v=><option key={v}>{v}</option>)}</Sel></Fld>
-          <Fld label="Project" required><Sel value={form.project} onChange={e=>upd("project",e.target.value)}>{PROJECTS.map(p=><option key={p}>{p}</option>)}</Sel></Fld>
+          <Fld label="Project" required>
+            {prefillItems&&autoProjectName
+              ?<div style={{padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.grnM,background:T.grnL,fontSize:12.5,color:T.grn,fontWeight:600}}>{autoProjectName} <span style={{fontSize:10,fontWeight:400,color:T.grn,opacity:.7}}>(from MR)</span></div>
+              :<select value={form.projectId} onChange={handleProjectChange}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                <option value="">Select project...</option>
+                {(dbProjects.length>0?dbProjects:PROJECTS.map((n,i)=>({id:i+1,name:n}))).map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)}
+              </select>
+            }
+          </Fld>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-          <Fld label="Delivery Site"><Inp value={form.deliverySite} onChange={e=>upd("deliverySite",e.target.value)} placeholder="e.g. Shubham Site"/></Fld>
+          <Fld label="Delivery Site (auto-filled)"><Inp value={form.deliverySite} onChange={e=>upd("deliverySite",e.target.value)} placeholder="Delivery site name"/></Fld>
           <Fld label="Expected Delivery"><Inp type="date" value={form.delivery} onChange={e=>upd("delivery",e.target.value)}/></Fld>
         </div>
         <div style={{marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -654,7 +686,22 @@ function CreatePOModal({onClose,onSave,prefillItems}){
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn onClick={()=>{if(!form.vendor||!form.project)return;const newPO={id:`PO-${String(Math.floor(Math.random()*900)+100)}`,date:"Today",vendor:form.vendor,project:form.project,deliverySite:form.deliverySite||form.project,poStatus:"Open",approval:"Draft",amount:total,items:form.items.filter(it=>it.desc).map(it=>({desc:it.desc,hsn:it.hsn||"—",qty:Number(it.qty)||0,unit:it.unit,rate:Number(it.rate)||0,amount:(Number(it.qty)||0)*(Number(it.rate)||0)})),linkedMR:"—",delivery:form.delivery||"TBD"};onSave(newPO);}} disabled={!form.vendor||!form.project} color={T.blu} full icon={<IcPO size={14} color="white"/>}>Create PO (Draft)</Btn>
+        <Btn onClick={()=>{if(!form.vendor||!form.project)return;const newPO={
+  id:"PO-new",date:"Today",
+  vendor:form.vendor,
+  project:form.project,
+  projectId:form.projectId,
+  deliverySite:form.deliverySite||form.project,
+  poStatus:"Open",approval:"Draft",amount:total,
+  items:form.items.filter(it=>it.desc).map(it=>({
+    desc:it.desc,hsn:it.hsn||"—",
+    qty:Number(it.qty)||0,unit:it.unit,
+    rate:Number(it.rate)||0,
+    amount:(Number(it.qty)||0)*(Number(it.rate)||0)
+  })),
+  linkedMR:"—",delivery:form.delivery||"TBD"
+};
+onSave(newPO);}} disabled={!form.vendor||!form.project} color={T.blu} full icon={<IcPO size={14} color="white"/>}>Create PO (Draft)</Btn>
       </MFoot>
     </Modal>
   );
@@ -746,6 +793,16 @@ function ProcurementModule(){
     }catch(e){setApiError("Load failed: "+e.message);}
     finally{setLoading(false);}
   };
+  // Projects from API (for dropdowns)
+  const [dbProjects, setDbProjects] = useState([]);
+  const projLoaded = useRef(false);
+  useEffect(()=>{
+    if(!projLoaded.current){
+      projLoaded.current=true;
+      api.get("/projects").then(res=>{ if(res.success&&res.data) setDbProjects(res.data); }).catch(()=>{});
+    }
+  });
+
   // Load on mount
   const didLoad = useRef(false);
   useEffect(()=>{
@@ -1314,12 +1371,12 @@ function ProcurementModule(){
       {rejectTgt&&<RejectMRModal mr={rejectTgt} onSave={saveRejectMR} onClose={()=>setRejectTgt(null)}/>}
       {markRecvTgt&&<MarkReceivedModal mr={markRecvTgt} onSave={saveMarkReceived} onClose={()=>setMarkRecvTgt(null)}/>}
       {showBulkOrder&&selectedItems.length>0&&<BulkOrderModal items={selectedItems} onSave={saveBulkOrder} onClose={()=>setShowBulkOrder(false)}/>}
-      {showCreatePO&&<CreatePOModal onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={async(newPO)=>{
+      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={async(newPO)=>{
         // Save PO to backend
         const linked_mr_ids = (createPOPrefill||[]).map(m=>m.id).filter(Boolean);
         const res = await api.post("/procurement/pos",{
           vendor_name: newPO.vendor,
-          project_id: (createPOPrefill||[])[0]?.project_id || 1,
+          project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 1,
           project_name: newPO.project,
           delivery_site: newPO.deliverySite,
           expected_delivery: newPO.delivery,
