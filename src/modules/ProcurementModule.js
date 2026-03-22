@@ -1028,14 +1028,27 @@ function ProcurementModule(){
   };
   const saveGRN=async(poId,challan,rows)=>{
     const po=pos.find(p=>p.id===poId);
-    await api.post("/procurement/grns",{
-      po_id:poId, vendor_name:po?.vendor, project_id:1,
-      project_name:po?.project, challan_no:challan,
-      received_date:new Date().toISOString().split("T")[0],
-      items:rows.map((r,i)=>({po_item_id:po?.items[i]?.id,description:po?.items[i]?.desc||"",ordered_qty:po?.items[i]?.qty||0,received_qty:parseFloat(r.qty),unit:po?.items[i]?.unit||""}))
-    });
-    const isPartial=rows.some((r,i)=>parseFloat(r.qty)<(po?.items[i]?.qty||0));
-    if(!isPartial)setPOs(p=>p.map(x=>x.id===poId?{...x,poStatus:"Closed"}:x));
+    try{
+      const grnPayload={
+        po_id:       poId,
+        vendor_name: po?.vendor    || "",
+        project_id:  po?.project_id|| po?._raw?.project_id || null,
+        project_name:po?.project   || "",
+        challan_no:  challan,
+        received_date: new Date().toISOString().split("T")[0],
+        items: rows.map((r,i)=>({
+          po_item_id:   po?.items?.[i]?.id       || null,
+          description:  r.desc || po?.items?.[i]?.desc || r.material || ("Item "+(i+1)),
+          ordered_qty:  po?.items?.[i]?.qty      || parseFloat(r.qty)||0,
+          received_qty: parseFloat(r.qty)        || 0,
+          unit:         r.unit || po?.items?.[i]?.unit || "",
+        })).filter(it=>it.received_qty>0),
+      };
+      const res = await api.post("/procurement/grns", grnPayload);
+      if(!res.success) { alert("GRN save failed: "+(res.message||"Unknown error")); return; }
+      const isPartial=rows.some((r,i)=>parseFloat(r.qty)<(po?.items?.[i]?.qty||0));
+      if(!isPartial) setPOs(p=>p.map(x=>x.id===poId?{...x,poStatus:"Closed"}:x));
+    }catch(e){ alert("GRN error: "+e.message); return; }
     setGrnTarget(null);
   };
   const saveBulkOrder=async(medium,vendor,delivery,items)=>{
