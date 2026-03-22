@@ -451,7 +451,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
 
   const onKeyDown=e=>{
     if(!open){if(e.key==="ArrowDown"||e.key==="Enter") openDrop(); return;}
-    if(e.key==="Escape"){setOpen(false);setQ("");setHi(-1);e.preventDefault();return;}
+    if(e.key==="Escape"||e.key==="Tab"){setOpen(false);setQ("");setHi(-1);if(e.key==="Escape")e.preventDefault();return;}
     if(e.key==="ArrowDown"){
       e.preventDefault();
       setHi(p=>p<filtered.length-1?p+1:0);
@@ -473,6 +473,13 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
         onChange={e=>{setQ(e.target.value);setHi(-1);if(!open)openDrop();}}
         onFocus={()=>{if(!open)openDrop();}}
         onMouseDown={e=>{if(open){e.preventDefault();setOpen(false);setQ("");setHi(-1);}}}
+        onBlur={e=>{
+          // Close only if focus goes outside the entire component (not to the dropdown portal)
+          setTimeout(()=>{
+            if(document.activeElement&&listRef.current&&listRef.current.contains(document.activeElement)) return;
+            setOpen(false);setQ("");setHi(-1);
+          },150);
+        }}
         onKeyDown={onKeyDown}
         placeholder={placeholder||"Type or select..."}
         autoComplete="off"
@@ -696,7 +703,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [saveErr,setSaveErr]=useState("");
   const handleSave=async()=>{
     const amt=isMaterial||isSubcon||isInvoice?grandTotal:Number(payAmt)||0;
-    if(!amt){setSaveErr("Amount is required.");return;}
+    if(!amt){setSaveErr(isMaterial?"Rate enter karo — Grand Total 0 hai.":"Amount required.");return;}
     setSaveErr("");
     try{
       // Map type to backend enum
@@ -1730,10 +1737,20 @@ function FinanceModule(){
     setCreateTxnType(type);
     setCreateTxnParty(party);
   };
-  const closeTxn=async()=>{
-    setCreateTxnType(null);setCreateTxnParty("");
-    // Refresh all data after any transaction is saved
+  const closeTxn=()=>{
+    setCreateTxnType(null);setCreateTxnParty("");setPrefillGRNData(null);
+  };
+  const handleTxnSaved=async()=>{
+    // Capture prefill BEFORE closeTxn clears it
+    const savedPrefill=prefillGRNData;
+    closeTxn(); // close modal immediately
     await refreshAll();
+    // Remove billed GRN from unbilled list
+    if(savedPrefill){
+      const grnNum=savedPrefill.grnNumber;
+      if(grnNum) setGrnList(p=>p.filter(g=>g.grn_number!==grnNum));
+      else setGrnList(p=>p.filter(g=>!(g.vendor_name===savedPrefill.vendor&&g.received_date===savedPrefill.receivedDate)));
+    }
   };
   // Filter chips (one per tab)
   const [chipParty,setChipParty]=useState("All");
@@ -3218,6 +3235,9 @@ function FinanceModule(){
                         <button onClick={()=>{
                           // Build prefill data for Material Purchase Bill
                           const prefill={
+                            grnNumber:   grn.grn_number,
+                            grnId:       grn.id,
+                            receivedDate:grn.received_date,
                             vendor:      grn.vendor_name||"",
                             deliveryDate:grn.received_date?grn.received_date.split("T")[0]:"",
                             project:     grn.project_name||"",
@@ -3333,7 +3353,7 @@ function FinanceModule(){
           dbParties={masterParties}
           dbAccounts={activeAccounts}
           dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
-          onSaved={refreshAll}
+          onSaved={handleTxnSaved}
           prefillGRN={prefillGRNData}
         />
       )}
