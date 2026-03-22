@@ -424,10 +424,10 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN}){
   // Fetch fresh PO with items from backend
   useEffect(()=>{
     if(!po.id) return;
-    api.get("/procurement/pos?project_id=&po_status=&approval_status=&search="+encodeURIComponent(po.poNum||""))
+    api.get("/procurement/pos")
       .then(res=>{
         if(res.success){
-          const fresh=res.data.find(p=>p.id===po.id)||res.data[0];
+          const fresh=res.data.find(p=>String(p.id)===String(po.id));
           if(fresh){
             const mapped={
               ...po,
@@ -844,24 +844,37 @@ function ProcurementModule(){
   const [apiError,setApiError]=useState("");
 
   // ── Map backend fields to frontend shape ──────────────────────
+  const fmtDate=d=>{try{return d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—"}catch{return d||"—"}};
   const mapMR=m=>({
     id:m.id, mrNum:m.mr_number,
-    date:m.created_at?new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+    date:fmtDate(m.created_at),
     project:m.project_name||"—", site:m.project_name||"—",
+    project_id:m.project_id||null,
     item:m.item_name, qty:parseFloat(m.quantity)||0, approvedQty:parseFloat(m.quantity)||0,
     unit:m.unit, requestedBy:m.requested_by||"—",
     mrStatus:m.mr_status, matStatus:m.mat_status, stage:m.stage||"Requested",
-    vendor:m.linked_vendor||null, expectedDelivery:m.expected_delivery||null,
+    vendor:m.linked_vendor||null,
+    expectedDelivery:m.expected_delivery?fmtDate(m.expected_delivery):null,
     challan:m.challan_no||null, rejectedReason:m.rejected_reason||null,
     receivedQty:null, inStock:0, approxAmount:m.approx_amount||0,
   });
   const mapPO=p=>({
     id:p.id, poNum:p.po_number,
-    date:p.created_at?new Date(p.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+    date:fmtDate(p.created_at),
     vendor:p.vendor_name||"—", project:p.project_name||"—",
-    deliverySite:p.delivery_site||"—", poStatus:p.po_status, approval:p.approval_status,
-    amount:parseFloat(p.total_amount)||0, delivery:p.expected_delivery||"—",
-    items:(p.items||[]).map(it=>({id:it.id,desc:it.description,hsn:it.hsn_code||"—",qty:parseFloat(it.quantity)||0,unit:it.unit,rate:parseFloat(it.rate)||0,amount:(parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0),receivedQty:parseFloat(it.received_qty)||0})),
+    project_id:p.project_id||null,
+    deliverySite:p.delivery_site||p.project_name||"—",
+    poStatus:p.po_status, approval:p.approval_status,
+    amount:parseFloat(p.total_amount)||0,
+    delivery:p.expected_delivery?fmtDate(p.expected_delivery):"—",
+    linked_mr_ids:p.linked_mr_ids?JSON.parse(p.linked_mr_ids||"[]"):[],
+    items:(p.items||[]).map(it=>({
+      id:it.id, desc:it.description, hsn:it.hsn_code||"—",
+      qty:parseFloat(it.quantity)||0, unit:it.unit,
+      rate:parseFloat(it.rate)||0,
+      amount:(parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0),
+      receivedQty:parseFloat(it.received_qty)||0,
+    })),
   });
   const mapRFQ=r=>({
     id:r.id, rfqNum:r.rfq_number,
@@ -964,7 +977,16 @@ function ProcurementModule(){
   // ── Actions — API connected ──────────────────────────────────
   const approvePO=async(id)=>{
     await api.patch("/procurement/pos/"+id+"/approve",{approved_by:"Admin"});
-    setPOs(p=>p.map(x=>x.id===id?{...x,approval:"Approved"}:x));
+    // Update PO approval status
+    setPOs(p=>p.map(x=>{
+      if(x.id!==id) return x;
+      // Also mark linked MRs as Ordered on frontend
+      const linked=x.linked_mr_ids||[];
+      if(linked.length>0){
+        setMRs(m=>m.map(mr=>linked.includes(mr.id)?{...mr,matStatus:"Ordered",mrStatus:"Approved"}:mr));
+      }
+      return{...x,approval:"Approved"};
+    }));
   };
   const lockRFQ=async(rfqId,vendorName)=>{
     await api.patch("/procurement/rfqs/"+rfqId+"/lock",{vendor_name:vendorName});
@@ -1484,7 +1506,7 @@ function ProcurementModule(){
           if(linked_mr_ids.length>0){
             setMRs(p=>p.map(m=>linked_mr_ids.includes(m.id)?{...m,matStatus:"Ordered",mrStatus:"Approved"}:m));
           }
-          setPOs(prev=>[res.data,...prev]);
+          setPOs(prev=>[mapPO(res.data),...prev]);
         } else {
           setPOs(prev=>[newPO,...prev]);
         }
