@@ -3254,7 +3254,8 @@ function FinanceModule(){
             );
           })()}
         </div>
-      )}
+        )}
+      </div>
 
       {/* Unbilled Drawer */}
       {showUB&&(<>
