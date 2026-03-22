@@ -418,57 +418,152 @@ function GRNModal({po,onClose,onSave}){
 
 // ── PO DETAIL DRAWER ──────────────────────────────────────────────────
 function PODetailDrawer({po,onClose,onApprove,onShare,onGRN}){
-  const ps=PO_STATUS[po.poStatus]||PO_STATUS.Open;
-  const as=APPR_STATUS[po.approval];
+  const [detail, setDetail] = useState(po);
+  const [fetching, setFetching] = useState(true);
+
+  // Fetch fresh PO with items from backend
+  useEffect(()=>{
+    if(!po.id) return;
+    api.get("/procurement/pos?project_id=&po_status=&approval_status=&search="+encodeURIComponent(po.poNum||""))
+      .then(res=>{
+        if(res.success){
+          const fresh=res.data.find(p=>p.id===po.id)||res.data[0];
+          if(fresh){
+            const mapped={
+              ...po,
+              poNum:   fresh.po_number||po.poNum,
+              vendor:  fresh.vendor_name||po.vendor,
+              project: fresh.project_name||po.project,
+              deliverySite: fresh.delivery_site||po.deliverySite,
+              delivery: fresh.expected_delivery||po.delivery,
+              amount:  parseFloat(fresh.total_amount)||0,
+              poStatus:fresh.po_status||po.poStatus,
+              approval:fresh.approval_status||po.approval,
+              date: fresh.created_at?new Date(fresh.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):po.date,
+              items:(fresh.items||[]).map(it=>({
+                id:it.id, desc:it.description, hsn:it.hsn_code||"—",
+                qty:parseFloat(it.quantity)||0, unit:it.unit,
+                rate:parseFloat(it.rate)||0,
+                amount:(parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0),
+                receivedQty:parseFloat(it.received_qty)||0,
+              })),
+            };
+            setDetail(mapped);
+          }
+        }
+      })
+      .catch(()=>{})
+      .finally(()=>setFetching(false));
+  },[po.id]);
+
+  const d=detail;
+  const ps=PO_STATUS[d.poStatus]||PO_STATUS.Open;
+  const as=APPR_STATUS[d.approval]||APPR_STATUS.Draft;
+  const totalAmt=d.items?.reduce((s,it)=>s+(it.amount||0),0)||d.amount||0;
+
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:480,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
-      <div style={{background:"#0D1B2A",padding:"14px 18px",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-          <div style={{fontSize:15,fontWeight:700,color:"white"}}>{po.id}</div>
-          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={15}/></button>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:520,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+
+      {/* Header */}
+      <div style={{background:"#0D1B2A",padding:"16px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <div>
+            <div style={{fontSize:16,fontWeight:700,color:"white",letterSpacing:"-.3px"}}>{d.poNum||("PO-"+d.id)}</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",marginTop:3}}>{d.date}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}><IcX size={15}/></button>
         </div>
-        <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginBottom:10}}>{po.vendor} · {po.project} · {po.date}</div>
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-          <Pill label={po.poStatus} c={ps.c} bg={ps.bg} brd={ps.brd}/>
-          <Pill label={po.approval} c={as.c} bg={as.bg} brd={as.brd}/>
-          <span style={{background:"rgba(255,255,255,0.1)",color:"white",fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20}}>₹{fmtN(po.amount)}</span>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+          <Pill label={d.poStatus} c={ps.c} bg={ps.bg} brd={ps.brd}/>
+          <Pill label={d.approval} c={as.c} bg={as.bg} brd={as.brd}/>
+          <span style={{background:"rgba(255,255,255,0.12)",color:"white",fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20}}>₹{fmtN(totalAmt)}</span>
+          {fetching&&<span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>loading...</span>}
         </div>
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
-        <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:10}}>
-          <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>PO Details</div>
-          {[["Vendor",po.vendor],["Delivery Site",po.deliverySite],["Delivery Date",po.delivery],["Linked MR",po.linkedMR],["PO Date",po.date]].map(([k,v])=>(
-            <div key={k} style={{display:"flex",padding:"6px 0",borderBottom:`1px solid ${T.b1}`}}>
-              <span style={{width:130,fontSize:11.5,color:T.t4,flexShrink:0}}>{k}</span>
-              <span style={{fontSize:12,fontWeight:500,color:T.t1}}>{v}</span>
+
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12}}>
+
+        {/* Project + Vendor card */}
+        <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
+          <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>PO Details</div>
+          {[
+            ["PO Number",   d.poNum||("PO-"+d.id)],
+            ["Project",     d.project],
+            ["Vendor",      d.vendor],
+            ["Delivery Site",d.deliverySite||d.project||"—"],
+            ["Exp. Delivery",d.delivery||"—"],
+            ["PO Date",     d.date||"—"],
+          ].map(([k,v])=>(
+            <div key={k} style={{display:"flex",padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
+              <span style={{width:130,fontSize:11.5,color:T.t4,flexShrink:0,fontWeight:500}}>{k}</span>
+              <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{v||"—"}</span>
             </div>
           ))}
         </div>
-        <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>Items</span></div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 50px 60px 70px 90px",padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
-            {["Description","Qty","Unit","Rate","Amount"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+
+        {/* Items table */}
+        <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
+          <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>Items ({d.items?.length||0})</span>
+            <span style={{fontSize:11,color:T.t4}}>Qty · Rate · Amount</span>
           </div>
-          {po.items.map((it,i)=>(
-            <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 50px 60px 70px 90px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
-              <div><div style={{fontSize:12.5,color:T.t1}}>{it.desc}</div><div style={{fontSize:10,color:T.t4}}>HSN: {it.hsn}</div></div>
-              <span style={{fontSize:12,color:T.t2}}>{it.qty}</span>
-              <span style={{fontSize:12,color:T.t3}}>{it.unit}</span>
-              <span style={{fontSize:12,color:T.t2}}>₹{fmtN(it.rate)}</span>
-              <span style={{fontSize:13,fontWeight:600,color:T.t1}}>₹{fmtN(it.amount)}</span>
+          {(!d.items||d.items.length===0)&&(
+            <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>
+              {fetching?"Loading items...":"No items found — enter rate while creating PO"}
+            </div>
+          )}
+          {(d.items||[]).map((it,i)=>(
+            <div key={i} style={{padding:"12px 14px",borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:T.surfaceB}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:600,color:T.t1}}>{it.desc}</div>
+                  {it.hsn&&it.hsn!=="—"&&<div style={{fontSize:10.5,color:T.t4,marginTop:2}}>HSN: {it.hsn}</div>}
+                </div>
+                <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
+                  <div style={{fontSize:15,fontWeight:700,color:it.amount>0?T.t1:T.t4}}>
+                    {it.amount>0?"₹"+fmtN(it.amount):"Rate pending"}
+                  </div>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+                <div style={{background:T.bg,borderRadius:5,padding:"4px 10px",display:"inline-flex",gap:6,alignItems:"center"}}>
+                  <span style={{fontSize:10,color:T.t4,fontWeight:500}}>QTY</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.qty} {it.unit}</span>
+                </div>
+                <div style={{background:T.bg,borderRadius:5,padding:"4px 10px",display:"inline-flex",gap:6,alignItems:"center"}}>
+                  <span style={{fontSize:10,color:T.t4,fontWeight:500}}>RATE</span>
+                  <span style={{fontSize:12,fontWeight:600,color:it.rate>0?T.t1:T.amb}}>{it.rate>0?"₹"+fmtN(it.rate):"—"}</span>
+                </div>
+                {it.receivedQty>0&&(
+                  <div style={{background:T.grnL,borderRadius:5,padding:"4px 10px",display:"inline-flex",gap:6,alignItems:"center",border:"1px solid "+T.grnM}}>
+                    <span style={{fontSize:10,color:T.grn,fontWeight:500}}>RECEIVED</span>
+                    <span style={{fontSize:12,fontWeight:600,color:T.grn}}>{it.receivedQty} {it.unit}</span>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 50px 60px 70px 90px",padding:"8px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`}}>
-            <span style={{fontSize:12,fontWeight:700,color:T.t1}}>Total</span><span/><span/><span/>
-            <span style={{fontSize:14,fontWeight:700,color:T.blu}}>₹{fmtN(po.amount)}</span>
+          {/* Total row */}
+          <div style={{padding:"12px 14px",background:"#0D1B2A",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <span style={{fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.6)"}}>PO Total</span>
+            <span style={{fontSize:18,fontWeight:700,color:"white",letterSpacing:"-.5px"}}>₹{fmtN(totalAmt)}</span>
           </div>
         </div>
+
+        {/* Rate notice if ₹0 */}
+        {totalAmt===0&&!fetching&&(
+          <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:7,padding:"10px 13px",fontSize:12,color:T.amb}}>
+            Rate enter nahi ki gayi thi PO bante waqt. GRN ke baad Finance mein invoice entry pe rate add karo.
+          </div>
+        )}
       </div>
-      <div style={{padding:"12px 16px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
-        {po.approval==="Draft"&&<button onClick={()=>onApprove(po.id)} style={{flex:1,padding:"8px",borderRadius:7,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcApprv size={13} color={T.grn}/> Approve</button>}
-        <button onClick={()=>onShare(po)} style={{flex:1,padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcShare size={13} color={T.blu}/> Share</button>
-        {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={()=>onGRN(po)} style={{flex:1,padding:"8px",borderRadius:7,background:T.ambL,color:T.amb,border:`1px solid ${T.ambM}`,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcGRN size={13} color={T.amb}/> GRN</button>}
+
+      {/* Action footer */}
+      <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
+        {d.approval==="Draft"&&<button onClick={()=>onApprove(d.id)} style={{flex:1,padding:"9px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcApprv size={13} color={T.grn}/> Approve PO</button>}
+        <button onClick={()=>onShare(d)} style={{flex:1,padding:"9px",borderRadius:7,background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcShare size={13} color={T.blu}/> Share</button>
+        {d.poStatus==="Open"&&d.approval==="Approved"&&<button onClick={()=>onGRN(d)} style={{flex:1,padding:"9px",borderRadius:7,background:T.ambL,color:T.amb,border:"1px solid "+T.ambM,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcGRN size={13} color={T.amb}/> Record GRN</button>}
       </div>
     </div>
   </>);
