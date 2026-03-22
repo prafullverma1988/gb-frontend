@@ -959,7 +959,12 @@ function ProcurementModule(){
     if(mrTab==="Ordered"  &&m.matStatus!=="Ordered") return false;
     if(mrTab==="Received" &&!(m.matStatus==="Received"||m.matStatus==="PartialReceived")) return false;
     if(mrTab==="Rejected" &&m.mrStatus!=="Rejected") return false;
-    if(mrProject!=="All"  &&m.project!==mrProject) return false;
+    if(mrProject!=="All"){
+      // Match by id (string) or by name
+      const matchById = dbProjects.length>0 && m.project_id && String(m.project_id)===mrProject;
+      const matchByName = m.project===mrProject;
+      if(!matchById&&!matchByName) return false;
+    }
     if(mrSearch           &&!m.item.toLowerCase().includes(mrSearch.toLowerCase())&&!m.project.toLowerCase().includes(mrSearch.toLowerCase())) return false;
     return true;
   });
@@ -1159,7 +1164,10 @@ function ProcurementModule(){
                 <select value={mrProject} onChange={e=>setMrProject(e.target.value)}
                   style={{height:32,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${mrProject!=="All"?T.blu:T.b1}`,background:mrProject!=="All"?T.bluL:T.surface,fontSize:11.5,color:mrProject!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:140,appearance:"none",WebkitAppearance:"none"}}>
                   <option value="All">All Projects</option>
-                  {PROJECTS.map(p=><option key={p} value={p}>{p}</option>)}
+                  {dbProjects.length>0
+                    ?dbProjects.map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)
+                    :[...new Set(mrs.map(m=>m.project).filter(Boolean))].map(n=><option key={n} value={n}>{n}</option>)
+                  }
                 </select>
                 <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
               </div>
