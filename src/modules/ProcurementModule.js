@@ -976,17 +976,14 @@ function ProcurementModule(){
 
   // ── Actions — API connected ──────────────────────────────────
   const approvePO=async(id)=>{
-    await api.patch("/procurement/pos/"+id+"/approve",{approved_by:"Admin"});
-    // Update PO approval status
-    setPOs(p=>p.map(x=>{
-      if(x.id!==id) return x;
-      // Also mark linked MRs as Ordered on frontend
-      const linked=x.linked_mr_ids||[];
-      if(linked.length>0){
-        setMRs(m=>m.map(mr=>linked.includes(mr.id)?{...mr,matStatus:"Ordered",mrStatus:"Approved"}:mr));
-      }
-      return{...x,approval:"Approved"};
-    }));
+    const res = await api.patch("/procurement/pos/"+id+"/approve",{approved_by:"Admin"});
+    if(res.success){
+      // Update PO to Approved on frontend
+      setPOs(p=>p.map(x=>x.id===id?{...x,approval:"Approved"}:x));
+      // Now fetch fresh MR list — backend already updated linked MRs to Ordered
+      const mRes = await api.get("/procurement/mrs");
+      if(mRes.success) setMRs(mRes.data.map(mapMR));
+    }
   };
   const lockRFQ=async(rfqId,vendorName)=>{
     await api.patch("/procurement/rfqs/"+rfqId+"/lock",{vendor_name:vendorName});
@@ -1424,9 +1421,9 @@ function ProcurementModule(){
               </div>
               {filteredPOs.map(po=>{
                 const ps=PO_STATUS[po.poStatus]||PO_STATUS.Open;const as=APPR_STATUS[po.approval];
-                return(<div key={po.id} style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 80px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",borderLeft:po.approval==="Draft"?`3px solid ${T.amb}`:"3px solid transparent",transition:"background 0.1s"}}
+                return(<div key={po.id} onClick={()=>setSelPO(po)} style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 80px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",borderLeft:po.approval==="Draft"?`3px solid ${T.amb}`:"3px solid transparent",transition:"background 0.1s"}}
                   onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                  <button onClick={()=>setSelPO(po)} style={{background:"none",border:"none",cursor:"pointer",fontSize:12,fontWeight:700,color:T.blu,textAlign:"left",padding:0}}>{po.id}</button>
+                  <span style={{fontSize:12,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{po.poNum||("PO-"+po.id)}</span>
                   <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.vendor}</span>
                   <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.project}</span>
                   <span style={{fontSize:11.5,color:T.t3}}>{po.deliverySite}</span>
@@ -1434,8 +1431,8 @@ function ProcurementModule(){
                   <Pill label={po.approval} c={as.c} bg={as.bg} brd={as.brd}/>
                   <span style={{fontSize:13,fontWeight:600,color:T.t1}}>₹{fmtN(po.amount)}</span>
                   <div style={{display:"flex",gap:4}}>
-                    {po.approval==="Draft"&&<button onClick={()=>approvePO(po.id)} title="Approve" style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
-                    {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={()=>setGrnTarget(po)} title="GRN" style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
+                    {po.approval==="Draft"&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title="Approve PO" style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
+                    {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title="GRN" style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
                   </div>
                 </div>);
               })}
@@ -1502,10 +1499,7 @@ function ProcurementModule(){
           notes: newPO.notes||"",
         });
         if(res.success){
-          // Update MRs to Ordered on frontend
-          if(linked_mr_ids.length>0){
-            setMRs(p=>p.map(m=>linked_mr_ids.includes(m.id)?{...m,matStatus:"Ordered",mrStatus:"Approved"}:m));
-          }
+          // PO created as Draft — MRs stay in Approved tab until admin approves PO
           setPOs(prev=>[mapPO(res.data),...prev]);
         } else {
           setPOs(prev=>[newPO,...prev]);
