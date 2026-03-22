@@ -3135,10 +3135,10 @@ function FinanceModule(){
             })()}
           </div>
         )}
-      </div>
-      {/* ══ UNBILLED GRN TAB ══ */}
-      {tab==="unbilled_grn"&&(
-        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+
+        {/* ══ UNBILLED GRN TAB ══ */}
+        {tab==="unbilled_grn"&&(
+          <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
 
           {/* Filter bar */}
           <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"8px 12px",marginBottom:12,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
