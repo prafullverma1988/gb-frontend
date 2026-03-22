@@ -3220,10 +3220,17 @@ function FinanceModule(){
                         <button onClick={()=>{
                           // Build prefill data for Material Purchase Bill
                           const prefill={
-                            vendor:     grn.vendor_name||"",
-                            deliveryDate: grn.received_date?grn.received_date.split("T")[0]:"",
-                            project:    grn.project_name||"",
-                            items:[]  // GRN items will be fetched inline — blank row for now
+                            vendor:      grn.vendor_name||"",
+                            deliveryDate:grn.received_date?grn.received_date.split("T")[0]:"",
+                            project:     grn.project_name||"",
+                            items:(grn.items||[]).map(it=>({
+                              name:  it.description||"",
+                              qty:   it.received_qty||0,
+                              unit:  it.unit||"Bag",
+                              rate:  "",
+                              head:  "Civil",
+                              desc:  "",
+                            })),
                           };
                           openTxn("Material Purchase Bill", grn.vendor_name||"", prefill);
                         }}
