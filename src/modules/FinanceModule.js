@@ -655,15 +655,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const blankRow=()=>({id:Date.now()+Math.random(),material:"",head:MAT_HEADS[0],desc:"",qty:"",unit:UNITS[0],rate:"",total:0});
   const [rows,setRows]=useState(()=>{
     if(prefillGRN?.items?.length){
-      return prefillGRN.items.map(it=>({
-        id:Date.now()+Math.random(),
-        material:it.name||"",
+      return prefillGRN.items.map((it,i)=>({
+        id:Date.now()+i+Math.random(),
+        material:it.name||it.description||"",
         head:it.head||MAT_HEADS[0],
         desc:it.desc||"",
-        qty:String(it.qty||""),
+        qty:String(it.qty||it.received_qty||""),
         unit:it.unit||UNITS[0],
         rate:String(it.rate||""),
-        total:(Number(it.qty||0))*(Number(it.rate||0)),
+        total:0,
       }));
     }
     return [blankRow()];
@@ -1131,6 +1131,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           ════════════════════════════════════════════════════ */}
           {isMaterial&&(
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+              {/* GRN prefill notice */}
+              {prefillGRN&&<div style={{padding:"7px 12px",background:T.grnL,borderBottom:"1px solid "+T.grnM,fontSize:11.5,color:T.grn,display:"flex",gap:6,alignItems:"center"}}>
+                <span style={{fontWeight:700}}>GRN se linked</span> — Material, Qty locked. Rate aur Notes enter karo.
+              </div>}
               <div style={{display:"grid",gridTemplateColumns:colTpl,padding:"7px 12px",background:T.sb,gap:7}}>
                 {["#","Material Name","Head","Description","Qty","Unit","Rate","Total",""].map((h,i)=>(
                   <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
@@ -1139,28 +1143,23 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               {rows.map((row,idx)=>(
                 <div key={row.id} style={{display:"grid",gridTemplateColumns:colTpl,gap:7,padding:"7px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:idx%2===0?T.surface:T.surfaceB}}>
                   <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}</span>
-                  <SearchSelect
-                    inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}}
-                    options={MATERIAL_LIBRARY}
-                    value={row.material}
-                    onChange={v=>updRow(row.id,"material",v)}
-                    placeholder="Search material..."
-                    compact={true}
-                    onAfterSelect={()=>{
-                      // after selecting material, focus the desc field of this row
-                      const rowEl=matRowRefs.current[row.id];
-                      if(rowEl){const next=rowEl.closest('[data-rowid]')?.querySelector('[data-field="desc"]');if(next)next.focus();}
-                    }}
-                  />
+                  {/* Material — locked if from GRN */}
+                  {prefillGRN
+                    ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.material||"—"}</div>
+                    :<SearchSelect inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}} options={MATERIAL_LIBRARY} value={row.material} onChange={v=>updRow(row.id,"material",v)} placeholder="Search material..." compact={true}/>
+                  }
                   <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
                   <input data-field="desc" value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Grade, spec, brand..."
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                  <input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0"
-                    style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                  {/* Qty — locked if from GRN */}
+                  {prefillGRN
+                    ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>{row.qty}</div>
+                    :<input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0" style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                  }
                   <SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>
                   <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
-                    style={inp({textAlign:"right"})}
-                    onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}
+                    style={inp({textAlign:"right",borderColor:T.amb,background:T.ambL})}
+                    onFocus={e=>e.target.style.borderColor=T.amb} onBlur={e=>e.target.style.borderColor=T.amb}
                     onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
                   <div style={{height:30,display:"flex",alignItems:"center",justifyContent:"flex-end",fontWeight:700,fontSize:13,
                     color:row.total>0?T.grn:T.t4,background:row.total>0?T.grnL:"transparent",
@@ -3139,7 +3138,6 @@ function FinanceModule(){
         {/* ══ UNBILLED GRN TAB ══ */}
         {tab==="unbilled_grn"&&(
           <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
-
           {/* Filter bar */}
           <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"8px 12px",marginBottom:12,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
             <span style={{fontSize:12,fontWeight:600,color:T.t2}}>Filters:</span>
