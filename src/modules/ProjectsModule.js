@@ -737,6 +737,185 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   </>);
 }
 
+
+// ═══════════════════════════════════════════════════════════════════
+// APPROVALS DRAWER
+// ═══════════════════════════════════════════════════════════════════
+function ApprovalsDrawer({onClose}){
+  const [data,setData]=useState({procurement:[],finance:[]});
+  const [loading,setLoading]=useState(true);
+  const [acting,setActing]=useState({}); // {id: "approving"|"rejecting"}
+  const [rejectId,setRejectId]=useState(null);
+  const [rejectNote,setRejectNote]=useState("");
+
+  const load=async()=>{
+    setLoading(true);
+    try{
+      const [mrRes,prRes]=await Promise.all([
+        api.get("/procurement/mrs?mr_status=Pending"),
+        api.get("/finance/payment-requests"),
+      ]);
+      setData({
+        procurement:(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested"),
+        finance:(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending"),
+      });
+    }catch(e){}
+    setLoading(false);
+  };
+
+  useEffect(()=>{load();},[]);
+
+  const approveMR=async(id)=>{
+    setActing(p=>({...p,[id]:"approving"}));
+    await api.patch("/procurement/mrs/"+id+"/approve",{action:"Approved",approved_qty:null});
+    setData(p=>({...p,procurement:p.procurement.filter(m=>m.id!==id)}));
+    setActing(p=>({...p,[id]:null}));
+  };
+  const rejectMR=async(id)=>{
+    setActing(p=>({...p,[id]:"rejecting"}));
+    await api.patch("/procurement/mrs/"+id+"/approve",{action:"Rejected",rejected_reason:rejectNote||"Rejected by admin"});
+    setData(p=>({...p,procurement:p.procurement.filter(m=>m.id!==id)}));
+    setActing(p=>({...p,[id]:null}));
+    setRejectId(null);setRejectNote("");
+  };
+  const approvePR=async(id)=>{
+    setActing(p=>({...p,["pr"+id]:"approving"}));
+    await api.put("/finance/payment-requests/"+id+"/approve",{action:"approve"});
+    setData(p=>({...p,finance:p.finance.filter(f=>f.id!==id)}));
+    setActing(p=>({...p,["pr"+id]:null}));
+  };
+  const rejectPR=async(id)=>{
+    setActing(p=>({...p,["pr"+id]:"rejecting"}));
+    await api.put("/finance/payment-requests/"+id+"/approve",{action:"reject",note:rejectNote});
+    setData(p=>({...p,finance:p.finance.filter(f=>f.id!==id)}));
+    setActing(p=>({...p,["pr"+id]:null}));
+    setRejectId(null);setRejectNote("");
+  };
+
+  const totalCount=data.procurement.length+data.finance.length;
+  const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(1)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${n}`;
+
+  const SectionHead=({label,count,color,bg,bdr})=>(
+    <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 16px",background:bg,borderBottom:"1px solid "+bdr,borderTop:"1px solid "+bdr,marginTop:8}}>
+      <span style={{fontSize:11,fontWeight:700,color,textTransform:"uppercase",letterSpacing:"0.6px"}}>{label}</span>
+      <span style={{background:color,color:"white",fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20}}>{count}</span>
+    </div>
+  );
+
+  const ApproveRejectBtns=({id,prefix="",onApprove,onReject})=>{
+    const key=prefix+id;
+    const act=acting[key];
+    if(rejectId===key) return(
+      <div style={{display:"flex",flexDirection:"column",gap:5,marginTop:8}}>
+        <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder="Reject karne ka reason..."
+          style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.redM,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+        <div style={{display:"flex",gap:5}}>
+          <button onClick={()=>{setRejectId(null);setRejectNote("");}} style={{flex:1,padding:"5px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>Cancel</button>
+          <button onClick={onReject} style={{flex:2,padding:"5px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{act==="rejecting"?"...":"Confirm Reject"}</button>
+        </div>
+      </div>
+    );
+    return(
+      <div style={{display:"flex",gap:6,marginTop:8}}>
+        <button onClick={()=>setRejectId(key)} disabled={!!act}
+          style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+          ✕ Reject
+        </button>
+        <button onClick={onApprove} disabled={!!act}
+          style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+          {act==="approving"?"Approving...":"✓ Approve"}
+        </button>
+      </div>
+    );
+  };
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:440,background:T.bg,zIndex:301,boxShadow:"-4px 0 28px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+
+      {/* Header */}
+      <div style={{background:"#0D1B2A",padding:"14px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>Pending Approvals</div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}>
+            <IcX size={15}/>
+          </button>
+        </div>
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <span style={{background:T.amb,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{totalCount} pending</span>
+          <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>All modules</span>
+          <button onClick={load} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>↻ Refresh</button>
+        </div>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto"}}>
+        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading approvals...</div>}
+
+        {!loading&&totalCount===0&&(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>Sab clear hai!</div>
+            <div style={{fontSize:12,color:T.t4,marginTop:4}}>Koi pending approval nahi</div>
+          </div>
+        )}
+
+        {/* ── PROCUREMENT SECTION ── */}
+        {!loading&&data.procurement.length>0&&(
+          <>
+            <SectionHead label="Procurement — Material Requests" count={data.procurement.length} color={T.amb} bg={T.ambL} bdr={T.ambM}/>
+            <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+              {data.procurement.map(mr=>(
+                <div key={mr.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.amb}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{mr.item_name}</div>
+                      <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.project_name||"—"} · {mr.quantity} {mr.unit}</div>
+                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>By {mr.requested_by||"Site Team"} · {mr.mr_number}</div>
+                    </div>
+                    {mr.approx_amount>0&&<span style={{fontSize:12,fontWeight:700,color:T.amb,flexShrink:0}}>{fmtAmt(mr.approx_amount)}</span>}
+                  </div>
+                  <ApproveRejectBtns
+                    id={mr.id}
+                    onApprove={()=>approveMR(mr.id)}
+                    onReject={()=>rejectMR(mr.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+
+        {/* ── FINANCE SECTION ── */}
+        {!loading&&data.finance.length>0&&(
+          <>
+            <SectionHead label="Finance — Payment Requests" count={data.finance.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
+            <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+              {data.finance.map(pr=>(
+                <div key={pr.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.blu}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{pr.party_name||pr.party||"—"}</div>
+                      <div style={{fontSize:11,color:T.t4,marginTop:2}}>{pr.project_name||pr.project||"—"} · {pr.type||"Payment"}</div>
+                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{pr.description||pr.note||"—"} · PR-{pr.id}</div>
+                    </div>
+                    <span style={{fontSize:13,fontWeight:700,color:T.blu,flexShrink:0}}>{fmtAmt(pr.amount||0)}</span>
+                  </div>
+                  <ApproveRejectBtns
+                    id={pr.id}
+                    prefix="pr"
+                    onApprove={()=>approvePR(pr.id)}
+                    onReject={()=>rejectPR(pr.id)}
+                  />
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  </>);
+}
+
 function ProjectsPage({onSelectProject}){
   const [allProjects,setAllProjects]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -751,6 +930,8 @@ function ProjectsPage({onSelectProject}){
   const [showNew,setShowNew]=useState(false);
   const [cardMenu,setCardMenu]=useState(null); // project id with open menu
   const [settingsOf,setSettingsOf]=useState(null); // project object for settings
+  const [showApprovals,setShowApprovals]=useState(false);
+  const [approvalCount,setApprovalCount]=useState(7);
 
   // Fetch projects from backend
   useEffect(()=>{
@@ -790,7 +971,7 @@ function ProjectsPage({onSelectProject}){
   const SM={"Ongoing":{c:T.grn,bg:T.grnL},"Completed":{c:T.blu,bg:T.bluL},"Hold":{c:T.amb,bg:T.ambL},"Not Started":{c:T.slt,bg:T.sltL}};
 
   const ACTION_TILES=[
-    {label:"Pending Approvals",val:7,   Icon:IcWarn,  color:T.amb,bg:T.ambL,bdr:T.ambM},
+    {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>setShowApprovals(true)},
     {label:"Material Requests", val:11,  Icon:IcProc,  color:T.blu,bg:T.bluL,bdr:T.bluM},
     {label:"My To-Do",          val:5,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
     {label:"Open Issues",       val:3,   Icon:IcWarn,  color:T.red,bg:T.redL,bdr:T.redM},
@@ -1061,6 +1242,7 @@ function ProjectsPage({onSelectProject}){
 
       {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
+      {showApprovals&&<ApprovalsDrawer onClose={()=>setShowApprovals(false)}/>}
       {settingsOf&&<ProjectSettingsModal
         project={settingsOf}
         onClose={()=>setSettingsOf(null)}
