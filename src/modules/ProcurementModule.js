@@ -807,7 +807,7 @@ function ProcurementModule(){
     return acc;
   },{});
 
-  const selectedItems=Object.entries(selected).filter(([,v])=>v).map(([id])=>mrs.find(m=>m.id===id)).filter(Boolean);
+  const selectedItems=Object.entries(selected).filter(([,v])=>v).map(([id])=>mrs.find(m=>String(m.id)===String(id))).filter(Boolean);
 
   // ── Actions — API connected ──────────────────────────────────
   const approvePO=async(id)=>{
@@ -874,7 +874,7 @@ function ProcurementModule(){
     setSelected({});
     setShowBulkOrder(false);
   };
-  const toggleSelect=(id)=>setSelected(p=>({...p,[id]:!p[id]}));
+  const toggleSelect=(id)=>setSelected(p=>({...p,[String(id)]:!p[String(id)]}));
   const toggleSelectAll=()=>{
     const allSelected=filteredMRs.every(m=>selected[m.id]);
     const next={};
@@ -1095,7 +1095,7 @@ function ProcurementModule(){
                             {m.inStock>0?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"2px 7px",borderRadius:10,border:`1px solid ${T.grnM}`}}>Stock: {m.inStock}</span>:<span style={{fontSize:10,color:T.t4}}>No stock</span>}
                           </div>
                           <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
-                            <button onClick={()=>{setSelected({[m.id]:true});setShowBulkOrder(true);}} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
+                            <button onClick={()=>{setSelected({[String(m.id)]:true});setShowBulkOrder(true);}} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
                               <IcTruck size={11} color={T.amb}/> Order
                             </button>
                           </div>
@@ -1314,7 +1314,33 @@ function ProcurementModule(){
       {rejectTgt&&<RejectMRModal mr={rejectTgt} onSave={saveRejectMR} onClose={()=>setRejectTgt(null)}/>}
       {markRecvTgt&&<MarkReceivedModal mr={markRecvTgt} onSave={saveMarkReceived} onClose={()=>setMarkRecvTgt(null)}/>}
       {showBulkOrder&&selectedItems.length>0&&<BulkOrderModal items={selectedItems} onSave={saveBulkOrder} onClose={()=>setShowBulkOrder(false)}/>}
-      {showCreatePO&&<CreatePOModal onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={(newPO)=>{setPOs(prev=>[newPO,...prev]);setShowCreatePO(false);setCreatePOPrefill(null);setMrTab("Ordered");}} prefillItems={createPOPrefill}/>}
+      {showCreatePO&&<CreatePOModal onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={async(newPO)=>{
+        // Save PO to backend
+        const linked_mr_ids = (createPOPrefill||[]).map(m=>m.id).filter(Boolean);
+        const res = await api.post("/procurement/pos",{
+          vendor_name: newPO.vendor,
+          project_id: (createPOPrefill||[])[0]?.project_id || 1,
+          project_name: newPO.project,
+          delivery_site: newPO.deliverySite,
+          expected_delivery: newPO.delivery,
+          linked_mr_ids,
+          items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate})),
+          notes: newPO.notes||"",
+        });
+        if(res.success){
+          // Update MRs to Ordered on frontend
+          if(linked_mr_ids.length>0){
+            setMRs(p=>p.map(m=>linked_mr_ids.includes(m.id)?{...m,matStatus:"Ordered",mrStatus:"Approved"}:m));
+          }
+          setPOs(prev=>[res.data,...prev]);
+        } else {
+          setPOs(prev=>[newPO,...prev]);
+        }
+        setShowCreatePO(false);
+        setCreatePOPrefill(null);
+        setSelected({});
+        setMrTab("Ordered");
+      }} prefillItems={createPOPrefill}/>}
     </div>
   );
 }
