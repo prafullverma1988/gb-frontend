@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
@@ -747,7 +747,10 @@ function ProcurementModule(){
     finally{setLoading(false);}
   };
   // Load on mount
-  useEffect(()=>{loadAll();},[]);// eslint-disable-line react-hooks/exhaustive-deps
+  const didLoad = useRef(false);
+  useEffect(()=>{
+    if(!didLoad.current){ didLoad.current=true; loadAll(); }
+  });
 
   // PO state
   const [poSearch,setPoSearch]=useState("");
