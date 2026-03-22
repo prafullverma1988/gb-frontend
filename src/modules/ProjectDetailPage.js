@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import api from "../config/api";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
@@ -2340,33 +2341,164 @@ function TabAttendance() {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 9 — MATERIAL (Site Stock)
 // ═══════════════════════════════════════════════════════════════════
-function TabMaterial() {
-  const MATERIAL_NAMES=["All",...[...new Set(D.materials.map(m=>m.name))]];
-  const [fStage,   setFStage]  = useState("All");
-  const [fMaterial,setFMaterial]=useState("All");
-  const [search,   setSearch]  = useState("");
-  const [viewMode, setViewMode]=useState("tile");
+function TabMaterial({ project }) {
+  const projectId   = project?.id || 1;
+  const projectName = project?.name || "Project";
 
-  const filtered=D.materials.filter(m=>{
-    if(fStage!=="All"&&m.stage!==fStage) return false;
-    if(fMaterial!=="All"&&m.name!==fMaterial) return false;
-    if(search&&!m.name.toLowerCase().includes(search.toLowerCase())) return false;
+  const [materials, setMaterials] = useState([]);
+  const [fStage,    setFStage]    = useState("All");
+  const [fMaterial, setFMaterial] = useState("All");
+  const [search,    setSearch]    = useState("");
+  const [viewMode,  setViewMode]  = useState("tile");
+  const [showModal, setShowModal] = useState(false);
+  const [saving,    setSaving]    = useState(false);
+  const [form,      setForm]      = useState({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"" });
+
+  const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
+
+  useEffect(() => {
+    api.get("/procurement/mrs?project_id=" + projectId)
+      .then(res => {
+        if (res.success) {
+          if (res.data.length > 0) {
+            setMaterials(res.data.map(m => ({
+              id:     m.id,
+              name:   m.item_name,
+              qty:    m.quantity + " " + m.unit,
+              stage:  m.stage || "Requested",
+              by:     m.requested_by || "—",
+              date:   m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+              vendor: m.linked_vendor || null,
+              amt:    parseFloat(m.approx_amount) || 0,
+            })));
+          } else {
+            setMaterials(D.materials);
+          }
+        } else {
+          setMaterials(D.materials);
+        }
+      })
+      .catch(() => setMaterials(D.materials));
+  }, [projectId]);
+
+  const handleSubmit = async () => {
+    if (!form.item_name || !form.quantity) return;
+    setSaving(true);
+    try {
+      const res = await api.post("/procurement/mrs", {
+        project_id:    projectId,
+        project_name:  projectName,
+        item_name:     form.item_name,
+        quantity:      parseFloat(form.quantity),
+        unit:          form.unit,
+        required_date: form.required_date || null,
+        approx_amount: form.approx_amount ? parseFloat(form.approx_amount) : null,
+        notes:         form.notes || null,
+        requested_by:  "Site Team",
+      });
+      if (res.success) {
+        const m = res.data;
+        setMaterials(prev => [{
+          id:     m.id,
+          name:   m.item_name,
+          qty:    m.quantity + " " + m.unit,
+          stage:  "Requested",
+          by:     "Site Team",
+          date:   new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+          vendor: null,
+          amt:    parseFloat(m.approx_amount) || 0,
+        }, ...prev]);
+        setForm({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"" });
+        setShowModal(false);
+      }
+    } catch(e) { alert("Error: " + e.message); }
+    finally { setSaving(false); }
+  };
+
+  const MATERIAL_NAMES = ["All", ...[...new Set(materials.map(m => m.name))]];
+  const filtered = materials.filter(m => {
+    if (fStage !== "All" && m.stage !== fStage) return false;
+    if (fMaterial !== "All" && m.name !== fMaterial) return false;
+    if (search && !m.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+  const stageData = STAGES.map(s => ({ stage:s, ...STAGE_S[s], count: materials.filter(m=>m.stage===s).length }));
+  const totalAmt = filtered.reduce((s,m) => s + (m.amt||0), 0);
+  const activeFilters = (fStage!=="All"?1:0) + (fMaterial!=="All"?1:0) + (search?1:0);
 
-  const stageData=STAGES.map(s=>({stage:s,...STAGE_S[s],count:D.materials.filter(m=>m.stage===s).length}));
-  const totalAmt=filtered.reduce((s,m)=>s+m.amt,0);
-  const activeFilters=(fStage!=="All"?1:0)+(fMaterial!=="All"?1:0)+(search?1:0);
-
-  return(
+  return (
     <div style={{padding:"14px 18px"}}>
+
+      {/* NEW REQUEST MODAL */}
+      {showModal && (<>
+        <div onClick={()=>setShowModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.32)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:10,boxShadow:"0 20px 60px rgba(0,0,0,0.18)",zIndex:401,width:440,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>New Material Request</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1}}>{projectName}</div>
+            </div>
+            <button onClick={()=>setShowModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>x</button>
+          </div>
+          <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
+            <div style={{background:T.ambL,border:"1px solid " + T.ambM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.amb}}>
+              Request Procurement mein jayegi — Admin approve karenge phir order hoga
+            </div>
+            <div>
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
+              <input value={form.item_name} onChange={e=>setForm(p=>({...p,item_name:e.target.value}))} placeholder="e.g. Cement OPC 50kg..."
+                style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Quantity *</label>
+                <input type="number" value={form.quantity} onChange={e=>setForm(p=>({...p,quantity:e.target.value}))} placeholder="200"
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Unit</label>
+                <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                  {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Required By</label>
+                <input type="date" value={form.required_date} onChange={e=>setForm(p=>({...p,required_date:e.target.value}))}
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Approx. Amount</label>
+                <input type="number" value={form.approx_amount} onChange={e=>setForm(p=>({...p,approx_amount:e.target.value}))} placeholder="76000"
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+            </div>
+            <div>
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Notes</label>
+              <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Special requirements..."
+                style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+            </div>
+          </div>
+          <div style={{padding:"11px 16px",borderTop:"1px solid " + T.b1,background:T.surfaceB,display:"flex",gap:8}}>
+            <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid " + T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={handleSubmit} disabled={saving||!form.item_name||!form.quantity}
+              style={{flex:2,padding:"8px",borderRadius:7,background:(saving||!form.item_name||!form.quantity)?T.b1:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(saving||!form.item_name||!form.quantity)?"not-allowed":"pointer"}}>
+              {saving?"Saving...":"Submit Request"}
+            </button>
+          </div>
+        </div>
+      </>)}
+
       {/* Stage pipeline tiles */}
-      <div style={{display:"grid",gridTemplateColumns:`repeat(${STAGES.length},1fr)`,gap:8,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(" + STAGES.length + ",1fr)",gap:8,marginBottom:12}}>
         {stageData.map((s,i)=>{
           const isA=fStage===s.stage;
           return(
             <div key={s.stage} onClick={()=>setFStage(isA?"All":s.stage)}
-              style={{padding:"9px 12px",background:isA?s.bg:T.surface,border:`1.5px solid ${isA?s.c:T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`,cursor:"pointer",transition:"all .15s",textAlign:"center"}}>
+              style={{padding:"9px 12px",background:isA?s.bg:T.surface,border:"1.5px solid " + (isA?s.c:T.b1),borderRadius:8,borderTop:"3px solid " + s.c,cursor:"pointer",transition:"all .15s",textAlign:"center"}}>
               {i>0&&<div style={{display:"flex",justifyContent:"center",marginBottom:3}}>
                 <svg width={12} height={8} viewBox="0 0 12 8" fill="none"><path d="M1 4h8M6 1l3 3-3 3" stroke={isA?s.c:T.b2} strokeWidth={1.5} strokeLinecap="round"/></svg>
               </div>}
@@ -2377,34 +2509,31 @@ function TabMaterial() {
         })}
       </div>
 
-      {/* Filter bar — search text + material dropdown + view toggle */}
-      <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"7px 10px",marginBottom:8,display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
-        {/* Text search */}
+      {/* Filter bar */}
+      <div style={{background:T.surface,border:"1px solid " + T.b1,borderRadius:8,padding:"7px 10px",marginBottom:8,display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{position:"relative",flex:1,minWidth:140}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search material..."
-            style={{width:"100%",height:29,padding:"0 8px 0 27px",borderRadius:6,border:`1.5px solid ${search?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:search?T.bluL:T.surface}}/>
+            style={{width:"100%",height:29,padding:"0 8px 0 27px",borderRadius:6,border:"1.5px solid " + (search?T.blu:T.b1),fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:search?T.bluL:T.surface}}/>
         </div>
-        {/* Material dropdown */}
         <div style={{position:"relative"}}>
           <select value={fMaterial} onChange={e=>setFMaterial(e.target.value)}
-            style={{height:29,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${fMaterial!=="All"?T.blu:T.b1}`,background:fMaterial!=="All"?T.bluL:T.surface,fontSize:11.5,color:fMaterial!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:fMaterial!=="All"?600:400,minWidth:160,appearance:"none",WebkitAppearance:"none"}}>
+            style={{height:29,padding:"0 22px 0 9px",borderRadius:6,border:"1.5px solid " + (fMaterial!=="All"?T.blu:T.b1),background:fMaterial!=="All"?T.bluL:T.surface,fontSize:11.5,color:fMaterial!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:fMaterial!=="All"?600:400,minWidth:160,appearance:"none",WebkitAppearance:"none"}}>
             {MATERIAL_NAMES.map(n=><option key={n} value={n}>{n==="All"?"All Materials":n}</option>)}
           </select>
           <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M6 9l6 6 6-6"/></svg>
         </div>
-        <span style={{fontSize:11,color:T.t4}}>{filtered.length} items · ₹{fmtN(totalAmt)}</span>
-        {/* View toggle */}
-        <div style={{display:"flex",background:T.bg,borderRadius:6,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          {[{id:"tile",icon:"⊞"},{id:"list",icon:"☰"}].map(v=>(
+        <span style={{fontSize:11,color:T.t4}}>{filtered.length} items</span>
+        <div style={{display:"flex",background:T.bg,borderRadius:6,border:"1px solid " + T.b1,overflow:"hidden"}}>
+          {[{id:"tile",icon:"tile"},{id:"list",icon:"list"}].map(v=>(
             <button key={v.id} onClick={()=>setViewMode(v.id)}
-              style={{padding:"4px 9px",border:"none",background:viewMode===v.id?T.blu:"none",color:viewMode===v.id?"white":T.t3,cursor:"pointer",fontSize:12,transition:"all .15s"}}>
-              {v.icon}
+              style={{padding:"4px 9px",border:"none",background:viewMode===v.id?T.blu:"none",color:viewMode===v.id?"white":T.t3,cursor:"pointer",fontSize:11,transition:"all .15s"}}>
+              {v.id==="tile"?"⊞":"☰"}
             </button>
           ))}
         </div>
-        {activeFilters>0&&<button onClick={()=>{setFStage("All");setFMaterial("All");setSearch("");}} style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>}
-        <AddBtn label="New Request"/>
+        {activeFilters>0&&<button onClick={()=>{setFStage("All");setFMaterial("All");setSearch("");}} style={{fontSize:11,color:T.red,background:T.redL,border:"1px solid " + T.redM,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear x</button>}
+        <AddBtn label="New Request" onClick={()=>setShowModal(true)}/>
       </div>
 
       {/* TILE VIEW */}
@@ -2413,7 +2542,7 @@ function TabMaterial() {
           {filtered.map(m=>{
             const ss=STAGE_S[m.stage]||STAGE_S["Requested"];
             return(
-              <div key={m.id} style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,.04)",borderLeft:`4px solid ${ss.c}`}}>
+              <div key={m.id} style={{background:T.surface,borderRadius:9,border:"1px solid " + T.b1,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,.04)",borderLeft:"4px solid " + ss.c}}>
                 <div style={{padding:"10px 12px 8px"}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
                     <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
@@ -2421,17 +2550,17 @@ function TabMaterial() {
                   </div>
                   <div style={{fontSize:13,fontWeight:600,color:T.t1,lineHeight:1.3,marginBottom:5}}>{m.name}</div>
                   <div style={{display:"flex",gap:8,fontSize:11,color:T.t4}}>
-                    <span>{m.vendor||"No vendor"}</span><span>·</span><span>{m.date}</span>
+                    <span>{m.vendor||"No vendor"}</span><span>.</span><span>{m.date}</span>
                   </div>
                 </div>
-                <div style={{padding:"7px 12px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                  <span style={{fontSize:11,color:T.t4}}>By {m.by.split(" ")[0]}</span>
-                  <span style={{fontSize:13,fontWeight:700,color:T.t1}}>₹{fmtN(m.amt)}</span>
+                <div style={{padding:"7px 12px",borderTop:"1px solid " + T.b1,background:T.surfaceB,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:11,color:T.t4}}>By {(m.by||"—").split(" ")[0]}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Rs.{fmtN(m.amt||0)}</span>
                 </div>
               </div>
             );
           })}
-          {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"48px",textAlign:"center",color:T.t4,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>No materials found</div>}
+          {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"48px",textAlign:"center",color:T.t4,background:T.surface,borderRadius:8,border:"1px solid " + T.b1}}>No materials found</div>}
         </div>
       )}
 
@@ -2442,15 +2571,15 @@ function TabMaterial() {
           {filtered.map(m=>{
             const ss=STAGE_S[m.stage]||STAGE_S["Requested"];
             return(
-              <div key={m.id} style={{display:"grid",gridTemplateColumns:"2fr 90px 110px 130px 110px 110px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${ss.c}44`,transition:"background .1s"}}
+              <div key={m.id} style={{display:"grid",gridTemplateColumns:"2fr 90px 110px 130px 110px 110px",padding:"9px 15px",borderBottom:"1px solid " + T.b1,alignItems:"center",borderLeft:"3px solid " + ss.c + "44",transition:"background .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                 <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.name}</span>
                 <span style={{fontSize:12,color:T.t2}}>{m.qty}</span>
                 <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
                 <span style={{fontSize:12,color:T.t2}}>{m.vendor||"—"}</span>
-                <span style={{fontSize:12,color:T.t2}}>{m.by.split(" ")[0]}</span>
-                <span style={{fontSize:13,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(m.amt)}</span>
+                <span style={{fontSize:12,color:T.t2}}>{(m.by||"—").split(" ")[0]}</span>
+                <span style={{fontSize:13,fontWeight:600,color:T.t1}}>Rs.{fmtN(m.amt||0)}</span>
               </div>
             );
           })}
@@ -2460,101 +2589,6 @@ function TabMaterial() {
     </div>
   );
 }
-
-// TAB 10 — SUBCON
-// ═══════════════════════════════════════════════════════════════════
-const SC_DATA=[
-  {id:1,no:"SC-001",contractor:"Ramesh Labour Cont.",work:"RCC & Masonry — All Floors",
-   type:"Labour Contractor",phone:"9876501234",totalValue:580000,paid:420000,status:"Active",start:"Jan 2025",end:"Aug 2025",
-   workOrder:{
-     sections:[
-       {id:"s1",title:"Foundation & PCC",subsections:[
-         {id:"s1a",title:"Excavation & PCC",items:[
-           {id:1,desc:"Excavation in ordinary soil",unit:"CuM",qty:120,rate:80,amount:9600,done:100},
-           {id:2,desc:"PCC M10 1:3:6",unit:"CuM",qty:45,rate:1200,amount:54000,done:100},
-         ]},
-         {id:"s1b",title:"RCC Foundation",items:[
-           {id:3,desc:"RCC M20 in raft foundation",unit:"CuM",qty:38,rate:3200,amount:121600,done:100},
-           {id:4,desc:"Shuttering & Deshuttering",unit:"SqM",qty:120,rate:180,amount:21600,done:100},
-         ]},
-       ]},
-       {id:"s2",title:"RCC Structure",subsections:[
-         {id:"s2a",title:"Columns & Beams",items:[
-           {id:5,desc:"RCC M25 columns",unit:"CuM",qty:28,rate:3800,amount:106400,done:85},
-           {id:6,desc:"RCC M25 beams",unit:"CuM",qty:22,rate:3600,amount:79200,done:70},
-         ]},
-         {id:"s2b",title:"Slabs",items:[
-           {id:7,desc:"RCC M20 slab 5 inch thick",unit:"CuM",qty:96,rate:3400,amount:326400,done:75},
-           {id:8,desc:"Shuttering for slab",unit:"SqM",qty:460,rate:160,amount:73600,done:75},
-         ]},
-       ]},
-       {id:"s3",title:"Brickwork & Plaster",subsections:[
-         {id:"s3a",title:"Brickwork",items:[
-           {id:9,desc:'Brick masonry 4.5" wall',unit:"CuM",qty:280,rate:1800,amount:504000,done:55},
-         ]},
-       ]},
-     ],
-   },
-   milestones:[
-     {id:1,title:"Foundation Complete",amount:150000,status:"Paid",date:"Mar 2025",pct:26},
-     {id:2,title:"GF Slab Complete",amount:120000,status:"Paid",date:"Apr 2025",pct:21},
-     {id:3,title:"1F Slab Complete",amount:100000,status:"Paid",date:"May 2025",pct:17},
-     {id:4,title:"2F Slab Complete",amount:50000,status:"Pending",date:"Jun 2025",pct:9},
-     {id:5,title:"Brickwork Complete",amount:80000,status:"Upcoming",date:"Jul 2025",pct:14},
-     {id:6,title:"Plaster Complete",amount:80000,status:"Upcoming",date:"Aug 2025",pct:14},
-   ],
-   bills:[
-     {id:1,date:"25 Jan",desc:"Foundation RCC & PCC",amount:175000,status:"Paid"},
-     {id:2,date:"20 Mar",desc:"GF Slab + Columns",amount:120000,status:"Paid"},
-     {id:3,date:"22 Apr",desc:"1F Brickwork + Slab",amount:125000,status:"Paid"},
-     {id:4,date:"10 Jun",desc:"2F Brickwork (partial)",amount:108000,status:"Unpaid"},
-   ],
-   materials:[
-     {id:1,date:"20 Jan",item:"Binding Wire",qty:"20 KG",issuedBy:"Vijay Sahu"},
-     {id:2,date:"05 Feb",item:"Nails & Fasteners",qty:"5 KG",issuedBy:"Niranjan"},
-     {id:3,date:"10 Mar",item:"Shuttering Oil",qty:"10 Ltrs",issuedBy:"Niranjan"},
-     {id:4,date:"15 May",item:"GI Wire",qty:"10 KG",issuedBy:"Vijay Sahu"},
-   ],
-  },
-  {id:2,no:"SC-002",contractor:"Rajesh Electrical",work:"Complete Electrical Work",
-   type:"Electrical Contractor",phone:"9876502345",totalValue:153000,paid:45000,status:"Active",start:"Mar 2025",end:"Aug 2025",
-   workOrder:{
-     sections:[
-       {id:"e1",title:"Concealed Conduit & Wiring",subsections:[
-         {id:"e1a",title:"Ground Floor",items:[
-           {id:1,desc:"Conduit laying 25mm PVC",unit:"Mtrs",qty:320,rate:35,amount:11200,done:100},
-           {id:2,desc:"Wiring 1.5 sq mm",unit:"Mtrs",qty:800,rate:18,amount:14400,done:100},
-           {id:3,desc:"Wiring 2.5 sq mm",unit:"Mtrs",qty:400,rate:25,amount:10000,done:100},
-         ]},
-         {id:"e1b",title:"1st & 2nd Floor",items:[
-           {id:4,desc:"Conduit laying 25mm PVC",unit:"Mtrs",qty:480,rate:35,amount:16800,done:40},
-           {id:5,desc:"Wiring 1.5 sq mm",unit:"Mtrs",qty:1200,rate:18,amount:21600,done:35},
-         ]},
-       ]},
-       {id:"e2",title:"DB & Fittings",subsections:[
-         {id:"e2a",title:"Distribution Boards",items:[
-           {id:6,desc:"Main DB 4-way",unit:"Nos",qty:1,rate:8500,amount:8500,done:0},
-           {id:7,desc:"Sub DB 8-way",unit:"Nos",qty:3,rate:6500,amount:19500,done:0},
-         ]},
-       ]},
-     ],
-   },
-   milestones:[
-     {id:1,title:"GF Concealed Wiring",amount:35000,status:"Paid",date:"Apr 2025",pct:23},
-     {id:2,title:"1F+2F Wiring",amount:50000,status:"Pending",date:"Jun 2025",pct:33},
-     {id:3,title:"DB & Fittings",amount:40000,status:"Upcoming",date:"Aug 2025",pct:26},
-     {id:4,title:"Testing & Commissioning",amount:28000,status:"Upcoming",date:"Aug 2025",pct:18},
-   ],
-   bills:[
-     {id:1,date:"15 Apr",desc:"GF Concealed Wiring Phase 1",amount:45000,status:"Paid"},
-     {id:2,date:"10 Jun",desc:"1F Wiring + Conduit",amount:60000,status:"Unpaid"},
-   ],
-   materials:[
-     {id:1,date:"20 Mar",item:"PVC Conduit 25mm",qty:"200 Mtrs",issuedBy:"Priyanka"},
-     {id:2,date:"25 Apr",item:"Junction Boxes",qty:"20 Nos",issuedBy:"Priyanka"},
-   ],
-  },
-];
 
 function TabSubcon() {
   const [sel,  setSel]  = useState(SC_DATA[0]);
@@ -3626,7 +3660,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     todo:       <TabTodo/>,
     task:       <TabTasks/>,
     attendance: <TabAttendance/>,
-    material:   <TabMaterial/>,
+    material:   <TabMaterial project={project}/>,
     subcon:     <TabSubcon/>,
     equipment:  <TabEquipment/>,
     files:      <TabFiles/>,
