@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import api from "../config/api";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
@@ -746,8 +746,8 @@ function ProcurementModule(){
     }catch(e){setApiError("Load failed: "+e.message);}
     finally{setLoading(false);}
   };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useState(()=>{loadAll();},[]);
+  // Load on mount
+  useEffect(()=>{loadAll();},[]);// eslint-disable-line react-hooks/exhaustive-deps
 
   // PO state
   const [poSearch,setPoSearch]=useState("");
