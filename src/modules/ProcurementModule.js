@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import api from "../config/api";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -694,9 +695,59 @@ function ShareModal({rfq,onClose}){
 // ── MAIN MODULE ───────────────────────────────────────────────────────
 function ProcurementModule(){
   const [tab,setTab]=useState("mr");
-  const [pos,setPOs]=useState(PO_DATA);
-  const [rfqs,setRFQs]=useState(RFQ_DATA);
-  const [mrs,setMRs]=useState(MR_DATA);
+  const [pos,setPOs]=useState([]);
+  const [rfqs,setRFQs]=useState([]);
+  const [mrs,setMRs]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [apiError,setApiError]=useState("");
+
+  // ── Map backend fields to frontend shape ──────────────────────
+  const mapMR=m=>({
+    id:m.id, mrNum:m.mr_number,
+    date:m.created_at?new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+    project:m.project_name||"—", site:m.project_name||"—",
+    item:m.item_name, qty:parseFloat(m.quantity)||0, approvedQty:parseFloat(m.quantity)||0,
+    unit:m.unit, requestedBy:m.requested_by||"—",
+    mrStatus:m.mr_status, matStatus:m.mat_status, stage:m.stage||"Requested",
+    vendor:m.linked_vendor||null, expectedDelivery:m.expected_delivery||null,
+    challan:m.challan_no||null, rejectedReason:m.rejected_reason||null,
+    receivedQty:null, inStock:0, approxAmount:m.approx_amount||0,
+  });
+  const mapPO=p=>({
+    id:p.id, poNum:p.po_number,
+    date:p.created_at?new Date(p.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+    vendor:p.vendor_name||"—", project:p.project_name||"—",
+    deliverySite:p.delivery_site||"—", poStatus:p.po_status, approval:p.approval_status,
+    amount:parseFloat(p.total_amount)||0, delivery:p.expected_delivery||"—",
+    items:(p.items||[]).map(it=>({id:it.id,desc:it.description,hsn:it.hsn_code||"—",qty:parseFloat(it.quantity)||0,unit:it.unit,rate:parseFloat(it.rate)||0,amount:(parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0),receivedQty:parseFloat(it.received_qty)||0})),
+  });
+  const mapRFQ=r=>({
+    id:r.id, rfqNum:r.rfq_number,
+    date:r.created_at?new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+    project:r.project_name||"—", status:r.status,
+    bidEnd:r.bid_end_date?new Date(r.bid_end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+    locked:r.locked_vendor||null,
+    items:(r.items||[]).map(it=>({desc:it.description,hsn:it.hsn_code||"",qty:parseFloat(it.quantity)||0,unit:it.unit,deliveryDate:"—"})),
+    vendors:(r.vendors||[]).map(v=>({name:v.vendor_name,status:v.status,rates:(v.rates||[]).map(rt=>({rate:rt.rate,remarks:rt.remarks||""}))})),
+  });
+
+  // ── Load all data from backend ─────────────────────────────────
+  const loadAll=async()=>{
+    setLoading(true); setApiError("");
+    try{
+      const [mRes,pRes,rRes]=await Promise.all([
+        api.get("/procurement/mrs"),
+        api.get("/procurement/pos"),
+        api.get("/procurement/rfqs"),
+      ]);
+      if(mRes.success)setMRs(mRes.data.map(mapMR));
+      if(pRes.success)setPOs(pRes.data.map(mapPO));
+      if(rRes.success)setRFQs(rRes.data.map(mapRFQ));
+    }catch(e){setApiError("Load failed: "+e.message);}
+    finally{setLoading(false);}
+  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useState(()=>{loadAll();},[]);
 
   // PO state
   const [poSearch,setPoSearch]=useState("");
@@ -755,39 +806,62 @@ function ProcurementModule(){
 
   const selectedItems=Object.entries(selected).filter(([,v])=>v).map(([id])=>mrs.find(m=>m.id===id)).filter(Boolean);
 
-  // ── Actions ──
-  const approvePO=(id)=>setPOs(p=>p.map(x=>x.id===id?{...x,approval:"Approved"}:x));
-  const lockRFQ=(rfqId,vendorName)=>setRFQs(p=>p.map(r=>r.id===rfqId?{...r,locked:vendorName}:r));
-  const publishRFQ=(rfqId)=>setRFQs(p=>p.map(r=>r.id===rfqId?{...r,status:"Published",bidStart:"Today",bidEnd:"+5 days"}:r));
-  const savePunch=(rfqId,vi,rates)=>{
+  // ── Actions — API connected ──────────────────────────────────
+  const approvePO=async(id)=>{
+    await api.patch("/procurement/pos/"+id+"/approve",{approved_by:"Admin"});
+    setPOs(p=>p.map(x=>x.id===id?{...x,approval:"Approved"}:x));
+  };
+  const lockRFQ=async(rfqId,vendorName)=>{
+    await api.patch("/procurement/rfqs/"+rfqId+"/lock",{vendor_name:vendorName});
+    setRFQs(p=>p.map(r=>r.id===rfqId?{...r,locked:vendorName}:r));
+  };
+  const publishRFQ=async(rfqId)=>{
+    await api.patch("/procurement/rfqs/"+rfqId+"/publish",{});
+    setRFQs(p=>p.map(r=>r.id===rfqId?{...r,status:"Published"}:r));
+  };
+  const savePunch=async(rfqId,vi,rates)=>{
+    const rfq=rfqs.find(r=>r.id===rfqId);
+    const vendor=rfq?.vendors[vi];
+    if(vendor){
+      const items=rfq.items.map((it,i)=>({rfq_item_id:i+1,rate:Number(rates[i]?.rate)||null,remarks:rates[i]?.remark||""}));
+      await api.post("/procurement/rfqs/"+rfqId+"/punch-quote",{vendor_name:vendor.name,rates:items});
+    }
     setRFQs(prev=>prev.map(r=>{if(r.id!==rfqId)return r;const nv=[...r.vendors];nv[vi]={...nv[vi],status:"Submitted",rates:rates.map(rt=>({rate:Number(rt.rate)||null,remarks:rt.remark}))};return{...r,vendors:nv};}));
     setPunchTarget(null);setPunchVendorIdx(null);
   };
-  const saveApproveMR=(id,qty,note)=>{
+  const saveApproveMR=async(id,qty,note)=>{
+    await api.patch("/procurement/mrs/"+id+"/approve",{action:"Approved",approved_qty:qty});
     setMRs(p=>p.map(m=>m.id===id?{...m,mrStatus:"Approved",approvedQty:qty}:m));
     setApproveTgt(null);
     setMrTab("Approved");
   };
-  const saveRejectMR=(id,reason)=>{
+  const saveRejectMR=async(id,reason)=>{
+    await api.patch("/procurement/mrs/"+id+"/approve",{action:"Rejected",rejected_reason:reason});
     setMRs(p=>p.map(m=>m.id===id?{...m,mrStatus:"Rejected",rejectedReason:reason}:m));
     setRejectTgt(null);
   };
-  const saveMarkReceived=(id,rQty,challan)=>{
-    setMRs(p=>p.map(m=>{
-      if(m.id!==id)return m;
-      const isPartial=rQty<(m.approvedQty||m.qty);
-      return{...m,matStatus:isPartial?"PartialReceived":"Received",receivedQty:rQty,challan};
-    }));
+  const saveMarkReceived=async(id,rQty,challan)=>{
+    const res=await api.patch("/procurement/mrs/"+id+"/mark-received",{challan_no:challan,received_qty:rQty});
+    const newStatus=res.is_partial?"PartialReceived":"Received";
+    setMRs(p=>p.map(m=>m.id===id?{...m,matStatus:newStatus,receivedQty:rQty,challan}:m));
     setMarkRecvTgt(null);
     setMrTab("Received");
   };
-  const saveGRN=(poId,challan,rows)=>{
-    const isPartial=rows.some((r,i)=>parseFloat(r.qty)<pos.find(p=>p.id===poId)?.items[i]?.qty);
+  const saveGRN=async(poId,challan,rows)=>{
+    const po=pos.find(p=>p.id===poId);
+    await api.post("/procurement/grns",{
+      po_id:poId, vendor_name:po?.vendor, project_id:1,
+      project_name:po?.project, challan_no:challan,
+      received_date:new Date().toISOString().split("T")[0],
+      items:rows.map((r,i)=>({po_item_id:po?.items[i]?.id,description:po?.items[i]?.desc||"",ordered_qty:po?.items[i]?.qty||0,received_qty:parseFloat(r.qty),unit:po?.items[i]?.unit||""}))
+    });
+    const isPartial=rows.some((r,i)=>parseFloat(r.qty)<(po?.items[i]?.qty||0));
     if(!isPartial)setPOs(p=>p.map(x=>x.id===poId?{...x,poStatus:"Closed"}:x));
     setGrnTarget(null);
   };
-  const saveBulkOrder=(medium,vendor,delivery,items)=>{
+  const saveBulkOrder=async(medium,vendor,delivery,items)=>{
     if(medium==="manual"){
+      await Promise.all(items.map(m=>api.patch("/procurement/mrs/"+m.id+"/mark-ordered",{vendor,expected_delivery:delivery})));
       setMRs(p=>p.map(m=>items.find(i=>i.id===m.id)?{...m,matStatus:"Ordered",vendor,expectedDelivery:delivery}:m));
       setMrTab("Ordered");
     } else if(medium==="po"){
@@ -843,6 +917,8 @@ function ProcurementModule(){
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif",overflow:"hidden"}}>
+      {loading&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"60px",color:T.t4,fontSize:13}}>Loading...</div>}
+      {apiError&&<div style={{margin:"12px 18px",padding:"10px 14px",background:T.redL,border:"1px solid "+T.redM,borderRadius:7,fontSize:12,color:T.red}}>{apiError}</div>}
 
       {/* Stat tiles */}
       <div style={{padding:"14px 18px 10px",flexShrink:0}}>
