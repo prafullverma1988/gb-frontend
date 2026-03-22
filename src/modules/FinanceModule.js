@@ -520,7 +520,7 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
 }
 
 // ─── CREATE TRANSACTION MODAL ─────────────────────────────────
-function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved}){
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN}){
   const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
   const UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"];
   const INV_UNITS=["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"];
@@ -565,9 +565,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
   // ── core state ──────────────────────────────────────────────
   const [billDate,setBillDate]=useState("2026-03-16");
-  const [delivDate,setDelivDate]=useState("2026-03-16");
-  const [party,setParty]=useState(preParty||"");
-  const [project,setProject]=useState(PROJECTS_LIST[0]);
+  const [delivDate,setDelivDate]=useState(prefillGRN?.deliveryDate||"2026-03-16");
+  // prefillGRN = {vendor, deliveryDate, project, items:[{name,qty,unit,head}]}
+  const [party,setParty]=useState(prefillGRN?.vendor||preParty||"");
+  const [project,setProject]=useState(prefillGRN?.project||PROJECTS_LIST[0]);
   const [account,setAccount]=useState(ACCOUNTS_LIST[0]);
   const [toAccount,setToAccount]=useState(ACCOUNTS_LIST[1]);
   const [mop,setMop]=useState(MOPS_LIST[0]);
@@ -652,7 +653,21 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
   // ── material / subcon rows — with auto-focus after addRow ────
   const blankRow=()=>({id:Date.now()+Math.random(),material:"",head:MAT_HEADS[0],desc:"",qty:"",unit:UNITS[0],rate:"",total:0});
-  const [rows,setRows]=useState([blankRow()]);
+  const [rows,setRows]=useState(()=>{
+    if(prefillGRN?.items?.length){
+      return prefillGRN.items.map(it=>({
+        id:Date.now()+Math.random(),
+        material:it.name||"",
+        head:it.head||MAT_HEADS[0],
+        desc:it.desc||"",
+        qty:String(it.qty||""),
+        unit:it.unit||UNITS[0],
+        rate:String(it.rate||""),
+        total:(Number(it.qty||0))*(Number(it.rate||0)),
+      }));
+    }
+    return [blankRow()];
+  });
   const matRowRefs=useRef({});
   const [focusMatId,setFocusMatId]=useState(null);
   const addRow=()=>{const r=blankRow();setRows(p=>[...p,r]);setFocusMatId(r.id);};
@@ -987,10 +1002,6 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div>
                   {lbl("Project")}
                   <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>
-                </div>
-                <div>
-                  {lbl("Account *",T.red)}
-                  <SearchSelect options={ACCOUNTS_LIST} value={account} onChange={setAccount} placeholder="Select account..." accent={T.red}/>
                 </div>
               </>
             )}
@@ -1699,7 +1710,27 @@ function FinanceModule(){
   // ── CREATE TRANSACTION MODAL state ──────────────────────────
   const [createTxnType,setCreateTxnType]=useState(null);
   const [createTxnParty,setCreateTxnParty]=useState("");
-  const openTxn=(type,party="")=>{setCreateTxnType(type);setCreateTxnParty(party);};
+  const [grnList,setGrnList]=useState([]);
+  const [grnLoading,setGrnLoading]=useState(false);
+  const [grnFilter,setGrnFilter]=useState({project:"All",material:"",head:"All"});
+  const [prefillGRNData,setPrefillGRNData]=useState(null);
+
+  // Load GRN data when tab opens
+  useEffect(()=>{
+    if(tab==="unbilled_grn"&&grnList.length===0){
+      setGrnLoading(true);
+      api.get("/procurement/grns").then(res=>{
+        if(res.success) setGrnList(res.data||[]);
+      }).catch(()=>{}).finally(()=>setGrnLoading(false));
+    }
+  },[tab]);
+
+  const openTxn=(type,party="",grnPrefill=null)=>{
+    if(grnPrefill) setPrefillGRNData(grnPrefill);
+    else setPrefillGRNData(null);
+    setCreateTxnType(type);
+    setCreateTxnParty(party);
+  };
   const closeTxn=async()=>{
     setCreateTxnType(null);setCreateTxnParty("");
     // Refresh all data after any transaction is saved
@@ -2146,7 +2177,7 @@ function FinanceModule(){
     }catch(e){console.error("Reject PR error:",e);}
   };
 
-  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"}];
+  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"unbilled_grn",l:"Unbilled GRN"}];
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -3105,6 +3136,126 @@ function FinanceModule(){
           </div>
         )}
       </div>
+      {/* ══ UNBILLED GRN TAB ══ */}
+      {tab==="unbilled_grn"&&(
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+
+          {/* Filter bar */}
+          <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"8px 12px",marginBottom:12,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontSize:12,fontWeight:600,color:T.t2}}>Filters:</span>
+            <select value={grnFilter.project} onChange={e=>setGrnFilter(p=>({...p,project:e.target.value}))}
+              style={{height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${grnFilter.project!=="All"?T.blu:T.b1}`,background:grnFilter.project!=="All"?T.bluL:T.surface,fontSize:11.5,color:grnFilter.project!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+              <option value="All">All Projects</option>
+              {[...new Set(grnList.map(g=>g.project_name).filter(Boolean))].map(p=><option key={p}>{p}</option>)}
+            </select>
+            <select value={grnFilter.head} onChange={e=>setGrnFilter(p=>({...p,head:e.target.value}))}
+              style={{height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${grnFilter.head!=="All"?T.blu:T.b1}`,background:grnFilter.head!=="All"?T.bluL:T.surface,fontSize:11.5,color:grnFilter.head!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+              <option value="All">All Categories</option>
+              {["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"].map(h=><option key={h}>{h}</option>)}
+            </select>
+            <div style={{position:"relative",flex:1,minWidth:160}}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+              <input value={grnFilter.material} onChange={e=>setGrnFilter(p=>({...p,material:e.target.value}))} placeholder="Search material..."
+                style={{width:"100%",height:30,padding:"0 8px 0 27px",borderRadius:6,border:`1.5px solid ${grnFilter.material?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:grnFilter.material?T.bluL:T.surface}}/>
+            </div>
+            {(grnFilter.project!=="All"||grnFilter.head!=="All"||grnFilter.material)&&(
+              <button onClick={()=>setGrnFilter({project:"All",material:"",head:"All"})}
+                style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>
+            )}
+            <button onClick={()=>{setGrnLoading(true);api.get("/procurement/grns").then(r=>{if(r.success)setGrnList(r.data||[]);}).finally(()=>setGrnLoading(false));}}
+              style={{height:30,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+              ↻ Refresh
+            </button>
+          </div>
+
+          {/* GRN List */}
+          {grnLoading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading GRN data...</div>}
+
+          {!grnLoading&&grnList.length===0&&(
+            <div style={{textAlign:"center",padding:"60px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+              <div style={{fontSize:14,fontWeight:600,color:T.t3,marginBottom:4}}>No GRN entries found</div>
+              <div style={{fontSize:12,color:T.t4}}>Procurement mein GRN complete hone ke baad yahan aayega</div>
+            </div>
+          )}
+
+          {!grnLoading&&grnList.length>0&&(()=>{
+            const filtered=grnList.filter(g=>{
+              if(grnFilter.project!=="All"&&g.project_name!==grnFilter.project) return false;
+              if(grnFilter.material&&!g.vendor_name?.toLowerCase().includes(grnFilter.material.toLowerCase())) return false;
+              return true;
+            });
+
+            if(filtered.length===0) return <div style={{textAlign:"center",padding:"40px",color:T.t4}}>No GRN matches filters</div>;
+
+            return(
+              <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                {/* Header */}
+                <div style={{display:"grid",gridTemplateColumns:"110px 1fr 140px 100px 90px 110px",padding:"6px 14px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+                  {["GRN #","Vendor","Project","Delivery","Type","Action"].map((h,i)=>(
+                    <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
+                  ))}
+                </div>
+
+                {filtered.map(grn=>{
+                  const delivDate=grn.received_date?new Date(grn.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—";
+                  return(
+                    <div key={grn.id} style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"110px 1fr 140px 100px 90px 110px",padding:"11px 14px",alignItems:"center",cursor:"pointer",transition:"background 0.1s"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                        onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
+                        {/* GRN # */}
+                        <span style={{fontSize:11.5,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{grn.grn_number}</span>
+                        {/* Vendor */}
+                        <div>
+                          <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{grn.vendor_name||"—"}</div>
+                          <div style={{fontSize:10.5,color:T.t4}}>Challan: {grn.challan_no||"—"}</div>
+                        </div>
+                        {/* Project */}
+                        <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{grn.project_name||"—"}</span>
+                        {/* Delivery date */}
+                        <span style={{fontSize:11.5,color:T.t3}}>{delivDate}</span>
+                        {/* GRN type */}
+                        <span style={{display:"inline-block",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600,background:grn.grn_type==="Full"?T.grnL:T.ambL,color:grn.grn_type==="Full"?T.grn:T.amb,border:`1px solid ${grn.grn_type==="Full"?T.grnM:T.ambM}`}}>{grn.grn_type||"Full"}</span>
+                        {/* Action */}
+                        <button onClick={()=>{
+                          // Build prefill data for Material Purchase Bill
+                          const prefill={
+                            vendor:     grn.vendor_name||"",
+                            deliveryDate: grn.received_date?grn.received_date.split("T")[0]:"",
+                            project:    grn.project_name||"",
+                            items:[]  // GRN items will be fetched inline — blank row for now
+                          };
+                          openTxn("Material Purchase Bill", grn.vendor_name||"", prefill);
+                        }}
+                          style={{padding:"5px 11px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+                          + Bill
+                        </button>
+                      </div>
+
+                      {/* GRN items preview */}
+                      {grn.items&&grn.items.length>0&&(
+                        <div style={{borderTop:`1px solid ${T.b1}`,background:T.surfaceB,padding:"8px 14px"}}>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 80px 60px",gap:4,marginBottom:4}}>
+                            {["Item","Qty Received","Unit"].map((h,i)=><span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                          </div>
+                          {grn.items.map((it,ii)=>(
+                            <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 80px 60px",gap:4,padding:"4px 0",borderTop:`1px solid ${T.b1}`}}>
+                              <span style={{fontSize:12,color:T.t1}}>{it.description||"—"}</span>
+                              <span style={{fontSize:11.5,color:T.t2,fontWeight:600}}>{it.received_qty}</span>
+                              <span style={{fontSize:11.5,color:T.t3}}>{it.unit||"—"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+        </div>
+      )}
+
       {/* Unbilled Drawer */}
       {showUB&&(<>
         <div onClick={()=>{setShowUB(false);setSelUBParty(null);}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
@@ -3177,6 +3328,7 @@ function FinanceModule(){
           dbAccounts={activeAccounts}
           dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
           onSaved={refreshAll}
+          prefillGRN={prefillGRNData}
         />
       )}
       {showNewPR&&(
