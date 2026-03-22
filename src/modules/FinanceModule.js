@@ -736,6 +736,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         project_name:project||null,
         note:note||null,
         status:"paid",
+        // DR = money going OUT (expense), CR = money coming IN (receipt)
+        dr: ["material_purchase","subcon_expense","site_expense","party_payment","bank_transfer","payment"].includes(backType),
         // Bank Transfer: destination account (always include, null for non-transfer)
         to_account_id:(()=>{
           if(type!=="Bank Transfer"||!toAccount) return null;
