@@ -328,8 +328,8 @@ function TabOverview({proj}) {
   const ongoingTasks = D.tasks.filter(t=>t.status==="In Progress");
   const todayAtt = D.attendance[0];
   const presentToday = todayAtt.workers.filter(w=>w.present).length;
-  const matByStage = STAGES.reduce((a,s)=>({...a,[s]:D.materials.filter(m=>m.stage===s).length}),{});
-  const pendingMat = D.materials.filter(m=>m.stage==="Requested"||m.stage==="Approved");
+  const matByStage = STAGES.reduce((a,s)=>({...a,[s]:0}),{});
+  const pendingMat = [];
 
   return (
     <div style={{padding:"16px 18px", display:"flex", flexDirection:"column", gap:14}}>
@@ -2357,28 +2357,25 @@ function TabMaterial({ project }) {
   const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
 
   useEffect(() => {
+    if (!projectId) return;
     api.get("/procurement/mrs?project_id=" + projectId)
       .then(res => {
-        if (res.success) {
-          if (res.data.length > 0) {
-            setMaterials(res.data.map(m => ({
-              id:     m.id,
-              name:   m.item_name,
-              qty:    m.quantity + " " + m.unit,
-              stage:  m.stage || "Requested",
-              by:     m.requested_by || "—",
-              date:   m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
-              vendor: m.linked_vendor || null,
-              amt:    parseFloat(m.approx_amount) || 0,
-            })));
-          } else {
-            setMaterials(D.materials);
-          }
+        if (res.success && Array.isArray(res.data)) {
+          setMaterials(res.data.map(m => ({
+            id:     m.id,
+            name:   m.item_name,
+            qty:    (parseFloat(m.quantity)||0) + " " + (m.unit||""),
+            stage:  m.stage || "Requested",
+            by:     m.requested_by || "Site Team",
+            date:   m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+            vendor: m.linked_vendor || null,
+            amt:    parseFloat(m.approx_amount) || 0,
+          })));
         } else {
-          setMaterials(D.materials);
+          setMaterials([]); // empty — no dummy fallback
         }
       })
-      .catch(() => setMaterials(D.materials));
+      .catch(() => setMaterials([]));
   }, [projectId]);
 
   const handleSubmit = async () => {
