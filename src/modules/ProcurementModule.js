@@ -226,7 +226,7 @@ function RejectMRModal({mr,onSave,onClose}){
 }
 
 // ── BULK ORDER MODAL (Checkbox selection → order medium) ──────────────
-function BulkOrderModal({items,onSave,onClose}){
+function BulkOrderModal({items,onSave,onClose,dbVendors=[]}){
   const [medium,setMedium]=useState(""); // 'po' | 'rfq' | 'manual'
   const [vendor,setVendor]=useState("");
   const [delivery,setDelivery]=useState("");
@@ -285,7 +285,7 @@ function BulkOrderModal({items,onSave,onClose}){
             <Fld label="Vendor" required>
               <Sel value={vendor} onChange={e=>setVendor(e.target.value)}>
                 <option value="">Select vendor...</option>
-                {VENDORS.map(v=><option key={v}>{v}</option>)}
+                {(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS).map(v=><option key={v}>{v}</option>)}
               </Sel>
             </Fld>
             <Fld label="Expected Delivery" required>
@@ -736,7 +736,7 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects}){
       <MHead title="Create Purchase Order" sub="Direct PO — no RFQ required" onClose={onClose}/>
       <MBody>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-          <Fld label="Vendor" required><Sel value={form.vendor} onChange={e=>upd("vendor",e.target.value)}><option value="">Select vendor...</option>{VENDORS.map(v=><option key={v}>{v}</option>)}</Sel></Fld>
+          <Fld label="Vendor" required><Sel value={form.vendor} onChange={e=>upd("vendor",e.target.value)}><option value="">Select vendor...</option>{(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS).map(v=><option key={v}>{v}</option>)}</Sel></Fld>
           <Fld label="Project" required>
             {prefillItems&&autoProjectName
               ?<div style={{padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.grnM,background:T.grnL,fontSize:12.5,color:T.grn,fontWeight:600}}>{autoProjectName} <span style={{fontSize:10,fontWeight:400,color:T.grn,opacity:.7}}>(from MR)</span></div>
@@ -885,6 +885,19 @@ function ProcurementModule(){
     items:(r.items||[]).map(it=>({desc:it.description,hsn:it.hsn_code||"",qty:parseFloat(it.quantity)||0,unit:it.unit,deliveryDate:"—"})),
     vendors:(r.vendors||[]).map(v=>({name:v.vendor_name,status:v.status,rates:(v.rates||[]).map(rt=>({rate:rt.rate,remarks:rt.remarks||""}))})),
   });
+
+  // Vendors from backend (for dropdowns)
+  const [dbVendors, setDbVendors] = useState([]);
+  useEffect(()=>{
+    api.get("/finance/parties").then(res=>{
+      if(res.success&&res.data){
+        const vendors=res.data.filter(p=>
+          ["Material Supplier","material_supplier","Other Vendor","vendor"].includes(p.type)
+        );
+        setDbVendors(vendors.length>0?vendors:res.data);
+      }
+    }).catch(()=>{});
+  },[]);
 
   // ── Load all data from backend ─────────────────────────────────
   const loadAll=async()=>{
@@ -1505,8 +1518,8 @@ function ProcurementModule(){
       {approveTgt&&<ApproveMRModal mr={approveTgt} onSave={saveApproveMR} onClose={()=>setApproveTgt(null)}/>}
       {rejectTgt&&<RejectMRModal mr={rejectTgt} onSave={saveRejectMR} onClose={()=>setRejectTgt(null)}/>}
       {markRecvTgt&&<MarkReceivedModal mr={markRecvTgt} onSave={saveMarkReceived} onClose={()=>setMarkRecvTgt(null)}/>}
-      {showBulkOrder&&selectedItems.length>0&&<BulkOrderModal items={selectedItems} onSave={saveBulkOrder} onClose={()=>setShowBulkOrder(false)}/>}
-      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={async(newPO)=>{
+      {showBulkOrder&&selectedItems.length>0&&<BulkOrderModal items={selectedItems} onSave={saveBulkOrder} onClose={()=>setShowBulkOrder(false)} dbVendors={dbVendors}/>}
+      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbVendors={dbVendors} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={async(newPO)=>{
         // Save PO to backend
         const linked_mr_ids = (createPOPrefill||[]).map(m=>m.id).filter(Boolean);
         const res = await api.post("/procurement/pos",{
