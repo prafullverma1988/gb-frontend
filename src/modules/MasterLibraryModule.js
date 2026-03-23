@@ -1031,7 +1031,7 @@ function SubcontractorSection() {
     { key: "name", label: "Firm Name", minW: 150, render: r => (<div><div style={{ fontWeight: 600 }}>{r.name}</div><div style={{ fontSize: 11, color: T.textLight }}>{r.owner}</div></div>) },
     { key: "trade", label: "Trade", minW: 110, render: r => <Badge text={r.trade} color={T.purple} bg={T.purpleSoft} /> },
     { key: "phone", label: "Phone", minW: 120, style: { fontFamily: "monospace", fontSize: 12 } },
-    { key: "city", label: "City", minW: 70 },
+    { key: "description", label: "City/Area", minW: 70, render: r => <span>{r.description||r.city||"—"}</span> },
     { key: "labour_strength", label: "Labour", minW: 60, align: "center", render: r => <span style={{ fontWeight: 600 }}>{r.labour_strength}</span> },
     { key: "rate", label: "Rate", minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>Rs.{r.rate}/{r.rateType}</span> },
     { key: "activeProjects", label: "Projects", minW: 60, align: "center", render: r => <Badge text={r.activeProjects} color={r.activeProjects > 0 ? T.green : T.textLight} bg={r.activeProjects > 0 ? T.greenSoft : T.borderLight} /> },
@@ -1106,7 +1106,7 @@ function SubcontractorSection() {
 // ═══════════════════════════════════════════════════════════════════════
 // 6. CLIENT BOQ RATE CARD
 // ═══════════════════════════════════════════════════════════════════════
-function ClientBOQSection() {
+function ClientBOQSection({ dbProjects = [] }) {
   const [selectedProject, setSelectedProject] = useState(1);
   const projects = [
     { id: 1, name: "Shubham & Nand Kishor 623" }, { id: 2, name: "Tikendra Banchhor Residence" },
@@ -1242,20 +1242,20 @@ function LabourRateSection() {
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ skill: "", category: "Skilled", dailyRate: 0, otRate: 0, city: "Raipur" });
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const filtered = rates.filter(r => r.skill.toLowerCase().includes(search.toLowerCase()));
+  const filtered = labourRates.filter(r => (r.skill||r.role||r.name||"").toLowerCase().includes(search.toLowerCase()));
   const openCreate = () => { setEditing(null); setForm({ skill: "", category: "Skilled", dailyRate: 0, otRate: 0, city: "Raipur" }); setShowModal(true); };
   const openEdit = (r) => { setEditing(r); setForm({ ...r }); setShowModal(true); };
-  const save = () => { if (!form.skill.trim()) return; if (editing) { setRates(prev => prev.map(r => r.id === editing.id ? { ...r, ...form } : r)); } else { setRates(prev => [...prev, { ...form, id: Date.now() }]); } setShowModal(false); };
-  const del = (id) => setRates(prev => prev.filter(r => r.id !== id));
+  const save = async () => { if (!form.role?.trim()&&!form.skill?.trim()) return; await apiSave({role: form.skill||form.role, category: form.category, unit: 'Day', rate: form.dailyRate||form.rate||0, overtime_rate: form.otRate||0, description: form.city||''}, editing?.id); setShowModal(false); };
+  const del = (id) => apiDel(id);
   const catColors = { Skilled: { c: T.blue, bg: T.blueSoft }, "Semi-Skilled": { c: T.amber, bg: T.amberSoft }, Unskilled: { c: T.textMid, bg: T.borderLight }, Staff: { c: T.green, bg: T.greenSoft } };
 
   const columns = [
-    { key: "skill", label: "Labour Type / Skill", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.skill}</span> },
-    { key: "category", label: "Category", minW: 100, render: r => { const cc = catColors[r.category] || catColors.Skilled; return <Badge text={r.category} color={cc.c} bg={cc.bg} />; }},
-    { key: "dailyRate", label: "Daily Rate", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700 }}>Rs.{r.dailyRate}</span> },
-    { key: "otRate", label: "OT/Hour", minW: 70, align: "right", render: r => r.otRate > 0 ? <span style={{ fontWeight: 600, color: T.amber }}>Rs.{r.otRate}</span> : "—" },
-    { key: "monthly", label: "Monthly (26d)", minW: 100, align: "right", render: r => <span style={{ fontWeight: 600, color: T.green }}>Rs.{(r.dailyRate * 26).toLocaleString()}</span> },
-    { key: "city", label: "City", minW: 70 },
+    { key: "role", label: "Labour Type / Skill", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.role||r.skill}</span> },
+    { key: "category", label: "Category", minW: 100, render: r => { const cc = catColors[r.category] || catColors.Skilled; return <Badge text={r.category||"Skilled"} color={cc.c} bg={cc.bg} />; }},
+    { key: "rate", label: "Daily Rate", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700 }}>Rs.{r.rate||r.dailyRate||0}</span> },
+    { key: "overtime_rate", label: "OT/Hour", minW: 70, align: "right", render: r => (r.overtime_rate||r.otRate)>0 ? <span style={{ fontWeight: 600, color: T.amber }}>Rs.{r.overtime_rate||r.otRate}</span> : "—" },
+    { key: "monthly", label: "Monthly (26d)", minW: 100, align: "right", render: r => <span style={{ fontWeight: 600, color: T.green }}>Rs.{((r.rate||r.dailyRate||0) * 26).toLocaleString()}</span> },
+    { key: "description", label: "City/Area", minW: 70, render: r => <span>{r.description||r.city||"—"}</span> },
   ];
 
   return (
@@ -1274,7 +1274,7 @@ function LabourRateSection() {
             id: Date.now() + i, skill: r["Skill / Labour Type"]||"", category: r["Category"]||"Skilled",
             dailyRate: parseFloat(r["Daily Rate (Rs.)"])||0, otRate: parseFloat(r["OT Rate/Hour (Rs.)"])||0, city: r["City/Area"]||"Raipur",
           })).filter(l => l.skill);
-          setRates(prev => [...prev, ...items]);
+          // CSV import not wired to API yet
         }}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
@@ -1371,64 +1371,29 @@ function EquipmentSection() {
 // 9. UOM MASTER (My idea)
 // ═══════════════════════════════════════════════════════════════════════
 function UOMMasterSection() {
-  const [uoms] = useState([
-    { id: 1, name: "Kilogram", symbol: "Kg", type: "Weight" },
-    { id: 2, name: "Metric Ton", symbol: "MT", type: "Weight" },
-    { id: 3, name: "Quintal", symbol: "Qtl", type: "Weight" },
-    { id: 4, name: "Square Foot", symbol: "Sq.Ft", type: "Area" },
-    { id: 5, name: "Square Meter", symbol: "Sq.M", type: "Area" },
-    { id: 6, name: "Cubic Foot", symbol: "CFT", type: "Volume" },
-    { id: 7, name: "Brass", symbol: "Brass", type: "Volume" },
-    { id: 8, name: "Litre", symbol: "Ltr", type: "Volume" },
-    { id: 9, name: "Meter", symbol: "Mtr", type: "Length" },
-    { id: 10, name: "Running Foot", symbol: "R.Ft", type: "Length" },
-    { id: 11, name: "Piece", symbol: "Pc", type: "Count" },
-    { id: 12, name: "Bag (50kg)", symbol: "Bag", type: "Count" },
-    { id: 13, name: "Bundle", symbol: "Bndl", type: "Count" },
-    { id: 14, name: "Sheet (8x4)", symbol: "Sheet", type: "Count" },
-    { id: 15, name: "Point", symbol: "Pt", type: "Work" },
-    { id: 16, name: "Lump Sum", symbol: "LS", type: "Work" },
-    { id: 17, name: "Day", symbol: "Day", type: "Time" },
-    { id: 18, name: "Hour", symbol: "Hr", type: "Time" },
-    { id: 19, name: "Trip", symbol: "Trip", type: "Transport" },
-  ]);
+  const { items: uoms, loading } = useSection("uom");
   const [search, setSearch] = useState("");
-  const filtered = uoms.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || u.symbol.toLowerCase().includes(search.toLowerCase()));
+  const filtered = uoms.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || (u.symbol||"").toLowerCase().includes(search.toLowerCase()));
   const typeColors = { Weight: T.blue, Area: T.green, Volume: T.purple, Length: T.amber, Count: T.teal, Work: T.orange, Time: T.indigo, Transport: T.rose };
+
+  const columns = [
+    { key: "symbol", label: "Symbol", minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 700, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.symbol}</code> },
+    { key: "name", label: "Unit Name", minW: 160, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "type", label: "Type", minW: 100, render: r => <Badge text={r.type||"—"} color={typeColors[r.type]||T.textMid} bg={(typeColors[r.type]||T.blue)+"15"} /> },
+  ];
 
   return (
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="units" onAdd={() => {}} addLabel="Add Unit"
-        templateConfig={{
-          headers: ["Unit Name","Symbol","Type"],
-          sampleRows: [["Kilogram","Kg","Weight"],["Square Foot","Sq.Ft","Area"],["Piece","Pc","Count"]],
-          filename: "gb_uom_export.csv", templateFilename: "gb_template_uom.csv",
-          instructions: "Instructions: Type must be Weight, Area, Volume, Length, Count, Work, Time, or Transport",
-          mapRow: (u) => [u.name, u.symbol, u.type],
-        }}
-        currentData={uoms}
-        onImportData={() => {}}
-      />
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
-        {filtered.map(u => (
-          <div key={u.id} style={{ background: T.card, borderRadius: 8, border: `1px solid ${T.border}`, padding: "14px 16px", display: "flex", alignItems: "center", gap: 12, boxShadow: T.shadow }}>
-            <div style={{ width: 42, height: 42, borderRadius: 10, background: (typeColors[u.type] || T.blue) + "15", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-              <span style={{ fontSize: 14, fontWeight: 800, color: typeColors[u.type] || T.blue }}>{u.symbol}</span>
-            </div>
-            <div>
-              <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{u.name}</div>
-              <Badge text={u.type} color={typeColors[u.type] || T.textMid} bg={(typeColors[u.type] || T.textMid) + "15"} />
-            </div>
-          </div>
-        ))}
-      </div>
+        templateConfig={{ headers: ["Unit Name","Symbol","Type"], sampleRows: [["Kilogram","Kg","Weight"]], filename: "gb_uom_export.csv", templateFilename: "gb_template_uom.csv", instructions: "Type: Weight, Area, Volume, Length, Count, Work, Time, Transport", mapRow: u => [u.name, u.symbol||"", u.type||""] }}
+        currentData={uoms} onImportData={() => {}} />
+      {loading ? <div style={{padding:"40px",textAlign:"center",color:T.textLight}}>Loading...</div>
+        : <DataTable columns={columns} data={filtered} onEdit={() => {}} onDelete={() => {}} emptyMsg="No units found" />}
     </div>
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// 10. EXPENSE HEAD MASTER (My idea)
-// ═══════════════════════════════════════════════════════════════════════
+
 function ExpenseHeadSection() {
   const { items: heads, loading, save: apiSave, del: apiDel } = useSection("expense-heads");
   const [search, setSearch] = useState("");
@@ -1438,13 +1403,22 @@ function ExpenseHeadSection() {
   const columns = [
     { key: "code", label: "Code", minW: 70, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
     { key: "name", label: "Expense Head", minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "group", label: "Group", minW: 110, render: r => <Badge text={r.group} color={groupColors[r.group] || T.textMid} bg={(groupColors[r.group] || T.textMid) + "18"} /> },
-    { key: "taxDeductible", label: "Tax Deductible", minW: 100, align: "center", render: r => r.taxDeductible ? <IcCheck size={16} color={T.green} /> : <IcX size={16} color={T.textLight} /> },
+    { key: "type", label: "Type", minW: 110, render: r => <Badge text={r.type||r.group||"Other"} color={groupColors[r.type||r.group] || T.textMid} bg={(groupColors[r.type||r.group] || T.textMid) + "18"} /> },
+    { key: "description", label: "Description", minW: 200, style: { fontSize: 12, color: T.textMid } },
   ];
+
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: "", code: "", type: "Material", description: "" });
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const openCreate = () => { setEditing(null); setForm({ name:"", code:"", type:"Material", description:"" }); setShowModal(true); };
+  const openEdit = (h) => { setEditing(h); setForm({ name: h.name, code: h.code||"", type: h.type||"Material", description: h.description||"" }); setShowModal(true); };
+  const save = async () => { if (!form.name.trim()) return; await apiSave(form, editing?.id); setShowModal(false); };
+  const del = (id) => apiDel(id);
 
   return (
     <div>
-      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="expense heads" onAdd={() => {}} addLabel="Add Head"
+      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="expense heads" onAdd={openCreate} addLabel="Add Head"
         templateConfig={{
           headers: ["Expense Head","Code","Group","Tax Deductible"],
           sampleRows: [["Material Purchase","EH-001","Direct Cost","Yes"],["Labour Wages","EH-002","Direct Cost","Yes"],["Site Petty Cash","EH-006","Site Overhead","No"]],
@@ -1455,7 +1429,17 @@ function ExpenseHeadSection() {
         currentData={heads}
         onImportData={() => {}}
       />
-      <DataTable columns={columns} data={filtered} onEdit={() => {}} onDelete={() => {}} />
+      <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Expense Head" : "Add Expense Head"} width={440}>
+        <FormField label="Expense Head Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. Material Purchase" required />
+        <div style={{ height: 12 }} />
+        <FormField label="Code" value={form.code} onChange={v => upd("code", v)} placeholder="e.g. EH-001" />
+        <div style={{ height: 12 }} />
+        <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={["Material","Labour","Equipment","Overhead","Other"]} />
+        <div style={{ height: 12 }} />
+        <FormTextarea label="Description" value={form.description||""} onChange={v => upd("description", v)} rows={2} />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Create"} />
+      </Modal>
     </div>
   );
 }
@@ -1465,19 +1449,25 @@ function ExpenseHeadSection() {
 // MAIN MASTER LIBRARY MODULE
 // ═══════════════════════════════════════════════════════════════════════
 const masterSections = [
-  { id: "material_cat",  label: "Material Category",   Icon: IcFolder,    Comp: MaterialCategorySection,  section: "INVENTORY", count: "12", color: T.blue },
-  { id: "materials",     label: "Material Master",     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, count: "10", color: T.teal },
-  { id: "work_cat",      label: "Work Category",       Icon: IcTool,      Comp: WorkCategorySection,      section: null, count: "15", color: T.purple },
-  { id: "party",         label: "Party / Supplier",    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", count: "7", color: T.green },
-  { id: "subcon",        label: "Subcontractors",      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, count: "6", color: T.amber },
-  { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, count: "12", color: T.orange },
-  { id: "boq",           label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", count: "8", color: T.indigo },
-  { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", count: "6", color: T.rose },
+  { id: "material_cat",  label: "Material Category",   Icon: IcFolder,    Comp: MaterialCategorySection,  section: "INVENTORY", countKey: "material_categories", color: T.blue },
+  { id: "materials",     label: "Material Master",     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
+  { id: "work_cat",      label: "Work Category",       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
+  { id: "party",         label: "Party / Supplier",    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
+  { id: "subcon",        label: "Subcontractors",      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
+  { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
+  { id: "boq",           label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: "boq", color: T.indigo },
+  { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", countKey: "equipment", color: T.rose },
   { id: "uom",           label: "Units (UOM)",         Icon: IcRuler,     Comp: UOMMasterSection,         section: "REFERENCE", count: "19", color: T.teal },
   { id: "expense_head",  label: "Expense Heads",       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, count: "14", color: T.amber },
 ];
 
 export default function MasterLibraryModule() {
+  const [summaryCounts, setSummaryCounts] = useState({});
+  const [dbProjects, setDbProjects] = useState([]);
+  useEffect(() => {
+    api.get("/library/summary").then(r => { if(r.success) setSummaryCounts(r.data); }).catch(()=>{});
+    api.get("/projects").then(r => { if(r.success&&r.data) setDbProjects(r.data); }).catch(()=>{});
+  }, []);
   const [activeSection, setActiveSection] = useState("materials");
   const ActiveComp = masterSections.find(s => s.id === activeSection)?.Comp || MaterialMasterSection;
   const active = masterSections.find(s => s.id === activeSection);
@@ -1543,7 +1533,7 @@ export default function MasterLibraryModule() {
           </div>
         </div>
         <div style={{ flex: 1, overflowY: "auto", padding: "24px 28px" }}>
-          <ActiveComp />
+          <ActiveComp dbProjects={dbProjects} />
         </div>
       </div>
     </div>
