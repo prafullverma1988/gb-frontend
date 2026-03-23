@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import api from "../config/api";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -609,38 +610,64 @@ function ToolbarWithIO({ search, setSearch, count, label, onAdd, addLabel, filte
 // ═══════════════════════════════════════════════════════════════════════
 // 1. MATERIAL CATEGORY — LIST VIEW
 // ═══════════════════════════════════════════════════════════════════════
+
+// ── Generic hook for all library sections ────────────────────────────
+function useSection(endpoint) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/library/" + endpoint);
+      if (res.success) setItems(res.data);
+    } catch(e) {}
+    setLoading(false);
+  }, [endpoint]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const save = async (form, editingId) => {
+    let res;
+    if (editingId) {
+      res = await api.put("/library/" + endpoint + "/" + editingId, form);
+    } else {
+      res = await api.post("/library/" + endpoint, form);
+    }
+    if (res.success) {
+      if (editingId) setItems(p => p.map(x => x.id === editingId ? res.data : x));
+      else setItems(p => [res.data, ...p]);
+    }
+    return res;
+  };
+
+  const del = async (id) => {
+    const res = await api.del("/library/" + endpoint + "/" + id);
+    if (res.success) setItems(p => p.filter(x => x.id !== id));
+    return res;
+  };
+
+  return { items, setItems, loading, reload: load, save, del };
+}
+
 function MaterialCategorySection() {
-  const [cats, setCats] = useState([
-    { id: 1, name: "Cement & Binding", code: "CEM", items: 12, desc: "All types of cement, putty, adhesives" },
-    { id: 2, name: "Steel & Rebar", code: "STL", items: 18, desc: "TMT bars, binding wire, steel plates" },
-    { id: 3, name: "Sand & Aggregates", code: "SND", items: 8, desc: "River sand, m-sand, gravel, rubble" },
-    { id: 4, name: "Bricks & Blocks", code: "BRK", items: 6, desc: "Clay bricks, AAC blocks, fly-ash bricks" },
-    { id: 5, name: "Plumbing", code: "PLB", items: 22, desc: "Pipes, fittings, valves, tanks" },
-    { id: 6, name: "Electrical", code: "ELE", items: 34, desc: "Wires, switches, MCBs, panels, conduits" },
-    { id: 7, name: "Paint & Finish", code: "PNT", items: 15, desc: "Interior paint, exterior, primer, putty" },
-    { id: 8, name: "Wood & Timber", code: "WOD", items: 10, desc: "Plywood, teak, door frames, shuttering" },
-    { id: 9, name: "Tiles & Flooring", code: "TIL", items: 16, desc: "Vitrified, ceramic, marble, granite" },
-    { id: 10, name: "Hardware", code: "HRD", items: 28, desc: "Nails, screws, hinges, handles, locks" },
-    { id: 11, name: "Waterproofing", code: "WTP", items: 7, desc: "Chemical, membrane, coating" },
-    { id: 12, name: "Safety Equipment", code: "SAF", items: 9, desc: "Helmets, vests, boots, nets" },
-  ]);
+  const { items: cats, loading, save: apiSave, del: apiDel } = useSection("material-categories");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ name: "", code: "", desc: "" });
+  const [form, setForm] = useState({ name: "", code: "", description: "" });
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const filtered = cats.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.code.toLowerCase().includes(search.toLowerCase()));
+  const filtered = cats.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || (c.code||"").toLowerCase().includes(search.toLowerCase()));
 
-  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", desc: "" }); setShowModal(true); };
-  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code, desc: c.desc }); setShowModal(true); };
-  const save = () => {
+  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", description: "" }); setShowModal(true); };
+  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", description: c.description||"" }); setShowModal(true); };
+  const save = async () => {
     if (!form.name.trim()) return;
-    if (editing) { setCats(prev => prev.map(c => c.id === editing.id ? { ...c, ...form } : c)); }
-    else { setCats(prev => [...prev, { id: Date.now(), ...form, items: 0 }]); }
+    await apiSave({ name: form.name, code: form.code, description: form.description }, editing?.id);
     setShowModal(false);
   };
-  const del = (id) => setCats(prev => prev.filter(c => c.id !== id));
+  const del = (id) => apiDel(id);
 
   const templateConfig = {
     headers: ["Category Name", "Code", "Description"],
@@ -669,8 +696,8 @@ function MaterialCategorySection() {
   const columns = [
     { key: "code", label: "Code", minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 10px", borderRadius: 4 }}>{r.code}</code> },
     { key: "name", label: "Category Name", minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "desc", label: "Description", minW: 280, style: { fontSize: 12.5, color: T.textMid } },
-    { key: "items", label: "Materials", minW: 90, align: "center", render: r => <Badge text={`${r.items} items`} color={r.items > 0 ? T.blue : T.textLight} bg={r.items > 0 ? T.blueSoft : T.borderLight} /> },
+    { key: "description", label: "Description", minW: 280, style: { fontSize: 12.5, color: T.textMid } },
+    { key: "item_count", label: "Materials", minW: 90, align: "center", render: r => <Badge text={`${r.item_count||0} items`} color={(r.item_count||0) > 0 ? T.blue : T.textLight} bg={(r.item_count||0) > 0 ? T.blueSoft : T.borderLight} /> },
   ];
 
   return (
@@ -683,7 +710,7 @@ function MaterialCategorySection() {
         <div style={{ height: 14 }} />
         <FormField label="Code (Short)" value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder="e.g. CEM" />
         <div style={{ height: 14 }} />
-        <FormTextarea label="Description" value={form.desc} onChange={v => upd("desc", v)} placeholder="What materials fall under this category?" rows={2} />
+        <FormTextarea label="Description" value={form.description||""} onChange={v => upd("description", v)} placeholder="What materials fall under this category?" rows={2} />
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Create"} />
       </Modal>
     </div>
@@ -694,18 +721,8 @@ function MaterialCategorySection() {
 // 2. MATERIAL MASTER
 // ═══════════════════════════════════════════════════════════════════════
 function MaterialMasterSection() {
-  const [materials, setMaterials] = useState([
-    { id: 1, name: "OPC Cement 53 Grade", code: "MAT-001", category: "Cement & Binding", unit: "Bag (50kg)", hsnCode: "2523", gstRate: 28, baseRate: 380, lastRate: 385, supplier: "UltraTech", minStock: 100, currentStock: 450 },
-    { id: 2, name: "TMT Steel Bar 12mm Fe500D", code: "MAT-002", category: "Steel & Rebar", unit: "Kg", hsnCode: "7214", gstRate: 18, baseRate: 62, lastRate: 64, supplier: "Tata Tiscon", minStock: 5000, currentStock: 12000 },
-    { id: 3, name: "River Sand (Fine)", code: "MAT-003", category: "Sand & Aggregates", unit: "CFT", hsnCode: "2505", gstRate: 5, baseRate: 45, lastRate: 48, supplier: "Local Supplier", minStock: 500, currentStock: 1200 },
-    { id: 4, name: "AAC Block 4 inch", code: "MAT-004", category: "Bricks & Blocks", unit: "Piece", hsnCode: "6810", gstRate: 12, baseRate: 52, lastRate: 55, supplier: "Magicrete", minStock: 2000, currentStock: 3500 },
-    { id: 5, name: "PVC Pipe 4 inch SWR", code: "MAT-005", category: "Plumbing", unit: "Piece (3m)", hsnCode: "3917", gstRate: 18, baseRate: 320, lastRate: 335, supplier: "Ashirvad", minStock: 50, currentStock: 120 },
-    { id: 6, name: "Copper Wire 2.5 sqmm FR", code: "MAT-006", category: "Electrical", unit: "Meter", hsnCode: "8544", gstRate: 18, baseRate: 18, lastRate: 19, supplier: "Polycab", minStock: 1000, currentStock: 3200 },
-    { id: 7, name: "Asian Paints Apex (White)", code: "MAT-007", category: "Paint & Finish", unit: "Litre", hsnCode: "3209", gstRate: 28, baseRate: 280, lastRate: 290, supplier: "Asian Paints", minStock: 50, currentStock: 80 },
-    { id: 8, name: "12mm Plywood BWR Grade", code: "MAT-008", category: "Wood & Timber", unit: "Sheet (8x4)", hsnCode: "4412", gstRate: 18, baseRate: 950, lastRate: 980, supplier: "Century Ply", minStock: 30, currentStock: 45 },
-    { id: 9, name: "Vitrified Tile 600x600 (Double Charge)", code: "MAT-009", category: "Tiles & Flooring", unit: "Sq.Ft", hsnCode: "6907", gstRate: 18, baseRate: 42, lastRate: 45, supplier: "Kajaria", minStock: 500, currentStock: 1800 },
-    { id: 10, name: "Dr. Fixit Waterproofing", code: "MAT-010", category: "Waterproofing", unit: "Kg", hsnCode: "3214", gstRate: 18, baseRate: 120, lastRate: 125, supplier: "Pidilite", minStock: 20, currentStock: 60 },
-  ]);
+  const { items: materials, loading, save: apiSave, del: apiDel } = useSection("materials");
+  const { items: matCats } = useSection("material-categories");
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("All");
   const [showModal, setShowModal] = useState(false);
@@ -816,16 +833,11 @@ function MaterialMasterSection() {
 // 3. PARTY / SUPPLIER MASTER
 // ═══════════════════════════════════════════════════════════════════════
 function PartyMasterSection() {
-  const [parties, setParties] = useState([
-    { id: 1, name: "UltraTech Cement Ltd", type: "Supplier", category: "Cement", gstin: "22AABCU1234F1Z5", contact: "Rajesh Agrawal", phone: "+91 98765 10001", email: "rajesh@ultratech.com", city: "Raipur", rating: 5, balance: -125000 },
-    { id: 2, name: "Tata Steel / Tiscon", type: "Supplier", category: "Steel", gstin: "22AABCT5678G2Z3", contact: "Sunil Mehta", phone: "+91 98765 10002", email: "sunil@tatasteel.com", city: "Bhilai", rating: 5, balance: -340000 },
-    { id: 3, name: "Ashirvad Pipes (Aliaxis)", type: "Supplier", category: "Plumbing", gstin: "22AABCA9012H3Z1", contact: "Pawan Kumar", phone: "+91 98765 10003", email: "pawan@ashirvad.com", city: "Raipur", rating: 4, balance: -67000 },
-    { id: 4, name: "Polycab Wires Pvt Ltd", type: "Supplier", category: "Electrical", gstin: "22AABCP3456I4Z8", contact: "Amit Sharma", phone: "+91 98765 10004", email: "amit@polycab.com", city: "Raipur", rating: 4, balance: 0 },
-    { id: 5, name: "Nand Kishor Agrawal", type: "Client", category: "Residential", gstin: "", contact: "Nand Kishor", phone: "+91 98765 20001", email: "nk@gmail.com", city: "Raipur", rating: 0, balance: 450000 },
-    { id: 6, name: "Esther Group", type: "Client", category: "Commercial", gstin: "22AABCE7890J5Z6", contact: "Mr. George", phone: "+91 98765 20002", email: "george@esther.com", city: "Bilaspur", rating: 0, balance: 1200000 },
-    { id: 7, name: "Raipur Transport Co.", type: "Transporter", category: "Logistics", gstin: "22AABCR2345K6Z4", contact: "Bhanu Pratap", phone: "+91 98765 30001", email: "bhanu@raipurtrans.com", city: "Raipur", rating: 3, balance: -15000 },
-  ]);
-  const [search, setSearch] = useState("");
+  const [parties, setParties] = useState([]);
+  useEffect(() => {
+    api.get("/finance/parties").then(res => { if(res.success) setParties(res.data||[]); }).catch(()=>{});
+  }, []);
+    const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -924,8 +936,8 @@ function PartyMasterSection() {
         <div style={{ padding: "12px 0 4px", fontSize: 13, fontWeight: 700, color: T.text, borderTop: `1px solid ${T.borderLight}`, marginTop: 4 }}>Bank Details (for payment)</div>
         <div style={{ height: 10 }} />
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Bank Name" value={form.bankName || ""} onChange={v => upd("bankName", v)} placeholder="e.g. SBI" half />
-          <FormField label="Account No." value={form.accNo || ""} onChange={v => upd("accNo", v)} placeholder="Account number" half />
+          <FormField label="Bank Name" value={form.bank_name || ""} onChange={v => upd("bank_name", v)} placeholder="e.g. SBI" half />
+          <FormField label="Account No." value={form.acc_no || ""} onChange={v => upd("acc_no", v)} placeholder="Account number" half />
         </div>
         <FormField label="IFSC Code" value={form.ifsc || ""} onChange={v => upd("ifsc", v)} placeholder="e.g. SBIN0005678" />
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update Party" : "Add Party"} />
@@ -938,24 +950,8 @@ function PartyMasterSection() {
 // 4. WORK CATEGORY
 // ═══════════════════════════════════════════════════════════════════════
 function WorkCategorySection() {
-  const [cats, setCats] = useState([
-    { id: 1, name: "Excavation & Earthwork", code: "EXC", unit: "CFT", rate: 12, desc: "Foundation digging, trenching, backfilling" },
-    { id: 2, name: "RCC Work", code: "RCC", unit: "CFT", rate: 280, desc: "Footings, columns, beams, slabs" },
-    { id: 3, name: "Brickwork / Blockwork", code: "BRK", unit: "Sq.Ft", rate: 22, desc: "Wall construction with bricks or blocks" },
-    { id: 4, name: "Plastering", code: "PLS", unit: "Sq.Ft", rate: 18, desc: "Interior & exterior plaster with finish" },
-    { id: 5, name: "Tile / Flooring Work", code: "TIL", unit: "Sq.Ft", rate: 35, desc: "Floor & wall tile installation" },
-    { id: 6, name: "Plumbing & Drainage", code: "PLB", unit: "Point", rate: 650, desc: "Water supply, drainage, fixture fitting" },
-    { id: 7, name: "Electrical Wiring", code: "ELE", unit: "Point", rate: 450, desc: "Wiring, switches, MCBs, earthing" },
-    { id: 8, name: "Painting", code: "PNT", unit: "Sq.Ft", rate: 14, desc: "Interior & exterior painting, putty" },
-    { id: 9, name: "Waterproofing", code: "WTP", unit: "Sq.Ft", rate: 45, desc: "Terrace, bathroom, basement waterproofing" },
-    { id: 10, name: "Carpentry / Woodwork", code: "CRP", unit: "Sq.Ft", rate: 85, desc: "Doors, windows, cupboards, frames" },
-    { id: 11, name: "Fabrication / Grillwork", code: "FAB", unit: "Kg", rate: 95, desc: "MS gates, railings, grills" },
-    { id: 12, name: "False Ceiling", code: "FCL", unit: "Sq.Ft", rate: 65, desc: "Gypsum, POP, grid ceiling" },
-    { id: 13, name: "HVAC & AC Work", code: "HVC", unit: "Unit", rate: 4500, desc: "AC installation, ducting, VRF" },
-    { id: 14, name: "Lift & Elevator", code: "LFT", unit: "Unit", rate: 350000, desc: "Elevator installation & shaft work" },
-    { id: 15, name: "Landscaping", code: "LND", unit: "Sq.Ft", rate: 25, desc: "Garden, pathway, paver blocks" },
-  ]);
-  const [search, setSearch] = useState("");
+  const { items: cats, loading, save: apiSave, del: apiDel } = useSection("work-categories");
+    const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [form, setForm] = useState({ name: "", code: "", unit: "Sq.Ft", rate: 0, desc: "" });
@@ -1018,32 +1014,25 @@ function WorkCategorySection() {
 // 5. SUBCONTRACTOR MASTER
 // ═══════════════════════════════════════════════════════════════════════
 function SubcontractorSection() {
-  const [subcons, setSubcons] = useState([
-    { id: 1, name: "Raj Construction", owner: "Rajendra Yadav", trade: "RCC & Civil", phone: "+91 98765 40001", city: "Raipur", gstin: "22AABCR1111A1Z1", labourStrength: 35, rating: 4, rateType: "Sq.Ft", rate: 22, activeProjects: 2, status: "Active" },
-    { id: 2, name: "Sahu Electricals", owner: "Mohan Sahu", trade: "Electrical", phone: "+91 98765 40002", city: "Raipur", gstin: "22AABCS2222B2Z2", labourStrength: 12, rating: 5, rateType: "Point", rate: 380, activeProjects: 3, status: "Active" },
-    { id: 3, name: "Patel Plumbing Works", owner: "Rakesh Patel", trade: "Plumbing", phone: "+91 98765 40003", city: "Durg", gstin: "22AABCP3333C3Z3", labourStrength: 8, rating: 3, rateType: "Point", rate: 550, activeProjects: 1, status: "Active" },
-    { id: 4, name: "Verma Paint & Polish", owner: "Suresh Verma", trade: "Painting", phone: "+91 98765 40004", city: "Raipur", gstin: "", labourStrength: 15, rating: 4, rateType: "Sq.Ft", rate: 12, activeProjects: 2, status: "Active" },
-    { id: 5, name: "Sharma Tile Works", owner: "Dinesh Sharma", trade: "Tiles & Flooring", phone: "+91 98765 40005", city: "Bhilai", gstin: "22AABCS5555E5Z5", labourStrength: 10, rating: 4, rateType: "Sq.Ft", rate: 28, activeProjects: 1, status: "Active" },
-    { id: 6, name: "Krishna Fabrication", owner: "Krishna Das", trade: "Fabrication", phone: "+91 98765 40006", city: "Raipur", gstin: "", labourStrength: 6, rating: 3, rateType: "Kg", rate: 55, activeProjects: 0, status: "Inactive" },
-  ]);
+  const { items: subcons, loading, save: apiSave, del: apiDel } = useSection("subcontractors");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const emptyForm = { name: "", owner: "", trade: "RCC & Civil", phone: "", city: "Raipur", gstin: "", pan: "", address: "", labourStrength: 0, rateType: "Sq.Ft", rate: 0, bankName: "", accNo: "", ifsc: "", status: "Active" };
+  const emptyForm = { name: "", owner: "", trade: "RCC & Civil", phone: "", city: "Raipur", gstin: "", pan: "", address: "", labour_strength: 0, rate_type: "Sq.Ft", rate: 0, bank_name: "", acc_no: "", ifsc: "", status: "Active" };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const filtered = subcons.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || s.trade.toLowerCase().includes(search.toLowerCase()) || s.owner.toLowerCase().includes(search.toLowerCase()));
+  const filtered = subcons.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.trade||"").toLowerCase().includes(search.toLowerCase()) || (s.owner||"").toLowerCase().includes(search.toLowerCase()));
   const openCreate = () => { setEditing(null); setForm({ ...emptyForm }); setShowModal(true); };
-  const openEdit = (s) => { setEditing(s); setForm({ ...emptyForm, ...s }); setShowModal(true); };
-  const save = () => { if (!form.name.trim()) return; if (editing) { setSubcons(prev => prev.map(s => s.id === editing.id ? { ...s, ...form } : s)); } else { setSubcons(prev => [...prev, { ...form, id: Date.now(), rating: 0, activeProjects: 0 }]); } setShowModal(false); };
-  const del = (id) => setSubcons(prev => prev.filter(s => s.id !== id));
+  const openEdit = (s) => { setEditing(s); setForm({ ...emptyForm, ...s, labour_strength: s.labour_strength||0, rate_type: s.rate_type||"Sq.Ft", bank_name: s.bank_name||"", acc_no: s.acc_no||"" }); setShowModal(true); };
+  const save = async () => { if (!form.name.trim()) return; await apiSave(form, editing?.id); setShowModal(false); };
+  const del = (id) => apiDel(id);
 
   const columns = [
     { key: "name", label: "Firm Name", minW: 150, render: r => (<div><div style={{ fontWeight: 600 }}>{r.name}</div><div style={{ fontSize: 11, color: T.textLight }}>{r.owner}</div></div>) },
     { key: "trade", label: "Trade", minW: 110, render: r => <Badge text={r.trade} color={T.purple} bg={T.purpleSoft} /> },
     { key: "phone", label: "Phone", minW: 120, style: { fontFamily: "monospace", fontSize: 12 } },
     { key: "city", label: "City", minW: 70 },
-    { key: "labourStrength", label: "Labour", minW: 60, align: "center", render: r => <span style={{ fontWeight: 600 }}>{r.labourStrength}</span> },
+    { key: "labour_strength", label: "Labour", minW: 60, align: "center", render: r => <span style={{ fontWeight: 600 }}>{r.labour_strength}</span> },
     { key: "rate", label: "Rate", minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>Rs.{r.rate}/{r.rateType}</span> },
     { key: "activeProjects", label: "Projects", minW: 60, align: "center", render: r => <Badge text={r.activeProjects} color={r.activeProjects > 0 ? T.green : T.textLight} bg={r.activeProjects > 0 ? T.greenSoft : T.borderLight} /> },
     { key: "rating", label: "Rating", minW: 70, align: "center", render: r => r.rating > 0 ? <div style={{ display: "flex", gap: 1, justifyContent: "center" }}>{[1,2,3,4,5].map(i => <IcStar key={i} size={11} color={i <= r.rating ? T.amber : T.borderLight} fill={i <= r.rating ? T.amber : "none"} strokeWidth={0} />)}</div> : "—" },
@@ -1088,7 +1077,7 @@ function SubcontractorSection() {
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormField label="City" value={form.city} onChange={v => upd("city", v)} half />
-          <FormField label="Labour Strength" value={form.labourStrength || ""} onChange={v => upd("labourStrength", parseInt(v) || 0)} type="number" half />
+          <FormField label="Labour Strength" value={form.labour_strength || ""} onChange={v => upd("labour_strength", parseInt(v) || 0)} type="number" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormField label="GSTIN" value={form.gstin} onChange={v => upd("gstin", v)} placeholder="If registered" half />
@@ -1097,14 +1086,14 @@ function SubcontractorSection() {
         <div style={{ padding: "12px 0 4px", fontSize: 13, fontWeight: 700, color: T.text, borderTop: `1px solid ${T.borderLight}`, marginTop: 4 }}>Default Rate Card</div>
         <div style={{ height: 10 }} />
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Rate Unit" value={form.rateType} onChange={v => upd("rateType", v)} options={["Sq.Ft","CFT","Point","Kg","Running Ft","Unit","Lump Sum","Day"]} half />
+          <FormSelect label="Rate Unit" value={form.rate_type} onChange={v => upd("rate_type", v)} options={["Sq.Ft","CFT","Point","Kg","Running Ft","Unit","Lump Sum","Day"]} half />
           <FormField label="Rate (Rs.)" value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half />
         </div>
         <div style={{ padding: "12px 0 4px", fontSize: 13, fontWeight: 700, color: T.text, borderTop: `1px solid ${T.borderLight}`, marginTop: 4 }}>Bank Details (for payment)</div>
         <div style={{ height: 10 }} />
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <FormField label="Bank Name" value={form.bankName || ""} onChange={v => upd("bankName", v)} half />
-          <FormField label="Account No." value={form.accNo || ""} onChange={v => upd("accNo", v)} half />
+          <FormField label="Bank Name" value={form.bank_name || ""} onChange={v => upd("bank_name", v)} half />
+          <FormField label="Account No." value={form.acc_no || ""} onChange={v => upd("acc_no", v)} half />
         </div>
         <div style={{ height: 14 }} />
         <FormField label="IFSC Code" value={form.ifsc || ""} onChange={v => upd("ifsc", v)} />
@@ -1247,20 +1236,7 @@ function ClientBOQSection() {
 // 7. LABOUR RATE CARD (My idea)
 // ═══════════════════════════════════════════════════════════════════════
 function LabourRateSection() {
-  const [rates, setRates] = useState([
-    { id: 1, skill: "Mason (Mistri)", category: "Skilled", dailyRate: 800, otRate: 120, city: "Raipur" },
-    { id: 2, skill: "Helper (Mazdoor)", category: "Unskilled", dailyRate: 450, otRate: 70, city: "Raipur" },
-    { id: 3, skill: "Electrician", category: "Skilled", dailyRate: 750, otRate: 110, city: "Raipur" },
-    { id: 4, skill: "Plumber", category: "Skilled", dailyRate: 700, otRate: 100, city: "Raipur" },
-    { id: 5, skill: "Carpenter", category: "Skilled", dailyRate: 850, otRate: 130, city: "Raipur" },
-    { id: 6, skill: "Painter", category: "Semi-Skilled", dailyRate: 600, otRate: 90, city: "Raipur" },
-    { id: 7, skill: "Welder / Fabricator", category: "Skilled", dailyRate: 900, otRate: 140, city: "Raipur" },
-    { id: 8, skill: "Bar Bender", category: "Skilled", dailyRate: 750, otRate: 110, city: "Raipur" },
-    { id: 9, skill: "Tile Mason", category: "Skilled", dailyRate: 850, otRate: 130, city: "Raipur" },
-    { id: 10, skill: "Crane Operator", category: "Skilled", dailyRate: 1000, otRate: 150, city: "Raipur" },
-    { id: 11, skill: "Site Supervisor", category: "Staff", dailyRate: 1200, otRate: 0, city: "Raipur" },
-    { id: 12, skill: "Watchman / Guard", category: "Unskilled", dailyRate: 400, otRate: 60, city: "Raipur" },
-  ]);
+  const { items: labourRates, loading, save: apiSave, del: apiDel } = useSection("labour-rates");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -1323,14 +1299,7 @@ function LabourRateSection() {
 // 8. EQUIPMENT / MACHINERY MASTER (My idea)
 // ═══════════════════════════════════════════════════════════════════════
 function EquipmentSection() {
-  const [equipment, setEquipment] = useState([
-    { id: 1, name: "JCB 3DX Backhoe Loader", code: "EQ-001", type: "Earthwork", ownership: "Rented", vendor: "Singh Cranes", dailyRate: 5500, currentProject: "Shubham & Nand Kishor", status: "In Use" },
-    { id: 2, name: "Tower Crane (6T)", code: "EQ-002", type: "Lifting", ownership: "Rented", vendor: "CraneMax India", dailyRate: 12000, currentProject: "Esther Risali Commercial", status: "In Use" },
-    { id: 3, name: "Concrete Mixer 10/7", code: "EQ-003", type: "Concrete", ownership: "Owned", vendor: "—", dailyRate: 0, currentProject: "Tikendra Banchhor", status: "In Use" },
-    { id: 4, name: "Vibrator (Needle)", code: "EQ-004", type: "Concrete", ownership: "Owned", vendor: "—", dailyRate: 0, currentProject: "—", status: "Available" },
-    { id: 5, name: "Bar Bending Machine", code: "EQ-005", type: "Steel", ownership: "Owned", vendor: "—", dailyRate: 0, currentProject: "Amarendra Villa", status: "In Use" },
-    { id: 6, name: "Scaffolding Set (100 sqm)", code: "EQ-006", type: "Safety", ownership: "Rented", vendor: "RKS Scaffolding", dailyRate: 800, currentProject: "Esther Risali Commercial", status: "In Use" },
-  ]);
+  const { items: equipment, loading, save: apiSave, del: apiDel } = useSection("equipment");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -1461,22 +1430,7 @@ function UOMMasterSection() {
 // 10. EXPENSE HEAD MASTER (My idea)
 // ═══════════════════════════════════════════════════════════════════════
 function ExpenseHeadSection() {
-  const [heads] = useState([
-    { id: 1, name: "Material Purchase", code: "EH-001", group: "Direct Cost", taxDeductible: true },
-    { id: 2, name: "Labour Wages", code: "EH-002", group: "Direct Cost", taxDeductible: true },
-    { id: 3, name: "Equipment Rental", code: "EH-003", group: "Direct Cost", taxDeductible: true },
-    { id: 4, name: "Subcontractor Payment", code: "EH-004", group: "Direct Cost", taxDeductible: true },
-    { id: 5, name: "Transport & Freight", code: "EH-005", group: "Direct Cost", taxDeductible: true },
-    { id: 6, name: "Site Petty Cash", code: "EH-006", group: "Site Overhead", taxDeductible: false },
-    { id: 7, name: "Food & Refreshment", code: "EH-007", group: "Site Overhead", taxDeductible: false },
-    { id: 8, name: "Site Electricity / Water", code: "EH-008", group: "Site Overhead", taxDeductible: true },
-    { id: 9, name: "Office Rent", code: "EH-009", group: "Admin Overhead", taxDeductible: true },
-    { id: 10, name: "Salary & Staff", code: "EH-010", group: "Admin Overhead", taxDeductible: true },
-    { id: 11, name: "Insurance", code: "EH-011", group: "Admin Overhead", taxDeductible: true },
-    { id: 12, name: "Legal & Permit Fees", code: "EH-012", group: "Admin Overhead", taxDeductible: true },
-    { id: 13, name: "Testing / Lab Charges", code: "EH-013", group: "Quality", taxDeductible: true },
-    { id: 14, name: "Miscellaneous", code: "EH-014", group: "Other", taxDeductible: false },
-  ]);
+  const { items: heads, loading, save: apiSave, del: apiDel } = useSection("expense-heads");
   const [search, setSearch] = useState("");
   const filtered = heads.filter(h => h.name.toLowerCase().includes(search.toLowerCase()));
   const groupColors = { "Direct Cost": T.blue, "Site Overhead": T.amber, "Admin Overhead": T.purple, Quality: T.green, Other: T.textMid };
