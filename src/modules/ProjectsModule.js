@@ -741,12 +741,14 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
 // ═══════════════════════════════════════════════════════════════════
 // APPROVALS DRAWER
 // ═══════════════════════════════════════════════════════════════════
-function ApprovalsDrawer({onClose}){
+function ApprovalsDrawer({onClose,initTab="mr"}){
+  const [activeTab,setActiveTab]=useState(initTab); // "mr" | "pr"
   const [data,setData]=useState({procurement:[],finance:[]});
   const [loading,setLoading]=useState(true);
-  const [acting,setActing]=useState({}); // {id: "approving"|"rejecting"}
+  const [acting,setActing]=useState({});
   const [rejectId,setRejectId]=useState(null);
   const [rejectNote,setRejectNote]=useState("");
+  const [saveErr,setSaveErr]=useState("");
 
   const load=async()=>{
     setLoading(true);
@@ -759,37 +761,56 @@ function ApprovalsDrawer({onClose}){
         procurement:(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested"),
         finance:(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending"),
       });
-    }catch(e){}
+    }catch(e){ setSaveErr("Data load failed"); }
     setLoading(false);
   };
 
   useEffect(()=>{load();},[]);
 
-  const approveMR=async(id)=>{
-    setActing(p=>({...p,[id]:"approving"}));
-    await api.patch("/procurement/mrs/"+id+"/approve",{action:"Approved",approved_qty:null});
-    setData(p=>({...p,procurement:p.procurement.filter(m=>m.id!==id)}));
+  const approveMR=async(id,approvedQty)=>{
+    setSaveErr(""); setActing(p=>({...p,[id]:"approving"}));
+    try{
+      const mr=data.procurement.find(m=>m.id===id);
+      const res=await api.patch("/procurement/mrs/"+id+"/approve",{
+        action:"Approved",
+        approved_qty:approvedQty||mr?.quantity||null,
+      });
+      if(res.success===false) { setSaveErr(res.message||"Approve failed"); }
+      else { setData(p=>({...p,procurement:p.procurement.filter(m=>m.id!==id)})); }
+    }catch(e){ setSaveErr(e.message); }
     setActing(p=>({...p,[id]:null}));
   };
   const rejectMR=async(id)=>{
-    setActing(p=>({...p,[id]:"rejecting"}));
-    await api.patch("/procurement/mrs/"+id+"/approve",{action:"Rejected",rejected_reason:rejectNote||"Rejected by admin"});
-    setData(p=>({...p,procurement:p.procurement.filter(m=>m.id!==id)}));
+    setSaveErr(""); setActing(p=>({...p,[id]:"rejecting"}));
+    try{
+      const res=await api.patch("/procurement/mrs/"+id+"/approve",{
+        action:"Rejected",
+        rejected_reason:rejectNote||"Rejected by admin",
+      });
+      if(res.success===false) { setSaveErr(res.message||"Reject failed"); }
+      else { setData(p=>({...p,procurement:p.procurement.filter(m=>m.id!==id)})); }
+    }catch(e){ setSaveErr(e.message); }
     setActing(p=>({...p,[id]:null}));
-    setRejectId(null);setRejectNote("");
+    setRejectId(null); setRejectNote("");
   };
   const approvePR=async(id)=>{
-    setActing(p=>({...p,["pr"+id]:"approving"}));
-    await api.put("/finance/payment-requests/"+id+"/approve",{action:"approve"});
-    setData(p=>({...p,finance:p.finance.filter(f=>f.id!==id)}));
+    setSaveErr(""); setActing(p=>({...p,["pr"+id]:"approving"}));
+    try{
+      const res=await api.put("/finance/payment-requests/"+id+"/approve",{action:"approve"});
+      if(res.success===false) { setSaveErr(res.message||"Approve failed"); }
+      else { setData(p=>({...p,finance:p.finance.filter(f=>f.id!==id)})); }
+    }catch(e){ setSaveErr(e.message); }
     setActing(p=>({...p,["pr"+id]:null}));
   };
   const rejectPR=async(id)=>{
-    setActing(p=>({...p,["pr"+id]:"rejecting"}));
-    await api.put("/finance/payment-requests/"+id+"/approve",{action:"reject",note:rejectNote});
-    setData(p=>({...p,finance:p.finance.filter(f=>f.id!==id)}));
+    setSaveErr(""); setActing(p=>({...p,["pr"+id]:"rejecting"}));
+    try{
+      const res=await api.put("/finance/payment-requests/"+id+"/approve",{action:"reject",note:rejectNote});
+      if(res.success===false) { setSaveErr(res.message||"Reject failed"); }
+      else { setData(p=>({...p,finance:p.finance.filter(f=>f.id!==id)})); }
+    }catch(e){ setSaveErr(e.message); }
     setActing(p=>({...p,["pr"+id]:null}));
-    setRejectId(null);setRejectNote("");
+    setRejectId(null); setRejectNote("");
   };
 
   const totalCount=data.procurement.length+data.finance.length;
@@ -846,21 +867,46 @@ function ApprovalsDrawer({onClose}){
           <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>All modules</span>
           <button onClick={load} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>↻ Refresh</button>
         </div>
+        {/* Module tabs */}
+        <div style={{display:"flex",gap:0,marginTop:10,borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,0.12)"}}>
+          {[
+            {id:"mr", label:"Material Requests", count:data.procurement.length, color:"#F59E0B"},
+            {id:"pr", label:"Payment Requests",  count:data.finance.length,     color:"#3B82F6"},
+          ].map(t=>(
+            <button key={t.id} onClick={()=>setActiveTab(t.id)}
+              style={{flex:1,padding:"7px 10px",border:"none",background:activeTab===t.id?"rgba(255,255,255,0.15)":"none",
+                color:activeTab===t.id?"white":"rgba(255,255,255,0.5)",
+                fontSize:11,fontWeight:activeTab===t.id?700:400,cursor:"pointer",
+                borderBottom:activeTab===t.id?"2px solid "+t.color:"2px solid transparent",
+                display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+              {t.label}
+              {t.count>0&&<span style={{background:t.color,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{t.count}</span>}
+            </button>
+          ))}
+        </div>
       </div>
 
       <div style={{flex:1,overflowY:"auto"}}>
+        {saveErr&&<div style={{margin:"8px 14px",padding:"8px 12px",background:T.redL,border:"1px solid "+T.redM,borderRadius:7,fontSize:12,color:T.red}}>{saveErr}</div>}
         {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading approvals...</div>}
 
-        {!loading&&totalCount===0&&(
+        {!loading&&activeTab==="mr"&&data.procurement.length===0&&(
           <div style={{textAlign:"center",padding:"60px 20px"}}>
             <div style={{fontSize:32,marginBottom:8}}>✅</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>Sab clear hai!</div>
-            <div style={{fontSize:12,color:T.t4,marginTop:4}}>Koi pending approval nahi</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>Koi pending MR nahi!</div>
+            <div style={{fontSize:12,color:T.t4,marginTop:4}}>Sab material requests clear hain</div>
+          </div>
+        )}
+        {!loading&&activeTab==="pr"&&data.finance.length===0&&(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>Koi pending Payment Request nahi!</div>
+            <div style={{fontSize:12,color:T.t4,marginTop:4}}>Sab payments clear hain</div>
           </div>
         )}
 
-        {/* ── PROCUREMENT SECTION ── */}
-        {!loading&&data.procurement.length>0&&(
+        {/* ── MATERIAL REQUESTS TAB ── */}
+        {!loading&&activeTab==="mr"&&(
           <>
             <SectionHead label="Procurement — Material Requests" count={data.procurement.length} color={T.amb} bg={T.ambL} bdr={T.ambM}/>
             <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
@@ -885,8 +931,8 @@ function ApprovalsDrawer({onClose}){
           </>
         )}
 
-        {/* ── FINANCE SECTION ── */}
-        {!loading&&data.finance.length>0&&(
+        {/* ── PAYMENT REQUESTS TAB ── */}
+        {!loading&&activeTab==="pr"&&(
           <>
             <SectionHead label="Finance — Payment Requests" count={data.finance.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
             <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
@@ -931,7 +977,25 @@ function ProjectsPage({onSelectProject}){
   const [cardMenu,setCardMenu]=useState(null); // project id with open menu
   const [settingsOf,setSettingsOf]=useState(null); // project object for settings
   const [showApprovals,setShowApprovals]=useState(false);
-  const [approvalCount,setApprovalCount]=useState(7);
+  const [approvalInitTab,setApprovalInitTab]=useState("mr"); // which tab to open
+  const [approvalCount,setApprovalCount]=useState(0);
+  const [mrPendingCount,setMrPendingCount]=useState(0);
+  const [prPendingCount,setPrPendingCount]=useState(0);
+
+  // Load real approval counts
+  const loadApprovalCounts=async()=>{
+    try{
+      const [mrRes,prRes]=await Promise.all([
+        api.get("/procurement/mrs?mr_status=Pending"),
+        api.get("/finance/payment-requests"),
+      ]);
+      const mrCount=(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested").length;
+      const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
+      setMrPendingCount(mrCount);
+      setPrPendingCount(prCount);
+      setApprovalCount(mrCount+prCount);
+    }catch(e){}
+  };
 
   // Fetch projects from backend
   useEffect(()=>{
@@ -953,6 +1017,7 @@ function ProjectsPage({onSelectProject}){
       }
     };
     fetchProjects();
+    loadApprovalCounts();
   },[]);
 
   const cities=["All",...new Set(allProjects.map(p=>p.city))];
@@ -971,8 +1036,8 @@ function ProjectsPage({onSelectProject}){
   const SM={"Ongoing":{c:T.grn,bg:T.grnL},"Completed":{c:T.blu,bg:T.bluL},"Hold":{c:T.amb,bg:T.ambL},"Not Started":{c:T.slt,bg:T.sltL}};
 
   const ACTION_TILES=[
-    {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>setShowApprovals(true)},
-    {label:"Material Requests", val:11,  Icon:IcProc,  color:T.blu,bg:T.bluL,bdr:T.bluM},
+    {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalInitTab("mr");setShowApprovals(true);}},
+    {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalInitTab("mr");setShowApprovals(true);}},
     {label:"My To-Do",          val:5,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
     {label:"Open Issues",       val:3,   Icon:IcWarn,  color:T.red,bg:T.redL,bdr:T.redM},
     {label:"Site Pulse",        val:"LIVE",Icon:IcPulse,color:T.pur,bg:T.purL,bdr:"#C4B5FD",live:true,onClick:()=>setShowPulse(true)},
@@ -1242,7 +1307,7 @@ function ProjectsPage({onSelectProject}){
 
       {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
-      {showApprovals&&<ApprovalsDrawer onClose={()=>setShowApprovals(false)}/>}
+      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} initTab={approvalInitTab}/>}
       {settingsOf&&<ProjectSettingsModal
         project={settingsOf}
         onClose={()=>setSettingsOf(null)}
