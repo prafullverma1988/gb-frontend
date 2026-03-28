@@ -522,49 +522,536 @@ function TabOverview({proj}) {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 2 — DESIGN
 // ═══════════════════════════════════════════════════════════════════
-function TabDesign() {
-  const [filter, setFilter] = useState("All");
-  const [sel, setSel] = useState(null);
-  const cats = ["All","Architectural","Structural","Electrical","Plumbing"];
-  const filtered = D.drawings.filter(d=>filter==="All"||d.cat===filter);
-  const statusS = {"Approved":{c:T.grn,bg:T.grnL},"Revision":{c:T.amb,bg:T.ambL},"Pending":{c:T.slt,bg:T.sltL}};
+function TabDesign({ project }) {
+  const projectId   = project?.id;
+  const projectName = project?.name || "Project";
+  const CLOUD_NAME  = "dd632nqfm";
+  const UPLOAD_PRESET = "gb_buildcon_drawings";
+  const CATS = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
 
-  return (
-    <div style={{padding:"16px 18px"}}>
-      <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12}}>
-        <FilterTabs options={cats.map(c=>({id:c,label:c,count:c==="All"?null:D.drawings.filter(d=>d.cat===c).length}))} active={filter} onChange={setFilter}/>
-        <AddBtn label="Upload Drawing"/>
-      </div>
-      <Panel>
-        <THead cols="2fr 70px 110px 55px 100px 90px 55px 70px" headers={["Title","Type","Category","Ver.","Status","Uploaded By","Size","Pins"]}/>
-        {filtered.map(d=>{
-          const ss = statusS[d.status];
-          const isS = sel?.id===d.id;
-          return (
-            <div key={d.id} onClick={()=>setSel(isS?null:d)}
-              style={{display:"grid", gridTemplateColumns:"2fr 70px 110px 55px 100px 90px 55px 70px", padding:"10px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", cursor:"pointer", background:isS?T.bluL:"transparent", borderLeft:isS?`3px solid ${T.blu}`:"3px solid transparent", transition:"all .12s"}}
-              onMouseEnter={e=>{if(!isS){e.currentTarget.style.background=T.surfaceB;}}}
-              onMouseLeave={e=>{e.currentTarget.style.background=isS?T.bluL:"transparent";}}>
-              <span style={{fontSize:12.5, fontWeight:isS?600:400, color:isS?T.blu:T.t1}}>{d.title}</span>
-              <Pill label={d.type} c={d.type==="3D"?T.pur:T.slt} bg={d.type==="3D"?T.purL:T.sltL}/>
-              <span style={{fontSize:12, color:T.t2}}>{d.cat}</span>
-              <span style={{fontSize:11.5, color:T.t4, fontFamily:"monospace"}}>{d.ver}</span>
-              <Pill label={d.status} c={ss.c} bg={ss.bg}/>
-              <span style={{fontSize:12, color:T.t2}}>{d.by}</span>
-              <span style={{fontSize:11.5, color:T.t4}}>{d.size}</span>
-              <span style={{fontSize:12, color:d.pins>0?T.blu:T.t4, fontWeight:d.pins>0?600:400}}>{d.pins>0?`${d.pins} pin${d.pins>1?"s":""}` :"—"}</span>
+  // State
+  const [drawings, setDrawings]     = useState([]);
+  const [loading,  setLoading]      = useState(true);
+  const [filter,   setFilter]       = useState("All");
+  const [sel,      setSel]          = useState(null);
+  const [showUpload, setShowUpload] = useState(false);
+  const [showRevQ,   setShowRevQ]   = useState(false);  // Revision queue
+  const [showVer,    setShowVer]    = useState(null);   // drawing for version history
+  const [showPins,   setShowPins]   = useState(null);   // drawing for pins
+
+  // Upload form state
+  const [uForm, setUForm]   = useState({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
+  const [uFile, setUFile]   = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploadErr, setUploadErr] = useState("");
+
+  // Revision state
+  const [revForm,   setRevForm]   = useState({ reason:"", pinX:"", pinY:"" });
+  const [revSaving, setRevSaving] = useState(false);
+
+  // Action state
+  const [acting, setActing] = useState({});
+  const [actionErr, setActionErr] = useState("");
+
+  const statusMeta = {
+    "Pending":  { c:T.slt, bg:T.sltL, brd:T.b2 },
+    "Approved": { c:T.grn, bg:T.grnL, brd:T.grnM },
+    "Revision": { c:T.amb, bg:T.ambL, brd:T.ambM },
+    "Rejected": { c:T.red, bg:T.redL, brd:T.redM },
+  };
+
+  // Load drawings
+  const loadDrawings = async () => {
+    if (!projectId) return;
+    setLoading(true);
+    try {
+      const res = await api.get("/design/drawings?project_id=" + projectId);
+      if (res.success) setDrawings(res.data || []);
+    } catch(e) {}
+    setLoading(false);
+  };
+  useEffect(() => { loadDrawings(); }, [projectId]);
+
+  const filtered = drawings.filter(d =>
+    filter === "All" || d.category === filter
+  );
+
+  const catCounts = CATS.reduce((acc, c) => ({
+    ...acc, [c]: drawings.filter(d => d.category === c).length
+  }), {});
+
+  const revQueue = drawings.filter(d => d.status === "Revision");
+
+  // ── Cloudinary Upload ─────────────────────────────────────────────
+  const uploadToCloudinary = async (file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("upload_preset", UPLOAD_PRESET);
+    fd.append("folder", "gb_buildcon/drawings");
+    const xhr = new XMLHttpRequest();
+    return new Promise((resolve, reject) => {
+      xhr.upload.onprogress = e => {
+        if (e.lengthComputable) setUploadPct(Math.round((e.loaded / e.total) * 80));
+      };
+      xhr.onload = () => {
+        const data = JSON.parse(xhr.responseText);
+        if (xhr.status === 200) resolve(data);
+        else reject(new Error(data.error?.message || "Upload failed"));
+      };
+      xhr.onerror = () => reject(new Error("Network error"));
+      xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`);
+      xhr.send(fd);
+    });
+  };
+
+  const handleUpload = async () => {
+    if (!uForm.title.trim()) { setUploadErr("Title required"); return; }
+    if (!uFile) { setUploadErr("File select karo"); return; }
+    setUploading(true); setUploadErr(""); setUploadPct(5);
+    try {
+      // 1. Upload to Cloudinary
+      const cld = await uploadToCloudinary(uFile);
+      setUploadPct(85);
+      // 2. Save to backend
+      const res = await api.post("/design/drawings", {
+        project_id:   projectId,
+        project_name: projectName,
+        title:        uForm.title,
+        category:     uForm.category,
+        drawing_type: uForm.drawing_type,
+        note:         uForm.note || null,
+        file_url:     cld.secure_url,
+        file_size:    Math.round(uFile.size / 1024) + " KB",
+      });
+      setUploadPct(100);
+      if (res.success) {
+        setDrawings(p => [res.data, ...p]);
+        setShowUpload(false);
+        setUForm({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
+        setUFile(null); setUploadPct(0);
+      } else {
+        setUploadErr(res.message || "Save failed");
+      }
+    } catch(e) { setUploadErr(e.message); }
+    setUploading(false);
+  };
+
+  // ── New Version Upload ────────────────────────────────────────────
+  const handleNewVersion = async (drawingId, file, note) => {
+    if (!file) return;
+    setActing(p => ({...p, ["ver"+drawingId]: true}));
+    try {
+      const cld = await uploadToCloudinary(file);
+      const res = await api.post("/design/drawings/" + drawingId + "/versions", {
+        file_url:  cld.secure_url,
+        file_size: Math.round(file.size / 1024) + " KB",
+        note:      note || null,
+      });
+      if (res.success) { loadDrawings(); setShowVer(null); }
+    } catch(e) { setActionErr(e.message); }
+    setActing(p => ({...p, ["ver"+drawingId]: false}));
+  };
+
+  // ── Admin Actions ─────────────────────────────────────────────────
+  const handleStatus = async (id, status, note) => {
+    setActing(p => ({...p, [id]: status}));
+    setActionErr("");
+    try {
+      const res = await api.patch("/design/drawings/" + id + "/status", { status, note: note || null });
+      if (res.success) {
+        setDrawings(p => p.map(d => d.id === id ? { ...d, status } : d));
+        setSel(null);
+      } else { setActionErr(res.message || "Failed"); }
+    } catch(e) { setActionErr(e.message); }
+    setActing(p => ({...p, [id]: null}));
+  };
+
+  // ── Add Revision Pin ──────────────────────────────────────────────
+  const handleAddPin = async (drawingId) => {
+    if (!revForm.reason) return;
+    setRevSaving(true);
+    try {
+      await api.post("/design/drawings/" + drawingId + "/pins", {
+        label: revForm.reason,
+        x_pct: parseFloat(revForm.pinX) || 50,
+        y_pct: parseFloat(revForm.pinY) || 50,
+      });
+      setRevForm({ reason:"", pinX:"", pinY:"" });
+      loadDrawings();
+    } catch(e) {}
+    setRevSaving(false);
+  };
+
+  const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
+
+  // ── UPLOAD MODAL ──────────────────────────────────────────────────
+  const UploadModal = () => (
+    <>
+      <div onClick={()=>!uploading&&setShowUpload(false)}
+        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
+        zIndex:401,width:520,maxHeight:"90vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+
+        {/* Header */}
+        <div style={{background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Upload Drawing</div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1}}>{projectName}</div>
+          </div>
+          {!uploading&&<button onClick={()=>setShowUpload(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+          {/* Form fields */}
+          {[
+            {label:"Drawing Title *", key:"title", type:"input", placeholder:"e.g. Ground Floor Plan"},
+          ].map(f=>(
+            <div key={f.key} style={{marginBottom:12}}>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{f.label}</label>
+              <input value={uForm[f.key]} onChange={e=>setUForm(p=>({...p,[f.key]:e.target.value}))}
+                placeholder={f.placeholder}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
-          );
-        })}
-      </Panel>
-      {sel&&(
-        <div style={{marginTop:10, padding:"11px 15px", background:T.bluL, borderRadius:7, border:`1px solid ${T.bluM}`, display:"flex", justifyContent:"space-between", alignItems:"center", gap:10}}>
-          <div style={{fontSize:12.5, fontWeight:600, color:T.blu}}>Selected: {sel.title}</div>
-          <div style={{display:"flex", gap:6}}>
-            {["Download","Approve","Request Revision"].map(l=><SecBtn key={l} label={l}/>)}
-            <SecBtn label="×" onClick={()=>setSel(null)}/>
+          ))}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
+              <select value={uForm.category} onChange={e=>setUForm(p=>({...p,category:e.target.value}))}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                {CATS.map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Type</label>
+              <select value={uForm.drawing_type} onChange={e=>setUForm(p=>({...p,drawing_type:e.target.value}))}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                {["2D","3D","Detail","Section","Elevation","Site Plan"].map(t=><option key={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+
+          {/* File drop zone */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>File *</label>
+            <label style={{display:"block",border:"2px dashed "+(uFile?T.grn:T.b2),borderRadius:9,padding:"20px 16px",
+              textAlign:"center",background:uFile?T.grnL:T.surfaceB,cursor:"pointer",transition:"all 0.2s"}}>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf,.svg" style={{display:"none"}}
+                onChange={e=>{ if(e.target.files[0]){ setUFile(e.target.files[0]); setUploadErr(""); }}}/>
+              {uFile ? (
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.grn}}>✓ {uFile.name}</div>
+                  <div style={{fontSize:11,color:T.t4,marginTop:3}}>{(uFile.size/1024).toFixed(0)} KB</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.t2}}>📁 File choose karo ya drop karo</div>
+                  <div style={{fontSize:11,color:T.t4,marginTop:3}}>PDF, PNG, JPG, DWG, DXF · Max 50MB</div>
+                </div>
+              )}
+            </label>
+          </div>
+
+          {/* Note */}
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Notes (optional)</label>
+            <textarea value={uForm.note} onChange={e=>setUForm(p=>({...p,note:e.target.value}))}
+              placeholder="Reviewer ke liye notes..." rows={2}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+          </div>
+
+          {/* Upload progress */}
+          {uploading&&(
+            <div style={{marginTop:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                <span style={{fontSize:11,color:T.t3}}>Uploading...</span>
+                <span style={{fontSize:11,fontWeight:700,color:T.blu}}>{uploadPct}%</span>
+              </div>
+              <div style={{height:6,background:T.b1,borderRadius:4,overflow:"hidden"}}>
+                <div style={{height:"100%",width:uploadPct+"%",background:T.blu,borderRadius:4,transition:"width 0.3s"}}/>
+              </div>
+            </div>
+          )}
+          {uploadErr&&<div style={{marginTop:8,padding:"7px 10px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:12,color:T.red}}>{uploadErr}</div>}
+        </div>
+
+        <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={()=>setShowUpload(false)} disabled={uploading}
+            style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
+            Cancel
+          </button>
+          <button onClick={handleUpload} disabled={uploading||!uFile||!uForm.title}
+            style={{flex:2,padding:"8px",borderRadius:7,background:uploading||!uFile||!uForm.title?T.b1:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:uploading?"not-allowed":"pointer"}}>
+            {uploading?"Uploading...":"⬆ Upload Drawing"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+
+  // ── REVISION QUEUE PANEL ──────────────────────────────────────────
+  const RevisionQueue = () => (
+    <>
+      <div onClick={()=>setShowRevQ(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",right:0,top:0,bottom:0,width:440,background:T.bg,zIndex:401,
+        boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column"}}>
+        <div style={{background:"#D97706",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Revision Queue</div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)",marginTop:1}}>{revQueue.length} drawings need revision</div>
+          </div>
+          <button onClick={()=>setShowRevQ(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:20}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"12px"}}>
+          {revQueue.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>No drawings in revision queue</div>}
+          {revQueue.map(d=>(
+            <div key={d.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.ambM,padding:"12px",marginBottom:10,borderLeft:"3px solid "+T.amb}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
+              <div style={{fontSize:11,color:T.t4,marginTop:2}}>{d.category} · {d.current_version} · {fmtDate(d.updated_at)}</div>
+              {d.note&&<div style={{fontSize:11.5,color:T.amb,marginTop:5,padding:"5px 8px",background:T.ambL,borderRadius:5}}>📝 {d.note}</div>}
+              {/* Pin list */}
+              {d.pin_count>0&&<div style={{fontSize:11,color:T.t3,marginTop:5}}>📍 {d.pin_count} revision pin(s)</div>}
+              {/* Upload new version */}
+              <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
+                <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>Upload Revised Version</label>
+                <label style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",border:"1.5px dashed "+T.b2,borderRadius:6,cursor:"pointer",background:T.surfaceB}}>
+                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg" style={{display:"none"}}
+                    onChange={e=>{ if(e.target.files[0]) handleNewVersion(d.id, e.target.files[0], null); }}/>
+                  <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>
+                    {acting["ver"+d.id]?"Uploading...":"⬆ Upload New Version"}
+                  </span>
+                </label>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </>
+  );
+
+  // ── VERSION HISTORY MODAL ─────────────────────────────────────────
+  const VersionModal = ({ drawing }) => {
+    const [versions, setVersions] = useState([]);
+    const [vLoading, setVLoading] = useState(true);
+    useEffect(()=>{
+      api.get("/design/drawings/"+drawing.id).then(res=>{
+        if(res.success) setVersions(res.data.versions||[]);
+        setVLoading(false);
+      });
+    },[]);
+    return(
+      <>
+        <div onClick={()=>setShowVer(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+          background:T.surface,borderRadius:12,zIndex:401,width:480,maxHeight:"80vh",
+          display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+          <div style={{background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:"white"}}>Version History — {drawing.title}</div>
+            <button onClick={()=>setShowVer(null)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:18}}>×</button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"12px"}}>
+            {vLoading&&<div style={{textAlign:"center",padding:"30px",color:T.t4}}>Loading...</div>}
+            {versions.map((v,i)=>(
+              <div key={v.id} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
+                <div style={{width:32,height:32,borderRadius:"50%",background:i===0?T.blu:T.b1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:11,fontWeight:700,color:i===0?"white":T.t3}}>{v.version_number}</span>
+                </div>
+                <div style={{flex:1,background:T.surfaceB,borderRadius:7,padding:"8px 10px",border:"1px solid "+T.b1}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{v.uploaded_by_name||"—"}</span>
+                    <span style={{fontSize:10,color:T.t4}}>{fmtDate(v.created_at)}</span>
+                  </div>
+                  {v.note&&<div style={{fontSize:11,color:T.t3,marginTop:3}}>{v.note}</div>}
+                  {v.file_url&&<a href={v.file_url} target="_blank" rel="noreferrer"
+                    style={{fontSize:11,color:T.blu,textDecoration:"none",marginTop:4,display:"inline-block"}}>
+                    📄 View File
+                  </a>}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
+      </>
+    );
+  };
+
+  // ── APPROVE / REVISION / REJECT panel (selected drawing) ─────────
+  const ActionPanel = ({ d }) => {
+    const [revNote,    setRevNote]    = useState("");
+    const [rejNote,    setRejNote]    = useState("");
+    const [showRevForm,setShowRevForm]= useState(false);
+    const [showRejForm,setShowRejForm]= useState(false);
+    const sm = statusMeta[d.status] || statusMeta["Pending"];
+    return(
+      <div style={{margin:"8px 0",padding:"12px 15px",background:sm.bg,borderRadius:8,border:"1px solid "+sm.brd}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
+            <div style={{fontSize:11,color:T.t4}}>{d.category} · {d.current_version} · {d.uploaded_by_name||"—"} · {fmtDate(d.updated_at)}</div>
+          </div>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer"
+              style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>
+              👁 View
+            </a>}
+            <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}>
+              🕐 History
+            </button>
+            <button onClick={()=>setSel(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:16}}>×</button>
+          </div>
+        </div>
+
+        {actionErr&&<div style={{padding:"6px 10px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:11.5,color:T.red,marginBottom:8}}>{actionErr}</div>}
+
+        {d.status!=="Approved"&&(
+          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+            {/* Approve */}
+            <button onClick={()=>handleStatus(d.id,"Approved",null)} disabled={!!acting[d.id]}
+              style={{padding:"7px 16px",borderRadius:7,background:acting[d.id]==="Approved"?T.b1:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              ✓ Approve
+            </button>
+            {/* Request Revision */}
+            <button onClick={()=>{setShowRevForm(!showRevForm);setShowRejForm(false);}}
+              style={{padding:"7px 16px",borderRadius:7,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+              🔄 Request Revision
+            </button>
+            {/* Reject */}
+            <button onClick={()=>{setShowRejForm(!showRejForm);setShowRevForm(false);}}
+              style={{padding:"7px 16px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+              ✕ Reject
+            </button>
+          </div>
+        )}
+
+        {d.status==="Approved"&&(
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:12,color:T.grn,fontWeight:600}}>✓ Approved</span>
+            <button onClick={()=>handleStatus(d.id,"Pending","Reopened for revision")}
+              style={{padding:"5px 12px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,cursor:"pointer"}}>
+              Reopen
+            </button>
+          </div>
+        )}
+
+        {/* Revision form */}
+        {showRevForm&&(
+          <div style={{marginTop:10,padding:"10px",background:T.ambL,borderRadius:7,border:"1px solid "+T.ambM}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>Revision Reason *</label>
+            <textarea value={revNote} onChange={e=>setRevNote(e.target.value)}
+              placeholder="Kya change karna hai..." rows={2}
+              style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.ambM,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+            <div style={{display:"flex",gap:6,marginTop:7}}>
+              <button onClick={()=>setShowRevForm(false)} style={{flex:1,padding:"6px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>Cancel</button>
+              <button onClick={()=>{ if(revNote) handleStatus(d.id,"Revision",revNote); setShowRevForm(false); }}
+                style={{flex:2,padding:"6px",borderRadius:6,background:T.amb,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                Send to Revision Queue
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Reject form */}
+        {showRejForm&&(
+          <div style={{marginTop:10,padding:"10px",background:T.redL,borderRadius:7,border:"1px solid "+T.redM}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>Rejection Reason *</label>
+            <textarea value={rejNote} onChange={e=>setRejNote(e.target.value)}
+              placeholder="Rejection ka reason..." rows={2}
+              style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.redM,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+            <div style={{display:"flex",gap:6,marginTop:7}}>
+              <button onClick={()=>setShowRejForm(false)} style={{flex:1,padding:"6px",borderRadius:6,background:T.surface,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>Cancel</button>
+              <button onClick={()=>{ if(rejNote) handleStatus(d.id,"Rejected",rejNote); setShowRejForm(false); }}
+                style={{flex:2,padding:"6px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                Confirm Reject
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  // ── MAIN RENDER ───────────────────────────────────────────────────
+  return (
+    <div style={{padding:"14px 18px"}}>
+
+      {/* Modals */}
+      {showUpload && <UploadModal />}
+      {showRevQ   && <RevisionQueue />}
+      {showVer    && <VersionModal drawing={showVer} />}
+
+      {/* Header toolbar */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:5,flex:1,flexWrap:"wrap"}}>
+          {["All",...CATS].map(c=>(
+            <button key={c} onClick={()=>setFilter(c)}
+              style={{padding:"4px 10px",borderRadius:20,border:"1.5px solid "+(filter===c?T.blu:T.b1),
+                background:filter===c?T.bluL:"none",color:filter===c?T.blu:T.t3,
+                fontSize:11,fontWeight:filter===c?700:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+              {c}{c!=="All"&&catCounts[c]>0&&<span style={{marginLeft:4,fontSize:10}}>{catCounts[c]}</span>}
+            </button>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          {revQueue.length>0&&(
+            <button onClick={()=>setShowRevQ(true)}
+              style={{padding:"6px 12px",borderRadius:7,background:T.ambL,border:"1px solid "+T.ambM,
+                color:T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              🔄 Revision Queue
+              <span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{revQueue.length}</span>
+            </button>
+          )}
+          <button onClick={()=>setShowUpload(true)}
+            style={{padding:"6px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",
+              fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            ⬆ Upload Drawing
+          </button>
+        </div>
+      </div>
+
+      {/* Loading */}
+      {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading drawings...</div>}
+
+      {/* Empty state */}
+      {!loading&&drawings.length===0&&(
+        <div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}>
+          <div style={{fontSize:40,marginBottom:10}}>📐</div>
+          <div style={{fontSize:14,fontWeight:600,color:T.t2}}>Koi drawing nahi hai abhi</div>
+          <div style={{fontSize:12,marginTop:4}}>Upload Drawing button se pehli drawing add karo</div>
+        </div>
+      )}
+
+      {/* Drawing list */}
+      {!loading&&filtered.length>0&&(
+        <Panel>
+          <THead cols="2fr 80px 120px 55px 100px 90px 60px" headers={["Title","Type","Category","Ver.","Status","Uploaded","Size"]}/>
+          {filtered.map(d=>{
+            const sm = statusMeta[d.status] || statusMeta["Pending"];
+            const isS = sel?.id===d.id;
+            return(
+              <div key={d.id}>
+                <div onClick={()=>setSel(isS?null:d)}
+                  style={{display:"grid",gridTemplateColumns:"2fr 80px 120px 55px 100px 90px 60px",
+                    padding:"9px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center",cursor:"pointer",
+                    background:isS?T.bluL:"none",borderLeft:isS?"3px solid "+T.blu:"3px solid transparent",transition:"all .1s"}}
+                  onMouseEnter={e=>{if(!isS)e.currentTarget.style.background=T.surfaceB;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=isS?T.bluL:"none";}}>
+                  <div>
+                    <div style={{fontSize:12.5,fontWeight:isS?700:500,color:isS?T.blu:T.t1}}>{d.title}</div>
+                    {d.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.note}</div>}
+                  </div>
+                  <Pill label={d.drawing_type||d.type||"2D"} c={d.drawing_type==="3D"?T.pur:T.slt} bg={d.drawing_type==="3D"?T.purL:T.sltL}/>
+                  <span style={{fontSize:11.5,color:T.t2}}>{d.category}</span>
+                  <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{d.current_version||"v1"}</span>
+                  <Pill label={d.status} c={sm.c} bg={sm.bg}/>
+                  <span style={{fontSize:11,color:T.t3}}>{d.uploaded_by_name||"—"}</span>
+                  <span style={{fontSize:11,color:T.t4}}>{d.file_size||"—"}</span>
+                </div>
+                {isS&&<ActionPanel d={d}/>}
+              </div>
+            );
+          })}
+        </Panel>
       )}
     </div>
   );
@@ -3882,7 +4369,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
   const tabContent = {
     overview:   <TabOverview    proj={project}/>,
-    design:     <TabDesign/>,
+    design:     <TabDesign project={project}/>,
     estimate:   <TabEstimate/>,
     party:      <TabParty/>,
     transaction:<TabTransaction/>,
