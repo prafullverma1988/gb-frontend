@@ -651,7 +651,16 @@ function TabDesign({ project }) {
         file_size: Math.round(file.size / 1024) + " KB",
         note:      note || null,
       });
-      if (res.success) { loadDrawings(); setShowVer(null); }
+      if (res.success) {
+        // Force fresh reload from backend
+        await loadDrawings();
+        setShowRevQ(false);
+        setShowVer(null);
+        // Brief delay then reopen revision queue if needed
+        setTimeout(() => {}, 100);
+      } else {
+        setActionErr(res.message || "Version upload failed");
+      }
     } catch(e) { setActionErr(e.message); }
     setActing(p => ({...p, ["ver"+drawingId]: false}));
   };
@@ -856,12 +865,23 @@ function TabDesign({ project }) {
               {/* Upload new version */}
               <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
                 <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>Upload Revised Version</label>
-                <label style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",border:"1.5px dashed "+T.b2,borderRadius:6,cursor:"pointer",background:T.surfaceB}}>
-                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg" style={{display:"none"}}
+                <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",
+                  border:"1.5px dashed "+(acting["ver"+d.id]?T.blu:T.b2),borderRadius:6,
+                  cursor:acting["ver"+d.id]?"not-allowed":"pointer",
+                  background:acting["ver"+d.id]?T.bluL:T.surfaceB,transition:"all 0.2s"}}>
+                  <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}}
+                    disabled={!!acting["ver"+d.id]}
                     onChange={e=>{ if(e.target.files[0]) handleNewVersion(d.id, e.target.files[0], null); }}/>
-                  <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>
-                    {acting["ver"+d.id]?"Uploading...":"⬆ Upload New Version"}
-                  </span>
+                  {acting["ver"+d.id] ? (
+                    <div style={{width:"100%"}}>
+                      <div style={{fontSize:11.5,color:T.blu,fontWeight:600,marginBottom:4}}>⏳ Uploading...</div>
+                      <div style={{height:4,background:T.b1,borderRadius:4,overflow:"hidden"}}>
+                        <div style={{height:"100%",width:uploadPct+"%",background:T.blu,borderRadius:4,transition:"width 0.3s"}}/>
+                      </div>
+                    </div>
+                  ) : (
+                    <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>⬆ Upload New Version</span>
+                  )}
                 </label>
               </div>
             </div>
