@@ -530,14 +530,20 @@ function TabDesign({ project }) {
   const CATS = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
 
   // State
+  const [mainTab,  setMainTab]      = useState("drawings"); // "drawings" | "requests"
   const [drawings, setDrawings]     = useState([]);
+  const [requests, setRequests]     = useState([]);
   const [loading,  setLoading]      = useState(true);
   const [filter,   setFilter]       = useState("All");
   const [sel,      setSel]          = useState(null);
-  const [showUpload, setShowUpload] = useState(false);
-  const [showRevQ,   setShowRevQ]   = useState(false);  // Revision queue
-  const [showVer,    setShowVer]    = useState(null);   // drawing for version history
-  const [showPins,   setShowPins]   = useState(null);   // drawing for pins
+  const [showUpload,  setShowUpload]  = useState(false);
+  const [showRevQ,    setShowRevQ]    = useState(false);
+  const [showVer,     setShowVer]     = useState(null);
+  const [showPins,    setShowPins]    = useState(null);
+  const [showReqForm, setShowReqForm] = useState(false);
+  const [editReq,     setEditReq]     = useState(null);
+  const [reqForm,     setReqForm]     = useState({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});
+  const [reqSaving,   setReqSaving]   = useState(false);
 
   // Upload form state
   const [uForm, setUForm]   = useState({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
@@ -571,7 +577,15 @@ function TabDesign({ project }) {
     } catch(e) {}
     setLoading(false);
   };
-  useEffect(() => { loadDrawings(); }, [projectId]);
+  const loadRequests = async () => {
+    if (!projectId) return;
+    try {
+      const res = await api.get("/design/requests?project_id=" + projectId);
+      if (res.success) setRequests(res.data || []);
+    } catch(e) {}
+  };
+
+  useEffect(() => { loadDrawings(); loadRequests(); }, [projectId]);
 
   const filtered = drawings.filter(d =>
     filter === "All" || d.category === filter
@@ -582,6 +596,45 @@ function TabDesign({ project }) {
   }), {});
 
   const revQueue = drawings.filter(d => d.status === "Revision");
+
+  // ── Request handlers ─────────────────────────────────────────────
+  const handleSaveRequest = async () => {
+    if (!reqForm.title.trim()) return;
+    setReqSaving(true);
+    try {
+      if (editReq) {
+        const res = await api.patch("/design/requests/" + editReq.id, reqForm);
+        if (res.success) setRequests(p => p.map(r => r.id === editReq.id ? res.data : r));
+      } else {
+        const res = await api.post("/design/requests", {
+          ...reqForm,
+          project_id:   projectId,
+          project_name: projectName,
+          requested_by: "Site Team",
+        });
+        if (res.success) setRequests(p => [res.data, ...p]);
+      }
+      setShowReqForm(false);
+      setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});
+      setEditReq(null);
+    } catch(e) {}
+    setReqSaving(false);
+  };
+
+  const handleUpdateReqStatus = async (id, status) => {
+    try {
+      const res = await api.patch("/design/requests/" + id, { status });
+      if (res.success) setRequests(p => p.map(r => r.id === id ? res.data : r));
+    } catch(e) {}
+  };
+
+  const handleDeleteReq = async (id) => {
+    if (!window.confirm("Delete this request?")) return;
+    try {
+      await api.del("/design/requests/" + id);
+      setRequests(p => p.filter(r => r.id !== id));
+    } catch(e) {}
+  };
 
   // ── Cloudinary Upload ─────────────────────────────────────────────
   const uploadToCloudinary = async (file) => {
@@ -696,6 +749,69 @@ function TabDesign({ project }) {
   };
 
   const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
+
+  // ── REQUEST MODAL ────────────────────────────────────────────────
+  const RequestModal = () => (
+    <>
+      <div onClick={()=>!reqSaving&&setShowReqForm(false)}
+        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
+        zIndex:401,width:480,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{editReq?"Edit Request":"New Design Request"}</div>
+          {!reqSaving&&<button onClick={()=>setShowReqForm(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+          {/* Title */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>What drawing do you need? *</label>
+            <input value={reqForm.title} onChange={e=>setReqForm(p=>({...p,title:e.target.value}))}
+              placeholder="e.g. Ground Floor Plan, Section A-A, Toilet Detail"
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          {/* Category + Priority */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
+              <select value={reqForm.category} onChange={e=>setReqForm(p=>({...p,category:e.target.value}))}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                {CATS.map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Priority</label>
+              <select value={reqForm.priority} onChange={e=>setReqForm(p=>({...p,priority:e.target.value}))}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                {["Low","Normal","High","Urgent"].map(p=><option key={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+          {/* Due Date */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Due Date (optional)</label>
+            <input type="date" value={reqForm.due_date} onChange={e=>setReqForm(p=>({...p,due_date:e.target.value}))}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          {/* Description */}
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Description / Reference</label>
+            <textarea value={reqForm.description} onChange={e=>setReqForm(p=>({...p,description:e.target.value}))}
+              placeholder="Kya specifically chahiye, koi reference drawing, scale, etc..." rows={3}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+          </div>
+        </div>
+        <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={()=>setShowReqForm(false)} disabled={reqSaving}
+            style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={handleSaveRequest} disabled={reqSaving||!reqForm.title.trim()}
+            style={{flex:2,padding:"8px",borderRadius:7,background:reqSaving||!reqForm.title.trim()?T.b1:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:reqSaving?"not-allowed":"pointer"}}>
+            {reqSaving?"Saving...":editReq?"Update Request":"Submit Request"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
 
   // ── UPLOAD MODAL ──────────────────────────────────────────────────
   const UploadModal = () => (
@@ -1044,7 +1160,27 @@ function TabDesign({ project }) {
       {showUpload && <UploadModal />}
       {showRevQ   && <RevisionQueue />}
       {showVer    && <VersionModal drawing={showVer} />}
+      {showReqForm && <RequestModal />}
 
+      {/* Main tab switcher: Drawings | Requests */}
+      <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"2px solid "+T.b1}}>
+        {[
+          {id:"drawings", label:"Drawings", count:drawings.length},
+          {id:"requests", label:"Design Requests", count:requests.filter(r=>r.status==="Pending").length},
+        ].map(t=>(
+          <button key={t.id} onClick={()=>setMainTab(t.id)}
+            style={{padding:"8px 18px",border:"none",background:"none",
+              color:mainTab===t.id?T.blu:T.t3,fontSize:13,fontWeight:mainTab===t.id?700:400,
+              cursor:"pointer",borderBottom:mainTab===t.id?"2px solid "+T.blu:"2px solid transparent",
+              marginBottom:"-2px",display:"flex",alignItems:"center",gap:6}}>
+            {t.label}
+            {t.count>0&&<span style={{background:mainTab===t.id?T.blu:T.b1,color:mainTab===t.id?"white":T.t3,fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{t.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* ── DRAWINGS TAB ── */}
+      {mainTab==="drawings"&&<>
       {/* Header toolbar */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:5,flex:1,flexWrap:"wrap"}}>
@@ -1117,6 +1253,104 @@ function TabDesign({ project }) {
             );
           })}
         </Panel>
+      )}
+      </>} {/* end drawings tab */}
+
+      {/* ── REQUESTS TAB ── */}
+      {mainTab==="requests"&&(
+        <div>
+          {/* Toolbar */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+            <div style={{fontSize:12,color:T.t3}}>{requests.length} total requests</div>
+            <button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
+              style={{padding:"6px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+              + New Request
+            </button>
+          </div>
+
+          {/* Empty state */}
+          {requests.length===0&&(
+            <div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}>
+              <div style={{fontSize:36,marginBottom:8}}>📋</div>
+              <div style={{fontSize:14,fontWeight:600,color:T.t2}}>Koi design request nahi</div>
+              <div style={{fontSize:12,marginTop:4}}>New Request button se request karo</div>
+            </div>
+          )}
+
+          {/* Request cards */}
+          {requests.map(req=>{
+            const prioMeta = {
+              "Urgent": {c:T.red,   bg:T.redL},
+              "High":   {c:T.amb,   bg:T.ambL},
+              "Normal": {c:T.blu,   bg:T.bluL},
+              "Low":    {c:T.t4,    bg:T.surfaceB},
+            };
+            const statusMeta2 = {
+              "Pending":     {c:T.amb, bg:T.ambL},
+              "In Progress": {c:T.blu, bg:T.bluL},
+              "Uploaded":    {c:T.grn, bg:T.grnL},
+              "Rejected":    {c:T.red, bg:T.redL},
+            };
+            const pm = prioMeta[req.priority]    || prioMeta["Normal"];
+            const sm = statusMeta2[req.status]   || statusMeta2["Pending"];
+            return(
+              <div key={req.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,
+                padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+pm.c}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{req.title}</div>
+                    <div style={{fontSize:11,color:T.t4,marginTop:2}}>
+                      {req.category}
+                      {req.due_date&&<span style={{marginLeft:8}}>· Due: {fmtDate(req.due_date)}</span>}
+                      {req.requested_by&&<span style={{marginLeft:8}}>· By: {req.requested_by}</span>}
+                    </div>
+                    {req.description&&<div style={{fontSize:11.5,color:T.t2,marginTop:5,lineHeight:1.4}}>{req.description}</div>}
+                    {req.assigned_to&&<div style={{fontSize:11,color:T.blu,marginTop:4}}>👤 Assigned to: {req.assigned_to}</div>}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,background:pm.bg,color:pm.c}}>{req.priority}</span>
+                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,background:sm.bg,color:sm.c}}>{req.status}</span>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
+                  {req.status==="Pending"&&<>
+                    <button onClick={()=>handleUpdateReqStatus(req.id,"In Progress")}
+                      style={{padding:"4px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      Start
+                    </button>
+                    <button onClick={()=>{
+                      setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                      setMainTab("drawings"); setShowUpload(true);
+                      handleUpdateReqStatus(req.id,"In Progress");
+                    }}
+                      style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      ⬆ Upload Direct
+                    </button>
+                  </>}
+                  {req.status==="In Progress"&&(
+                    <button onClick={()=>{
+                      setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                      setMainTab("drawings"); setShowUpload(true);
+                    }}
+                      style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      ⬆ Upload Drawing
+                    </button>
+                  )}
+                  <button onClick={()=>{setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||""});setShowReqForm(true);}}
+                    style={{padding:"4px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}>
+                    Edit
+                  </button>
+                  <button onClick={()=>handleDeleteReq(req.id)}
+                    style={{padding:"4px 10px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,cursor:"pointer"}}>
+                    Delete
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
