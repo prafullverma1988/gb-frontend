@@ -600,7 +600,10 @@ function TabDesign({ project }) {
         else reject(new Error(data.error?.message || "Upload failed"));
       };
       xhr.onerror = () => reject(new Error("Network error"));
-      xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/auto/upload`);
+      // PDF/DWG → raw, images → image
+      const isPDF = file.type === "application/pdf" || file.name.match(/\.(pdf|dwg|dxf)$/i);
+      const resType = isPDF ? "raw" : "image";
+      xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${resType}/upload`);
       xhr.send(fd);
     });
   };
@@ -790,6 +793,40 @@ function TabDesign({ project }) {
     </>
   );
 
+  // ── Revision Pin Form ────────────────────────────────────────────
+  const RevPinForm = ({ drawingId, onAdded }) => {
+    const [pinNote, setPinNote] = useState("");
+    const [saving,  setSaving]  = useState(false);
+    const [added,   setAdded]   = useState(false);
+    const submit = async () => {
+      if (!pinNote.trim()) return;
+      setSaving(true);
+      try {
+        await api.post("/design/drawings/" + drawingId + "/pins", {
+          label: pinNote, x_pct: 50, y_pct: 50,
+        });
+        setPinNote(""); setAdded(true);
+        setTimeout(() => setAdded(false), 2000);
+        onAdded();
+      } catch(e) {}
+      setSaving(false);
+    };
+    return(
+      <div style={{marginTop:8}}>
+        <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>📍 Add Revision Pin / Comment</label>
+        <div style={{display:"flex",gap:6}}>
+          <input value={pinNote} onChange={e=>setPinNote(e.target.value)}
+            placeholder="e.g. Column dimension ghalat hai..."
+            style={{flex:1,padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+          <button onClick={submit} disabled={saving||!pinNote.trim()}
+            style={{padding:"6px 11px",borderRadius:6,background:pinNote.trim()?T.amb:T.b1,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:pinNote.trim()?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+            {added?"✓ Added":saving?"...":"Add Pin"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
   // ── REVISION QUEUE PANEL ──────────────────────────────────────────
   const RevisionQueue = () => (
     <>
@@ -810,8 +847,12 @@ function TabDesign({ project }) {
               <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
               <div style={{fontSize:11,color:T.t4,marginTop:2}}>{d.category} · {d.current_version} · {fmtDate(d.updated_at)}</div>
               {d.note&&<div style={{fontSize:11.5,color:T.amb,marginTop:5,padding:"5px 8px",background:T.ambL,borderRadius:5}}>📝 {d.note}</div>}
-              {/* Pin list */}
-              {d.pin_count>0&&<div style={{fontSize:11,color:T.t3,marginTop:5}}>📍 {d.pin_count} revision pin(s)</div>}
+              {/* Revision reason / note */}
+              {d.note&&<div style={{fontSize:11.5,color:T.amb,marginTop:6,padding:"6px 9px",background:"rgba(217,119,6,0.08)",borderRadius:6,borderLeft:"3px solid "+T.amb}}>
+                💬 {d.note}
+              </div>}
+              {/* Add Pin */}
+              <RevPinForm drawingId={d.id} onAdded={loadDrawings}/>
               {/* Upload new version */}
               <div style={{marginTop:10,paddingTop:8,borderTop:"1px solid "+T.b1}}>
                 <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>Upload Revised Version</label>
@@ -894,6 +935,10 @@ function TabDesign({ project }) {
             {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer"
               style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>
               👁 View
+            </a>}
+            {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer"
+              style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>
+              ⬇ Download
             </a>}
             <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}>
               🕐 History
