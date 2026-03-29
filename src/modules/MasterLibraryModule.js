@@ -1163,27 +1163,40 @@ function SubcontractorSection() {
 // 6. CLIENT BOQ RATE CARD
 // ═══════════════════════════════════════════════════════════════════════
 function ClientBOQSection({ dbProjects = [] }) {
-  const [selectedProject, setSelectedProject] = useState(1);
-  const projects = [
-    { id: 1, name: "Shubham & Nand Kishor 623" }, { id: 2, name: "Tikendra Banchhor Residence" },
-    { id: 3, name: "Esther Risali Commercial" }, { id: 4, name: "Amarendra Shrivastava Villa" },
-  ];
-  const [boqItems, setBoqItems] = useState([
-    { id: 1, projectId: 1, category: "RCC Work", item: "Footing RCC M25", unit: "CFT", qty: 450, rate: 310, clientRate: 380, remark: "Including formwork" },
-    { id: 2, projectId: 1, category: "RCC Work", item: "Column RCC M30", unit: "CFT", qty: 280, rate: 340, clientRate: 420, remark: "" },
-    { id: 3, projectId: 1, category: "Brickwork", item: "AAC Block Wall 4 inch", unit: "Sq.Ft", qty: 3200, rate: 18, clientRate: 26, remark: "Including mortar" },
-    { id: 4, projectId: 1, category: "Plastering", item: "Interior Plaster 12mm", unit: "Sq.Ft", qty: 6800, rate: 14, clientRate: 22, remark: "Cement mortar 1:4" },
-    { id: 5, projectId: 1, category: "Tiles", item: "Vitrified Tile (Living & Bed)", unit: "Sq.Ft", qty: 1800, rate: 55, clientRate: 75, remark: "Double charge 600x600" },
-    { id: 6, projectId: 1, category: "Electrical", item: "Electrical Wiring Complete", unit: "Point", qty: 120, rate: 380, clientRate: 520, remark: "Concealed wiring, Polycab" },
-    { id: 7, projectId: 1, category: "Plumbing", item: "Plumbing Complete", unit: "Point", qty: 45, rate: 550, clientRate: 750, remark: "CPVC + drainage" },
-    { id: 8, projectId: 1, category: "Painting", item: "Interior Painting (Apex)", unit: "Sq.Ft", qty: 5500, rate: 11, clientRate: 16, remark: "2 coat putty + 2 coat paint" },
-  ]);
+  const { items: uomList } = useSection("uom");
+  const { items: workCats } = useSection("work-categories");
+  const [projects, setProjects] = useState([]);
+  const [selectedProject, setSelectedProject] = useState("");
+  const [boqItems, setBoqItems] = useState([]);
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const emptyForm = { category: "", item: "", unit: "Sq.Ft", qty: 0, rate: 0, clientRate: 0, remark: "" };
+  const emptyForm = { category: "", item: "", unit: "", qty: 0, rate: 0, clientRate: 0, remark: "" };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  // UOM from backend
+  const uomOptions = uomList.length > 0 ? uomList.map(u => u.name) : ["CFT","Sq.Ft","Running Ft","Kg","MT","Point","Unit","Lump Sum","Piece"];
+  // Work categories from backend
+  const workCatOptions = workCats.map(c => c.name);
+
+  // Load real projects
+  useEffect(() => {
+    api.get("/projects").then(res => {
+      if (res.success && res.data.length) {
+        setProjects(res.data);
+        setSelectedProject(res.data[0].id);
+      }
+    }).catch(() => {});
+  }, []);
+
+  // Load BOQ items when project changes
+  useEffect(() => {
+    if (!selectedProject) return;
+    api.get("/library/boq?project_id=" + selectedProject).then(res => {
+      if (res.success) setBoqItems(res.data || []);
+    }).catch(() => {});
+  }, [selectedProject]);
 
   const filtered = boqItems.filter(b => {
     if (b.projectId !== selectedProject) return false;
@@ -1199,10 +1212,28 @@ function ClientBOQSection({ dbProjects = [] }) {
 
   const fmt = (n) => n >= 10000000 ? `${(n/10000000).toFixed(2)}Cr` : n >= 100000 ? `${(n/100000).toFixed(1)}L` : `${(n/1000).toFixed(0)}K`;
 
-  const openCreate = () => { setEditing(null); setForm({ ...emptyForm }); setShowModal(true); };
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ ...emptyForm, unit: uomOptions[0] || "Sq.Ft", category: workCatOptions[0] || "" });
+    setShowModal(true);
+  };
   const openEdit = (b) => { setEditing(b); setForm({ ...b }); setShowModal(true); };
-  const save = () => { if (!form.item.trim()) return; if (editing) { setBoqItems(prev => prev.map(b => b.id === editing.id ? { ...b, ...form } : b)); } else { setBoqItems(prev => [...prev, { ...form, id: Date.now(), projectId: selectedProject }]); } setShowModal(false); };
-  const del = (id) => setBoqItems(prev => prev.filter(b => b.id !== id));
+  const save = async () => {
+    if (!form.item.trim()) return alert("BOQ item name required");
+    const payload = { ...form, project_id: selectedProject };
+    let res;
+    if (editing) res = await api.put("/library/boq/" + editing.id, payload);
+    else res = await api.post("/library/boq", payload);
+    if (res.success) {
+      if (editing) setBoqItems(prev => prev.map(b => b.id === editing.id ? res.data : b));
+      else setBoqItems(prev => [...prev, res.data]);
+      setShowModal(false);
+    } else alert(res.message || "Save failed");
+  };
+  const del = async (id) => {
+    const res = await api.del("/library/boq/" + id);
+    if (res.success) setBoqItems(prev => prev.filter(b => b.id !== id));
+  };
 
   const columns = [
     { key: "category", label: "Category", minW: 100, render: r => <Badge text={r.category} color={T.purple} bg={T.purpleSoft} /> },
@@ -1223,7 +1254,7 @@ function ClientBOQSection({ dbProjects = [] }) {
           <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 8 }}>Select Project</label>
           <select value={selectedProject} onChange={e => setSelectedProject(parseInt(e.target.value))}
             style={{ width: "100%", padding: "10px 14px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13.5, color: T.text, fontFamily: T.font, cursor: "pointer" }}>
-            {projects.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            {projects.map(p => <option key={p.id} value={p.id}>{p.project_name || p.name}</option>)}
           </select>
         </div>
         {[
@@ -1264,11 +1295,11 @@ function ClientBOQSection({ dbProjects = [] }) {
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit BOQ Item" : "Add BOQ Item"} desc="Define item, quantity, and client rate" width={600}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Work Category" value={form.category} onChange={v => upd("category", v)} placeholder="e.g. RCC Work" half required />
+          <FormSelect label="Work Category" value={form.category} onChange={v => upd("category", v)} options={workCatOptions} half required />
           <FormField label="BOQ Item Name" value={form.item} onChange={v => upd("item", v)} placeholder="e.g. Column RCC M30" half required />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={["CFT","Sq.Ft","Running Ft","Kg","MT","Point","Unit","Lump Sum","Piece"]} half />
+          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={uomOptions} half />
           <FormField label="Quantity" value={form.qty || ""} onChange={v => upd("qty", parseFloat(v) || 0)} type="number" half required />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
