@@ -695,7 +695,15 @@ function TabDesign({ project }) {
     } catch(e) {}
   };
 
-  useEffect(() => { loadDrawings(); loadRequests(); loadCategories(); }, [projectId]);
+  // Load titles immediately on mount (separate from categories for speed)
+  useEffect(() => {
+    if (!projectId) return;
+    api.get("/design/titles").then(r=>{ if(r.success&&r.data.length) setDbTitles(r.data); }).catch(()=>{});
+    api.get("/design/categories?type=category").then(r=>{ if(r.success&&r.data.length) setDbCats(r.data); }).catch(()=>{});
+    api.get("/design/categories?type=drawing_type").then(r=>{ if(r.success&&r.data.length) setDbTypes(r.data); }).catch(()=>{});
+    loadDrawings();
+    loadRequests();
+  }, [projectId]);
 
   const filtered = drawings.filter(d => {
     if (filter !== "All" && d.category !== filter) return false;
