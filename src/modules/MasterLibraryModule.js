@@ -1244,8 +1244,8 @@ function LabourRateSection() {
   const [form, setForm] = useState({ skill: "", category: "Skilled", dailyRate: 0, otRate: 0, city: "Raipur" });
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const filtered = labourRates.filter(r => (r.skill||r.role||r.name||"").toLowerCase().includes(search.toLowerCase()));
-  const openCreate = () => { setEditing(null); setForm({ skill: "", category: "Skilled", dailyRate: 0, otRate: 0, city: "Raipur" }); setShowModal(true); };
-  const openEdit = (r) => { setEditing(r); setForm({ ...r }); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ role: "", category: "Skilled", rate: 0, overtime_rate: 0, description: "" }); setShowModal(true); };
+  const openEdit = (r) => { setEditing(r); setForm({ role: r.role||r.skill||"", category: r.category||"Skilled", rate: r.rate||r.dailyRate||0, overtime_rate: r.overtime_rate||r.otRate||0, description: r.description||r.city||"" }); setShowModal(true); };
   const save = async () => { if (!form.role?.trim()&&!form.skill?.trim()) return; await apiSave({role: form.skill||form.role, category: form.category, unit: 'Day', rate: form.dailyRate||form.rate||0, overtime_rate: form.otRate||0, description: form.city||''}, editing?.id); setShowModal(false); };
   const del = (id) => apiDel(id);
   const catColors = { Skilled: { c: T.blue, bg: T.blueSoft }, "Semi-Skilled": { c: T.amber, bg: T.amberSoft }, Unskilled: { c: T.textMid, bg: T.borderLight }, Staff: { c: T.green, bg: T.greenSoft } };
@@ -1269,26 +1269,20 @@ function LabourRateSection() {
           instructions: "Instructions: Category must be Skilled, Semi-Skilled, Unskilled, or Staff. Skill and Daily Rate required.",
           mapRow: (r) => [r.skill, r.category, r.dailyRate, r.otRate, r.city],
         }}
-        currentData={rates}
-        onImportData={(rows) => {
-          const items = rows.map((r, i) => ({
-            id: Date.now() + i, skill: r["Skill / Labour Type"]||"", category: r["Category"]||"Skilled",
-            dailyRate: parseFloat(r["Daily Rate (Rs.)"])||0, otRate: parseFloat(r["OT Rate/Hour (Rs.)"])||0, city: r["City/Area"]||"Raipur",
-          })).filter(l => l.skill);
-          // CSV import not wired to API yet
-        }}
+        currentData={labourRates}
+        onImportData={(rows) => { /* CSV import */ }}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Labour Rate" : "Add Labour Rate"} width={480}>
-        <FormField label="Skill / Labour Type" value={form.skill} onChange={v => upd("skill", v)} placeholder="e.g. Mason (Mistri)" required />
+        <FormField label="Role / Labour Type" value={form.role||form.skill||""} onChange={v => upd("role", v)} placeholder="e.g. Mason (Mistri)" required />
         <div style={{ height: 14 }} />
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormSelect label="Category" value={form.category} onChange={v => upd("category", v)} options={["Skilled","Semi-Skilled","Unskilled","Staff"]} half />
           <FormField label="City / Area" value={form.city} onChange={v => upd("city", v)} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <FormField label="Daily Rate (Rs.)" value={form.dailyRate || ""} onChange={v => upd("dailyRate", parseFloat(v) || 0)} type="number" half required />
-          <FormField label="OT Rate / Hour (Rs.)" value={form.otRate || ""} onChange={v => upd("otRate", parseFloat(v) || 0)} type="number" half />
+          <FormField label="Daily Rate (Rs.)" value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half required />
+          <FormField label="OT Rate / Hour (Rs.)" value={form.overtime_rate || ""} onChange={v => upd("overtime_rate", parseFloat(v) || 0)} type="number" half />
         </div>
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Add"} />
       </Modal>
