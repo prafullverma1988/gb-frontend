@@ -1517,7 +1517,8 @@ const masterSections = [
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
   { id: "boq",           label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: "boq", color: T.indigo },
   { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", countKey: "equipment", color: T.rose },
-  { id: "uom",           label: "Units (UOM)",         Icon: IcRuler,     Comp: UOMMasterSection,         section: "REFERENCE", count: "19", color: T.teal },
+  { id: "design_cats",   label: "Design Categories",  Icon: IcLayers,    Comp: DesignCategorySection,    section: "REFERENCE", countKey: "design_cats", color: T.blue },
+  { id: "uom",           label: "Units (UOM)",         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
   { id: "expense_head",  label: "Expense Heads",       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, count: "14", color: T.amber },
 ];
 

@@ -613,6 +613,7 @@ function TabDesign({ project }) {
   const [editReq,     setEditReq]     = useState(null);
   const [reqForm,     setReqForm]     = useState({title:"",category:"Architectural",description:"",priority:"Normal",due_date:"",assigned_to:""});
   const [reqSaving,   setReqSaving]   = useState(false);
+  const [pendingReqId, setPendingReqId] = useState(null); // request to mark "Uploaded" after drawing saved
 
   // Upload form state
   const [uForm, setUForm]   = useState({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
@@ -755,6 +756,11 @@ function TabDesign({ project }) {
         setShowUpload(false);
         setUForm({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
         setUFile(null); setUploadPct(0);
+        // Mark linked request as Uploaded
+        if (pendingReqId) {
+          handleUpdateReqStatus(pendingReqId, "Uploaded");
+          setPendingReqId(null);
+        }
       } else {
         setUploadErr(res.message || "Save failed");
       }
@@ -1330,6 +1336,7 @@ function TabDesign({ project }) {
                     </button>
                     <button onClick={()=>{
                       setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                      setPendingReqId(req.id);
                       setMainTab("drawings"); setShowUpload(true);
                       handleUpdateReqStatus(req.id,"In Progress");
                     }}
@@ -1340,6 +1347,7 @@ function TabDesign({ project }) {
                   {req.status==="In Progress"&&(
                     <button onClick={()=>{
                       setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                      setPendingReqId(req.id);
                       setMainTab("drawings"); setShowUpload(true);
                     }}
                       style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
