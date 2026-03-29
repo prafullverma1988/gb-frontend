@@ -785,7 +785,7 @@ function MaterialMasterSection() {
     { key: "lastRate", label: "Last Rate", minW: 80, align: "right", render: r => <span style={{ fontWeight: 600, color: r.lastRate > r.baseRate ? T.red : T.green }}>Rs.{r.lastRate}</span> },
     { key: "currentStock", label: "Stock", minW: 70, align: "right", render: r => (
       <span style={{ fontWeight: 600, color: r.currentStock <= r.minStock ? T.red : T.text }}>
-        {r.currentStock.toLocaleString()}
+        {(r.currentStock||0).toLocaleString()}
         {r.currentStock <= r.minStock && <span style={{ fontSize: 10, color: T.red, marginLeft: 4 }}>LOW</span>}
       </span>
     )},
@@ -987,7 +987,7 @@ function WorkCategorySection() {
     { key: "name", label: "Work Category", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
     { key: "desc", label: "Description", minW: 200, style: { fontSize: 12, color: T.textMid } },
     { key: "unit", label: "Unit", minW: 70 },
-    { key: "rate", label: "Base Rate", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>Rs.{r.rate.toLocaleString()}/{r.unit}</span> },
+    { key: "rate", label: "Base Rate", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>Rs.{(r.rate||0).toLocaleString()}/{r.unit||""}</span> },
   ];
 
   return (
@@ -1153,11 +1153,11 @@ function ClientBOQSection({ dbProjects = [] }) {
     { key: "category", label: "Category", minW: 100, render: r => <Badge text={r.category} color={T.purple} bg={T.purpleSoft} /> },
     { key: "item", label: "BOQ Item", minW: 200, render: r => (<div><div style={{ fontWeight: 600 }}>{r.item}</div>{r.remark && <div style={{ fontSize: 11, color: T.textLight, marginTop: 1 }}>{r.remark}</div>}</div>) },
     { key: "unit", label: "Unit", minW: 60 },
-    { key: "qty", label: "Qty", minW: 60, align: "right", render: r => <span style={{ fontWeight: 600 }}>{r.qty.toLocaleString()}</span> },
+    { key: "qty", label: "Qty", minW: 60, align: "right", render: r => <span style={{ fontWeight: 600 }}>{(r.qty||0).toLocaleString()}</span> },
     { key: "rate", label: "Our Cost", minW: 80, align: "right", render: r => <span style={{ fontWeight: 600 }}>Rs.{r.rate}</span> },
     { key: "clientRate", label: "Client Rate", minW: 80, align: "right", render: r => <span style={{ fontWeight: 700, color: T.blue }}>Rs.{r.clientRate}</span> },
     { key: "margin", label: "Margin", minW: 80, align: "right", render: r => { const m = r.clientRate - r.rate; const pct = r.clientRate > 0 ? ((m / r.clientRate) * 100).toFixed(0) : 0; return <span style={{ fontWeight: 600, color: m > 0 ? T.green : T.red }}>Rs.{m} ({pct}%)</span>; }},
-    { key: "total", label: "Client Total", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700 }}>Rs.{(r.clientRate * r.qty).toLocaleString()}</span> },
+    { key: "total", label: "Client Total", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700 }}>Rs.{((r.clientRate||0) * (r.qty||0)).toLocaleString()}</span> },
   ];
 
   return (
@@ -1223,7 +1223,7 @@ function ClientBOQSection({ dbProjects = [] }) {
         {form.rate > 0 && form.clientRate > 0 && (
           <div style={{ background: T.greenSoft, borderRadius: 8, padding: "10px 14px", marginBottom: 14, fontSize: 13 }}>
             <span style={{ fontWeight: 700, color: T.green }}>Margin: Rs.{form.clientRate - form.rate} per {form.unit} ({form.clientRate > 0 ? (((form.clientRate - form.rate) / form.clientRate) * 100).toFixed(1) : 0}%)</span>
-            {form.qty > 0 && <span style={{ color: T.textMid, marginLeft: 12 }}>Total profit: Rs.{((form.clientRate - form.rate) * form.qty).toLocaleString()}</span>}
+            {form.qty > 0 && <span style={{ color: T.textMid, marginLeft: 12 }}>Total profit: Rs.{(((form.clientRate||0) - (form.rate||0)) * (form.qty||0)).toLocaleString()}</span>}
           </div>
         )}
         <FormTextarea label="Remark / Specification" value={form.remark} onChange={v => upd("remark", v)} placeholder="e.g. Including formwork" rows={2} />
@@ -1320,7 +1320,7 @@ function EquipmentSection() {
     { key: "type", label: "Type", minW: 80 },
     { key: "ownership", label: "Own/Rent", minW: 70, render: r => <Badge text={r.ownership} color={r.ownership === "Owned" ? T.green : T.amber} bg={r.ownership === "Owned" ? T.greenSoft : T.amberSoft} /> },
     { key: "vendor", label: "Vendor", minW: 110, style: { fontSize: 12 } },
-    { key: "dailyRate", label: "Daily Rate", minW: 80, align: "right", render: r => r.dailyRate > 0 ? <span style={{ fontWeight: 700 }}>Rs.{r.dailyRate.toLocaleString()}</span> : <span style={{ color: T.textLight }}>N/A</span> },
+    { key: "dailyRate", label: "Daily Rate", minW: 80, align: "right", render: r => r.dailyRate > 0 ? <span style={{ fontWeight: 700 }}>Rs.{(r.dailyRate||0).toLocaleString()}</span> : <span style={{ color: T.textLight }}>N/A</span> },
     { key: "currentProject", label: "At Project", minW: 130, style: { fontSize: 12 } },
     { key: "status", label: "Status", minW: 80, render: r => { const sc = statusColors[r.status] || statusColors.Available; return <Badge text={r.status} color={sc.c} bg={sc.bg} />; }},
   ];
