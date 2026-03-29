@@ -1074,7 +1074,7 @@ function SubcontractorSection() {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const emptyForm = { name: "", owner: "", trade: "RCC & Civil", phone: "", city: "Raipur", gstin: "", pan: "", address: "", labour_strength: 0, rate_type: "Sq.Ft", rate: 0, bank_name: "", acc_no: "", ifsc: "", status: "Active" };
+  const emptyForm = { name: "", owner: "", trade: "RCC & Civil", phone: "", city: "Raipur", gstin: "", pan: "", address: "", labour_strength: 0, status: "Active" };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
   const filtered = subcons.filter(s => s.name.toLowerCase().includes(search.toLowerCase()) || (s.trade||"").toLowerCase().includes(search.toLowerCase()) || (s.owner||"").toLowerCase().includes(search.toLowerCase()));
@@ -1122,13 +1122,13 @@ function SubcontractorSection() {
         }}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Subcontractor" : "Add Subcontractor"} desc="Subcontractor firm and rate card details" width={640}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Subcontractor" : "Add Subcontractor"} desc="Subcontractor firm details" width={580}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormField label="Firm / Company Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. Raj Construction" half required />
-          <FormField label="Owner / Contact" value={form.owner} onChange={v => upd("owner", v)} placeholder="Owner name" half />
+          <FormField label="Owner / Contact Person" value={form.owner} onChange={v => upd("owner", v)} placeholder="Owner name" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Trade / Specialty" value={form.trade} onChange={v => upd("trade", v)} options={["RCC & Civil","Electrical","Plumbing","Painting","Tiles & Flooring","Fabrication","Carpentry","Waterproofing","False Ceiling","HVAC","Landscaping","Demolition","Other"]} half required />
+          <FormSelect label="Trade / Specialty" value={form.trade} onChange={v => upd("trade", v)} options={["RCC & Civil","Electrical Work","Plumbing","Painting","Tiles & Flooring","Fabrication","Carpentry","Waterproofing","False Ceiling","HVAC","Landscaping","Demolition","Other"]} half required />
           <FormField label="Phone" value={form.phone} onChange={v => upd("phone", v)} placeholder="+91 XXXXX XXXXX" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
@@ -1139,21 +1139,125 @@ function SubcontractorSection() {
           <FormField label="GSTIN" value={form.gstin} onChange={v => upd("gstin", v)} placeholder="If registered" half />
           <FormSelect label="Status" value={form.status} onChange={v => upd("status", v)} options={["Active","Inactive","Blacklisted"]} half />
         </div>
-        <div style={{ padding: "12px 0 4px", fontSize: 13, fontWeight: 700, color: T.text, borderTop: `1px solid ${T.borderLight}`, marginTop: 4 }}>Default Rate Card</div>
-        <div style={{ height: 10 }} />
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Rate Unit" value={form.rate_type} onChange={v => upd("rate_type", v)} options={["Sq.Ft","CFT","Point","Kg","Running Ft","Unit","Lump Sum","Day"]} half />
-          <FormField label="Rate (Rs.)" value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half />
-        </div>
-        <div style={{ padding: "12px 0 4px", fontSize: 13, fontWeight: 700, color: T.text, borderTop: `1px solid ${T.borderLight}`, marginTop: 4 }}>Bank Details (for payment)</div>
-        <div style={{ height: 10 }} />
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
-          <FormField label="Bank Name" value={form.bank_name || ""} onChange={v => upd("bank_name", v)} half />
-          <FormField label="Account No." value={form.acc_no || ""} onChange={v => upd("acc_no", v)} half />
-        </div>
-        <div style={{ height: 14 }} />
-        <FormField label="IFSC Code" value={form.ifsc || ""} onChange={v => upd("ifsc", v)} />
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Add Subcontractor"} />
+      </Modal>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// SUBCON RATE CARD SECTION
+// ═══════════════════════════════════════════════════════════════════════
+function SubconRateCardSection() {
+  const { items: subcons } = useSection("subcontractors");
+  const { items: uomList } = useSection("uom");
+  const { items: workCats } = useSection("work-categories");
+  const [selectedSubcon, setSelectedSubcon] = useState("");
+  const [rateItems, setRateItems] = useState([]);
+  const [loadingItems, setLoadingItems] = useState(false);
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { work_item: "", unit: "", rate: 0, remark: "" };
+  const [form, setForm] = useState(emptyForm);
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const uomOptions = uomList.length > 0 ? uomList.map(u => u.name) : ["Sq.Ft","CFT","Running Ft","Kg","MT","Point","Unit","Lump Sum","Piece","Day"];
+  const workItems = workCats.map(c => c.name);
+
+  useEffect(() => {
+    if (!selectedSubcon) return;
+    setLoadingItems(true);
+    api.get("/library/subcon-rates?subcon_id=" + selectedSubcon)
+      .then(res => { if (res.success) setRateItems(res.data || []); })
+      .catch(() => {})
+      .finally(() => setLoadingItems(false));
+  }, [selectedSubcon]);
+
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ ...emptyForm, unit: uomOptions[0] || "Sq.Ft", work_item: workItems[0] || "" });
+    setShowModal(true);
+  };
+  const openEdit = (r) => { setEditing(r); setForm({ work_item: r.work_item, unit: r.unit, rate: r.rate, remark: r.remark || "" }); setShowModal(true); };
+  const save = async () => {
+    if (!form.work_item.trim()) return alert("Work item required");
+    if (!selectedSubcon) return alert("Select a subcontractor first");
+    setSaving(true);
+    const payload = { ...form, subcon_id: selectedSubcon };
+    let res;
+    if (editing) res = await api.put("/library/subcon-rates/" + editing.id, payload);
+    else res = await api.post("/library/subcon-rates", payload);
+    setSaving(false);
+    if (res.success) {
+      if (editing) setRateItems(p => p.map(x => x.id === editing.id ? res.data : x));
+      else setRateItems(p => [...p, res.data]);
+      setShowModal(false);
+    } else alert(res.message || "Save failed");
+  };
+  const del = async (id) => {
+    const res = await api.del("/library/subcon-rates/" + id);
+    if (res.success) setRateItems(p => p.filter(x => x.id !== id));
+  };
+
+  const selectedSubconName = subcons.find(s => String(s.id) === String(selectedSubcon))?.name || "";
+
+  return (
+    <div>
+      {/* Subcon selector */}
+      <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
+        <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", whiteSpace: "nowrap" }}>SELECT SUBCONTRACTOR</label>
+        <select value={selectedSubcon} onChange={e => setSelectedSubcon(e.target.value)}
+          style={{ flex: 1, padding: "9px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, color: "#111827", fontFamily: "inherit", cursor: "pointer" }}>
+          <option value="">-- Select subcontractor --</option>
+          {subcons.map(s => <option key={s.id} value={s.id}>{s.name} ({s.trade || ""})</option>)}
+        </select>
+        {selectedSubcon && (
+          <button onClick={openCreate}
+            style={{ padding: "9px 18px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+            + Add Item
+          </button>
+        )}
+      </div>
+
+      {!selectedSubcon ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "#9CA3AF", fontSize: 14 }}>
+          Select a subcontractor to view or add rate items
+        </div>
+      ) : loadingItems ? (
+        <div style={{ textAlign: "center", padding: "60px 0", color: "#9CA3AF" }}>Loading...</div>
+      ) : (
+        <>
+          <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#374151" }}>
+            Rate Card — {selectedSubconName}
+            <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 500, color: "#6B7280" }}>{rateItems.length} items</span>
+          </div>
+          <DataTable
+            columns={[
+              { key: "work_item", label: "Work Item", minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.work_item}</span> },
+              { key: "unit", label: "Unit", minW: 80 },
+              { key: "rate", label: "Rate (Rs.)", minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: "#2563EB" }}>Rs.{(r.rate||0).toLocaleString()}/{r.unit}</span> },
+              { key: "remark", label: "Remark", minW: 160, render: r => <span style={{ fontSize: 12, color: "#6B7280" }}>{r.remark || "—"}</span> },
+            ]}
+            data={rateItems}
+            onEdit={openEdit}
+            onDelete={del}
+            emptyMsg="No rate items added yet — click Add Item to start"
+          />
+        </>
+      )}
+
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Rate Item" : "Add Rate Item"} desc={"Rate for: " + selectedSubconName} width={500}>
+        <div style={{ marginBottom: 14 }}>
+          <FormSelect label="Work Item" value={form.work_item} onChange={v => upd("work_item", v)} options={workItems} required />
+        </div>
+        <div style={{ display: "flex", gap: 16, marginBottom: 14 }}>
+          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={uomOptions} half />
+          <FormField label="Rate (Rs.)" value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half required />
+        </div>
+        <FormField label="Remark / Scope" value={form.remark} onChange={v => upd("remark", v)} placeholder="e.g. Including material, labour only, etc." />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Add Item"} />
       </Modal>
     </div>
   );
@@ -1823,6 +1927,7 @@ const masterSections = [
   { id: "work_cat",      label: "Work Category",       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
   { id: "party",         label: "Party / Supplier",    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
   { id: "subcon",        label: "Subcontractors",      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
+  { id: "subcon_rate",   label: "Subcon Rate Card",    Icon: IcDollar,    Comp: SubconRateCardSection,    section: null, countKey: null, color: T.teal },
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
   { id: "boq",           label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: "boq", color: T.indigo },
   { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", countKey: "equipment", color: T.rose },
