@@ -1492,7 +1492,7 @@ function DesignCategorySection() {
 
   const columns = [
     { key:"name", label:"Name", minW:160, render: r => <span style={{fontWeight:600}}>{r.name}</span> },
-    { key:"type", label:"Type", minW:120, render: r => <Badge text={r.type==="category"?"Category":"Drawing Type"} color={r.type==="category"?T.blue:T.purple} bg={r.type==="category"?T.blueSoft:T.purpleSoft}/> },
+    { key:"type", label:"Type", minW:120, render: r => <Badge text={r.type==="category"?"📁 Category":"📐 Drawing Type"} color={r.type==="category"?T.blue:T.purple} bg={r.type==="category"?T.blueSoft:T.purpleSoft}/> },
     { key:"description", label:"Description", minW:200, style:{fontSize:12,color:T.textMid} },
   ];
 
@@ -1515,10 +1515,17 @@ function DesignCategorySection() {
         currentData={filtered} onImportData={()=>{}}/>
       {loading?<div style={{padding:"30px",textAlign:"center",color:T.textLight}}>Loading...</div>
         :<DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del}/>}
-      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Item":"Add Design Item"} width={420}>
-        <FormField label="Name" value={form.name} onChange={v=>upd("name",v)} placeholder="e.g. Architectural / 2D" required/>
+      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Category/Type":(form.type==="category"?"Add Drawing Category":"Add Drawing Type")} width={420}>
+        <FormField label={form.type==="category"?"Category Name *":"Type Name *"} value={form.name} onChange={v=>upd("name",v)} placeholder={form.type==="category"?"e.g. Architectural, Structural":"e.g. 2D, Elevation, Section"} required/>
         <div style={{height:12}}/>
-        <FormSelect label="Type" value={form.type} onChange={v=>upd("type",v)} options={["category","drawing_type"]}/>
+        <div style={{marginBottom:0}}>
+          <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>What are you adding?</label>
+          <select value={form.type} onChange={e=>upd("type",e.target.value)}
+            style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.border}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
+            <option value="category">Drawing Category (e.g. Architectural, Structural)</option>
+            <option value="drawing_type">Drawing Type (e.g. 2D, Elevation, Section)</option>
+          </select>
+        </div>
         <div style={{height:12}}/>
         <FormTextarea label="Description" value={form.description||""} onChange={v=>upd("description",v)} rows={2}/>
         <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={editing?"Update":"Create"}/>
@@ -1537,19 +1544,19 @@ function DrawingTitlesSection() {
   useEffect(()=>{ 
     api.get("/design/titles").then(r=>{ if(r.success) setTitles(r.data||[]); setLoading(false); }).catch(()=>setLoading(false)); 
   },[]);
+  const reloadTitles = () => {
+    api.get("/design/titles").then(r=>{ if(r.success) setTitles(r.data||[]); }).catch(()=>{});
+  };
   const apiSave = async (form, editingId) => {
     let res;
     if (editingId) res = await api.put("/design/titles/"+editingId, form);
     else res = await api.post("/design/titles", form);
-    if (res.success) {
-      if (editingId) setTitles(p=>p.map(t=>t.id===editingId?res.data:t));
-      else setTitles(p=>[res.data,...p]);
-    }
+    if (res.success) reloadTitles();
     return res;
   };
   const apiDel = async (id) => {
     await api.del("/design/titles/"+id);
-    setTitles(p=>p.filter(t=>t.id!==id));
+    reloadTitles();
   };
   const [search,    setSearch]    = useState("");
   const [catFilter, setCatFilter] = useState("All");
