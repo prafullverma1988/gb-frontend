@@ -522,6 +522,75 @@ function TabOverview({proj}) {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 2 — DESIGN
 // ═══════════════════════════════════════════════════════════════════
+// ── DESIGN REQUEST MODAL — outside TabDesign to prevent cursor jump ──────
+function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSave, saving }) {
+  const CATS = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
+  if (!show) return null;
+  return (
+    <>
+      <div onClick={()=>!saving&&onClose()}
+        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        background:"#FFFFFF",borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
+        zIndex:401,width:480,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+        <div style={{background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{editReq?"Edit Request":"New Design Request"}</div>
+          {!saving&&<button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Kya drawing chahiye? *</label>
+            <input value={reqForm.title} onChange={e=>setReqForm(p=>({...p,title:e.target.value}))}
+              placeholder="e.g. Ground Floor Plan, Section A-A"
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
+              <select value={reqForm.category} onChange={e=>setReqForm(p=>({...p,category:e.target.value}))}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                {CATS.map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Priority</label>
+              <select value={reqForm.priority} onChange={e=>setReqForm(p=>({...p,priority:e.target.value}))}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                {["Low","Normal","High","Urgent"].map(p=><option key={p}>{p}</option>)}
+              </select>
+            </div>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Assign To (optional)</label>
+            <input value={reqForm.assigned_to||""} onChange={e=>setReqForm(p=>({...p,assigned_to:e.target.value}))}
+              placeholder="Designer ka naam, e.g. Harsh Sahu"
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Due Date (optional)</label>
+            <input type="date" value={reqForm.due_date||""} onChange={e=>setReqForm(p=>({...p,due_date:e.target.value}))}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Description / Reference</label>
+            <textarea value={reqForm.description||""} onChange={e=>setReqForm(p=>({...p,description:e.target.value}))}
+              placeholder="Scale, reference, specific details..." rows={3}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+          </div>
+        </div>
+        <div style={{padding:"11px 16px",borderTop:"1px solid #E5E7EB",background:"#F9FAFB",display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={onClose} disabled={saving}
+            style={{flex:1,padding:"8px",borderRadius:7,background:"white",border:"1px solid #E5E7EB",fontSize:12.5,fontWeight:600,color:"#6B7280",cursor:"pointer"}}>Cancel</button>
+          <button onClick={onSave} disabled={saving||!reqForm.title.trim()}
+            style={{flex:2,padding:"8px",borderRadius:7,background:saving||!reqForm.title.trim()?"#E5E7EB":"#2563EB",border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}>
+            {saving?"Saving...":editReq?"Update":"Submit Request"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function TabDesign({ project }) {
   const projectId   = project?.id;
   const projectName = project?.name || "Project";
@@ -542,7 +611,7 @@ function TabDesign({ project }) {
   const [showPins,    setShowPins]    = useState(null);
   const [showReqForm, setShowReqForm] = useState(false);
   const [editReq,     setEditReq]     = useState(null);
-  const [reqForm,     setReqForm]     = useState({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});
+  const [reqForm,     setReqForm]     = useState({title:"",category:"Architectural",description:"",priority:"Normal",due_date:"",assigned_to:""});
   const [reqSaving,   setReqSaving]   = useState(false);
 
   // Upload form state
@@ -750,68 +819,7 @@ function TabDesign({ project }) {
 
   const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
 
-  // ── REQUEST MODAL ────────────────────────────────────────────────
-  const RequestModal = () => (
-    <>
-      <div onClick={()=>!reqSaving&&setShowReqForm(false)}
-        style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"}}/>
-      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
-        background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
-        zIndex:401,width:480,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <div style={{background:"#0D1B2A",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>{editReq?"Edit Request":"New Design Request"}</div>
-          {!reqSaving&&<button onClick={()=>setShowReqForm(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
-        </div>
-        <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
-          {/* Title */}
-          <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>What drawing do you need? *</label>
-            <input value={reqForm.title} onChange={e=>setReqForm(p=>({...p,title:e.target.value}))}
-              placeholder="e.g. Ground Floor Plan, Section A-A, Toilet Detail"
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-          </div>
-          {/* Category + Priority */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-            <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
-              <select value={reqForm.category} onChange={e=>setReqForm(p=>({...p,category:e.target.value}))}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {CATS.map(c=><option key={c}>{c}</option>)}
-              </select>
-            </div>
-            <div>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Priority</label>
-              <select value={reqForm.priority} onChange={e=>setReqForm(p=>({...p,priority:e.target.value}))}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {["Low","Normal","High","Urgent"].map(p=><option key={p}>{p}</option>)}
-              </select>
-            </div>
-          </div>
-          {/* Due Date */}
-          <div style={{marginBottom:12}}>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Due Date (optional)</label>
-            <input type="date" value={reqForm.due_date} onChange={e=>setReqForm(p=>({...p,due_date:e.target.value}))}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-          </div>
-          {/* Description */}
-          <div>
-            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Description / Reference</label>
-            <textarea value={reqForm.description} onChange={e=>setReqForm(p=>({...p,description:e.target.value}))}
-              placeholder="Kya specifically chahiye, koi reference drawing, scale, etc..." rows={3}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
-          </div>
-        </div>
-        <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
-          <button onClick={()=>setShowReqForm(false)} disabled={reqSaving}
-            style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-          <button onClick={handleSaveRequest} disabled={reqSaving||!reqForm.title.trim()}
-            style={{flex:2,padding:"8px",borderRadius:7,background:reqSaving||!reqForm.title.trim()?T.b1:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:reqSaving?"not-allowed":"pointer"}}>
-            {reqSaving?"Saving...":editReq?"Update Request":"Submit Request"}
-          </button>
-        </div>
-      </div>
-    </>
-  );
+  // DesignRequestModal is defined outside TabDesign
 
   // ── UPLOAD MODAL ──────────────────────────────────────────────────
   const UploadModal = () => (
@@ -1160,7 +1168,7 @@ function TabDesign({ project }) {
       {showUpload && <UploadModal />}
       {showRevQ   && <RevisionQueue />}
       {showVer    && <VersionModal drawing={showVer} />}
-      {showReqForm && <RequestModal />}
+      <DesignRequestModal show={showReqForm} onClose={()=>setShowReqForm(false)} editReq={editReq} reqForm={reqForm} setReqForm={setReqForm} onSave={handleSaveRequest} saving={reqSaving}/>
 
       {/* Main tab switcher: Drawings | Requests */}
       <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"2px solid "+T.b1}}>
@@ -1316,9 +1324,9 @@ function TabDesign({ project }) {
                 {/* Actions */}
                 <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
                   {req.status==="Pending"&&<>
-                    <button onClick={()=>handleUpdateReqStatus(req.id,"In Progress")}
+                    <button onClick={()=>{setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
                       style={{padding:"4px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      Start
+                      👤 Assign
                     </button>
                     <button onClick={()=>{
                       setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
@@ -1338,7 +1346,7 @@ function TabDesign({ project }) {
                       ⬆ Upload Drawing
                     </button>
                   )}
-                  <button onClick={()=>{setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||""});setShowReqForm(true);}}
+                  <button onClick={()=>{setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
                     style={{padding:"4px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}>
                     Edit
                   </button>

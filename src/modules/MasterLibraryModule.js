@@ -1448,6 +1448,66 @@ function ExpenseHeadSection() {
 // ═══════════════════════════════════════════════════════════════════════
 // MAIN MASTER LIBRARY MODULE
 // ═══════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════
+// DESIGN CATEGORIES & DRAWING TYPES
+// ═══════════════════════════════════════════════════════════════════════
+function DesignCategorySection() {
+  const { items: allItems, loading, save: apiSave, del: apiDel } = useSection("design/categories");
+  const [search, setSearch]     = useState("");
+  const [typeFilter, setTypeFilter] = useState("All");
+  const [showModal, setShowModal]   = useState(false);
+  const [editing,   setEditing]     = useState(null);
+  const [form, setForm] = useState({ name:"", type:"category", description:"" });
+  const upd = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const filtered = allItems.filter(i =>
+    (typeFilter==="All" || i.type===typeFilter) &&
+    i.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setEditing(null); setForm({name:"",type:"category",description:""}); setShowModal(true); };
+  const openEdit   = (i) => { setEditing(i); setForm({name:i.name,type:i.type,description:i.description||""}); setShowModal(true); };
+  const save = async () => { if(!form.name.trim()) return; await apiSave(form, editing?.id); setShowModal(false); };
+  const del  = (id) => apiDel(id);
+
+  const columns = [
+    { key:"name", label:"Name", minW:160, render: r => <span style={{fontWeight:600}}>{r.name}</span> },
+    { key:"type", label:"Type", minW:120, render: r => <Badge text={r.type==="category"?"Category":"Drawing Type"} color={r.type==="category"?T.blue:T.purple} bg={r.type==="category"?T.blueSoft:T.purpleSoft}/> },
+    { key:"description", label:"Description", minW:200, style:{fontSize:12,color:T.textMid} },
+  ];
+
+  return (
+    <div>
+      <div style={{display:"flex",gap:8,alignItems:"center",padding:"0 0 10px"}}>
+        {["All","category","drawing_type"].map(t=>(
+          <button key={t} onClick={()=>setTypeFilter(t)}
+            style={{padding:"4px 12px",borderRadius:20,border:"1.5px solid "+(typeFilter===t?T.blue:T.border),
+              background:typeFilter===t?T.blueSoft:"none",color:typeFilter===t?T.blue:T.textMid,
+              fontSize:11,fontWeight:typeFilter===t?700:400,cursor:"pointer"}}>
+            {t==="All"?"All":t==="category"?"Categories":"Drawing Types"}
+          </button>
+        ))}
+      </div>
+      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="design items" onAdd={openCreate} addLabel="Add Item"
+        templateConfig={{headers:["Name","Type","Description"],sampleRows:[["Architectural","category","Floor plans, elevations"],["2D","drawing_type","2D drawings"]],
+          filename:"gb_design_categories.csv",templateFilename:"gb_template_design_cats.csv",instructions:"Type: category or drawing_type",
+          mapRow:i=>[i.name,i.type,i.description||""]}}
+        currentData={filtered} onImportData={()=>{}}/>
+      {loading?<div style={{padding:"30px",textAlign:"center",color:T.textLight}}>Loading...</div>
+        :<DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del}/>}
+      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Item":"Add Design Item"} width={420}>
+        <FormField label="Name" value={form.name} onChange={v=>upd("name",v)} placeholder="e.g. Architectural / 2D" required/>
+        <div style={{height:12}}/>
+        <FormSelect label="Type" value={form.type} onChange={v=>upd("type",v)} options={["category","drawing_type"]}/>
+        <div style={{height:12}}/>
+        <FormTextarea label="Description" value={form.description||""} onChange={v=>upd("description",v)} rows={2}/>
+        <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={editing?"Update":"Create"}/>
+      </Modal>
+    </div>
+  );
+}
+
 const masterSections = [
   { id: "material_cat",  label: "Material Category",   Icon: IcFolder,    Comp: MaterialCategorySection,  section: "INVENTORY", countKey: "material_categories", color: T.blue },
   { id: "materials",     label: "Material Master",     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
