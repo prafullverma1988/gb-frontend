@@ -728,28 +728,64 @@ function MaterialMasterSection() {
   const [filterCat, setFilterCat] = useState("All");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const emptyForm = { name: "", code: "", category: "Cement & Binding", unit: "Kg", hsnCode: "", gstRate: 18, baseRate: 0, lastRate: 0, supplier: "", minStock: 0, currentStock: 0 };
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { name: "", code: "", category: "", unit: "Kg", hsnCode: "", gstRate: 18, baseRate: 0, lastRate: 0, supplier: "", minStock: 0 };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const categories = ["All", "Cement & Binding", "Steel & Rebar", "Sand & Aggregates", "Bricks & Blocks", "Plumbing", "Electrical", "Paint & Finish", "Wood & Timber", "Tiles & Flooring", "Waterproofing", "Hardware", "Safety Equipment"];
-  const units = ["Kg", "Bag (50kg)", "CFT", "Sq.Ft", "Piece", "Meter", "Litre", "Sheet (8x4)", "Piece (3m)", "Quintal", "MT", "Running Ft", "Brass", "Bundle"];
+  // Use real categories from backend, fallback to empty
+  const catNames = matCats.map(c => c.name);
+  const allCats = ["All", ...catNames];
+  const units = ["Kg", "Bag (50kg)", "CFT", "Sq.Ft", "Piece", "Meter", "Litre", "Sheet (8x4)", "Quintal", "MT", "Running Ft", "Brass", "Bundle", "Nos"];
 
   const filtered = materials.filter(m => {
-    if (filterCat !== "All" && m.category !== filterCat) return false;
-    if (search && !m.name.toLowerCase().includes(search.toLowerCase()) && !m.code.toLowerCase().includes(search.toLowerCase())) return false;
+    const cat = m.category || m.category_name || "";
+    if (filterCat !== "All" && cat !== filterCat) return false;
+    if (search && !m.name.toLowerCase().includes(search.toLowerCase()) && !(m.code||"").toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
-  const openCreate = () => { setEditing(null); setForm({ ...emptyForm, code: `MAT-${String(materials.length + 1).padStart(3, "0")}` }); setShowModal(true); };
-  const openEdit = (m) => { setEditing(m); setForm({ ...m }); setShowModal(true); };
-  const save = () => {
-    if (!form.name.trim()) return;
-    if (editing) { setMaterials(prev => prev.map(m => m.id === editing.id ? { ...form, id: m.id } : m)); }
-    else { setMaterials(prev => [...prev, { ...form, id: Date.now() }]); }
-    setShowModal(false);
+  const openCreate = () => {
+    setEditing(null);
+    setForm({ ...emptyForm, category: catNames[0] || "", code: "MAT-" + String(materials.length + 1).padStart(3, "0") });
+    setShowModal(true);
   };
-  const del = (id) => setMaterials(prev => prev.filter(m => m.id !== id));
+  const openEdit = (m) => {
+    setEditing(m);
+    setForm({
+      name: m.name || "", code: m.code || "", category: m.category_name || m.category || "",
+      unit: m.unit || "Kg", hsnCode: m.hsn_code || m.hsnCode || "",
+      gstRate: m.gst_rate ?? m.gstRate ?? 18,
+      baseRate: m.base_rate ?? m.baseRate ?? 0,
+      lastRate: m.last_rate ?? m.lastRate ?? 0,
+      supplier: m.preferred_supplier || m.supplier || "",
+      minStock: m.min_stock ?? m.minStock ?? 0,
+    });
+    setShowModal(true);
+  };
+  const save = async () => {
+    if (!form.name.trim()) return alert("Material name required");
+    setSaving(true);
+    // Find category_id from matCats
+    const catObj = matCats.find(c => c.name === form.category);
+    const payload = {
+      name: form.name.trim(),
+      code: form.code,
+      category_id: catObj ? catObj.id : null,
+      unit: form.unit,
+      hsn_code: form.hsnCode,
+      gst_rate: form.gstRate,
+      base_rate: form.baseRate,
+      last_rate: form.lastRate,
+      preferred_supplier: form.supplier,
+      min_stock: form.minStock,
+    };
+    const res = await apiSave(payload, editing?.id);
+    setSaving(false);
+    if (res.success) { setShowModal(false); }
+    else alert(res.message || "Save failed");
+  };
+  const del = async (id) => { await apiDel(id); };
 
   const matTemplateConfig = {
     headers: ["Material Name", "Code", "Category", "Unit", "HSN Code", "GST Rate %", "Base Rate (Rs.)", "Last Purchase Rate", "Preferred Supplier", "Min Stock Level", "Current Stock"],
@@ -798,7 +834,7 @@ function MaterialMasterSection() {
         filterEl={
           <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
             style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, fontSize: 12, color: T.text, background: "white", cursor: "pointer", fontFamily: T.font }}>
-            {categories.map(c => <option key={c}>{c}</option>)}
+            {allCats.map(c => <option key={c}>{c}</option>)}
           </select>
         }
       />
@@ -809,7 +845,7 @@ function MaterialMasterSection() {
           <FormField label="Code" value={form.code} onChange={v => upd("code", v)} placeholder="MAT-001" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Category" value={form.category} onChange={v => upd("category", v)} options={categories.filter(c => c !== "All")} half required />
+          <FormSelect label="Category" value={form.category} onChange={v => upd("category", v)} options={catNames} half required />
           <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={units} half required />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
@@ -824,7 +860,7 @@ function MaterialMasterSection() {
           <FormField label="Preferred Supplier" value={form.supplier} onChange={v => upd("supplier", v)} placeholder="Supplier name" half />
           <FormField label="Minimum Stock Level" value={form.minStock || ""} onChange={v => upd("minStock", parseInt(v) || 0)} type="number" half />
         </div>
-        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update Material" : "Add Material"} />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update Material" : "Add Material"} />
       </Modal>
     </div>
   );
