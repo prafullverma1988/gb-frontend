@@ -263,16 +263,19 @@ function RolesAccess() {
     { id: "viewer", name: "Viewer", desc: "Read-only access", color: T.purple, colorBg: T.purpleSoft, isSystem: true },
   ]);
 
-  const [users, setUsers] = useState([
-    { id: 1, name: "Prafull Agrawal", email: "admin@gbbuildcon.com", phone: "+91 98765 43210", role: "admin", status: "Active", projects: [1,2,3,4,5,6,7,8] },
-    { id: 2, name: "Vijay Sahu", email: "vijay@gbbuildcon.com", phone: "+91 88888 11111", role: "project_manager", status: "Active", projects: [1,4,8] },
-    { id: 3, name: "Niranjan Kumar", email: "niranjan@gbbuildcon.com", phone: "+91 88888 22222", role: "project_manager", status: "Active", projects: [2,5] },
-    { id: 4, name: "Harsh Sahu", email: "harsh@gbbuildcon.com", phone: "+91 88888 33333", role: "project_manager", status: "Active", projects: [3,7] },
-    { id: 5, name: "Priyanka Verma", email: "priyanka@gbbuildcon.com", phone: "+91 88888 44444", role: "supervisor", status: "Active", projects: [6] },
-    { id: 6, name: "Ramesh Tiwari", email: "ramesh@gbbuildcon.com", phone: "+91 88888 55555", role: "supervisor", status: "Active", projects: [1,2] },
-    { id: 7, name: "Sunita Patel", email: "sunita@gbbuildcon.com", phone: "+91 88888 66666", role: "accountant", status: "Active", projects: [1,2,3,4,5,6,7,8] },
-    { id: 8, name: "Mohan Verma", email: "mohan@gbbuildcon.com", phone: "+91 88888 77777", role: "viewer", status: "Invited", projects: [1,3] },
-  ]);
+  const [users, setUsers] = useState([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+
+  const loadUsers = async () => {
+    setUsersLoading(true);
+    try {
+      const res = await api.get("/settings/users");
+      if (res.success) setUsers(res.data || []);
+    } catch(e) {}
+    setUsersLoading(false);
+  };
+
+  useEffect(() => { loadUsers(); }, []);
 
   const [selectedRole, setSelectedRole] = useState("project_manager");
   const [tab, setTab] = useState("permissions"); // permissions | users | projects
@@ -299,17 +302,32 @@ function RolesAccess() {
   };
 
   // User form
-  const [userForm, setUserForm] = useState({ name: "", email: "", phone: "", role: "viewer", projects: [] });
-  const openCreateUser = () => { setEditingUser(null); setUserForm({ name: "", email: "", phone: "", role: selectedRole, projects: [] }); setShowUserModal(true); };
-  const openEditUser = (u) => { setEditingUser(u); setUserForm({ name: u.name, email: u.email, phone: u.phone, role: u.role, projects: u.projects }); setShowUserModal(true); };
-  const saveUser = () => {
-    if (!userForm.name.trim() || !userForm.email.trim()) return;
+  const [userForm, setUserForm] = useState({ name: "", email: "", phone: "", role: "viewer", designation: "", password: "", projects: [] });
+  const openCreateUser = () => { setEditingUser(null); setUserForm({ name: "", email: "", phone: "", role: selectedRole, designation: "", password: "Welcome@123", projects: [] }); setShowUserModal(true); };
+  const openEditUser = (u) => { setEditingUser(u); setUserForm({ name: u.name, email: u.email, phone: u.phone || "", role: u.role, designation: u.designation || "", password: "", projects: u.projects || [] }); setShowUserModal(true); };
+  const [userSaving, setUserSaving] = useState(false);
+  const saveUser = async () => {
+    if (!userForm.name.trim() || !userForm.email.trim()) return alert("Name and email required");
+    setUserSaving(true);
+    let res;
     if (editingUser) {
-      setUsers(prev => prev.map(u => u.id === editingUser.id ? { ...u, ...userForm } : u));
+      res = await api.put("/settings/users/" + editingUser.id, {
+        name: userForm.name, email: userForm.email,
+        phone: userForm.phone, role: userForm.role,
+        designation: userForm.designation || "",
+        is_active: userForm.status === "Active" ? 1 : 0,
+      });
     } else {
-      setUsers(prev => [...prev, { id: Date.now(), ...userForm, status: "Invited" }]);
+      res = await api.post("/settings/users", {
+        name: userForm.name, email: userForm.email,
+        phone: userForm.phone, role: userForm.role,
+        designation: userForm.designation || "",
+        password: userForm.password || "Welcome@123",
+      });
     }
-    setShowUserModal(false);
+    setUserSaving(false);
+    if (res.success) { await loadUsers(); setShowUserModal(false); }
+    else alert(res.message || "Save failed");
   };
   const toggleUserProject = (pid) => {
     setUserForm(p => ({ ...p, projects: p.projects.includes(pid) ? p.projects.filter(x => x !== pid) : [...p.projects, pid] }));
@@ -461,7 +479,8 @@ function RolesAccess() {
               <IcPlus size={15} color="white" /> Add User
             </button>
           }>
-          {roleUsers.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>No users in this role yet</div>}
+          {usersLoading && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>Loading...</div>}
+          {!usersLoading && roleUsers.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>No users in this role yet</div>}
           {roleUsers.map((u, i) => (
             <div key={u.id} style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 0", borderBottom: i < roleUsers.length - 1 ? `1px solid ${T.borderLight}` : "none" }}>
               <div style={{ width: 38, height: 38, borderRadius: "50%", background: `linear-gradient(135deg, ${activeRole?.color || T.blue}, ${activeRole?.color || T.blue}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, fontWeight: 700, color: "white", flexShrink: 0 }}>
@@ -476,7 +495,7 @@ function RolesAccess() {
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
                 <Badge text={`${u.projects.length} projects`} color={T.textMid} bg={T.borderLight} />
-                <Badge text={u.status} color={u.status === "Active" ? T.green : T.amber} bg={u.status === "Active" ? T.greenSoft : T.amberSoft} />
+                <Badge text={u.is_active===0?"Inactive":"Active"} color={u.is_active===0?T.amber:T.green} bg={u.is_active===0?T.amberSoft:T.greenSoft} />
                 <button onClick={() => openEditUser(u)} style={{ background: T.borderLight, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
                   <IcEdit size={14} color={T.textMid} />
                 </button>
@@ -567,6 +586,10 @@ function RolesAccess() {
           <FormField label="Phone" value={userForm.phone} onChange={v => setUserForm(p => ({ ...p, phone: v }))} placeholder="+91 XXXXX XXXXX" half />
           <FormSelect label="Role" value={userForm.role} onChange={v => setUserForm(p => ({ ...p, role: v }))} options={roles.map(r => ({ value: r.id, label: r.name }))} half />
         </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+          <FormField label="Designation" value={userForm.designation||""} onChange={v => setUserForm(p => ({ ...p, designation: v }))} placeholder="e.g. Site Engineer, PM" half />
+          {!editingUser && <FormField label="Password" value={userForm.password||""} onChange={v => setUserForm(p => ({ ...p, password: v }))} placeholder="Default: Welcome@123" half />}
+        </div>
 
         {/* Project access */}
         <div style={{ marginTop: 8 }}>
@@ -600,7 +623,7 @@ function RolesAccess() {
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
           <button onClick={() => setShowUserModal(false)} style={{ padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>Cancel</button>
           <button onClick={saveUser} style={{ padding: "10px 24px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer" }}>
-            {editingUser ? "Update User" : "Add User"}
+            {userSaving ? "Saving..." : editingUser ? "Update User" : "Add User"}
           </button>
         </div>
       </Modal>
