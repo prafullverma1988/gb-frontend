@@ -528,13 +528,13 @@ function TabOverview({proj}) {
 function TitleDropdown({ value, titles, onSelect, onChange }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState(value || "");
-  const ref = React.useRef(null);
+  const ref = useRef(null);
 
   // Sync search when value changes externally
-  React.useEffect(() => { setSearch(value || ""); }, [value]);
+  useEffect(() => { setSearch(value || ""); }, [value]);
 
   // Close on outside click
-  React.useEffect(() => {
+  useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener("mousedown", handler);
     return () => document.removeEventListener("mousedown", handler);
