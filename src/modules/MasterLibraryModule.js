@@ -15,6 +15,7 @@ const IcHardHat   = (p) => <Icon {...p} d="M2 18h20M4 18v-3a8 8 0 0116 0v3M9 18v
 const IcClipboard = (p) => <Icon {...p} d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2M9 2h6a1 1 0 011 1v2a1 1 0 01-1 1H9a1 1 0 01-1-1V3a1 1 0 011-1z" />;
 const IcDollar    = (p) => <Icon {...p} d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />;
 const IcTruck     = (p) => <Icon {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 18.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM18.5 18.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5z" />;
+const IcFile = (p) => <Icon {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8"/>;
 const IcLayers    = (p) => <Icon {...p} d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />;
 const IcHash      = (p) => <Icon {...p} d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18" />;
 const IcRuler     = (p) => <Icon {...p} d="M2 4h4v16H2zM6 4l7 7M6 9l4 4M6 14l3 3M22 4L9 17l-3 3" />;
@@ -1508,6 +1509,112 @@ function DesignCategorySection() {
   );
 }
 
+
+// ═══════════════════════════════════════════════════════════════════════
+// DRAWING TITLES MASTER
+// ═══════════════════════════════════════════════════════════════════════
+function DrawingTitlesSection() {
+  const { items: titles, loading, save: apiSave, del: apiDel } = useSection("design/titles");
+  const [search,    setSearch]    = useState("");
+  const [catFilter, setCatFilter] = useState("All");
+  const [showModal, setShowModal] = useState(false);
+  const [editing,   setEditing]   = useState(null);
+  const [form, setForm] = useState({ title:"", category:"", type:"", description:"" });
+  const upd = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const cats  = ["All", ...Array.from(new Set(titles.map(t=>t.category).filter(Boolean)))];
+  const TYPES = ["Plan","Elevation","Section","Detail","3D","Diagram","Schedule","Site Plan"];
+  const CATS  = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
+
+  const filtered = titles.filter(t =>
+    (catFilter==="All" || t.category===catFilter) &&
+    t.title.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setEditing(null); setForm({title:"",category:"Architectural",type:"Plan",description:""}); setShowModal(true); };
+  const openEdit   = (t) => { setEditing(t); setForm({title:t.title,category:t.category||"",type:t.type||"",description:t.description||""}); setShowModal(true); };
+  const save = async () => { if(!form.title.trim()) return; await apiSave(form, editing?.id); setShowModal(false); };
+  const del  = (id) => apiDel(id);
+
+  const columns = [
+    { key:"title",    label:"Drawing Title", minW:220, render: r => <span style={{fontWeight:600}}>{r.title}</span> },
+    { key:"category", label:"Category",      minW:120, render: r => r.category ? <Badge text={r.category} color={T.blue} bg={T.blueSoft}/> : "—" },
+    { key:"type",     label:"Type",          minW:100, render: r => r.type ? <Badge text={r.type} color={T.purple} bg={T.purpleSoft}/> : "—" },
+    { key:"description", label:"Description", minW:200, style:{fontSize:12,color:T.textMid} },
+  ];
+
+  return (
+    <div>
+      {/* Category filter tabs */}
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
+        {cats.map(c=>(
+          <button key={c} onClick={()=>setCatFilter(c)}
+            style={{padding:"3px 10px",borderRadius:20,border:"1.5px solid "+(catFilter===c?T.blue:T.border),
+              background:catFilter===c?T.blueSoft:"none",color:catFilter===c?T.blue:T.textMid,
+              fontSize:11,fontWeight:catFilter===c?700:400,cursor:"pointer"}}>
+            {c}
+            {c!=="All"&&<span style={{marginLeft:4,fontSize:10}}>{titles.filter(t=>t.category===c).length}</span>}
+          </button>
+        ))}
+      </div>
+      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="drawing titles"
+        onAdd={openCreate} addLabel="Add Title"
+        templateConfig={{
+          headers:["Drawing Title","Category","Type","Description"],
+          sampleRows:[
+            ["Ground Floor Plan","Architectural","Plan","GF layout plan"],
+            ["Column Detail","Structural","Detail","Column reinforcement detail"],
+            ["Electrical Layout","Electrical","Plan","GF electrical layout"],
+          ],
+          filename:"gb_drawing_titles.csv",
+          templateFilename:"gb_template_drawing_titles.csv",
+          instructions:"Category: Architectural/Structural/Electrical/Plumbing/Interior. Type: Plan/Elevation/Section/Detail/3D/Diagram",
+          mapRow: t => [t.title, t.category||"", t.type||"", t.description||""],
+        }}
+        currentData={filtered}
+        onImportData={(rows)=>{
+          rows.forEach(async r => {
+            if(r["Drawing Title"]) {
+              await api.post("/design/titles", {
+                title: r["Drawing Title"],
+                category: r["Category"]||"Architectural",
+                type: r["Type"]||"Plan",
+                description: r["Description"]||null,
+              });
+            }
+          });
+          setTimeout(()=>window.location.reload(),1000);
+        }}
+      />
+      {loading ? <div style={{padding:"30px",textAlign:"center",color:T.textLight}}>Loading...</div>
+        : <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} emptyMsg="No drawing titles found"/>}
+      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Drawing Title":"Add Drawing Title"} width={460}>
+        <FormField label="Drawing Title *" value={form.title} onChange={v=>upd("title",v)} placeholder="e.g. Ground Floor Plan" required/>
+        <div style={{height:12}}/>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:140}}>
+            <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>Category</label>
+            <select value={form.category} onChange={e=>upd("category",e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.border}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
+              {CATS.map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+          <div style={{flex:1,minWidth:120}}>
+            <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>Type</label>
+            <select value={form.type} onChange={e=>upd("type",e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.border}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
+              {TYPES.map(t=><option key={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{height:12}}/>
+        <FormTextarea label="Description" value={form.description||""} onChange={v=>upd("description",v)} rows={2} placeholder="Optional notes"/>
+        <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={editing?"Update":"Create"}/>
+      </Modal>
+    </div>
+  );
+}
+
 const masterSections = [
   { id: "material_cat",  label: "Material Category",   Icon: IcFolder,    Comp: MaterialCategorySection,  section: "INVENTORY", countKey: "material_categories", color: T.blue },
   { id: "materials",     label: "Material Master",     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
@@ -1517,7 +1624,8 @@ const masterSections = [
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
   { id: "boq",           label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: "boq", color: T.indigo },
   { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", countKey: "equipment", color: T.rose },
-  { id: "design_cats",   label: "Design Categories",  Icon: IcLayers,    Comp: DesignCategorySection,    section: "REFERENCE", countKey: "design_cats", color: T.blue },
+  { id: "drawing_titles", label: "Drawing Titles",     Icon: IcFile,      Comp: DrawingTitlesSection,     section: "DESIGN LIBRARY", countKey: "drawing_titles", color: T.blue },
+  { id: "design_cats",   label: "Categories & Types", Icon: IcLayers,    Comp: DesignCategorySection,    section: null, countKey: "design_cats", color: T.purple },
   { id: "uom",           label: "Units (UOM)",         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
   { id: "expense_head",  label: "Expense Heads",       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, count: "14", color: T.amber },
 ];

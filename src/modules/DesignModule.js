@@ -1,1248 +1,745 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
+import api from "../config/api";
 
-// ── ICON BASE ────────────────────────────────────────────────────────
-const Ic=({d,d2,size=18,color="currentColor",sw=1.8,fill="none"})=>(
+// ── ICONS ────────────────────────────────────────────────────────────
+const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round">
     <path d={d}/>{d2&&<path d={d2}/>}
   </svg>
 );
-const IcHome  =(p)=><Ic {...p} d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/>;
-const IcProj  =(p)=><Ic {...p} d="M3 7h18M3 12h18M3 17h18"/>;
-const IcFin   =(p)=><Ic {...p} d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/>;
-const IcDes   =(p)=><Ic {...p} d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/>;
-const IcRep   =(p)=><Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/>;
-const IcSet   =(p)=><Ic {...p} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0"/>;
-const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
-const IcProc  =(p)=><Ic {...p} d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/>;
-const IcMenu  =(p)=><Ic {...p} d="M4 6h16M4 12h16M4 18h16"/>;
-const IcBell  =(p)=><Ic {...p} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>;
-const IcSrch  =(p)=><Ic {...p} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>;
-const IcAdd   =(p)=><Ic {...p} d="M12 5v14M5 12h14"/>;
-const IcDown  =(p)=><Ic {...p} d="M6 9l6 6 6-6"/>;
-const IcUp2   =(p)=><Ic {...p} d="M18 15l-6-6-6 6"/>;
-const IcEye   =(p)=><Ic {...p} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 12m-3 0a3 3 0 106 0 3 3 0 10-6 0"/>;
-const IcEyeX  =(p)=><Ic {...p} d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22"/>;
-const IcTeam  =(p)=><Ic {...p} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>;
-const IcCRM   =(p)=><Ic {...p} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a3 3 0 00-3-3M16 3.13a4 4 0 010 7.75"/>;
-const IcMOM   =(p)=><Ic {...p} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>;
-const IcPay   =(p)=><Ic {...p} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z"/>;
-const IcLib   =(p)=><Ic {...p} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"/>;
-const IcX     =(p)=><Ic {...p} d="M18 6L6 18M6 6l12 12"/>;
-const IcChk   =(p)=><Ic {...p} d="M20 6L9 17l-5-5"/>;
-const IcUpload=(p)=><Ic {...p} d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>;
-const IcFile  =(p)=><Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8"/>;
-const IcDraw  =(p)=><Ic {...p} d="M2 20h20M5 20V8l7-6 7 6v12M9 20v-5h6v5"/>;
-const IcTask  =(p)=><Ic {...p} d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>;
-const IcApprv =(p)=><Ic {...p} d="M22 11.08V12a10 10 0 11-5.93-9.14M22 4L12 14.01l-3-3"/>;
-const IcHist  =(p)=><Ic {...p} d="M12 8v4l3 3M3.05 11A9 9 0 102 12M3 4v4l2.5 2.5"/>;
-const IcRevise=(p)=><Ic {...p} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>;
-const IcPin   =(p)=><Ic {...p} d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0zM12 10m-1 0a1 1 0 102 0 1 1 0 10-2 0" fill={p.fill||"none"}/>;
-const IcFolder=(p)=><Ic {...p} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/>;
-const IcAlert =(p)=><Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/>;
-const IcMsg   =(p)=><Ic {...p} d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>;
-const IcSort  =(p)=><Ic {...p} d="M3 6h18M7 12h10M11 18h2"/>;
-const IcSend  =(p)=><Ic {...p} d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/>;
-const IcFlag  =(p)=><Ic {...p} d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1zM4 22v-7"/>;
+const IcDraw   = p=><Ic {...p} d="M2 20h20M5 20V8l7-6 7 6v12M9 20v-5h6v5"/>;
+const IcReq    = p=><Ic {...p} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>;
+const IcRevise = p=><Ic {...p} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>;
+const IcCal    = p=><Ic {...p} d="M8 7V3M16 7V3M3 11h18M5 4h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V6a2 2 0 012-2z"/>;
+const IcUpload = p=><Ic {...p} d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/>;
+const IcSearch = p=><Ic {...p} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/>;
+const IcFilter = p=><Ic {...p} d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>;
+const IcCheck  = p=><Ic {...p} d="M20 6L9 17l-5-5"/>;
+const IcX      = p=><Ic {...p} d="M18 6L6 18M6 6l12 12"/>;
+const IcEye    = p=><Ic {...p} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 100 6 3 3 0 000-6z"/>;
+const IcDown   = p=><Ic {...p} d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>;
+const IcHist   = p=><Ic {...p} d="M12 8v4l3 3M3.05 11A9 9 0 102 12M3 4v4l2.5 2.5"/>;
+const IcPin    = p=><Ic {...p} d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0zM12 10m-1 0a1 1 0 102 0 1 1 0 10-2 0"/>;
+const IcRefresh= p=><Ic {...p} d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.36-3.36L23 10M1 14l5.09 4.36A9 9 0 0020.49 15"/>;
+const IcAlert  = p=><Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/>;
 
-// ── COLOR SYSTEM ─────────────────────────────────────────────────────
-const C={
-  p:"#1565C0",p2:"#1976D2",a:"#FF6F00",
-  sb:"#0D1B2A",sbH:"#1E2E42",
-  w:"#FFFFFF",bg:"#F1F4F8",t:"#1A2332",tm:"#4A5568",tl:"#8896A6",b:"#E2E8F0",
-};
-const T={
-  bg:"#F4F6F9",surface:"#FFFFFF",surfaceB:"#F8F9FB",
-  t1:"#111827",t2:"#374151",t3:"#6B7280",t4:"#9CA3AF",
-  b1:"#E5E7EB",b2:"#D1D5DB",
-  blu:"#2563EB",bluL:"#EFF6FF",bluM:"#BFDBFE",
-  grn:"#059669",grnL:"#ECFDF5",grnM:"#A7F3D0",
-  amb:"#D97706",ambL:"#FFFBEB",ambM:"#FDE68A",
-  red:"#DC2626",redL:"#FEF2F2",redM:"#FECACA",
-  slt:"#64748B",sltL:"#F1F5F9",
-  pur:"#7C3AED",purL:"#F5F3FF",purM:"#DDD6FE",
+// ── THEME ────────────────────────────────────────────────────────────
+const T = {
+  bg:"#F1F4F8", surface:"#FFFFFF", surfaceB:"#F8FAFC",
+  blu:"#2563EB", bluL:"#EFF6FF", bluM:"#BFDBFE",
+  grn:"#059669", grnL:"#ECFDF5", grnM:"#A7F3D0",
+  red:"#DC2626", redL:"#FEF2F2", redM:"#FECACA",
+  amb:"#D97706", ambL:"#FFFBEB", ambM:"#FDE68A",
+  pur:"#7C3AED", purL:"#F5F3FF", purM:"#DDD6FE",
+  t1:"#111827", t2:"#374151", t3:"#6B7280", t4:"#9CA3AF",
+  b1:"#E5E7EB", b2:"#D1D5DB",
+  sb:"#0D1B2A",
 };
 
-// ── NAV ──────────────────────────────────────────────────────────────
-const NAV_GROUPS=[
-  {section:null,items:[
-    {id:"dashboard",label:"Dashboard",Icon:IcHome},
-    {id:"projects",label:"Projects",Icon:IcProj},
-    {id:"crm",label:"CRM",Icon:IcCRM},
-    {id:"mom",label:"MOM",Icon:IcMOM},
-    {id:"team",label:"Team Schedule",Icon:IcTeam},
-    {id:"design",label:"Design",Icon:IcDes,badge:"NEW",bc:C.a},
-  ]},
-  {section:"FINANCE & OPS",items:[
-    {id:"finance",label:"Finance",Icon:IcFin},
-    {id:"procurement",label:"Procurement",Icon:IcProc,badge:11,bc:C.p},
-    {id:"warehouse",label:"Warehouse",Icon:IcWH},
-    {id:"payroll",label:"Payroll",Icon:IcPay},
-  ]},
-  {section:"REPORTS",items:[
-    {id:"reports",label:"Reports",Icon:IcRep},
-    {id:"library",label:"Library",Icon:IcLib},
-    {id:"settings",label:"Settings",Icon:IcSet},
-  ]},
-];
+const fmt = n => n>=10000000?`₹${(n/10000000).toFixed(1)}Cr`:n>=100000?`₹${(n/100000).toFixed(1)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${n||0}`;
+const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
 
-// ── DESIGN DATA ──────────────────────────────────────────────────────
-const PROJECTS=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Bablu Farmhouse"];
-
-const DRAWINGS=[
-  {id:1,title:"Ground Floor Plan",project:"Shubham & NK 623",cat:"Architectural",type:"2D",status:"Approved",ver:"v3",by:"Harsh Sahu",date:"08 Mar",size:"2.4 MB",pins:3,note:"Final approved — client sign-off done"},
-  {id:2,title:"RCC Column Layout",project:"Shubham & NK 623",cat:"Structural",type:"2D",status:"Approved",ver:"v2",by:"Vijay Sahu",date:"05 Mar",size:"1.8 MB",pins:1,note:""},
-  {id:3,title:"First Floor Elevation",project:"Shubham & NK 623",cat:"Architectural",type:"2D",status:"Revision",ver:"v2",by:"Harsh Sahu",date:"10 Mar",size:"3.1 MB",pins:2,note:"Client wants window size change on east side"},
-  {id:4,title:"Electrical Wiring Schematic",project:"Tikendra Residence",cat:"Electrical",type:"2D",status:"Pending",ver:"v1",by:"Priyanka",date:"11 Mar",size:"890 KB",pins:0,note:"Awaiting review from client"},
-  {id:5,title:"3D Exterior Render",project:"Tikendra Residence",cat:"Architectural",type:"3D",status:"Approved",ver:"v4",by:"Harsh Sahu",date:"01 Mar",size:"18 MB",pins:0,note:"",clientStatus:"Pending",clientNote:""},
-  {id:6,title:"Plumbing Layout GF",project:"Esther Risali",cat:"Plumbing",type:"2D",status:"Rejected",ver:"v1",by:"Niranjan",date:"28 Feb",size:"1.2 MB",pins:4,note:"Pipe routing conflicts with structural beam — redo"},
-  {id:7,title:"Commercial Lobby 3D",project:"Esther Risali",cat:"Architectural",type:"3D",status:"Approved",ver:"v2",by:"Harsh Sahu",date:"20 Feb",size:"24 MB",pins:0,note:"",clientStatus:"Approved",clientNote:"Looks great, approved by client on 22 Feb"},
-  {id:8,title:"Foundation Detail",project:"Amarendra Villa",cat:"Structural",type:"2D",status:"Pending",ver:"v1",by:"Vijay Sahu",date:"12 Mar",size:"1.5 MB",pins:0,note:"Pending structural engineer review"},
-  {id:9,title:"Villa Floor Plan",project:"Amarendra Villa",cat:"Architectural",type:"2D",status:"Revision",ver:"v3",by:"Harsh Sahu",date:"09 Mar",size:"2.9 MB",pins:5,note:"Add servant quarter as per client request"},
-  {id:10,title:"Office False Ceiling",project:"Neha Sagar Office",cat:"Interior",type:"2D",status:"Approved",ver:"v1",by:"Priyanka",date:"15 Feb",size:"980 KB",pins:1,note:""},
-  {id:11,title:"Staircase Detail",project:"Bablu Farmhouse",cat:"Structural",type:"2D",status:"Pending",ver:"v1",by:"Vijay Sahu",date:"13 Mar",size:"760 KB",pins:0,note:""},
-  {id:12,title:"Farmhouse 3D View",project:"Bablu Farmhouse",cat:"Architectural",type:"3D",status:"Approved",ver:"v2",by:"Harsh Sahu",date:"07 Mar",size:"21 MB",pins:2,note:"",clientStatus:"Revision",clientNote:"Client wants darker stone texture on exterior walls"},
-];
-
-// ── REVISION PINS DATA ── (pre-loaded pins for Revision drawings)
-const INIT_REVISION_PINS={
-  3:[
-    {id:1,location:"East elevation — window row",note:"Increase all windows from 3ft to 4ft width as client discussed",by:"Prafull (Admin)",date:"10 Mar",priority:"High",done:false},
-    {id:2,location:"North wall — bedroom 2",note:"Shift window 2ft south to align with bathroom opening",by:"Client — Shubham",date:"10 Mar",priority:"Medium",done:false},
-  ],
-  9:[
-    {id:1,location:"North-west corner — ground floor",note:"Add servant quarter 12x10 ft with attached toilet as per site visit",by:"Prafull (Admin)",date:"09 Mar",priority:"High",done:false},
-    {id:2,location:"Main lobby",note:"Increase lobby width by 2ft — current 8ft feels narrow",by:"Prafull (Admin)",date:"09 Mar",priority:"Medium",done:false},
-    {id:3,location:"Master bedroom",note:"Shift attached bath 3ft inward to create walk-in closet space",by:"Client — Amarendra",date:"10 Mar",priority:"High",done:false},
-    {id:4,location:"Staircase",note:"Change staircase from straight run to L-shape — saves 40 sqft",by:"Vijay Sahu",date:"11 Mar",priority:"Low",done:false},
-    {id:5,location:"Car porch",note:"Extend car porch by 4ft to fit 2 cars side by side",by:"Client — Amarendra",date:"09 Mar",priority:"Medium",done:false},
-  ],
-};
-
-// ── REVISION COMMENTS DATA
-const INIT_REVISION_COMMENTS={
-  3:[
-    {id:1,by:"Prafull (Admin)",date:"10 Mar 14:22",text:"Harsh, please revise all east elevation windows — client confirmed 4ft width in today's site meeting. Also update the elevation PDF and DWG both.",avatar:"P",color:"#1565C0"},
-    {id:2,by:"Harsh Sahu",date:"10 Mar 16:45",text:"Understood. Will update the DWG and regenerate the elevation view. Should be done by tomorrow morning. The north wall window shift will also be taken care of.",avatar:"H",color:"#2E7D32"},
-  ],
-  9:[
-    {id:1,by:"Prafull (Admin)",date:"09 Mar 10:15",text:"Harsh — major revision needed. Client wants servant quarter added, lobby widened, and master bath reworked. All pin details added. Please call me before starting.",avatar:"P",color:"#1565C0"},
-    {id:2,by:"Vijay Sahu",date:"09 Mar 11:30",text:"I've added a staircase revision pin too — changing to L-shape will help with the space. Discuss with Harsh.",avatar:"V",color:"#6A1B9A"},
-    {id:3,by:"Harsh Sahu",date:"10 Mar 09:00",text:"Starting revisions today. Will take 2 days for all changes. Will upload v4 by 12 Mar.",avatar:"H",color:"#2E7D32"},
-    {id:4,by:"Prafull (Admin)",date:"10 Mar 09:30",text:"Good. Prioritise the servant quarter and car porch first — those are client's top requirements.",avatar:"P",color:"#1565C0"},
-  ],
-};
-
-const VERSION_HISTORY=[
-  {drawingId:1,title:"Ground Floor Plan",project:"Shubham & NK 623",ver:"v3",date:"08 Mar 2026",by:"Harsh Sahu",size:"2.4 MB",status:"Approved",note:"Final version after 2 revisions"},
-  {drawingId:1,title:"Ground Floor Plan",project:"Shubham & NK 623",ver:"v2",date:"28 Feb 2026",by:"Harsh Sahu",size:"2.2 MB",status:"Revision",note:"Client requested bedroom size increase"},
-  {drawingId:1,title:"Ground Floor Plan",project:"Shubham & NK 623",ver:"v1",date:"10 Feb 2026",by:"Vijay Sahu",size:"2.0 MB",status:"Rejected",note:"Layout did not match site dimensions"},
-  {drawingId:3,title:"First Floor Elevation",project:"Shubham & NK 623",ver:"v2",date:"10 Mar 2026",by:"Harsh Sahu",size:"3.1 MB",status:"Revision",note:"Window size revision requested"},
-  {drawingId:3,title:"First Floor Elevation",project:"Shubham & NK 623",ver:"v1",date:"01 Mar 2026",by:"Harsh Sahu",size:"2.8 MB",status:"Rejected",note:"Facade proportion incorrect"},
-  {drawingId:5,title:"3D Exterior Render",project:"Tikendra Residence",ver:"v4",date:"01 Mar 2026",by:"Harsh Sahu",size:"18 MB",status:"Approved",note:""},
-  {drawingId:5,title:"3D Exterior Render",project:"Tikendra Residence",ver:"v3",date:"20 Feb 2026",by:"Harsh Sahu",size:"16 MB",status:"Revision",note:"Change roof color and add garden"},
-  {drawingId:6,title:"Plumbing Layout GF",project:"Esther Risali",ver:"v1",date:"28 Feb 2026",by:"Niranjan",size:"1.2 MB",status:"Rejected",note:"Conflicts with structural beam"},
-  {drawingId:9,title:"Villa Floor Plan",project:"Amarendra Villa",ver:"v3",date:"09 Mar 2026",by:"Harsh Sahu",size:"2.9 MB",status:"Revision",note:"Add servant quarter"},
-  {drawingId:9,title:"Villa Floor Plan",project:"Amarendra Villa",ver:"v2",date:"22 Feb 2026",by:"Harsh Sahu",size:"2.6 MB",status:"Revision",note:"Master bedroom layout change"},
-  {drawingId:9,title:"Villa Floor Plan",project:"Amarendra Villa",ver:"v1",date:"05 Feb 2026",by:"Vijay Sahu",size:"2.3 MB",status:"Rejected",note:"Client not satisfied with room sizes"},
-];
-
-const DESIGN_TASKS=[
-  {id:1,task:"Revise First Floor Elevation — east window",project:"Shubham & NK 623",cat:"Architectural",assignedTo:"Harsh Sahu",priority:"High",status:"In Progress",due:"15 Mar"},
-  {id:2,task:"Electrical layout for 2nd floor",project:"Tikendra Residence",cat:"Electrical",assignedTo:"Priyanka",priority:"Medium",status:"Pending",due:"18 Mar"},
-  {id:3,task:"Add servant quarter to villa plan",project:"Amarendra Villa",cat:"Architectural",assignedTo:"Harsh Sahu",priority:"High",status:"In Progress",due:"16 Mar"},
-  {id:4,task:"Redo plumbing layout avoiding beam",project:"Esther Risali",cat:"Plumbing",assignedTo:"Niranjan",priority:"High",status:"Pending",due:"14 Mar"},
-  {id:5,task:"Foundation detail review with SE",project:"Amarendra Villa",cat:"Structural",assignedTo:"Vijay Sahu",priority:"Medium",status:"Pending",due:"17 Mar"},
-  {id:6,task:"Office pantry layout drawing",project:"Neha Sagar Office",cat:"Interior",assignedTo:"Priyanka",priority:"Low",status:"Pending",due:"20 Mar"},
-  {id:7,task:"Staircase detail v2 upload",project:"Bablu Farmhouse",cat:"Structural",assignedTo:"Vijay Sahu",priority:"Medium",status:"Pending",due:"19 Mar"},
-  {id:8,task:"3D render update — add landscaping",project:"Tikendra Residence",cat:"Architectural",assignedTo:"Harsh Sahu",priority:"Low",status:"Completed",due:"05 Mar"},
-  {id:9,task:"Electrical conduit path review",project:"Shubham & NK 623",cat:"Electrical",assignedTo:"Priyanka",priority:"Medium",status:"Completed",due:"01 Mar"},
-];
-
-// ── STATUS / PRIORITY META ───────────────────────────────────────────
-const STATUS_META={
-  "Approved": {c:T.grn,bg:T.grnL,brd:T.grnM},
-  "Pending":  {c:T.slt,bg:T.sltL,brd:T.b2},
-  "Revision": {c:T.amb,bg:T.ambL,brd:T.ambM},
-  "Rejected": {c:T.red,bg:T.redL,brd:T.redM},
-};
-const PRIORITY_META={
-  "High":   {c:T.red,bg:T.redL},
-  "Medium": {c:T.amb,bg:T.ambL},
-  "Low":    {c:T.slt,bg:T.sltL},
-};
-const TASK_STATUS_META={
-  "In Progress": {c:T.blu,bg:T.bluL},
-  "Pending":     {c:T.amb,bg:T.ambL},
-  "Completed":   {c:T.grn,bg:T.grnL},
-};
-const CAT_COLORS={
-  "Architectural":{c:T.blu,bg:T.bluL},
-  "Structural":   {c:T.pur,bg:T.purL},
-  "Electrical":   {c:T.amb,bg:T.ambL},
-  "Plumbing":     {c:"#0369A1",bg:"#E0F2FE"},
-  "Interior":     {c:"#BE185D",bg:"#FCE7F3"},
-};
-
-// ── SHARED COMPONENTS ────────────────────────────────────────────────
-const Pill=({label,c,bg,brd})=>(
-  <span style={{display:"inline-block",background:bg,color:c,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,whiteSpace:"nowrap",border:`1px solid ${brd||bg}`}}>{label}</span>
+const Pill = ({label,c,bg,size=10.5}) => (
+  <span style={{fontSize:size,fontWeight:700,color:c,background:bg,padding:"2px 8px",borderRadius:20,whiteSpace:"nowrap"}}>{label}</span>
 );
 
+const STATUS_META = {
+  "Pending":     {c:T.t3,  bg:"#F3F4F6"},
+  "Approved":    {c:T.grn, bg:T.grnL},
+  "Revision":    {c:T.amb, bg:T.ambL},
+  "Rejected":    {c:T.red, bg:T.redL},
+  "In Progress": {c:T.blu, bg:T.bluL},
+  "Uploaded":    {c:T.grn, bg:T.grnL},
+};
+const PRIO_META = {
+  "Urgent":{c:T.red,bg:T.redL},
+  "High":  {c:T.amb,bg:T.ambL},
+  "Normal":{c:T.blu,bg:T.bluL},
+  "Low":   {c:T.t4, bg:"#F3F4F6"},
+};
 
-// ── VERSION HISTORY DRAWER ───────────────────────────────────────────
-function VersionDrawer({drawing,allVersions,onClose}){
-  const versions=allVersions.filter(v=>v.drawingId===drawing.id);
-  return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:200}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn 0.2s ease"}}>
-      <div style={{background:T.surface,padding:"12px 16px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-        <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{drawing.title}</div><div style={{fontSize:10.5,color:T.t4}}>Version History · {versions.length} versions</div></div>
-        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex"}}><IcX size={15}/></button>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"12px"}}>
-        {versions.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No history available</div>}
-        {versions.map((v,i)=>{
-          const sm=STATUS_META[v.status];
-          return(
-            <div key={i} style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"11px 14px",marginBottom:8,borderLeft:`3px solid ${sm.c}`}}>
-              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
-                <span style={{fontSize:13,fontWeight:800,color:T.t1,fontFamily:"monospace"}}>{v.ver}</span>
-                <Pill label={v.status} c={sm.c} bg={sm.bg} brd={sm.brd}/>
-                <span style={{fontSize:10.5,color:T.t4,marginLeft:"auto"}}>{v.date}</span>
+const CATS  = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
+const TYPES = ["Plan","Elevation","Section","Detail","3D","Diagram","Schedule","Site Plan"];
+
+// ── UPLOAD MODAL (standalone) ─────────────────────────────────────────
+function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefill, onUploaded }) {
+  const CLOUD_NAME = "dd632nqfm";
+  const PRESET     = "gb_buildcon_drawings";
+  const [form,     setForm]     = useState({ project_id:"", title:"", category:"Architectural", drawing_type:"2D", note:"" });
+  const [file,     setFile]     = useState(null);
+  const [uploading,setUploading]= useState(false);
+  const [pct,      setPct]      = useState(0);
+  const [err,      setErr]      = useState("");
+  const [titleSearch, setTitleSearch] = useState("");
+
+  useEffect(()=>{
+    if(prefill) setForm(p=>({...p,...prefill}));
+  },[prefill]);
+
+  const filteredTitles = dbTitles.filter(t =>
+    (!form.category || t.category===form.category) &&
+    (t.title.toLowerCase().includes(titleSearch.toLowerCase()))
+  );
+
+  if (!show) return null;
+
+  const upload = async () => {
+    if (!form.project_id) { setErr("Project select karo"); return; }
+    if (!form.title.trim()) { setErr("Title required"); return; }
+    if (!file) { setErr("File select karo"); return; }
+    setUploading(true); setErr(""); setPct(5);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", PRESET);
+      fd.append("folder", "gb_buildcon/drawings");
+      const xhr = new XMLHttpRequest();
+      const cld = await new Promise((res,rej)=>{
+        xhr.upload.onprogress = e => { if(e.lengthComputable) setPct(Math.round(e.loaded/e.total*80)); };
+        xhr.onload = () => { const d=JSON.parse(xhr.responseText); xhr.status===200?res(d):rej(new Error(d.error?.message||"Upload failed")); };
+        xhr.onerror = ()=>rej(new Error("Network error"));
+        const isPDF = file.name.match(/\.(pdf|dwg|dxf)$/i);
+        xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${isPDF?"raw":"image"}/upload`);
+        xhr.send(fd);
+      });
+      setPct(85);
+      const proj = projects.find(p=>p.id===parseInt(form.project_id));
+      const res = await api.post("/design/drawings", {
+        project_id:   form.project_id,
+        project_name: proj?.name||"",
+        title:        form.title,
+        category:     form.category,
+        drawing_type: form.drawing_type,
+        note:         form.note||null,
+        file_url:     cld.secure_url,
+        file_size:    Math.round(file.size/1024)+" KB",
+      });
+      setPct(100);
+      if (res.success) {
+        onUploaded(res.data);
+        onClose();
+        setFile(null); setForm({project_id:"",title:"",category:"Architectural",drawing_type:"2D",note:""}); setPct(0);
+      } else setErr(res.message||"Save failed");
+    } catch(e) { setErr(e.message); }
+    setUploading(false);
+  };
+
+  return (
+    <>
+      <div onClick={()=>!uploading&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+        background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
+        zIndex:501,width:560,maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+        <div style={{background:T.sb,padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>Upload Drawing</div>
+          {!uploading&&<button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+          {/* Project */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Project *</label>
+            <select value={form.project_id} onChange={e=>setForm(p=>({...p,project_id:e.target.value}))}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+              <option value="">Select project...</option>
+              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+          </div>
+          {/* Category + Type */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
+              <select value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value,title:""}))}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                {(dbCats.length>0?dbCats.map(c=>c.name):CATS).map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Type</label>
+              <select value={form.drawing_type} onChange={e=>setForm(p=>({...p,drawing_type:e.target.value}))}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                {(dbTypes.length>0?dbTypes.map(t=>t.name):TYPES).map(t=><option key={t}>{t}</option>)}
+              </select>
+            </div>
+          </div>
+          {/* Title — searchable from library */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Drawing Title *</label>
+            <input value={form.title} onChange={e=>{setForm(p=>({...p,title:e.target.value}));setTitleSearch(e.target.value);}}
+              placeholder="Search or type title..."
+              list="drawing_titles_list"
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            <datalist id="drawing_titles_list">
+              {filteredTitles.map(t=><option key={t.id} value={t.title}>{t.title} ({t.type})</option>)}
+            </datalist>
+            {filteredTitles.length>0&&form.title===""&&(
+              <div style={{background:T.surfaceB,border:"1px solid "+T.b1,borderRadius:7,marginTop:4,maxHeight:140,overflowY:"auto"}}>
+                {filteredTitles.slice(0,8).map(t=>(
+                  <div key={t.id} onClick={()=>{setForm(p=>({...p,title:t.title,drawing_type:t.type||p.drawing_type}));setTitleSearch("");}}
+                    style={{padding:"7px 10px",cursor:"pointer",fontSize:12,borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.bluL}
+                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                    <span style={{fontWeight:500,color:T.t1}}>{t.title}</span>
+                    <span style={{fontSize:10,color:T.t4}}>{t.type}</span>
+                  </div>
+                ))}
               </div>
-              <div style={{fontSize:11.5,color:T.t2,marginBottom:3}}>Uploaded by {v.by} · {v.size}</div>
-              {v.note&&<div style={{fontSize:11,color:T.t3,padding:"4px 8px",background:T.surfaceB,borderRadius:5,marginTop:4}}>{v.note}</div>}
+            )}
+          </div>
+          {/* File */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>File *</label>
+            <label style={{display:"block",border:"2px dashed "+(file?T.grn:T.b2),borderRadius:9,padding:"18px",textAlign:"center",background:file?T.grnL:T.surfaceB,cursor:"pointer"}}>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" style={{display:"none"}} onChange={e=>{if(e.target.files[0]){setFile(e.target.files[0]);setErr("");}}}/>
+              {file?<div><div style={{fontSize:13,fontWeight:700,color:T.grn}}>✓ {file.name}</div><div style={{fontSize:11,color:T.t4,marginTop:2}}>{(file.size/1024).toFixed(0)} KB</div></div>
+                :<div><div style={{fontSize:13,fontWeight:600,color:T.t2}}>📁 Choose file or drop</div><div style={{fontSize:11,color:T.t4,marginTop:2}}>PDF, PNG, JPG, DWG · Max 50MB</div></div>}
+            </label>
+          </div>
+          {/* Note */}
+          <div>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Notes</label>
+            <textarea value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder="Reviewer ke liye..." rows={2}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+          </div>
+          {uploading&&<div style={{marginTop:10}}><div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:11,color:T.t3}}>Uploading...</span><span style={{fontSize:11,fontWeight:700,color:T.blu}}>{pct}%</span></div><div style={{height:5,background:T.b1,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:pct+"%",background:T.blu,borderRadius:4,transition:"width 0.3s"}}/></div></div>}
+          {err&&<div style={{marginTop:8,padding:"7px 10px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:12,color:T.red}}>{err}</div>}
+        </div>
+        <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={onClose} disabled={uploading} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={upload} disabled={uploading||!file||!form.title||!form.project_id}
+            style={{flex:2,padding:"9px",borderRadius:7,background:uploading||!file||!form.title||!form.project_id?T.b1:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:uploading?"not-allowed":"pointer"}}>
+            {uploading?"Uploading...":"⬆ Upload Drawing"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── MAIN DESIGN MODULE ────────────────────────────────────────────────
+export default function DesignModule() {
+  const [activeTab, setActiveTab] = useState("drawings");
+  const [drawings,  setDrawings]  = useState([]);
+  const [requests,  setRequests]  = useState([]);
+  const [projects,  setProjects]  = useState([]);
+  const [dbTitles,  setDbTitles]  = useState([]);
+  const [dbCats,    setDbCats]    = useState([]);
+  const [dbTypes,   setDbTypes]   = useState([]);
+  const [loading,   setLoading]   = useState(true);
+  const [showUpload,setShowUpload]= useState(false);
+  const [uploadPrefill, setUploadPrefill] = useState(null);
+  const [acting,    setActing]    = useState({});
+  const [actionErr, setActionErr] = useState("");
+
+  // Drawing filters
+  const [dSearch,   setDSearch]   = useState("");
+  const [dProject,  setDProject]  = useState("All");
+  const [dCat,      setDCat]      = useState("All");
+  const [dStatus,   setDStatus]   = useState("All");
+  const [dType,     setDType]     = useState("All");
+  const [selDraw,   setSelDraw]   = useState(null);
+  const [showVer,   setShowVer]   = useState(null);
+
+  // Request filters
+  const [rSearch,   setRSearch]   = useState("");
+  const [rProject,  setRProject]  = useState("All");
+  const [rStatus,   setRStatus]   = useState("All");
+  const [rCat,      setRCat]      = useState("All");
+  const [rPrio,     setRPrio]     = useState("All");
+  const [hideUploadedR, setHideUploadedR] = useState(true);
+
+  // Revision queue filters
+  const [revSearch,  setRevSearch]  = useState("");
+  const [revProject, setRevProject] = useState("All");
+  const [revFile,    setRevFile]    = useState({});   // {drawingId: File}
+  const [revUploading,setRevUploading]=useState({});
+
+  // Due date filters
+  const [ddView,    setDdView]    = useState("all"); // all|overdue|today|week
+  const [ddProject, setDdProject] = useState("All");
+
+  // Load all data
+  const loadAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const [drRes, rqRes, prRes, titRes, catRes, typRes] = await Promise.all([
+        api.get("/design/drawings"),
+        api.get("/design/requests"),
+        api.get("/projects"),
+        api.get("/design/titles"),
+        api.get("/design/categories?type=category"),
+        api.get("/design/categories?type=drawing_type"),
+      ]);
+      if (drRes.success) setDrawings(drRes.data||[]);
+      if (rqRes.success) setRequests(rqRes.data||[]);
+      if (prRes.success && prRes.data) setProjects(prRes.data);
+      if (titRes.success) setDbTitles(titRes.data||[]);
+      if (catRes.success && catRes.data.length) setDbCats(catRes.data);
+      if (typRes.success && typRes.data.length) setDbTypes(typRes.data);
+    } catch(e) {}
+    setLoading(false);
+  }, []);
+
+  useEffect(()=>{ loadAll(); }, [loadAll]);
+
+  const CATS_LIST  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : CATS;
+  const TYPES_LIST = dbTypes.length > 0 ? dbTypes.map(t=>t.name) : TYPES;
+  const projectNames = ["All", ...projects.map(p=>p.name)];
+
+  // Status action
+  const handleStatus = async (id, status, note) => {
+    setActing(p=>({...p,[id]:status})); setActionErr("");
+    try {
+      const res = await api.patch("/design/drawings/"+id+"/status", {status, note:note||null});
+      if (res.success) { setDrawings(p=>p.map(d=>d.id===id?{...d,status}:d)); setSelDraw(null); }
+      else setActionErr(res.message||"Failed");
+    } catch(e) { setActionErr(e.message); }
+    setActing(p=>({...p,[id]:null}));
+  };
+
+  // Upload new version from revision queue
+  const handleNewVersion = async (drawingId, file) => {
+    setRevUploading(p=>({...p,[drawingId]:true}));
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", "gb_buildcon_drawings");
+      const isPDF = file.name.match(/\.(pdf|dwg|dxf)$/i);
+      const xhr = new XMLHttpRequest();
+      const cld = await new Promise((res,rej)=>{
+        xhr.onload = ()=>{ const d=JSON.parse(xhr.responseText); xhr.status===200?res(d):rej(new Error(d.error?.message)); };
+        xhr.onerror = ()=>rej(new Error("Network error"));
+        xhr.open("POST", `https://api.cloudinary.com/v1_1/dd632nqfm/${isPDF?"raw":"image"}/upload`);
+        xhr.send(fd);
+      });
+      const res = await api.post("/design/drawings/"+drawingId+"/versions", {
+        file_url: cld.secure_url, file_size: Math.round(file.size/1024)+" KB",
+      });
+      if (res.success) { await loadAll(); }
+    } catch(e) { alert(e.message); }
+    setRevUploading(p=>({...p,[drawingId]:false}));
+  };
+
+  // Update request status
+  const updateReqStatus = async (id, status, assigned_to) => {
+    try {
+      const res = await api.patch("/design/requests/"+id, { status, assigned_to:assigned_to||undefined });
+      if (res.success) setRequests(p=>p.map(r=>r.id===id?res.data:r));
+    } catch(e) {}
+  };
+
+  // Filtered lists
+  const filteredDrawings = drawings.filter(d=>{
+    if (dProject!=="All" && (d.project_name||"")!==dProject) return false;
+    if (dCat!=="All" && d.category!==dCat) return false;
+    if (dStatus!=="All" && d.status!==dStatus) return false;
+    if (dType!=="All" && (d.drawing_type||"")!==dType) return false;
+    if (dSearch && !d.title.toLowerCase().includes(dSearch.toLowerCase())) return false;
+    return true;
+  });
+
+  const filteredRequests = requests.filter(r=>{
+    if (hideUploadedR && (r.status==="Uploaded"||r.status==="Rejected")) return false;
+    if (rProject!=="All" && (r.project_name||"")!==rProject) return false;
+    if (rStatus!=="All" && r.status!==rStatus) return false;
+    if (rCat!=="All" && r.category!==rCat) return false;
+    if (rPrio!=="All" && r.priority!==rPrio) return false;
+    if (rSearch && !r.title.toLowerCase().includes(rSearch.toLowerCase())) return false;
+    return true;
+  });
+
+  const revQueue = drawings.filter(d=>d.status==="Revision").filter(d=>{
+    if (revProject!=="All" && (d.project_name||"")!==revProject) return false;
+    if (revSearch && !d.title.toLowerCase().includes(revSearch.toLowerCase())) return false;
+    return true;
+  });
+
+  // Due date data — requests with due_date
+  const today = new Date(); today.setHours(0,0,0,0);
+  const dueDateItems = requests.filter(r=>r.due_date&&r.status!=="Uploaded"&&r.status!=="Rejected").filter(r=>{
+    if (ddProject!=="All" && (r.project_name||"")!==ddProject) return false;
+    const d = new Date(r.due_date); d.setHours(0,0,0,0);
+    const diff = Math.floor((d-today)/(1000*60*60*24));
+    if (ddView==="overdue" && diff>=0) return false;
+    if (ddView==="today"   && diff!==0) return false;
+    if (ddView==="week"    && (diff<0||diff>7)) return false;
+    return true;
+  }).sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
+
+  const overdueCt = requests.filter(r=>{if(!r.due_date||r.status==="Uploaded"||r.status==="Rejected")return false;const d=new Date(r.due_date);d.setHours(0,0,0,0);return d<today;}).length;
+
+  // ── TAB: DRAWINGS ─────────────────────────────────────────────────
+  const DrawingsTab = () => (
+    <div>
+      {/* Filters */}
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        <div style={{position:"relative",flex:1,minWidth:160}}>
+          <input value={dSearch} onChange={e=>setDSearch(e.target.value)} placeholder="Search drawings..."
+            style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+        </div>
+        {[
+          {val:dProject,set:setDProject,opts:projectNames,label:"Project"},
+          {val:dCat,    set:setDCat,    opts:["All",...CATS_LIST],label:"Category"},
+          {val:dStatus, set:setDStatus, opts:["All","Pending","Approved","Revision","Rejected"],label:"Status"},
+          {val:dType,   set:setDType,   opts:["All",...TYPES_LIST],label:"Type"},
+        ].map(f=>(
+          <select key={f.label} value={f.val} onChange={e=>f.set(e.target.value)}
+            style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(f.val!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:f.val!=="All"?T.bluL:T.surface,color:f.val!=="All"?T.blu:T.t2}}>
+            {f.opts.map(o=><option key={o} value={o}>{o==="All"?`All ${f.label}s`:o}</option>)}
+          </select>
+        ))}
+        <button onClick={()=>setShowUpload(true)}
+          style={{padding:"7px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+          <IcUpload size={13} color="white"/> Upload Drawing
+        </button>
+      </div>
+
+      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{filteredDrawings.length} drawings</div>
+
+      {/* Table */}
+      <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 120px 120px 60px 100px 100px 70px",padding:"8px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
+          {["Title","Project","Category","Ver.","Type","Status","Size"].map((h,i)=>(
+            <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===3?"center":"left"}}>{h}</span>
+          ))}
+        </div>
+        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>Loading...</div>}
+        {!loading&&filteredDrawings.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>No drawings found</div>}
+        {filteredDrawings.map(d=>{
+          const sm=STATUS_META[d.status]||STATUS_META["Pending"];
+          const isSel=selDraw?.id===d.id;
+          return(
+            <div key={d.id}>
+              <div onClick={()=>setSelDraw(isSel?null:d)}
+                style={{display:"grid",gridTemplateColumns:"2fr 120px 120px 60px 100px 100px 70px",padding:"9px 14px",
+                  borderBottom:"1px solid "+T.b1,alignItems:"center",cursor:"pointer",gap:8,
+                  background:isSel?T.bluL:"none",borderLeft:isSel?"3px solid "+T.blu:"3px solid transparent",transition:"all .1s"}}
+                onMouseEnter={e=>{if(!isSel)e.currentTarget.style.background=T.surfaceB;}}
+                onMouseLeave={e=>{e.currentTarget.style.background=isSel?T.bluL:"none";}}>
+                <div>
+                  <div style={{fontSize:12.5,fontWeight:isSel?700:500,color:isSel?T.blu:T.t1}}>{d.title}</div>
+                  {d.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.note}</div>}
+                </div>
+                <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.project_name||"—"}</span>
+                <span style={{fontSize:11,color:T.t2}}>{d.category||"—"}</span>
+                <span style={{fontSize:11,color:T.t4,fontFamily:"monospace",textAlign:"center"}}>{d.current_version||"v1"}</span>
+                <Pill label={d.drawing_type||"2D"} c={T.pur} bg={T.purL}/>
+                <Pill label={d.status} c={sm.c} bg={sm.bg}/>
+                <span style={{fontSize:11,color:T.t4}}>{d.file_size||"—"}</span>
+              </div>
+              {/* Action panel */}
+              {isSel&&(
+                <div style={{padding:"10px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM}}>
+                  {actionErr&&<div style={{padding:"5px 9px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:11.5,color:T.red,marginBottom:8}}>{actionErr}</div>}
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
+                    {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>👁 View</a>}
+                    {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer" style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>⬇ Download</a>}
+                    <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}><IcHist size={12}/> History</button>
+                    {d.status!=="Approved"&&<button onClick={()=>handleStatus(d.id,"Approved")} disabled={!!acting[d.id]} style={{padding:"5px 11px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
+                    {d.status!=="Revision"&&<button onClick={()=>{ const r=prompt("Revision reason:"); if(r) handleStatus(d.id,"Revision",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer"}}>🔄 Revision</button>}
+                    {d.status!=="Rejected"&&<button onClick={()=>{ const r=prompt("Rejection reason:"); if(r) handleStatus(d.id,"Rejected",r); }} style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>✕ Reject</button>}
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
       </div>
     </div>
-  </>);
-}
+  );
 
-// ── UPLOAD DRAWER ────────────────────────────────────────────────────
-function UploadDrawer({onClose}){
-  const [form,setForm]=useState({title:"",project:"Shubham & NK 623",cat:"Architectural",type:"2D",note:""});
-  return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:400,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
-      <div style={{background:T.surface,padding:"12px 16px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-        <div style={{flex:1}}><div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>Upload Drawing</div><div style={{fontSize:10.5,color:T.t4}}>Add new drawing to a project</div></div>
-        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex"}}><IcX size={15}/></button>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"14px"}}>
-        {[{label:"Drawing Title",key:"title",type:"input",placeholder:"e.g. Ground Floor Plan"},{label:"Project",key:"project",type:"select",options:PROJECTS},{label:"Category",key:"cat",type:"select",options:["Architectural","Structural","Electrical","Plumbing","Interior"]},{label:"Drawing Type",key:"type",type:"select",options:["2D","3D"]},].map(f=>(
-          <div key={f.key} style={{marginBottom:13}}>
-            <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{f.label}</label>
-            {f.type==="input"
-              ?<input value={form[f.key]} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.placeholder} style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-              :<select value={form[f.key]} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))} style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>{f.options.map(o=><option key={o}>{o}</option>)}</select>
-            }
-          </div>
-        ))}
-        <div style={{border:`2px dashed ${T.b2}`,borderRadius:9,padding:"28px 16px",textAlign:"center",background:T.surfaceB,marginBottom:13,cursor:"pointer"}} onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.background=T.bluL;}} onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.background=T.surfaceB;}}>
-          <IcUpload size={28} color={T.t4}/>
-          <div style={{fontSize:13,fontWeight:600,color:T.t2,marginTop:8}}>Drop file or click to browse</div>
-          <div style={{fontSize:11,color:T.t4,marginTop:4}}>PDF, DWG, DXF, PNG, JPG · Max 50MB</div>
-        </div>
-        <div>
-          <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Notes / Comments</label>
-          <textarea value={form.note} onChange={e=>setForm(p=>({...p,note:e.target.value}))} placeholder="Optional notes for reviewer..." rows={3} style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-        </div>
-      </div>
-      <div style={{padding:"12px 14px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:8,flexShrink:0}}>
-        <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-        <button onClick={onClose} style={{flex:2,padding:"9px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}><IcUpload size={14} color="white"/> Upload Drawing</button>
-      </div>
-    </div>
-  </>);
-}
-
-// ── REVISION QUEUE TAB ───────────────────────────────────────────────
-function RevisionQueueTab({revisionDrawings,drawings,setDrawings,seedComments={}}){
-  const [revPins,setRevPins]=useState(INIT_REVISION_PINS);
-  const [revComments,setRevComments]=useState(()=>{
-    // Merge INIT + any seed comments passed from parent
-    const merged={...INIT_REVISION_COMMENTS};
-    Object.entries(seedComments).forEach(([id,cs])=>{merged[id]=[...(merged[id]||[]),...cs];});
-    return merged;
-  });
-
-  // Sync new seedComments from parent (e.g. when a drawing is newly revised)
-  const prevSeedRef=useState(seedComments);
-  useState(()=>{
-    // simple sync: merge any new entries not yet in revComments
-    setRevComments(prev=>{
-      const next={...prev};
-      Object.entries(seedComments).forEach(([id,cs])=>{
-        const existing=new Set((next[id]||[]).map(c=>c.id));
-        const newOnes=cs.filter(c=>!existing.has(c.id));
-        if(newOnes.length>0) next[id]=[...(next[id]||[]),...newOnes];
-      });
-      return next;
-    });
-  });
-  const [expandedId,setExpandedId]=useState(null);
-  const [activePanel,setActivePanel]=useState({}); // drawingId -> "pins" | "comments"
-  const [newPinForms,setNewPinForms]=useState({});
-  const [newCommentText,setNewCommentText]=useState({});
-  const [rProject,setRProject]=useState("All");
-  const [sortBy,setSortBy]=useState("date"); // date | title | project | pins
-  const [sortDir,setSortDir]=useState("desc");
-
-  const approveDrawing=id=>setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Approved"}:d));
-
-  const filtered=revisionDrawings
-    .filter(d=>rProject==="All"||d.project===rProject)
-    .sort((a,b)=>{
-      let va,vb;
-      if(sortBy==="title"){va=a.title;vb=b.title;}
-      else if(sortBy==="project"){va=a.project;vb=b.project;}
-      else if(sortBy==="pins"){va=a.pins;vb=b.pins;}
-      else {va=a.date;vb=b.date;}
-      if(typeof va==="string") return sortDir==="asc"?va.localeCompare(vb):vb.localeCompare(va);
-      return sortDir==="asc"?va-vb:vb-va;
-    });
-
-  const getPins=id=>revPins[id]||[];
-  const getComments=id=>revComments[id]||[];
-  const donePins=id=>getPins(id).filter(p=>p.done).length;
-
-  const addPin=(drawingId)=>{
-    const f=newPinForms[drawingId]||{location:"",note:"",priority:"High"};
-    if(!f.location.trim()||!f.note.trim()) return;
-    const pin={id:Date.now(),location:f.location,note:f.note,priority:f.priority,by:"Prafull (Admin)",date:"Now",done:false};
-    setRevPins(p=>({...p,[drawingId]:[...(p[drawingId]||[]),pin]}));
-    setNewPinForms(p=>({...p,[drawingId]:{location:"",note:"",priority:"High"}}));
-  };
-  const togglePin=(drawingId,pinId)=>{
-    setRevPins(p=>({...p,[drawingId]:p[drawingId].map(pin=>pin.id===pinId?{...pin,done:!pin.done}:pin)}));
-  };
-  const deletePin=(drawingId,pinId)=>{
-    setRevPins(p=>({...p,[drawingId]:p[drawingId].filter(pin=>pin.id!==pinId)}));
-  };
-  const addComment=(drawingId)=>{
-    const text=newCommentText[drawingId]||"";
-    if(!text.trim()) return;
-    const c={id:Date.now(),by:"Prafull (Admin)",date:"Now",text,avatar:"P",color:"#1565C0"};
-    setRevComments(p=>({...p,[drawingId]:[...(p[drawingId]||[]),c]}));
-    setNewCommentText(p=>({...p,[drawingId]:""}));
-  };
-  const setPanel=(id,panel)=>setActivePanel(p=>({...p,[id]:p[id]===panel?null:panel}));
-
-  const SORT_OPTS=[{v:"date",l:"Date"},{v:"title",l:"Title"},{v:"project",l:"Project"},{v:"pins",l:"Pins"}];
-
-  if(revisionDrawings.length===0){
+  // ── TAB: DESIGN REQUESTS ─────────────────────────────────────────
+  const RequestsTab = () => {
+    const [assignId,  setAssignId]  = useState(null);
+    const [assignVal, setAssignVal] = useState("");
     return(
-      <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <div style={{textAlign:"center",color:T.t4}}>
-          <IcChk size={44} color={T.grnM}/>
-          <div style={{fontSize:15,fontWeight:700,color:T.grn,marginTop:12}}>No drawings in revision queue!</div>
-          <div style={{fontSize:12,color:T.t4,marginTop:5}}>All drawings are either approved or pending.</div>
+      <div>
+        {/* Filters */}
+        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{position:"relative",flex:1,minWidth:160}}>
+            <input value={rSearch} onChange={e=>setRSearch(e.target.value)} placeholder="Search requests..."
+              style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+          </div>
+          {[
+            {val:rProject,set:setRProject,opts:projectNames,label:"Project"},
+            {val:rCat,    set:setRCat,    opts:["All",...CATS_LIST],label:"Category"},
+            {val:rStatus, set:setRStatus, opts:["All","Pending","In Progress","Uploaded","Rejected"],label:"Status"},
+            {val:rPrio,   set:setRPrio,   opts:["All","Urgent","High","Normal","Low"],label:"Priority"},
+          ].map(f=>(
+            <select key={f.label} value={f.val} onChange={e=>f.set(e.target.value)}
+              style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(f.val!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:f.val!=="All"?T.bluL:T.surface,color:f.val!=="All"?T.blu:T.t2}}>
+              {f.opts.map(o=><option key={o} value={o}>{o==="All"?`All ${f.label}s`:o}</option>)}
+            </select>
+          ))}
+          <button onClick={()=>setHideUploadedR(!hideUploadedR)}
+            style={{padding:"6px 11px",borderRadius:7,border:"1.5px solid "+(hideUploadedR?T.b1:T.grn),background:hideUploadedR?"none":T.grnL,color:hideUploadedR?T.t4:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+            {hideUploadedR?"Show Completed":"Hide Completed"}
+          </button>
         </div>
+        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{filteredRequests.length} requests · {requests.filter(r=>r.status==="Pending").length} pending</div>
+
+        {filteredRequests.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>📋</div><div style={{fontSize:13,color:T.t2}}>No requests</div></div>}
+
+        {filteredRequests.map(req=>{
+          const pm=PRIO_META[req.priority]||PRIO_META["Normal"];
+          const sm=STATUS_META[req.status]||STATUS_META["Pending"];
+          return(
+            <div key={req.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+pm.c}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{req.title}</div>
+                  <div style={{fontSize:11,color:T.t4,marginTop:2,display:"flex",gap:10,flexWrap:"wrap"}}>
+                    <span>{req.project_name||"—"}</span>
+                    <span>{req.category}</span>
+                    {req.due_date&&<span style={{color:new Date(req.due_date)<today?T.red:T.t4}}>Due: {fmtDate(req.due_date)}</span>}
+                    {req.requested_by&&<span>By: {req.requested_by}</span>}
+                  </div>
+                  {req.description&&<div style={{fontSize:11.5,color:T.t2,marginTop:5}}>{req.description}</div>}
+                  {req.assigned_to&&<div style={{fontSize:11,color:T.blu,marginTop:4}}>👤 {req.assigned_to}</div>}
+                </div>
+                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+                  <Pill label={req.priority} c={pm.c} bg={pm.bg}/>
+                  <Pill label={req.status} c={sm.c} bg={sm.bg}/>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
+                {req.status==="Pending"&&<>
+                  {assignId===req.id?(
+                    <div style={{display:"flex",gap:5}}>
+                      <input value={assignVal} onChange={e=>setAssignVal(e.target.value)} placeholder="Designer naam..."
+                        style={{padding:"4px 8px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+                      <button onClick={()=>{updateReqStatus(req.id,"In Progress",assignVal);setAssignId(null);setAssignVal("");}}
+                        style={{padding:"4px 10px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11,fontWeight:600,cursor:"pointer"}}>Assign</button>
+                      <button onClick={()=>setAssignId(null)} style={{padding:"4px 8px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>×</button>
+                    </div>
+                  ):(
+                    <button onClick={()=>{setAssignId(req.id);setAssignVal(req.assigned_to||"");}}
+                      style={{padding:"4px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      👤 Assign
+                    </button>
+                  )}
+                  <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||""});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
+                    style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                    ⬆ Upload Direct
+                  </button>
+                </>}
+                {req.status==="In Progress"&&(
+                  <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||""});setShowUpload(true);}}
+                    style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                    ⬆ Upload Drawing
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
-  }
+  };
 
-  return(
-    <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-      {/* Toolbar */}
-      <div style={{background:T.surface,borderRadius:8,padding:"8px 12px",marginBottom:10,border:`1px solid ${T.ambM}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,borderLeft:`3px solid ${T.amb}`}}>
-        <IcAlert size={15} color={T.amb}/>
-        <span style={{fontSize:12,fontWeight:700,color:T.amb}}>{filtered.length} drawing{filtered.length!==1?"s":""} need revision</span>
-        <div style={{flex:1}}/>
-        {/* Project filter */}
-        <select value={rProject} onChange={e=>setRProject(e.target.value)}
-          style={{height:30,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${rProject!=="All"?T.blu:T.b1}`,background:rProject!=="All"?T.bluL:T.surface,fontSize:11.5,color:rProject!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:rProject!=="All"?600:400,minWidth:130,appearance:"none",WebkitAppearance:"none"}}>
-          <option value="All">All Projects</option>
-          {PROJECTS.map(p=><option key={p}>{p}</option>)}
+  // ── TAB: REVISION QUEUE ──────────────────────────────────────────
+  const RevisionTab = () => (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        <div style={{position:"relative",flex:1,minWidth:160}}>
+          <input value={revSearch} onChange={e=>setRevSearch(e.target.value)} placeholder="Search..."
+            style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+        </div>
+        <select value={revProject} onChange={e=>setRevProject(e.target.value)}
+          style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(revProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:revProject!=="All"?T.bluL:T.surface}}>
+          {projectNames.map(p=><option key={p}>{p}</option>)}
         </select>
-        {/* Sort */}
-        <div style={{display:"flex",alignItems:"center",gap:4,background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,padding:"2px 4px"}}>
-          <IcSort size={13} color={T.t4}/>
-          {SORT_OPTS.map(s=>(
-            <button key={s.v} onClick={()=>{if(sortBy===s.v)setSortDir(d=>d==="asc"?"desc":"asc");else{setSortBy(s.v);setSortDir("desc");}}}
-              style={{padding:"3px 8px",borderRadius:4,border:"none",background:sortBy===s.v?T.amb:"none",color:sortBy===s.v?"white":T.t3,fontSize:11,fontWeight:sortBy===s.v?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:3}}>
-              {s.l}{sortBy===s.v&&(sortDir==="desc"?<IcDown size={9} color="white"/>:<IcUp2 size={9} color="white"/>)}
-            </button>
+      </div>
+      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{revQueue.length} drawings in revision</div>
+      {revQueue.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>✅</div><div style={{fontSize:13,color:T.t2}}>Koi revision pending nahi</div></div>}
+      {revQueue.map(d=>(
+        <div key={d.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.ambM,padding:"13px 14px",marginBottom:10,borderLeft:"3px solid "+T.amb}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:10}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
+              <div style={{fontSize:11,color:T.t4,marginTop:2}}>{d.project_name||"—"} · {d.category} · {d.current_version}</div>
+              {d.note&&<div style={{fontSize:11.5,color:T.amb,marginTop:5,padding:"5px 8px",background:T.ambL,borderRadius:5}}>📝 {d.note}</div>}
+              {d.pin_count>0&&<div style={{fontSize:11,color:T.t3,marginTop:4}}>📍 {d.pin_count} revision pin(s)</div>}
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"4px 9px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>👁 View Current</a>}
+            </div>
+          </div>
+          <div style={{paddingTop:8,borderTop:"1px solid "+T.b1}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>Upload Revised Version</label>
+            <label style={{display:"flex",alignItems:"center",gap:8,padding:"8px 11px",border:"1.5px dashed "+(revUploading[d.id]?T.blu:T.b2),borderRadius:7,cursor:revUploading[d.id]?"not-allowed":"pointer",background:revUploading[d.id]?T.bluL:T.surfaceB}}>
+              <input type="file" accept=".pdf,.png,.jpg,.jpeg,.dwg" style={{display:"none"}} disabled={revUploading[d.id]}
+                onChange={e=>{if(e.target.files[0])handleNewVersion(d.id,e.target.files[0]);}}/>
+              <span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>{revUploading[d.id]?"⏳ Uploading...":"⬆ Upload New Version"}</span>
+            </label>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+
+  // ── TAB: DUE DATES ───────────────────────────────────────────────
+  const DueDatesTab = () => (
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        {[
+          {id:"all",label:"All"},
+          {id:"overdue",label:`Overdue ${overdueCt>0?"("+overdueCt+")":""}`,color:overdueCt>0?T.red:null},
+          {id:"today",label:"Today"},
+          {id:"week",label:"This Week"},
+        ].map(v=>(
+          <button key={v.id} onClick={()=>setDdView(v.id)}
+            style={{padding:"5px 12px",borderRadius:20,border:"1.5px solid "+(ddView===v.id?(v.color||T.blu):T.b1),
+              background:ddView===v.id?(v.color?v.color+"15":T.bluL):"none",
+              color:ddView===v.id?(v.color||T.blu):T.t3,fontSize:11.5,fontWeight:ddView===v.id?700:400,cursor:"pointer"}}>
+            {v.label}
+          </button>
+        ))}
+        <select value={ddProject} onChange={e=>setDdProject(e.target.value)}
+          style={{marginLeft:"auto",padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(ddProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
+          {projectNames.map(p=><option key={p}>{p}</option>)}
+        </select>
+      </div>
+      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{dueDateItems.length} items</div>
+      {dueDateItems.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>📅</div><div style={{fontSize:13,color:T.t2}}>Koi due date nahi</div></div>}
+
+      {/* Table */}
+      <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+        <div style={{display:"grid",gridTemplateColumns:"2fr 130px 110px 100px 100px 90px",padding:"7px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
+          {["Drawing Request","Project","Category","Due Date","Priority","Status"].map((h,i)=>(
+            <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</span>
           ))}
         </div>
-      </div>
-
-      {/* Cards */}
-      <div style={{flex:1,overflowY:"auto",display:"flex",flexDirection:"column",gap:10}}>
-        {filtered.map(d=>{
-          const pins=getPins(d.id);
-          const comments=getComments(d.id);
-          const done=donePins(d.id);
-          const total=pins.length;
-          const pct=total>0?Math.round(done/total*100):0;
-          const cc=CAT_COLORS[d.cat]||{c:T.slt,bg:T.sltL};
-          const panel=activePanel[d.id];
-          const isOpen=expandedId===d.id;
-          const pinForm=newPinForms[d.id]||{location:"",note:"",priority:"High"};
-
+        {dueDateItems.map(r=>{
+          const due = new Date(r.due_date); due.setHours(0,0,0,0);
+          const diff = Math.floor((due-today)/(1000*60*60*24));
+          const isOverdue = diff < 0;
+          const isToday   = diff === 0;
+          const pm=PRIO_META[r.priority]||PRIO_META["Normal"];
+          const sm=STATUS_META[r.status]||STATUS_META["Pending"];
           return(
-            <div key={d.id} style={{background:T.surface,borderRadius:10,border:`1.5px solid ${panel?T.ambM:T.b1}`,overflow:"hidden",boxShadow:panel?"0 4px 16px rgba(217,119,6,0.1)":"0 1px 4px rgba(0,0,0,0.05)",transition:"all 0.2s"}}>
-
-              {/* Card Header */}
-              <div style={{padding:"13px 16px",display:"flex",alignItems:"center",gap:12,borderBottom:panel?`1px solid ${T.b1}`:"none",background:panel?`linear-gradient(90deg,${T.ambL},${T.surface})`:T.surface}}>
-                {/* Left accent */}
-                <div style={{width:4,height:44,borderRadius:2,background:T.amb,flexShrink:0}}/>
-                {/* Icon */}
-                <div style={{width:40,height:40,borderRadius:9,background:T.ambL,border:`1px solid ${T.ambM}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <IcRevise size={18} color={T.amb}/>
-                </div>
-                {/* Info */}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
-                    <span style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{d.title}</span>
-                    <Pill label="Revision" c={T.amb} bg={T.ambL} brd={T.ambM}/>
-                    <Pill label={d.cat} c={cc.c} bg={cc.bg}/>
-                    <Pill label={d.ver} c={T.slt} bg={T.sltL}/>
-                  </div>
-                  <div style={{fontSize:11.5,color:T.t3}}>{d.project} · {d.by} · {d.date} · {d.size}</div>
-                  {d.note&&(
-                    <div style={{fontSize:12,color:T.t2,marginTop:6,padding:"5px 10px",background:T.ambL,borderRadius:6,borderLeft:`3px solid ${T.amb}`,display:"flex",alignItems:"flex-start",gap:6}}>
-                      <IcFlag size={13} color={T.amb} style={{flexShrink:0,marginTop:1}}/>
-                      <span>{d.note}</span>
-                    </div>
-                  )}
-                </div>
-                {/* Progress ring & actions */}
-                <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:8,flexShrink:0}}>
-                  {/* Pin progress */}
-                  {total>0&&(
-                    <div style={{display:"flex",alignItems:"center",gap:8}}>
-                      <div style={{fontSize:10.5,color:T.t4}}>{done}/{total} pins done</div>
-                      <div style={{width:80,height:6,background:T.b1,borderRadius:3,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:`${pct}%`,background:pct===100?T.grn:T.amb,borderRadius:3,transition:"width 0.4s"}}/>
-                      </div>
-                      <span style={{fontSize:11,fontWeight:700,color:pct===100?T.grn:T.amb}}>{pct}%</span>
-                    </div>
-                  )}
-                  <div style={{display:"flex",gap:6}}>
-                    <button onClick={()=>setPanel(d.id,"pins")}
-                      style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,background:panel==="pins"?T.pur:T.purL,border:`1px solid ${panel==="pins"?T.pur:T.purM}`,color:panel==="pins"?"white":T.pur,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                      <IcPin size={13} color="currentColor" fill={panel==="pins"?"white":"none"}/> Pins {total>0&&<span style={{background:panel==="pins"?"rgba(255,255,255,0.3)":T.pur,color:"white",fontSize:9,padding:"0 5px",borderRadius:10,fontWeight:800}}>{total}</span>}
-                    </button>
-                    <button onClick={()=>setPanel(d.id,"comments")}
-                      style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,background:panel==="comments"?T.blu:T.bluL,border:`1px solid ${panel==="comments"?T.blu:T.bluM}`,color:panel==="comments"?"white":T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                      <IcMsg size={13} color="currentColor"/> Comments {comments.length>0&&<span style={{background:panel==="comments"?"rgba(255,255,255,0.3)":T.blu,color:"white",fontSize:9,padding:"0 5px",borderRadius:10,fontWeight:800}}>{comments.length}</span>}
-                    </button>
-                    {pct===100&&(
-                      <button onClick={()=>approveDrawing(d.id)}
-                        style={{display:"flex",alignItems:"center",gap:4,padding:"5px 12px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-                        <IcChk size={13} color={T.grn}/> Mark Revised
-                      </button>
-                    )}
-                  </div>
-                </div>
+            <div key={r.id} style={{display:"grid",gridTemplateColumns:"2fr 130px 110px 100px 100px 90px",padding:"9px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center",gap:8,
+              background:isOverdue?"#FFF5F5":isToday?"#FFFBEB":"none"}}>
+              <div>
+                <div style={{fontSize:12.5,fontWeight:600,color:isOverdue?T.red:T.t1}}>{r.title}</div>
+                {r.assigned_to&&<div style={{fontSize:10.5,color:T.blu,marginTop:1}}>👤 {r.assigned_to}</div>}
               </div>
-
-              {/* ── PINS PANEL ── */}
-              {panel==="pins"&&(
-                <div style={{background:T.purL,borderBottom:`1px solid ${T.purM}`,padding:"12px 16px"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
-                    <IcPin size={13} color={T.pur}/> Revision Pins — specific locations & changes required
-                    <span style={{fontSize:9.5,color:T.t4,fontWeight:400,marginLeft:4}}>Tick each pin when corrected</span>
-                  </div>
-                  {pins.length===0&&<div style={{fontSize:12,color:T.t4,padding:"8px 0",marginBottom:8}}>No pins added yet. Add below to mark specific locations for change.</div>}
-                  <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:12}}>
-                    {pins.map((pin,pi)=>{
-                      const pm=PRIORITY_META[pin.priority];
-                      return(
-                        <div key={pin.id} style={{background:T.surface,borderRadius:8,padding:"9px 12px",border:`1px solid ${pin.done?T.grnM:T.purM}`,display:"flex",gap:10,alignItems:"flex-start",opacity:pin.done?0.65:1,transition:"all 0.2s"}}>
-                          {/* Checkbox */}
-                          <button onClick={()=>togglePin(d.id,pin.id)}
-                            style={{width:20,height:20,borderRadius:5,border:`2px solid ${pin.done?T.grn:T.pur}`,background:pin.done?T.grn:"none",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer",marginTop:1}}>
-                            {pin.done&&<IcChk size={10} color="white"/>}
-                          </button>
-                          {/* Pin number */}
-                          <div style={{width:22,height:22,borderRadius:"50%",background:T.pur,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:800,flexShrink:0}}>
-                            {pi+1}
-                          </div>
-                          <div style={{flex:1,minWidth:0}}>
-                            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
-                              <span style={{fontSize:12,fontWeight:700,color:pin.done?T.t4:T.t1,textDecoration:pin.done?"line-through":"none"}}>{pin.location}</span>
-                              <Pill label={pin.priority} c={pm.c} bg={pm.bg}/>
-                            </div>
-                            <div style={{fontSize:11.5,color:pin.done?T.t4:T.t2,textDecoration:pin.done?"line-through":"none"}}>{pin.note}</div>
-                            <div style={{fontSize:10,color:T.t4,marginTop:3}}>— {pin.by} · {pin.date}</div>
-                          </div>
-                          <button onClick={()=>deletePin(d.id,pin.id)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",flexShrink:0}} onMouseEnter={e=>e.currentTarget.style.color=T.red} onMouseLeave={e=>e.currentTarget.style.color=T.t4}>
-                            <IcX size={13} color="currentColor"/>
-                          </button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  {/* Add pin form */}
-                  <div style={{background:T.surface,borderRadius:8,border:`1.5px solid ${T.purM}`,padding:"10px 12px"}}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.pur,marginBottom:8}}>+ Add New Pin</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 100px",gap:8,marginBottom:8}}>
-                      <div>
-                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Location *</label>
-                        <input value={pinForm.location}
-                          onChange={e=>setNewPinForms(p=>({...p,[d.id]:{...pinForm,location:e.target.value}}))}
-                          placeholder="e.g. East wall, Room 2, Staircase..."
-                          style={{width:"100%",height:29,padding:"0 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                          onFocus={e=>e.target.style.borderColor=T.pur} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                      </div>
-                      <div>
-                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>What to change *</label>
-                        <input value={pinForm.note}
-                          onChange={e=>setNewPinForms(p=>({...p,[d.id]:{...pinForm,note:e.target.value}}))}
-                          placeholder="Describe the required change..."
-                          style={{width:"100%",height:29,padding:"0 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                          onFocus={e=>e.target.style.borderColor=T.pur} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                      </div>
-                      <div>
-                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Priority</label>
-                        <select value={pinForm.priority} onChange={e=>setNewPinForms(p=>({...p,[d.id]:{...pinForm,priority:e.target.value}}))}
-                          style={{width:"100%",height:29,padding:"0 7px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}>
-                          <option>High</option><option>Medium</option><option>Low</option>
-                        </select>
-                      </div>
-                    </div>
-                    <button onClick={()=>addPin(d.id)}
-                      style={{padding:"6px 16px",borderRadius:6,background:T.pur,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                      <IcPin size={12} color="white" fill="white"/> Add Pin
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* ── COMMENTS PANEL ── */}
-              {panel==="comments"&&(
-                <div style={{background:T.bluL,borderBottom:`1px solid ${T.bluM}`,padding:"12px 16px"}}>
-                  <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:10,display:"flex",alignItems:"center",gap:6}}>
-                    <IcMsg size={13} color={T.blu}/> Team Discussion
-                    <span style={{fontSize:9.5,color:T.t4,fontWeight:400}}>Comments visible to whole design team</span>
-                  </div>
-                  {/* Comment thread */}
-                  <div style={{display:"flex",flexDirection:"column",gap:7,marginBottom:12}}>
-                    {getComments(d.id).length===0&&<div style={{fontSize:12,color:T.t4,padding:"6px 0"}}>No comments yet. Start the thread below.</div>}
-                    {getComments(d.id).map(c=>(
-                      <div key={c.id} style={{display:"flex",gap:9,alignItems:"flex-start"}}>
-                        <div style={{width:30,height:30,borderRadius:"50%",background:c.color,color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>{c.avatar}</div>
-                        <div style={{background:T.surface,borderRadius:8,padding:"8px 11px",flex:1,border:`1px solid ${T.bluM}`}}>
-                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                            <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{c.by}</span>
-                            <span style={{fontSize:10,color:T.t4}}>{c.date}</span>
-                          </div>
-                          <div style={{fontSize:12,color:T.t2,lineHeight:1.5}}>{c.text}</div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* New comment */}
-                  <div style={{display:"flex",gap:8,alignItems:"flex-end"}}>
-                    <div style={{width:30,height:30,borderRadius:"50%",background:"#1565C0",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,fontWeight:800,flexShrink:0}}>P</div>
-                    <div style={{flex:1,background:T.surface,borderRadius:8,border:`1.5px solid ${T.bluM}`,overflow:"hidden"}}>
-                      <textarea value={newCommentText[d.id]||""}
-                        onChange={e=>setNewCommentText(p=>({...p,[d.id]:e.target.value}))}
-                        placeholder="Write a comment for the design team..."
-                        rows={2}
-                        style={{width:"100%",padding:"8px 10px",border:"none",outline:"none",fontSize:12,fontFamily:"inherit",resize:"none",background:"none"}}
-                        onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();addComment(d.id);}}}
-                      />
-                      <div style={{display:"flex",justifyContent:"flex-end",padding:"4px 8px",borderTop:`1px solid ${T.b1}`}}>
-                        <button onClick={()=>addComment(d.id)}
-                          style={{display:"flex",alignItems:"center",gap:4,padding:"4px 12px",borderRadius:5,background:T.blu,color:"white",fontSize:11,fontWeight:700,border:"none",cursor:"pointer"}}>
-                          <IcSend size={11} color="white"/> Send
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
+              <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.project_name||"—"}</span>
+              <span style={{fontSize:11,color:T.t2}}>{r.category}</span>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:isOverdue?T.red:isToday?T.amb:T.t1}}>{fmtDate(r.due_date)}</div>
+                <div style={{fontSize:10,color:isOverdue?T.red:isToday?T.amb:T.t4}}>{isOverdue?`${Math.abs(diff)}d overdue`:isToday?"Today":`${diff}d left`}</div>
+              </div>
+              <Pill label={r.priority} c={pm.c} bg={pm.bg}/>
+              <Pill label={r.status} c={sm.c} bg={sm.bg}/>
             </div>
           );
         })}
       </div>
     </div>
   );
-}
 
-// ── DESIGN MODULE ────────────────────────────────────────────────────
-function DesignModule(){
-  const [tab,setTab]=useState("drawings");
-  const [dProject,setDProject]=useState("All");
-  const [dCat,setDCat]=useState("All");
-  const [dStatus,setDStatus]=useState("All");
-  const [dSearch,setDSearch]=useState("");
-  const [dSortBy,setDSortBy]=useState("date");
-  const [dSortDir,setDSortDir]=useState("desc");
-  const [selDrawing,setSelDrawing]=useState(null);
-  const [showVersions,setShowVersions]=useState(false);
-  const [showUpload,setShowUpload]=useState(false);
-  const [tProject,setTProject]=useState("All");
-  const [tStatus,setTStatus]=useState("All");
-  const [tPriority,setTPriority]=useState("All");
-  const [tSortBy,setTSortBy]=useState("priority");
-  const [tSortDir,setTSortDir]=useState("desc");
-  const [aProject,setAProject]=useState("All");
-  const [drawings,setDrawings]=useState(DRAWINGS);
-  const [vProject,setVProject]=useState("All");
-  const [vSearch,setVSearch]=useState("");
-  const [vSortDir,setVSortDir]=useState("desc");
-
-  const revisionDrawings=drawings.filter(d=>d.status==="Revision");
-  const revCount=revisionDrawings.length;
-
-  // Sort helper
-  const sortItems=(arr,by,dir,fields)=>{
-    return[...arr].sort((a,b)=>{
-      const va=a[by]||"",vb=b[by]||"";
-      const cmp=typeof va==="number"?va-vb:String(va).localeCompare(String(vb));
-      return dir==="asc"?cmp:-cmp;
-    });
-  };
-
-  const filteredDrawings=sortItems(
-    drawings.filter(d=>{
-      if(dProject!=="All"&&d.project!==dProject) return false;
-      if(dCat!=="All"&&d.cat!==dCat) return false;
-      if(dStatus!=="All"&&d.status!==dStatus) return false;
-      if(dSearch&&!d.title.toLowerCase().includes(dSearch.toLowerCase())) return false;
-      return true;
-    }),dSortBy,dSortDir
-  );
-
-  const pendingApprovals=drawings.filter(d=>d.status==="Pending");
-  const filteredApprovals=pendingApprovals.filter(d=>aProject==="All"||d.project===aProject);
-
-  const filteredVersions=[...VERSION_HISTORY]
-    .filter(v=>{
-      if(vProject!=="All"&&v.project!==vProject) return false;
-      if(vSearch&&!v.title.toLowerCase().includes(vSearch.toLowerCase())) return false;
-      return true;
-    })
-    .sort((a,b)=>vSortDir==="desc"?b.date.localeCompare(a.date):a.date.localeCompare(b.date));
-
-  const PRIORITY_ORDER={"High":0,"Medium":1,"Low":2};
-  const filteredTasks=sortItems(
-    DESIGN_TASKS.filter(t=>{
-      if(tProject!=="All"&&t.project!==tProject) return false;
-      if(tStatus!=="All"&&t.status!==tStatus) return false;
-      if(tPriority!=="All"&&t.priority!==tPriority) return false;
-      return true;
-    }),tSortBy,tSortDir
-  ).sort((a,b)=>{
-    if(tSortBy==="priority") return tSortDir==="asc"?PRIORITY_ORDER[a.priority]-PRIORITY_ORDER[b.priority]:PRIORITY_ORDER[b.priority]-PRIORITY_ORDER[a.priority];
-    return 0;
-  });
-
-  const drawings3D=drawings.filter(d=>d.type==="3D");
-  const pending3DApprovals=drawings3D.filter(d=>d.clientStatus==="Pending"||!d.clientStatus);
-
-  const TILES={
-    drawings:[
-      {l:"Total Drawings",v:drawings.length,sub:`${[...new Set(drawings.map(d=>d.project))].length} projects`,c:T.blu},
-      {l:"Approved",v:drawings.filter(d=>d.status==="Approved").length,sub:"Finalised",c:T.grn},
-      {l:"Pending Review",v:drawings.filter(d=>d.status==="Pending").length,sub:"Awaiting decision",c:T.slt},
-      {l:"Revision / Rejected",v:drawings.filter(d=>d.status==="Revision"||d.status==="Rejected").length,sub:"Needs rework",c:T.red},
-    ],
-    tasks:[
-      {l:"Total Tasks",v:DESIGN_TASKS.length,sub:"All design work",c:T.blu},
-      {l:"In Progress",v:DESIGN_TASKS.filter(t=>t.status==="In Progress").length,sub:"Active work",c:T.pur},
-      {l:"Pending",v:DESIGN_TASKS.filter(t=>t.status==="Pending").length,sub:"Not started",c:T.amb},
-      {l:"Completed",v:DESIGN_TASKS.filter(t=>t.status==="Completed").length,sub:"Done",c:T.grn},
-    ],
-    revision:[
-      {l:"In Revision Queue",v:revCount,sub:"Need rework",c:T.amb},
-      {l:"Pins Added",v:Object.values(INIT_REVISION_PINS).flat().length,sub:"Change markers",c:T.pur},
-      {l:"High Priority",v:Object.values(INIT_REVISION_PINS).flat().filter(p=>p.priority==="High").length,sub:"Urgent changes",c:T.red},
-      {l:"Projects Affected",v:[...new Set(revisionDrawings.map(d=>d.project))].length,sub:"Under revision",c:T.blu},
-    ],
-    approvals:[
-      {l:"Awaiting Approval",v:pendingApprovals.length,sub:"Need decision",c:T.amb},
-      {l:"Approved",v:drawings.filter(d=>d.status==="Approved").length,sub:"Finalised",c:T.grn},
-      {l:"Revision Sent",v:revCount,sub:"Rework in progress",c:T.pur},
-      {l:"Rejected",v:drawings.filter(d=>d.status==="Rejected").length,sub:"Rejected drawings",c:T.red},
-    ],
-    preview3d:[
-      {l:"3D Renders Total",v:drawings3D.length,sub:"All 3D drawings",c:T.pur},
-      {l:"Pending Client Approval",v:pending3DApprovals.length,sub:"Awaiting client",c:T.amb},
-      {l:"Client Approved",v:drawings3D.filter(d=>d.clientStatus==="Approved").length,sub:"Sign-off done",c:T.grn},
-      {l:"Revision Requested",v:drawings3D.filter(d=>d.clientStatus==="Revision").length,sub:"Client wants changes",c:T.red},
-    ],
-    versions:[
-      {l:"Total Versions",v:VERSION_HISTORY.length,sub:"Across all drawings",c:T.blu},
-      {l:"Latest Uploads",v:VERSION_HISTORY.filter(v=>v.date.includes("Mar 2026")).length,sub:"This month",c:T.grn},
-      {l:"Revision Versions",v:VERSION_HISTORY.filter(v=>v.status==="Revision").length,sub:"Rework iterations",c:T.amb},
-      {l:"Rejected Versions",v:VERSION_HISTORY.filter(v=>v.status==="Rejected").length,sub:"Scrapped",c:T.red},
-    ],
-  };
-  const curTiles=TILES[tab]||TILES.drawings;
-
-  const approveDrawing=id=>setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Approved"}:d));
-  const rejectDrawing=id=>setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Rejected"}:d));
-
-  // ── Revise with compulsory comment ─────────────────────────
-  const [reviseModal,setReviseModal]=useState(null); // {drawing} | null
-  const [reviseComment,setReviseComment]=useState("");
-  const [reviseError,setReviseError]=useState(false);
-
-  const openReviseModal=d=>{setReviseModal(d);setReviseComment("");setReviseError(false);};
-  const closeReviseModal=()=>{setReviseModal(null);setReviseComment("");setReviseError(false);};
-
-  const confirmRevise=()=>{
-    if(!reviseComment.trim()){setReviseError(true);return;}
-    const d=reviseModal;
-    setDrawings(p=>p.map(dr=>dr.id===d.id?{...dr,status:"Revision",note:reviseComment.trim()}:dr));
-    // Auto-add comment to revision panel so team sees it immediately
-    const newC={id:Date.now(),by:"Prafull (Admin)",date:"Now",text:reviseComment.trim(),avatar:"P",color:"#1565C0"};
-    // We pass it via a shared state update via RevisionQueueTab's own state — 
-    // simplest: store in a global-ish init override via a side-channel ref approach
-    // Instead just update the drawing note; RevisionQueueTab reads INIT_ on mount
-    // For live update, store pending seed comments separately
-    setSeedComments(p=>({...p,[d.id]:[...(p[d.id]||[]),newC]}));
-    closeReviseModal();
-  };
-
-  const [seedComments,setSeedComments]=useState({});
-  const [show3DShare,setShow3DShare]=useState(null); // drawing obj
-  const [copiedLink,setCopiedLink]=useState(null);
-
-  const TABS=[
-    {id:"drawings",l:"All Drawings"},
-    {id:"revision",l:"Revision Queue",badge:revCount,badgeC:T.amb},
-    {id:"tasks",l:"Design Tasks"},
-    {id:"approvals",l:`Approvals${pendingApprovals.length>0?` (${pendingApprovals.length})`:""}`},
-    {id:"versions",l:"Version History"},
-  ];
-
-  // Sort button component
-  const SortBtn=({label,val,cur,dir,onClick})=>(
-    <button onClick={()=>onClick(val)}
-      style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:4,border:"none",background:cur===val?T.blu:"none",color:cur===val?"white":T.t3,fontSize:11,fontWeight:cur===val?700:400,cursor:"pointer"}}>
-      {label}{cur===val&&(dir==="desc"?<IcDown size={9} color="white"/>:<IcUp2 size={9} color="white"/>)}
-    </button>
-  );
-
-  return(
-    <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-
-      {/* Stat Tiles */}
-      <div style={{padding:"14px 18px 10px",flexShrink:0}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-          {curTiles.map((s,i)=>(
-            <div key={i} style={{padding:"13px 15px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-              <div style={{fontSize:10,color:T.t3,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",marginBottom:5}}>{s.l}</div>
-              <div style={{fontSize:22,fontWeight:700,color:T.t1,letterSpacing:"-.5px",lineHeight:1}}>{s.v}</div>
-              <div style={{fontSize:11,color:T.t4,marginTop:4}}>{s.sub}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Dark Tab Bar */}
-      <div style={{margin:"0 18px 0",flexShrink:0}}>
-        <div style={{background:"#0D1B2A",borderRadius:10,padding:"0 10px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
-          <div style={{display:"flex",flex:1}}>
-            {TABS.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{padding:"11px 14px",border:"none",background:"none",fontSize:12.5,fontWeight:tab===t.id?600:400,color:tab===t.id?"white":"rgba(255,255,255,0.45)",cursor:"pointer",borderBottom:tab===t.id?`2px solid ${t.badgeC||"#2563EB"}`:"2px solid transparent",transition:"all 0.15s",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:6}}>
-                {t.l}
-                {t.badge>0&&<span style={{background:t.badgeC||T.blu,color:"white",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{t.badge}</span>}
-              </button>
+  // ── VERSION HISTORY MODAL ────────────────────────────────────────
+  const VersionModal = () => {
+    const [versions, setVersions] = useState([]);
+    const [vLoad, setVLoad] = useState(true);
+    useEffect(()=>{
+      api.get("/design/drawings/"+showVer.id).then(res=>{
+        if(res.success) setVersions(res.data.versions||[]);
+        setVLoad(false);
+      });
+    },[]);
+    return(
+      <>
+        <div onClick={()=>setShowVer(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,zIndex:501,width:460,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
+          <div style={{background:T.sb,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div style={{fontSize:13,fontWeight:700,color:"white"}}>Version History — {showVer.title}</div>
+            <button onClick={()=>setShowVer(null)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:18}}>×</button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"12px"}}>
+            {vLoad&&<div style={{textAlign:"center",padding:"30px",color:T.t4}}>Loading...</div>}
+            {versions.map((v,i)=>(
+              <div key={v.id} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
+                <div style={{width:32,height:32,borderRadius:"50%",background:i===0?T.blu:T.b1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                  <span style={{fontSize:11,fontWeight:700,color:i===0?"white":T.t3}}>{v.version_number}</span>
+                </div>
+                <div style={{flex:1,background:T.surfaceB,borderRadius:7,padding:"8px 10px",border:"1px solid "+T.b1}}>
+                  <div style={{display:"flex",justifyContent:"space-between"}}>
+                    <span style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{v.uploaded_by_name||"—"}</span>
+                    <span style={{fontSize:10,color:T.t4}}>{fmtDate(v.created_at)}</span>
+                  </div>
+                  {v.note&&<div style={{fontSize:11,color:T.t3,marginTop:3}}>{v.note}</div>}
+                  {v.file_url&&<a href={v.file_url} target="_blank" rel="noreferrer" style={{fontSize:11,color:T.blu,textDecoration:"none",marginTop:4,display:"inline-block"}}>📄 View File</a>}
+                </div>
+              </div>
             ))}
           </div>
-          <div style={{display:"flex",gap:6,padding:"6px 0"}}>
-            <button onClick={()=>setShowUpload(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-              <IcUpload size={13} color="white"/> Upload
-            </button>
-          </div>
+        </div>
+      </>
+    );
+  };
+
+  const TABS = [
+    {id:"drawings", label:"All Drawings",    Icon:IcDraw,   count:drawings.length,                             badge:null},
+    {id:"requests", label:"Design Requests", Icon:IcReq,    count:requests.filter(r=>r.status==="Pending").length, badge:"amber"},
+    {id:"revision", label:"Revision Queue",  Icon:IcRevise, count:drawings.filter(d=>d.status==="Revision").length, badge:"amber"},
+    {id:"duedate",  label:"Due Dates",       Icon:IcCal,    count:overdueCt,                                   badge:overdueCt>0?"red":null},
+  ];
+
+  return (
+    <div style={{padding:"20px 24px",fontFamily:"'Segoe UI',system-ui,sans-serif",minHeight:"100%",background:T.bg}}>
+      {/* Header */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20}}>
+        <div>
+          <div style={{fontSize:18,fontWeight:800,color:T.t1,letterSpacing:"-0.3px"}}>Design</div>
+          <div style={{fontSize:12,color:T.t4,marginTop:2}}>Drawings · Requests · Revisions · Deadlines</div>
+        </div>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={loadAll} style={{padding:"7px 12px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            <IcRefresh size={13}/> Refresh
+          </button>
+          <button onClick={()=>{setUploadPrefill(null);setShowUpload(true);}}
+            style={{padding:"7px 16px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+            <IcUpload size={14} color="white"/> Upload Drawing
+          </button>
         </div>
       </div>
 
-      {/* Tab Content */}
-      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",padding:"12px 18px 14px"}}>
-
-        {/* ── ALL DRAWINGS TAB ── */}
-        {tab==="drawings"&&(
-          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-            <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
-              <div style={{position:"relative",flex:1,minWidth:160}}>
-                <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                <input value={dSearch} onChange={e=>setDSearch(e.target.value)} placeholder="Search drawings..."
-                  style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:6,border:`1.5px solid ${dSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:dSearch?T.bluL:T.surface}}/>
-              </div>
-              {[{val:dProject,set:setDProject,opts:["All",...PROJECTS],def:"All Projects"},{val:dCat,set:setDCat,opts:["All","Architectural","Structural","Electrical","Plumbing","Interior"],def:"All Categories"},{val:dStatus,set:setDStatus,opts:["All","Approved","Pending","Revision","Rejected"],def:"All Status"}].map(({val,set,opts,def},i)=>(
-                <div key={i} style={{position:"relative"}}>
-                  <select value={val} onChange={e=>set(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${val!=="All"?T.blu:T.b1}`,background:val!=="All"?T.bluL:T.surface,fontSize:11.5,color:val!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:val!=="All"?600:400,minWidth:100,appearance:"none",WebkitAppearance:"none"}}>
-                    {opts.map(o=><option key={o}>{o==="All"?def:o}</option>)}
-                  </select>
-                  <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
-                </div>
-              ))}
-              {/* Sort bar */}
-              <div style={{display:"flex",alignItems:"center",gap:4,background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,padding:"2px 4px",flexShrink:0}}>
-                <IcSort size={13} color={T.t4}/>
-                {[{v:"date",l:"Date"},{v:"title",l:"Title"},{v:"status",l:"Status"},{v:"cat",l:"Cat"},{v:"project",l:"Project"}].map(s=>(
-                  <SortBtn key={s.v} label={s.l} val={s.v} cur={dSortBy} dir={dSortDir} onClick={v=>{if(dSortBy===v)setDSortDir(d=>d==="asc"?"desc":"asc");else{setDSortBy(v);setDSortDir("desc");}}}/>
-                ))}
-              </div>
-              <span style={{fontSize:11,color:T.t4,marginLeft:2}}>{filteredDrawings.length}</span>
-            </div>
-
-            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"2.5fr 130px 120px 50px 100px 80px 50px 70px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
-                {["Title","Project","Category","Type","Status","Uploaded","Size","Pins"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px"}}>{h}</span>
-                ))}
-              </div>
-              {filteredDrawings.map(d=>{
-                const sm=STATUS_META[d.status];const cc=CAT_COLORS[d.cat]||{c:T.slt,bg:T.sltL};const isS=selDrawing?.id===d.id;
-                return(
-                  <div key={d.id} onClick={()=>setSelDrawing(isS?null:d)}
-                    style={{display:"grid",gridTemplateColumns:"2.5fr 130px 120px 50px 100px 80px 50px 70px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:isS?T.bluL:"none",borderLeft:isS?`3px solid ${T.blu}`:"3px solid transparent",transition:"background 0.1s",cursor:"pointer"}}
-                    onMouseEnter={e=>{if(!isS)e.currentTarget.style.background=T.surfaceB;}}
-                    onMouseLeave={e=>{if(!isS)e.currentTarget.style.background="none";}}>
-                    <div>
-                      <div style={{fontSize:12.5,fontWeight:500,color:isS?T.blu:T.t1}}>{d.title}</div>
-                      {d.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:2,fontStyle:"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.note}</div>}
-                    </div>
-                    <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.project.length>15?d.project.slice(0,14)+"…":d.project}</span>
-                    <Pill label={d.cat} c={cc.c} bg={cc.bg}/>
-                    <span style={{fontSize:11.5,color:T.t3,fontWeight:600}}>{d.type}</span>
-                    <Pill label={d.status} c={sm.c} bg={sm.bg} brd={sm.brd}/>
-                    <span style={{fontSize:11,color:T.t3}}>{d.by.split(" ")[0]} · {d.date}</span>
-                    <span style={{fontSize:11,color:T.t4}}>{d.size}</span>
-                    <div style={{display:"flex",alignItems:"center",gap:5}}>
-                      {d.pins>0&&<><IcPin size={12} color={T.pur}/><span style={{fontSize:11.5,color:T.pur,fontWeight:600}}>{d.pins}</span></>}
-                      {isS&&<button onClick={e=>{e.stopPropagation();setShowVersions(true);}} style={{fontSize:10,padding:"2px 7px",borderRadius:4,background:T.blu,color:"white",border:"none",cursor:"pointer",whiteSpace:"nowrap"}}>History</button>}
-                    </div>
-                  </div>
-                );
-              })}
-              {filteredDrawings.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcDraw size={32} color={T.b2}/><div style={{marginTop:10,fontSize:13,fontWeight:500,color:T.t3}}>No drawings match filters</div></div>}
-            </div>
-          </div>
-        )}
-
-        {/* ── REVISION QUEUE TAB ── */}
-        {tab==="revision"&&(
-          <RevisionQueueTab
-            revisionDrawings={revisionDrawings}
-            drawings={drawings}
-            setDrawings={setDrawings}
-            seedComments={seedComments}
-          />
-        )}
-
-        {/* ── TASKS TAB ── */}
-        {tab==="tasks"&&(
-          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-            <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
-              {[{val:tProject,set:setTProject,opts:["All",...PROJECTS],def:"All Projects"},{val:tStatus,set:setTStatus,opts:["All","In Progress","Pending","Completed"],def:"All Status"},{val:tPriority,set:setTPriority,opts:["All","High","Medium","Low"],def:"All Priority"}].map(({val,set,opts,def},i)=>(
-                <div key={i} style={{position:"relative"}}>
-                  <select value={val} onChange={e=>set(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${val!=="All"?T.blu:T.b1}`,background:val!=="All"?T.bluL:T.surface,fontSize:11.5,color:val!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:val!=="All"?600:400,minWidth:100,appearance:"none",WebkitAppearance:"none"}}>
-                    {opts.map(o=><option key={o}>{o==="All"?def:o}</option>)}
-                  </select>
-                  <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
-                </div>
-              ))}
-              {/* Sort */}
-              <div style={{display:"flex",alignItems:"center",gap:4,background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,padding:"2px 4px"}}>
-                <IcSort size={13} color={T.t4}/>
-                {[{v:"priority",l:"Priority"},{v:"due",l:"Due"},{v:"status",l:"Status"},{v:"assignedTo",l:"Assigned"}].map(s=>(
-                  <SortBtn key={s.v} label={s.l} val={s.v} cur={tSortBy} dir={tSortDir} onClick={v=>{if(tSortBy===v)setTSortDir(d=>d==="asc"?"desc":"asc");else{setTSortBy(v);setTSortDir("desc");}}}/>
-                ))}
-              </div>
-              <span style={{fontSize:11,color:T.t4,marginLeft:2}}>{filteredTasks.length} tasks</span>
-            </div>
-            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 140px 110px 90px 90px 80px 80px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
-                {["Task","Project","Category","Assigned","Priority","Due","Status"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px"}}>{h}</span>
-                ))}
-              </div>
-              {filteredTasks.map(t=>{
-                const ts=TASK_STATUS_META[t.status];const pr=PRIORITY_META[t.priority];const cc=CAT_COLORS[t.cat]||{c:T.slt,bg:T.sltL};
-                return(
-                  <div key={t.id} style={{display:"grid",gridTemplateColumns:"2fr 140px 110px 90px 90px 80px 80px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background 0.1s",cursor:"pointer",borderLeft:t.priority==="High"?`3px solid ${T.red}`:"3px solid transparent"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    <div style={{fontSize:12.5,fontWeight:500,color:T.t1,paddingRight:8,lineHeight:1.4}}>{t.task}</div>
-                    <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.project.length>16?t.project.slice(0,15)+"…":t.project}</span>
-                    <Pill label={t.cat} c={cc.c} bg={cc.bg}/>
-                    <span style={{fontSize:11.5,color:T.t2}}>{t.assignedTo.split(" ")[0]}</span>
-                    <Pill label={t.priority} c={pr.c} bg={pr.bg}/>
-                    <span style={{fontSize:11,color:T.t4}}>{t.due}</span>
-                    <Pill label={t.status} c={ts.c} bg={ts.bg}/>
-                  </div>
-                );
-              })}
-              {filteredTasks.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcTask size={32} color={T.b2}/><div style={{marginTop:10,fontSize:13,fontWeight:500,color:T.t3}}>No tasks match filters</div></div>}
-            </div>
-          </div>
-        )}
-
-        {/* ── APPROVALS TAB ── */}
-        {tab==="approvals"&&(
-          <div style={{flex:1,overflowY:"auto"}}>
-            <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexShrink:0}}>
-              <div style={{position:"relative"}}>
-                <select value={aProject} onChange={e=>setAProject(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${aProject!=="All"?T.blu:T.b1}`,background:aProject!=="All"?T.bluL:T.surface,fontSize:11.5,color:aProject!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:aProject!=="All"?600:400,minWidth:140,appearance:"none",WebkitAppearance:"none"}}>
-                  <option value="All">All Projects</option>{PROJECTS.map(p=><option key={p}>{p}</option>)}
-                </select>
-                <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
-              </div>
-              <span style={{fontSize:11,color:T.t4}}>{filteredApprovals.length} drawings need attention</span>
-            </div>
-            {filteredApprovals.length===0&&<div style={{textAlign:"center",padding:"60px",color:T.t4}}><IcApprv size={40} color={T.grnM}/><div style={{fontSize:14,fontWeight:600,color:T.grn,marginTop:10}}>All caught up!</div><div style={{fontSize:12,color:T.t4,marginTop:4}}>No drawings pending approval</div></div>}
-            {[...new Set(filteredApprovals.map(d=>d.project))].map(proj=>{
-              const projDrawings=filteredApprovals.filter(d=>d.project===proj);
-              return(
-                <div key={proj} style={{marginBottom:14}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7}}>
-                    <IcDraw size={13} color={T.t4}/>
-                    <span style={{fontSize:11.5,fontWeight:700,color:T.t2}}>{proj}</span>
-                    <span style={{background:T.ambL,color:T.amb,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${T.ambM}`}}>{projDrawings.length}</span>
-                  </div>
-                  {projDrawings.map(d=>{
-                    const sm=STATUS_META[d.status];
-                    return(
-                      <div key={d.id} style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:7,overflow:"hidden"}}>
-                        <div style={{padding:"11px 14px",display:"flex",alignItems:"center",gap:12}}>
-                          <div style={{width:38,height:38,borderRadius:8,background:sm.bg,border:`1px solid ${sm.brd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                            <IcFile size={17} color={sm.c}/>
-                          </div>
-                          <div style={{flex:1}}>
-                            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                              <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{d.title}</span>
-                              <Pill label={d.status} c={sm.c} bg={sm.bg} brd={sm.brd}/>
-                              <Pill label={d.cat} c={CAT_COLORS[d.cat]?.c||T.slt} bg={CAT_COLORS[d.cat]?.bg||T.sltL}/>
-                            </div>
-                            <div style={{fontSize:11,color:T.t4}}>{d.ver} · by {d.by} · {d.date} · {d.size}</div>
-                            {d.note&&<div style={{fontSize:11.5,color:T.t3,marginTop:4,padding:"5px 8px",background:T.sltL,borderRadius:5,borderLeft:`3px solid ${T.slt}`,display:"inline-block"}}>{d.note}</div>}
-                          </div>
-                          <div style={{display:"flex",gap:6,flexShrink:0}}>
-                            <button onClick={()=>approveDrawing(d.id)} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}><IcChk size={13} color={T.grn}/> Approve</button>
-                            <button onClick={()=>openReviseModal(d)} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11.5,fontWeight:600,cursor:"pointer"}}><IcRevise size={13} color={T.amb}/> Revise</button>
-                            <button onClick={()=>rejectDrawing(d.id)} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}><IcX size={13} color={T.red}/> Reject</button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        )}
-
-        {/* ── 3D CLIENT PREVIEW TAB ── */}
-        {tab==="preview3d"&&(
-          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-            {/* Toolbar */}
-            <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
-              <div style={{position:"relative"}}>
-                <select value={dProject} onChange={e=>setDProject(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${dProject!=="All"?T.pur:T.b1}`,background:dProject!=="All"?"#F5F3FF":T.surface,fontSize:11.5,color:dProject!=="All"?"#7C3AED":T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:dProject!=="All"?600:400,minWidth:140,appearance:"none",WebkitAppearance:"none"}}>
-                  <option value="All">All Projects</option>{PROJECTS.map(p=><option key={p}>{p}</option>)}
-                </select>
-                <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
-              </div>
-              <div style={{position:"relative"}}>
-                <select style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,fontSize:11.5,color:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:140,appearance:"none",WebkitAppearance:"none"}}
-                  onChange={e=>{const v=e.target.value;setDrawings(p=>p.map(d=>d.id===parseInt(v)||v==="All"?d:d));}}>
-                  <option value="All">All Client Status</option>
-                  <option value="Pending">Pending Approval</option>
-                  <option value="Approved">Client Approved</option>
-                  <option value="Revision">Revision Requested</option>
-                </select>
-                <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
-              </div>
-              <span style={{fontSize:11,color:T.t4}}>{drawings3D.filter(d=>dProject==="All"||d.project===dProject).length} 3D renders</span>
-              <div style={{flex:1}}/>
-              <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:7,fontSize:11.5,color:"#7C3AED",fontWeight:600}}>
-                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
-                Share link → client approves directly on their screen
-              </div>
-            </div>
-
-            {/* 3D Cards Grid */}
-            <div style={{flex:1,overflowY:"auto"}}>
-              {drawings3D.filter(d=>dProject==="All"||d.project===dProject).length===0&&(
-                <div style={{textAlign:"center",padding:"60px",color:T.t4}}>
-                  <div style={{fontSize:40,marginBottom:12}}>🎨</div>
-                  <div style={{fontSize:14,fontWeight:600,color:T.t3}}>No 3D renders found</div>
-                  <div style={{fontSize:12,marginTop:4}}>Upload a 3D drawing to get started</div>
-                </div>
-              )}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:14}}>
-                {drawings3D.filter(d=>dProject==="All"||d.project===dProject).map(d=>{
-                  const cs=d.clientStatus||"Pending";
-                  const csm={
-                    Pending:{c:T.amb,bg:T.ambL,brd:T.ambM,label:"Awaiting Client"},
-                    Approved:{c:T.grn,bg:T.grnL,brd:T.grnM,label:"Client Approved"},
-                    Revision:{c:T.red,bg:T.redL,brd:T.redM,label:"Revision Requested"},
-                  }[cs]||{c:T.slt,bg:T.sltL,brd:T.b2,label:cs};
-                  const shareLink="https://gbuildcon.in/3d-preview/"+d.id+"?token=tk"+d.id+"x9m";
-                  return(
-                    <div key={d.id} style={{background:T.surface,borderRadius:12,border:`1px solid ${T.b1}`,overflow:"hidden",boxShadow:"0 2px 8px rgba(0,0,0,0.07)",transition:"transform 0.15s,box-shadow 0.15s"}}
-                      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-2px)";e.currentTarget.style.boxShadow="0 8px 24px rgba(0,0,0,0.12)";}}
-                      onMouseLeave={e=>{e.currentTarget.style.transform="translateY(0)";e.currentTarget.style.boxShadow="0 2px 8px rgba(0,0,0,0.07)";}}>
-                      {/* 3D Render Preview Area */}
-                      <div style={{height:160,background:"linear-gradient(135deg,#1E293B 0%,#334155 50%,#1E3A5F 100%)",display:"flex",alignItems:"center",justifyContent:"center",position:"relative",overflow:"hidden"}}>
-                        {/* Grid pattern bg */}
-                        <div style={{position:"absolute",inset:0,backgroundImage:"linear-gradient(rgba(255,255,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,0.03) 1px,transparent 1px)",backgroundSize:"24px 24px"}}/>
-                        <div style={{textAlign:"center",position:"relative",zIndex:1}}>
-                          <div style={{width:56,height:56,borderRadius:12,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.15)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 8px"}}>
-                            <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.8)" strokeWidth={1.5} strokeLinecap="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-                          </div>
-                          <div style={{fontSize:12,color:"rgba(255,255,255,0.7)",fontWeight:500}}>{d.title}</div>
-                          <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}}>{d.size} · {d.ver}</div>
-                        </div>
-                        {/* Status badge top-right */}
-                        <div style={{position:"absolute",top:10,right:10,background:csm.bg,border:`1px solid ${csm.brd}`,color:csm.c,fontSize:10,fontWeight:700,padding:"3px 9px",borderRadius:20}}>{csm.label}</div>
-                        {/* Category badge top-left */}
-                        <div style={{position:"absolute",top:10,left:10,background:"rgba(255,255,255,0.12)",color:"rgba(255,255,255,0.8)",fontSize:9.5,fontWeight:700,padding:"3px 8px",borderRadius:5,letterSpacing:"0.3px",textTransform:"uppercase"}}>3D · {d.cat}</div>
-                      </div>
-
-                      {/* Card Body */}
-                      <div style={{padding:"12px 14px"}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                          <div>
-                            <div style={{fontSize:13.5,fontWeight:700,color:T.t1,marginBottom:2}}>{d.title}</div>
-                            <div style={{fontSize:11,color:T.t3}}>{d.project} · {d.by.split(" ")[0]} · {d.date}</div>
-                          </div>
-                        </div>
-                        {/* Client feedback note */}
-                        {d.clientNote&&(
-                          <div style={{padding:"7px 10px",background:csm.bg,border:`1px solid ${csm.brd}`,borderRadius:7,marginBottom:10,fontSize:11.5,color:csm.c,lineHeight:1.5}}>
-                            <span style={{fontWeight:600}}>Client: </span>{d.clientNote}
-                          </div>
-                        )}
-                        {/* Share link box */}
-                        <div style={{background:"#F8F4FF",borderRadius:7,border:"1px solid #DDD6FE",padding:"8px 10px",marginBottom:10}}>
-                          <div style={{fontSize:9.5,fontWeight:700,color:"#7C3AED",textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:4}}>Client Share Link</div>
-                          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-                            <span style={{flex:1,fontSize:10.5,color:"#6B7280",fontFamily:"monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{shareLink}</span>
-                            <button onClick={()=>{navigator.clipboard?.writeText(shareLink);setCopiedLink(d.id);setTimeout(()=>setCopiedLink(null),2000);}}
-                              style={{padding:"3px 9px",borderRadius:5,background:copiedLink===d.id?"#059669":"#7C3AED",color:"white",border:"none",cursor:"pointer",fontSize:10,fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
-                              {copiedLink===d.id?"✓ Copied":"Copy"}
-                            </button>
-                          </div>
-                        </div>
-                        {/* Action buttons */}
-                        <div style={{display:"flex",gap:6}}>
-                          <button onClick={()=>setShow3DShare(d)}
-                            style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"7px",borderRadius:7,background:"#7C3AED",color:"white",border:"none",cursor:"pointer",fontSize:11.5,fontWeight:700}}>
-                            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3"/></svg>
-                            Share to Client
-                          </button>
-                          {cs==="Pending"&&(
-                            <>
-                              <button onClick={()=>setDrawings(p=>p.map(x=>x.id===d.id?{...x,clientStatus:"Approved",clientNote:"Approved by admin (override)"}:x))}
-                                style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"7px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,cursor:"pointer",fontSize:11,fontWeight:700}}>
-                                ✓ Mark Approved
-                              </button>
-                              <button onClick={()=>{const note=window.prompt("Client feedback/revision note:");if(note)setDrawings(p=>p.map(x=>x.id===d.id?{...x,clientStatus:"Revision",clientNote:note}:x));}}
-                                style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:4,padding:"7px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,cursor:"pointer",fontSize:11,fontWeight:700}}>
-                                ✗ Revision
-                              </button>
-                            </>
-                          )}
-                          {cs!=="Pending"&&(
-                            <button onClick={()=>setDrawings(p=>p.map(x=>x.id===d.id?{...x,clientStatus:"Pending",clientNote:""}:x))}
-                              style={{flex:1,padding:"7px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t3,cursor:"pointer",fontSize:11,fontWeight:600}}>
-                              Reset
-                            </button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ── VERSION HISTORY TAB ── */}
-        {tab==="versions"&&(
-          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-            <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
-              <div style={{position:"relative",flex:1,minWidth:160}}>
-                <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                <input value={vSearch} onChange={e=>setVSearch(e.target.value)} placeholder="Search drawings..."
-                  style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:6,border:`1.5px solid ${vSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:vSearch?T.bluL:T.surface}}/>
-              </div>
-              <div style={{position:"relative"}}>
-                <select value={vProject} onChange={e=>setVProject(e.target.value)} style={{height:31,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${vProject!=="All"?T.blu:T.b1}`,background:vProject!=="All"?T.bluL:T.surface,fontSize:11.5,color:vProject!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:vProject!=="All"?600:400,minWidth:130,appearance:"none",WebkitAppearance:"none"}}>
-                  <option value="All">All Projects</option>{PROJECTS.map(p=><option key={p}>{p}</option>)}
-                </select>
-                <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
-              </div>
-              <button onClick={()=>setVSortDir(d=>d==="asc"?"desc":"asc")}
-                style={{display:"flex",alignItems:"center",gap:4,height:31,padding:"0 10px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                <IcSort size={13} color={T.t4}/> Date {vSortDir==="desc"?<IcDown size={10} color={T.t4}/>:<IcUp2 size={10} color={T.t4}/>}
-              </button>
-              <span style={{fontSize:11,color:T.t4}}>{filteredVersions.length} versions</span>
-            </div>
-            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"110px 2fr 120px 50px 100px 90px 55px 90px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
-                {["Date","Drawing Title","Project","Ver.","Status","Uploaded By","Size","Note"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px"}}>{h}</span>
-                ))}
-              </div>
-              {filteredVersions.map((v,i)=>{
-                const sm=STATUS_META[v.status];
-                return(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"110px 2fr 120px 50px 100px 90px 55px 90px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background 0.1s",cursor:"pointer"}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{v.date.split(" ").slice(0,2).join(" ")}</span>
-                    <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{v.title}</div>
-                    <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v.project.length>14?v.project.slice(0,13)+"…":v.project}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:T.t2,fontFamily:"monospace"}}>{v.ver}</span>
-                    <Pill label={v.status} c={sm.c} bg={sm.bg} brd={sm.brd}/>
-                    <span style={{fontSize:11.5,color:T.t2}}>{v.by.split(" ")[0]}</span>
-                    <span style={{fontSize:11,color:T.t4}}>{v.size}</span>
-                    <span style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontStyle:v.note?"italic":"normal"}}>{v.note||"—"}</span>
-                  </div>
-                );
-              })}
-              {filteredVersions.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcHist size={32} color={T.b2}/><div style={{marginTop:10,fontSize:13,fontWeight:500,color:T.t3}}>No version history found</div></div>}
-            </div>
-          </div>
-        )}
+      {/* Tabs */}
+      <div style={{display:"flex",gap:0,marginBottom:20,borderBottom:"2px solid "+T.b1}}>
+        {TABS.map(tab=>(
+          <button key={tab.id} onClick={()=>setActiveTab(tab.id)}
+            style={{display:"flex",alignItems:"center",gap:6,padding:"9px 18px",border:"none",background:"none",
+              color:activeTab===tab.id?T.blu:T.t3,fontSize:13,fontWeight:activeTab===tab.id?700:400,
+              cursor:"pointer",borderBottom:activeTab===tab.id?"2px solid "+T.blu:"2px solid transparent",
+              marginBottom:"-2px",whiteSpace:"nowrap"}}>
+            <tab.Icon size={15} color="currentColor"/>
+            {tab.label}
+            {tab.count>0&&<span style={{
+              background:activeTab===tab.id?T.blu:tab.badge==="red"?T.red:tab.badge==="amber"?T.amb:T.b1,
+              color:activeTab===tab.id||tab.badge?"white":T.t4,
+              fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:10}}>
+              {tab.count}
+            </span>}
+          </button>
+        ))}
       </div>
 
-      {/* ── Revise Comment Modal ── */}
-      {reviseModal&&(<>
-        <div onClick={closeReviseModal} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:400,backdropFilter:"blur(3px)"}}/>
-        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:500,maxWidth:"95vw",zIndex:401,boxShadow:"0 24px 70px rgba(0,0,0,0.3)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
-          {/* Header */}
-          <div style={{background:T.amb,padding:"13px 16px",display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:34,height:34,borderRadius:9,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <IcRevise size={17} color="white"/>
-            </div>
-            <div style={{flex:1}}>
-              <div style={{fontSize:14,fontWeight:800,color:"white"}}>Send for Revision</div>
-              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.75)"}}>{reviseModal.title} · {reviseModal.project}</div>
-            </div>
-            <button onClick={closeReviseModal} style={{background:"rgba(255,255,255,0.18)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:6,display:"flex"}}><IcX size={14}/></button>
-          </div>
-          {/* Body */}
-          <div style={{padding:"18px 20px"}}>
-            <div style={{background:T.ambL,borderRadius:8,padding:"10px 13px",marginBottom:14,border:`1px solid ${T.ambM}`,display:"flex",gap:8,alignItems:"flex-start"}}>
-              <IcAlert size={15} color={T.amb} style={{flexShrink:0,marginTop:1}}/>
-              <div style={{fontSize:12,color:T.amb,lineHeight:1.5}}>
-                Comment is <strong>compulsory</strong> — drawing team ko clearly pata hona chahiye kya aur kahan change karna hai. Yeh comment Revision Queue ke comments mein automatically add hoga.
-              </div>
-            </div>
-            <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:6}}>
-              Revision Instruction *
-            </label>
-            <textarea
-              value={reviseComment}
-              onChange={e=>{setReviseComment(e.target.value);if(reviseError&&e.target.value.trim())setReviseError(false);}}
-              placeholder="e.g. East side ke saare windows 3ft se 4ft karo. North wall bedroom 2 ka window 2ft south shift karo. Client ki site visit ke baad confirm hua..."
-              rows={5}
-              autoFocus
-              style={{width:"100%",padding:"10px 12px",borderRadius:8,border:`1.5px solid ${reviseError?T.red:reviseComment.trim()?T.amb:T.b1}`,fontSize:12.5,color:T.t1,background:reviseError?T.redL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical",lineHeight:1.6,transition:"border 0.15s"}}
-              onFocus={e=>e.target.style.borderColor=reviseError?T.red:T.amb}
-              onBlur={e=>e.target.style.borderColor=reviseError?T.red:reviseComment.trim()?T.amb:T.b1}
-            />
-            {reviseError&&<div style={{fontSize:11.5,color:T.red,marginTop:5,display:"flex",alignItems:"center",gap:5}}>
-              <IcAlert size={13} color={T.red}/> Comment likhna zaroori hai — blank nahi chhod sakte.
-            </div>}
-            <div style={{fontSize:11,color:T.t4,marginTop:6}}>{reviseComment.trim().length} characters</div>
-          </div>
-          {/* Footer */}
-          <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,background:T.surfaceB}}>
-            <button onClick={closeReviseModal} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-            <button onClick={confirmRevise}
-              style={{flex:2,padding:"9px",borderRadius:7,background:reviseComment.trim()?T.amb:T.b2,color:reviseComment.trim()?"white":T.t4,fontSize:12.5,fontWeight:700,border:"none",cursor:reviseComment.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"background 0.2s"}}>
-              <IcRevise size={14} color="currentColor"/> Send for Revision
-            </button>
-          </div>
-        </div>
-      </>)}
+      {/* Tab content */}
+      <div>
+        {activeTab==="drawings" && <DrawingsTab/>}
+        {activeTab==="requests" && <RequestsTab/>}
+        {activeTab==="revision" && <RevisionTab/>}
+        {activeTab==="duedate"  && <DueDatesTab/>}
+      </div>
 
-      {/* ── 3D Share Modal ── */}
-      {show3DShare&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
-          <div style={{background:T.surface,borderRadius:14,width:520,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",overflow:"hidden"}}>
-            {/* Header */}
-            <div style={{background:"linear-gradient(135deg,#5B21B6,#7C3AED)",padding:"16px 20px",display:"flex",alignItems:"center",gap:12}}>
-              <div style={{width:40,height:40,borderRadius:10,background:"rgba(255,255,255,0.15)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={1.8} strokeLinecap="round"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"/></svg>
-              </div>
-              <div style={{flex:1}}>
-                <div style={{fontSize:15,fontWeight:700,color:"white"}}>Share 3D Preview with Client</div>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.7)",marginTop:2}}>{show3DShare.title} · {show3DShare.project}</div>
-              </div>
-              <button onClick={()=>setShow3DShare(null)} style={{background:"rgba(255,255,255,0.2)",border:"none",borderRadius:7,cursor:"pointer",color:"white",padding:"5px 10px",fontSize:14}}>✕</button>
-            </div>
-            {/* Body */}
-            <div style={{padding:"20px"}}>
-              {/* Link box */}
-              <div style={{background:"#F8F4FF",borderRadius:10,border:"1.5px solid #DDD6FE",padding:"14px 16px",marginBottom:16}}>
-                <div style={{fontSize:10,fontWeight:700,color:"#7C3AED",textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:8}}>Client Preview Link</div>
-                <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                  <div style={{flex:1,padding:"9px 12px",background:"white",borderRadius:7,border:"1px solid #EDE9FE",fontSize:12,color:"#4B5563",fontFamily:"monospace",wordBreak:"break-all"}}>
-                    {"https://gbuildcon.in/3d-preview/"+show3DShare.id+"?token=tk"+show3DShare.id+"x9m"}
-                  </div>
-                  <button onClick={()=>{navigator.clipboard?.writeText("https://gbuildcon.in/3d-preview/"+show3DShare.id+"?token=tk"+show3DShare.id+"x9m");setCopiedLink(show3DShare.id);setTimeout(()=>setCopiedLink(null),2000);}}
-                    style={{height:40,padding:"0 16px",borderRadius:7,background:copiedLink===show3DShare.id?"#059669":"#7C3AED",color:"white",border:"none",cursor:"pointer",fontSize:12.5,fontWeight:700,flexShrink:0,transition:"background 0.2s"}}>
-                    {copiedLink===show3DShare.id?"✓ Copied!":"Copy Link"}
-                  </button>
-                </div>
-              </div>
-              {/* What client can do */}
-              <div style={{marginBottom:16}}>
-                <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Client Can</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                  {[
-                    {icon:"👁",label:"View 3D render",desc:"See the full image"},
-                    {icon:"✓",label:"Approve",desc:"One click approval"},
-                    {icon:"✎",label:"Request revision",desc:"Add feedback note"},
-                  ].map((item,i)=>(
-                    <div key={i} style={{padding:"10px 12px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,textAlign:"center"}}>
-                      <div style={{fontSize:20,marginBottom:6}}>{item.icon}</div>
-                      <div style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{item.label}</div>
-                      <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.desc}</div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              {/* Share via */}
-              <div style={{marginBottom:4}}>
-                <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:8}}>Share Via</div>
-                <div style={{display:"flex",gap:8}}>
-                  {[
-                    {label:"WhatsApp",color:"#25D366",bg:"#F0FDF4",icon:<svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#25D366" strokeWidth={1.8} strokeLinecap="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>},
-                    {label:"Email",color:T.blu,bg:T.bluL,icon:<svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={1.8} strokeLinecap="round"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6"/></svg>},
-                    {label:"Copy & SMS",color:T.pur,bg:T.purL,icon:<svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke={T.pur} strokeWidth={1.8} strokeLinecap="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>},
-                  ].map((s,i)=>(
-                    <button key={i} onClick={()=>{navigator.clipboard?.writeText("https://gbuildcon.in/3d-preview/"+show3DShare.id+"?token=tk"+show3DShare.id+"x9m");}}
-                      style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"9px",borderRadius:8,background:s.bg,border:`1px solid ${s.color}22`,color:s.color,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                      {s.icon} {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-            {/* Footer */}
-            <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",justifyContent:"flex-end"}}>
-              <button onClick={()=>setShow3DShare(null)} style={{padding:"8px 20px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Drawers */}
-      {showVersions&&selDrawing&&<VersionDrawer drawing={selDrawing} allVersions={VERSION_HISTORY} onClose={()=>setShowVersions(false)}/>}
-      {showUpload&&<UploadDrawer onClose={()=>setShowUpload(false)}/>}
+      {/* Modals */}
+      {showUpload&&<UploadModal show={showUpload} onClose={()=>{setShowUpload(false);setUploadPrefill(null);}} projects={projects} dbTitles={dbTitles} dbCats={dbCats} dbTypes={dbTypes} prefill={uploadPrefill}
+        onUploaded={(d)=>setDrawings(p=>[d,...p])}/>}
+      {showVer&&<VersionModal/>}
     </div>
   );
 }
-
-export default DesignModule;
