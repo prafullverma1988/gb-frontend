@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../config/api";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
@@ -528,17 +528,8 @@ function TabOverview({proj}) {
 function TitleDropdown({ value, titles, onSelect, onChange }) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState(value || "");
-  const ref = useRef(null);
-
   // Sync search when value changes externally
   useEffect(() => { setSearch(value || ""); }, [value]);
-
-  // Close on outside click
-  useEffect(() => {
-    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
 
   const filtered = titles.filter(t =>
     !search || t.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -558,7 +549,7 @@ function TitleDropdown({ value, titles, onSelect, onChange }) {
   };
 
   return (
-    <div ref={ref} style={{position:"relative"}}>
+    <div style={{position:"relative"}}>
       <div style={{position:"relative"}}>
         <input
           value={search}
@@ -571,12 +562,7 @@ function TitleDropdown({ value, titles, onSelect, onChange }) {
           style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",cursor:"pointer",color:"#9CA3AF",fontSize:14}}>▼</span>
       </div>
       {open && filtered.length > 0 && (
-        <div style={{position:"fixed",zIndex:9999,background:"white",border:"1.5px solid #E5E7EB",borderRadius:8,
-          boxShadow:"0 8px 24px rgba(0,0,0,0.12)",maxHeight:240,overflowY:"auto",minWidth:280,
-          left: ref.current ? ref.current.getBoundingClientRect().left : 0,
-          top:  ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0,
-          width: ref.current ? ref.current.getBoundingClientRect().width : "auto"
-        }}>
+        <div style={{position:"absolute",top:"100%",left:0,right:0,zIndex:9999,background:"white",border:"1.5px solid #E5E7EB",borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,0.12)",maxHeight:220,overflowY:"auto",marginTop:2}}>
           {filtered.map(t => (
             <div key={t.id} onMouseDown={() => handleSelect(t)}
               style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid #F3F4F6"}}
