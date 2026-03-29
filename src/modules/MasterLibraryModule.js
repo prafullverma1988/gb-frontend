@@ -1454,7 +1454,25 @@ function ExpenseHeadSection() {
 // DESIGN CATEGORIES & DRAWING TYPES
 // ═══════════════════════════════════════════════════════════════════════
 function DesignCategorySection() {
-  const { items: allItems, loading, save: apiSave, del: apiDel } = useSection("design/categories");
+  const [allItems, setAllItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(()=>{
+    api.get("/design/categories").then(r=>{ if(r.success) setAllItems(r.data||[]); setLoading(false); }).catch(()=>setLoading(false));
+  },[]);
+  const apiSave = async (form, editingId) => {
+    let res;
+    if (editingId) res = await api.put("/design/categories/"+editingId, form);
+    else res = await api.post("/design/categories", form);
+    if (res.success) {
+      if (editingId) setAllItems(p=>p.map(i=>i.id===editingId?res.data:i));
+      else setAllItems(p=>[res.data,...p]);
+    }
+    return res;
+  };
+  const apiDel = async (id) => {
+    await api.del("/design/categories/"+id);
+    setAllItems(p=>p.filter(i=>i.id!==id));
+  };
   const [search, setSearch]     = useState("");
   const [typeFilter, setTypeFilter] = useState("All");
   const [showModal, setShowModal]   = useState(false);
@@ -1514,7 +1532,25 @@ function DesignCategorySection() {
 // DRAWING TITLES MASTER
 // ═══════════════════════════════════════════════════════════════════════
 function DrawingTitlesSection() {
-  const { items: titles, loading, save: apiSave, del: apiDel } = useSection("design/titles");
+  const [titles, setTitles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(()=>{ 
+    api.get("/design/titles").then(r=>{ if(r.success) setTitles(r.data||[]); setLoading(false); }).catch(()=>setLoading(false)); 
+  },[]);
+  const apiSave = async (form, editingId) => {
+    let res;
+    if (editingId) res = await api.put("/design/titles/"+editingId, form);
+    else res = await api.post("/design/titles", form);
+    if (res.success) {
+      if (editingId) setTitles(p=>p.map(t=>t.id===editingId?res.data:t));
+      else setTitles(p=>[res.data,...p]);
+    }
+    return res;
+  };
+  const apiDel = async (id) => {
+    await api.del("/design/titles/"+id);
+    setTitles(p=>p.filter(t=>t.id!==id));
+  };
   const [search,    setSearch]    = useState("");
   const [catFilter, setCatFilter] = useState("All");
   const [showModal, setShowModal] = useState(false);

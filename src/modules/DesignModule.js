@@ -580,7 +580,206 @@ export default function DesignModule() {
     </div>
   );
 
-  // ── TAB: DUE DATES ───────────────────────────────────────────────
+  // ── TAB: APPROVAL ───────────────────────────────────────────────
+  const ApprovalTab = () => {
+    const [aprvSearch, setAprvSearch] = useState("");
+    const [aprvProject, setAprvProject] = useState("All");
+    const [aprvCat, setAprvCat] = useState("All");
+    const [aprvActing, setAprvActing] = useState({});
+
+    const pendingDrawings = drawings.filter(d => {
+      if (d.status !== "Pending") return false;
+      if (aprvProject !== "All" && (d.project_name||"") !== aprvProject) return false;
+      if (aprvCat !== "All" && d.category !== aprvCat) return false;
+      if (aprvSearch && !d.title.toLowerCase().includes(aprvSearch.toLowerCase())) return false;
+      return true;
+    });
+
+    const approveDrawing = async (id) => {
+      setAprvActing(p=>({...p,[id]:"approving"}));
+      try {
+        const res = await api.patch("/design/drawings/"+id+"/status", {status:"Approved"});
+        if (res.success) setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Approved"}:d));
+      } catch(e) {}
+      setAprvActing(p=>({...p,[id]:null}));
+    };
+
+    const revisionDrawing = async (id) => {
+      const reason = prompt("Revision reason likhiye:");
+      if (!reason) return;
+      setAprvActing(p=>({...p,[id]:"revision"}));
+      try {
+        const res = await api.patch("/design/drawings/"+id+"/status", {status:"Revision", note:reason});
+        if (res.success) setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Revision",note:reason}:d));
+      } catch(e) {}
+      setAprvActing(p=>({...p,[id]:null}));
+    };
+
+    const rejectDrawing = async (id) => {
+      const reason = prompt("Rejection reason likhiye:");
+      if (!reason) return;
+      setAprvActing(p=>({...p,[id]:"rejecting"}));
+      try {
+        const res = await api.patch("/design/drawings/"+id+"/status", {status:"Rejected", note:reason});
+        if (res.success) setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Rejected"}:d));
+      } catch(e) {}
+      setAprvActing(p=>({...p,[id]:null}));
+    };
+
+    return (
+      <div>
+        {/* Filters */}
+        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{position:"relative",flex:1,minWidth:160}}>
+            <input value={aprvSearch} onChange={e=>setAprvSearch(e.target.value)} placeholder="Search drawings..."
+              style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+          </div>
+          <select value={aprvProject} onChange={e=>setAprvProject(e.target.value)}
+            style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(aprvProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:aprvProject!=="All"?T.bluL:T.surface}}>
+            {projectNames.map(p=><option key={p}>{p}</option>)}
+          </select>
+          <select value={aprvCat} onChange={e=>setAprvCat(e.target.value)}
+            style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(aprvCat!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:aprvCat!=="All"?T.bluL:T.surface}}>
+            {["All",...CATS_LIST].map(c=><option key={c}>{c}</option>)}
+          </select>
+        </div>
+
+        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{pendingDrawings.length} drawings awaiting approval</div>
+
+        {pendingDrawings.length===0&&(
+          <div style={{textAlign:"center",padding:"60px",color:T.t4}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{fontSize:14,fontWeight:600,color:T.t2}}>Sab clear!</div>
+            <div style={{fontSize:12,marginTop:4}}>Koi drawing pending approval mein nahi</div>
+          </div>
+        )}
+
+        {pendingDrawings.map(d=>(
+          <div key={d.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,padding:"13px 14px",marginBottom:8,borderLeft:"3px solid #E5E7EB"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:10}}>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
+                <div style={{fontSize:11,color:T.t4,marginTop:2,display:"flex",gap:10,flexWrap:"wrap"}}>
+                  <span>{d.project_name||"—"}</span>
+                  <span>{d.category}</span>
+                  <span style={{fontFamily:"monospace"}}>{d.current_version||"v1"}</span>
+                  <span>{d.drawing_type}</span>
+                  {d.uploaded_by_name&&<span>By: {d.uploaded_by_name}</span>}
+                </div>
+                {d.note&&<div style={{fontSize:11.5,color:T.t3,marginTop:4,padding:"4px 8px",background:T.surfaceB,borderRadius:5}}>{d.note}</div>}
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer"
+                  style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>👁 View</a>}
+                {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer"
+                  style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>⬇</a>}
+              </div>
+            </div>
+            <div style={{display:"flex",gap:7}}>
+              <button onClick={()=>approveDrawing(d.id)} disabled={!!aprvActing[d.id]}
+                style={{padding:"6px 18px",borderRadius:7,background:aprvActing[d.id]?T.b1:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:aprvActing[d.id]?"not-allowed":"pointer"}}>
+                {aprvActing[d.id]==="approving"?"...":"✓ Approve"}
+              </button>
+              <button onClick={()=>revisionDrawing(d.id)} disabled={!!aprvActing[d.id]}
+                style={{padding:"6px 16px",borderRadius:7,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                🔄 Revision
+              </button>
+              <button onClick={()=>rejectDrawing(d.id)} disabled={!!aprvActing[d.id]}
+                style={{padding:"6px 16px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                ✕ Reject
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  // ── TAB: HISTORY ─────────────────────────────────────────────────
+  const HistoryTab = () => {
+    const [histSearch,  setHistSearch]  = useState("");
+    const [histProject, setHistProject] = useState("All");
+    const [histStatus,  setHistStatus]  = useState("All");
+
+    const histDrawings = [...drawings]
+      .filter(d => {
+        if (histProject !== "All" && (d.project_name||"") !== histProject) return false;
+        if (histStatus  !== "All" && d.status !== histStatus) return false;
+        if (histSearch && !d.title.toLowerCase().includes(histSearch.toLowerCase())) return false;
+        return true;
+      })
+      .sort((a,b)=>new Date(b.updated_at||b.created_at)-new Date(a.updated_at||a.created_at));
+
+    return(
+      <div>
+        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+          <div style={{position:"relative",flex:1,minWidth:160}}>
+            <input value={histSearch} onChange={e=>setHistSearch(e.target.value)} placeholder="Search drawings..."
+              style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
+          </div>
+          <select value={histProject} onChange={e=>setHistProject(e.target.value)}
+            style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(histProject!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:histProject!=="All"?T.bluL:T.surface}}>
+            {projectNames.map(p=><option key={p}>{p}</option>)}
+          </select>
+          <select value={histStatus} onChange={e=>setHistStatus(e.target.value)}
+            style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(histStatus!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:histStatus!=="All"?T.bluL:T.surface}}>
+            {["All","Pending","Approved","Revision","Rejected"].map(s=><option key={s} value={s}>{s==="All"?"All Status":s}</option>)}
+          </select>
+        </div>
+
+        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{histDrawings.length} drawings · latest changes first</div>
+
+        <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 130px 110px 60px 100px 100px 70px 90px",padding:"8px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
+            {["Title","Project","Category","Ver.","Type","Status","Size","Last Updated"].map((h,i)=>(
+              <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</span>
+            ))}
+          </div>
+          {histDrawings.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>No drawings found</div>}
+          {histDrawings.map(d=>{
+            const sm=STATUS_META[d.status]||STATUS_META["Pending"];
+            return(
+              <div key={d.id} style={{display:"grid",gridTemplateColumns:"2fr 130px 110px 60px 100px 100px 70px 90px",padding:"9px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center",gap:8,transition:"background 0.1s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                <div>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{d.title}</div>
+                  {d.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.note}</div>}
+                </div>
+                <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{d.project_name||"—"}</span>
+                <span style={{fontSize:11,color:T.t2}}>{d.category}</span>
+                <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{d.current_version||"v1"}</span>
+                <Pill label={d.drawing_type||"2D"} c={T.pur} bg={T.purL}/>
+                <Pill label={d.status} c={sm.c} bg={sm.bg}/>
+                <span style={{fontSize:11,color:T.t4}}>{d.file_size||"—"}</span>
+                <div>
+                  <div style={{fontSize:11,color:T.t3}}>{fmtDate(d.updated_at||d.created_at)}</div>
+                  {d.uploaded_by_name&&<div style={{fontSize:10,color:T.t4}}>{d.uploaded_by_name}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Stats summary */}
+        <div style={{display:"flex",gap:10,marginTop:14,flexWrap:"wrap"}}>
+          {Object.entries({Approved:T.grn,Pending:T.t4,Revision:T.amb,Rejected:T.red}).map(([s,c])=>{
+            const cnt = drawings.filter(d=>d.status===s).length;
+            return cnt>0?(
+              <div key={s} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"8px 14px",display:"flex",gap:8,alignItems:"center"}}>
+                <span style={{fontSize:18,fontWeight:800,color:c}}>{cnt}</span>
+                <span style={{fontSize:11,color:T.t3}}>{s}</span>
+              </div>
+            ):null;
+          })}
+        </div>
+      </div>
+    );
+  };
+
+    // ── TAB: DUE DATES ───────────────────────────────────────────────
   const DueDatesTab = () => (
     <div>
       <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
@@ -682,11 +881,15 @@ export default function DesignModule() {
     );
   };
 
+  const pendingApprovalCt = drawings.filter(d=>d.status==="Pending").length;
+
   const TABS = [
-    {id:"drawings", label:"All Drawings",    Icon:IcDraw,   count:drawings.length,                             badge:null},
-    {id:"requests", label:"Design Requests", Icon:IcReq,    count:requests.filter(r=>r.status==="Pending").length, badge:"amber"},
-    {id:"revision", label:"Revision Queue",  Icon:IcRevise, count:drawings.filter(d=>d.status==="Revision").length, badge:"amber"},
-    {id:"duedate",  label:"Due Dates",       Icon:IcCal,    count:overdueCt,                                   badge:overdueCt>0?"red":null},
+    {id:"drawings",  label:"All Drawings",    Icon:IcDraw,   count:drawings.length,                              badge:null},
+    {id:"requests",  label:"Design Requests", Icon:IcReq,    count:requests.filter(r=>r.status==="Pending").length, badge:"amber"},
+    {id:"revision",  label:"Revision Queue",  Icon:IcRevise, count:drawings.filter(d=>d.status==="Revision").length, badge:"amber"},
+    {id:"approval",  label:"Approval",        Icon:IcCheck,  count:pendingApprovalCt,                            badge:pendingApprovalCt>0?"amber":null},
+    {id:"history",   label:"History",         Icon:IcHist,   count:null,                                         badge:null},
+    {id:"duedate",   label:"Due Dates",       Icon:IcCal,    count:overdueCt,                                    badge:overdueCt>0?"red":null},
   ];
 
   return (
@@ -733,6 +936,8 @@ export default function DesignModule() {
         {activeTab==="drawings" && <DrawingsTab/>}
         {activeTab==="requests" && <RequestsTab/>}
         {activeTab==="revision" && <RevisionTab/>}
+        {activeTab==="approval" && <ApprovalTab/>}
+        {activeTab==="history"  && <HistoryTab/>}
         {activeTab==="duedate"  && <DueDatesTab/>}
       </div>
 
