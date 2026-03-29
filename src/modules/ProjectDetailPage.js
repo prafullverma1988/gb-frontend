@@ -619,6 +619,7 @@ function TabDesign({ project }) {
 
   // Filters - requests
   const [filterReqStatus, setFilterReqStatus] = useState("All");
+  const [hideUploadedReq, setHideUploadedReq] = useState(true); // hide Uploaded/Rejected by default
   const [filterReqCat,    setFilterReqCat]    = useState("All");
   const [searchReq,       setSearchReq]       = useState("");
 
@@ -1356,6 +1357,7 @@ function TabDesign({ project }) {
           </div>
 
           {requests.filter(req=>{
+            if(hideUploadedReq && (req.status==="Uploaded"||req.status==="Rejected")) return false;
             if(filterReqStatus!=="All" && req.status!==filterReqStatus) return false;
             if(filterReqCat!=="All" && req.category!==filterReqCat) return false;
             if(searchReq && !req.title.toLowerCase().includes(searchReq.toLowerCase()) && !(req.description||"").toLowerCase().includes(searchReq.toLowerCase())) return false;
