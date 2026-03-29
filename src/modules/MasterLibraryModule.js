@@ -1565,18 +1565,35 @@ function DrawingTitlesSection() {
   const [form, setForm] = useState({ title:"", category:"", type:"", description:"" });
   const upd = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  const cats  = ["All", ...Array.from(new Set(titles.map(t=>t.category).filter(Boolean)))];
-  const TYPES = ["Plan","Elevation","Section","Detail","3D","Diagram","Schedule","Site Plan"];
-  const CATS  = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
+  const [dbCategories, setDbCategories] = useState([]);
+  const [dbTypes,      setDbTypes]      = useState([]);
+  useEffect(()=>{
+    api.get("/design/categories?type=category").then(r=>{ if(r.success&&r.data.length) setDbCategories(r.data.map(c=>c.name)); }).catch(()=>{});
+    api.get("/design/categories?type=drawing_type").then(r=>{ if(r.success&&r.data.length) setDbTypes(r.data.map(t=>t.name)); }).catch(()=>{});
+  },[]);
+
+  const CATS_DEFAULT = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
+  const TYPES_DEFAULT= ["Plan","Elevation","Section","Detail","3D","Diagram","Schedule","Site Plan"];
+  const CATS  = dbCategories.length > 0 ? dbCategories : CATS_DEFAULT;
+  const TYPES = dbTypes.length      > 0 ? dbTypes      : TYPES_DEFAULT;
+
+  const cats = ["All", ...CATS];
 
   const filtered = titles.filter(t =>
     (catFilter==="All" || t.category===catFilter) &&
     t.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const openCreate = () => { setEditing(null); setForm({title:"",category:"Architectural",type:"Plan",description:""}); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({title:"",category:CATS[0]||"Architectural",type:TYPES[0]||"Plan",description:""}); setShowModal(true); };
   const openEdit   = (t) => { setEditing(t); setForm({title:t.title,category:t.category||"",type:t.type||"",description:t.description||""}); setShowModal(true); };
-  const save = async () => { if(!form.title.trim()) return; await apiSave(form, editing?.id); setShowModal(false); };
+  const [saveErr, setSaveErr] = useState("");
+  const save = async () => {
+    if(!form.title.trim()) return;
+    setSaveErr("");
+    const res = await apiSave(form, editing?.id);
+    if (res && res.success) setShowModal(false);
+    else setSaveErr(res?.message || "Save failed");
+  };
   const del  = (id) => apiDel(id);
 
   const columns = [
