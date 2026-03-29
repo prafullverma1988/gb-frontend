@@ -523,6 +523,78 @@ function TabOverview({proj}) {
 // TAB 2 — DESIGN
 // ═══════════════════════════════════════════════════════════════════
 // ── DESIGN REQUEST MODAL — outside TabDesign to prevent cursor jump ──────
+
+// ── TitleDropdown — select title from library, auto-fills category+type ──
+function TitleDropdown({ value, titles, onSelect, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState(value || "");
+  const ref = React.useRef(null);
+
+  // Sync search when value changes externally
+  React.useEffect(() => { setSearch(value || ""); }, [value]);
+
+  // Close on outside click
+  React.useEffect(() => {
+    const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  const filtered = titles.filter(t =>
+    !search || t.title.toLowerCase().includes(search.toLowerCase()) ||
+    (t.category||"").toLowerCase().includes(search.toLowerCase())
+  ).slice(0, 30);
+
+  const handleInput = (e) => {
+    setSearch(e.target.value);
+    onChange(e.target.value);
+    setOpen(true);
+  };
+
+  const handleSelect = (t) => {
+    setSearch(t.title);
+    onSelect(t);
+    setOpen(false);
+  };
+
+  return (
+    <div ref={ref} style={{position:"relative"}}>
+      <div style={{position:"relative"}}>
+        <input
+          value={search}
+          onChange={handleInput}
+          onFocus={() => setOpen(true)}
+          placeholder="Type or select from library..."
+          style={{width:"100%",padding:"8px 32px 8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+        />
+        <span onClick={() => setOpen(o => !o)}
+          style={{position:"absolute",right:8,top:"50%",transform:"translateY(-50%)",cursor:"pointer",color:"#9CA3AF",fontSize:14}}>▼</span>
+      </div>
+      {open && filtered.length > 0 && (
+        <div style={{position:"fixed",zIndex:9999,background:"white",border:"1.5px solid #E5E7EB",borderRadius:8,
+          boxShadow:"0 8px 24px rgba(0,0,0,0.12)",maxHeight:240,overflowY:"auto",minWidth:280,
+          left: ref.current ? ref.current.getBoundingClientRect().left : 0,
+          top:  ref.current ? ref.current.getBoundingClientRect().bottom + 4 : 0,
+          width: ref.current ? ref.current.getBoundingClientRect().width : "auto"
+        }}>
+          {filtered.map(t => (
+            <div key={t.id} onMouseDown={() => handleSelect(t)}
+              style={{padding:"8px 12px",cursor:"pointer",borderBottom:"1px solid #F3F4F6"}}
+              onMouseEnter={e => e.currentTarget.style.background="#F0F9FF"}
+              onMouseLeave={e => e.currentTarget.style.background="white"}>
+              <div style={{fontWeight:600,fontSize:13,color:"#111827"}}>{t.title}</div>
+              <div style={{fontSize:11,color:"#6B7280",marginTop:1}}>
+                {t.category && <span style={{background:"#DBEAFE",color:"#1D4ED8",padding:"1px 6px",borderRadius:4,marginRight:5}}>{t.category}</span>}
+                {t.type    && <span style={{background:"#EDE9FE",color:"#6D28D9",padding:"1px 6px",borderRadius:4}}>{t.type}</span>}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSave, saving, dbTitles=[], dbCats=[], dbTypes=[] }) {
   const CATS  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
   const TYPES = dbTypes.length > 0 ? dbTypes.map(t=>t.name) : ["Plan","Elevation","Section","Detail","3D","Diagram"];
@@ -539,17 +611,14 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
           {!saving&&<button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
-          <div style={{marginBottom:12}}>
+          <div style={{marginBottom:12,position:"relative"}}>
             <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Kya drawing chahiye? *</label>
-            <input value={reqForm.title} onChange={e=>setReqForm(p=>({...p,title:e.target.value}))}
-              placeholder="Type or select from library..."
-              list="req_drawing_titles"
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <datalist id="req_drawing_titles">
-              {dbTitles.filter(t=>!reqForm.category||t.category===reqForm.category).map(t=>(
-                <option key={t.id} value={t.title}>{t.title} — {t.type}</option>
-              ))}
-            </datalist>
+            <TitleDropdown
+              value={reqForm.title}
+              titles={dbTitles}
+              onSelect={t => setReqForm(p=>({...p, title:t.title, category:t.category||p.category, drawing_type:t.type||p.drawing_type}))}
+              onChange={v => setReqForm(p=>({...p, title:v}))}
+            />
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
@@ -899,17 +968,14 @@ function TabDesign({ project }) {
 
         <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
           {/* Form fields */}
-          <div style={{marginBottom:12}}>
+          <div style={{marginBottom:12,position:"relative"}}>
             <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Drawing Title *</label>
-            <input value={uForm.title} onChange={e=>setUForm(p=>({...p,title:e.target.value}))}
-              placeholder="Type or select from library..."
-              list="upload_drawing_titles"
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <datalist id="upload_drawing_titles">
-              {dbTitles.filter(t=>!uForm.category||t.category===uForm.category).map(t=>(
-                <option key={t.id} value={t.title}/>
-              ))}
-            </datalist>
+            <TitleDropdown
+              value={uForm.title}
+              titles={dbTitles}
+              onSelect={t => setUForm(p=>({...p, title:t.title, category:t.category||p.category, drawing_type:t.type||p.drawing_type}))}
+              onChange={v => setUForm(p=>({...p, title:v}))}
+            />
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
