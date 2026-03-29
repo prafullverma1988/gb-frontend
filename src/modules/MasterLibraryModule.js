@@ -712,7 +712,7 @@ function MaterialCategorySection() {
         <FormField label="Code (Short)" value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder="e.g. CEM" />
         <div style={{ height: 14 }} />
         <FormTextarea label="Description" value={form.description||""} onChange={v => upd("description", v)} placeholder="What materials fall under this category?" rows={2} />
-        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Create"} />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
       </Modal>
     </div>
   );
@@ -988,16 +988,35 @@ function PartyMasterSection() {
 // ═══════════════════════════════════════════════════════════════════════
 function WorkCategorySection() {
   const { items: cats, loading, save: apiSave, del: apiDel } = useSection("work-categories");
-    const [search, setSearch] = useState("");
+  const { items: uomList } = useSection("uom");
+  const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", unit: "Sq.Ft", rate: 0, desc: "" });
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const filtered = cats.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.code.toLowerCase().includes(search.toLowerCase()));
-  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", unit: "Sq.Ft", rate: 0, desc: "" }); setShowModal(true); };
-  const openEdit = (c) => { setEditing(c); setForm({ ...c }); setShowModal(true); };
-  const save = () => { if (!form.name.trim()) return; if (editing) { setCats(prev => prev.map(c => c.id === editing.id ? { ...c, ...form } : c)); } else { setCats(prev => [...prev, { ...form, id: Date.now() }]); } setShowModal(false); };
-  const del = (id) => setCats(prev => prev.filter(c => c.id !== id));
+
+  // UOM from backend, fallback to defaults
+  const uomOptions = uomList.length > 0
+    ? uomList.map(u => u.symbol ? u.symbol + " (" + u.name + ")" : u.name)
+    : ["CFT","Sq.Ft","Running Ft","Kg","MT","Point","Unit","Lump Sum","Brass","Piece"];
+  const uomValues = uomList.length > 0 ? uomList.map(u => u.name) : uomOptions;
+
+  const filtered = cats.filter(c =>
+    c.name.toLowerCase().includes(search.toLowerCase()) ||
+    (c.code||"").toLowerCase().includes(search.toLowerCase())
+  );
+  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", unit: uomValues[0] || "Sq.Ft", rate: 0, desc: "" }); setShowModal(true); };
+  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", unit: c.unit||"Sq.Ft", rate: c.rate||0, desc: c.description||c.desc||"" }); setShowModal(true); };
+  const save = async () => {
+    if (!form.name.trim()) return alert("Work category name required");
+    setSaving(true);
+    const res = await apiSave({ name: form.name.trim(), code: form.code, unit: form.unit, rate: form.rate, description: form.desc }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
+  };
+  const del = (id) => apiDel(id);
 
   const workTemplateConfig = {
     headers: ["Work Category Name", "Code", "Unit", "Base Rate (Rs.)", "Description"],
@@ -1037,11 +1056,11 @@ function WorkCategorySection() {
           <FormField label="Code" value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder="e.g. RCC" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={["CFT","Sq.Ft","Running Ft","Kg","MT","Point","Unit","Lump Sum","Brass","Piece"]} half />
+          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={uomValues} half />
           <FormField label="Base Rate (Rs.)" value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half />
         </div>
         <FormTextarea label="Description" value={form.desc} onChange={v => upd("desc", v)} placeholder="What work is included?" rows={2} />
-        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Create"} />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
       </Modal>
     </div>
   );
@@ -1531,7 +1550,7 @@ function ExpenseHeadSection() {
         <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={["Material","Labour","Equipment","Overhead","Other"]} />
         <div style={{ height: 12 }} />
         <FormTextarea label="Description" value={form.description||""} onChange={v => upd("description", v)} rows={2} />
-        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Create"} />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
       </Modal>
     </div>
   );
