@@ -1294,24 +1294,37 @@ function ClientBOQSection({ dbProjects = [] }) {
     }).catch(() => {});
   }, []);
 
-  // Load BOQ items when project changes
+  // Load BOQ items when project changes — map DB snake_case to camelCase
   useEffect(() => {
     if (!selectedProject) return;
     api.get("/library/boq?project_id=" + selectedProject).then(res => {
-      if (res.success) setBoqItems(res.data || []);
+      if (res.success) {
+        const mapped = (res.data || []).map(b => ({
+          id: b.id,
+          projectId: b.project_id,
+          category: b.category,
+          item: b.item_name,
+          unit: b.unit,
+          qty: b.qty,
+          rate: b.our_rate,
+          clientRate: b.client_rate,
+          remark: b.remark || "",
+        }));
+        setBoqItems(mapped);
+      }
     }).catch(() => {});
   }, [selectedProject]);
 
   const filtered = boqItems.filter(b => {
-    if (b.projectId !== selectedProject) return false;
-    if (search && !b.item.toLowerCase().includes(search.toLowerCase()) && !b.category.toLowerCase().includes(search.toLowerCase())) return false;
+    if (String(b.projectId) !== String(selectedProject)) return false;
+    if (search && !(b.item||"").toLowerCase().includes(search.toLowerCase()) && !(b.category||"").toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
   const totals = useMemo(() => {
-    const cost = filtered.reduce((s, b) => s + b.rate * b.qty, 0);
-    const revenue = filtered.reduce((s, b) => s + b.clientRate * b.qty, 0);
-    return { cost, revenue, margin: revenue - cost, marginPct: cost > 0 ? (((revenue - cost) / revenue) * 100).toFixed(1) : 0 };
+    const cost = filtered.reduce((s, b) => s + (parseFloat(b.our_rate||b.rate)||0) * (parseFloat(b.qty)||0), 0);
+    const revenue = filtered.reduce((s, b) => s + (parseFloat(b.client_rate||b.clientRate)||0) * (parseFloat(b.qty)||0), 0);
+    return { cost, revenue, margin: revenue - cost, marginPct: revenue > 0 ? (((revenue - cost) / revenue) * 100).toFixed(1) : 0 };
   }, [filtered]);
 
   const fmt = (n) => n >= 10000000 ? `${(n/10000000).toFixed(2)}Cr` : n >= 100000 ? `${(n/100000).toFixed(1)}L` : `${(n/1000).toFixed(0)}K`;
@@ -1321,7 +1334,19 @@ function ClientBOQSection({ dbProjects = [] }) {
     setForm({ ...emptyForm, unit: uomOptions[0] || "Sq.Ft", category: workCatOptions[0] || "" });
     setShowModal(true);
   };
-  const openEdit = (b) => { setEditing(b); setForm({ ...b }); setShowModal(true); };
+  const openEdit = (b) => {
+    setEditing(b);
+    setForm({
+      category: b.category || "",
+      item: b.item_name || b.item || "",
+      unit: b.unit || "",
+      qty: b.qty || 0,
+      rate: b.our_rate ?? b.rate ?? 0,
+      clientRate: b.client_rate ?? b.clientRate ?? 0,
+      remark: b.remark || "",
+    });
+    setShowModal(true);
+  };
   const save = async () => {
     if (!form.item.trim()) return alert("BOQ item name required");
     const payload = { ...form, project_id: selectedProject };
@@ -1329,8 +1354,15 @@ function ClientBOQSection({ dbProjects = [] }) {
     if (editing) res = await api.put("/library/boq/" + editing.id, payload);
     else res = await api.post("/library/boq", payload);
     if (res.success) {
-      if (editing) setBoqItems(prev => prev.map(b => b.id === editing.id ? res.data : b));
-      else setBoqItems(prev => [...prev, res.data]);
+      const mapped = {
+        id: res.data.id, projectId: res.data.project_id,
+        category: res.data.category, item: res.data.item_name,
+        unit: res.data.unit, qty: res.data.qty,
+        rate: res.data.our_rate, clientRate: res.data.client_rate,
+        remark: res.data.remark || "",
+      };
+      if (editing) setBoqItems(prev => prev.map(b => b.id === editing.id ? mapped : b));
+      else setBoqItems(prev => [...prev, mapped]);
       setShowModal(false);
     } else alert(res.message || "Save failed");
   };
@@ -1341,13 +1373,13 @@ function ClientBOQSection({ dbProjects = [] }) {
 
   const columns = [
     { key: "category", label: "Category", minW: 100, render: r => <Badge text={r.category} color={T.purple} bg={T.purpleSoft} /> },
-    { key: "item", label: "BOQ Item", minW: 200, render: r => (<div><div style={{ fontWeight: 600 }}>{r.item}</div>{r.remark && <div style={{ fontSize: 11, color: T.textLight, marginTop: 1 }}>{r.remark}</div>}</div>) },
+    { key: "item_name", label: "BOQ Item", minW: 200, render: r => (<div><div style={{ fontWeight: 600 }}>{r.item_name||r.item}</div>{r.remark && <div style={{ fontSize: 11, color: T.textLight, marginTop: 1 }}>{r.remark}</div>}</div>) },
     { key: "unit", label: "Unit", minW: 60 },
-    { key: "qty", label: "Qty", minW: 60, align: "right", render: r => <span style={{ fontWeight: 600 }}>{(r.qty||0).toLocaleString()}</span> },
-    { key: "rate", label: "Our Cost", minW: 80, align: "right", render: r => <span style={{ fontWeight: 600 }}>Rs.{r.rate}</span> },
-    { key: "clientRate", label: "Client Rate", minW: 80, align: "right", render: r => <span style={{ fontWeight: 700, color: T.blue }}>Rs.{r.clientRate}</span> },
-    { key: "margin", label: "Margin", minW: 80, align: "right", render: r => { const m = r.clientRate - r.rate; const pct = r.clientRate > 0 ? ((m / r.clientRate) * 100).toFixed(0) : 0; return <span style={{ fontWeight: 600, color: m > 0 ? T.green : T.red }}>Rs.{m} ({pct}%)</span>; }},
-    { key: "total", label: "Client Total", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700 }}>Rs.{((r.clientRate||0) * (r.qty||0)).toLocaleString()}</span> },
+    { key: "qty", label: "Qty", minW: 60, align: "right", render: r => <span style={{ fontWeight: 600 }}>{(parseFloat(r.qty)||0).toLocaleString()}</span> },
+    { key: "our_rate", label: "Our Cost", minW: 80, align: "right", render: r => <span style={{ fontWeight: 600 }}>Rs.{r.our_rate??r.rate??0}</span> },
+    { key: "client_rate", label: "Client Rate", minW: 80, align: "right", render: r => <span style={{ fontWeight: 700, color: T.blue }}>Rs.{r.client_rate??r.clientRate??0}</span> },
+    { key: "margin", label: "Margin", minW: 80, align: "right", render: r => { const cr = parseFloat(r.client_rate||r.clientRate||0); const or_ = parseFloat(r.our_rate||r.rate||0); const m = cr - or_; const pct = cr > 0 ? ((m / cr) * 100).toFixed(0) : 0; return <span style={{ fontWeight: 600, color: m > 0 ? T.green : T.red }}>Rs.{m} ({pct}%)</span>; }},
+    { key: "total", label: "Client Total", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700 }}>Rs.{((parseFloat(r.client_rate||r.clientRate)||0) * (parseFloat(r.qty)||0)).toLocaleString()}</span> },
   ];
 
   return (
