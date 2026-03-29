@@ -1895,223 +1895,253 @@ function ExpenseHeadSection() {
 // ═══════════════════════════════════════════════════════════════════════
 // DESIGN CATEGORIES & DRAWING TYPES
 // ═══════════════════════════════════════════════════════════════════════
-function DesignCategorySection() {
-  const [allItems, setAllItems] = useState([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(()=>{
-    api.get("/design/categories").then(r=>{ if(r.success) setAllItems(r.data||[]); setLoading(false); }).catch(()=>setLoading(false));
-  },[]);
-  const apiSave = async (form, editingId) => {
-    let res;
-    if (editingId) res = await api.put("/design/categories/"+editingId, form);
-    else res = await api.post("/design/categories", form);
-    if (res.success) {
-      if (editingId) setAllItems(p=>p.map(i=>i.id===editingId?res.data:i));
-      else setAllItems(p=>[res.data,...p]);
-    }
-    return res;
-  };
-  const apiDel = async (id) => {
-    await api.del("/design/categories/"+id);
-    setAllItems(p=>p.filter(i=>i.id!==id));
-  };
-  const [search, setSearch]     = useState("");
-  const [typeFilter, setTypeFilter] = useState("All");
-  const [showModal, setShowModal]   = useState(false);
-  const [editing,   setEditing]     = useState(null);
-  const [form, setForm] = useState({ name:"", type:"category", description:"" });
-  const upd = (k,v) => setForm(p=>({...p,[k]:v}));
-
-  const filtered = allItems.filter(i =>
-    (typeFilter==="All" || i.type===typeFilter) &&
-    i.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const openCreate = () => { setEditing(null); setForm({name:"",type:"category",description:""}); setShowModal(true); };
-  const openEdit   = (i) => { setEditing(i); setForm({name:i.name,type:i.type,description:i.description||""}); setShowModal(true); };
-  const save = async () => { if(!form.name.trim()) return; await apiSave(form, editing?.id); setShowModal(false); };
-  const del  = (id) => apiDel(id);
-
-  const columns = [
-    { key:"name", label:"Name", minW:160, render: r => <span style={{fontWeight:600}}>{r.name}</span> },
-    { key:"type", label:"Type", minW:120, render: r => <Badge text={r.type==="category"?"📁 Category":"📐 Drawing Type"} color={r.type==="category"?T.blue:T.purple} bg={r.type==="category"?T.blueSoft:T.purpleSoft}/> },
-    { key:"description", label:"Description", minW:200, style:{fontSize:12,color:T.textMid} },
-  ];
-
-  return (
-    <div>
-      <div style={{display:"flex",gap:8,alignItems:"center",padding:"0 0 10px"}}>
-        {["All","category","drawing_type"].map(t=>(
-          <button key={t} onClick={()=>setTypeFilter(t)}
-            style={{padding:"4px 12px",borderRadius:20,border:"1.5px solid "+(typeFilter===t?T.blue:T.border),
-              background:typeFilter===t?T.blueSoft:"none",color:typeFilter===t?T.blue:T.textMid,
-              fontSize:11,fontWeight:typeFilter===t?700:400,cursor:"pointer"}}>
-            {t==="All"?"All":t==="category"?"Categories":"Drawing Types"}
-          </button>
-        ))}
-      </div>
-      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="design items" onAdd={openCreate} addLabel="Add Item"
-        templateConfig={{headers:["Name","Type","Description"],sampleRows:[["Architectural","category","Floor plans, elevations"],["2D","drawing_type","2D drawings"]],
-          filename:"gb_design_categories.csv",templateFilename:"gb_template_design_cats.csv",instructions:"Type: category or drawing_type",
-          mapRow:i=>[i.name,i.type,i.description||""]}}
-        currentData={filtered} onImportData={()=>{}}/>
-      {loading?<div style={{padding:"30px",textAlign:"center",color:T.textLight}}>Loading...</div>
-        :<DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del}/>}
-      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Category/Type":(form.type==="category"?"Add Drawing Category":"Add Drawing Type")} width={420}>
-        <FormField label={form.type==="category"?"Category Name *":"Type Name *"} value={form.name} onChange={v=>upd("name",v)} placeholder={form.type==="category"?"e.g. Architectural, Structural":"e.g. 2D, Elevation, Section"} required/>
-        <div style={{height:12}}/>
-        <div style={{marginBottom:0}}>
-          <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>What are you adding?</label>
-          <select value={form.type} onChange={e=>upd("type",e.target.value)}
-            style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.border}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
-            <option value="category">Drawing Category (e.g. Architectural, Structural)</option>
-            <option value="drawing_type">Drawing Type (e.g. 2D, Elevation, Section)</option>
-          </select>
-        </div>
-        <div style={{height:12}}/>
-        <FormTextarea label="Description" value={form.description||""} onChange={v=>upd("description",v)} rows={2}/>
-        <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={editing?"Update":"Create"}/>
-      </Modal>
-    </div>
-  );
-}
-
-
 // ═══════════════════════════════════════════════════════════════════════
-// DRAWING TITLES MASTER
+// DESIGN LIBRARY — Unified Tab
+// Sub-tabs: Categories | Drawing Types | Drawing Titles
 // ═══════════════════════════════════════════════════════════════════════
-function DrawingTitlesSection() {
-  const [titles, setTitles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  useEffect(()=>{ 
-    api.get("/design/titles").then(r=>{ if(r.success) setTitles(r.data||[]); setLoading(false); }).catch(()=>setLoading(false)); 
-  },[]);
-  const reloadTitles = () => {
-    api.get("/design/titles").then(r=>{ if(r.success) setTitles(r.data||[]); }).catch(()=>{});
+function DesignLibrarySection() {
+  const [subTab, setSubTab] = useState("categories"); // "categories" | "types" | "titles"
+
+  // ── Shared data ──────────────────────────────────────────────────────
+  const [categories, setCategories] = useState([]);
+  const [drawTypes,  setDrawTypes]  = useState([]);
+  const [titles,     setTitles]     = useState([]);
+  const [loading,    setLoading]    = useState(false);
+
+  const loadAll = async () => {
+    setLoading(true);
+    try {
+      const [catRes, titRes] = await Promise.all([
+        api.get("/design/categories"),
+        api.get("/design/titles"),
+      ]);
+      if (catRes.success) {
+        setCategories((catRes.data||[]).filter(i => i.type === "category"));
+        setDrawTypes((catRes.data||[]).filter(i => i.type === "drawing_type"));
+      }
+      if (titRes.success) setTitles(titRes.data||[]);
+    } catch(e) {}
+    setLoading(false);
   };
-  const apiSave = async (form, editingId) => {
-    let res;
-    if (editingId) res = await api.put("/design/titles/"+editingId, form);
-    else res = await api.post("/design/titles", form);
-    if (res.success) reloadTitles();
-    return res;
-  };
-  const apiDel = async (id) => {
-    await api.del("/design/titles/"+id);
-    reloadTitles();
-  };
-  const [search,    setSearch]    = useState("");
-  const [catFilter, setCatFilter] = useState("All");
+  useEffect(() => { loadAll(); }, []);
+
+  const catNames  = categories.map(c => c.name);
+  const typeNames = drawTypes.map(t => t.name);
+
+  // ── Modal state (shared) ─────────────────────────────────────────────
   const [showModal, setShowModal] = useState(false);
   const [editing,   setEditing]   = useState(null);
-  const [form, setForm] = useState({ title:"", category:"", type:"", description:"" });
-  const upd = (k,v) => setForm(p=>({...p,[k]:v}));
+  const [form,      setForm]      = useState({});
+  const [saving,    setSaving]    = useState(false);
+  const [errMsg,    setErrMsg]    = useState("");
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const [dbCategories, setDbCategories] = useState([]);
-  const [dbTypes,      setDbTypes]      = useState([]);
-  useEffect(()=>{
-    api.get("/design/categories?type=category").then(r=>{ if(r.success&&r.data.length) setDbCategories(r.data.map(c=>c.name)); }).catch(()=>{});
-    api.get("/design/categories?type=drawing_type").then(r=>{ if(r.success&&r.data.length) setDbTypes(r.data.map(t=>t.name)); }).catch(()=>{});
-  },[]);
+  const openCreate = (defaults) => { setEditing(null); setForm(defaults); setErrMsg(""); setShowModal(true); };
+  const closeModal = () => { setShowModal(false); setEditing(null); setErrMsg(""); };
 
-  const CATS_DEFAULT = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
-  const TYPES_DEFAULT= ["Plan","Elevation","Section","Detail","3D","Diagram","Schedule","Site Plan"];
-  const CATS  = dbCategories.length > 0 ? dbCategories : CATS_DEFAULT;
-  const TYPES = dbTypes.length      > 0 ? dbTypes      : TYPES_DEFAULT;
+  // ── Save handlers ────────────────────────────────────────────────────
+  const saveCategory = async () => {
+    if (!form.name?.trim()) return setErrMsg("Name required");
+    setSaving(true);
+    const payload = { name: form.name.trim(), type: "category", description: form.description || "" };
+    const res = editing
+      ? await api.put("/design/categories/" + editing.id, payload)
+      : await api.post("/design/categories", payload);
+    setSaving(false);
+    if (res.success) { loadAll(); closeModal(); }
+    else setErrMsg(res.message || "Save failed");
+  };
 
-  const cats = ["All", ...CATS];
+  const saveType = async () => {
+    if (!form.name?.trim()) return setErrMsg("Name required");
+    setSaving(true);
+    const payload = { name: form.name.trim(), type: "drawing_type", description: form.description || "" };
+    const res = editing
+      ? await api.put("/design/categories/" + editing.id, payload)
+      : await api.post("/design/categories", payload);
+    setSaving(false);
+    if (res.success) { loadAll(); closeModal(); }
+    else setErrMsg(res.message || "Save failed");
+  };
 
-  const filtered = titles.filter(t =>
-    (catFilter==="All" || t.category===catFilter) &&
+  const saveTitle = async () => {
+    if (!form.title?.trim()) return setErrMsg("Title required");
+    setSaving(true);
+    const payload = { title: form.title.trim(), category: form.category || "", type: form.type || "", description: form.description || "" };
+    const res = editing
+      ? await api.put("/design/titles/" + editing.id, payload)
+      : await api.post("/design/titles", payload);
+    setSaving(false);
+    if (res.success) { loadAll(); closeModal(); }
+    else setErrMsg(res.message || "Save failed");
+  };
+
+  const deleteItem = async (type, id) => {
+    if (type === "title") await api.del("/design/titles/" + id);
+    else await api.del("/design/categories/" + id);
+    loadAll();
+  };
+
+  // ── Search state ─────────────────────────────────────────────────────
+  const [search, setSearch] = useState("");
+  const [catFilter, setCatFilter] = useState("All");
+
+  // ── Sub-tab change resets search ─────────────────────────────────────
+  const switchTab = (tab) => { setSubTab(tab); setSearch(""); setCatFilter("All"); };
+
+  // ── Sub-tab pill style ───────────────────────────────────────────────
+  const tabStyle = (id) => ({
+    padding: "8px 20px", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", border: "none",
+    background: subTab === id ? "#2563EB" : "white",
+    color: subTab === id ? "white" : "#6B7280",
+    boxShadow: subTab === id ? "0 1px 4px rgba(37,99,235,0.3)" : "none",
+  });
+
+  // ── Filtered data ────────────────────────────────────────────────────
+  const filteredCats  = categories.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredTypes = drawTypes.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const filteredTitles = titles.filter(t =>
+    (catFilter === "All" || t.category === catFilter) &&
     t.title.toLowerCase().includes(search.toLowerCase())
   );
 
-  const openCreate = () => { setEditing(null); setForm({title:"",category:CATS[0]||"Architectural",type:TYPES[0]||"Plan",description:""}); setShowModal(true); };
-  const openEdit   = (t) => { setEditing(t); setForm({title:t.title,category:t.category||"",type:t.type||"",description:t.description||""}); setShowModal(true); };
-  const [saveErr, setSaveErr] = useState("");
-  const save = async () => {
-    if(!form.title.trim()) return;
-    setSaveErr("");
-    const res = await apiSave(form, editing?.id);
-    if (res && res.success) setShowModal(false);
-    else setSaveErr(res?.message || "Save failed");
-  };
-  const del  = (id) => apiDel(id);
-
-  const columns = [
-    { key:"title",    label:"Drawing Title", minW:220, render: r => <span style={{fontWeight:600}}>{r.title}</span> },
-    { key:"category", label:"Category",      minW:120, render: r => r.category ? <Badge text={r.category} color={T.blue} bg={T.blueSoft}/> : "—" },
-    { key:"type",     label:"Type",          minW:100, render: r => r.type ? <Badge text={r.type} color={T.purple} bg={T.purpleSoft}/> : "—" },
-    { key:"description", label:"Description", minW:200, style:{fontSize:12,color:T.textMid} },
-  ];
-
   return (
     <div>
-      {/* Category filter tabs */}
-      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
-        {cats.map(c=>(
-          <button key={c} onClick={()=>setCatFilter(c)}
-            style={{padding:"3px 10px",borderRadius:20,border:"1.5px solid "+(catFilter===c?T.blue:T.border),
-              background:catFilter===c?T.blueSoft:"none",color:catFilter===c?T.blue:T.textMid,
-              fontSize:11,fontWeight:catFilter===c?700:400,cursor:"pointer"}}>
-            {c}
-            {c!=="All"&&<span style={{marginLeft:4,fontSize:10}}>{titles.filter(t=>t.category===c).length}</span>}
-          </button>
-        ))}
+      {/* Sub-tab switcher */}
+      <div style={{ display: "flex", gap: 8, marginBottom: 18, background: "#F3F4F6", padding: 6, borderRadius: 10, width: "fit-content" }}>
+        <button style={tabStyle("categories")} onClick={() => switchTab("categories")}>
+          Drawing Categories <span style={{ marginLeft: 6, background: subTab==="categories"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{categories.length}</span>
+        </button>
+        <button style={tabStyle("types")} onClick={() => switchTab("types")}>
+          Drawing Types <span style={{ marginLeft: 6, background: subTab==="types"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{drawTypes.length}</span>
+        </button>
+        <button style={tabStyle("titles")} onClick={() => switchTab("titles")}>
+          Drawing Titles <span style={{ marginLeft: 6, background: subTab==="titles"?"rgba(255,255,255,0.3)":"#E5E7EB", borderRadius: 10, padding: "1px 7px", fontSize: 11 }}>{titles.length}</span>
+        </button>
       </div>
-      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="drawing titles"
-        onAdd={openCreate} addLabel="Add Title"
-        templateConfig={{
-          headers:["Drawing Title","Category","Type","Description"],
-          sampleRows:[
-            ["Ground Floor Plan","Architectural","Plan","GF layout plan"],
-            ["Column Detail","Structural","Detail","Column reinforcement detail"],
-            ["Electrical Layout","Electrical","Plan","GF electrical layout"],
-          ],
-          filename:"gb_drawing_titles.csv",
-          templateFilename:"gb_template_drawing_titles.csv",
-          instructions:"Category: Architectural/Structural/Electrical/Plumbing/Interior. Type: Plan/Elevation/Section/Detail/3D/Diagram",
-          mapRow: t => [t.title, t.category||"", t.type||"", t.description||""],
-        }}
-        currentData={filtered}
-        onImportData={(rows)=>{
-          rows.forEach(async r => {
-            if(r["Drawing Title"]) {
-              await api.post("/design/titles", {
-                title: r["Drawing Title"],
-                category: r["Category"]||"Architectural",
-                type: r["Type"]||"Plan",
-                description: r["Description"]||null,
-              });
-            }
-          });
-          setTimeout(()=>window.location.reload(),1000);
-        }}
-      />
-      {loading ? <div style={{padding:"30px",textAlign:"center",color:T.textLight}}>Loading...</div>
-        : <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} emptyMsg="No drawing titles found"/>}
-      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Drawing Title":"Add Drawing Title"} width={460}>
-        <FormField label="Drawing Title *" value={form.title} onChange={v=>upd("title",v)} placeholder="e.g. Ground Floor Plan" required/>
-        <div style={{height:12}}/>
-        <div style={{display:"flex",gap:14,flexWrap:"wrap"}}>
-          <div style={{flex:1,minWidth:140}}>
-            <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>Category</label>
-            <select value={form.category} onChange={e=>upd("category",e.target.value)}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.border}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
-              {CATS.map(c=><option key={c}>{c}</option>)}
+
+      {/* Toolbar */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14, gap: 12 }}>
+        <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder={"Search " + (subTab === "categories" ? "categories" : subTab === "types" ? "drawing types" : "titles") + "..."}
+            style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, width: 240, fontFamily: "inherit" }} />
+          {/* Category filter for titles */}
+          {subTab === "titles" && (
+            <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
+              style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }}>
+              <option>All</option>
+              {catNames.map(c => <option key={c}>{c}</option>)}
             </select>
-          </div>
-          <div style={{flex:1,minWidth:120}}>
-            <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>Type</label>
-            <select value={form.type} onChange={e=>upd("type",e.target.value)}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.border}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
-              {TYPES.map(t=><option key={t}>{t}</option>)}
-            </select>
-          </div>
+          )}
         </div>
-        <div style={{height:12}}/>
-        <FormTextarea label="Description" value={form.description||""} onChange={v=>upd("description",v)} rows={2} placeholder="Optional notes"/>
-        <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={editing?"Update":"Create"}/>
+        <button
+          onClick={() => {
+            if (subTab === "categories") openCreate({ name: "", description: "" });
+            else if (subTab === "types")  openCreate({ name: "", description: "" });
+            else openCreate({ title: "", category: catNames[0] || "", type: typeNames[0] || "", description: "" });
+          }}
+          style={{ padding: "9px 20px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
+          + {subTab === "categories" ? "Add Category" : subTab === "types" ? "Add Type" : "Add Title"}
+        </button>
+      </div>
+
+      {/* Content */}
+      {loading ? (
+        <div style={{ textAlign: "center", padding: 50, color: "#9CA3AF" }}>Loading...</div>
+      ) : subTab === "categories" ? (
+        /* ── Categories grid ── */
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px,1fr))", gap: 10 }}>
+          {filteredCats.map(cat => (
+            <div key={cat.id} style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", padding: "14px 16px", borderLeft: "4px solid #2563EB" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>{cat.name}</div>
+                  {cat.description && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{cat.description}</div>}
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => { setEditing(cat); setForm({ name: cat.name, description: cat.description||"" }); setErrMsg(""); setShowModal(true); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><IcEdit size={14} /></button>
+                  <button onClick={() => deleteItem("category", cat.id)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><IcTrash size={14} /></button>
+                </div>
+              </div>
+              <div style={{ marginTop: 8, fontSize: 11, color: "#9CA3AF" }}>
+                {titles.filter(t => t.category === cat.name).length} titles
+              </div>
+            </div>
+          ))}
+          {filteredCats.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9CA3AF" }}>No categories found</div>}
+        </div>
+      ) : subTab === "types" ? (
+        /* ── Drawing Types grid ── */
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(180px,1fr))", gap: 10 }}>
+          {filteredTypes.map(dt => (
+            <div key={dt.id} style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", padding: "14px 16px", borderLeft: "4px solid #7C3AED" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>{dt.name}</div>
+                  {dt.description && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{dt.description}</div>}
+                </div>
+                <div style={{ display: "flex", gap: 4 }}>
+                  <button onClick={() => { setEditing(dt); setForm({ name: dt.name, description: dt.description||"" }); setErrMsg(""); setShowModal(true); }}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><IcEdit size={14} /></button>
+                  <button onClick={() => deleteItem("type", dt.id)}
+                    style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><IcTrash size={14} /></button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filteredTypes.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9CA3AF" }}>No drawing types found</div>}
+        </div>
+      ) : (
+        /* ── Drawing Titles table ── */
+        <DataTable
+          columns={[
+            { key: "title",    label: "Drawing Title", minW: 220, render: r => <span style={{ fontWeight: 600 }}>{r.title}</span> },
+            { key: "category", label: "Category",      minW: 130, render: r => r.category ? <Badge text={r.category} color="#2563EB" bg="#DBEAFE" /> : <span style={{ color: "#9CA3AF" }}>—</span> },
+            { key: "type",     label: "Drawing Type",  minW: 110, render: r => r.type ? <Badge text={r.type} color="#7C3AED" bg="#EDE9FE" /> : <span style={{ color: "#9CA3AF" }}>—</span> },
+            { key: "description", label: "Description", minW: 200, render: r => <span style={{ fontSize: 12, color: "#6B7280" }}>{r.description || "—"}</span> },
+          ]}
+          data={filteredTitles}
+          onEdit={t => { setEditing(t); setForm({ title: t.title, category: t.category||"", type: t.type||"", description: t.description||"" }); setErrMsg(""); setShowModal(true); }}
+          onDelete={t => deleteItem("title", t.id)}
+          emptyMsg="No drawing titles found"
+        />
+      )}
+
+      {/* ── Modal ─────────────────────────────────────────────────────── */}
+      <Modal open={showModal} onClose={closeModal}
+        title={
+          subTab === "categories" ? (editing ? "Edit Category" : "Add Drawing Category") :
+          subTab === "types"      ? (editing ? "Edit Drawing Type" : "Add Drawing Type") :
+                                    (editing ? "Edit Drawing Title" : "Add Drawing Title")
+        } width={460}>
+        {(subTab === "categories" || subTab === "types") && (
+          <>
+            <FormField label="Name" value={form.name||""} onChange={v => upd("name", v)}
+              placeholder={subTab === "categories" ? "e.g. Architectural, Structural" : "e.g. Plan, Elevation, Section"}
+              required />
+            <div style={{ height: 12 }} />
+            <FormField label="Description (optional)" value={form.description||""} onChange={v => upd("description", v)} placeholder="Brief description" />
+          </>
+        )}
+        {subTab === "titles" && (
+          <>
+            <FormField label="Drawing Title" value={form.title||""} onChange={v => upd("title", v)} placeholder="e.g. Ground Floor Plan" required />
+            <div style={{ height: 12 }} />
+            <div style={{ display: "flex", gap: 16 }}>
+              <FormSelect label="Category" value={form.category||""} onChange={v => upd("category", v)} options={catNames} half />
+              <FormSelect label="Drawing Type" value={form.type||""} onChange={v => upd("type", v)} options={typeNames} half />
+            </div>
+            <div style={{ height: 12 }} />
+            <FormField label="Description (optional)" value={form.description||""} onChange={v => upd("description", v)} placeholder="Brief description" />
+          </>
+        )}
+        {errMsg && <div style={{ color: "#EF4444", fontSize: 12, marginTop: 8 }}>{errMsg}</div>}
+        <ModalFooter onClose={closeModal}
+          onSave={subTab === "categories" ? saveCategory : subTab === "types" ? saveType : saveTitle}
+          saveLabel={saving ? "Saving..." : editing ? "Update" : "Add"} />
       </Modal>
     </div>
   );
@@ -2127,8 +2157,7 @@ const masterSections = [
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
   { id: "client_boq",    label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: null, color: T.indigo },
   { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", countKey: "equipment", color: T.rose },
-  { id: "drawing_titles", label: "Drawing Titles",     Icon: IcFile,      Comp: DrawingTitlesSection,     section: "DESIGN LIBRARY", countKey: "drawing_titles", color: T.blue },
-  { id: "design_cats",   label: "Categories & Types", Icon: IcLayers,    Comp: DesignCategorySection,    section: null, countKey: "design_cats", color: T.purple },
+  { id: "design_library", label: "Design Library",     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "DESIGN LIBRARY", countKey: null, color: T.purple },
   { id: "uom",           label: "Units (UOM)",         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
   { id: "expense_head",  label: "Expense Heads",       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, count: "14", color: T.amber },
 ];
