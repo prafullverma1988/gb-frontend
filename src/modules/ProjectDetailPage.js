@@ -596,14 +596,32 @@ function TabDesign({ project }) {
   const projectName = project?.name || "Project";
   const CLOUD_NAME  = "dd632nqfm";
   const UPLOAD_PRESET = "gb_buildcon_drawings";
-  const CATS = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
-
   // State
+  const CATS_DEFAULT = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
+  const TYPES_DEFAULT = ["2D","3D","Detail","Section","Elevation","Site Plan","Working Drawing"];
+
   const [mainTab,  setMainTab]      = useState("drawings"); // "drawings" | "requests"
   const [drawings, setDrawings]     = useState([]);
   const [requests, setRequests]     = useState([]);
   const [loading,  setLoading]      = useState(true);
-  const [filter,   setFilter]       = useState("All");
+  const [dbCats,   setDbCats]       = useState([]);
+  const [dbTypes,  setDbTypes]      = useState([]);
+
+  // Computed options (library data or fallback)
+  const CATS  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : CATS_DEFAULT;
+  const TYPES = dbTypes.length > 0 ? dbTypes.map(t=>t.name) : TYPES_DEFAULT;
+
+  // Filters - drawings
+  const [filter,      setFilter]      = useState("All");
+  const [filterStatus,setFilterStatus]= useState("All");
+  const [filterType,  setFilterType]  = useState("All");
+  const [searchDraw,  setSearchDraw]  = useState("");
+
+  // Filters - requests
+  const [filterReqStatus, setFilterReqStatus] = useState("All");
+  const [filterReqCat,    setFilterReqCat]    = useState("All");
+  const [searchReq,       setSearchReq]       = useState("");
+
   const [sel,      setSel]          = useState(null);
   const [showUpload,  setShowUpload]  = useState(false);
   const [showRevQ,    setShowRevQ]    = useState(false);
@@ -655,11 +673,26 @@ function TabDesign({ project }) {
     } catch(e) {}
   };
 
-  useEffect(() => { loadDrawings(); loadRequests(); }, [projectId]);
+  const loadCategories = async () => {
+    try {
+      const [catRes, typeRes] = await Promise.all([
+        api.get("/design/categories?type=category"),
+        api.get("/design/categories?type=drawing_type"),
+      ]);
+      if (catRes.success  && catRes.data.length)  setDbCats(catRes.data);
+      if (typeRes.success && typeRes.data.length) setDbTypes(typeRes.data);
+    } catch(e) {}
+  };
 
-  const filtered = drawings.filter(d =>
-    filter === "All" || d.category === filter
-  );
+  useEffect(() => { loadDrawings(); loadRequests(); loadCategories(); }, [projectId]);
+
+  const filtered = drawings.filter(d => {
+    if (filter !== "All" && d.category !== filter) return false;
+    if (filterStatus !== "All" && d.status !== filterStatus) return false;
+    if (filterType   !== "All" && (d.drawing_type||d.type) !== filterType) return false;
+    if (searchDraw && !d.title.toLowerCase().includes(searchDraw.toLowerCase())) return false;
+    return true;
+  });
 
   const catCounts = CATS.reduce((acc, c) => ({
     ...acc, [c]: drawings.filter(d => d.category === c).length
@@ -869,7 +902,7 @@ function TabDesign({ project }) {
               <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Type</label>
               <select value={uForm.drawing_type} onChange={e=>setUForm(p=>({...p,drawing_type:e.target.value}))}
                 style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {["2D","3D","Detail","Section","Elevation","Site Plan"].map(t=><option key={t}>{t}</option>)}
+                {TYPES.map(t=><option key={t}>{t}</option>)}
               </select>
             </div>
           </div>
@@ -1207,7 +1240,18 @@ function TabDesign({ project }) {
             </button>
           ))}
         </div>
-        <div style={{display:"flex",gap:6}}>
+        <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          {/* Search + filters */}
+          <div style={{position:"relative"}}>
+            <input value={searchDraw} onChange={e=>setSearchDraw(e.target.value)}
+              placeholder="Search..."
+              style={{padding:"5px 9px 5px 27px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit",width:130}}/>
+            <span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)",fontSize:12,color:T.t4}}>🔍</span>
+          </div>
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
+            style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
+            {["All Status","Pending","Approved","Revision","Rejected"].map(s=><option key={s} value={s==="All Status"?"All":s}>{s}</option>)}
+          </select>
           {revQueue.length>0&&(
             <button onClick={()=>setShowRevQ(true)}
               style={{padding:"6px 12px",borderRadius:7,background:T.ambL,border:"1px solid "+T.ambM,
@@ -1292,7 +1336,31 @@ function TabDesign({ project }) {
           )}
 
           {/* Request cards */}
-          {requests.map(req=>{
+          {/* Request filters */}
+          <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+            <div style={{position:"relative",flex:1,minWidth:160}}>
+              <input value={searchReq} onChange={e=>setSearchReq(e.target.value)}
+                placeholder="Search requests..."
+                style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:13,color:T.t4}}>🔍</span>
+            </div>
+            <select value={filterReqStatus} onChange={e=>setFilterReqStatus(e.target.value)}
+              style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
+              {["All Status","Pending","In Progress","Uploaded","Rejected"].map(s=><option key={s} value={s==="All Status"?"All":s}>{s}</option>)}
+            </select>
+            <select value={filterReqCat} onChange={e=>setFilterReqCat(e.target.value)}
+              style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
+              <option value="All">All Categories</option>
+              {CATS.map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+
+          {requests.filter(req=>{
+            if(filterReqStatus!=="All" && req.status!==filterReqStatus) return false;
+            if(filterReqCat!=="All" && req.category!==filterReqCat) return false;
+            if(searchReq && !req.title.toLowerCase().includes(searchReq.toLowerCase()) && !(req.description||"").toLowerCase().includes(searchReq.toLowerCase())) return false;
+            return true;
+          }).map(req=>{
             const prioMeta = {
               "Urgent": {c:T.red,   bg:T.redL},
               "High":   {c:T.amb,   bg:T.ambL},
