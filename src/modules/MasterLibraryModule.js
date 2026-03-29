@@ -1366,24 +1366,86 @@ function EquipmentSection() {
 // 9. UOM MASTER (My idea)
 // ═══════════════════════════════════════════════════════════════════════
 function UOMMasterSection() {
-  const { items: uoms, loading } = useSection("uom");
+  const [uoms, setUoms] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const filtered = uoms.filter(u => u.name.toLowerCase().includes(search.toLowerCase()) || (u.symbol||"").toLowerCase().includes(search.toLowerCase()));
-  const typeColors = { Weight: T.blue, Area: T.green, Volume: T.purple, Length: T.amber, Count: T.teal, Work: T.orange, Time: T.indigo, Transport: T.rose };
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name:"", symbol:"", type:"Weight" });
+  const upd = (k,v) => setForm(p=>({...p,[k]:v}));
+  const TYPES = ["Weight","Area","Volume","Length","Count","Work","Time","Transport","Bulk","Flat"];
+  const typeColors = { Weight:T.blue, Area:T.green, Volume:T.purple, Length:T.amber, Count:T.teal, Work:T.orange, Time:T.indigo, Transport:T.rose };
+
+  const reload = () => {
+    api.get("/library/uom").then(r=>{ if(r.success) setUoms(r.data||[]); setLoading(false); }).catch(()=>setLoading(false));
+  };
+  useEffect(()=>{ reload(); },[]);
+
+  const filtered = uoms.filter(u =>
+    u.name.toLowerCase().includes(search.toLowerCase()) ||
+    (u.symbol||"").toLowerCase().includes(search.toLowerCase())
+  );
+
+  const openCreate = () => { setEditing(null); setForm({name:"",symbol:"",type:"Weight"}); setShowModal(true); };
+  const openEdit   = (u) => { setEditing(u); setForm({name:u.name,symbol:u.symbol||"",type:u.type||"Weight"}); setShowModal(true); };
+
+  const save = async () => {
+    if (!form.name.trim()) return;
+    const isDup = uoms.some(u => u.name.toLowerCase()===form.name.toLowerCase() && u.id!==editing?.id);
+    if (isDup) { alert(form.name+" already exists!"); return; }
+    let res;
+    if (editing) res = await api.put("/library/uom/"+editing.id, form);
+    else res = await api.post("/library/uom", form);
+    if (res.success) { reload(); setShowModal(false); }
+    else alert(res.message||"Save failed");
+  };
+
+  const del = async (id) => {
+    if (!window.confirm("Delete this unit?")) return;
+    await api.del("/library/uom/"+id);
+    reload();
+  };
+
+  const handleImport = async (rows) => {
+    let added=0, skipped=0;
+    for (const r of rows) {
+      const name = r["Unit Name"]||r["name"]||"";
+      if (!name) continue;
+      if (uoms.some(u=>u.name.toLowerCase()===name.toLowerCase())) { skipped++; continue; }
+      const res = await api.post("/library/uom",{ name, symbol:r["Symbol"]||r["symbol"]||"", type:r["Type"]||r["type"]||"Count" }).catch(()=>null);
+      if (res?.success) added++;
+    }
+    reload();
+    alert(added+" units added, "+skipped+" duplicates skipped");
+  };
 
   const columns = [
-    { key: "symbol", label: "Symbol", minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 700, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.symbol}</code> },
-    { key: "name", label: "Unit Name", minW: 160, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "type", label: "Type", minW: 100, render: r => <Badge text={r.type||"—"} color={typeColors[r.type]||T.textMid} bg={(typeColors[r.type]||T.blue)+"15"} /> },
+    { key:"symbol", label:"Symbol", minW:80, render: r=><code style={{fontSize:12,fontWeight:700,color:T.blue,background:T.blueSoft,padding:"2px 8px",borderRadius:4}}>{r.symbol||"—"}</code> },
+    { key:"name",   label:"Unit Name", minW:160, render: r=><span style={{fontWeight:600}}>{r.name}</span> },
+    { key:"type",   label:"Type", minW:100, render: r=><Badge text={r.type||"—"} color={typeColors[r.type]||T.textMid} bg={(typeColors[r.type]||T.blue)+"15"}/> },
   ];
 
   return (
     <div>
-      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="units" onAdd={() => {}} addLabel="Add Unit"
-        templateConfig={{ headers: ["Unit Name","Symbol","Type"], sampleRows: [["Kilogram","Kg","Weight"]], filename: "gb_uom_export.csv", templateFilename: "gb_template_uom.csv", instructions: "Type: Weight, Area, Volume, Length, Count, Work, Time, Transport", mapRow: u => [u.name, u.symbol||"", u.type||""] }}
-        currentData={uoms} onImportData={() => {}} />
-      {loading ? <div style={{padding:"40px",textAlign:"center",color:T.textLight}}>Loading...</div>
-        : <DataTable columns={columns} data={filtered} onEdit={() => {}} onDelete={() => {}} emptyMsg="No units found" />}
+      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="units"
+        onAdd={openCreate} addLabel="Add Unit"
+        templateConfig={{ headers:["Unit Name","Symbol","Type"], sampleRows:[["Kilogram","Kg","Weight"],["Square Feet","Sqft","Area"],["Piece","Pcs","Count"]], filename:"gb_uom_export.csv", templateFilename:"gb_template_uom.csv", instructions:"Type: Weight, Area, Volume, Length, Count, Work, Time, Transport, Bulk, Flat", mapRow:u=>[u.name,u.symbol||"",u.type||""] }}
+        currentData={uoms} onImportData={handleImport}/>
+      {loading?<div style={{padding:"40px",textAlign:"center",color:T.textLight}}>Loading...</div>
+        :<DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} emptyMsg="No units found"/>}
+      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Unit":"Add Unit"} width={400}>
+        <FormField label="Unit Name *" value={form.name} onChange={v=>upd("name",v)} placeholder="e.g. Kilogram" required/>
+        <div style={{height:12}}/>
+        <FormField label="Symbol" value={form.symbol} onChange={v=>upd("symbol",v)} placeholder="e.g. Kg"/>
+        <div style={{height:12}}/>
+        <div>
+          <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>Type</label>
+          <select value={form.type} onChange={e=>upd("type",e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.border}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
+            {TYPES.map(t=><option key={t}>{t}</option>)}
+          </select>
+        </div>
+        <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={editing?"Update":"Add"}/>
+      </Modal>
     </div>
   );
 }
