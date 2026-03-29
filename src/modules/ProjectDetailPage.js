@@ -523,8 +523,9 @@ function TabOverview({proj}) {
 // TAB 2 — DESIGN
 // ═══════════════════════════════════════════════════════════════════
 // ── DESIGN REQUEST MODAL — outside TabDesign to prevent cursor jump ──────
-function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSave, saving }) {
-  const CATS = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
+function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSave, saving, dbTitles=[], dbCats=[], dbTypes=[] }) {
+  const CATS  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
+  const TYPES = dbTypes.length > 0 ? dbTypes.map(t=>t.name) : ["Plan","Elevation","Section","Detail","3D","Diagram"];
   if (!show) return null;
   return (
     <>
@@ -541,8 +542,14 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
           <div style={{marginBottom:12}}>
             <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Kya drawing chahiye? *</label>
             <input value={reqForm.title} onChange={e=>setReqForm(p=>({...p,title:e.target.value}))}
-              placeholder="e.g. Ground Floor Plan, Section A-A"
+              placeholder="Type or select from library..."
+              list="req_drawing_titles"
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            <datalist id="req_drawing_titles">
+              {dbTitles.filter(t=>!reqForm.category||t.category===reqForm.category).map(t=>(
+                <option key={t.id} value={t.title}>{t.title} — {t.type}</option>
+              ))}
+            </datalist>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
@@ -606,6 +613,7 @@ function TabDesign({ project }) {
   const [loading,  setLoading]      = useState(true);
   const [dbCats,   setDbCats]       = useState([]);
   const [dbTypes,  setDbTypes]      = useState([]);
+  const [dbTitles, setDbTitles]     = useState([]);
 
   // Computed options (library data or fallback)
   const CATS  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : CATS_DEFAULT;
@@ -676,12 +684,14 @@ function TabDesign({ project }) {
 
   const loadCategories = async () => {
     try {
-      const [catRes, typeRes] = await Promise.all([
+      const [catRes, typeRes, titRes] = await Promise.all([
         api.get("/design/categories?type=category"),
         api.get("/design/categories?type=drawing_type"),
+        api.get("/design/titles"),
       ]);
       if (catRes.success  && catRes.data.length)  setDbCats(catRes.data);
-      if (typeRes.success && typeRes.data.length) setDbTypes(typeRes.data);
+      if (typeRes.success && typeRes.data.length)  setDbTypes(typeRes.data);
+      if (titRes.success  && titRes.data.length)   setDbTitles(titRes.data);
     } catch(e) {}
   };
 
@@ -881,16 +891,18 @@ function TabDesign({ project }) {
 
         <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
           {/* Form fields */}
-          {[
-            {label:"Drawing Title *", key:"title", type:"input", placeholder:"e.g. Ground Floor Plan"},
-          ].map(f=>(
-            <div key={f.key} style={{marginBottom:12}}>
-              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>{f.label}</label>
-              <input value={uForm[f.key]} onChange={e=>setUForm(p=>({...p,[f.key]:e.target.value}))}
-                placeholder={f.placeholder}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            </div>
-          ))}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Drawing Title *</label>
+            <input value={uForm.title} onChange={e=>setUForm(p=>({...p,title:e.target.value}))}
+              placeholder="Type or select from library..."
+              list="upload_drawing_titles"
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            <datalist id="upload_drawing_titles">
+              {dbTitles.filter(t=>!uForm.category||t.category===uForm.category).map(t=>(
+                <option key={t.id} value={t.title}/>
+              ))}
+            </datalist>
+          </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
@@ -1208,7 +1220,7 @@ function TabDesign({ project }) {
       {showUpload && <UploadModal />}
       {showRevQ   && <RevisionQueue />}
       {showVer    && <VersionModal drawing={showVer} />}
-      <DesignRequestModal show={showReqForm} onClose={()=>setShowReqForm(false)} editReq={editReq} reqForm={reqForm} setReqForm={setReqForm} onSave={handleSaveRequest} saving={reqSaving}/>
+      <DesignRequestModal show={showReqForm} onClose={()=>setShowReqForm(false)} editReq={editReq} reqForm={reqForm} setReqForm={setReqForm} onSave={handleSaveRequest} saving={reqSaving} dbTitles={dbTitles} dbCats={dbCats} dbTypes={dbTypes}/>
 
       {/* Main tab switcher: Drawings | Requests */}
       <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"2px solid "+T.b1}}>
