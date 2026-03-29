@@ -1264,6 +1264,451 @@ function SubconRateCardSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// BOQ SYSTEM — Construction Types, Cities, Packages, Items, Rate Matrix
+// ═══════════════════════════════════════════════════════════════════════
+
+// ── 1. Construction Types ──────────────────────────────────────────────
+function ConstructionTypeSection() {
+  const { items, loading, save: apiSave, del: apiDel } = useSection("construction-types");
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { name: "", description: "", color: "#2563EB" };
+  const [form, setForm] = useState(emptyForm);
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const openCreate = () => { setEditing(null); setForm(emptyForm); setShowModal(true); };
+  const openEdit = (i) => { setEditing(i); setForm({ name: i.name, description: i.description || "", color: i.color || "#2563EB" }); setShowModal(true); };
+  const save = async () => {
+    if (!form.name.trim()) return alert("Name required");
+    setSaving(true);
+    const res = await apiSave({ name: form.name.trim(), description: form.description, color: form.color }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
+  };
+
+  const COLORS = ["#2563EB","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#06B6D4","#84CC16"];
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search types..."
+          style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, width: 260, fontFamily: "inherit" }} />
+        <button onClick={openCreate}
+          style={{ padding: "9px 20px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          + Add Type
+        </button>
+      </div>
+      {loading ? <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>Loading...</div> : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 12 }}>
+          {filtered.map(item => (
+            <div key={item.id} style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", padding: "16px 18px", borderLeft: "4px solid " + (item.color || "#2563EB"), display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 700, fontSize: 14, color: "#111827" }}>{item.name}</div>
+                {item.description && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{item.description}</div>}
+              </div>
+              <div style={{ display: "flex", gap: 6 }}>
+                <button onClick={() => openEdit(item)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><IcEdit size={15} /></button>
+                <button onClick={() => apiDel(item.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><IcTrash size={15} /></button>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9CA3AF" }}>No construction types found</div>}
+        </div>
+      )}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Construction Type" : "Add Construction Type"} width={440}>
+        <FormField label="Type Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. Residential House, Villa, Commercial" required />
+        <div style={{ height: 12 }} />
+        <FormField label="Description" value={form.description} onChange={v => upd("description", v)} placeholder="Brief description" />
+        <div style={{ height: 12 }} />
+        <div>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", display: "block", marginBottom: 8 }}>Color</label>
+          <div style={{ display: "flex", gap: 8 }}>
+            {COLORS.map(c => (
+              <div key={c} onClick={() => upd("color", c)}
+                style={{ width: 28, height: 28, borderRadius: "50%", background: c, cursor: "pointer", border: form.color === c ? "3px solid #111827" : "3px solid transparent" }} />
+            ))}
+          </div>
+        </div>
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Add Type"} />
+      </Modal>
+    </div>
+  );
+}
+
+// ── 2. Cities ──────────────────────────────────────────────────────────
+function CitySection() {
+  const { items, loading, save: apiSave, del: apiDel } = useSection("cities");
+  const [search, setSearch] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { name: "", state: "Chhattisgarh" };
+  const [form, setForm] = useState(emptyForm);
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const filtered = items.filter(i => i.name.toLowerCase().includes(search.toLowerCase()));
+  const openCreate = () => { setEditing(null); setForm(emptyForm); setShowModal(true); };
+  const openEdit = (i) => { setEditing(i); setForm({ name: i.name, state: i.state || "Chhattisgarh" }); setShowModal(true); };
+  const save = async () => {
+    if (!form.name.trim()) return alert("City name required");
+    setSaving(true);
+    const res = await apiSave({ name: form.name.trim(), state: form.state }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search cities..."
+          style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, width: 260, fontFamily: "inherit" }} />
+        <button onClick={openCreate}
+          style={{ padding: "9px 20px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          + Add City
+        </button>
+      </div>
+      {loading ? <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>Loading...</div> : (
+        <DataTable
+          columns={[
+            { key: "name", label: "City", minW: 150, render: r => <span style={{ fontWeight: 700 }}>{r.name}</span> },
+            { key: "state", label: "State", minW: 150 },
+          ]}
+          data={filtered} onEdit={openEdit} onDelete={r => apiDel(r.id)} emptyMsg="No cities found" />
+      )}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit City" : "Add City"} width={400}>
+        <FormField label="City Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. Raipur" required />
+        <div style={{ height: 12 }} />
+        <FormField label="State" value={form.state} onChange={v => upd("state", v)} placeholder="e.g. Chhattisgarh" />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Add City"} />
+      </Modal>
+    </div>
+  );
+}
+
+// ── 3. Rate Packages ───────────────────────────────────────────────────
+function RatePackageSection() {
+  const { items, loading, save: apiSave, del: apiDel } = useSection("rate-packages");
+  const { items: conTypes } = useSection("construction-types");
+  const [search, setSearch] = useState("");
+  const [filterType, setFilterType] = useState("All");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { name: "", construction_type_id: "", description: "", sqft_rate: 0 };
+  const [form, setForm] = useState(emptyForm);
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const filtered = items.filter(i => {
+    if (filterType !== "All") {
+      const ct = conTypes.find(c => String(c.id) === String(i.construction_type_id));
+      if (!ct || ct.name !== filterType) return false;
+    }
+    return i.name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const openCreate = () => { setEditing(null); setForm({ ...emptyForm, construction_type_id: conTypes[0]?.id || "" }); setShowModal(true); };
+  const openEdit = (i) => { setEditing(i); setForm({ name: i.name, construction_type_id: i.construction_type_id, description: i.description || "", sqft_rate: i.sqft_rate || 0 }); setShowModal(true); };
+  const save = async () => {
+    if (!form.name.trim()) return alert("Package name required");
+    if (!form.construction_type_id) return alert("Select construction type");
+    setSaving(true);
+    const res = await apiSave({ name: form.name.trim(), construction_type_id: form.construction_type_id, description: form.description, sqft_rate: form.sqft_rate }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
+  };
+
+  const getTypeName = (id) => conTypes.find(c => String(c.id) === String(id))?.name || "—";
+  const getTypeColor = (id) => conTypes.find(c => String(c.id) === String(id))?.color || "#6B7280";
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search packages..."
+            style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, width: 200, fontFamily: "inherit" }} />
+          <select value={filterType} onChange={e => setFilterType(e.target.value)}
+            style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }}>
+            <option>All</option>
+            {conTypes.map(c => <option key={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <button onClick={openCreate}
+          style={{ padding: "9px 20px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          + Add Package
+        </button>
+      </div>
+      {loading ? <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>Loading...</div> : (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 12 }}>
+          {filtered.map(pkg => (
+            <div key={pkg.id} style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", padding: "16px 18px", borderTop: "3px solid " + getTypeColor(pkg.construction_type_id) }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+                <div>
+                  <div style={{ fontSize: 11, color: getTypeColor(pkg.construction_type_id), fontWeight: 700, textTransform: "uppercase", marginBottom: 4 }}>{getTypeName(pkg.construction_type_id)}</div>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: "#111827" }}>{pkg.name}</div>
+                  {pkg.description && <div style={{ fontSize: 12, color: "#6B7280", marginTop: 3 }}>{pkg.description}</div>}
+                  {pkg.sqft_rate > 0 && <div style={{ fontSize: 13, fontWeight: 700, color: "#2563EB", marginTop: 6 }}>Rs.{Number(pkg.sqft_rate).toLocaleString()}/sqft</div>}
+                </div>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button onClick={() => openEdit(pkg)} style={{ background: "none", border: "none", cursor: "pointer", color: "#6B7280" }}><IcEdit size={15} /></button>
+                  <button onClick={() => apiDel(pkg.id)} style={{ background: "none", border: "none", cursor: "pointer", color: "#EF4444" }}><IcTrash size={15} /></button>
+                </div>
+              </div>
+            </div>
+          ))}
+          {filtered.length === 0 && <div style={{ gridColumn: "1/-1", textAlign: "center", padding: 40, color: "#9CA3AF" }}>No packages found</div>}
+        </div>
+      )}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Package" : "Add Rate Package"} width={480}>
+        <div style={{ display: "flex", gap: 16, marginBottom: 14 }}>
+          <FormSelect label="Construction Type" value={String(form.construction_type_id)} onChange={v => upd("construction_type_id", v)}
+            options={conTypes.map(c => ({ value: String(c.id), label: c.name }))} half required />
+          <FormField label="Package Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. Basic, Standard, Premium" half required />
+        </div>
+        <div style={{ display: "flex", gap: 16, marginBottom: 14 }}>
+          <FormField label="Base Rate (Rs./sqft)" value={form.sqft_rate || ""} onChange={v => upd("sqft_rate", parseFloat(v) || 0)} type="number" half />
+          <FormField label="Description" value={form.description} onChange={v => upd("description", v)} placeholder="e.g. Standard finishing" half />
+        </div>
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Add Package"} />
+      </Modal>
+    </div>
+  );
+}
+
+// ── 4. BOQ Items (common items with base rate) ─────────────────────────
+function BOQItemsSection() {
+  const { items, loading, save: apiSave, del: apiDel } = useSection("boq-items");
+  const { items: uomList } = useSection("uom");
+  const { items: workCats } = useSection("work-categories");
+  const [search, setSearch] = useState("");
+  const [filterCat, setFilterCat] = useState("All");
+  const [showModal, setShowModal] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { name: "", category: "", unit: "", base_rate: 0, description: "" };
+  const [form, setForm] = useState(emptyForm);
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const uomOptions = uomList.length > 0 ? uomList.map(u => u.name) : ["Sq.Ft","CFT","Running Ft","Kg","Point","Unit","Lump Sum"];
+  const catOptions = workCats.map(c => c.name);
+  const allCats = ["All", ...catOptions];
+
+  const filtered = items.filter(i => {
+    if (filterCat !== "All" && i.category !== filterCat) return false;
+    return i.name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const openCreate = () => { setEditing(null); setForm({ ...emptyForm, category: catOptions[0] || "", unit: uomOptions[0] || "" }); setShowModal(true); };
+  const openEdit = (i) => { setEditing(i); setForm({ name: i.name, category: i.category || "", unit: i.unit || "", base_rate: i.base_rate || 0, description: i.description || "" }); setShowModal(true); };
+  const save = async () => {
+    if (!form.name.trim()) return alert("Item name required");
+    setSaving(true);
+    const res = await apiSave({ name: form.name.trim(), category: form.category, unit: form.unit, base_rate: form.base_rate, description: form.description }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
+  };
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search items..."
+            style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, width: 200, fontFamily: "inherit" }} />
+          <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
+            style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }}>
+            {allCats.map(c => <option key={c}>{c}</option>)}
+          </select>
+        </div>
+        <button onClick={openCreate}
+          style={{ padding: "9px 20px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          + Add Item
+        </button>
+      </div>
+      {loading ? <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>Loading...</div> : (
+        <DataTable
+          columns={[
+            { key: "name", label: "Item Name", minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+            { key: "category", label: "Category", minW: 130, render: r => <Badge text={r.category || "—"} color="#7C3AED" bg="#EDE9FE" /> },
+            { key: "unit", label: "Unit", minW: 80 },
+            { key: "base_rate", label: "Base Rate", minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: "#2563EB" }}>Rs.{Number(r.base_rate||0).toLocaleString()}</span> },
+            { key: "description", label: "Description", minW: 150, render: r => <span style={{ fontSize: 12, color: "#6B7280" }}>{r.description || "—"}</span> },
+          ]}
+          data={filtered} onEdit={openEdit} onDelete={r => apiDel(r.id)} emptyMsg="No BOQ items found" />
+      )}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit BOQ Item" : "Add BOQ Item"} width={500}>
+        <div style={{ display: "flex", gap: 16, marginBottom: 14 }}>
+          <FormField label="Item Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. RCC Footing M25" half required />
+          <FormSelect label="Category" value={form.category} onChange={v => upd("category", v)} options={catOptions} half required />
+        </div>
+        <div style={{ display: "flex", gap: 16, marginBottom: 14 }}>
+          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={uomOptions} half />
+          <FormField label="Base Rate (Rs.)" value={form.base_rate || ""} onChange={v => upd("base_rate", parseFloat(v) || 0)} type="number" half />
+        </div>
+        <FormField label="Description / Scope" value={form.description} onChange={v => upd("description", v)} placeholder="What is included in this item?" />
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Add Item"} />
+      </Modal>
+    </div>
+  );
+}
+
+// ── 5. Rate Matrix (Package + City = item rates) ───────────────────────
+function RateMatrixSection() {
+  const { items: conTypes } = useSection("construction-types");
+  const { items: cities } = useSection("cities");
+  const { items: packages } = useSection("rate-packages");
+  const { items: boqItems } = useSection("boq-items");
+  const [selectedType, setSelectedType] = useState("");
+  const [selectedPkg, setSelectedPkg] = useState("");
+  const [selectedCity, setSelectedCity] = useState("");
+  const [rates, setRates] = useState({});
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const filteredPkgs = packages.filter(p => !selectedType || String(p.construction_type_id) === String(selectedType));
+
+  useEffect(() => {
+    if (conTypes.length && !selectedType) setSelectedType(String(conTypes[0]?.id || ""));
+  }, [conTypes]);
+  useEffect(() => {
+    if (filteredPkgs.length && !filteredPkgs.find(p => String(p.id) === selectedPkg))
+      setSelectedPkg(String(filteredPkgs[0]?.id || ""));
+  }, [selectedType, packages]);
+  useEffect(() => {
+    if (cities.length && !selectedCity) setSelectedCity(String(cities[0]?.id || ""));
+  }, [cities]);
+
+  // Load existing rates when pkg+city changes
+  useEffect(() => {
+    if (!selectedPkg || !selectedCity) return;
+    setLoading(true);
+    api.get("/library/rate-matrix?package_id=" + selectedPkg + "&city_id=" + selectedCity)
+      .then(res => {
+        if (res.success) {
+          const rMap = {};
+          (res.data || []).forEach(r => { rMap[r.item_id] = r.rate; });
+          setRates(rMap);
+        }
+      }).catch(() => {}).finally(() => setLoading(false));
+  }, [selectedPkg, selectedCity]);
+
+  const saveAll = async () => {
+    if (!selectedPkg || !selectedCity) return alert("Select package and city");
+    setSaving(true);
+    const payload = boqItems.map(item => ({
+      item_id: item.id,
+      rate: parseFloat(rates[item.id] || item.base_rate || 0),
+    }));
+    const res = await api.post("/library/rate-matrix/bulk", { package_id: selectedPkg, city_id: selectedCity, items: payload });
+    setSaving(false);
+    if (res.success) alert("Rates saved!");
+    else alert(res.message || "Save failed");
+  };
+
+  // Group items by category
+  const grouped = boqItems.reduce((acc, item) => {
+    const cat = item.category || "General";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(item);
+    return acc;
+  }, {});
+
+  const selectedCityName = cities.find(c => String(c.id) === selectedCity)?.name || "";
+  const selectedPkgName = packages.find(p => String(p.id) === selectedPkg)?.name || "";
+
+  return (
+    <div>
+      {/* Selectors */}
+      <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", padding: "16px 20px", marginBottom: 16, display: "flex", gap: 16, flexWrap: "wrap", alignItems: "flex-end" }}>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Construction Type</label>
+          <select value={selectedType} onChange={e => setSelectedType(e.target.value)}
+            style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }}>
+            {conTypes.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", display: "block", marginBottom: 6 }}>Package</label>
+          <select value={selectedPkg} onChange={e => setSelectedPkg(e.target.value)}
+            style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }}>
+            {filteredPkgs.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+          </select>
+        </div>
+        <div style={{ flex: 1, minWidth: 180 }}>
+          <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", display: "block", marginBottom: 6 }}>City</label>
+          <select value={selectedCity} onChange={e => setSelectedCity(e.target.value)}
+            style={{ width: "100%", padding: "9px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }}>
+            {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </div>
+        <button onClick={saveAll} disabled={saving}
+          style={{ padding: "10px 24px", background: saving ? "#9CA3AF" : "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer", whiteSpace: "nowrap" }}>
+          {saving ? "Saving..." : "Save All Rates"}
+        </button>
+      </div>
+
+      {/* Info banner */}
+      {selectedPkg && selectedCity && (
+        <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8, padding: "10px 16px", marginBottom: 14, fontSize: 13, color: "#1E40AF" }}>
+          Editing rates for <strong>{selectedPkgName}</strong> package in <strong>{selectedCityName}</strong> — 
+          blank field uses base rate (shown as placeholder)
+        </div>
+      )}
+
+      {loading ? <div style={{ textAlign: "center", padding: 40, color: "#9CA3AF" }}>Loading rates...</div> : (
+        boqItems.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 60, color: "#9CA3AF" }}>Add BOQ Items first to set rates</div>
+        ) : (
+          Object.entries(grouped).map(([cat, catItems]) => (
+            <div key={cat} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "#7C3AED", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8, paddingBottom: 6, borderBottom: "2px solid #EDE9FE" }}>
+                {cat}
+              </div>
+              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                <thead>
+                  <tr style={{ background: "#F9FAFB" }}>
+                    <th style={{ padding: "8px 12px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Item</th>
+                    <th style={{ padding: "8px 12px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 80 }}>Unit</th>
+                    <th style={{ padding: "8px 12px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 120 }}>Base Rate</th>
+                    <th style={{ padding: "8px 12px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#2563EB", textTransform: "uppercase", width: 160 }}>Rate for {selectedCityName || "City"}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {catItems.map((item, idx) => (
+                    <tr key={item.id} style={{ background: idx % 2 === 0 ? "white" : "#F9FAFB", borderBottom: "1px solid #F3F4F6" }}>
+                      <td style={{ padding: "10px 12px", fontSize: 13, fontWeight: 500, color: "#111827" }}>
+                        {item.name}
+                        {item.description && <span style={{ fontSize: 11, color: "#9CA3AF", marginLeft: 8 }}>{item.description}</span>}
+                      </td>
+                      <td style={{ padding: "10px 12px", textAlign: "center", fontSize: 12, color: "#6B7280" }}>{item.unit}</td>
+                      <td style={{ padding: "10px 12px", textAlign: "right", fontSize: 13, color: "#6B7280" }}>Rs.{Number(item.base_rate||0).toLocaleString()}</td>
+                      <td style={{ padding: "10px 12px", textAlign: "right" }}>
+                        <input
+                          type="number"
+                          value={rates[item.id] !== undefined ? rates[item.id] : ""}
+                          placeholder={String(item.base_rate || 0)}
+                          onChange={e => setRates(p => ({ ...p, [item.id]: e.target.value }))}
+                          style={{ width: 110, padding: "6px 10px", borderRadius: 6, border: "1.5px solid " + (rates[item.id] ? "#2563EB" : "#E5E7EB"), fontSize: 13, textAlign: "right", fontFamily: "inherit", outline: "none" }}
+                        />
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ))
+        )
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // 6. CLIENT BOQ RATE CARD
 // ═══════════════════════════════════════════════════════════════════════
 function ClientBOQSection({ dbProjects = [] }) {
@@ -1961,7 +2406,11 @@ const masterSections = [
   { id: "subcon",        label: "Subcontractors",      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
   { id: "subcon_rate",   label: "Subcon Rate Card",    Icon: IcDollar,    Comp: SubconRateCardSection,    section: null, countKey: null, color: T.teal },
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
-  { id: "boq",           label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: "boq", color: T.indigo },
+  { id: "con_types",     label: "Construction Types",  Icon: IcLayers,    Comp: ConstructionTypeSection,  section: "RATES & BOQ", countKey: null, color: T.blue },
+  { id: "cities",        label: "Cities",              Icon: IcGrid,      Comp: CitySection,              section: null, countKey: null, color: T.teal },
+  { id: "rate_pkgs",     label: "Rate Packages",       Icon: IcClipboard, Comp: RatePackageSection,       section: null, countKey: null, color: T.indigo },
+  { id: "boq_items",     label: "BOQ Items",           Icon: IcHash,      Comp: BOQItemsSection,          section: null, countKey: null, color: T.purple },
+  { id: "rate_matrix",   label: "Rate Matrix",         Icon: IcDollar,    Comp: RateMatrixSection,        section: null, countKey: null, color: T.green },
   { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", countKey: "equipment", color: T.rose },
   { id: "drawing_titles", label: "Drawing Titles",     Icon: IcFile,      Comp: DrawingTitlesSection,     section: "DESIGN LIBRARY", countKey: "drawing_titles", color: T.blue },
   { id: "design_cats",   label: "Categories & Types", Icon: IcLayers,    Comp: DesignCategorySection,    section: null, countKey: "design_cats", color: T.purple },
