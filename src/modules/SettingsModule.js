@@ -331,7 +331,7 @@ function RolesAccess() {
     else alert(res.message || "Save failed");
   };
   const toggleUserProject = (pid) => {
-    setUserForm(p => ({ ...p, projects: p.projects.includes(pid) ? p.projects.filter(x => x !== pid) : [...p.projects, pid] }));
+    setUserForm(p => ({ ...p, projects: (p.projects||[]).includes(pid) ? (p.projects||[]).filter(x => x !== pid) : [...(p.projects||[]), pid] }));
   };
 
   // Permission matrix
@@ -536,7 +536,7 @@ function RolesAccess() {
                       return (
                         <td key={p.id} style={{ textAlign: "center", padding: "8px 6px" }}>
                           <button onClick={() => {
-                            setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, projects: has ? usr.projects.filter(x => x !== p.id) : [...usr.projects, p.id] } : usr));
+                            setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, projects: has ? (usr.projects||[]).filter(x => x !== p.id) : [...(usr.projects||[]), p.id] } : usr));
                           }}
                             style={{ width: 26, height: 26, borderRadius: 6, background: has ? T.greenSoft : T.borderLight, border: `1.5px solid ${has ? T.green + "55" : "transparent"}`, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
                             {has && <IcCheck size={13} color={T.green} strokeWidth={2.5} />}
