@@ -495,7 +495,7 @@ function RolesAccess() {
                 </div>
               </div>
               <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", justifyContent: "flex-end" }}>
-                <Badge text={`${u.projects.length} projects`} color={T.textMid} bg={T.borderLight} />
+                <Badge text={`${(u.projects||[]).length} projects`} color={T.textMid} bg={T.borderLight} />
                 <Badge text={u.is_active===0?"Inactive":"Active"} color={u.is_active===0?T.amber:T.green} bg={u.is_active===0?T.amberSoft:T.greenSoft} />
                 <button onClick={() => openEditUser(u)} style={{ background: T.borderLight, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
                   <IcEdit size={14} color={T.textMid} />
@@ -532,7 +532,7 @@ function RolesAccess() {
                       </div>
                     </td>
                     {allProjects.map(p => {
-                      const has = u.projects.includes(p.id);
+                      const has = (u.projects||[]).includes(p.id);
                       return (
                         <td key={p.id} style={{ textAlign: "center", padding: "8px 6px" }}>
                           <button onClick={() => {
