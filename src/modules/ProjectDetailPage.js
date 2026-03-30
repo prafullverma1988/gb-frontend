@@ -2744,110 +2744,496 @@ function PTGantt({tasks}){
 }
 
 // ── PT Task Detail ────────────────────────────────────────────────
-function PTTaskDetail({task,allTasks,onClose,onUpdate}){
-  const [tab,setTab]=useState("overview");
-  const [prog,setProg]=useState(task.progress);
-  const [comment,setComment]=useState("");
-  const [comments,setComments]=useState([{id:1,by:"Vijay Sahu",text:"Slab curing started.",date:"10 Mar"},{id:2,by:"Prafull",text:"Check alignment before pour.",date:"12 Mar"}]);
+function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
+  const [tab,setTab]=useState("progress");
+  const [prog,setProg]=useState(task.progress||0);
+  const [saving,setSaving]=useState(false);
+
+  // Materials state
+  const [materials,setMaterials]=useState([]);
+  const [showMatForm,setShowMatForm]=useState(false);
+  const [matForm,setMatForm]=useState({material_name:"",required_qty:"",used_qty:"",unit:"Bag",remark:""});
+
+  // Labour state
+  const [labours,setLabours]=useState([]);
+  const [showLabForm,setShowLabForm]=useState(false);
+  const [labForm,setLabForm]=useState({labour_name:"",role:"Mason",count:1,work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});
+
+  // Site Photos state
+  const [photos,setPhotos]=useState([]);
+  const [uploading,setUploading]=useState(false);
+
+  // Issues state
+  const [issues,setIssues]=useState([]);
+  const [showIssueForm,setShowIssueForm]=useState(false);
+  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:""});
+
+  // Comments state
+  const [comments,setComments]=useState([]);
+  const [commentText,setCommentText]=useState("");
+
+  // Load data on tab change
+  useEffect(()=>{
+    if(tab==="materials") api.get("/tasks/"+task.id+"/materials").then(r=>{if(r.success)setMaterials(r.data||[]);}).catch(()=>{});
+    if(tab==="labour")    api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
+    if(tab==="photos")    api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
+    if(tab==="issues")    api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+    if(tab==="comments")  api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
+  },[tab]);
+
+  // Auto status from progress
+  const autoStatus=(p)=>{ if(p===0) return "Not Started"; if(p===100) return "Completed"; return "Ongoing"; };
+
   const ss={"Completed":{c:T.grn,bg:T.grnL,brd:T.grnM},"Ongoing":{c:T.blu,bg:T.bluL,brd:T.bluM},"Not Started":{c:T.slt,bg:T.sltL,brd:T.b2},"Hold":{c:T.amb,bg:T.ambL,brd:T.ambM}};
-  const sm=ss[task.status]||ss["Not Started"];
-  const depTasks=task.dependencies?.map(d=>allTasks.find(t=>t.id===d)).filter(Boolean)||[];
+  const sm=ss[autoStatus(prog)]||ss["Not Started"];
   const delay=ptDelayDays(task);
+
+  const UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos"];
+  const ROLES=["Mason","Labour","Helper","Electrician","Plumber","Carpenter","Painter","Supervisor","Other"];
+  const PRIORITIES=["Low","Medium","High","Critical"];
+  const ISSUE_STATUS=["Open","In Progress","Resolved","Closed"];
+  const issueColors={"Open":{c:T.red,bg:T.redL},"In Progress":{c:T.blu,bg:T.bluL},"Resolved":{c:T.grn,bg:T.grnL},"Closed":{c:T.slt,bg:T.sltL}};
+  const priColors={"Low":{c:T.slt,bg:T.sltL},"Medium":{c:T.amb,bg:T.ambL},"High":{c:T.red,bg:T.redL},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
+
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(560px,92vw)",background:T.bg,zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
-      <div style={{background:"#0D1B2A",padding:"13px 16px",flexShrink:0}}>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(580px,96vw)",background:T.bg,zIndex:301,boxShadow:"-8px 0 40px rgba(0,0,0,0.25)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+
+      {/* ── HEADER ── */}
+      <div style={{background:"#0D1B2A",padding:"14px 16px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
           <div style={{flex:1}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}>
               <span style={{fontSize:10,color:"rgba(255,255,255,0.4)",fontFamily:"monospace"}}>{task.no}</span>
-              <span style={{background:sm.bg,color:sm.c,fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:20}}>{task.status}</span>
-              {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>DHYAN</span>}
-              {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>{delay}d delayed</span>}
+              <span style={{background:sm.bg,color:sm.c,fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{autoStatus(prog)}</span>
+              {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:20}}>DHYAN</span>}
+              {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{delay}d delayed</span>}
             </div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>{task.name}</div>
-            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:3}}>{task.category} · @{task.assignee} · {task.baseStart} → {task.baseEnd}</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white",lineHeight:1.3}}>{task.name}</div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:4}}>{task.category}{task.assignee?" · @"+task.assignee:""}{task.baseStart?" · "+task.baseStart+" → "+(task.baseEnd||"?"):""}</div>
           </div>
-          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg></button>
         </div>
+        {/* Progress bar */}
         <div style={{marginTop:10}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>Progress</span><span style={{fontSize:12,fontWeight:700,color:task.progress===100?T.grn:"white"}}>{task.progress}%</span></div>
-          <div style={{height:5,background:"rgba(255,255,255,0.15)",borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${task.progress}%`,background:task.progress===100?T.grn:T.blu,borderRadius:3}}/></div>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>Progress</span>
+            <span style={{fontSize:12,fontWeight:700,color:prog===100?T.grn:"white"}}>{prog}%</span>
+          </div>
+          <div style={{height:5,background:"rgba(255,255,255,0.15)",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",width:prog+"%",background:prog===100?T.grn:T.blu,borderRadius:3,transition:"width .3s"}}/>
+          </div>
         </div>
       </div>
+
+      {/* DHYAN banner */}
       {task.dhyanRakhen&&<div style={{padding:"8px 14px",background:"#FEF3C7",borderBottom:"1px solid #FDE68A",flexShrink:0,display:"flex",gap:7,alignItems:"flex-start"}}>
-        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth={2} style={{marginTop:1,flexShrink:0}}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/></svg>
+        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="#92400E" strokeWidth={2} style={{marginTop:1,flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
         <div><div style={{fontSize:9.5,fontWeight:700,color:"#78350F",textTransform:"uppercase",letterSpacing:".5px",marginBottom:2}}>DHYAN RAKHEN</div><div style={{fontSize:11.5,color:"#92400E",lineHeight:1.5}}>{task.dhyanRakhen}</div></div>
       </div>}
-      <div style={{background:T.surface,borderBottom:`1px solid ${T.b1}`,padding:"0 14px",flexShrink:0,display:"flex",gap:2}}>
-        {[{id:"overview",l:"Overview"},{id:"progress",l:"Progress"},{id:"comments",l:`Comments (${comments.length})`}].map(t=>(
+
+      {/* ── TABS ── */}
+      <div style={{background:T.surface,borderBottom:"1px solid "+T.b1,padding:"0 12px",flexShrink:0,display:"flex",gap:0,overflowX:"auto"}}>
+        {[
+          {id:"progress",l:"Progress"},
+          {id:"materials",l:"Materials"},
+          {id:"labour",l:"Labour"},
+          {id:"photos",l:"Site Photos"},
+          {id:"issues",l:"Issues"},
+          {id:"comments",l:"Comments"},
+        ].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:"9px 11px",border:"none",background:"none",fontSize:12,fontWeight:tab===t.id?700:400,color:tab===t.id?T.blu:T.t3,borderBottom:tab===t.id?`2px solid ${T.blu}`:"2px solid transparent",cursor:"pointer"}}>
+            style={{padding:"10px 12px",border:"none",background:"none",fontSize:12.5,fontWeight:tab===t.id?700:400,color:tab===t.id?T.blu:T.t3,borderBottom:tab===t.id?"2px solid "+T.blu:"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
             {t.l}
           </button>
         ))}
       </div>
-      <div style={{flex:1,overflowY:"auto",padding:"13px 15px"}}>
-        {tab==="overview"&&(
+
+      {/* ── CONTENT ── */}
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+
+        {/* ── PROGRESS ── */}
+        {tab==="progress"&&(
           <div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:12}}>
-              {[{l:"Baseline",v:`${task.baseStart} → ${task.baseEnd}`},{l:"Actual",v:`${task.actualStart||"Not started"} → ${task.actualEnd||"Ongoing"}`},{l:"Duration",v:`${task.duration} days`},{l:"Last Update",v:task.lastUpdate||"—"}].map(({l,v})=>(
-                <div key={l} style={{background:T.surface,borderRadius:6,padding:"8px 11px",border:`1px solid ${T.b1}`}}>
-                  <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{l}</div>
-                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{v}</div>
+            <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:12}}>Update Progress</div>
+            <div style={{background:T.surface,borderRadius:10,padding:"18px",border:"1px solid "+T.b1,marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                <span style={{fontSize:13,fontWeight:600,color:T.t1}}>Completion</span>
+                <span style={{fontSize:20,fontWeight:800,color:prog===100?T.grn:prog>0?T.blu:T.slt}}>{prog}%</span>
+              </div>
+              <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}
+                style={{width:"100%",accentColor:T.blu,height:6,cursor:"pointer"}}/>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                <span style={{fontSize:10,color:T.t4}}>0%</span>
+                <span style={{fontSize:10,color:T.t4}}>50%</span>
+                <span style={{fontSize:10,color:T.t4}}>100%</span>
+              </div>
+            </div>
+            {/* Status preview */}
+            <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:sm.bg,border:"1.5px solid "+sm.brd,borderRadius:8,marginBottom:16}}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={sm.c} strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
+              <div>
+                <div style={{fontSize:11,color:sm.c,fontWeight:700}}>Status will be set to: {autoStatus(prog)}</div>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>
+                  {prog===0?"Task not started yet":prog===100?"Task completed!":"Task in progress"}
                 </div>
+              </div>
+            </div>
+            {/* Quick buttons */}
+            <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
+              {[0,25,50,75,100].map(p=>(
+                <button key={p} onClick={()=>setProg(p)}
+                  style={{padding:"6px 14px",borderRadius:6,border:"1.5px solid "+(prog===p?T.blu:T.b1),background:prog===p?T.bluL:"white",color:prog===p?T.blu:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                  {p}%
+                </button>
               ))}
             </div>
-            {depTasks.length>0&&<div style={{marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Dependencies ({depTasks.length})</div>
-              {depTasks.map(dt=>{const ds=ss[dt.status]||ss["Not Started"];return(
-                <div key={dt.id} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 11px",background:T.surface,borderRadius:6,border:`1px solid ${T.b1}`,marginBottom:5}}>
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2}><path d="M5 12h14M12 5l7 7-7 7"/></svg>
-                  <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.t1}}>{dt.no} — {dt.name}</div><div style={{fontSize:10.5,color:T.t4}}>{dt.status} · {dt.baseEnd}</div></div>
-                  <span style={{background:ds.bg,color:ds.c,fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:20}}>{dt.status}</span>
+            <button onClick={async()=>{
+              setSaving(true);
+              const res=await api.put("/tasks/"+task.id,{progress:prog});
+              setSaving(false);
+              if(res.success){onUpdate(task.id,{progress:prog,status:autoStatus(prog)});onClose();}
+              else alert(res.message||"Save failed");
+            }} disabled={saving}
+              style={{width:"100%",padding:"12px",borderRadius:8,background:saving?"#9CA3AF":T.blu,color:"white",fontSize:14,fontWeight:700,border:"none",cursor:saving?"default":"pointer"}}>
+              {saving?"Saving...":"Save Progress"}
+            </button>
+          </div>
+        )}
+
+        {/* ── MATERIALS ── */}
+        {tab==="materials"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>Materials</div>
+              <button onClick={()=>setShowMatForm(s=>!s)}
+                style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                {showMatForm?"Cancel":"+ Add"}
+              </button>
+            </div>
+            {showMatForm&&(
+              <div style={{background:T.surface,borderRadius:8,padding:"13px",border:"1px solid "+T.b1,marginBottom:12}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                  <div style={{gridColumn:"1/-1"}}>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Material Name *</label>
+                    <input value={matForm.material_name} onChange={e=>setMatForm(p=>({...p,material_name:e.target.value}))}
+                      placeholder="e.g. OPC Cement 53 Grade"
+                      style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Required Qty</label>
+                    <input type="number" value={matForm.required_qty} onChange={e=>setMatForm(p=>({...p,required_qty:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Used Qty</label>
+                    <input type="number" value={matForm.used_qty} onChange={e=>setMatForm(p=>({...p,used_qty:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Unit</label>
+                    <select value={matForm.unit} onChange={e=>setMatForm(p=>({...p,unit:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",fontFamily:"inherit"}}>
+                      {UNITS.map(u=><option key={u}>{u}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Remark</label>
+                    <input value={matForm.remark} onChange={e=>setMatForm(p=>({...p,remark:e.target.value}))}
+                      placeholder="Optional"
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
                 </div>
-              );})}
+                <button onClick={async()=>{
+                  if(!matForm.material_name.trim()) return alert("Material name required");
+                  const res=await api.post("/tasks/"+task.id+"/materials",matForm);
+                  if(res.success){setMaterials(p=>[...p,res.data]);setMatForm({material_name:"",required_qty:"",used_qty:"",unit:"Bag",remark:""});setShowMatForm(false);}
+                  else alert(res.message||"Failed");
+                }} style={{width:"100%",padding:"9px",borderRadius:6,background:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Add Material</button>
+              </div>
+            )}
+            {materials.length===0?<div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>No materials added yet</div>
+            :materials.map((m,i)=>{
+              const pct=m.required_qty>0?Math.min(100,Math.round((m.used_qty/m.required_qty)*100)):0;
+              const over=m.used_qty>m.required_qty;
+              return(
+                <div key={m.id} style={{background:T.surface,borderRadius:8,padding:"12px 13px",border:"1px solid "+T.b1,marginBottom:8,borderLeft:"3px solid "+(over?T.red:pct===100?T.grn:T.blu)}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{m.material_name}</div>
+                      <div style={{fontSize:11,color:T.t3,marginTop:2}}>Required: {m.required_qty} {m.unit} · Used: <span style={{fontWeight:700,color:over?T.red:T.grn}}>{m.used_qty} {m.unit}</span></div>
+                      {m.remark&&<div style={{fontSize:11,color:T.t4,marginTop:2}}>{m.remark}</div>}
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginLeft:10}}>
+                      <span style={{fontSize:12,fontWeight:700,color:over?T.red:pct===100?T.grn:T.blu}}>{pct}%</span>
+                      <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/materials/"+m.id);if(r.success)setMaterials(p=>p.filter(x=>x.id!==m.id));}}
+                        style={{background:"none",border:"none",cursor:"pointer",color:T.red,display:"flex",padding:2}}>
+                        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                      </button>
+                    </div>
+                  </div>
+                  {m.required_qty>0&&<div style={{marginTop:8,height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
+                    <div style={{height:"100%",width:Math.min(100,pct)+"%",background:over?T.red:pct===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/>
+                  </div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ── LABOUR ── */}
+        {tab==="labour"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>Labour Entries</div>
+              <button onClick={()=>setShowLabForm(s=>!s)}
+                style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                {showLabForm?"Cancel":"+ Add"}
+              </button>
+            </div>
+            {showLabForm&&(
+              <div style={{background:T.surface,borderRadius:8,padding:"13px",border:"1px solid "+T.b1,marginBottom:12}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Labour Name *</label>
+                    <input value={labForm.labour_name} onChange={e=>setLabForm(p=>({...p,labour_name:e.target.value}))}
+                      placeholder="e.g. Ramesh Kumar"
+                      style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Role</label>
+                    <select value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",fontFamily:"inherit"}}>
+                      {ROLES.map(r=><option key={r}>{r}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Count</label>
+                    <input type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Work Date</label>
+                    <input type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Hours</label>
+                    <input type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Remark</label>
+                    <input value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  </div>
+                </div>
+                <button onClick={async()=>{
+                  if(!labForm.labour_name.trim()) return alert("Labour name required");
+                  const res=await api.post("/tasks/"+task.id+"/labour",labForm);
+                  if(res.success){setLabours(p=>[res.data,...p]);setLabForm({labour_name:"",role:"Mason",count:1,work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});setShowLabForm(false);}
+                  else alert(res.message||"Failed");
+                }} style={{width:"100%",padding:"9px",borderRadius:6,background:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Add Labour Entry</button>
+              </div>
+            )}
+            {/* Summary */}
+            {labours.length>0&&<div style={{display:"flex",gap:10,marginBottom:12}}>
+              {[{l:"Total Workers",v:labours.reduce((s,l)=>s+(l.count||1),0),c:T.blu},{l:"Total Man-Hours",v:labours.reduce((s,l)=>s+(l.hours||8)*(l.count||1),0),c:T.grn},{l:"Entries",v:labours.length,c:T.slt}].map(s=>(
+                <div key={s.l} style={{flex:1,background:T.surface,borderRadius:7,padding:"9px 11px",border:"1px solid "+T.b1,borderTop:"3px solid "+s.c,textAlign:"center"}}>
+                  <div style={{fontSize:17,fontWeight:800,color:s.c}}>{s.v}</div>
+                  <div style={{fontSize:9.5,color:T.t4,marginTop:2}}>{s.l}</div>
+                </div>
+              ))}
+            </div>}
+            {labours.length===0?<div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>No labour entries yet</div>
+            :labours.map(l=>(
+              <div key={l.id} style={{background:T.surface,borderRadius:8,padding:"12px 13px",border:"1px solid "+T.b1,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                    <div style={{width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,"+T.blu+","+T.pur+")",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:11,fontWeight:700,flexShrink:0}}>{l.labour_name.charAt(0)}</div>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{l.labour_name}</div>
+                      <div style={{fontSize:11,color:T.t3}}>{l.role} · {l.count} workers · {l.hours}h</div>
+                    </div>
+                  </div>
+                  <div style={{fontSize:11,color:T.t4,marginLeft:36}}>{l.work_date}{l.remark?" · "+l.remark:""}</div>
+                </div>
+                <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/labour/"+l.id);if(r.success)setLabours(p=>p.filter(x=>x.id!==l.id));}}
+                  style={{background:"none",border:"none",cursor:"pointer",color:T.red,display:"flex",padding:4}}>
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* ── SITE PHOTOS ── */}
+        {tab==="photos"&&(
+          <div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>Site Photos</div>
+              <label style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                {uploading?"Uploading...":"+ Upload"}
+                <input type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={async(e)=>{
+                  const file=e.target.files[0]; if(!file) return;
+                  setUploading(true);
+                  // Get geolocation
+                  let lat=null,lng=null;
+                  if(navigator.geolocation){
+                    await new Promise(resolve=>navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lng=p.coords.longitude;resolve();},resolve,{timeout:5000}));
+                  }
+                  // Upload to Cloudinary
+                  const fd=new FormData(); fd.append("file",file); fd.append("upload_preset","gb_buildcon_drawings"); fd.append("folder","site_photos");
+                  try{
+                    const cr=await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload",{method:"POST",body:fd});
+                    const cd=await cr.json();
+                    const res=await api.post("/tasks/"+task.id+"/photos",{photo_url:cd.secure_url,caption:"",lat,lng});
+                    if(res.success) setPhotos(p=>[res.data,...p]);
+                  }catch(e){alert("Upload failed");}
+                  setUploading(false);
+                }}/>
+              </label>
+            </div>
+            {photos.length===0?<div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>No site photos yet — tap Upload to add</div>
+            :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {photos.map(p=>(
+                <div key={p.id} style={{background:T.surface,borderRadius:8,overflow:"hidden",border:"1px solid "+T.b1,position:"relative"}}>
+                  <img src={p.photo_url} alt="site" style={{width:"100%",height:130,objectFit:"cover",display:"block"}}/>
+                  {(p.lat||p.lng)&&<div style={{position:"absolute",top:6,right:6,background:"rgba(0,0,0,0.65)",borderRadius:20,padding:"3px 8px",display:"flex",alignItems:"center",gap:4}}>
+                    <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
+                    <span style={{fontSize:9,color:"white",fontFamily:"monospace"}}>{Number(p.lat).toFixed(4)}, {Number(p.lng).toFixed(4)}</span>
+                  </div>}
+                  <div style={{padding:"7px 9px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:10.5,color:T.t3}}>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
+                    <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}
+                      style={{background:"none",border:"none",cursor:"pointer",color:T.red,display:"flex",padding:2}}>
+                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    </button>
+                  </div>
+                </div>
+              ))}
             </div>}
           </div>
         )}
-        {tab==="progress"&&(
+
+        {/* ── ISSUES ── */}
+        {tab==="issues"&&(
           <div>
-            <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Update Progress — {prog}%</div>
-            <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:8}}>
-              <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))} style={{flex:1,accentColor:T.blu}}/>
-              <span style={{fontSize:14,fontWeight:700,color:T.blu,minWidth:36,textAlign:"right"}}>{prog}%</span>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>Issues ({issues.length})</div>
+              <button onClick={()=>setShowIssueForm(s=>!s)}
+                style={{padding:"6px 14px",borderRadius:6,background:T.red,color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                {showIssueForm?"Cancel":"+ Create Issue"}
+              </button>
             </div>
-            <div style={{height:7,background:T.b1,borderRadius:4,overflow:"hidden",marginBottom:12}}><div style={{height:"100%",width:`${prog}%`,background:prog===100?T.grn:T.blu,borderRadius:4,transition:"width .3s"}}/></div>
-            <button onClick={()=>{onUpdate(task.id,{progress:prog,status:prog===100?"Completed":"Ongoing"});onClose();}}
-              style={{width:"100%",padding:"10px",borderRadius:7,background:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Save Progress Update</button>
+            {showIssueForm&&(
+              <div style={{background:"#FFF5F5",borderRadius:8,padding:"13px",border:"1.5px solid "+T.redM,marginBottom:12}}>
+                <div style={{marginBottom:8}}>
+                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Issue Title *</label>
+                  <input value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))}
+                    placeholder="Describe the issue briefly"
+                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.redM,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                <div style={{marginBottom:8}}>
+                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Description</label>
+                  <textarea value={issueForm.description} onChange={e=>setIssueForm(p=>({...p,description:e.target.value}))} rows={2} placeholder="Details..."
+                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+                </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Priority</label>
+                  <div style={{display:"flex",gap:6}}>
+                    {PRIORITIES.map(p=>(
+                      <button key={p} onClick={()=>setIssueForm(prev=>({...prev,priority:p}))}
+                        style={{padding:"5px 12px",borderRadius:6,border:"1.5px solid "+(issueForm.priority===p?priColors[p].c:T.b1),background:issueForm.priority===p?priColors[p].bg:"white",color:issueForm.priority===p?priColors[p].c:T.t3,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button onClick={async()=>{
+                  if(!issueForm.title.trim()) return alert("Title required");
+                  const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
+                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:""});setShowIssueForm(false);}
+                  else alert(res.message||"Failed");
+                }} style={{width:"100%",padding:"9px",borderRadius:6,background:T.red,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Create Issue</button>
+              </div>
+            )}
+            {issues.length===0?<div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>No issues reported</div>
+            :issues.map(issue=>{
+              const ic=issueColors[issue.status]||issueColors["Open"];
+              const pc=priColors[issue.priority]||priColors["Medium"];
+              return(
+                <div key={issue.id} style={{background:T.surface,borderRadius:8,padding:"12px 13px",border:"1px solid "+T.b1,marginBottom:8,borderLeft:"3px solid "+ic.c}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                    <div style={{flex:1,marginRight:8}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:3}}>{issue.title}</div>
+                      {issue.description&&<div style={{fontSize:11.5,color:T.t3,lineHeight:1.4}}>{issue.description}</div>}
+                    </div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <span style={{background:pc.bg,color:pc.c,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20}}>{issue.priority}</span>
+                    </div>
+                  </div>
+                  <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                    {ISSUE_STATUS.map(s=>(
+                      <button key={s} onClick={async()=>{
+                        const r=await api.put("/tasks/"+task.id+"/issues/"+issue.id,{status:s});
+                        if(r.success) setIssues(p=>p.map(x=>x.id===issue.id?{...x,status:s}:x));
+                      }}
+                        style={{padding:"3px 9px",borderRadius:20,border:"1.5px solid "+(issue.status===s?issueColors[s].c:T.b1),background:issue.status===s?issueColors[s].bg:"white",color:issue.status===s?issueColors[s].c:T.t4,fontSize:10,fontWeight:issue.status===s?700:400,cursor:"pointer"}}>
+                        {s}
+                      </button>
+                    ))}
+                    <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success)setIssues(p=>p.filter(x=>x.id!==issue.id));}}
+                      style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:T.red,display:"flex"}}>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
+
+        {/* ── COMMENTS ── */}
         {tab==="comments"&&(
           <div>
+            <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:12}}>Comments ({comments.length})</div>
+            {comments.length===0&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No comments yet</div>}
             {comments.map(c=>(
-              <div key={c.id} style={{display:"flex",gap:9,marginBottom:11}}>
-                <div style={{width:26,height:26,borderRadius:"50%",background:`linear-gradient(135deg,${T.blu},${T.pur})`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"white",fontSize:10,fontWeight:700}}>{c.by.charAt(0)}</div>
+              <div key={c.id} style={{display:"flex",gap:9,marginBottom:12}}>
+                <div style={{width:28,height:28,borderRadius:"50%",background:"linear-gradient(135deg,"+T.blu+","+T.pur+")",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"white",fontSize:11,fontWeight:700}}>
+                  {(c.user_name||"?").charAt(0)}
+                </div>
                 <div style={{flex:1}}>
-                  <div style={{display:"flex",gap:7,marginBottom:3}}><span style={{fontSize:12,fontWeight:600,color:T.t1}}>{c.by}</span><span style={{fontSize:10.5,color:T.t4}}>{c.date}</span></div>
-                  <div style={{padding:"8px 11px",background:T.surface,borderRadius:"0 7px 7px 7px",border:`1px solid ${T.b1}`,fontSize:12.5,color:T.t2,lineHeight:1.5}}>{c.text}</div>
+                  <div style={{display:"flex",gap:7,marginBottom:3}}>
+                    <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{c.user_name||"User"}</span>
+                    <span style={{fontSize:10.5,color:T.t4}}>{new Date(c.created_at).toLocaleDateString("en-IN")}</span>
+                  </div>
+                  <div style={{padding:"9px 11px",background:T.surface,borderRadius:"0 8px 8px 8px",border:"1px solid "+T.b1,fontSize:12.5,color:T.t2,lineHeight:1.5}}>{c.text}</div>
                 </div>
               </div>
             ))}
-            <div style={{display:"flex",gap:7}}>
-              <input value={comment} onChange={e=>setComment(e.target.value)} placeholder="Add comment..."
-                style={{flex:1,padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}
+            <div style={{display:"flex",gap:8,marginTop:8}}>
+              <input value={commentText} onChange={e=>setCommentText(e.target.value)}
+                placeholder="Add a comment..."
+                onKeyDown={async e=>{if(e.key==="Enter"&&commentText.trim()){const r=await api.post("/tasks/"+task.id+"/comments",{text:commentText});if(r.success){setComments(p=>[...p,r.data]);setCommentText("");}}}
+                }
+                style={{flex:1,padding:"9px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-              <button onClick={()=>{if(comment.trim()){setComments(p=>[...p,{id:Date.now(),by:"Prafull",text:comment,date:"Today"}]);setComment("");}}}
-                style={{padding:"8px 13px",borderRadius:7,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>Send</button>
+              <button onClick={async()=>{
+                if(!commentText.trim()) return;
+                const r=await api.post("/tasks/"+task.id+"/comments",{text:commentText});
+                if(r.success){setComments(p=>[...p,r.data]);setCommentText("");}
+              }} style={{padding:"9px 14px",borderRadius:7,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>Send</button>
             </div>
           </div>
         )}
+
       </div>
     </div>
   </>);
 }
 
-// ── PT Edit Task ──────────────────────────────────────────────────
 function PTEditTask({task,allTasks,onClose,onSave}){
   const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
   const [showDhyan,setShowDhyan]=useState(!!task.dhyanRakhen);
