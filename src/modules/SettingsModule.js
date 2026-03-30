@@ -68,16 +68,8 @@ const T = {
 };
 
 // ─── PROJECTS DATA (for project access) ──────────────────────────────
-const allProjects = [
-  { id: 1, name: "Shubham & Nand Kishor 623", city: "Raipur", status: "Ongoing" },
-  { id: 2, name: "Tikendra Banchhor Residence", city: "Raipur", status: "Ongoing" },
-  { id: 3, name: "Esther Risali Commercial", city: "Bilaspur", status: "Ongoing" },
-  { id: 4, name: "Amarendra Shrivastava Villa", city: "Raipur", status: "Ongoing" },
-  { id: 5, name: "Shyam Ji Township Phase 1", city: "Bhilai", status: "Completed" },
-  { id: 6, name: "Simran Kaur Bungalow", city: "Raipur", status: "Not Started" },
-  { id: 7, name: "Neha Sagar Office Complex", city: "Durg", status: "Hold" },
-  { id: 8, name: "Bablu Mehta Farmhouse", city: "Raipur", status: "Ongoing" },
-];
+// allProjects loaded dynamically in RolesAccess component
+const allProjects = []; // fallback — real data from API
 
 // ─── REUSABLE COMPONENTS ─────────────────────────────────────────────
 
@@ -256,6 +248,18 @@ function CompanySettings() {
 // ROLES & ACCESS — Full rewrite with modals, custom roles, project access
 // ═══════════════════════════════════════════════════════════════════════
 function RolesAccess() {
+  const [allProjects, setAllProjects] = useState([]);
+  useEffect(() => {
+    api.get("/projects").then(r => {
+      if (r.success) setAllProjects(r.data.map(p => ({
+        id: p.id,
+        name: p.project_name || p.name,
+        city: p.city || "",
+        status: p.status || ""
+      })));
+    }).catch(() => {});
+  }, []);
+
   const [roles, setRoles] = useState([
     { id: "admin", name: "Admin", desc: "Full access to everything", color: T.red, colorBg: T.redSoft, isSystem: true },
     { id: "project_manager", name: "Project Manager", desc: "Manage assigned projects", color: T.blue, colorBg: T.blueSoft, isSystem: true },
