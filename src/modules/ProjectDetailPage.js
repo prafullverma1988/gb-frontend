@@ -2501,19 +2501,19 @@ function TabTasks({ projectId }) {
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
     const lvl=lvlColors[Math.min(depth,6)];
     const indent=depth*16;
-    const GRID="26px 52px 1fr 85px 100px 80px 80px 44px 70px";
-    const SEP={borderRight:"1px solid "+T.b1};
+    const GRID="26px 52px 320px 85px 100px 82px 82px 44px 80px";
+    const SEP={borderRight:"1px solid #F1F5F9"};
 
     return(
       <div key={t.id} onContextMenu={e=>{e.preventDefault();setContextMenu({x:e.clientX,y:e.clientY,task:t});}} style={{position:"relative"}}>
-        <div style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",height:34,borderBottom:"1px solid "+T.b1,background:depth===0?T.surfaceB+"55":"transparent",borderLeft:"3px solid "+lvl,transition:"background .12s"}}
+        <div style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",height:32,borderBottom:"1px solid #F1F5F9",background:depth===0?"#F8FAFC":"white",transition:"background .1s"}}
           onMouseEnter={e=>{
-            e.currentTarget.style.background=T.bluL+"44";
+            e.currentTarget.style.background="#EFF6FF";
             const a=e.currentTarget.querySelector(".tsk-act");
             if(a) a.style.display="flex";
           }}
           onMouseLeave={e=>{
-            e.currentTarget.style.background=depth===0?T.surfaceB+"55":"transparent";
+            e.currentTarget.style.background=depth===0?"#F8FAFC":"white";
             const a=e.currentTarget.querySelector(".tsk-act");
             if(a) a.style.display="none";
           }}>
@@ -2530,17 +2530,17 @@ function TabTasks({ projectId }) {
 
           {/* S.No T0001 */}
           <div style={{padding:"0 5px",display:"flex",flexDirection:"column",justifyContent:"center",...SEP}}>
-            <span style={{fontSize:11,fontWeight:700,color:T.t1,lineHeight:1.2}}>{t.no}</span>
-            <span style={{fontSize:8.5,color:T.slt,fontFamily:"monospace",lineHeight:1.2}}>{t.tsk_no||""}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:"#1E293B",lineHeight:1.3}}>{t.no}</span>
+            <span style={{fontSize:8,color:"#94A3B8",fontFamily:"monospace",lineHeight:1.3}}>{t.tsk_no||""}</span>
           </div>
 
           {/* Task Name + hover buttons */}
           <div style={{display:"flex",alignItems:"center",paddingLeft:6+indent,paddingRight:4,overflow:"hidden",...SEP,height:"100%",position:"relative"}}>
             <div onClick={(e)=>{e.stopPropagation();handleOpen(t);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",flex:1,minWidth:0}}>
-              {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
-              <span style={{fontSize:depth===0?13:12.5,fontWeight:depth===0?700:depth===1?600:400,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-              {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
-              {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:8,fontWeight:700,padding:"1px 3px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
+              {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#EF4444" strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
+              <span style={{fontSize:depth===0?13:12.5,fontWeight:depth===0?600:depth===1?500:400,color:"#1E293B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+              {t.tag&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
+              {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
             </div>
             {/* Buttons on hover */}
             <div className="tsk-act" onClick={e=>e.stopPropagation()} style={{display:"none",alignItems:"center",gap:3,flexShrink:0,paddingLeft:5,background:"linear-gradient(to right,transparent,"+T.bluL+"dd 15%)"}}>
@@ -2561,16 +2561,16 @@ function TabTasks({ projectId }) {
 
           {/* Status */}
           <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
-            <span style={{background:ss.bg,color:ss.c,fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap"}}>{t.status}</span>
+            <span style={{background:ss.bg,color:ss.c,fontSize:9.5,fontWeight:600,padding:"2px 8px",borderRadius:4,whiteSpace:"nowrap",border:"1px solid "+ss.brd}}>{t.status}</span>
           </div>
 
           {/* Progress */}
           <div style={{padding:"0 8px",...SEP,display:"flex",flexDirection:"column",justifyContent:"center",height:"100%"}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-              <span style={{fontSize:10,fontWeight:700,color:t.progress===100?T.grn:t.progress>0?T.blu:T.t4}}>{t.progress}%</span>
-            </div>
-            <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
-              <div style={{height:"100%",width:t.progress+"%",background:t.progress===100?T.grn:T.blu,borderRadius:2}}/>
+            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
+              <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
+                <div style={{height:"100%",width:t.progress+"%",background:t.progress===100?"#10B981":t.progress>0?"#3B82F6":"#E2E8F0",borderRadius:2,transition:"width .3s"}}/>
+              </div>
+              <span style={{fontSize:10,fontWeight:600,color:t.progress===100?"#10B981":t.progress>0?"#3B82F6":"#94A3B8",flexShrink:0,minWidth:24,textAlign:"right"}}>{t.progress}%</span>
             </div>
           </div>
 
@@ -2604,12 +2604,12 @@ function TabTasks({ projectId }) {
 
           {/* Days */}
           <div style={{padding:"0 4px",...SEP,display:"flex",alignItems:"center",justifyContent:"center",height:"100%"}}>
-            <span style={{fontSize:10,color:T.t4}}>{t.duration>0?t.duration:"—"}</span>
+            <span style={{fontSize:10,color:"#94A3B8",fontWeight:t.duration>0?500:400}}>{t.duration>0?t.duration+"d":"—"}</span>
           </div>
 
           {/* Assigned */}
           <div style={{padding:"0 6px",display:"flex",alignItems:"center",height:"100%"}}>
-            <span style={{fontSize:10,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
+            <span style={{fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
           </div>
         </div>
 
@@ -2843,7 +2843,7 @@ function TabTasks({ projectId }) {
       {view==="list"&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           {/* Header */}
-          <div style={{display:"grid",gridTemplateColumns:"26px 52px 1fr 85px 100px 80px 80px 44px 70px",background:"#0D1B2A"}}>
+          <div style={{display:"grid",gridTemplateColumns:"26px 52px 320px 85px 100px 82px 82px 44px 80px",background:"#0D1B2A"}}>
             {["","No / TSK","Task Name","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
               <div key={i} style={{padding:"7px 5px",borderRight:i<8?"1px solid rgba(255,255,255,0.08)":"none"}}>
                 <span style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{h}</span>
@@ -2901,7 +2901,7 @@ function TabTasks({ projectId }) {
       {/* Skeleton loader */}
       {loading && (
         <div style={{background:"white",borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden",marginTop:4}}>
-          <div style={{display:"grid",gridTemplateColumns:"26px 52px 1fr 85px 100px 80px 80px 44px 70px",background:"#0D1B2A",padding:"7px 4px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"26px 52px 320px 85px 100px 82px 82px 44px 80px",background:"#0D1B2A",padding:"7px 4px"}}>
             {["","No/TSK","Task Name","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
               <div key={i} style={{padding:"0 5px"}}><span style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{h}</span></div>
             ))}
@@ -5482,7 +5482,7 @@ function TaskSkeleton(){
   return(
     <div style={{padding:"0 0"}}>
       {[1,2,3,4,5,6,7,8].map(i=>(
-        <div key={i} style={{display:"grid",gridTemplateColumns:"26px 52px 1fr 85px 100px 80px 80px 44px 70px",alignItems:"center",height:34,borderBottom:"1px solid #F3F4F6",paddingLeft:4,opacity:Math.max(0.2,1-i*0.1)}}>
+        <div key={i} style={{display:"grid",gridTemplateColumns:"26px 52px 320px 85px 100px 82px 82px 44px 80px",alignItems:"center",height:34,borderBottom:"1px solid #F3F4F6",paddingLeft:4,opacity:Math.max(0.2,1-i*0.1)}}>
           <Sk w={14} h={14} r={3}/>
           <div style={{padding:"0 5px"}}><Sk w="80%" h={10} mb={3}/><Sk w="55%" h={8}/></div>
           <div style={{padding:"0 8px"}}><Sk w={i%3===0?"55%":i%2===0?"70%":"85%"} h={11}/></div>
