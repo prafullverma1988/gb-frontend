@@ -2330,9 +2330,10 @@ function TabTasks({ projectId }) {
         // Build tree from flat list
         const flat = r.data || [];
         const map = {};
-        flat.forEach(t => {
+        flat.forEach((t, idx) => {
           t.children = [];
           t.no = t.task_no;
+          t.tsk_no = "TSK" + String(t.id).padStart(6, "0");
           t.baseStart = t.base_start;
           t.baseEnd = t.base_end;
           t.actualStart = t.actual_start;
@@ -2340,6 +2341,7 @@ function TabTasks({ projectId }) {
           t.dhyanRakhen = t.dhyan_rakhen;
           t.lastUpdate = t.last_update;
           t.assignee = t.assignee_name || t.assigned_to || "";
+          t.serial = idx + 1;
           map[t.id] = t;
         });
         const roots = [];
@@ -2369,6 +2371,9 @@ function TabTasks({ projectId }) {
   const [filterSaveName,setFilterSaveName] = useState("");
   const [lastUsedFilter,setLastUsedFilter] = useState(null);
   const [levelFilter,setLevelFilter] = useState("All"); // All | 1 | 2 | 3 | 4 | 5 | 6 | 7
+  const [dragId,setDragId]           = useState(null);
+  const [dragOverId,setDragOverId]   = useState(null);
+  const [infoTask,setInfoTask]       = useState(null); // task for info tooltip
   const [dhyanTask,setDhyanTask]     = useState(null);
   const [pendingTask,setPendingTask] = useState(null);
   const [openTask,setOpenTask]       = useState(null);
@@ -2468,12 +2473,32 @@ function TabTasks({ projectId }) {
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
     const lvl=lvlColors[Math.min(depth,6)];
     const indent=depth*16;
-    const deps=(t.dependencies||[]).filter(Boolean);
+    const isDragging=dragId===t.id;
+    const isDragOver=dragOverId===t.id;
     return(
-      <div key={t.id}>
-        <div style={{display:"grid",gridTemplateColumns:"36px 36px 1fr 80px 80px 90px 90px 90px 80px 80px",alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${T.b1}`,background:depth===0?T.surfaceB+"66":"transparent",borderLeft:`3px solid ${lvl}`,transition:"background .1s"}}
-          onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"33"}
-          onMouseLeave={e=>e.currentTarget.style.background=depth===0?T.surfaceB+"66":"transparent"}>
+      <div key={t.id}
+        draggable
+        onDragStart={()=>setDragId(t.id)}
+        onDragEnd={async()=>{
+          if(dragId&&dragOverId&&dragId!==dragOverId){
+            // Swap sort_order in backend
+            await api.put("/tasks/"+dragId,{sort_order:dragOverId});
+            await api.put("/tasks/"+dragOverId,{sort_order:dragId});
+            // Reload
+            const r=await api.get("/tasks?project_id="+projectId);
+            if(r.success){const flat=r.data||[];const map={};flat.forEach((t,i)=>{t.children=[];t.no=t.task_no;t.tsk_no="TSK"+String(t.id).padStart(6,"0");t.baseStart=t.base_start;t.baseEnd=t.base_end;t.dhyanRakhen=t.dhyan_rakhen;t.assignee=t.assignee_name||"";map[t.id]=t;});const roots=[];flat.forEach(t=>{if(t.parent_id&&map[t.parent_id])map[t.parent_id].children.push(t);else roots.push(t);});setTasks(roots);}
+          }
+          setDragId(null);setDragOverId(null);
+        }}
+        onDragOver={e=>{e.preventDefault();setDragOverId(t.id);}}
+        onDragLeave={()=>setDragOverId(null)}>
+        <div style={{display:"grid",gridTemplateColumns:"20px 36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${T.b1}`,background:isDragOver?"#E0F2FE":isDragging?"#EFF6FF":depth===0?T.surfaceB+"66":"transparent",borderLeft:`3px solid ${lvl}`,transition:"background .1s",opacity:isDragging?0.5:1,cursor:"grab"}}
+          onMouseEnter={e=>{if(!isDragging)e.currentTarget.style.background=T.bluL+"33";}}
+          onMouseLeave={e=>e.currentTarget.style.background=isDragOver?"#E0F2FE":depth===0?T.surfaceB+"66":"transparent"}>
+          {/* Drag handle */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,cursor:"grab"}}>
+            <svg width={10} height={14} viewBox="0 0 10 14" fill={T.b2}><circle cx={3} cy={2} r={1.2}/><circle cx={7} cy={2} r={1.2}/><circle cx={3} cy={7} r={1.2}/><circle cx={7} cy={7} r={1.2}/><circle cx={3} cy={12} r={1.2}/><circle cx={7} cy={12} r={1.2}/></svg>
+          </div>
           {/* Toggle */}
           <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",cursor:hasKids?"pointer":"default"}}>
             {hasKids
@@ -2483,8 +2508,11 @@ function TabTasks({ projectId }) {
               :<div style={{width:6,height:6,borderRadius:"50%",background:lvl,flexShrink:0}}/>
             }
           </div>
-          {/* S.No */}
-          <span style={{fontSize:10,color:T.t4,fontFamily:"monospace"}}>{t.no}</span>
+          {/* TSK No */}
+          <div>
+            <div style={{fontSize:9,color:T.t4,fontFamily:"monospace",whiteSpace:"nowrap"}}>{t.no}</div>
+            <div style={{fontSize:8.5,color:T.slt,fontFamily:"monospace"}}>{t.tsk_no||""}</div>
+          </div>
           {/* Task Name — indented */}
           <div onClick={()=>handleOpen(t)} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",minWidth:0,paddingLeft:indent}}>
             {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
@@ -2511,23 +2539,50 @@ function TabTasks({ projectId }) {
           <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap"}}>{t.baseEnd||"—"}</span>
           {/* Duration */}
           <span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap"}}>{t.duration>0?t.duration+"d":"—"}</span>
-          {/* Assignee + Actions */}
-          <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"space-between"}} onClick={e=>e.stopPropagation()}>
-            <span style={{fontSize:10,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
-            <div style={{display:"flex",gap:3,flexShrink:0}}>
-              {depth < 6 && (
-                <button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
-                  style={{width:20,height:20,borderRadius:4,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                  <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                </button>
-              )}
-              <button onClick={()=>setEditTask(t)} title="Edit"
-                style={{width:20,height:20,borderRadius:4,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+          {/* Assignee */}
+          <span style={{fontSize:10,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
+          {/* Actions: Info + Add Subtask + Edit */}
+          <div style={{display:"flex",gap:3,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+            <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title="Info"
+              style={{width:20,height:20,borderRadius:4,background:infoTask?.id===t.id?T.ambL:T.surfaceB,border:`1px solid ${infoTask?.id===t.id?T.ambM:T.b2}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?T.amb:T.t4} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
+            </button>
+            {depth < 6 && (
+              <button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
+                style={{width:20,height:20,borderRadius:4,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
               </button>
-            </div>
+            )}
+            <button onClick={()=>setEditTask(t)} title="Edit"
+              style={{width:20,height:20,borderRadius:4,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </button>
           </div>
         </div>
+        {/* Info panel */}
+        {infoTask?.id===t.id&&(
+          <div style={{padding:"12px 20px",background:"#FFFBEB",borderBottom:`1px solid #FDE68A`,borderLeft:`3px solid ${lvl}`,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+            {[
+              {l:"TSK Number",v:t.tsk_no||"—"},
+              {l:"Task No",v:t.no||"—"},
+              {l:"Category",v:t.category||"—"},
+              {l:"Status",v:t.status||"—"},
+              {l:"Progress",v:(t.progress||0)+"%"},
+              {l:"Assigned",v:t.assignee||"—"},
+              {l:"Start Date",v:t.baseStart||"—"},
+              {l:"End Date",v:t.baseEnd||"—"},
+              {l:"Duration",v:t.duration>0?t.duration+"d":"—"},
+              {l:"Tag",v:t.tag||"—"},
+              {l:"Last Update",v:t.lastUpdate||"—"},
+              {l:"Dhyan Alert",v:t.dhyanRakhen?"Yes":"No"},
+            ].map(({l,v})=>(
+              <div key={l}>
+                <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>{l}</div>
+                <div style={{fontSize:12,fontWeight:600,color:"#1C1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
         {hasKids&&isOpen&&(maxDepth===undefined||depth+1<=maxDepth)&&t.children.map(ch=>renderRow(ch,depth+1,undefined,maxDepth))}
       </div>
     );
@@ -2740,8 +2795,8 @@ function TabTasks({ projectId }) {
       {view==="list"&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           {/* Header */}
-          <div style={{display:"grid",gridTemplateColumns:"36px 36px 1fr 80px 80px 90px 90px 90px 80px 80px",padding:"8px 14px",background:"#0D1B2A"}}>
-            {["","S.No","Task Name","Category","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
+          <div style={{display:"grid",gridTemplateColumns:"20px 36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",padding:"8px 14px",background:"#0D1B2A"}}>
+            {["","S.No","Task Name","Category","Status","Progress","Start","End","Days","Assigned",""].map((h,i)=>(
               <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>{h}</span>
             ))}
           </div>
