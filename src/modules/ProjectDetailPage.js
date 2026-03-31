@@ -2471,7 +2471,7 @@ function TabTasks({ projectId }) {
     const r = await api.get("/tasks?project_id=" + projectId);
     if (r.success) {
       const fl = r.data || []; const map = {};
-      fl.forEach((t,i) => { t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0"); t.baseStart=t.base_start; t.baseEnd=t.base_end; t.dhyanRakhen=t.dhyan_rakhen; t.assignee=t.assignee_name||""; t.serial=i+1; map[t.id]=t; });
+      fl.forEach((t,i) => { t.children=[]; t.no=t.task_no; t.tsk_no="T"+String(t.id).padStart(4,"0"); t.baseStart=t.base_start; t.baseEnd=t.base_end; t.dhyanRakhen=t.dhyan_rakhen; t.assignee=t.assignee_name||""; t.serial=i+1; map[t.id]=t; });
       const roots=[]; fl.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
       setTasks(roots);
     }
@@ -2500,82 +2500,111 @@ function TabTasks({ projectId }) {
     const delay=ptDelayDays(t);
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
     const lvl=lvlColors[Math.min(depth,6)];
-    const indent=depth*18;
-    // grid: toggle | sno+tsk | task-name(60%) | status | progress | start | end | days | assigned
-    const GRID="28px 60px 1fr 82px 100px 82px 82px 50px 75px";
+    const indent=depth*16;
+    const GRID="26px 52px 1fr 85px 100px 80px 80px 44px 70px";
     const SEP={borderRight:"1px solid "+T.b1};
+    const [showAct,setShowAct]=React.useState(false);
+    const [editStart,setEditStart]=React.useState(false);
+    const [editEnd,setEditEnd]=React.useState(false);
+
     return(
       <div key={t.id} onContextMenu={e=>{e.preventDefault();setContextMenu({x:e.clientX,y:e.clientY,task:t});}} style={{position:"relative"}}>
-        <div style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",minHeight:38,borderBottom:"1px solid "+T.b1,background:depth===0?T.surfaceB+"55":"transparent",borderLeft:"3px solid "+lvl,transition:"background .12s"}}
-          onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"44"}
-          onMouseLeave={e=>e.currentTarget.style.background=depth===0?T.surfaceB+"55":"transparent"}>
+        <div style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",height:34,borderBottom:"1px solid "+T.b1,background:depth===0?T.surfaceB+"55":"transparent",borderLeft:"3px solid "+lvl,transition:"background .12s"}}
+          onMouseEnter={e=>{e.currentTarget.style.background=T.bluL+"44";setShowAct(true);}}
+          onMouseLeave={e=>{e.currentTarget.style.background=depth===0?T.surfaceB+"55":"transparent";setShowAct(false);}}>
 
           {/* Toggle */}
           <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",cursor:hasKids?"pointer":"default",...SEP}}>
             {hasKids
-              ?<div style={{width:15,height:15,borderRadius:3,background:isOpen?lvl:T.surfaceB,border:"1px solid "+(isOpen?lvl:T.b2),display:"flex",alignItems:"center",justifyContent:"center"}}>
+              ?<div style={{width:14,height:14,borderRadius:3,background:isOpen?lvl:T.surfaceB,border:"1px solid "+(isOpen?lvl:T.b2),display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <svg width={7} height={7} viewBox="0 0 12 12" fill="none" stroke={isOpen?"white":T.t4} strokeWidth={2.5}><path d={isOpen?"M2 4l4 4 4-4":"M4 2l4 4-4 4"}/></svg>
                </div>
               :<div style={{width:5,height:5,borderRadius:"50%",background:lvl}}/>
             }
           </div>
 
-          {/* S.No + TSK */}
-          <div style={{padding:"0 6px",display:"flex",flexDirection:"column",justifyContent:"center",...SEP}}>
-            <span style={{fontSize:10,fontWeight:600,color:T.t2,lineHeight:1.3}}>{t.no}</span>
-            <span style={{fontSize:8,color:T.slt,fontFamily:"monospace",lineHeight:1.3}}>{t.tsk_no||""}</span>
+          {/* S.No T0001 */}
+          <div style={{padding:"0 5px",display:"flex",flexDirection:"column",justifyContent:"center",...SEP}}>
+            <span style={{fontSize:11,fontWeight:700,color:T.t1,lineHeight:1.2}}>{t.no}</span>
+            <span style={{fontSize:8.5,color:T.slt,fontFamily:"monospace",lineHeight:1.2}}>{t.tsk_no||""}</span>
           </div>
 
-          {/* Task Name — hover shows action buttons */}
-          <div style={{position:"relative",display:"flex",alignItems:"center",paddingLeft:8+indent,paddingRight:8,overflow:"hidden",...SEP,height:"100%"}}
-            className="task-row-name">
+          {/* Task Name + hover buttons */}
+          <div style={{display:"flex",alignItems:"center",paddingLeft:6+indent,paddingRight:4,overflow:"hidden",...SEP,height:"100%",position:"relative"}}>
             <div onClick={(e)=>{e.stopPropagation();handleOpen(t);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",flex:1,minWidth:0}}>
               {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
-              <span style={{fontSize:depth===0?13:depth===1?12.5:12,fontWeight:depth===0?700:depth===1?600:400,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-              {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
-              {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
+              <span style={{fontSize:depth===0?13:12.5,fontWeight:depth===0?700:depth===1?600:400,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+              {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
+              {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:8,fontWeight:700,padding:"1px 3px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
             </div>
-            {/* Hover action buttons — right side of task name */}
-            <div className="task-row-actions" onClick={e=>e.stopPropagation()}
-              style={{display:"none",alignItems:"center",gap:3,flexShrink:0,paddingLeft:6,background:"linear-gradient(to right,transparent,"+T.bluL+"ee 20%)"}}>
-              <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title="Info"
-                style={{width:22,height:22,borderRadius:5,background:infoTask?.id===t.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===t.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}}>
-                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
-              </button>
-              {depth<6&&<button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
-                style={{width:22,height:22,borderRadius:5,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}}>
-                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-              </button>}
-              <button onClick={()=>setEditTask(t)} title="Edit"
-                style={{width:22,height:22,borderRadius:5,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}}>
-                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-              </button>
-            </div>
+            {/* Buttons on hover — inline React state */}
+            {showAct&&(
+              <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:3,flexShrink:0,paddingLeft:5,background:"linear-gradient(to right,transparent,"+T.bluL+"dd 15%)"}}>
+                <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title="Info"
+                  style={{width:22,height:22,borderRadius:4,background:infoTask?.id===t.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===t.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
+                </button>
+                {depth<6&&<button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
+                  style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                </button>}
+                <button onClick={()=>setEditTask(t)} title="Edit"
+                  style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </button>
+              </div>
+            )}
           </div>
 
           {/* Status */}
           <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
-            <span style={{background:ss.bg,color:ss.c,fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap"}}>{t.status}</span>
+            <span style={{background:ss.bg,color:ss.c,fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap"}}>{t.status}</span>
           </div>
 
           {/* Progress */}
           <div style={{padding:"0 8px",...SEP,display:"flex",flexDirection:"column",justifyContent:"center",height:"100%"}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-              <span style={{fontSize:9.5,fontWeight:700,color:t.progress===100?T.grn:t.progress>0?T.blu:T.t4}}>{t.progress}%</span>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
+              <span style={{fontSize:10,fontWeight:700,color:t.progress===100?T.grn:t.progress>0?T.blu:T.t4}}>{t.progress}%</span>
             </div>
             <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
-              <div style={{height:"100%",width:t.progress+"%",background:t.progress===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/>
+              <div style={{height:"100%",width:t.progress+"%",background:t.progress===100?T.grn:T.blu,borderRadius:2}}/>
             </div>
           </div>
 
-          {/* Start */}
-          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
-            <span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap"}}>{fmtDate(t.baseStart)}</span>
+          {/* Start — click to edit inline */}
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:"pointer"}}
+            onClick={e=>{e.stopPropagation();setEditStart(true);}}>
+            {editStart
+              ?<input type="date" autoFocus defaultValue={t.baseStart||""}
+                  style={{width:"100%",fontSize:10,border:"none",outline:"none",background:"transparent",color:T.blu,fontFamily:"inherit"}}
+                  onBlur={async e=>{
+                    setEditStart(false);
+                    if(e.target.value!==t.baseStart){
+                      await api.put("/tasks/"+t.id,{base_start:e.target.value});
+                      setTasks(updateInTree(tasks,t.id,{baseStart:e.target.value,base_start:e.target.value}));
+                    }
+                  }}
+                  onClick={e=>e.stopPropagation()}/>
+              :<span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap"}}>{fmtDate(t.baseStart)}</span>
+            }
           </div>
 
-          {/* End */}
-          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
-            <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap"}}>{fmtDate(t.baseEnd)}</span>
+          {/* End — click to edit inline */}
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:"pointer"}}
+            onClick={e=>{e.stopPropagation();setEditEnd(true);}}>
+            {editEnd
+              ?<input type="date" autoFocus defaultValue={t.baseEnd||""}
+                  style={{width:"100%",fontSize:10,border:"none",outline:"none",background:"transparent",color:delay>0?T.red:T.blu,fontFamily:"inherit"}}
+                  onBlur={async e=>{
+                    setEditEnd(false);
+                    if(e.target.value!==t.baseEnd){
+                      await api.put("/tasks/"+t.id,{base_end:e.target.value});
+                      setTasks(updateInTree(tasks,t.id,{baseEnd:e.target.value,base_end:e.target.value}));
+                    }
+                  }}
+                  onClick={e=>e.stopPropagation()}/>
+              :<span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap"}}>{fmtDate(t.baseEnd)}</span>
+            }
           </div>
 
           {/* Days */}
@@ -2591,9 +2620,9 @@ function TabTasks({ projectId }) {
 
         {/* Info panel */}
         {infoTask?.id===t.id&&(
-          <div style={{padding:"12px 20px",background:"#FFFBEB",borderBottom:"1px solid #FDE68A",borderLeft:"3px solid "+lvl,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+          <div style={{padding:"10px 18px",background:"#FFFBEB",borderBottom:"1px solid #FDE68A",borderLeft:"3px solid "+lvl,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
             {[
-              {l:"TSK Number",v:t.tsk_no||"—"},{l:"Task No",v:t.no||"—"},
+              {l:"Task No",v:t.no||"—"},{l:"TSK",v:t.tsk_no||"—"},
               {l:"Category",v:t.category||"—"},{l:"Status",v:t.status||"—"},
               {l:"Progress",v:(t.progress||0)+"%"},{l:"Assigned",v:t.assignee||"—"},
               {l:"Start",v:fmtDate(t.baseStart)},{l:"End",v:fmtDate(t.baseEnd)},
@@ -2601,7 +2630,7 @@ function TabTasks({ projectId }) {
               {l:"Last Update",v:fmtDate(t.lastUpdate)},{l:"Dhyan Alert",v:t.dhyanRakhen?"Yes":"No"},
             ].map(({l,v})=>(
               <div key={l}>
-                <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>{l}</div>
+                <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:1}}>{l}</div>
                 <div style={{fontSize:12,fontWeight:600,color:"#1C1917"}}>{v}</div>
               </div>
             ))}
@@ -2819,10 +2848,10 @@ function TabTasks({ projectId }) {
       {view==="list"&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           {/* Header */}
-          <div style={{display:"grid",gridTemplateColumns:"28px 60px 1fr 82px 100px 82px 82px 50px 75px",background:"#0D1B2A"}}>
-            {["","S.No / TSK","Task Name","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
-              <div key={i} style={{padding:"8px 6px",borderRight:i<8?"1px solid rgba(255,255,255,0.08)":"none"}}>
-                <span style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{h}</span>
+          <div style={{display:"grid",gridTemplateColumns:"26px 52px 1fr 85px 100px 80px 80px 44px 70px",background:"#0D1B2A"}}>
+            {["","No / TSK","Task Name","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
+              <div key={i} style={{padding:"7px 5px",borderRight:i<8?"1px solid rgba(255,255,255,0.08)":"none"}}>
+                <span style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{h}</span>
               </div>
             ))}
           </div>
