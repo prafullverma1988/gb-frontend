@@ -2598,8 +2598,7 @@ function TabTasks({ projectId }) {
           const flat=ptFlatten(tasks);
           const rows=[["Task No","Name","Category","Status","Progress%","Assigned To","Start Date","End Date","Tag"]];
           flat.forEach(t=>rows.push([t.no,t.name,t.category,t.status,t.progress,t.assignee||"",t.baseStart||"",t.baseEnd||"",t.tag||""]));
-          const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("
-");
+          const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n");
           const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="tasks.csv";a.click();
         }} title="Export to Excel"
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
@@ -2614,8 +2613,7 @@ function TabTasks({ projectId }) {
           <input type="file" accept=".csv" style={{display:"none"}} onChange={async e=>{
             const file=e.target.files[0]; if(!file) return;
             const text=await file.text();
-            const lines=text.split("
-").filter(Boolean);
+            const lines=text.split("\n").filter(Boolean);
             const headers=lines[0].split(",").map(h=>h.replace(/"/g,"").trim());
             const rows=lines.slice(1).map(line=>{
               const vals=line.split(",").map(v=>v.replace(/"/g,"").trim());
