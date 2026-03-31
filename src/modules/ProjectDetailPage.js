@@ -5519,18 +5519,12 @@ const TABS = [
 
 function ProjectDetailPage({project=PROJ, onBack}) {
   const [tab, setTab] = useState("overview");
-  const [visited, setVisited] = useState({"overview": true}); // track visited tabs
   const sm = STATUS_S[project.status]||{c:T.slt, bg:T.sltL};
   const margin = project.boq - project.expense;
 
-  // Mark tab as visited on switch
-  const switchTab = (t) => {
-    setTab(t);
-    setVisited(v => ({...v, [t]: true}));
-  };
+  const switchTab = (t) => setTab(t);
 
-  // All tab components — only render if visited (lazy), show/hide via display
-  const allTabs = {
+  const tabContent = {
     overview:    <TabOverview    proj={project}/>,
     design:      <TabDesign project={project}/>,
     estimate:    <TabEstimate/>,
@@ -5605,14 +5599,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
       {/* ── CONTENT ── */}
       <div style={{flex:1, overflowY:"auto", background:T.bg}}>
-        {/* Render visited tabs, hide inactive ones — NO unmount = cached! */}
-        {Object.keys(allTabs).map(key => (
-          visited[key] ? (
-            <div key={key} style={{display: tab===key ? "block" : "none", height:"100%", overflow:"auto"}}>
-              {allTabs[key]}
-            </div>
-          ) : null
-        ))}
+        {tabContent[tab]}
       </div>
     </div>
   );
