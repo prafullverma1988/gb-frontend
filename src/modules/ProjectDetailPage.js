@@ -2459,7 +2459,7 @@ function TabTasks({ projectId }) {
     return out;
   }
 
-  function renderRow(t, depth=0, sno=[]){
+  function renderRow(t, depth=0, sno=[], maxDepth=undefined){
     const hasKids=t.children?.length>0;
     const isOpen=!collapsed[t.id];
     const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
@@ -2528,7 +2528,7 @@ function TabTasks({ projectId }) {
             </div>
           </div>
         </div>
-        {hasKids&&isOpen&&t.children.map(ch=>renderRow(ch,depth+1))}
+        {hasKids&&isOpen&&(maxDepth===undefined||depth+1<=maxDepth)&&t.children.map(ch=>renderRow(ch,depth+1,undefined,maxDepth))}
       </div>
     );
   }
@@ -2748,7 +2748,7 @@ function TabTasks({ projectId }) {
           <div style={{maxHeight:480,overflowY:"auto"}}>
             {levelFilter==="All"
               ? filtered.map(t=>renderRow(t,0))
-              : flattenWithDepth(filtered).filter(t=>t._depth===parseInt(levelFilter)-1).map(t=>renderRow(t,t._depth))
+              : flattenWithDepth(filtered).filter(t=>t._depth===parseInt(levelFilter)-1).map(t=>renderRow(t,0,undefined,0))
             }
           </div>
         </div>
