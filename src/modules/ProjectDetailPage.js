@@ -2368,6 +2368,7 @@ function TabTasks({ projectId }) {
   ]);
   const [filterSaveName,setFilterSaveName] = useState("");
   const [lastUsedFilter,setLastUsedFilter] = useState(null);
+  const [levelFilter,setLevelFilter] = useState("All"); // All | 1 | 2 | 3 | 4 | 5 | 6 | 7
   const [dhyanTask,setDhyanTask]     = useState(null);
   const [pendingTask,setPendingTask] = useState(null);
   const [openTask,setOpenTask]       = useState(null);
@@ -2496,8 +2497,14 @@ function TabTasks({ projectId }) {
           </div>
           {/* Assignee */}
           <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.assignee.split(" ")[0]}</span>
-          {/* Edit */}
+          {/* Edit + Add Subtask */}
           <div style={{display:"flex",gap:4,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+            {depth < 6 && (
+              <button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
+                style={{width:22,height:22,borderRadius:4,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+              </button>
+            )}
             <button onClick={()=>setEditTask(t)} title="Edit"
               style={{width:22,height:22,borderRadius:4,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
               <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
@@ -2580,6 +2587,64 @@ function TabTasks({ projectId }) {
           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
           <span style={{fontSize:10.5,fontWeight:700,color:T.red}}>{dhyanCount} DHYAN alerts</span>
         </div>}
+        {/* Level filter */}
+        <select value={levelFilter} onChange={e=>setLevelFilter(e.target.value)}
+          style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t2,background:T.surface,fontFamily:"inherit",cursor:"pointer"}}>
+          <option value="All">All Levels</option>
+          {[1,2,3,4,5,6,7].map(l=><option key={l} value={l}>Level {l}</option>)}
+        </select>
+        {/* Excel Export */}
+        <button onClick={()=>{
+          const flat=ptFlatten(tasks);
+          const rows=[["Task No","Name","Category","Status","Progress%","Assigned To","Start Date","End Date","Tag"]];
+          flat.forEach(t=>rows.push([t.no,t.name,t.category,t.status,t.progress,t.assignee||"",t.baseStart||"",t.baseEnd||"",t.tag||""]));
+          const csv=rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(",")).join("
+");
+          const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="tasks.csv";a.click();
+        }} title="Export to Excel"
+          style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+          Export
+        </button>
+        {/* Excel Import */}
+        <label title="Import from Excel/CSV"
+          style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+          Import
+          <input type="file" accept=".csv" style={{display:"none"}} onChange={async e=>{
+            const file=e.target.files[0]; if(!file) return;
+            const text=await file.text();
+            const lines=text.split("
+").filter(Boolean);
+            const headers=lines[0].split(",").map(h=>h.replace(/"/g,"").trim());
+            const rows=lines.slice(1).map(line=>{
+              const vals=line.split(",").map(v=>v.replace(/"/g,"").trim());
+              const obj={}; headers.forEach((h,i)=>obj[h]=vals[i]||""); return obj;
+            });
+            for(const row of rows){
+              if(!row["Name"]&&!row["name"]) continue;
+              await api.post("/tasks",{
+                project_id:projectId,
+                name:row["Name"]||row["name"],
+                category:row["Category"]||row["category"]||"Civil",
+                tag:row["Tag"]||row["tag"]||"",
+                base_start:row["Start Date"]||row["start_date"]||null,
+                base_end:row["End Date"]||row["end_date"]||null,
+                status:row["Status"]||"Not Started",
+              });
+            }
+            // Reload
+            const r=await api.get("/tasks?project_id="+projectId);
+            if(r.success){
+              const flat=r.data||[];const map={};
+              flat.forEach(t=>{t.children=[];t.no=t.task_no;t.baseStart=t.base_start;t.baseEnd=t.base_end;t.dhyanRakhen=t.dhyan_rakhen;t.assignee=t.assignee_name||"";map[t.id]=t;});
+              const roots=[];flat.forEach(t=>{if(t.parent_id&&map[t.parent_id])map[t.parent_id].children.push(t);else roots.push(t);});
+              setTasks(roots);
+            }
+            alert("Import complete!");
+            e.target.value="";
+          }}/>
+        </label>
         <button onClick={()=>{setAddParent(null);setShowAdd(true);}}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg> Add Task
@@ -2666,7 +2731,7 @@ function TabTasks({ projectId }) {
             ))}
           </div>
           <div style={{maxHeight:480,overflowY:"auto"}}>
-            {filtered.map(t=>renderRow(t,0))}
+            {(levelFilter==="All" ? filtered : ptFlatten(filtered).filter(t=>(t.level||1)===parseInt(levelFilter))).map(t=>renderRow(t, levelFilter==="All"?0:(t.level||1)-1))}
           </div>
         </div>
       )}
