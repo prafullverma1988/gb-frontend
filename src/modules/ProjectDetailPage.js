@@ -2317,6 +2317,13 @@ const PROJECT_TASKS=[
 ];
 
 function ptFlatten(tasks,out=[]){tasks.forEach(t=>{out.push(t);if(t.children?.length)ptFlatten(t.children,out)});return out;}
+function fmtDate(d){
+  if(!d) return "—";
+  const s=String(d).slice(0,10);
+  if(!s||s==="—") return "—";
+  const [y,m,dd]=s.split("-");
+  return dd+"/"+m+"/"+y;
+}
 function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date("2026-03-15")-new Date(t.baseEnd))/(1000*86400));return d>0?d:0;}
 
 function TabTasks({ projectId }) {
@@ -2490,106 +2497,112 @@ function TabTasks({ projectId }) {
     const hasKids=t.children?.length>0;
     const isOpen=!collapsed[t.id];
     const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
-    const cs=CAT_C[t.category]||CAT_C["Civil"];
     const delay=ptDelayDays(t);
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
     const lvl=lvlColors[Math.min(depth,6)];
-    const indent=depth*16;
-    
-    
+    const indent=depth*18;
+    // grid: toggle | sno+tsk | task-name(60%) | status | progress | start | end | days | assigned
+    const GRID="28px 60px 1fr 82px 100px 82px 82px 50px 75px";
+    const SEP={borderRight:"1px solid "+T.b1};
     return(
       <div key={t.id} onContextMenu={e=>{e.preventDefault();setContextMenu({x:e.clientX,y:e.clientY,task:t});}} style={{position:"relative"}}>
-        <div style={{display:"grid",gridTemplateColumns:"36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${T.b1}`,background:depth===0?T.surfaceB+"66":"transparent",borderLeft:`3px solid ${lvl}`,transition:"background .15s",cursor:"pointer"}}
+        <div style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",minHeight:38,borderBottom:"1px solid "+T.b1,background:depth===0?T.surfaceB+"55":"transparent",borderLeft:"3px solid "+lvl,transition:"background .12s"}}
           onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"44"}
-          onMouseLeave={e=>e.currentTarget.style.background=depth===0?T.surfaceB+"66":"transparent"}>
+          onMouseLeave={e=>e.currentTarget.style.background=depth===0?T.surfaceB+"55":"transparent"}>
+
           {/* Toggle */}
-          <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",cursor:hasKids?"pointer":"default"}}>
+          <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",cursor:hasKids?"pointer":"default",...SEP}}>
             {hasKids
-              ?<div style={{width:16,height:16,borderRadius:4,background:isOpen?lvl:T.surfaceB,border:`1px solid ${isOpen?lvl:T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <svg width={8} height={8} viewBox="0 0 12 12" fill="none" stroke={isOpen?"white":T.t4} strokeWidth={2}><path d={isOpen?"M2 4l4 4 4-4":"M4 2l4 4-4 4"}/></svg>
+              ?<div style={{width:15,height:15,borderRadius:3,background:isOpen?lvl:T.surfaceB,border:"1px solid "+(isOpen?lvl:T.b2),display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <svg width={7} height={7} viewBox="0 0 12 12" fill="none" stroke={isOpen?"white":T.t4} strokeWidth={2.5}><path d={isOpen?"M2 4l4 4 4-4":"M4 2l4 4-4 4"}/></svg>
                </div>
-              :<div style={{width:6,height:6,borderRadius:"50%",background:lvl,flexShrink:0}}/>
+              :<div style={{width:5,height:5,borderRadius:"50%",background:lvl}}/>
             }
           </div>
-          {/* TSK No */}
-          <div>
-            <div style={{fontSize:9,color:T.t4,fontFamily:"monospace",whiteSpace:"nowrap"}}>{t.no}</div>
-            <div style={{fontSize:8.5,color:T.slt,fontFamily:"monospace"}}>{t.tsk_no||""}</div>
+
+          {/* S.No + TSK */}
+          <div style={{padding:"0 6px",display:"flex",flexDirection:"column",justifyContent:"center",...SEP}}>
+            <span style={{fontSize:10,fontWeight:600,color:T.t2,lineHeight:1.3}}>{t.no}</span>
+            <span style={{fontSize:8,color:T.slt,fontFamily:"monospace",lineHeight:1.3}}>{t.tsk_no||""}</span>
           </div>
-          {/* Task Name — indented */}
-          <div onClick={(e)=>{e.stopPropagation();handleOpen(t);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",minWidth:0,paddingLeft:indent}}>
-            {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
-            <span style={{fontSize:depth===0?13:depth===1?12.5:12,fontWeight:depth===0?700:depth===1?600:400,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-            {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t.tag}</span>}
-            {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
+
+          {/* Task Name — hover shows action buttons */}
+          <div style={{position:"relative",display:"flex",alignItems:"center",paddingLeft:8+indent,paddingRight:8,overflow:"hidden",...SEP,height:"100%"}}
+            className="task-row-name">
+            <div onClick={(e)=>{e.stopPropagation();handleOpen(t);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",flex:1,minWidth:0}}>
+              {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
+              <span style={{fontSize:depth===0?13:depth===1?12.5:12,fontWeight:depth===0?700:depth===1?600:400,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+              {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
+              {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
+            </div>
+            {/* Hover action buttons — right side of task name */}
+            <div className="task-row-actions" onClick={e=>e.stopPropagation()}
+              style={{display:"none",alignItems:"center",gap:3,flexShrink:0,paddingLeft:6,background:"linear-gradient(to right,transparent,"+T.bluL+"ee 20%)"}}>
+              <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title="Info"
+                style={{width:22,height:22,borderRadius:5,background:infoTask?.id===t.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===t.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}}>
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
+              </button>
+              {depth<6&&<button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
+                style={{width:22,height:22,borderRadius:5,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}}>
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+              </button>}
+              <button onClick={()=>setEditTask(t)} title="Edit"
+                style={{width:22,height:22,borderRadius:5,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 1px 3px rgba(0,0,0,.08)"}}>
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              </button>
+            </div>
           </div>
-          {/* Category */}
-          <span style={{background:cs.bg,color:cs.c,fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.category}</span>
+
           {/* Status */}
-          <span style={{background:ss.bg,color:ss.c,fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap"}}>{t.status}</span>
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
+            <span style={{background:ss.bg,color:ss.c,fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap"}}>{t.status}</span>
+          </div>
+
           {/* Progress */}
-          <div style={{paddingRight:4}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-              <span style={{fontSize:9.5,fontWeight:600,color:t.progress===100?T.grn:T.t3}}>{t.progress}%</span>
+          <div style={{padding:"0 8px",...SEP,display:"flex",flexDirection:"column",justifyContent:"center",height:"100%"}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+              <span style={{fontSize:9.5,fontWeight:700,color:t.progress===100?T.grn:t.progress>0?T.blu:T.t4}}>{t.progress}%</span>
             </div>
             <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
-              <div style={{height:"100%",width:`${t.progress}%`,background:t.progress===100?T.grn:T.blu,borderRadius:2}}/>
+              <div style={{height:"100%",width:t.progress+"%",background:t.progress===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/>
             </div>
           </div>
-          {/* Start Date */}
-          <span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap"}}>{t.baseStart||"—"}</span>
-          {/* End Date */}
-          <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap"}}>{t.baseEnd||"—"}</span>
-          {/* Duration */}
-          <span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap"}}>{t.duration>0?t.duration+"d":"—"}</span>
-          {/* Assignee */}
-          <span style={{fontSize:10,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
-          {/* Actions: Up/Down + Info + Add + Edit */}
-          <div style={{display:"flex",gap:2,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
-            <button onClick={()=>moveTask(t.id,"up")} title="Move Up"
-              style={{width:20,height:20,borderRadius:4,background:T.surfaceB,border:`1px solid ${T.b2}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.t3} strokeWidth={2.5}><path d="M18 15l-6-6-6 6"/></svg>
-            </button>
-            <button onClick={()=>moveTask(t.id,"down")} title="Move Down"
-              style={{width:20,height:20,borderRadius:4,background:T.surfaceB,border:`1px solid ${T.b2}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.t3} strokeWidth={2.5}><path d="M6 9l6 6 6-6"/></svg>
-            </button>
-            <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title="Info"
-              style={{width:20,height:20,borderRadius:4,background:infoTask?.id===t.id?T.ambL:T.surfaceB,border:`1px solid ${infoTask?.id===t.id?T.ambM:T.b2}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?T.amb:T.t4} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
-            </button>
-            {depth < 6 && (
-              <button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
-                style={{width:20,height:20,borderRadius:4,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-              </button>
-            )}
-            <button onClick={()=>setEditTask(t)} title="Edit"
-              style={{width:20,height:20,borderRadius:4,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
+
+          {/* Start */}
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
+            <span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap"}}>{fmtDate(t.baseStart)}</span>
+          </div>
+
+          {/* End */}
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
+            <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap"}}>{fmtDate(t.baseEnd)}</span>
+          </div>
+
+          {/* Days */}
+          <div style={{padding:"0 4px",...SEP,display:"flex",alignItems:"center",justifyContent:"center",height:"100%"}}>
+            <span style={{fontSize:10,color:T.t4}}>{t.duration>0?t.duration:"—"}</span>
+          </div>
+
+          {/* Assigned */}
+          <div style={{padding:"0 6px",display:"flex",alignItems:"center",height:"100%"}}>
+            <span style={{fontSize:10,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
           </div>
         </div>
+
         {/* Info panel */}
         {infoTask?.id===t.id&&(
-          <div style={{padding:"12px 20px",background:"#FFFBEB",borderBottom:`1px solid #FDE68A`,borderLeft:`3px solid ${lvl}`,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+          <div style={{padding:"12px 20px",background:"#FFFBEB",borderBottom:"1px solid #FDE68A",borderLeft:"3px solid "+lvl,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
             {[
-              {l:"TSK Number",v:t.tsk_no||"—"},
-              {l:"Task No",v:t.no||"—"},
-              {l:"Category",v:t.category||"—"},
-              {l:"Status",v:t.status||"—"},
-              {l:"Progress",v:(t.progress||0)+"%"},
-              {l:"Assigned",v:t.assignee||"—"},
-              {l:"Start Date",v:t.baseStart||"—"},
-              {l:"End Date",v:t.baseEnd||"—"},
-              {l:"Duration",v:t.duration>0?t.duration+"d":"—"},
-              {l:"Tag",v:t.tag||"—"},
-              {l:"Last Update",v:t.lastUpdate||"—"},
-              {l:"Dhyan Alert",v:t.dhyanRakhen?"Yes":"No"},
+              {l:"TSK Number",v:t.tsk_no||"—"},{l:"Task No",v:t.no||"—"},
+              {l:"Category",v:t.category||"—"},{l:"Status",v:t.status||"—"},
+              {l:"Progress",v:(t.progress||0)+"%"},{l:"Assigned",v:t.assignee||"—"},
+              {l:"Start",v:fmtDate(t.baseStart)},{l:"End",v:fmtDate(t.baseEnd)},
+              {l:"Duration",v:t.duration>0?t.duration+"d":"—"},{l:"Tag",v:t.tag||"—"},
+              {l:"Last Update",v:fmtDate(t.lastUpdate)},{l:"Dhyan Alert",v:t.dhyanRakhen?"Yes":"No"},
             ].map(({l,v})=>(
               <div key={l}>
                 <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>{l}</div>
-                <div style={{fontSize:12,fontWeight:600,color:"#1C1917",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</div>
+                <div style={{fontSize:12,fontWeight:600,color:"#1C1917"}}>{v}</div>
               </div>
             ))}
           </div>
@@ -2806,9 +2819,11 @@ function TabTasks({ projectId }) {
       {view==="list"&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           {/* Header */}
-          <div style={{display:"grid",gridTemplateColumns:"36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",padding:"8px 14px",background:"#0D1B2A"}}>
-            {["S.No","#","Task Name","Category","Status","Progress","Start","End","Days","Actions"].map((h,i)=>(
-              <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>{h}</span>
+          <div style={{display:"grid",gridTemplateColumns:"28px 60px 1fr 82px 100px 82px 82px 50px 75px",background:"#0D1B2A"}}>
+            {["","S.No / TSK","Task Name","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
+              <div key={i} style={{padding:"8px 6px",borderRight:i<8?"1px solid rgba(255,255,255,0.08)":"none"}}>
+                <span style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{h}</span>
+              </div>
             ))}
           </div>
           <div style={{maxHeight:480,overflowY:"auto"}}>
