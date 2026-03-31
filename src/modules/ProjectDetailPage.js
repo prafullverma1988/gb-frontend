@@ -2503,15 +2503,20 @@ function TabTasks({ projectId }) {
     const indent=depth*16;
     const GRID="26px 52px 1fr 85px 100px 80px 80px 44px 70px";
     const SEP={borderRight:"1px solid "+T.b1};
-    const [showAct,setShowAct]=React.useState(false);
-    const [editStart,setEditStart]=React.useState(false);
-    const [editEnd,setEditEnd]=React.useState(false);
 
     return(
       <div key={t.id} onContextMenu={e=>{e.preventDefault();setContextMenu({x:e.clientX,y:e.clientY,task:t});}} style={{position:"relative"}}>
         <div style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",height:34,borderBottom:"1px solid "+T.b1,background:depth===0?T.surfaceB+"55":"transparent",borderLeft:"3px solid "+lvl,transition:"background .12s"}}
-          onMouseEnter={e=>{e.currentTarget.style.background=T.bluL+"44";setShowAct(true);}}
-          onMouseLeave={e=>{e.currentTarget.style.background=depth===0?T.surfaceB+"55":"transparent";setShowAct(false);}}>
+          onMouseEnter={e=>{
+            e.currentTarget.style.background=T.bluL+"44";
+            const a=e.currentTarget.querySelector(".tsk-act");
+            if(a) a.style.display="flex";
+          }}
+          onMouseLeave={e=>{
+            e.currentTarget.style.background=depth===0?T.surfaceB+"55":"transparent";
+            const a=e.currentTarget.querySelector(".tsk-act");
+            if(a) a.style.display="none";
+          }}>
 
           {/* Toggle */}
           <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",cursor:hasKids?"pointer":"default",...SEP}}>
@@ -2537,9 +2542,8 @@ function TabTasks({ projectId }) {
               {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
               {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:8,fontWeight:700,padding:"1px 3px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
             </div>
-            {/* Buttons on hover — inline React state */}
-            {showAct&&(
-              <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:3,flexShrink:0,paddingLeft:5,background:"linear-gradient(to right,transparent,"+T.bluL+"dd 15%)"}}>
+            {/* Buttons on hover */}
+            <div className="tsk-act" onClick={e=>e.stopPropagation()} style={{display:"none",alignItems:"center",gap:3,flexShrink:0,paddingLeft:5,background:"linear-gradient(to right,transparent,"+T.bluL+"dd 15%)"}}>
                 <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title="Info"
                   style={{width:22,height:22,borderRadius:4,background:infoTask?.id===t.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===t.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
@@ -2552,8 +2556,7 @@ function TabTasks({ projectId }) {
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </button>
-              </div>
-            )}
+            </div>
           </div>
 
           {/* Status */}
@@ -2571,40 +2574,32 @@ function TabTasks({ projectId }) {
             </div>
           </div>
 
-          {/* Start — click to edit inline */}
-          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:"pointer"}}
-            onClick={e=>{e.stopPropagation();setEditStart(true);}}>
-            {editStart
-              ?<input type="date" autoFocus defaultValue={t.baseStart||""}
-                  style={{width:"100%",fontSize:10,border:"none",outline:"none",background:"transparent",color:T.blu,fontFamily:"inherit"}}
-                  onBlur={async e=>{
-                    setEditStart(false);
-                    if(e.target.value!==t.baseStart){
-                      await api.put("/tasks/"+t.id,{base_start:e.target.value});
-                      setTasks(updateInTree(tasks,t.id,{baseStart:e.target.value,base_start:e.target.value}));
-                    }
-                  }}
-                  onClick={e=>e.stopPropagation()}/>
-              :<span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap"}}>{fmtDate(t.baseStart)}</span>
-            }
+          {/* Start — click opens date picker */}
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:"pointer",position:"relative"}}
+            onClick={e=>{e.stopPropagation();e.currentTarget.querySelector("input").showPicker&&e.currentTarget.querySelector("input").showPicker();}}>
+            <span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtDate(t.baseStart)||"—"}</span>
+            <input type="date" defaultValue={t.baseStart||""}
+              style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%"}}
+              onChange={async e=>{
+                const v=e.target.value;
+                await api.put("/tasks/"+t.id,{base_start:v});
+                setTasks(updateInTree(tasks,t.id,{baseStart:v}));
+              }}
+              onClick={e=>e.stopPropagation()}/>
           </div>
 
-          {/* End — click to edit inline */}
-          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:"pointer"}}
-            onClick={e=>{e.stopPropagation();setEditEnd(true);}}>
-            {editEnd
-              ?<input type="date" autoFocus defaultValue={t.baseEnd||""}
-                  style={{width:"100%",fontSize:10,border:"none",outline:"none",background:"transparent",color:delay>0?T.red:T.blu,fontFamily:"inherit"}}
-                  onBlur={async e=>{
-                    setEditEnd(false);
-                    if(e.target.value!==t.baseEnd){
-                      await api.put("/tasks/"+t.id,{base_end:e.target.value});
-                      setTasks(updateInTree(tasks,t.id,{baseEnd:e.target.value,base_end:e.target.value}));
-                    }
-                  }}
-                  onClick={e=>e.stopPropagation()}/>
-              :<span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap"}}>{fmtDate(t.baseEnd)}</span>
-            }
+          {/* End — click opens date picker */}
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:"pointer",position:"relative"}}
+            onClick={e=>{e.stopPropagation();e.currentTarget.querySelector("input").showPicker&&e.currentTarget.querySelector("input").showPicker();}}>
+            <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtDate(t.baseEnd)||"—"}</span>
+            <input type="date" defaultValue={t.baseEnd||""}
+              style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%"}}
+              onChange={async e=>{
+                const v=e.target.value;
+                await api.put("/tasks/"+t.id,{base_end:v});
+                setTasks(updateInTree(tasks,t.id,{baseEnd:v}));
+              }}
+              onClick={e=>e.stopPropagation()}/>
           </div>
 
           {/* Days */}
