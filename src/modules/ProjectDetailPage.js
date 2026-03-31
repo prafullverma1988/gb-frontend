@@ -2371,9 +2371,8 @@ function TabTasks({ projectId }) {
   const [filterSaveName,setFilterSaveName] = useState("");
   const [lastUsedFilter,setLastUsedFilter] = useState(null);
   const [levelFilter,setLevelFilter] = useState("All"); // All | 1 | 2 | 3 | 4 | 5 | 6 | 7
-  const [dragId,setDragId]           = useState(null);
-  const [dragOverId,setDragOverId]   = useState(null);
-  const [infoTask,setInfoTask]       = useState(null); // task for info tooltip
+  const [infoTask,setInfoTask]       = useState(null);
+  const [contextMenu,setContextMenu] = useState(null); // {x,y,task}
   const [dhyanTask,setDhyanTask]     = useState(null);
   const [pendingTask,setPendingTask] = useState(null);
   const [openTask,setOpenTask]       = useState(null);
@@ -2448,6 +2447,29 @@ function TabTasks({ projectId }) {
     else setOpenTask(t);
   };
 
+  // Move task up/down within siblings
+  const moveTask = async (taskId, dir) => {
+    const flat = ptFlatten(tasks);
+    const idx = flat.findIndex(t => t.id === taskId);
+    if (idx === -1) return;
+    const swapIdx = dir === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= flat.length) return;
+    const a = flat[idx], b = flat[swapIdx];
+    // Swap sort_order
+    await Promise.all([
+      api.put("/tasks/" + a.id, {sort_order: b.sort_order ?? swapIdx}),
+      api.put("/tasks/" + b.id, {sort_order: a.sort_order ?? idx}),
+    ]);
+    // Reload
+    const r = await api.get("/tasks?project_id=" + projectId);
+    if (r.success) {
+      const fl = r.data || []; const map = {};
+      fl.forEach((t,i) => { t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0"); t.baseStart=t.base_start; t.baseEnd=t.base_end; t.dhyanRakhen=t.dhyan_rakhen; t.assignee=t.assignee_name||""; t.serial=i+1; map[t.id]=t; });
+      const roots=[]; fl.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
+      setTasks(roots);
+    }
+  };
+
   function updateInTree(list,id,upd){
     return list.map(t=>{
       if(t.id===id) return{...t,...upd,lastUpdate:"2026-03-15"};
@@ -2473,32 +2495,13 @@ function TabTasks({ projectId }) {
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
     const lvl=lvlColors[Math.min(depth,6)];
     const indent=depth*16;
-    const isDragging=dragId===t.id;
-    const isDragOver=dragOverId===t.id;
+    
+    
     return(
-      <div key={t.id}
-        draggable
-        onDragStart={()=>setDragId(t.id)}
-        onDragEnd={async()=>{
-          if(dragId&&dragOverId&&dragId!==dragOverId){
-            // Swap sort_order in backend
-            await api.put("/tasks/"+dragId,{sort_order:dragOverId});
-            await api.put("/tasks/"+dragOverId,{sort_order:dragId});
-            // Reload
-            const r=await api.get("/tasks?project_id="+projectId);
-            if(r.success){const flat=r.data||[];const map={};flat.forEach((t,i)=>{t.children=[];t.no=t.task_no;t.tsk_no="TSK"+String(t.id).padStart(6,"0");t.baseStart=t.base_start;t.baseEnd=t.base_end;t.dhyanRakhen=t.dhyan_rakhen;t.assignee=t.assignee_name||"";map[t.id]=t;});const roots=[];flat.forEach(t=>{if(t.parent_id&&map[t.parent_id])map[t.parent_id].children.push(t);else roots.push(t);});setTasks(roots);}
-          }
-          setDragId(null);setDragOverId(null);
-        }}
-        onDragOver={e=>{e.preventDefault();setDragOverId(t.id);}}
-        onDragLeave={()=>setDragOverId(null)}>
-        <div style={{display:"grid",gridTemplateColumns:"20px 36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${T.b1}`,background:isDragOver?"#E0F2FE":isDragging?"#EFF6FF":depth===0?T.surfaceB+"66":"transparent",borderLeft:`3px solid ${lvl}`,transition:"background .1s",opacity:isDragging?0.5:1,cursor:"grab"}}
-          onMouseEnter={e=>{if(!isDragging){e.currentTarget.style.background=T.bluL+"44";}}}
-          onMouseLeave={e=>{e.currentTarget.style.background=isDragOver?"#E0F2FE":isDragging?"#EFF6FF":depth===0?T.surfaceB+"66":"transparent";}}>
-          {/* Drag handle */}
-          <div style={{display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,cursor:"grab"}}>
-            <svg width={10} height={14} viewBox="0 0 10 14" fill={T.b2}><circle cx={3} cy={2} r={1.2}/><circle cx={7} cy={2} r={1.2}/><circle cx={3} cy={7} r={1.2}/><circle cx={7} cy={7} r={1.2}/><circle cx={3} cy={12} r={1.2}/><circle cx={7} cy={12} r={1.2}/></svg>
-          </div>
+      <div key={t.id} onContextMenu={e=>{e.preventDefault();setContextMenu({x:e.clientX,y:e.clientY,task:t});}} style={{position:"relative"}}>
+        <div style={{display:"grid",gridTemplateColumns:"36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${T.b1}`,background:depth===0?T.surfaceB+"66":"transparent",borderLeft:`3px solid ${lvl}`,transition:"background .15s",cursor:"pointer"}}
+          onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"44"}
+          onMouseLeave={e=>e.currentTarget.style.background=depth===0?T.surfaceB+"66":"transparent"}>
           {/* Toggle */}
           <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",cursor:hasKids?"pointer":"default"}}>
             {hasKids
@@ -2541,8 +2544,16 @@ function TabTasks({ projectId }) {
           <span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap"}}>{t.duration>0?t.duration+"d":"—"}</span>
           {/* Assignee */}
           <span style={{fontSize:10,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
-          {/* Actions: Info + Add Subtask + Edit */}
-          <div style={{display:"flex",gap:3,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+          {/* Actions: Up/Down + Info + Add + Edit */}
+          <div style={{display:"flex",gap:2,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+            <button onClick={()=>moveTask(t.id,"up")} title="Move Up"
+              style={{width:20,height:20,borderRadius:4,background:T.surfaceB,border:`1px solid ${T.b2}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.t3} strokeWidth={2.5}><path d="M18 15l-6-6-6 6"/></svg>
+            </button>
+            <button onClick={()=>moveTask(t.id,"down")} title="Move Down"
+              style={{width:20,height:20,borderRadius:4,background:T.surfaceB,border:`1px solid ${T.b2}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.t3} strokeWidth={2.5}><path d="M6 9l6 6 6-6"/></svg>
+            </button>
             <button onClick={()=>setInfoTask(infoTask?.id===t.id?null:t)} title="Info"
               style={{width:20,height:20,borderRadius:4,background:infoTask?.id===t.id?T.ambL:T.surfaceB,border:`1px solid ${infoTask?.id===t.id?T.ambM:T.b2}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
               <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?T.amb:T.t4} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
@@ -2795,8 +2806,8 @@ function TabTasks({ projectId }) {
       {view==="list"&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           {/* Header */}
-          <div style={{display:"grid",gridTemplateColumns:"20px 36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",padding:"8px 14px",background:"#0D1B2A"}}>
-            {["","S.No","Task Name","Category","Status","Progress","Start","End","Days","Assigned",""].map((h,i)=>(
+          <div style={{display:"grid",gridTemplateColumns:"36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",padding:"8px 14px",background:"#0D1B2A"}}>
+            {["S.No","#","Task Name","Category","Status","Progress","Start","End","Days","Actions"].map((h,i)=>(
               <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>{h}</span>
             ))}
           </div>
@@ -2851,6 +2862,40 @@ function TabTasks({ projectId }) {
       {/* Loading state */}
       {loading && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>Loading tasks...</div>}
       {!loading && tasks.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>No tasks yet — click + Add Task to create</div>}
+
+      {/* Context Menu */}
+      {contextMenu && <>
+        <div onClick={()=>setContextMenu(null)} style={{position:"fixed",inset:0,zIndex:998}}/>
+        <div style={{position:"fixed",left:contextMenu.x,top:contextMenu.y,zIndex:999,background:"white",borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",border:"1px solid #E5E7EB",minWidth:200,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+          <div style={{padding:"6px 0"}}>
+            {/* Task info header */}
+            <div style={{padding:"8px 14px 6px",borderBottom:"1px solid #F3F4F6",marginBottom:4}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{contextMenu.task.name}</div>
+              <div style={{fontSize:9.5,color:"#9CA3AF",fontFamily:"monospace"}}>{contextMenu.task.tsk_no} · {contextMenu.task.no}</div>
+            </div>
+            {[
+              {icon:"M5 15l7-7 7 7",label:"Move Up",action:()=>{moveTask(contextMenu.task.id,"up");setContextMenu(null);}},
+              {icon:"M19 9l-7 7-7-7",label:"Move Down",action:()=>{moveTask(contextMenu.task.id,"down");setContextMenu(null);}},
+              null, // divider
+              {icon:"M12 5v14M5 12h14",label:"Add Subtask",action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981"},
+              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:"Edit Task",action:()=>{setEditTask(contextMenu.task);setContextMenu(null);}},
+              {icon:"M20 6L9 17l-5-5",label:"Mark Complete",action:async()=>{await api.put("/tasks/"+contextMenu.task.id,{progress:100});setTasks(updateInTree(tasks,contextMenu.task.id,{progress:100,status:"Completed"}));setContextMenu(null);}},
+              null,
+              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{if(window.confirm("Delete this task?")){{await api.del("/tasks/"+contextMenu.task.id);setTasks(ptFlatten(tasks).filter(t=>t.id!==contextMenu.task.id));setContextMenu(null);}};},color:"#EF4444"},
+            ].map((item,i)=>
+              item === null
+              ? <div key={i} style={{height:1,background:"#F3F4F6",margin:"4px 0"}}/>
+              : <button key={i} onClick={item.action}
+                  style={{width:"100%",padding:"8px 14px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:9,fontSize:13,color:item.color||"#374151",textAlign:"left"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="#F9FAFB"}
+                  onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={item.color||"#6B7280"} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d={item.icon}/></svg>
+                  {item.label}
+                </button>
+            )}
+          </div>
+        </div>
+      </>}
 
       {/* Task Detail drawer */}
       {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}}/>}
