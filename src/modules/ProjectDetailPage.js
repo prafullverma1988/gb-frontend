@@ -3037,9 +3037,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
 
   // Materials
   const [materials,setMaterials]=useState([]);
+  const [libMaterials,setLibMaterials]=useState([]); // from library + GRN
   const [showMatForm,setShowMatForm]=useState(false);
-  const [matForm,setMatForm]=useState({material_name:"",required_qty:"",received_qty:"",used_qty:"",unit:"Bag",remark:""});
+  const [matForm,setMatForm]=useState({material_name:"",required_qty:"",used_qty:"",unit:"Bag",remark:""});
   const [editMatId,setEditMatId]=useState(null);
+  const [usedEditId,setUsedEditId]=useState(null); // inline used qty edit
+  const [usedEditVal,setUsedEditVal]=useState("");
 
   // Labour
   const [labours,setLabours]=useState([]);
@@ -3080,7 +3083,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
   },[]);
   useEffect(()=>{
-    if(tab==="materials") api.get("/tasks/"+task.id+"/materials").then(r=>{if(r.success)setMaterials(r.data||[]);}).catch(()=>{});
+    if(tab==="materials"){
+      api.get("/tasks/"+task.id+"/materials").then(r=>{if(r.success)setMaterials(r.data||[]);}).catch(()=>{});
+      if(projectId) api.get("/tasks/material-list/"+projectId).then(r=>{if(r.success)setLibMaterials(r.data||[]);}).catch(()=>{});
+    }
     if(tab==="labour")    api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
     if(tab==="photos")    api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
     if(tab==="issues")    api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
@@ -3226,108 +3232,129 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
         {/* ── MATERIALS TAB ── */}
         {tab==="materials"&&(
           <div>
-            {/* Summary cards */}
+            {/* Summary */}
             {materials.length>0&&(
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
                 {[
-                  {l:"Required",v:materials.reduce((s,m)=>s+Number(m.required_qty||0),0),c:"#64748B",bg:"#F8FAFC"},
-                  {l:"Received",v:materials.reduce((s,m)=>s+Number(m.received_qty||0),0),c:"#2563EB",bg:"#DBEAFE"},
-                  {l:"Used",v:materials.reduce((s,m)=>s+Number(m.used_qty||0),0),c:"#16A34A",bg:"#DCFCE7"},
+                  {l:"Required",v:materials.reduce((s,m)=>s+Number(m.required_qty||0),0).toFixed(1),c:"#64748B",bg:"#F8FAFC"},
+                  {l:"Received (GRN)",v:materials.reduce((s,m)=>s+Number(m.received_qty||0),0).toFixed(1),c:"#2563EB",bg:"#DBEAFE"},
+                  {l:"Used (This Task)",v:materials.reduce((s,m)=>s+Number(m.used_qty||0),0).toFixed(1),c:"#16A34A",bg:"#DCFCE7"},
                 ].map(s=>(
                   <div key={s.l} style={{background:s.bg,borderRadius:8,padding:"10px",textAlign:"center",border:"1px solid "+s.c+"33"}}>
-                    <div style={{fontSize:18,fontWeight:800,color:s.c}}>{s.v}</div>
-                    <div style={{fontSize:9.5,color:"#64748B",marginTop:2}}>{s.l}</div>
+                    <div style={{fontSize:17,fontWeight:800,color:s.c}}>{s.v}</div>
+                    <div style={{fontSize:9,color:"#64748B",marginTop:2}}>{s.l}</div>
                   </div>
                 ))}
               </div>
             )}
+
+            {/* Toolbar */}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".5px"}}>Materials ({materials.length})</span>
-              <button onClick={()=>{setShowMatForm(s=>!s);setEditMatId(null);setMatForm({material_name:"",required_qty:"",received_qty:"",used_qty:"",unit:"Bag",remark:""}); }}
+              <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".5px"}}>
+                Materials ({materials.length}) {materials.length>0&&"· From Procurement/GRN"}
+              </span>
+              <button onClick={()=>{setShowMatForm(s=>!s);setMatForm({material_name:"",required_qty:"",used_qty:"",unit:"Bag",remark:""}); }}
                 style={{padding:"6px 14px",borderRadius:6,background:showMatForm?"#F1F5F9":"#2563EB",color:showMatForm?"#64748B":"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                {showMatForm?"Cancel":"+ Add Material"}
+                {showMatForm?"Cancel":"+ Mark Usage"}
               </button>
             </div>
+
+            {/* Add/Edit form */}
             {showMatForm&&(
-              <div style={{background:"white",borderRadius:10,padding:"14px",border:"1px solid #E2E8F0",marginBottom:12,boxShadow:"0 1px 4px rgba(0,0,0,.06)"}}>
+              <div style={{background:"white",borderRadius:10,padding:"14px",border:"1px solid #E2E8F0",marginBottom:12}}>
                 <div style={{marginBottom:10}}>
-                  <LBL t="Material Name *"/>
-                  <INP value={matForm.material_name} onChange={e=>setMatForm(p=>({...p,material_name:e.target.value}))} placeholder="e.g. OPC Cement 53 Grade"/>
+                  <LBL t="Select Material *"/>
+                  <SEL value={matForm.material_name} onChange={e=>{
+                    const sel=libMaterials.find(m=>m.name===e.target.value);
+                    setMatForm(p=>({...p,material_name:e.target.value,unit:sel?.unit||p.unit}));
+                  }} style={{background:"white"}}>
+                    <option value="">-- Select from library --</option>
+                    {libMaterials.map(m=><option key={m.name} value={m.name}>{m.name} ({m.unit||"Nos"})</option>)}
+                  </SEL>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                  <div><LBL t="Unit"/><SEL value={matForm.unit} onChange={e=>setMatForm(p=>({...p,unit:e.target.value}))}>{UNITS.map(u=><option key={u}>{u}</option>)}</SEL></div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:10}}>
+                  <div><LBL t="Unit"/><INP value={matForm.unit} onChange={e=>setMatForm(p=>({...p,unit:e.target.value}))} placeholder="Bag"/></div>
                   <div><LBL t="Required Qty"/><INP type="number" value={matForm.required_qty} onChange={e=>setMatForm(p=>({...p,required_qty:e.target.value}))} placeholder="0"/></div>
-                  <div><LBL t="Received Qty"/><INP type="number" value={matForm.received_qty} onChange={e=>setMatForm(p=>({...p,received_qty:e.target.value}))} placeholder="0"/></div>
-                  <div><LBL t="Used Qty"/><INP type="number" value={matForm.used_qty} onChange={e=>setMatForm(p=>({...p,used_qty:e.target.value}))} placeholder="0"/></div>
+                  <div><LBL t="Used Qty *"/><INP type="number" value={matForm.used_qty} onChange={e=>setMatForm(p=>({...p,used_qty:e.target.value}))} placeholder="0"/></div>
                 </div>
                 <div style={{marginBottom:10}}><LBL t="Remark"/><INP value={matForm.remark} onChange={e=>setMatForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"/></div>
                 <button onClick={async()=>{
-                  if(!matForm.material_name.trim()) return alert("Material name required");
-                  const res=editMatId
-                    ?await api.put("/tasks/"+task.id+"/materials/"+editMatId,matForm)
-                    :await api.post("/tasks/"+task.id+"/materials",matForm);
+                  if(!matForm.material_name) return alert("Please select a material");
+                  const res=await api.post("/tasks/"+task.id+"/materials",matForm);
                   if(res.success){
-                    if(editMatId) setMaterials(p=>p.map(x=>x.id===editMatId?res.data:x));
-                    else setMaterials(p=>[...p,res.data]);
-                    setMatForm({material_name:"",required_qty:"",received_qty:"",used_qty:"",unit:"Bag",remark:""});
-                    setShowMatForm(false);setEditMatId(null);
+                    // Reload materials to get updated GRN data
+                    const r2=await api.get("/tasks/"+task.id+"/materials");
+                    if(r2.success) setMaterials(r2.data||[]);
+                    setMatForm({material_name:"",required_qty:"",used_qty:"",unit:"Bag",remark:""});
+                    setShowMatForm(false);
                   } else alert(res.message||"Failed");
                 }} style={{width:"100%",padding:"10px",borderRadius:7,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
-                  {editMatId?"Update Material":"Add Material"}
+                  Save Material Usage
                 </button>
               </div>
             )}
-            {materials.length===0&&!showMatForm&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>No materials added yet</div>}
-            {materials.map(m=>{
+
+            {/* Empty state */}
+            {materials.length===0&&!showMatForm&&(
+              <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
+                <div style={{fontSize:13,marginBottom:6}}>No materials received for this project yet</div>
+                <div style={{fontSize:11}}>Add materials via Procurement → GRN</div>
+              </div>
+            )}
+
+            {/* Material cards */}
+            {materials.map((m,i)=>{
               const req=Number(m.required_qty||0);
               const rec=Number(m.received_qty||0);
               const used=Number(m.used_qty||0);
-              const usedPct=req>0?Math.min(100,Math.round((used/req)*100)):0;
-              const recPct=req>0?Math.min(100,Math.round((rec/req)*100)):0;
-              const over=used>req&&req>0;
+              const usedPct=rec>0?Math.min(100,Math.round((used/rec)*100)):0;
+              const over=used>rec&&rec>0;
+              const isEdit=usedEditId===m.material_name;
               return(
-                <div key={m.id} style={{background:"white",borderRadius:10,padding:"12px 14px",border:"1px solid #E2E8F0",marginBottom:8,boxShadow:"0 1px 3px rgba(0,0,0,.04)"}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                <div key={m.material_name+i} style={{background:"white",borderRadius:10,padding:"12px 14px",border:"1px solid #E2E8F0",marginBottom:8,borderLeft:"3px solid "+(over?"#EF4444":m.from_grn?"#3B82F6":"#94A3B8")}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
                     <div>
                       <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{m.material_name}</div>
-                      {m.remark&&<div style={{fontSize:11,color:"#94A3B8",marginTop:1}}>{m.remark}</div>}
+                      <div style={{display:"flex",gap:5,marginTop:2,alignItems:"center"}}>
+                        <span style={{fontSize:9,color:"white",background:m.from_grn?"#3B82F6":"#94A3B8",padding:"1px 6px",borderRadius:3,fontWeight:600}}>{m.from_grn?"GRN":"Manual"}</span>
+                        <span style={{fontSize:10,color:"#94A3B8"}}>{m.unit}</span>
+                        {m.remark&&<span style={{fontSize:10,color:"#94A3B8"}}>· {m.remark}</span>}
+                      </div>
                     </div>
-                    <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>{setMatForm({material_name:m.material_name,required_qty:m.required_qty,received_qty:m.received_qty||0,used_qty:m.used_qty,unit:m.unit,remark:m.remark||""});setEditMatId(m.id);setShowMatForm(true);}}
-                        style={{width:22,height:22,borderRadius:4,background:"#EFF6FF",border:"1px solid #BFDBFE",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                      </button>
-                      <button onClick={async()=>{if(window.confirm("Delete?")){ const r=await api.del("/tasks/"+task.id+"/materials/"+m.id);if(r.success)setMaterials(p=>p.filter(x=>x.id!==m.id));}}}
-                        style={{width:22,height:22,borderRadius:4,background:"#FEF2F2",border:"1px solid #FECACA",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                        <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#DC2626" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                      </button>
-                    </div>
+                    {/* Inline used qty edit */}
+                    {isEdit
+                      ?<div style={{display:"flex",gap:5,alignItems:"center"}}>
+                        <input autoFocus type="number" value={usedEditVal} onChange={e=>setUsedEditVal(e.target.value)}
+                          style={{width:60,padding:"4px 7px",borderRadius:5,border:"1.5px solid #3B82F6",fontSize:13,fontWeight:700,textAlign:"center",outline:"none"}}/>
+                        <button onClick={async()=>{
+                          const res=await api.post("/tasks/"+task.id+"/materials",{...m,used_qty:Number(usedEditVal)});
+                          if(res.success){const r=await api.get("/tasks/"+task.id+"/materials");if(r.success)setMaterials(r.data||[]);}
+                          setUsedEditId(null);
+                        }} style={{padding:"4px 9px",borderRadius:5,background:"#16A34A",color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>✓</button>
+                        <button onClick={()=>setUsedEditId(null)} style={{padding:"4px 9px",borderRadius:5,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:11}}>✕</button>
+                      </div>
+                      :<button onClick={()=>{setUsedEditId(m.material_name);setUsedEditVal(String(used));}}
+                          style={{padding:"5px 11px",borderRadius:6,background:"#EFF6FF",color:"#2563EB",border:"1px solid #BFDBFE",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+                          ✏ Used: {used}
+                        </button>
+                    }
                   </div>
-                  {/* 3 columns: Required | Received | Used */}
+                  {/* 3 numbers */}
                   <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
                     {[{l:"Required",v:req,c:"#64748B"},{l:"Received",v:rec,c:"#2563EB"},{l:"Used",v:used,c:over?"#DC2626":"#16A34A"}].map(col=>(
-                      <div key={col.l} style={{textAlign:"center",padding:"6px",background:"#F8FAFC",borderRadius:6,border:"1px solid #E2E8F0"}}>
-                        <div style={{fontSize:14,fontWeight:800,color:col.c}}>{col.v}</div>
-                        <div style={{fontSize:9,color:"#94A3B8",marginTop:1}}>{col.l} · {m.unit}</div>
+                      <div key={col.l} style={{textAlign:"center",padding:"6px 4px",background:"#F8FAFC",borderRadius:6,border:"1px solid #E2E8F0"}}>
+                        <div style={{fontSize:15,fontWeight:800,color:col.c}}>{col.v}</div>
+                        <div style={{fontSize:8.5,color:"#94A3B8",marginTop:1}}>{col.l}</div>
                       </div>
                     ))}
                   </div>
-                  {/* Progress bars */}
-                  {req>0&&<div style={{display:"flex",flexDirection:"column",gap:4}}>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:9,color:"#2563EB",width:52}}>Received</span>
-                      <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:recPct+"%",background:"#3B82F6",borderRadius:2}}/>
-                      </div>
-                      <span style={{fontSize:9,color:"#2563EB",minWidth:26,textAlign:"right"}}>{recPct}%</span>
+                  {/* Progress bar: used vs received */}
+                  {rec>0&&<div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <span style={{fontSize:9,color:over?"#DC2626":"#16A34A",width:32}}>Used</span>
+                    <div style={{flex:1,height:5,background:"#E2E8F0",borderRadius:3,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:Math.min(100,usedPct)+"%",background:over?"#EF4444":"#22C55E",borderRadius:3,transition:"width .3s"}}/>
                     </div>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:9,color:over?"#DC2626":"#16A34A",width:52}}>Used</span>
-                      <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
-                        <div style={{height:"100%",width:Math.min(100,usedPct)+"%",background:over?"#EF4444":"#22C55E",borderRadius:2}}/>
-                      </div>
-                      <span style={{fontSize:9,color:over?"#DC2626":"#16A34A",minWidth:26,textAlign:"right"}}>{usedPct}%</span>
-                    </div>
+                    <span style={{fontSize:9,fontWeight:700,color:over?"#DC2626":"#16A34A",minWidth:28,textAlign:"right"}}>{usedPct}%</span>
                   </div>}
                 </div>
               );
