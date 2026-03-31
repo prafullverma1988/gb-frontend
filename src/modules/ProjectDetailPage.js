@@ -2898,8 +2898,17 @@ function TabTasks({ projectId }) {
         </div>
       )}
 
-      {/* Loading state */}
-      {loading && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>Loading tasks...</div>}
+      {/* Skeleton loader */}
+      {loading && (
+        <div style={{background:"white",borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden",marginTop:4}}>
+          <div style={{display:"grid",gridTemplateColumns:"26px 52px 1fr 85px 100px 80px 80px 44px 70px",background:"#0D1B2A",padding:"7px 4px"}}>
+            {["","No/TSK","Task Name","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
+              <div key={i} style={{padding:"0 5px"}}><span style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{h}</span></div>
+            ))}
+          </div>
+          <TaskSkeleton/>
+        </div>
+      )}
       {!loading && tasks.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>No tasks yet — click + Add Task to create</div>}
 
       {/* Context Menu */}
@@ -3119,7 +3128,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           {id:"issues",l:"Issues"},
           {id:"comments",l:"Comments"},
         ].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)}
+          <button key={t.id} onClick={()=>switchTab(t.id)}
             style={{padding:"10px 12px",border:"none",background:"none",fontSize:12.5,fontWeight:tab===t.id?700:400,color:tab===t.id?T.blu:T.t3,borderBottom:tab===t.id?"2px solid "+T.blu:"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0}}>
             {t.l}
           </button>
@@ -5463,6 +5472,32 @@ function TabMOM() {
 }
 
 // ═══════════════════════════════════════════════════════════════════
+// ─── SKELETON LOADER ─────────────────────────────────────────────
+function Sk({ w="100%", h=14, r=6, mb=0 }) {
+  return <div style={{width:w,height:h,borderRadius:r,marginBottom:mb,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>;
+}
+if(typeof document!=="undefined"&&!document.getElementById("sk-style")){const s=document.createElement("style");s.id="sk-style";s.textContent="@keyframes skShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}";document.head.appendChild(s);}
+
+function TaskSkeleton(){
+  return(
+    <div style={{padding:"0 0"}}>
+      {[1,2,3,4,5,6,7,8].map(i=>(
+        <div key={i} style={{display:"grid",gridTemplateColumns:"26px 52px 1fr 85px 100px 80px 80px 44px 70px",alignItems:"center",height:34,borderBottom:"1px solid #F3F4F6",paddingLeft:4,opacity:Math.max(0.2,1-i*0.1)}}>
+          <Sk w={14} h={14} r={3}/>
+          <div style={{padding:"0 5px"}}><Sk w="80%" h={10} mb={3}/><Sk w="55%" h={8}/></div>
+          <div style={{padding:"0 8px"}}><Sk w={i%3===0?"55%":i%2===0?"70%":"85%"} h={11}/></div>
+          <div style={{padding:"0 6px"}}><Sk w={58} h={18} r={20}/></div>
+          <div style={{padding:"0 8px"}}><Sk w="65%" h={8} mb={4}/><Sk w="65%" h={4} r={2}/></div>
+          <div style={{padding:"0 6px"}}><Sk w={52} h={10}/></div>
+          <div style={{padding:"0 6px"}}><Sk w={52} h={10}/></div>
+          <div style={{padding:"0 4px"}}><Sk w={24} h={10}/></div>
+          <div style={{padding:"0 6px"}}><Sk w={40} h={10}/></div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // PROJECT DETAIL PAGE — SHELL
 // ═══════════════════════════════════════════════════════════════════
 const TABS = [
@@ -5484,24 +5519,32 @@ const TABS = [
 
 function ProjectDetailPage({project=PROJ, onBack}) {
   const [tab, setTab] = useState("overview");
+  const [visited, setVisited] = useState({"overview": true}); // track visited tabs
   const sm = STATUS_S[project.status]||{c:T.slt, bg:T.sltL};
   const margin = project.boq - project.expense;
 
-  const tabContent = {
-    overview:   <TabOverview    proj={project}/>,
-    design:     <TabDesign project={project}/>,
-    estimate:   <TabEstimate/>,
-    party:      <TabParty/>,
-    transaction:<TabTransaction/>,
-    todo:       <TabTodo/>,
-    task:       <TabTasks projectId={project.id}/>,
-    attendance: <TabAttendance/>,
-    material:   <TabMaterial project={project}/>,
-    subcon:     <TabSubcon/>,
-    equipment:  <TabEquipment/>,
-    files:      <TabFiles/>,
-    site:       <TabSite/>,
-    mom:        <TabMOM/>,
+  // Mark tab as visited on switch
+  const switchTab = (t) => {
+    setTab(t);
+    setVisited(v => ({...v, [t]: true}));
+  };
+
+  // All tab components — only render if visited (lazy), show/hide via display
+  const allTabs = {
+    overview:    <TabOverview    proj={project}/>,
+    design:      <TabDesign project={project}/>,
+    estimate:    <TabEstimate/>,
+    party:       <TabParty/>,
+    transaction: <TabTransaction/>,
+    todo:        <TabTodo/>,
+    task:        <TabTasks projectId={project.id}/>,
+    attendance:  <TabAttendance/>,
+    material:    <TabMaterial project={project}/>,
+    subcon:      <TabSubcon/>,
+    equipment:   <TabEquipment/>,
+    files:       <TabFiles/>,
+    site:        <TabSite/>,
+    mom:         <TabMOM/>,
   };
 
   return (
@@ -5562,7 +5605,14 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
       {/* ── CONTENT ── */}
       <div style={{flex:1, overflowY:"auto", background:T.bg}}>
-        {tabContent[tab]}
+        {/* Render visited tabs, hide inactive ones — NO unmount = cached! */}
+        {Object.keys(allTabs).map(key => (
+          visited[key] ? (
+            <div key={key} style={{display: tab===key ? "block" : "none", height:"100%", overflow:"auto"}}>
+              {allTabs[key]}
+            </div>
+          ) : null
+        ))}
       </div>
     </div>
   );

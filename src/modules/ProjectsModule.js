@@ -1053,10 +1053,37 @@ function ProjectsPage({onSelectProject}){
   );
 
   if(loading) return(
-    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontFamily:"'Segoe UI',sans-serif"}}>
-      <div style={{textAlign:"center",color:T.t3}}>
-        <div style={{fontSize:16,fontWeight:600}}>Loading Projects...</div>
-        <div style={{fontSize:12,marginTop:6,color:T.t4}}>Fetching from server</div>
+    <div style={{padding:"14px 18px",fontFamily:"'Segoe UI',sans-serif",background:T.bg,minHeight:"100%"}}>
+      {/* Skeleton Pills */}
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        {[80,70,60,75,65].map((w,i)=>(
+          <div key={i} style={{width:w,height:28,borderRadius:20,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
+        ))}
+      </div>
+      {/* Skeleton toolbar */}
+      <div style={{display:"flex",gap:8,marginBottom:14}}>
+        <div style={{flex:1,height:34,borderRadius:8,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
+        {[90,80,100].map((w,i)=>(
+          <div key={i} style={{width:w,height:34,borderRadius:8,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
+        ))}
+      </div>
+      {/* Skeleton project cards */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
+        {[1,2,3,4,5,6].map(i=>(
+          <div key={i} style={{background:"white",borderRadius:12,padding:18,boxShadow:"0 1px 4px rgba(0,0,0,.06)",border:"1px solid #F3F4F6",opacity:Math.max(0.3,1-i*0.12)}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
+              <div style={{width:"60%",height:14,borderRadius:4,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
+              <div style={{width:60,height:20,borderRadius:20,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
+            </div>
+            <div style={{width:"40%",height:10,borderRadius:4,marginBottom:12,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
+            <div style={{height:4,borderRadius:2,marginBottom:12,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
+            <div style={{display:"flex",justifyContent:"space-between"}}>
+              {[70,60,80].map((w,j)=>(
+                <div key={j} style={{width:w,height:10,borderRadius:4,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
+              ))}
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
