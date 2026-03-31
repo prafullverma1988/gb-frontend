@@ -656,6 +656,7 @@ function MaterialCategorySection() {
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ name: "", code: "", description: "" });
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -665,8 +666,11 @@ function MaterialCategorySection() {
   const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", description: c.description||"" }); setShowModal(true); };
   const save = async () => {
     if (!form.name.trim()) return;
-    await apiSave({ name: form.name, code: form.code, description: form.description }, editing?.id);
-    setShowModal(false);
+    setSaving(true);
+    const res = await apiSave({ name: form.name, code: form.code, description: form.description }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
   };
   const del = (id) => apiDel(id);
 
