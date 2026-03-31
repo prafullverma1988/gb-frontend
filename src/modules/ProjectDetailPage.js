@@ -2319,8 +2319,39 @@ const PROJECT_TASKS=[
 function ptFlatten(tasks,out=[]){tasks.forEach(t=>{out.push(t);if(t.children?.length)ptFlatten(t.children,out)});return out;}
 function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date("2026-03-15")-new Date(t.baseEnd))/(1000*86400));return d>0?d:0;}
 
-function TabTasks() {
-  const [tasks,setTasks]     = useState(PROJECT_TASKS);
+function TabTasks({ projectId }) {
+  const [tasks,setTasks]     = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!projectId) { setLoading(false); return; }
+    api.get("/tasks?project_id=" + projectId).then(r => {
+      if (r.success) {
+        // Build tree from flat list
+        const flat = r.data || [];
+        const map = {};
+        flat.forEach(t => {
+          t.children = [];
+          t.no = t.task_no;
+          t.baseStart = t.base_start;
+          t.baseEnd = t.base_end;
+          t.actualStart = t.actual_start;
+          t.actualEnd = t.actual_end;
+          t.dhyanRakhen = t.dhyan_rakhen;
+          t.lastUpdate = t.last_update;
+          t.assignee = t.assignee_name || t.assigned_to || "";
+          map[t.id] = t;
+        });
+        const roots = [];
+        flat.forEach(t => {
+          if (t.parent_id && map[t.parent_id]) map[t.parent_id].children.push(t);
+          else roots.push(t);
+        });
+        setTasks(roots);
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [projectId]);
   const [view,setView]       = useState("list");
   const [collapsed,setCollapsed] = useState({});
   const [fCat,setFCat]       = useState("All");
@@ -2679,23 +2710,47 @@ function TabTasks() {
         </div>
       )}
 
+      {/* Loading state */}
+      {loading && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>Loading tasks...</div>}
+      {!loading && tasks.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>No tasks yet — click + Add Task to create</div>}
+
       {/* Task Detail drawer */}
-      {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} onUpdate={(id,u)=>setTasks(updateInTree(tasks,id,u))}/>}
+      {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}}/>}
 
       {/* Edit Task drawer */}
-      {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={(id,u)=>{setTasks(updateInTree(tasks,id,u));setEditTask(null);}}/>}
+      {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
+        await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen });
+        setTasks(updateInTree(tasks,id,u)); setEditTask(null);
+      }}/>}
 
       {/* Add Task modal */}
-      {showAdd&&<PTAddTask parent={addParent} allTasks={allFlat} onClose={()=>{setShowAdd(false);setAddParent(null);}} onSave={(form)=>{
-        const nId=addParent?`${addParent.id}.${Date.now()%100}`:String(tasks.length+1);
-        const nt={id:nId,no:nId,level:addParent?(addParent.level+1):1,name:form.name,category:form.category,tag:form.tag||"",status:"Not Started",progress:0,assignee:form.assignee,baseStart:form.baseStart,baseEnd:form.baseEnd,actualStart:null,actualEnd:null,duration:Math.round((new Date(form.baseEnd)-new Date(form.baseStart))/(1000*86400)),dependencies:form.dependencies||[],dhyanRakhen:form.dhyanRakhen||null,lastUpdate:null,children:[]};
-        if(addParent){
-          function addChild(list){return list.map(t=>{if(t.id===addParent.id)return{...t,children:[...t.children,nt]};return{...t,children:addChild(t.children||[])};});}
-          setTasks(addChild(tasks));
-        } else {
-          setTasks(p=>[...p,nt]);
-        }
-        setShowAdd(false);setAddParent(null);
+      {showAdd&&<PTAddTask parent={addParent} allTasks={allFlat} onClose={()=>{setShowAdd(false);setAddParent(null);}} onSave={async(form)=>{
+        const res = await api.post("/tasks", {
+          project_id: projectId,
+          parent_id: addParent?.id || null,
+          name: form.name,
+          category: form.category,
+          tag: form.tag || "",
+          assigned_to: null,
+          base_start: form.baseStart || null,
+          base_end: form.baseEnd || null,
+          duration: form.baseStart && form.baseEnd ? Math.round((new Date(form.baseEnd)-new Date(form.baseStart))/(1000*86400)) : 0,
+          dependencies: form.dependencies || [],
+          dhyan_rakhen: form.dhyanRakhen || null,
+        });
+        if (res.success) {
+          // Reload tasks from backend
+          const r2 = await api.get("/tasks?project_id=" + projectId);
+          if (r2.success) {
+            const flat = r2.data || [];
+            const map = {};
+            flat.forEach(t => { t.children=[]; t.no=t.task_no; t.baseStart=t.base_start; t.baseEnd=t.base_end; t.dhyanRakhen=t.dhyan_rakhen; t.assignee=t.assignee_name||""; map[t.id]=t; });
+            const roots = [];
+            flat.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
+            setTasks(roots);
+          }
+        } else alert(res.message || "Save failed");
+        setShowAdd(false); setAddParent(null);
       }}/>}
     </div>
   );
@@ -5217,7 +5272,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     party:      <TabParty/>,
     transaction:<TabTransaction/>,
     todo:       <TabTodo/>,
-    task:       <TabTasks/>,
+    task:       <TabTasks projectId={project.id}/>,
     attendance: <TabAttendance/>,
     material:   <TabMaterial project={project}/>,
     subcon:     <TabSubcon/>,
