@@ -2493,8 +2493,8 @@ function TabTasks({ projectId }) {
         onDragOver={e=>{e.preventDefault();setDragOverId(t.id);}}
         onDragLeave={()=>setDragOverId(null)}>
         <div style={{display:"grid",gridTemplateColumns:"20px 36px 36px 1fr 80px 80px 90px 90px 90px 80px 90px",alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${T.b1}`,background:isDragOver?"#E0F2FE":isDragging?"#EFF6FF":depth===0?T.surfaceB+"66":"transparent",borderLeft:`3px solid ${lvl}`,transition:"background .1s",opacity:isDragging?0.5:1,cursor:"grab"}}
-          onMouseEnter={e=>{if(!isDragging)e.currentTarget.style.background=T.bluL+"33";}}
-          onMouseLeave={e=>e.currentTarget.style.background=isDragOver?"#E0F2FE":depth===0?T.surfaceB+"66":"transparent"}>
+          onMouseEnter={e=>{if(!isDragging){e.currentTarget.style.background=T.bluL+"44";}}}
+          onMouseLeave={e=>{e.currentTarget.style.background=isDragOver?"#E0F2FE":isDragging?"#EFF6FF":depth===0?T.surfaceB+"66":"transparent";}}>
           {/* Drag handle */}
           <div style={{display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,cursor:"grab"}}>
             <svg width={10} height={14} viewBox="0 0 10 14" fill={T.b2}><circle cx={3} cy={2} r={1.2}/><circle cx={7} cy={2} r={1.2}/><circle cx={3} cy={7} r={1.2}/><circle cx={7} cy={7} r={1.2}/><circle cx={3} cy={12} r={1.2}/><circle cx={7} cy={12} r={1.2}/></svg>
@@ -2514,7 +2514,7 @@ function TabTasks({ projectId }) {
             <div style={{fontSize:8.5,color:T.slt,fontFamily:"monospace"}}>{t.tsk_no||""}</div>
           </div>
           {/* Task Name — indented */}
-          <div onClick={()=>handleOpen(t)} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",minWidth:0,paddingLeft:indent}}>
+          <div onClick={(e)=>{e.stopPropagation();handleOpen(t);}} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",minWidth:0,paddingLeft:indent}}>
             {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
             <span style={{fontSize:depth===0?13:depth===1?12.5:12,fontWeight:depth===0?700:depth===1?600:400,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
             {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t.tag}</span>}
@@ -2803,7 +2803,7 @@ function TabTasks({ projectId }) {
           <div style={{maxHeight:480,overflowY:"auto"}}>
             {levelFilter==="All"
               ? filtered.map(t=>renderRow(t,0))
-              : flattenWithDepth(filtered).filter(t=>t._depth===parseInt(levelFilter)-1).map(t=>renderRow(t,0,undefined,0))
+              : filtered.map(t=>renderRow(t,0,undefined,parseInt(levelFilter)-1))
             }
           </div>
         </div>
