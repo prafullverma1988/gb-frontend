@@ -2453,62 +2453,79 @@ function TabTasks({ projectId }) {
   const STATUS_C={"Completed":{c:T.grn,bg:T.grnL,brd:T.grnM},"Ongoing":{c:T.blu,bg:T.bluL,brd:T.bluM},"Not Started":{c:T.slt,bg:T.sltL,brd:T.b2},"Hold":{c:T.amb,bg:T.ambL,brd:T.ambM}};
   const CAT_C={"Civil":{c:T.blu,bg:T.bluL},"Electrical":{c:T.amb,bg:T.ambL},"Plumbing":{c:"#0891B2",bg:"#E0F2FE"},"Finishing":{c:T.pur,bg:T.purL},"Custom":{c:T.slt,bg:T.sltL}};
 
-  function renderRow(t,depth=0){
+  // Flatten with depth info for level filter
+  function flattenWithDepth(list, depth=0, out=[]) {
+    list.forEach(t => { out.push({...t, _depth: depth}); if(t.children?.length) flattenWithDepth(t.children, depth+1, out); });
+    return out;
+  }
+
+  function renderRow(t, depth=0, sno=[]){
     const hasKids=t.children?.length>0;
     const isOpen=!collapsed[t.id];
     const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
     const cs=CAT_C[t.category]||CAT_C["Civil"];
     const delay=ptDelayDays(t);
-    const lvlColors=[T.blu,T.grn,T.amb];
+    const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
+    const lvl=lvlColors[Math.min(depth,6)];
+    const indent=depth*16;
+    const deps=(t.dependencies||[]).filter(Boolean);
     return(
       <div key={t.id}>
-        <div style={{display:"grid",gridTemplateColumns:"26px 1fr 90px 85px 110px 80px 70px",alignItems:"center",padding:`8px ${depth===0?14:depth===1?22:32}px 8px 14px`,borderBottom:`1px solid ${T.b1}`,background:depth===0?T.surfaceB+"88":"transparent",borderLeft:`3px solid ${lvlColors[Math.min(depth,2)]}`,cursor:"pointer",transition:"background .1s"}}
-          onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"44"}
-          onMouseLeave={e=>e.currentTarget.style.background=depth===0?T.surfaceB+"88":"transparent"}>
+        <div style={{display:"grid",gridTemplateColumns:"36px 36px 1fr 80px 80px 90px 90px 90px 80px 80px",alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${T.b1}`,background:depth===0?T.surfaceB+"66":"transparent",borderLeft:`3px solid ${lvl}`,transition:"background .1s"}}
+          onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"33"}
+          onMouseLeave={e=>e.currentTarget.style.background=depth===0?T.surfaceB+"66":"transparent"}>
           {/* Toggle */}
-          <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div onClick={()=>hasKids&&toggleCollapse(t.id)} style={{display:"flex",alignItems:"center",justifyContent:"center",cursor:hasKids?"pointer":"default"}}>
             {hasKids
-              ?<div style={{width:16,height:16,borderRadius:4,background:isOpen?lvlColors[depth%3]:T.surfaceB,border:`1px solid ${isOpen?lvlColors[depth%3]:T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",transition:"all .15s"}}>
+              ?<div style={{width:16,height:16,borderRadius:4,background:isOpen?lvl:T.surfaceB,border:`1px solid ${isOpen?lvl:T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <svg width={8} height={8} viewBox="0 0 12 12" fill="none" stroke={isOpen?"white":T.t4} strokeWidth={2}><path d={isOpen?"M2 4l4 4 4-4":"M4 2l4 4-4 4"}/></svg>
                </div>
-              :<div style={{width:6,height:6,borderRadius:"50%",background:lvlColors[Math.min(depth,2)],margin:"0 5px"}}/>
+              :<div style={{width:6,height:6,borderRadius:"50%",background:lvl,flexShrink:0}}/>
             }
           </div>
-          {/* Name */}
-          <div onClick={()=>handleOpen(t)} style={{display:"flex",alignItems:"center",gap:6,cursor:"pointer",minWidth:0}}>
-            {t.dhyanRakhen&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
-            <span style={{fontSize:9.5,color:T.t4,fontFamily:"monospace",flexShrink:0}}>{t.no}</span>
+          {/* S.No */}
+          <span style={{fontSize:10,color:T.t4,fontFamily:"monospace"}}>{t.no}</span>
+          {/* Task Name — indented */}
+          <div onClick={()=>handleOpen(t)} style={{display:"flex",alignItems:"center",gap:5,cursor:"pointer",minWidth:0,paddingLeft:indent}}>
+            {t.dhyanRakhen&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2} style={{flexShrink:0}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>}
             <span style={{fontSize:depth===0?13:depth===1?12.5:12,fontWeight:depth===0?700:depth===1?600:400,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
-            {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:9,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t.tag}</span>}
-            {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
+            {t.tag&&<span style={{background:T.ambL,color:T.amb,fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0}}>{t.tag}</span>}
+            {delay>0&&<span style={{background:T.redL,color:T.red,fontSize:8,fontWeight:700,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
           </div>
           {/* Category */}
-          <span style={{background:cs.bg,color:cs.c,fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:20,border:`1px solid ${cs.c}33`,whiteSpace:"nowrap"}}>{t.category}</span>
+          <span style={{background:cs.bg,color:cs.c,fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{t.category}</span>
           {/* Status */}
-          <span style={{background:ss.bg,color:ss.c,fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:20,border:`1px solid ${ss.brd}`,whiteSpace:"nowrap"}}>{t.status}</span>
+          <span style={{background:ss.bg,color:ss.c,fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:20,whiteSpace:"nowrap"}}>{t.status}</span>
           {/* Progress */}
-          <div>
+          <div style={{paddingRight:4}}>
             <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-              <span style={{fontSize:10,color:T.t4}}>{t.progress}%</span>
+              <span style={{fontSize:9.5,fontWeight:600,color:t.progress===100?T.grn:T.t3}}>{t.progress}%</span>
             </div>
             <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
               <div style={{height:"100%",width:`${t.progress}%`,background:t.progress===100?T.grn:T.blu,borderRadius:2}}/>
             </div>
           </div>
-          {/* Assignee */}
-          <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.assignee.split(" ")[0]}</span>
-          {/* Edit + Add Subtask */}
-          <div style={{display:"flex",gap:4,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
-            {depth < 6 && (
-              <button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
-                style={{width:22,height:22,borderRadius:4,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+          {/* Start Date */}
+          <span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap"}}>{t.baseStart||"—"}</span>
+          {/* End Date */}
+          <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap"}}>{t.baseEnd||"—"}</span>
+          {/* Duration */}
+          <span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap"}}>{t.duration>0?t.duration+"d":"—"}</span>
+          {/* Assignee + Actions */}
+          <div style={{display:"flex",alignItems:"center",gap:4,justifyContent:"space-between"}} onClick={e=>e.stopPropagation()}>
+            <span style={{fontSize:10,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
+            <div style={{display:"flex",gap:3,flexShrink:0}}>
+              {depth < 6 && (
+                <button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
+                  style={{width:20,height:20,borderRadius:4,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                </button>
+              )}
+              <button onClick={()=>setEditTask(t)} title="Edit"
+                style={{width:20,height:20,borderRadius:4,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
               </button>
-            )}
-            <button onClick={()=>setEditTask(t)} title="Edit"
-              style={{width:22,height:22,borderRadius:4,background:T.bluL,border:`1px solid ${T.bluM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-            </button>
+            </div>
           </div>
         </div>
         {hasKids&&isOpen&&t.children.map(ch=>renderRow(ch,depth+1))}
@@ -2723,13 +2740,16 @@ function TabTasks({ projectId }) {
       {view==="list"&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           {/* Header */}
-          <div style={{display:"grid",gridTemplateColumns:"26px 1fr 90px 85px 110px 80px 70px",padding:"7px 14px",background:"#0D1B2A"}}>
-            {["","Task","Category","Status","Progress","Assigned",""].map((h,i)=>(
-              <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+          <div style={{display:"grid",gridTemplateColumns:"36px 36px 1fr 80px 80px 90px 90px 90px 80px 80px",padding:"8px 14px",background:"#0D1B2A"}}>
+            {["","S.No","Task Name","Category","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
+              <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>{h}</span>
             ))}
           </div>
           <div style={{maxHeight:480,overflowY:"auto"}}>
-            {(levelFilter==="All" ? filtered : ptFlatten(filtered).filter(t=>(t.level||1)===parseInt(levelFilter))).map(t=>renderRow(t, levelFilter==="All"?0:(t.level||1)-1))}
+            {levelFilter==="All"
+              ? filtered.map(t=>renderRow(t,0))
+              : flattenWithDepth(filtered).filter(t=>t._depth===parseInt(levelFilter)-1).map(t=>renderRow(t,t._depth))
+            }
           </div>
         </div>
       )}
