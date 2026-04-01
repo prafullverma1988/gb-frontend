@@ -910,23 +910,43 @@ function ApprovalsDrawer({onClose,initTab="mr"}){
           <>
             <SectionHead label="Procurement — Material Requests" count={data.procurement.length} color={T.amb} bg={T.ambL} bdr={T.ambM}/>
             <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
-              {data.procurement.map(mr=>(
+              {data.procurement.map(mr=>{
+                const [editQty,setEditQty]=React.useState(String(mr.quantity||""));
+                const [showQtyEdit,setShowQtyEdit]=React.useState(false);
+                const notesHasTask=mr.notes&&mr.notes.includes("Task:");
+                const taskInfo=notesHasTask?mr.notes.match(/Task:\s*([^(]+)/)?.[1]?.trim():"";
+                return(
                 <div key={mr.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.amb}}>
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                     <div style={{flex:1}}>
                       <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{mr.item_name}</div>
                       <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.project_name||"—"} · {mr.quantity} {mr.unit}</div>
+                      {taskInfo&&<div style={{fontSize:10.5,color:T.blu,marginTop:2,fontWeight:600}}>📌 Task: {taskInfo}</div>}
                       <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>By {mr.requested_by||"Site Team"} · {mr.mr_number}</div>
                     </div>
                     {mr.approx_amount>0&&<span style={{fontSize:12,fontWeight:700,color:T.amb,flexShrink:0}}>{fmtAmt(mr.approx_amount)}</span>}
                   </div>
+                  {/* Qty edit toggle */}
+                  <div style={{display:"flex",alignItems:"center",gap:6,margin:"8px 0 4px"}}>
+                    <span style={{fontSize:10.5,color:T.t3}}>Approve Qty:</span>
+                    {showQtyEdit
+                      ?<input autoFocus type="number" value={editQty} onChange={e=>setEditQty(e.target.value)}
+                          style={{width:80,padding:"3px 7px",borderRadius:5,border:"1.5px solid "+T.blu,fontSize:12,fontWeight:700,textAlign:"center",outline:"none"}}/>
+                      :<span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{editQty} {mr.unit}</span>
+                    }
+                    <button onClick={()=>setShowQtyEdit(s=>!s)}
+                      style={{fontSize:10,color:T.blu,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
+                      {showQtyEdit?"Done":"Edit Qty"}
+                    </button>
+                  </div>
                   <ApproveRejectBtns
                     id={mr.id}
-                    onApprove={()=>approveMR(mr.id)}
+                    onApprove={()=>approveMR(mr.id,Number(editQty)||mr.quantity)}
                     onReject={()=>rejectMR(mr.id)}
                   />
                 </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -1053,37 +1073,10 @@ function ProjectsPage({onSelectProject}){
   );
 
   if(loading) return(
-    <div style={{padding:"14px 18px",fontFamily:"'Segoe UI',sans-serif",background:T.bg,minHeight:"100%"}}>
-      {/* Skeleton Pills */}
-      <div style={{display:"flex",gap:8,marginBottom:14}}>
-        {[80,70,60,75,65].map((w,i)=>(
-          <div key={i} style={{width:w,height:28,borderRadius:20,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
-        ))}
-      </div>
-      {/* Skeleton toolbar */}
-      <div style={{display:"flex",gap:8,marginBottom:14}}>
-        <div style={{flex:1,height:34,borderRadius:8,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
-        {[90,80,100].map((w,i)=>(
-          <div key={i} style={{width:w,height:34,borderRadius:8,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
-        ))}
-      </div>
-      {/* Skeleton project cards */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(300px,1fr))",gap:14}}>
-        {[1,2,3,4,5,6].map(i=>(
-          <div key={i} style={{background:"white",borderRadius:12,padding:18,boxShadow:"0 1px 4px rgba(0,0,0,.06)",border:"1px solid #F3F4F6",opacity:Math.max(0.3,1-i*0.12)}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:12}}>
-              <div style={{width:"60%",height:14,borderRadius:4,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
-              <div style={{width:60,height:20,borderRadius:20,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
-            </div>
-            <div style={{width:"40%",height:10,borderRadius:4,marginBottom:12,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
-            <div style={{height:4,borderRadius:2,marginBottom:12,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
-            <div style={{display:"flex",justifyContent:"space-between"}}>
-              {[70,60,80].map((w,j)=>(
-                <div key={j} style={{width:w,height:10,borderRadius:4,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>
-              ))}
-            </div>
-          </div>
-        ))}
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{textAlign:"center",color:T.t3}}>
+        <div style={{fontSize:16,fontWeight:600}}>Loading Projects...</div>
+        <div style={{fontSize:12,marginTop:6,color:T.t4}}>Fetching from server</div>
       </div>
     </div>
   );

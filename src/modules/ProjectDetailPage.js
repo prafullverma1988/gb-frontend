@@ -3040,7 +3040,18 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
     notes:"",
   });
   const [saving,setSaving]=useState(false);
+  const [matLib,setMatLib]=useState([]);
   const UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"];
+
+  useEffect(()=>{
+    // Fetch material library
+    if(projectId){
+      api.get("/tasks/material-list/"+projectId).then(r=>{
+        if(r.success) setMatLib(r.data||[]);
+      }).catch(()=>{});
+    }
+    // Fallback static list always available
+  },[projectId]);
 
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
@@ -3060,9 +3071,20 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
         </div>
         <div style={{marginBottom:10}}>
           <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name *</label>
-          <input value={form.item_name} onChange={e=>setForm(p=>({...p,item_name:e.target.value}))} placeholder="e.g. OPC Cement 53 Grade"
+          <input value={form.item_name} onChange={e=>{
+              setForm(p=>({...p,item_name:e.target.value}));
+              // Auto-fill unit from library
+              const found=matLib.find(m=>m.name===e.target.value);
+              if(found&&found.unit) setForm(p=>({...p,item_name:e.target.value,unit:found.unit}));
+            }} placeholder="Type to search material..." list="task-mr-mat-list"
             style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
             onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+          <datalist id="task-mr-mat-list">
+            {matLib.length>0
+              ?matLib.map(m=><option key={m.name} value={m.name}>{m.name} ({m.unit||"Nos"})</option>)
+              :["TMT Steel Fe500 8mm","TMT Steel Fe500 10mm","OPC 53 Cement","PPC Cement","River Sand","M-Sand","20mm Aggregate","Red Brick 9x4x3","Binding Wire","Diesel"].map(m=><option key={m} value={m}/>)
+            }
+          </datalist>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
@@ -3106,7 +3128,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
               unit: form.unit,
               required_date: form.required_date||null,
               approx_amount: form.approx_amount||null,
-              notes: form.notes||null,
+              notes: form.notes ? form.notes+" [Task: "+task.name+"]" : "Task: "+task.name+" ("+task.tsk_no+")",
               task_id: task.id,
               task_name: task.name,
             });
