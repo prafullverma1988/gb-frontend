@@ -3245,10 +3245,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [materials,setMaterials]=useState([]);
   const [showMRModal,setShowMRModal]=useState(false);
   const [showGRNModal,setShowGRNModal]=useState(false);
-  const [mrMaterial,setMrMaterial]=useState(null); // prefill MR modal
-  const [usedEditId,setUsedEditId]=useState(null);
-  const [usedEditVal,setUsedEditVal]=useState("");
+  const [mrMaterial,setMrMaterial]=useState(null);
   const [matLoading,setMatLoading]=useState(false);
+  const [showUsedModal,setShowUsedModal]=useState(false);
+  const [usedEntries,setUsedEntries]=useState({});
 
   // Labour
   const [labours,setLabours]=useState([]);
@@ -3577,33 +3577,101 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                     ))}
                   </div>
 
-                  {/* Used qty inline edit */}
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    {rec>0&&<div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
+                  {/* Progress bar */}
+                  {rec>0&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
+                    <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
                       <div style={{height:"100%",width:Math.min(100,usedPct)+"%",background:over?"#EF4444":"#22C55E",borderRadius:2}}/>
-                    </div>}
-                    {isEdit
-                      ?<div style={{display:"flex",gap:4,alignItems:"center"}}>
-                        <input autoFocus type="number" value={usedEditVal} onChange={e=>setUsedEditVal(e.target.value)}
-                          style={{width:65,padding:"4px 7px",borderRadius:5,border:"1.5px solid #3B82F6",fontSize:13,fontWeight:700,textAlign:"center",outline:"none"}}/>
-                        <button onClick={async()=>{
-                          await api.post("/tasks/"+task.id+"/materials",{...m,used_qty:Number(usedEditVal)});
-                          const r=await api.get("/tasks/"+task.id+"/material-summary");
-                          if(r.success)setMaterials(r.data||[]);
-                          setUsedEditId(null);
-                        }} style={{padding:"4px 9px",borderRadius:5,background:"#16A34A",color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700}}>✓</button>
-                        <button onClick={()=>setUsedEditId(null)} style={{padding:"4px 9px",borderRadius:5,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:11}}>✕</button>
-                      </div>
-                      :<button onClick={()=>{setUsedEditId(m.material_name);setUsedEditVal(String(used));}}
-                        style={{padding:"4px 11px",borderRadius:5,background:"#EFF6FF",color:"#2563EB",border:"1px solid #BFDBFE",fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap",marginLeft:"auto"}}>
-                        ✏ Mark Used
-                      </button>
-                    }
-                  </div>
+                    </div>
+                    <span style={{fontSize:9,fontWeight:700,color:over?"#DC2626":"#16A34A",minWidth:28}}>{usedPct}%</span>
+                  </div>}
+                  {/* Mark Used button — opens stock modal */}
+                  <button onClick={async()=>{
+                    const r=await api.get("/tasks/"+task.id+"/material-summary");
+                    const list=r.success?r.data||[]:materials;
+                    setUsedEntries(Object.fromEntries(list.map(s=>[s.material_name,String(s.used_qty||0)])));
+                    setShowUsedModal(true);
+                  }} style={{width:"100%",padding:"7px",borderRadius:6,background:"#F0FDF4",color:"#16A34A",border:"1px solid #BBF7D0",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
+                    Update Used Qty
+                  </button>
                 </div>
               );
             })}
           </div>
+        )}
+
+        {/* ── USED QTY MODAL ── */}
+        {showUsedModal&&(
+          <>
+            <div onClick={()=>setShowUsedModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(480px,95vw)",maxHeight:"80vh",background:"white",borderRadius:12,zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,0.2)",fontFamily:"'Segoe UI',sans-serif",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+              <div style={{background:"#14532D",padding:"13px 16px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:"white"}}>Mark Material Used</div>
+                  <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:1}}>Enter qty used in this task</div>
+                </div>
+                <button onClick={()=>setShowUsedModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",display:"flex"}}>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              {/* Stock list */}
+              <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
+                {materials.length===0&&<div style={{textAlign:"center",padding:"30px 0",color:"#94A3B8",fontSize:13}}>No materials found. Add MR or GRN first.</div>}
+                {materials.map((m,i)=>{
+                  const rec=Number(m.received_qty||0);
+                  const used=Number(usedEntries[m.material_name]||0);
+                  const bal=rec-used;
+                  return(
+                    <div key={m.material_name+i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderBottom:"1px solid #F1F5F9"}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:700,color:"#1E293B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.material_name}</div>
+                        <div style={{fontSize:10.5,color:"#94A3B8",marginTop:1}}>
+                          Received: <span style={{color:"#2563EB",fontWeight:600}}>{rec}</span>
+                          {" · "}Balance: <span style={{color:bal<0?"#DC2626":"#16A34A",fontWeight:600}}>{rec-Number(m.used_qty||0)}</span>
+                          {" "+m.unit}
+                        </div>
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                        <input type="number" min={0} value={usedEntries[m.material_name]||""} 
+                          onChange={e=>setUsedEntries(p=>({...p,[m.material_name]:e.target.value}))}
+                          placeholder="0"
+                          style={{width:70,padding:"6px 8px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,fontWeight:700,textAlign:"center",outline:"none"}}
+                          onFocus={e=>e.target.style.borderColor="#16A34A"}
+                          onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+                        <span style={{fontSize:10,color:"#94A3B8",minWidth:20}}>{m.unit}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+              {/* Save button */}
+              <div style={{padding:"12px 16px",borderTop:"1px solid #E2E8F0",flexShrink:0}}>
+                <button onClick={async()=>{
+                  // Save all used entries
+                  const entries=Object.entries(usedEntries).filter(([k,v])=>v!==""&&Number(v)>=0);
+                  for(const [matName,qty] of entries){
+                    const m=materials.find(x=>x.material_name===matName)||{unit:"Nos"};
+                    await api.post("/tasks/"+task.id+"/materials",{
+                      material_name:matName,
+                      used_qty:Number(qty),
+                      required_qty:m.required_qty||0,
+                      unit:m.unit||"Nos",
+                    });
+                  }
+                  // Reload
+                  const r=await api.get("/tasks/"+task.id+"/material-summary");
+                  if(r.success)setMaterials(r.data||[]);
+                  else{
+                    const r2=await api.get("/tasks/"+task.id+"/materials");
+                    if(r2.success)setMaterials(r2.data||[]);
+                  }
+                  setShowUsedModal(false);
+                }} style={{width:"100%",padding:"11px",borderRadius:8,background:"#16A34A",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:"pointer"}}>
+                  Save All Used Quantities
+                </button>
+              </div>
+            </div>
+          </>
         )}
 
         {/* ── LABOUR TAB ── */}
@@ -4499,9 +4567,13 @@ function TabMaterial({ project }) {
             </div>
             <div>
               <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
-              <input value={form.item_name} onChange={e=>setForm(p=>({...p,item_name:e.target.value}))} placeholder="e.g. Cement OPC 50kg..."
+              <input value={form.item_name} onChange={e=>setForm(p=>({...p,item_name:e.target.value}))}
+                placeholder="Type to search material..." list="mat-lib-list"
                 style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              <datalist id="mat-lib-list">
+                {MAT_LIB.map(m=><option key={m} value={m}/>)}
+              </datalist>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div>
