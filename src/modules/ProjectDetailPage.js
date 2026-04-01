@@ -3449,7 +3449,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
   },[]);
   useEffect(()=>{
-    if(tab==="materials"){
+    if(tab==="materials" && materials.length===0){
       setMatLoading(true);
       api.get("/tasks/"+task.id+"/material-summary").then(r=>{
         if(r.success && r.data && r.data.length>0){
@@ -3481,9 +3481,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
         setUsedLogLoading(false);
       }).catch(()=>setUsedLogLoading(false));
     }
-    if(tab==="labour")    api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
-    if(tab==="photos")    api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
-    if(tab==="issues")    api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+    if(tab==="labour"  && labours.length===0) api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
+    if(tab==="photos"  && photos.length===0)  api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
+    if(tab==="issues"  && issues.length===0)  api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
   },[tab]);
 
   const sendComment=async()=>{
