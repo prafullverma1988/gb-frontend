@@ -3125,9 +3125,14 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
 
 // ── Task GRN Modal ──────────────────────────────────────────────────
 function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
+  const [grnTab,setGrnTab]=useState("ordered"); // ordered | direct
+  const [orderedMRs,setOrderedMRs]=useState([]);
+  const [grnRows,setGrnRows]=useState({}); // {mrId: {challan, received_qty}}
+  const [grnDone,setGrnDone]=useState([]);
+  const [grnSaving,setGrnSaving]=useState(false);
   const [form,setForm]=useState({
     material_name: prefill?.material_name||"",
-    received_qty: "",
+    received_qty:"",
     unit: prefill?.unit||"Bag",
     vendor_name:"",
     challan_no:"",
@@ -3138,104 +3143,228 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   const [saving,setSaving]=useState(false);
   const UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"];
 
+  // Load ordered MRs for this project
+  useEffect(()=>{
+    if(!projectId) return;
+    api.get("/procurement/mrs?project_id="+projectId+"&mr_status=Approved&mat_status=Ordered").then(r=>{
+      if(r.success){
+        const mrs=(r.data||[]).filter(m=>m.mat_status==="Ordered"||m.mat_status==="Pending");
+        setOrderedMRs(mrs);
+        const rows={};
+        mrs.forEach(m=>{ rows[m.id]={challan:"",received_qty:m.quantity||0}; });
+        setGrnRows(rows);
+      }
+    }).catch(()=>{});
+  },[projectId]);
+
+  const handleOrderedReceive=async(mr)=>{
+    const row=grnRows[mr.id]||{};
+    if(!row.challan) return alert("Challan number required");
+    setGrnSaving(true);
+    const res=await api.post("/procurement/grn",{
+      project_id: projectId,
+      po_id: mr.linked_po_id||null,
+      vendor_name: mr.vendor_name||"Vendor",
+      received_by: "Site",
+      received_date: new Date().toISOString().split("T")[0],
+      challan_no: row.challan,
+      quality: "Good",
+      task_id: task.id,
+      items:[{
+        description: mr.item_name,
+        received_qty: Number(row.received_qty||mr.quantity),
+        unit: mr.unit,
+        ordered_qty: mr.quantity,
+        po_item_id: mr.po_item_id||null,
+      }]
+    });
+    setGrnSaving(false);
+    if(res.success){
+      setGrnDone(p=>[...p,mr.id]);
+      onSaved();
+    } else alert(res.message||"Failed");
+  };
+
+  const handleDirectSave=async()=>{
+    if(!form.material_name.trim()||!form.received_qty) return alert("Material name and received qty required");
+    setSaving(true);
+    const res=await api.post("/procurement/grn",{
+      project_id: projectId,
+      vendor_name: form.vendor_name||"Direct",
+      received_by: "Site",
+      received_date: form.received_date,
+      challan_no: form.challan_no||null,
+      quality: form.quality,
+      remark: form.remark||null,
+      task_id: task.id,
+      items:[{
+        description: form.material_name,
+        received_qty: Number(form.received_qty),
+        unit: form.unit,
+        ordered_qty: Number(form.received_qty),
+      }]
+    });
+    setSaving(false);
+    if(res.success) onSaved();
+    else alert(res.message||"Failed");
+  };
+
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
-    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(460px,95vw)",background:"white",borderRadius:12,zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,0.2)",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
-      <div style={{background:"#14532D",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(560px,96vw)",maxHeight:"85vh",background:"white",borderRadius:12,zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,0.2)",fontFamily:"'Segoe UI',sans-serif",display:"flex",flexDirection:"column",overflow:"hidden"}}>
+      {/* Header */}
+      <div style={{background:"#0F172A",padding:"13px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
         <div>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>Record Direct GRN</div>
-          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Task: {task.name} · {task.tsk_no||task.no}</div>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>Record GRN — Material Received</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:2}}>Task: {task.name} · {task.tsk_no||task.no}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",display:"flex"}}>
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
-      <div style={{padding:"16px 18px"}}>
-        <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:7,padding:"8px 12px",marginBottom:14,fontSize:11.5,color:"#14532D"}}>
-          Direct site delivery — Stock register mein add hoga
-        </div>
-        <div style={{marginBottom:10}}>
-          <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name *</label>
-          <input value={form.material_name} onChange={e=>setForm(p=>({...p,material_name:e.target.value}))} placeholder="e.g. OPC Cement 53 Grade"
-            style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-            onFocus={e=>e.target.style.borderColor="#16A34A"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+
+      {/* Tabs */}
+      <div style={{display:"flex",background:"white",borderBottom:"1px solid #E2E8F0",flexShrink:0}}>
+        {[
+          {id:"ordered",l:"Ordered Materials",count:orderedMRs.filter(m=>!grnDone.includes(m.id)).length},
+          {id:"direct",l:"Direct Receive",count:0},
+        ].map(t=>(
+          <button key={t.id} onClick={()=>setGrnTab(t.id)}
+            style={{flex:1,padding:"11px",border:"none",background:"none",fontSize:13,fontWeight:grnTab===t.id?700:400,color:grnTab===t.id?"#2563EB":"#64748B",borderBottom:grnTab===t.id?"2px solid #2563EB":"2px solid transparent",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            {t.l}
+            {t.count>0&&<span style={{background:"#2563EB",color:"white",fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{t.count}</span>}
+          </button>
+        ))}
+      </div>
+
+      {/* Content */}
+      <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+
+        {/* Ordered Materials tab */}
+        {grnTab==="ordered"&&(
           <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Received Qty *</label>
-            <input type="number" value={form.received_qty} onChange={e=>setForm(p=>({...p,received_qty:e.target.value}))} placeholder="0"
-              style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            {orderedMRs.length===0&&(
+              <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
+                <div style={{fontSize:13,marginBottom:4}}>No ordered materials pending</div>
+                <div style={{fontSize:11}}>MR raise karo aur approve/order hone do</div>
+              </div>
+            )}
+            {orderedMRs.map(mr=>{
+              const done=grnDone.includes(mr.id);
+              const row=grnRows[mr.id]||{};
+              return(
+                <div key={mr.id} style={{background:done?"#F0FDF4":"white",borderRadius:10,padding:"12px 14px",border:"1px solid "+(done?"#BBF7D0":"#E2E8F0"),marginBottom:10,borderLeft:"3px solid "+(done?"#16A34A":"#F59E0B")}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                    <div>
+                      <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{mr.item_name}</div>
+                      <div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>
+                        Ordered: {mr.quantity} {mr.unit}
+                        {mr.project_name&&<span style={{color:"#64748B"}}> · {mr.project_name}</span>}
+                      </div>
+                    </div>
+                    {done&&<span style={{fontSize:11,fontWeight:700,color:"#16A34A",background:"#DCFCE7",padding:"3px 9px",borderRadius:20}}>✓ Received</span>}
+                  </div>
+                  {!done&&(
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
+                      <div>
+                        <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:3,textTransform:"uppercase"}}>Challan No *</label>
+                        <input value={row.challan||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],challan:e.target.value}}))}
+                          placeholder="e.g. CH-445"
+                          style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                          onFocus={e=>e.target.style.borderColor="#2563EB"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:3,textTransform:"uppercase"}}>Received Qty</label>
+                        <input type="number" value={row.received_qty||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))}
+                          style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
+                      <button onClick={()=>handleOrderedReceive(mr)} disabled={grnSaving}
+                        style={{padding:"8px 14px",borderRadius:6,background:grnSaving?"#94A3B8":"#16A34A",color:"white",border:"none",cursor:grnSaving?"default":"pointer",fontSize:12,fontWeight:700,whiteSpace:"nowrap"}}>
+                        ✓ Receive
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+        )}
+
+        {/* Direct Receive tab */}
+        {grnTab==="direct"&&(
           <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Unit</label>
-            <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
-              style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
-              {UNITS.map(u=><option key={u}>{u}</option>)}
-            </select>
+            <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:7,padding:"8px 12px",marginBottom:14,fontSize:11.5,color:"#14532D"}}>
+              Direct site delivery — Stock register mein add hoga
+            </div>
+            <div style={{marginBottom:10}}>
+              <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name *</label>
+              <input value={form.material_name} onChange={e=>setForm(p=>({...p,material_name:e.target.value}))}
+                placeholder="e.g. OPC Cement 53 Grade" list="grn-mat-list"
+                style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                onFocus={e=>e.target.style.borderColor="#16A34A"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
+              <datalist id="grn-mat-list">
+                {["TMT Steel Fe500","OPC 53 Cement","PPC Cement","River Sand","M-Sand","20mm Aggregate","Red Brick","Vitrified Tile","PVC Pipe","FR Wiring","Plywood 18mm","Binding Wire"].map(m=><option key={m} value={m}/>)}
+              </datalist>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+              <div>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Received Qty *</label>
+                <input type="number" value={form.received_qty} onChange={e=>setForm(p=>({...p,received_qty:e.target.value}))} placeholder="0"
+                  style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Unit</label>
+                <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                  style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
+                  {UNITS.map(u=><option key={u}>{u}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Vendor Name</label>
+                <input value={form.vendor_name} onChange={e=>setForm(p=>({...p,vendor_name:e.target.value}))} placeholder="Supplier name"
+                  style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Challan No</label>
+                <input value={form.challan_no} onChange={e=>setForm(p=>({...p,challan_no:e.target.value}))} placeholder="Optional"
+                  style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Received Date</label>
+                <input type="date" value={form.received_date} onChange={e=>setForm(p=>({...p,received_date:e.target.value}))}
+                  style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Quality</label>
+                <select value={form.quality} onChange={e=>setForm(p=>({...p,quality:e.target.value}))}
+                  style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
+                  {["Good","Average","Rejected"].map(q=><option key={q}>{q}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Remark</label>
+              <input value={form.remark} onChange={e=>setForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"
+                style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            </div>
           </div>
-          <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Vendor Name</label>
-            <input value={form.vendor_name} onChange={e=>setForm(p=>({...p,vendor_name:e.target.value}))} placeholder="Supplier name"
-              style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-          </div>
-          <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Challan No</label>
-            <input value={form.challan_no} onChange={e=>setForm(p=>({...p,challan_no:e.target.value}))} placeholder="Optional"
-              style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-          </div>
-          <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Received Date</label>
-            <input type="date" value={form.received_date} onChange={e=>setForm(p=>({...p,received_date:e.target.value}))}
-              style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-          </div>
-          <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Quality</label>
-            <select value={form.quality} onChange={e=>setForm(p=>({...p,quality:e.target.value}))}
-              style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
-              {["Good","Average","Rejected"].map(q=><option key={q}>{q}</option>)}
-            </select>
-          </div>
-        </div>
-        <div style={{marginBottom:14}}>
-          <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Remark</label>
-          <input value={form.remark} onChange={e=>setForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"
-            style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-        </div>
-        <div style={{display:"flex",gap:8}}>
-          <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>Cancel</button>
-          <button onClick={async()=>{
-            if(!form.material_name.trim()||!form.received_qty) return alert("Material name and received qty required");
-            setSaving(true);
-            const res=await api.post("/procurement/grn",{
-              project_id: projectId,
-              vendor_name: form.vendor_name||"Direct",
-              received_by: "Site",
-              received_date: form.received_date,
-              challan_no: form.challan_no||null,
-              quality: form.quality,
-              remark: form.remark||null,
-              task_id: task.id,
-              items:[{
-                description: form.material_name,
-                received_qty: Number(form.received_qty),
-                unit: form.unit,
-                ordered_qty: Number(form.received_qty),
-              }]
-            });
-            setSaving(false);
-            if(res.success) onSaved();
-            else alert(res.message||"Failed");
-          }} disabled={saving}
+        )}
+      </div>
+
+      {/* Footer */}
+      <div style={{padding:"12px 18px",borderTop:"1px solid #E2E8F0",flexShrink:0,display:"flex",gap:8}}>
+        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>Close</button>
+        {grnTab==="direct"&&(
+          <button onClick={handleDirectSave} disabled={saving}
             style={{flex:2,padding:"10px",borderRadius:7,background:saving?"#94A3B8":"#16A34A",color:"white",border:"none",cursor:saving?"default":"pointer",fontSize:13,fontWeight:700}}>
             {saving?"Saving...":"Record GRN"}
           </button>
-        </div>
+        )}
       </div>
     </div>
   </>);
 }
 
-// ── PT Task Detail ────────────────────────────────────────────────
 function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [tab,setTab]=useState("progress");
   const [prog,setProg]=useState(task.progress||0);
