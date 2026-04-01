@@ -957,6 +957,11 @@ export default function App(){
   const [nav,setNav]=useState("dashboard");
   const [collapsed,setCollapsed]=useState(false);
 
+  // Wake up Railway backend on app load — prevents cold start delay
+  useEffect(()=>{
+    fetch("https://gb-backend-production-7bd2.up.railway.app/api/health").catch(()=>{});
+  },[]);
+
   // Check if token exists on load
   const loggedIn=!!user&&!!getToken();
 
