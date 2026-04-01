@@ -741,6 +741,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
 // ═══════════════════════════════════════════════════════════════════
 // APPROVALS DRAWER
 // ═══════════════════════════════════════════════════════════════════
+// v2-fixed
 function MRApprovalCard({mr, onApprove, onReject}){
   const [editQty,setEditQty]=useState(String(mr.quantity||""));
   const [showQtyEdit,setShowQtyEdit]=useState(false);
@@ -772,11 +773,16 @@ function MRApprovalCard({mr, onApprove, onReject}){
           {showQtyEdit?"Done":"Edit Qty"}
         </button>
       </div>
-      <ApproveRejectBtns
-        id={mr.id}
-        onApprove={()=>onApprove(mr.id,Number(editQty)||mr.quantity)}
-        onReject={()=>onReject(mr.id)}
-      />
+      <div style={{display:"flex",gap:8,marginTop:8}}>
+        <button onClick={()=>onApprove(mr.id,Number(editQty)||mr.quantity)}
+          style={{flex:2,padding:"7px",borderRadius:6,background:"#16A34A",color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:700}}>
+          Approve
+        </button>
+        <button onClick={()=>onReject(mr.id)}
+          style={{flex:1,padding:"7px",borderRadius:6,background:"#FEE2E2",color:"#DC2626",border:"1px solid #FECACA",cursor:"pointer",fontSize:12,fontWeight:600}}>
+          Reject
+        </button>
+      </div>
     </div>
   );
 }
