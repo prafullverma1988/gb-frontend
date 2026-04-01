@@ -741,6 +741,45 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
 // ═══════════════════════════════════════════════════════════════════
 // APPROVALS DRAWER
 // ═══════════════════════════════════════════════════════════════════
+function MRApprovalCard({mr, onApprove, onReject}){
+  const [editQty,setEditQty]=useState(String(mr.quantity||""));
+  const [showQtyEdit,setShowQtyEdit]=useState(false);
+  const taskInfo=mr.notes&&mr.notes.includes("Task:")
+    ?mr.notes.replace(/.*Task:\s*/,"").replace(/\s*\(TSK.*\)/,"").trim()
+    :"";
+  return(
+    <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.amb}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{mr.item_name}</div>
+          <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.project_name||"—"} · {mr.quantity} {mr.unit}</div>
+          {taskInfo&&<div style={{fontSize:10.5,color:T.blu,marginTop:2,fontWeight:600}}>📌 {taskInfo}</div>}
+          <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>By {mr.requested_by||"Site Team"} · {mr.mr_number}</div>
+        </div>
+        {mr.approx_amount>0&&<span style={{fontSize:12,fontWeight:700,color:T.amb,flexShrink:0}}>{fmtAmt(mr.approx_amount)}</span>}
+      </div>
+      {/* Qty edit */}
+      <div style={{display:"flex",alignItems:"center",gap:6,margin:"8px 0 4px"}}>
+        <span style={{fontSize:10.5,color:T.t3}}>Approve Qty:</span>
+        {showQtyEdit
+          ?<input autoFocus type="number" value={editQty} onChange={e=>setEditQty(e.target.value)}
+              style={{width:80,padding:"3px 7px",borderRadius:5,border:"1.5px solid "+T.blu,fontSize:12,fontWeight:700,textAlign:"center",outline:"none"}}/>
+          :<span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{editQty} {mr.unit}</span>
+        }
+        <button onClick={()=>setShowQtyEdit(s=>!s)}
+          style={{fontSize:10,color:T.blu,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
+          {showQtyEdit?"Done":"Edit Qty"}
+        </button>
+      </div>
+      <ApproveRejectBtns
+        id={mr.id}
+        onApprove={()=>onApprove(mr.id,Number(editQty)||mr.quantity)}
+        onReject={()=>onReject(mr.id)}
+      />
+    </div>
+  );
+}
+
 function ApprovalsDrawer({onClose,initTab="mr"}){
   const [activeTab,setActiveTab]=useState(initTab); // "mr" | "pr"
   const [data,setData]=useState({procurement:[],finance:[]});
@@ -910,43 +949,9 @@ function ApprovalsDrawer({onClose,initTab="mr"}){
           <>
             <SectionHead label="Procurement — Material Requests" count={data.procurement.length} color={T.amb} bg={T.ambL} bdr={T.ambM}/>
             <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
-              {data.procurement.map(mr=>{
-                const [editQty,setEditQty]=React.useState(String(mr.quantity||""));
-                const [showQtyEdit,setShowQtyEdit]=React.useState(false);
-                const notesHasTask=mr.notes&&mr.notes.includes("Task:");
-                const taskInfo=notesHasTask?mr.notes.match(/Task:\s*([^(]+)/)?.[1]?.trim():"";
-                return(
-                <div key={mr.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.amb}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{mr.item_name}</div>
-                      <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.project_name||"—"} · {mr.quantity} {mr.unit}</div>
-                      {taskInfo&&<div style={{fontSize:10.5,color:T.blu,marginTop:2,fontWeight:600}}>📌 Task: {taskInfo}</div>}
-                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>By {mr.requested_by||"Site Team"} · {mr.mr_number}</div>
-                    </div>
-                    {mr.approx_amount>0&&<span style={{fontSize:12,fontWeight:700,color:T.amb,flexShrink:0}}>{fmtAmt(mr.approx_amount)}</span>}
-                  </div>
-                  {/* Qty edit toggle */}
-                  <div style={{display:"flex",alignItems:"center",gap:6,margin:"8px 0 4px"}}>
-                    <span style={{fontSize:10.5,color:T.t3}}>Approve Qty:</span>
-                    {showQtyEdit
-                      ?<input autoFocus type="number" value={editQty} onChange={e=>setEditQty(e.target.value)}
-                          style={{width:80,padding:"3px 7px",borderRadius:5,border:"1.5px solid "+T.blu,fontSize:12,fontWeight:700,textAlign:"center",outline:"none"}}/>
-                      :<span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{editQty} {mr.unit}</span>
-                    }
-                    <button onClick={()=>setShowQtyEdit(s=>!s)}
-                      style={{fontSize:10,color:T.blu,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>
-                      {showQtyEdit?"Done":"Edit Qty"}
-                    </button>
-                  </div>
-                  <ApproveRejectBtns
-                    id={mr.id}
-                    onApprove={()=>approveMR(mr.id,Number(editQty)||mr.quantity)}
-                    onReject={()=>rejectMR(mr.id)}
-                  />
-                </div>
-                );
-              })}
+              {data.procurement.map(mr=>(
+                <MRApprovalCard key={mr.id} mr={mr} onApprove={approveMR} onReject={rejectMR}/>
+              ))}
             </div>
           </>
         )}
