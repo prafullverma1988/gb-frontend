@@ -4557,15 +4557,16 @@ function TabMaterial({ project }) {
   const [grnDone,    setGrnDone]    = useState([]);   // successfully received mr ids
 
   const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
-  const MAT_LIB  = ["TMT Steel Fe500 8mm","TMT Steel Fe500 10mm","TMT Steel Fe500 12mm",
-    "OPC 53 Cement","OPC 43 Cement","PPC Cement",
-    "River Sand","M-Sand","P-Sand","20mm Aggregate","10mm Aggregate",
-    "Red Brick 9x4x3","Fly Ash Brick","AAC Block 4\"",
-    "Vitrified Tile 600x600","Vitrified Tile 800x800","Anti-Skid Tile",
-    "PVC Pipe 1\"","PVC Pipe 2\"","FR Wiring 1.5mm","FR Wiring 2.5mm",
-    "Plywood 18mm","Plywood 12mm","GI Sheet",
-    "Asian Paints Apex","Putty","Primer","Distemper",
-    "Binding Wire","Diesel","Safety Helmet","Centering Plate"];
+  const MAT_LIB_STATIC = ["TMT Steel Fe500 8mm","OPC 53 Cement","PPC Cement","River Sand","M-Sand","20mm Aggregate","Red Brick 9x4x3","Binding Wire","Diesel","Safety Helmet"];
+  const [matLibReal, setMatLibReal] = useState([]);
+  const MAT_LIB = matLibReal.length > 0 ? matLibReal.map(m => m.name) : MAT_LIB_STATIC;
+
+  // Fetch material library from backend
+  useEffect(() => {
+    api.get("/tasks/material-list/" + projectId).then(r => {
+      if (r.success && r.data && r.data.length > 0) setMatLibReal(r.data);
+    }).catch(() => {});
+  }, [projectId]);
 
   // Load ordered MRs for GRN
   useEffect(() => {
@@ -4718,12 +4719,19 @@ function TabMaterial({ project }) {
             </div>
             <div>
               <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
-              <input value={form.item_name} onChange={e=>setForm(p=>({...p,item_name:e.target.value}))}
+              <input value={form.item_name} onChange={e=>{
+                  const val=e.target.value;
+                  const found=matLibReal.find(m=>m.name===val);
+                  setForm(p=>({...p,item_name:val,unit:found?.unit||p.unit}));
+                }}
                 placeholder="Type to search material..." list="mat-lib-list"
                 style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
               <datalist id="mat-lib-list">
-                {MAT_LIB.map(m=><option key={m} value={m}/>)}
+                {matLibReal.length>0
+                  ? matLibReal.map(m=><option key={m.name} value={m.name}>{m.name}{m.unit?" ("+m.unit+")":""}</option>)
+                  : MAT_LIB_STATIC.map(m=><option key={m} value={m}/>)
+                }
               </datalist>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
