@@ -744,6 +744,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
 function MRApprovalCard({mr, onApprove, onReject}){
   const [editQty,setEditQty]=useState(String(mr.quantity||""));
   const [showQtyEdit,setShowQtyEdit]=useState(false);
+  const fmtAmt=n=>n>=100000?"₹"+(n/100000).toFixed(1)+"L":n>=1000?"₹"+(n/1000).toFixed(0)+"K":"₹"+n;
   const taskInfo=mr.notes&&mr.notes.includes("Task:")
     ?mr.notes.replace(/.*Task:\s*/,"").replace(/\s*\(TSK.*\)/,"").trim()
     :"";
