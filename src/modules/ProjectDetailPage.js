@@ -4913,318 +4913,671 @@ function TabAttendance() {
 // TAB 9 — MATERIAL (Site Stock)
 // ═══════════════════════════════════════════════════════════════════
 function TabMaterial({ project }) {
-  const projectId = project?.id || 1;
-  const [subTab,setSubTab] = useState("summary"); // summary | tasks | requests | grn
-  const [loading,setLoading] = useState(false);
-  const [summary,setSummary] = useState([]);
-  const [taskBreakdown,setTaskBreakdown] = useState([]);
-  const [requests,setRequests] = useState([]);
-  const [matLib,setMatLib] = useState([]);
-  const [search,setSearch] = useState("");
-  const [filterStatus,setFilterStatus] = useState("All");
+  const projectId   = project?.id || 1;
+  const projectName = project?.name || "Project";
+
+  const [materials, setMaterials] = useState([]);
+  const [fStage,    setFStage]    = useState("All");
+  const [fMaterial, setFMaterial] = useState("All");
+  const [search,    setSearch]    = useState("");
+  const [viewMode,  setViewMode]  = useState("tile");
+  const [showModal,  setShowModal]  = useState(false);
+  const [showGRN,    setShowGRN]    = useState(false);
+  const [saving,     setSaving]     = useState(false);
+  const [form,       setForm]       = useState({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"" });
 
   // GRN state
-  const [grnTab,setGrnTab] = useState("ordered");
-  const [orderedMRs,setOrderedMRs] = useState([]);
-  const [grnRows,setGrnRows] = useState({});
-  const [directRows,setDirectRows] = useState([{id:1,item_name:"",qty:"",unit:"Bags",vendor:"",challan:""}]);
-  const [grnSaving,setGrnSaving] = useState(false);
-  const [grnDone,setGrnDone] = useState([]);
-  const UNITS = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
+  const [grnTab,     setGrnTab]     = useState("ordered"); // "ordered" | "direct"
+  const [orderedMRs, setOrderedMRs] = useState([]);
+  const [grnRows,    setGrnRows]    = useState({});    // {mrId: {challan, received_qty}}
+  const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:""}]);
+  const [grnSaving,  setGrnSaving]  = useState(false);
+  const [grnDone,    setGrnDone]    = useState([]);   // successfully received mr ids
 
-  useEffect(()=>{
-    if(!projectId) return;
-    // Load summary + requests together
-    setLoading(true);
+  const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
+  const [matLibReal, setMatLibReal] = useState([]);
+  const MAT_LIB = matLibReal.map(m => m.name);
+
+  // ── Inventory section ──────────────────────────────────────
+  const [showInv, setShowInv] = useState(false);
+  const [invView, setInvView] = useState("summary"); // summary | received | used | inventory
+  const [invData, setInvData] = useState(null);
+  const [invLoading, setInvLoading] = useState(false);
+  const [grnHistory, setGrnHistory] = useState([]);
+  const [usedHistory, setUsedHistory] = useState([]);
+
+  const loadInvData = () => {
+    if(invData) return; // already loaded
+    setInvLoading(true);
     Promise.all([
       api.get("/tasks/project/"+projectId+"/material-summary"),
-      api.get("/procurement/mrs?project_id="+projectId),
-      api.get("/library/materials"),
-    ]).then(([sumRes, mrRes, libRes])=>{
-      if(sumRes.success){ setSummary(sumRes.data?.summary||[]); setTaskBreakdown(sumRes.data?.task_breakdown||[]); }
-      if(mrRes.success) setRequests(mrRes.data||[]);
-      if(libRes.success) setMatLib((libRes.data||[]).map(m=>m.name));
-      setLoading(false);
-    }).catch(()=>setLoading(false));
-  },[projectId]);
-
-  useEffect(()=>{
-    if(subTab==="grn"&&projectId){
-      api.get("/procurement/mrs?project_id="+projectId+"&stage=Ordered").then(r=>{
-        if(r.success){ setOrderedMRs(r.data||[]); const rows={}; (r.data||[]).forEach(m=>{rows[m.id]={challan:"",received_qty:m.quantity||0};}); setGrnRows(rows); }
-      }).catch(()=>{});
-    }
-  },[subTab]);
-
-  const reload=()=>{
-    api.get("/tasks/project/"+projectId+"/material-summary").then(r=>{
-      if(r.success){ setSummary(r.data?.summary||[]); setTaskBreakdown(r.data?.task_breakdown||[]); }
-    });
-    api.get("/procurement/mrs?project_id="+projectId).then(r=>{ if(r.success) setRequests(r.data||[]); });
+      api.get("/procurement/grns?project_id="+projectId),
+      api.get("/tasks/project/"+projectId+"/used-history"),
+    ]).then(([sumRes, grnRes, usedRes])=>{
+      if(sumRes.success) setInvData(sumRes.data);
+      if(grnRes.success) setGrnHistory(grnRes.data||[]);
+      if(usedRes.success) setUsedHistory(usedRes.data||[]);
+      setInvLoading(false);
+    }).catch(()=>setInvLoading(false));
   };
 
-  const statusColors={"Available":{c:T.grn,bg:T.grnL},"Low":{c:T.amb,bg:T.ambL},"Exhausted":{c:T.red,bg:T.redL},"Pending":{c:T.slt,bg:T.sltL}};
-  const stageC={"Requested":{c:T.slt,bg:T.sltL},"Approved":{c:T.grn,bg:T.grnL},"Ordered":{c:T.blu,bg:T.bluL},"Received":{c:"#7C3AED",bg:"#EDE9FE"},"Rejected":{c:T.red,bg:T.redL}};
+  const toggleInv = () => {
+    if(!showInv) loadInvData();
+    setShowInv(s=>!s);
+  };
 
-  const filteredSummary = summary.filter(m=>{
-    if(filterStatus!=="All" && m.status!==filterStatus) return false;
-    if(search && !m.material_name.toLowerCase().includes(search.toLowerCase())) return false;
+  // Fetch material library from backend
+  useEffect(() => {
+    api.get("/library/materials").then(r => {
+      if (r.success && r.data && r.data.length > 0) setMatLibReal(r.data);
+    }).catch(() => {});
+  }, [projectId]);
+
+  // Load ordered MRs for GRN
+  useEffect(() => {
+    if (!showGRN || !projectId) return;
+    api.get("/procurement/mrs?project_id=" + projectId + "&stage=Ordered")
+      .then(res => {
+        if (res.success) setOrderedMRs(res.data||[]);
+      }).catch(()=>{});
+  }, [showGRN, projectId]);
+
+  useEffect(() => {
+    if (!projectId) return;
+    api.get("/procurement/mrs?project_id=" + projectId)
+      .then(res => {
+        if (res.success && Array.isArray(res.data)) {
+          setMaterials(res.data.map(m => ({
+            id:     m.id,
+            name:   m.item_name,
+            qty:    (parseFloat(m.quantity)||0) + " " + (m.unit||""),
+            stage:  m.stage || "Requested",
+            by:     m.requested_by || "Site Team",
+            date:   m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+            vendor: m.linked_vendor || null,
+            amt:    parseFloat(m.approx_amount) || 0,
+          })));
+        } else {
+          setMaterials([]); // empty — no dummy fallback
+        }
+      })
+      .catch(() => setMaterials([]));
+  }, [projectId]);
+
+  // ── GRN Handlers ──────────────────────────────────────────
+  const handleReceiveMR = async (mrId) => {
+    const row = grnRows[mrId] || {};
+    if (!row.challan) { alert("Challan number required"); return; }
+    setGrnSaving(true);
+    try {
+      const mr = orderedMRs.find(m => m.id === mrId);
+      const res = await api.patch("/procurement/mrs/" + mrId + "/mark-received", {
+        challan_no:   row.challan,
+        received_qty: parseFloat(row.received_qty) || parseFloat(mr?.quantity) || 0,
+      });
+      if (res.success) {
+        setGrnDone(p => [...p, mrId]);
+        setMaterials(prev => prev.map(m =>
+          m.id === mrId ? { ...m, stage: "Received" } : m
+        ));
+      } else {
+        alert(res.message || "Failed");
+      }
+    } catch(e) { alert(e.message); }
+    setGrnSaving(false);
+  };
+
+  const handleDirectReceive = async () => {
+    const validRows = directRows.filter(r => r.item_name && r.qty && r.challan);
+    if (!validRows.length) { alert("Item name, qty aur challan required hai"); return; }
+    setGrnSaving(true);
+    try {
+      // Create GRN entry directly
+      const res = await api.post("/procurement/grns", {
+        po_id:         null,
+        vendor_name:   validRows[0].vendor || null,
+        project_id:    projectId,
+        project_name:  projectName,
+        challan_no:    validRows[0].challan,
+        received_date: new Date().toISOString().split("T")[0],
+        items: validRows.map(r => ({
+          po_item_id:   null,
+          description:  r.item_name,
+          ordered_qty:  parseFloat(r.qty),
+          received_qty: parseFloat(r.qty),
+          unit:         r.unit || "Bags",
+        })),
+      });
+      if (res.success) {
+        alert("GRN created: " + res.grn_number);
+        setShowGRN(false);
+        setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:""}]);
+      } else {
+        alert(res.message || "GRN failed");
+      }
+    } catch(e) { alert(e.message); }
+    setGrnSaving(false);
+  };
+
+  const handleSubmit = async () => {
+    if (!form.item_name || !form.quantity) return;
+    setSaving(true);
+    try {
+      const res = await api.post("/procurement/mrs", {
+        project_id:    projectId,
+        project_name:  projectName,
+        item_name:     form.item_name,
+        quantity:      parseFloat(form.quantity),
+        unit:          form.unit,
+        required_date: form.required_date || null,
+        approx_amount: form.approx_amount ? parseFloat(form.approx_amount) : null,
+        notes:         form.notes || null,
+        requested_by:  "Site Team",
+      });
+      if (res.success) {
+        const m = res.data;
+        setMaterials(prev => [{
+          id:     m.id,
+          name:   m.item_name,
+          qty:    m.quantity + " " + m.unit,
+          stage:  "Requested",
+          by:     "Site Team",
+          date:   new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+          vendor: null,
+          amt:    parseFloat(m.approx_amount) || 0,
+        }, ...prev]);
+        setForm({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"" });
+        setShowModal(false);
+      }
+    } catch(e) { alert("Error: " + e.message); }
+    finally { setSaving(false); }
+  };
+
+  const MATERIAL_NAMES = ["All", ...[...new Set(materials.map(m => m.name))]];
+  const filtered = materials.filter(m => {
+    if (fStage !== "All" && m.stage !== fStage) return false;
+    if (fMaterial !== "All" && m.name !== fMaterial) return false;
+    if (search && !m.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
+  const stageData = STAGES.map(s => ({ stage:s, ...STAGE_S[s], count: materials.filter(m=>m.stage===s).length }));
+  const totalAmt = filtered.reduce((s,m) => s + (m.amt||0), 0);
+  const activeFilters = (fStage!=="All"?1:0) + (fMaterial!=="All"?1:0) + (search?1:0);
 
-  const handleReceiveMR = async(mrId)=>{
-    const row=grnRows[mrId]||{};
-    if(!row.challan){alert("Challan number required");return;}
-    setGrnSaving(true);
-    const mr=orderedMRs.find(m=>m.id===mrId);
-    const res=await api.patch("/procurement/mrs/"+mrId+"/mark-received",{challan_no:row.challan,received_qty:parseFloat(row.received_qty)||parseFloat(mr?.quantity)||0});
-    if(res.success){setGrnDone(p=>[...p,mrId]);reload();}
-    else alert(res.message||"Failed");
-    setGrnSaving(false);
-  };
+  return (
+    <div style={{padding:"14px 18px"}}>
 
-  const handleDirectGRN = async()=>{
-    const valid=directRows.filter(r=>r.item_name&&r.qty&&r.challan);
-    if(!valid.length){alert("Item name, qty aur challan required");return;}
-    setGrnSaving(true);
-    const res=await api.post("/procurement/grns",{
-      project_id:projectId, vendor_name:valid[0].vendor||null,
-      challan_no:valid[0].challan, items:valid.map(r=>({description:r.item_name,received_qty:parseFloat(r.qty)||0,unit:r.unit||"Bags"}))
-    });
-    if(res.success){alert("GRN recorded!");setDirectRows([{id:1,item_name:"",qty:"",unit:"Bags",vendor:"",challan:""}]);reload();}
-    else alert(res.message||"Failed");
-    setGrnSaving(false);
-  };
+      {/* NEW REQUEST MODAL */}
+      {showModal && (<>
+        <div onClick={()=>setShowModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.32)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:10,boxShadow:"0 20px 60px rgba(0,0,0,0.18)",zIndex:401,width:440,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>New Material Request</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1}}>{projectName}</div>
+            </div>
+            <button onClick={()=>setShowModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>x</button>
+          </div>
+          <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
+            <div style={{background:T.ambL,border:"1px solid " + T.ambM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.amb}}>
+              Request Procurement mein jayegi — Admin approve karenge phir order hoga
+            </div>
+            <div>
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
+              <input value={form.item_name} onChange={e=>{
+                  const val=e.target.value;
+                  const found=matLibReal.find(m=>m.name===val);
+                  setForm(p=>({...p,item_name:val,unit:found?.unit||p.unit}));
+                }}
+                placeholder="Type to search material..." list="mat-lib-list"
+                style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              <datalist id="mat-lib-list">
+                {matLibReal.length>0
+                  ? matLibReal.map(m=><option key={m.name} value={m.name}>{m.name}{m.unit?" ("+m.unit+")":""}</option>)
+                  : MAT_LIB_STATIC.map(m=><option key={m} value={m}/>)
+                }
+              </datalist>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Quantity *</label>
+                <input type="number" value={form.quantity} onChange={e=>setForm(p=>({...p,quantity:e.target.value}))} placeholder="200"
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Unit</label>
+                <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                  {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                </select>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Required By</label>
+                <input type="date" value={form.required_date} onChange={e=>setForm(p=>({...p,required_date:e.target.value}))}
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Approx. Amount</label>
+                <input type="number" value={form.approx_amount} onChange={e=>setForm(p=>({...p,approx_amount:e.target.value}))} placeholder="76000"
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+            </div>
+            <div>
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Notes</label>
+              <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Special requirements..."
+                style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid " + T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+            </div>
+          </div>
+          <div style={{padding:"11px 16px",borderTop:"1px solid " + T.b1,background:T.surfaceB,display:"flex",gap:8}}>
+            <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid " + T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={handleSubmit} disabled={saving||!form.item_name||!form.quantity}
+              style={{flex:2,padding:"8px",borderRadius:7,background:(saving||!form.item_name||!form.quantity)?T.b1:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(saving||!form.item_name||!form.quantity)?"not-allowed":"pointer"}}>
+              {saving?"Saving...":"Submit Request"}
+            </button>
+          </div>
+        </div>
+      </>)}
 
-  const SUBTABS=[
-    {id:"summary",l:"Summary"},
-    {id:"tasks",l:"By Task"},
-    {id:"requests",l:"Requests ("+requests.length+")"},
-    {id:"grn",l:"Record GRN"},
-  ];
-
-  return(
-    <div style={{padding:"14px 18px",fontFamily:"'Segoe UI',sans-serif"}}>
-      {/* Sub-tabs */}
-      <div style={{display:"flex",gap:2,borderBottom:"2px solid "+T.b1,marginBottom:14}}>
-        {SUBTABS.map(t=>(
-          <button key={t.id} onClick={()=>setSubTab(t.id)}
-            style={{padding:"8px 14px",border:"none",background:"none",fontSize:12.5,fontWeight:subTab===t.id?700:400,color:subTab===t.id?T.blu:T.t3,borderBottom:subTab===t.id?"2px solid "+T.blu:"2px solid transparent",cursor:"pointer",marginBottom:-2}}>
-            {t.l}
-          </button>
-        ))}
+      {/* Stage pipeline tiles */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(" + STAGES.length + ",1fr)",gap:8,marginBottom:12}}>
+        {stageData.map((s,i)=>{
+          const isA=fStage===s.stage;
+          return(
+            <div key={s.stage} onClick={()=>setFStage(isA?"All":s.stage)}
+              style={{padding:"9px 12px",background:isA?s.bg:T.surface,border:"1.5px solid " + (isA?s.c:T.b1),borderRadius:8,borderTop:"3px solid " + s.c,cursor:"pointer",transition:"all .15s",textAlign:"center"}}>
+              {i>0&&<div style={{display:"flex",justifyContent:"center",marginBottom:3}}>
+                <svg width={12} height={8} viewBox="0 0 12 8" fill="none"><path d="M1 4h8M6 1l3 3-3 3" stroke={isA?s.c:T.b2} strokeWidth={1.5} strokeLinecap="round"/></svg>
+              </div>}
+              <div style={{fontSize:18,fontWeight:700,color:isA?s.c:T.t1}}>{s.count}</div>
+              <div style={{fontSize:11,fontWeight:600,color:isA?s.c:T.t2}}>{s.stage}</div>
+            </div>
+          );
+        })}
       </div>
 
-      {loading&&<div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>Loading...</div>}
 
-      {/* ── SUMMARY TAB ── */}
-      {!loading&&subTab==="summary"&&(
-        <div>
-          {/* Stats row */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:9,marginBottom:12}}>
-            {[
-              {l:"Total Materials",v:summary.length,c:T.slt},
-              {l:"Pending Delivery",v:summary.filter(m=>m.received_qty===0).length,c:T.amb},
-              {l:"Low / Exhausted",v:summary.filter(m=>m.status==="Low"||m.status==="Exhausted").length,c:T.red},
-              {l:"Available",v:summary.filter(m=>m.status==="Available").length,c:T.grn},
-            ].map((s,i)=>(
-              <div key={i} style={{padding:"9px 12px",background:T.surface,border:"1px solid "+T.b1,borderRadius:7,borderTop:"3px solid "+s.c}}>
-                <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
-                <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
-              </div>
-            ))}
-          </div>
-
-          {/* Search + filter */}
-          <div style={{display:"flex",gap:8,marginBottom:10}}>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search material..."
-              style={{flex:1,padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
-            <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
-              style={{padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,fontFamily:"inherit"}}>
-              {["All","Available","Low","Exhausted","Pending"].map(s=><option key={s}>{s}</option>)}
-            </select>
-          </div>
-
-          {filteredSummary.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>No material data yet — raise MR or record GRN</div>}
-
-          {/* Table */}
-          {filteredSummary.length>0&&(
-            <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 80px 90px 90px 90px 80px",background:"#1E293B",padding:"7px 12px",gap:4}}>
-                {["Material","Unit","Required","Received","Used","Status"].map(h=>(
-                  <div key={h} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.6)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
-                ))}
-              </div>
-              {filteredSummary.map((m,i)=>{
-                const sc=statusColors[m.status]||statusColors["Pending"];
-                return(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 80px 90px 90px 90px 80px",padding:"9px 12px",gap:4,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
-                    <div>
-                      <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.material_name}</div>
-                      {m.tasks?.length>0&&<div style={{fontSize:10,color:T.t4,marginTop:2}}>{m.tasks.slice(0,2).join(" · ")}{m.tasks.length>2?" +more":""}</div>}
-                    </div>
-                    <div style={{fontSize:12,color:T.t3}}>{m.unit||"—"}</div>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.t2}}>{m.required_qty||"—"}</div>
-                    <div style={{fontSize:12.5,fontWeight:600,color:m.received_qty>0?T.grn:T.t3}}>{m.received_qty||0}</div>
-                    <div style={{fontSize:12.5,fontWeight:600,color:m.used_qty>0?T.amb:T.t3}}>{m.used_qty||0}</div>
-                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:sc.bg,color:sc.c,whiteSpace:"nowrap"}}>{m.status}</span>
-                  </div>
-                );
-              })}
+      {/* ── GRN MODAL ───────────────────────────────────────────── */}
+      {showGRN&&(<>
+        <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:401,width:580,maxHeight:"85vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:"white"}}>Record GRN — Material Received</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:2}}>{projectName}</div>
             </div>
-          )}
-        </div>
-      )}
-
-      {/* ── BY TASK TAB ── */}
-      {!loading&&subTab==="tasks"&&(
-        <div>
-          {taskBreakdown.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>No task-wise material data</div>}
-          {Object.entries(
-            taskBreakdown.reduce((acc,r)=>{
-              const key=r.task_no+" — "+r.task_name;
-              if(!acc[key]) acc[key]=[];
-              acc[key].push(r);
-              return acc;
-            },{})
-          ).map(([taskLabel,rows])=>(
-            <div key={taskLabel} style={{marginBottom:12,background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
-              <div style={{padding:"8px 12px",background:"#1E293B",fontSize:12,fontWeight:700,color:"white"}}>{taskLabel}</div>
-              {rows.map((r,i)=>{
-                const sc=stageC[r.stage]||stageC["Requested"];
-                return(
-                  <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:"white"}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{r.material_name}</div>
-                      <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{r.required_qty} {r.unit}</div>
-                    </div>
-                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:sc.bg,color:sc.c}}>{r.stage||r.mr_status||"Requested"}</span>
-                  </div>
-                );
-              })}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* ── REQUESTS TAB ── */}
-      {!loading&&subTab==="requests"&&(
-        <div>
-          {requests.length===0&&<div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>No material requests yet</div>}
-          {requests.map((mr,i)=>{
-            const sc=stageC[mr.stage]||stageC["Requested"];
-            return(
-              <div key={mr.id} style={{background:T.surface,borderRadius:8,padding:"10px 13px",marginBottom:8,border:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div style={{flex:1}}>
-                  <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{mr.item_name}</div>
-                  <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.quantity} {mr.unit} · {mr.requested_by||"Site Team"} · {mr.mr_number}</div>
-                  {mr.notes&&<div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{mr.notes}</div>}
-                </div>
-                <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:sc.bg,color:sc.c,flexShrink:0}}>{mr.stage||"Requested"}</span>
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── RECORD GRN TAB ── */}
-      {!loading&&subTab==="grn"&&(
-        <div>
-          <div style={{display:"flex",gap:4,marginBottom:12}}>
-            {[["ordered","From Ordered MRs"],["direct","Direct Entry"]].map(([id,lbl])=>(
-              <button key={id} onClick={()=>setGrnTab(id)}
-                style={{padding:"6px 14px",borderRadius:6,border:"1.5px solid "+(grnTab===id?T.blu:T.b1),background:grnTab===id?T.blu:"white",color:grnTab===id?"white":T.t3,fontSize:12,fontWeight:grnTab===id?700:400,cursor:"pointer"}}>
-                {lbl}
+            <button onClick={()=>setShowGRN(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
+          </div>
+          <div style={{display:"flex",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
+            {[{id:"ordered",label:"Ordered Materials"},{id:"direct",label:"Direct Receive"}].map(t=>(
+              <button key={t.id} onClick={()=>setGrnTab(t.id)}
+                style={{flex:1,padding:"10px",border:"none",background:grnTab===t.id?T.surface:T.surfaceB,color:grnTab===t.id?T.blu:T.t3,fontSize:12.5,fontWeight:grnTab===t.id?700:400,cursor:"pointer",borderBottom:grnTab===t.id?"2px solid "+T.blu:"2px solid transparent"}}>
+                {t.label}
+                {t.id==="ordered"&&orderedMRs.length>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,marginLeft:5}}>{orderedMRs.length}</span>}
               </button>
             ))}
           </div>
-
-          {grnTab==="ordered"&&(
-            <div>
-              {orderedMRs.filter(mr=>!grnDone.includes(mr.id)).length===0&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No ordered MRs pending</div>}
-              {orderedMRs.filter(mr=>!grnDone.includes(mr.id)).map(mr=>(
-                <div key={mr.id} style={{background:T.surface,borderRadius:8,padding:"11px 13px",marginBottom:8,border:"1px solid "+T.b1}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                    <div>
-                      <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{mr.item_name}</div>
-                      <div style={{fontSize:11,color:T.t4}}>{mr.quantity} {mr.unit} · {mr.mr_number}</div>
-                    </div>
-                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:T.bluL,color:T.blu}}>Ordered</span>
+          <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+            {grnTab==="ordered"&&(
+              <div>
+                {orderedMRs.length===0&&(
+                  <div style={{textAlign:"center",padding:"40px",color:T.t4}}>
+                    <div style={{fontSize:13,fontWeight:600,color:T.t2,marginBottom:4}}>Koi ordered material nahi hai</div>
+                    <div style={{fontSize:12,marginTop:4}}>Procurement se order karo, ya Direct Receive tab use karo</div>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                    <div>
-                      <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Challan No *</label>
-                      <input value={grnRows[mr.id]?.challan||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],challan:e.target.value}}))}
-                        placeholder="e.g. CH-2024-001"
-                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                )}
+                {orderedMRs.map(mr=>{
+                  const isDone=grnDone.includes(mr.id);
+                  const row=grnRows[mr.id]||{};
+                  return(
+                    <div key={mr.id} style={{background:isDone?T.grnL:T.surface,border:"1px solid "+(isDone?T.grnM:T.b1),borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+(isDone?T.grn:T.amb)}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone?0:10}}>
+                        <div>
+                          <div style={{fontSize:13,fontWeight:700,color:isDone?T.grn:T.t1}}>{mr.item_name}</div>
+                          <div style={{fontSize:11,color:T.t4,marginTop:2}}>
+                            Ordered: {mr.quantity} {mr.unit}
+                            {mr.linked_vendor&&<span style={{marginLeft:8,color:T.blu}}>· {mr.linked_vendor}</span>}
+                          </div>
+                        </div>
+                        {isDone&&<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>✓ Received</span>}
+                      </div>
+                      {!isDone&&(
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
+                          <div>
+                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
+                            <input value={row.challan||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],challan:e.target.value}}))}
+                              placeholder="e.g. CH-445"
+                              style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                          </div>
+                          <div>
+                            <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received Qty</label>
+                            <input type="number" value={row.received_qty||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))}
+                              placeholder={String(mr.quantity)}
+                              style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                          </div>
+                          <button onClick={()=>handleReceiveMR(mr.id)} disabled={!row.challan||grnSaving}
+                            style={{padding:"7px 14px",borderRadius:6,background:row.challan?T.grn:T.b1,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:row.challan?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+                            {grnSaving?"...":"✓ Receive"}
+                          </button>
+                        </div>
+                      )}
                     </div>
-                    <div>
-                      <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Received Qty</label>
-                      <input type="number" value={grnRows[mr.id]?.received_qty||mr.quantity} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))}
-                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                    </div>
-                  </div>
-                  <button onClick={()=>handleReceiveMR(mr.id)} disabled={grnSaving}
-                    style={{width:"100%",padding:"8px",borderRadius:6,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-                    Record GRN
-                  </button>
+                  );
+                })}
+              </div>
+            )}
+            {grnTab==="direct"&&(
+              <div>
+                <div style={{background:T.bluL,border:"1px solid "+T.bluM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.blu,marginBottom:12}}>
+                  Bina PO ke directly site pe aaya material — challan se receive karo
                 </div>
-              ))}
-            </div>
-          )}
-
-          {grnTab==="direct"&&(
-            <div>
-              {directRows.map((row,i)=>(
-                <div key={row.id} style={{background:T.surface,borderRadius:8,padding:"11px 13px",marginBottom:8,border:"1px solid "+T.b1}}>
-                  <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 80px",gap:8,marginBottom:8}}>
-                    <div>
-                      <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Material *</label>
-                      <input value={row.item_name} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,item_name:e.target.value}:r))}
-                        list="mat_list_proj" placeholder="Material name"
-                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                      <datalist id="mat_list_proj">{matLib.map(m=><option key={m} value={m}/>)}</datalist>
+                {directRows.map((row,i)=>(
+                  <div key={row.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px",marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <span style={{fontSize:11,fontWeight:600,color:T.t3}}>Item {i+1}</span>
+                      {directRows.length>1&&<button onClick={()=>setDirectRows(p=>p.filter(r=>r.id!==row.id))} style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:18,lineHeight:1}}>×</button>}
                     </div>
-                    <div>
-                      <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Qty *</label>
-                      <input type="number" value={row.qty} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,qty:e.target.value}:r))}
-                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Material Name *</label>
+                        <input value={row.item_name} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,item_name:e.target.value}:r))}
+                          placeholder="e.g. Cement OPC 53"
+                          list={"mat_lib_"+row.id}
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        <datalist id={"mat_lib_"+row.id}>{MAT_LIB.map(m=><option key={m} value={m}/>)}</datalist>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor</label>
+                        <input value={row.vendor} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:e.target.value}:r))}
+                          placeholder="Vendor name"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
                     </div>
-                    <div>
-                      <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Unit</label>
-                      <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
-                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,fontFamily:"inherit"}}>
-                        {UNITS.map(u=><option key={u}>{u}</option>)}
-                      </select>
+                    <div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr",gap:8}}>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Qty *</label>
+                        <input type="number" value={row.qty} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,qty:e.target.value}:r))}
+                          placeholder="0"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Unit</label>
+                        <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                          {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
+                        <input value={row.challan} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,challan:e.target.value}:r))}
+                          placeholder="e.g. CH-445"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
                     </div>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                    <div>
-                      <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Challan No *</label>
-                      <input value={row.challan} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,challan:e.target.value}:r))}
-                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                    </div>
-                    <div>
-                      <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3,textTransform:"uppercase"}}>Vendor</label>
-                      <input value={row.vendor} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:e.target.value}:r))}
-                        placeholder="Optional"
-                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              <div style={{display:"flex",gap:8,marginTop:4}}>
+                ))}
                 <button onClick={()=>setDirectRows(p=>[...p,{id:Date.now(),item_name:"",qty:"",unit:"Bags",vendor:"",challan:""}])}
-                  style={{padding:"8px 14px",borderRadius:6,border:"1.5px solid "+T.b1,background:"white",fontSize:12,color:T.t3,cursor:"pointer"}}>+ Add Row</button>
-                <button onClick={handleDirectGRN} disabled={grnSaving}
-                  style={{flex:1,padding:"8px",borderRadius:6,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-                  {grnSaving?"Saving...":"Submit GRN"}
+                  style={{width:"100%",padding:"8px",borderRadius:7,border:"1.5px dashed "+T.b2,background:"none",color:T.t4,fontSize:12,cursor:"pointer",marginTop:4}}>
+                  + Add Another Item
                 </button>
               </div>
-            </div>
-          )}
+            )}
+          </div>
+          <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
+            <button onClick={()=>setShowGRN(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
+            {grnTab==="direct"&&(
+              <button onClick={handleDirectReceive} disabled={grnSaving}
+                style={{flex:2,padding:"8px",borderRadius:7,background:grnSaving?T.b1:T.grn,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer"}}>
+                {grnSaving?"Saving...":"Submit GRN"}
+              </button>
+            )}
+            {grnTab==="ordered"&&grnDone.length>0&&(
+              <button onClick={()=>{setShowGRN(false);}}
+                style={{flex:2,padding:"8px",borderRadius:7,background:T.grn,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                Done ✓ ({grnDone.length} received)
+              </button>
+            )}
+          </div>
+        </div>
+      </>)}
+
+      {/* Filter bar */}
+      <div style={{background:T.surface,border:"1px solid " + T.b1,borderRadius:8,padding:"7px 10px",marginBottom:8,display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{position:"relative",flex:1,minWidth:140}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+          <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search material..."
+            style={{width:"100%",height:29,padding:"0 8px 0 27px",borderRadius:6,border:"1.5px solid " + (search?T.blu:T.b1),fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:search?T.bluL:T.surface}}/>
+        </div>
+        <div style={{position:"relative"}}>
+          <select value={fMaterial} onChange={e=>setFMaterial(e.target.value)}
+            style={{height:29,padding:"0 22px 0 9px",borderRadius:6,border:"1.5px solid " + (fMaterial!=="All"?T.blu:T.b1),background:fMaterial!=="All"?T.bluL:T.surface,fontSize:11.5,color:fMaterial!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",fontWeight:fMaterial!=="All"?600:400,minWidth:160,appearance:"none",WebkitAppearance:"none"}}>
+            {MATERIAL_NAMES.map(n=><option key={n} value={n}>{n==="All"?"All Materials":n}</option>)}
+          </select>
+          <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <span style={{fontSize:11,color:T.t4}}>{filtered.length} items</span>
+        <div style={{display:"flex",background:T.bg,borderRadius:6,border:"1px solid " + T.b1,overflow:"hidden"}}>
+          {[{id:"tile",icon:"tile"},{id:"list",icon:"list"}].map(v=>(
+            <button key={v.id} onClick={()=>setViewMode(v.id)}
+              style={{padding:"4px 9px",border:"none",background:viewMode===v.id?T.blu:"none",color:viewMode===v.id?"white":T.t3,cursor:"pointer",fontSize:11,transition:"all .15s"}}>
+              {v.id==="tile"?"⊞":"☰"}
+            </button>
+          ))}
+        </div>
+        {activeFilters>0&&<button onClick={()=>{setFStage("All");setFMaterial("All");setSearch("");}} style={{fontSize:11,color:T.red,background:T.redL,border:"1px solid " + T.redM,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear x</button>}
+        <AddBtn label="New Request" onClick={()=>setShowModal(true)}/>
+        <button onClick={()=>{setShowGRN(true);setGrnDone([]);setGrnRows({});}}
+          style={{padding:"5px 12px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M9 12l2 2 4-4M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+          Record GRN
+        </button>
+      </div>
+
+      {/* TILE VIEW */}
+      {viewMode==="tile"&&(
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10}}>
+          {filtered.map(m=>{
+            const ss=STAGE_S[m.stage]||STAGE_S["Requested"];
+            return(
+              <div key={m.id} style={{background:T.surface,borderRadius:9,border:"1px solid " + T.b1,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,.04)",borderLeft:"4px solid " + ss.c}}>
+                <div style={{padding:"10px 12px 8px"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
+                    <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{m.qty}</span>
+                  </div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.t1,lineHeight:1.3,marginBottom:5}}>{m.name}</div>
+                  <div style={{display:"flex",gap:8,fontSize:11,color:T.t4}}>
+                    <span>{m.vendor||"No vendor"}</span><span>.</span><span>{m.date}</span>
+                  </div>
+                </div>
+                <div style={{padding:"7px 12px",borderTop:"1px solid " + T.b1,background:T.surfaceB,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:11,color:T.t4}}>By {(m.by||"—").split(" ")[0]}</span>
+                  <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Rs.{fmtN(m.amt||0)}</span>
+                </div>
+              </div>
+            );
+          })}
+          {filtered.length===0&&<div style={{gridColumn:"1/-1",padding:"48px",textAlign:"center",color:T.t4,background:T.surface,borderRadius:8,border:"1px solid " + T.b1}}>No materials found</div>}
         </div>
       )}
+
+      {/* LIST VIEW */}
+      {viewMode==="list"&&(
+        <Panel>
+          <THead cols="2fr 90px 110px 130px 110px 110px" headers={["Material","Qty","Stage","Vendor","Requested By","Amount"]}/>
+          {filtered.map(m=>{
+            const ss=STAGE_S[m.stage]||STAGE_S["Requested"];
+            return(
+              <div key={m.id} style={{display:"grid",gridTemplateColumns:"2fr 90px 110px 130px 110px 110px",padding:"9px 15px",borderBottom:"1px solid " + T.b1,alignItems:"center",borderLeft:"3px solid " + ss.c + "44",transition:"background .1s"}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.name}</span>
+                <span style={{fontSize:12,color:T.t2}}>{m.qty}</span>
+                <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
+                <span style={{fontSize:12,color:T.t2}}>{m.vendor||"—"}</span>
+                <span style={{fontSize:12,color:T.t2}}>{(m.by||"—").split(" ")[0]}</span>
+                <span style={{fontSize:13,fontWeight:600,color:T.t1}}>Rs.{fmtN(m.amt||0)}</span>
+              </div>
+            );
+          })}
+          {filtered.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4}}>No materials found</div>}
+        </Panel>
+      )}
+
+      {/* ── INVENTORY SECTION (Toggle) ─────────────────────────── */}
+      <div style={{marginTop:16,border:"1px solid "+T.b1,borderRadius:10,overflow:"hidden",background:T.surface}}>
+        {/* Toggle Header */}
+        <button onClick={toggleInv}
+          style={{width:"100%",padding:"11px 16px",background:showInv?"#1E293B":T.surface,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",transition:"background .15s"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={showInv?"white":T.t2} strokeWidth={2}><path d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3H8v4h8V3z"/><circle cx={12} cy={12} r={1}/></svg>
+            <span style={{fontSize:13,fontWeight:700,color:showInv?"white":T.t1}}>Material Inventory & History</span>
+            {invData?.summary?.length>0&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:10,background:showInv?"rgba(255,255,255,.15)":"#DBEAFE",color:showInv?"white":T.blu}}>{invData.summary.length} materials</span>}
+          </div>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={showInv?"white":T.t4} strokeWidth={2}><path d={showInv?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"}/></svg>
+        </button>
+
+        {showInv&&(
+          <div style={{padding:"12px 16px"}}>
+            {/* View selector */}
+            <div style={{display:"flex",gap:4,marginBottom:12,background:T.surfaceB,borderRadius:7,padding:4}}>
+              {[
+                {id:"summary",  l:"Summary"},
+                {id:"received", l:"Received"},
+                {id:"used",     l:"Used Log"},
+                {id:"inventory",l:"Inventory"},
+              ].map(v=>(
+                <button key={v.id} onClick={()=>setInvView(v.id)}
+                  style={{flex:1,padding:"6px",borderRadius:5,border:"none",background:invView===v.id?T.blu:"none",color:invView===v.id?"white":T.t3,fontSize:11.5,fontWeight:invView===v.id?700:400,cursor:"pointer",transition:"all .15s"}}>
+                  {v.l}
+                </button>
+              ))}
+            </div>
+
+            {invLoading&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>Loading...</div>}
+
+            {/* SUMMARY VIEW */}
+            {!invLoading&&invView==="summary"&&(
+              <div>
+                {(!invData?.summary||invData.summary.length===0)&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No data yet — raise MR or record GRN</div>}
+                <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
+                  {invData?.summary?.length>0&&(
+                    <>
+                      <div style={{display:"grid",gridTemplateColumns:"2fr 70px 80px 80px 80px 80px",background:"#1E293B",padding:"7px 12px",gap:4}}>
+                        {["Material","Unit","Required","Received","Used","Balance"].map(h=>(
+                          <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.6)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
+                        ))}
+                      </div>
+                      {invData.summary.map((m,i)=>{
+                        const balColor=m.balance<=0?T.red:m.balance<m.received_qty*0.2?T.amb:T.grn;
+                        return(
+                          <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 70px 80px 80px 80px 80px",padding:"8px 12px",gap:4,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
+                            <div>
+                              <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{m.material_name}</div>
+                              {m.tasks?.length>0&&<div style={{fontSize:9.5,color:T.t4}}>{m.tasks[0]}{m.tasks.length>1?" +more":""}</div>}
+                            </div>
+                            <div style={{fontSize:11.5,color:T.t3}}>{m.unit||"—"}</div>
+                            <div style={{fontSize:12,fontWeight:600,color:T.t2}}>{m.required_qty||"—"}</div>
+                            <div style={{fontSize:12,fontWeight:600,color:m.received_qty>0?T.grn:T.t3}}>{m.received_qty||0}</div>
+                            <div style={{fontSize:12,fontWeight:600,color:m.used_qty>0?T.amb:T.t3}}>{m.used_qty||0}</div>
+                            <div style={{fontSize:13,fontWeight:700,color:balColor}}>{m.balance||0}</div>
+                          </div>
+                        );
+                      })}
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* RECEIVED VIEW */}
+            {!invLoading&&invView==="received"&&(
+              <div>
+                {grnHistory.length===0&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No GRN entries recorded yet</div>}
+                {grnHistory.map((grn,i)=>(
+                  <div key={grn.id||i} style={{background:T.surface,borderRadius:8,padding:"10px 13px",marginBottom:8,border:"1px solid "+T.b1,borderLeft:"3px solid "+T.grn}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
+                      <div>
+                        <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{grn.grn_number||"GRN"}</div>
+                        <div style={{fontSize:11,color:T.t4,marginTop:2}}>
+                          {grn.vendor_name||"Direct"} · Challan: {grn.challan_no||"—"} · {grn.received_date?new Date(grn.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}
+                        </div>
+                      </div>
+                      <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.grnL,color:T.grn}}>Received</span>
+                    </div>
+                    {(grn.items||[]).map((item,j)=>(
+                      <div key={j} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderTop:j===0?"1px solid "+T.b1:"none"}}>
+                        <span style={{fontSize:12,color:T.t2}}>{item.description||item.item_name}</span>
+                        <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{item.received_qty} {item.unit}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* USED LOG VIEW */}
+            {!invLoading&&invView==="used"&&(
+              <div>
+                {usedHistory.length===0&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No used log entries yet</div>}
+                {usedHistory.map((u,i)=>(
+                  <div key={u.id||i} style={{background:T.surface,borderRadius:8,padding:"10px 13px",marginBottom:6,border:"1px solid "+T.b1,borderLeft:"3px solid "+T.amb,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{u.material_name}</div>
+                      <div style={{fontSize:11,color:T.t4,marginTop:2}}>
+                        {u.task_name||u.task_no||"—"} · {u.user_name||"Site Team"} · {u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}
+                      </div>
+                      {u.remark&&<div style={{fontSize:10.5,color:T.t3,marginTop:1}}>{u.remark}</div>}
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.amb}}>{u.used_qty} {u.unit}</div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* INVENTORY VIEW */}
+            {!invLoading&&invView==="inventory"&&(
+              <div>
+                {(!invData?.summary||invData.summary.length===0)&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No inventory data yet</div>}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:8}}>
+                  {(invData?.summary||[]).map((m,i)=>{
+                    const pct=m.received_qty>0?Math.min(100,Math.round((m.used_qty/m.received_qty)*100)):0;
+                    const balColor=m.balance<=0?T.red:m.balance<m.received_qty*0.2?T.amb:T.grn;
+                    const status=m.balance<=0&&m.received_qty>0?"Exhausted":m.received_qty===0?"Pending":m.balance<m.received_qty*0.2?"Low":"Available";
+                    const statusBg={"Available":T.grnL,"Low":T.ambL,"Exhausted":T.redL,"Pending":T.sltL};
+                    const statusC={"Available":T.grn,"Low":T.amb,"Exhausted":T.red,"Pending":T.slt};
+                    return(
+                      <div key={i} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,padding:"11px 13px",borderTop:"3px solid "+balColor}}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:2}}>{m.material_name}</div>
+                        <div style={{fontSize:10.5,color:T.t4,marginBottom:8}}>{m.unit||"—"}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                          <span style={{fontSize:10,color:T.t4}}>Balance</span>
+                          <span style={{fontSize:15,fontWeight:800,color:balColor}}>{m.balance||0}</span>
+                        </div>
+                        {/* Progress bar: used/received */}
+                        {m.received_qty>0&&(
+                          <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:6}}>
+                            <div style={{height:"100%",width:pct+"%",background:pct>80?T.red:pct>50?T.amb:T.grn,borderRadius:2,transition:"width .4s"}}/>
+                          </div>
+                        )}
+                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.t4}}>
+                          <span>Rcvd: <b style={{color:T.grn}}>{m.received_qty}</b></span>
+                          <span>Used: <b style={{color:T.amb}}>{m.used_qty}</b></span>
+                        </div>
+                        <span style={{display:"inline-block",marginTop:6,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:statusBg[status]||T.sltL,color:statusC[status]||T.slt}}>{status}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
