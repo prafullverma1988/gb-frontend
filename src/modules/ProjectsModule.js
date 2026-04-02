@@ -1393,7 +1393,66 @@ function ProjectsPage({onSelectProject}){
 
 
 // ── Issues Drawer ─────────────────────────────────────────────────────
+function IssueChat({issueId}){
+  const [comments,setComments]=useState([]);
+  const [text,setText]=useState("");
+  const [sending,setSending]=useState(false);
+  const [loaded,setLoaded]=useState(false);
+  const fmtT=d=>d?new Date(d).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"";
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+  useEffect(()=>{
+    api.get("/tasks/issues/"+issueId+"/comments").then(r=>{
+      if(r.success)setComments(r.data||[]);
+      setLoaded(true);
+    }).catch(()=>setLoaded(true));
+  },[issueId]);
+  const send=async()=>{
+    if(!text.trim())return;
+    setSending(true);
+    const r=await api.post("/tasks/issues/"+issueId+"/comments",{text});
+    if(r.success){setComments(p=>[...p,r.data]);setText("");}
+    setSending(false);
+  };
+  return(
+    <div style={{borderTop:"1px solid #F1F5F9",paddingTop:10,marginTop:8}}>
+      <div style={{fontSize:9.5,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
+        Chat ({comments.length})
+      </div>
+      {!loaded&&<div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"6px 0"}}>Loading...</div>}
+      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"6px 0"}}>No messages yet</div>}
+      <div style={{maxHeight:160,overflowY:"auto",marginBottom:8}}>
+        {comments.map(c=>(
+          <div key={c.id} style={{display:"flex",gap:7,marginBottom:7,alignItems:"flex-start"}}>
+            <div style={{width:24,height:24,borderRadius:"50%",background:"linear-gradient(135deg,#2563EB,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:9,fontWeight:700,color:"white"}}>
+              {(c.user_name||"?").charAt(0).toUpperCase()}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:2}}>
+                <span style={{fontSize:10.5,fontWeight:700,color:"#1E293B"}}>{c.user_name||"—"}</span>
+                <span style={{fontSize:9,color:"#94A3B8"}}>{fmtD(c.created_at)} {fmtT(c.created_at)}</span>
+              </div>
+              <div style={{padding:"6px 9px",background:"#F8FAFC",borderRadius:"0 7px 7px 7px",border:"1px solid #E2E8F0",fontSize:12,color:"#334155",lineHeight:1.5}}>{c.text}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input value={text} onChange={e=>setText(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
+          placeholder="Type message..."
+          style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:12,color:"#1E293B",outline:"none",fontFamily:"inherit"}}/>
+        <button onClick={send} disabled={sending||!text.trim()}
+          style={{padding:"7px 12px",borderRadius:7,background:sending||!text.trim()?"#E2E8F0":"#2563EB",color:sending||!text.trim()?"#94A3B8":"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function IssuesDrawer({issues, loading, filter, setFilter, onClose}){
+  const [expandedChat,setExpandedChat]=useState(null);
+  const [fullPhoto,setFullPhoto]=useState(null);
   const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
   const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
   const FILTERS=["All","Open","In Progress","Resolved","Closed"];
@@ -1402,6 +1461,14 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose}){
 
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
+    {fullPhoto&&(
+      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
+        <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    )}
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
       {/* Header */}
       <div style={{background:"#0F172A",padding:"14px 18px",flexShrink:0}}>
@@ -1450,12 +1517,25 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose}){
                 <span style={{fontSize:11,color:"#64748B"}}>{issue.task_name}</span>
                 {issue.city&&<span style={{fontSize:10,color:"#94A3B8",marginLeft:2}}>· {issue.city}</span>}
               </div>
-              {/* Assigned + Category + Date */}
-              <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
-                {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>🔧 {issue.work_category}</span>}
-                <span style={{fontSize:10,color:"#94A3B8",marginLeft:"auto"}}>{fmtDate(issue.created_at)}</span>
+              {/* Photo + Assigned + Category + Chat + Date */}
+              <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",marginBottom:issue.photo_url?8:0}}>
+                {issue.photo_url&&(
+                  <img src={issue.photo_url} alt="issue"
+                    onClick={()=>setFullPhoto(issue.photo_url)}
+                    style={{width:44,height:44,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0",cursor:"zoom-in",flexShrink:0}}/>
+                )}
+                <div style={{flex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                  {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                  {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                  <span style={{fontSize:10,color:"#94A3B8",marginLeft:"auto"}}>{fmtDate(issue.created_at)}</span>
+                  <button onClick={()=>setExpandedChat(expandedChat===issue.id?null:issue.id)}
+                    style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,border:"1px solid #E2E8F0",background:expandedChat===issue.id?"#DBEAFE":"white",cursor:"pointer",fontSize:10,color:expandedChat===issue.id?"#2563EB":"#64748B",fontWeight:600}}>
+                    <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    Chat
+                  </button>
+                </div>
               </div>
+              {expandedChat===issue.id&&<IssueChat issueId={issue.id}/>}
             </div>
           );
         })}

@@ -2446,6 +2446,18 @@ function TabTasks({ projectId }) {
   const completed=allFlat.filter(t=>t.status==="Completed").length;
   const delayed=allFlat.filter(t=>ptDelayDays(t)>0).length;
   const dhyanCount=allFlat.filter(t=>t.dhyanRakhen).length;
+  const [showProjIssues,setShowProjIssues]=useState(false);
+  const [projIssues,setProjIssues]=useState([]);
+  const [projIssuesLoading,setProjIssuesLoading]=useState(false);
+  const [projIssueFilter,setProjIssueFilter]=useState("All");
+
+  const loadProjIssues=()=>{
+    setProjIssuesLoading(true);
+    api.get("/tasks/all-issues?project_id="+projectId).then(r=>{
+      if(r.success) setProjIssues(r.data||[]);
+      setProjIssuesLoading(false);
+    }).catch(()=>setProjIssuesLoading(false));
+  };
 
   const toggleCollapse=(id)=>setCollapsed(p=>({...p,[id]:!p[id]}));
 
@@ -2653,6 +2665,14 @@ function TabTasks({ projectId }) {
             <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
           </div>
         ))}
+        {/* Issues card — replaces DHYAN as 5th card */}
+        <div onClick={()=>{setShowProjIssues(true);loadProjIssues();}}
+          style={{padding:"9px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,borderTop:`3px solid ${T.red}`,cursor:"pointer",transition:"box-shadow .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 10px rgba(220,38,38,0.15)"}
+          onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+          <div style={{fontSize:9,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Open Issues</div>
+          <div style={{fontSize:18,fontWeight:700,color:T.red}}>{projIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length||"—"}</div>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -2949,6 +2969,7 @@ function TabTasks({ projectId }) {
       {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}}/>}
 
       {/* Edit Task drawer */}
+      {showProjIssues&&<ProjectIssuesDrawer issues={projIssues} loading={projIssuesLoading} filter={projIssueFilter} setFilter={setProjIssueFilter} onClose={()=>setShowProjIssues(false)}/>}
       {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
         await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen });
         setTasks(updateInTree(tasks,id,u)); setEditTask(null);
@@ -4305,6 +4326,76 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
           </button>
         </div>
+      </div>
+    </div>
+  </>);
+}
+
+// ── Project Issues Drawer (from Tasks tab) ────────────────────────────
+function ProjectIssuesDrawer({issues, loading, filter, setFilter, onClose}){
+  const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
+  const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
+  const FILTERS=["All","Open","In Progress","Resolved","Closed"];
+  const filtered=filter==="All"?issues:issues.filter(i=>i.status===filter);
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(500px,96vw)",background:"#F8FAFC",zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+      {/* Header */}
+      <div style={{background:"#0F172A",padding:"14px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Issues — This Project</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{filtered.length} issue{filtered.length!==1?"s":""}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {FILTERS.map(f=>(
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
+              {f}{f!=="All"&&<span style={{marginLeft:4,fontSize:10,opacity:.8}}>{issues.filter(i=>i.status===f).length}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+      {/* List */}
+      <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
+        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
+        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found</div>}
+        {filtered.map(issue=>{
+          const pc=priC[issue.priority]||priC["Medium"];
+          const ic=issC[issue.status]||issC["Open"];
+          return(
+            <div key={issue.id} style={{background:"white",borderRadius:10,padding:"12px 14px",marginBottom:8,border:"1px solid #E2E8F0",borderLeft:`3px solid ${ic.c}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#1E293B",flex:1,marginRight:8}}>{issue.title}</div>
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.priority}</span>
+                  <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.status}</span>
+                </div>
+              </div>
+              {/* Task name */}
+              <div style={{fontSize:11,color:"#64748B",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
+                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/></svg>
+                <span style={{fontWeight:600,color:"#475569"}}>{issue.task_name||issue.task_no||"-"}</span>
+              </div>
+              {/* Assigned + category + photo + date */}
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                {issue.photo_url&&(
+                  <img src={issue.photo_url} alt="issue" style={{width:32,height:32,borderRadius:5,objectFit:"cover",border:"1px solid #E2E8F0",cursor:"zoom-in"}}
+                    onClick={()=>window.open(issue.photo_url,"_blank")}/>
+                )}
+                <span style={{fontSize:10,color:"#94A3B8",marginLeft:"auto"}}>{fmtD(issue.created_at)}</span>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   </>);
