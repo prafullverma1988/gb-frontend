@@ -68,8 +68,8 @@ const NAV=[
 
 // ── MONTHS ─────────────────────────────────────────────────────────
 const MONTHS=["January","February","March","April","May","June","July","August","September","October","November","December"];
-const CUR_MONTH=2; // March (0-indexed)
-const CUR_YEAR=2026;
+const CUR_MONTH=new Date().getMonth();
+const CUR_YEAR=new Date().getFullYear();
 const WORKING_DAYS=26; // working days in month
 const PROJECTS=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Central Office"];
 
@@ -854,7 +854,7 @@ const IcBank  =(p)=><Ic {...p} d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2V9z
 const IcSlip  =(p)=><Ic {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8"/>;
 const IcFinLink=(p)=><Ic {...p} d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71"/>;
 
-const TODAY="2026-03-16";
+const TODAY=new Date().toISOString().split("T")[0];
 const addDays=(dateStr,n)=>{
   const d=new Date(dateStr);d.setDate(d.getDate()+n);
   return d.toISOString().split("T")[0];

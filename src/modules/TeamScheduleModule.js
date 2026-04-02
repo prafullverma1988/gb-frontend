@@ -90,7 +90,7 @@ const TYPES={
   "Todo":  {c:T.grn, icon:"✓"},
 };
 
-const TODAY="2026-03-16";
+const TODAY=new Date().toISOString().split("T")[0];
 const fmtDate=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
 const daysDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/(1000*86400));
 const isOverdue=item=>item.dueDate&&item.status!=="Done"&&item.dueDate<TODAY;

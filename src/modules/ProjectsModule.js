@@ -1048,8 +1048,10 @@ function ProjectsPage({onSelectProject}){
         setLoading(false);
       }
     };
-    fetchProjects();
-    loadApprovalCounts();
+    fetchProjects().then(() => {
+      // Load approval counts after main project list renders
+      loadApprovalCounts();
+    });
   },[]);
 
   const cities=["All",...new Set(allProjects.map(p=>p.city))];

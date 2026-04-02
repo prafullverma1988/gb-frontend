@@ -104,7 +104,7 @@ const fmtN=n=>n==null?"—":Number(n).toLocaleString("en-IN");
 const fmtRs=n=>"₹"+fmtN(Math.abs(n));
 const fmtDate=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"-";
 const fmtShort=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
-const TODAY="2026-03-16";
+const TODAY=new Date().toISOString().split("T")[0];
 
 // ── MASTER DATA ───────────────────────────────────────────────
 const SITES=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office"];

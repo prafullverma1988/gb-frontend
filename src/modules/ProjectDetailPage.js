@@ -6279,21 +6279,25 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
   const switchTab = (t) => setTab(t);
 
-  const tabContent = {
-    overview:    <TabOverview    proj={project}/>,
-    design:      <TabDesign project={project}/>,
-    estimate:    <TabEstimate/>,
-    party:       <TabParty/>,
-    transaction: <TabTransaction/>,
-    todo:        <TabTodo/>,
-    task:        <TabTasks projectId={project.id}/>,
-    attendance:  <TabAttendance/>,
-    material:    <TabMaterial project={project}/>,
-    subcon:      <TabSubcon/>,
-    equipment:   <TabEquipment/>,
-    files:       <TabFiles/>,
-    site:        <TabSite/>,
-    mom:         <TabMOM/>,
+  // Render only the active tab — prevents all tabs from mounting at once
+  const renderTab = () => {
+    switch(tab) {
+      case "overview":    return <TabOverview    proj={project}/>;
+      case "design":      return <TabDesign      project={project}/>;
+      case "estimate":    return <TabEstimate/>;
+      case "party":       return <TabParty/>;
+      case "transaction": return <TabTransaction/>;
+      case "todo":        return <TabTodo/>;
+      case "task":        return <TabTasks        projectId={project.id}/>;
+      case "attendance":  return <TabAttendance/>;
+      case "material":    return <TabMaterial     project={project}/>;
+      case "subcon":      return <TabSubcon/>;
+      case "equipment":   return <TabEquipment/>;
+      case "files":       return <TabFiles/>;
+      case "site":        return <TabSite/>;
+      case "mom":         return <TabMOM/>;
+      default:            return <TabOverview    proj={project}/>;
+    }
   };
 
   return (
@@ -6354,7 +6358,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
       {/* ── CONTENT ── */}
       <div style={{flex:1, overflowY:"auto", background:T.bg}}>
-        {tabContent[tab]}
+        {renderTab()}
       </div>
     </div>
   );

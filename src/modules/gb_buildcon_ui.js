@@ -1,19 +1,4 @@
-import { useState, lazy, Suspense } from "react";
-
-// ── Lazy-loaded modules (load only when first visited) ─────────────
-const ProjectsModule     = lazy(() => import("./modules/ProjectsModule"));
-const ProjectDetailPage  = lazy(() => import("./modules/ProjectDetailPage"));
-const FinanceModule      = lazy(() => import("./modules/FinanceModule"));
-const ProcurementModule  = lazy(() => import("./modules/ProcurementModule"));
-const DesignModule       = lazy(() => import("./modules/DesignModule"));
-const CRMModule          = lazy(() => import("./modules/CRMModule"));
-const MasterLibraryModule= lazy(() => import("./modules/MasterLibraryModule"));
-const MOMModule          = lazy(() => import("./modules/MOMModule"));
-const PayrollModule      = lazy(() => import("./modules/PayrollModule"));
-const ReportsModule      = lazy(() => import("./modules/ReportsModule"));
-const SettingsModule     = lazy(() => import("./modules/SettingsModule"));
-const TeamScheduleModule = lazy(() => import("./modules/TeamScheduleModule"));
-const WarehouseModule    = lazy(() => import("./modules/WarehouseModule"));
+import { useState } from "react";
 
 // ─── ICONS ───────────────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -160,19 +145,15 @@ function LoginScreen({ onLogin }) {
 
 // ─── SIDEBAR ──────────────────────────────────────────────────────────
 const navItems = [
-  { id: "dashboard",  label: "Dashboard",    Icon: IcHome,      section: null },
-  { id: "projects",   label: "Projects",     Icon: IcProjects,  section: null },
-  { id: "design",     label: "Design",       Icon: IcDesign,    section: "MODULES" },
-  { id: "finance",    label: "Finance",      Icon: IcFinance,   section: null },
-  { id: "procurement",label: "Procurement",  Icon: IcProcure,   section: null },
-  { id: "crm",        label: "CRM",          Icon: IcTeam,      section: null },
-  { id: "library",    label: "Library",      Icon: IcTask,      section: null },
-  { id: "warehouse",  label: "Warehouse",    Icon: IcWarehouse, section: null },
-  { id: "team",       label: "Team Schedule",Icon: IcTeam,      section: null },
-  { id: "payroll",    label: "Payroll",      Icon: IcFinance,   section: null },
-  { id: "mom",        label: "MOM",          Icon: IcReport,    section: null },
-  { id: "reports",    label: "Reports",      Icon: IcReport,    section: "REPORTS & MORE" },
-  { id: "settings",   label: "Settings",     Icon: IcSettings,  section: null },
+  { id: "dashboard",  label: "Dashboard",   Icon: IcHome,      section: null },
+  { id: "projects",   label: "Projects",    Icon: IcProjects,  section: null },
+  { id: "design",     label: "Design",      Icon: IcDesign,    section: "MODULES" },
+  { id: "finance",    label: "Finance",     Icon: IcFinance,   section: null },
+  { id: "procurement",label: "Procurement", Icon: IcProcure,   section: null },
+  { id: "warehouse",  label: "Warehouse",   Icon: IcWarehouse, section: null },
+  { id: "team",       label: "Team Schedule",Icon: IcTeam,     section: null },
+  { id: "reports",    label: "Reports",     Icon: IcReport,    section: "REPORTS & MORE" },
+  { id: "settings",   label: "Settings",    Icon: IcSettings,  section: null },
 ];
 
 function Sidebar({ active, setActive, collapsed, setCollapsed }) {
@@ -451,19 +432,15 @@ export default function App() {
   const inProjectDetail = !!openedProject;
 
   const pageMap = {
-    dashboard:   { title: "Dashboard",    sub: "Company Overview" },
-    projects:    { title: "Projects",     sub: "All Construction Projects" },
-    crm:         { title: "CRM",          sub: "Leads & Clients" },
-    design:      { title: "Design",       sub: "Drawings & Files" },
-    finance:     { title: "Finance",      sub: "Cash Book · Challan · Transactions" },
-    procurement: { title: "Procurement",  sub: "RFQ · Purchase Orders" },
-    library:     { title: "Library",      sub: "Materials · Rates · Subcontractors" },
-    warehouse:   { title: "Warehouse",    sub: "Central Stock" },
-    team:        { title: "Team Schedule",sub: "Gantt · Timesheets" },
-    payroll:     { title: "Payroll",      sub: "Salary & Attendance" },
-    mom:         { title: "MOM",          sub: "Minutes of Meeting" },
-    reports:     { title: "Reports",      sub: "All Reports" },
-    settings:    { title: "Settings",     sub: "Roles · Approvals · Config" },
+    dashboard:   { title: "Dashboard",    sub: "Company Overview", icon: "🏠",  el: <PlaceholderPage title="Dashboard" icon="🏠" /> },
+    projects:    { title: "Projects",     sub: "All Construction Projects", icon: "🏗️", el: <ProjectsPage onOpenProject={p => setOpenedProject(p)} /> },
+    design:      { title: "Design",       sub: "Drawings & Files", icon: "📐", el: <PlaceholderPage title="Design Module" icon="📐" /> },
+    finance:     { title: "Finance",      sub: "Cash Book · Challan · Transactions", icon: "💰", el: <PlaceholderPage title="Finance" icon="💰" /> },
+    procurement: { title: "Procurement",  sub: "RFQ · Purchase Orders", icon: "📦", el: <PlaceholderPage title="Procurement" icon="📦" /> },
+    warehouse:   { title: "Warehouse",    sub: "Central Stock", icon: "🏭", el: <PlaceholderPage title="Warehouse" icon="🏭" /> },
+    team:        { title: "Team Schedule",sub: "Gantt · Timesheets", icon: "👥", el: <PlaceholderPage title="Team Schedule" icon="👥" /> },
+    reports:     { title: "Reports",      sub: "All Reports", icon: "📊", el: <PlaceholderPage title="Reports" icon="📊" /> },
+    settings:    { title: "Settings",     sub: "Roles · Approvals · Config", icon: "⚙️", el: <PlaceholderPage title="Settings" icon="⚙️" /> },
   };
 
   const page = pageMap[activeNav] || pageMap.projects;
@@ -503,47 +480,19 @@ export default function App() {
             <div style={{ width: 32, height: 32, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, #FF8F00)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "white" }}>P</div>
           </div>
         ) : (
-          <TopBar title={(pageMap[activeNav]||pageMap.projects).title} subtitle={(pageMap[activeNav]||pageMap.projects).sub} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
+          <TopBar title={page.title} subtitle={page.sub} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />
         )}
         <div style={{ flex: 1, overflowY: "auto" }}>
-          <Suspense fallback={<ModuleLoader />}>
-            {inProjectDetail
-              ? <ProjectDetailPage projectId={openedProject.id} projectName={openedProject.name} onBack={() => setOpenedProject(null)} />
-              : <ActiveModule nav={activeNav} onOpenProject={p => setOpenedProject(p)} />}
-          </Suspense>
+          {inProjectDetail
+            ? <ProjectDetailFromApp projectId={openedProject.id} projectName={openedProject.name} onBack={() => setOpenedProject(null)} />
+            : page.el}
         </div>
       </div>
     </div>
   );
 }
 
-// ── Module Loader (shown while lazy module downloads) ──────────────────
-function ModuleLoader() {
-  return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: "100%", flexDirection: "column", gap: 14 }}>
-      <div style={{ width: 36, height: 36, border: "3px solid #E2E8F0", borderTopColor: "#1565C0", borderRadius: "50%", animation: "spin 0.7s linear infinite" }} />
-      <div style={{ fontSize: 13, color: "#8896A6" }}>Loading...</div>
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-    </div>
-  );
-}
-
-// ── Module Router ───────────────────────────────────────────────────────
-function ActiveModule({ nav, onOpenProject }) {
-  switch(nav) {
-    case "projects":    return <ProjectsModule    onOpenProject={onOpenProject} />;
-    case "finance":     return <FinanceModule />;
-    case "procurement": return <ProcurementModule />;
-    case "design":      return <DesignModule />;
-    case "crm":         return <CRMModule />;
-    case "library":     return <MasterLibraryModule />;
-    case "warehouse":   return <WarehouseModule />;
-    case "team":        return <TeamScheduleModule />;
-    case "payroll":     return <PayrollModule />;
-    case "mom":         return <MOMModule />;
-    case "reports":     return <ReportsModule />;
-    case "settings":    return <SettingsModule />;
-    case "dashboard":   return <PlaceholderPage title="Dashboard" icon="🏠" />;
-    default:            return <PlaceholderPage title="Coming Soon" icon="🚧" />;
-  }
+// Wrapper to load ProjectDetailPage with project context
+function ProjectDetailFromApp({ projectId, projectName, onBack }) {
+  return <ProjectDetailPage projectId={projectId} projectName={projectName} onBack={onBack} />;
 }
