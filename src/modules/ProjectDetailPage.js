@@ -3080,10 +3080,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
             style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
             onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
           <datalist id="task-mr-mat-list">
-            {matLib.length>0
-              ?matLib.map(m=><option key={m.name} value={m.name}>{m.name} ({m.unit||"Nos"})</option>)
-              :["TMT Steel Fe500 8mm","TMT Steel Fe500 10mm","OPC 53 Cement","PPC Cement","River Sand","M-Sand","20mm Aggregate","Red Brick 9x4x3","Binding Wire","Diesel"].map(m=><option key={m} value={m}/>)
-            }
+            {matLib.map(m=><option key={m.name} value={m.name}>{m.name} ({m.unit||"Nos"})</option>)}
           </datalist>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -3163,11 +3160,13 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
     remark:"",
   });
   const [saving,setSaving]=useState(false);
+  const [grnMatLib,setGrnMatLib]=useState([]);
   const UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"];
 
-  // Load ordered MRs for this project
+  // Load ordered MRs + material library
   useEffect(()=>{
     if(!projectId) return;
+    api.get("/tasks/material-list/"+projectId).then(r=>{if(r.success)setGrnMatLib(r.data||[]);}).catch(()=>{});
     api.get("/procurement/mrs?project_id="+projectId+"&mr_status=Approved&mat_status=Ordered").then(r=>{
       if(r.success){
         const mrs=(r.data||[]).filter(m=>m.mat_status==="Ordered"||m.mat_status==="Pending");
@@ -3325,7 +3324,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
                 style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                 onFocus={e=>e.target.style.borderColor="#16A34A"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
               <datalist id="grn-mat-list">
-                {["TMT Steel Fe500","OPC 53 Cement","PPC Cement","River Sand","M-Sand","20mm Aggregate","Red Brick","Vitrified Tile","PVC Pipe","FR Wiring","Plywood 18mm","Binding Wire"].map(m=><option key={m} value={m}/>)}
+                {grnMatLib.map(m=><option key={m.name} value={m.name}/>)}
               </datalist>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
@@ -4727,9 +4726,8 @@ function TabMaterial({ project }) {
   const [grnDone,    setGrnDone]    = useState([]);   // successfully received mr ids
 
   const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
-  const MAT_LIB_STATIC = ["TMT Steel Fe500 8mm","OPC 53 Cement","PPC Cement","River Sand","M-Sand","20mm Aggregate","Red Brick 9x4x3","Binding Wire","Diesel","Safety Helmet"];
   const [matLibReal, setMatLibReal] = useState([]);
-  const MAT_LIB = matLibReal.length > 0 ? matLibReal.map(m => m.name) : MAT_LIB_STATIC;
+  const MAT_LIB = matLibReal.map(m => m.name);
 
   // Fetch material library from backend
   useEffect(() => {
