@@ -4045,7 +4045,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                     ?<div style={{gridColumn:"1/-1"}}><TaskLBL t="Labour Name *"/><TaskINP value={labForm.labour_name} onChange={e=>setLabForm(p=>({...p,labour_name:e.target.value}))} placeholder="e.g. Ramesh Kumar"/></div>
                     :<><div style={{gridColumn:"1/-1"}}><TaskLBL t={labForm.labour_type+" Name *"}/><TaskINP value={labForm.vendor_name} onChange={e=>setLabForm(p=>({...p,vendor_name:e.target.value}))} placeholder={"e.g. "+labForm.labour_type+" company name"}/></div></>
                   }
-                  <div><TaskLBL t="Role"/><TaskSEL value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}>{ROLES.map(r=><option key={r}>{r}</option>)}</SEL></div>
+                  <div><TaskLBL t="Role"/><TaskSEL value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}>{ROLES.map(r=><option key={r}>{r}</option>)}</TaskSEL></div>
                   <div><TaskLBL t="Count"/><TaskINP type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}/></div>
                   <div><TaskLBL t="Work Date"/><TaskINP type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}/></div>
                   <div><TaskLBL t="Hours/Day"/><TaskINP type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}/></div>
