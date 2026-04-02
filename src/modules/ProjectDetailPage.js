@@ -3426,7 +3426,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   // Issues
   const [issues,setIssues]=useState([]);
   const [showIssueForm,setShowIssueForm]=useState(false);
-  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:""});
+  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});
+  const [issueWorkCats,setIssueWorkCats]=useState([]);
+  const [issueTeam,setIssueTeam]=useState([]);
   const [issueUploading,setIssueUploading]=useState(false);
   const [expandedIssue,setExpandedIssue]=useState(null);
 
@@ -3486,7 +3488,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     }
     if(tab==="labour"  && labours.length===0) api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
     if(tab==="photos"  && photos.length===0)  api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
-    if(tab==="issues"  && issues.length===0)  api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+    if(tab==="issues" && issues.length===0){
+      api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+      if(issueWorkCats.length===0) api.get("/library/work-categories").then(r=>{if(r.success)setIssueWorkCats((r.data||[]).map(c=>c.name));}).catch(()=>{});
+      if(issueTeam.length===0) api.get("/settings/users").then(r=>{if(r.success)setIssueTeam((r.data||[]).map(u=>u.name));}).catch(()=>{});
+    }
   },[tab]);
 
   const sendComment=async()=>{
@@ -4144,7 +4150,15 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
             </div>
             {showIssueForm&&(
               <div style={{background:"white",borderRadius:10,padding:"14px",border:"1.5px solid #FECACA",marginBottom:12}}>
-                <div style={{marginBottom:9}}><TaskLBL t="Issue Title *"/><TaskINP value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))} placeholder="Describe the issue briefly"/></div>
+                <div style={{marginBottom:9}}>
+                  <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Issue Title *</label>
+                  <input
+                    value={issueForm.title}
+                    onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))}
+                    placeholder="Describe the issue briefly"
+                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                  />
+                </div>
                 <div style={{marginBottom:9}}><TaskLBL t="Description"/>
                   <textarea value={issueForm.description} onChange={e=>setIssueForm(p=>({...p,description:e.target.value}))} rows={2} placeholder="More details..."
                     style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
@@ -4159,6 +4173,25 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                         {p}
                       </button>
                     ))}
+                  </div>
+                </div>
+                {/* Assign To + Work Category */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:9}}>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Assign To</label>
+                    <select value={issueForm.assigned_to} onChange={e=>setIssueForm(p=>({...p,assigned_to:e.target.value}))}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit"}}>
+                      <option value="">-- Select Member --</option>
+                      {issueTeam.map(m=><option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Work Category</label>
+                    <select value={issueForm.work_category} onChange={e=>setIssueForm(p=>({...p,work_category:e.target.value}))}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit"}}>
+                      <option value="">-- Select Category --</option>
+                      {issueWorkCats.map(c=><option key={c} value={c}>{c}</option>)}
+                    </select>
                   </div>
                 </div>
                 {/* Photo upload */}
@@ -4178,7 +4211,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 <button onClick={async()=>{
                   if(!issueForm.title.trim()) return alert("Title required");
                   const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
-                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:""});setShowIssueForm(false);}
+                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});setShowIssueForm(false);}
                   else alert(res.message||"Failed");
                 }} style={{width:"100%",padding:"10px",borderRadius:7,background:"#DC2626",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Create Issue</button>
               </div>
@@ -4195,8 +4228,18 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                       <div style={{flex:1,marginRight:8}}>
                         <div style={{fontSize:13,fontWeight:700,color:"#1E293B",marginBottom:3}}>{issue.title}</div>
                         {issue.description&&!isExp&&<div style={{fontSize:11,color:"#64748B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{issue.description}</div>}
+                        {!isExp&&(issue.assigned_to||issue.work_category)&&(
+                          <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap"}}>
+                            {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 6px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                            {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 6px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                          </div>
+                        )}
                       </div>
                       <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+                        {issue.photo_url&&!isExp&&(
+                          <img src={issue.photo_url} alt="p" onClick={e=>{e.stopPropagation();setFullPhoto({photo_url:issue.photo_url,created_at:issue.created_at});}}
+                            style={{width:36,height:36,borderRadius:5,objectFit:"cover",cursor:"zoom-in",border:"1px solid #E2E8F0",flexShrink:0}}/>
+                        )}
                         <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.priority}</span>
                         <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.status}</span>
                         <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d={isExp?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"}/></svg>
