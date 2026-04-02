@@ -3384,6 +3384,12 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   </>);
 }
 
+// ── Shared micro-components — defined OUTSIDE to prevent remount on re-render ──
+function TaskLBL({t}){ return <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t}</label>; }
+function TaskINP(props){ return <input {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style}}
+    onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>; }
+function TaskSEL(props){ return <select {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit",...props.style}}/>; }
+
 function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [tab,setTab]=useState("progress");
   const [prog,setProg]=useState(task.progress||0);
@@ -3420,9 +3426,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   // Issues
   const [issues,setIssues]=useState([]);
   const [showIssueForm,setShowIssueForm]=useState(false);
-  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});
-  const [issueWorkCats,setIssueWorkCats]=useState([]);
-  const [issueTeam,setIssueTeam]=useState([]);
+  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:""});
   const [issueUploading,setIssueUploading]=useState(false);
   const [expandedIssue,setExpandedIssue]=useState(null);
 
@@ -3482,11 +3486,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     }
     if(tab==="labour"  && labours.length===0) api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
     if(tab==="photos"  && photos.length===0)  api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
-    if(tab==="issues"  && issues.length===0){
-      api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
-      if(issueWorkCats.length===0) api.get("/library/work-categories").then(r=>{if(r.success)setIssueWorkCats((r.data||[]).map(c=>c.name));}).catch(()=>{});
-      if(issueTeam.length===0) api.get("/settings/users").then(r=>{if(r.success)setIssueTeam((r.data||[]).map(u=>u.name));}).catch(()=>{});
-    }
+    if(tab==="issues"  && issues.length===0)  api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
   },[tab]);
 
   const sendComment=async()=>{
@@ -3503,10 +3503,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     return await cr.json();
   };
 
-  const LBL=({t})=><label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t}</label>;
-  const INP=(props)=><input {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style}}
-    onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>;
-  const SEL=(props)=><select {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit",...props.style}}/>;
+
 
   return(<>
     {/* Backdrop */}
@@ -4027,7 +4024,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               <div style={{background:"white",borderRadius:10,padding:"14px",border:"1px solid #E2E8F0",marginBottom:12}}>
                 {/* Labour Type selector */}
                 <div style={{marginBottom:10}}>
-                  <LBL t="Type"/>
+                  <TaskLBL t="Type"/>
                   <div style={{display:"flex",gap:6}}>
                     {["Direct","Subcon","Vendor"].map(t=>(
                       <button key={t} onClick={()=>setLabForm(p=>({...p,labour_type:t,labour_name:"",vendor_name:""}))}
@@ -4039,14 +4036,14 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                   {labForm.labour_type==="Direct"
-                    ?<div style={{gridColumn:"1/-1"}}><LBL t="Labour Name *"/><INP value={labForm.labour_name} onChange={e=>setLabForm(p=>({...p,labour_name:e.target.value}))} placeholder="e.g. Ramesh Kumar"/></div>
-                    :<><div style={{gridColumn:"1/-1"}}><LBL t={labForm.labour_type+" Name *"}/><INP value={labForm.vendor_name} onChange={e=>setLabForm(p=>({...p,vendor_name:e.target.value}))} placeholder={"e.g. "+labForm.labour_type+" company name"}/></div></>
+                    ?<div style={{gridColumn:"1/-1"}}><TaskLBL t="Labour Name *"/><TaskINP value={labForm.labour_name} onChange={e=>setLabForm(p=>({...p,labour_name:e.target.value}))} placeholder="e.g. Ramesh Kumar"/></div>
+                    :<><div style={{gridColumn:"1/-1"}}><TaskLBL t={labForm.labour_type+" Name *"}/><TaskINP value={labForm.vendor_name} onChange={e=>setLabForm(p=>({...p,vendor_name:e.target.value}))} placeholder={"e.g. "+labForm.labour_type+" company name"}/></div></>
                   }
-                  <div><LBL t="Role"/><SEL value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}>{ROLES.map(r=><option key={r}>{r}</option>)}</SEL></div>
-                  <div><LBL t="Count"/><INP type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}/></div>
-                  <div><LBL t="Work Date"/><INP type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}/></div>
-                  <div><LBL t="Hours/Day"/><INP type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}/></div>
-                  <div style={{gridColumn:"1/-1"}}><LBL t="Remark"/><INP value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"/></div>
+                  <div><TaskLBL t="Role"/><TaskSEL value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}>{ROLES.map(r=><option key={r}>{r}</option>)}</SEL></div>
+                  <div><TaskLBL t="Count"/><TaskINP type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}/></div>
+                  <div><TaskLBL t="Work Date"/><TaskINP type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}/></div>
+                  <div><TaskLBL t="Hours/Day"/><TaskINP type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}/></div>
+                  <div style={{gridColumn:"1/-1"}}><TaskLBL t="Remark"/><TaskINP value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"/></div>
                 </div>
                 <button onClick={async()=>{
                   const name=labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name;
@@ -4147,14 +4144,14 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
             </div>
             {showIssueForm&&(
               <div style={{background:"white",borderRadius:10,padding:"14px",border:"1.5px solid #FECACA",marginBottom:12}}>
-                <div style={{marginBottom:9}}><LBL t="Issue Title *"/><INP value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))} placeholder="Describe the issue briefly"/></div>
-                <div style={{marginBottom:9}}><LBL t="Description"/>
+                <div style={{marginBottom:9}}><TaskLBL t="Issue Title *"/><TaskINP value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))} placeholder="Describe the issue briefly"/></div>
+                <div style={{marginBottom:9}}><TaskLBL t="Description"/>
                   <textarea value={issueForm.description} onChange={e=>setIssueForm(p=>({...p,description:e.target.value}))} rows={2} placeholder="More details..."
                     style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
                 </div>
                 {/* Priority */}
                 <div style={{marginBottom:9}}>
-                  <LBL t="Priority"/>
+                  <TaskLBL t="Priority"/>
                   <div style={{display:"flex",gap:6}}>
                     {PRIORITIES.map(p=>(
                       <button key={p} onClick={()=>setIssueForm(prev=>({...prev,priority:p}))}
@@ -4164,26 +4161,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                     ))}
                   </div>
                 </div>
-                {/* Assigned To + Work Category */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:9}}>
-                  <div>
-                    <LBL t="Assign To"/>
-                    <SEL value={issueForm.assigned_to} onChange={e=>setIssueForm(p=>({...p,assigned_to:e.target.value}))}>
-                      <option value="">-- Select Member --</option>
-                      {issueTeam.map(m=><option key={m} value={m}>{m}</option>)}
-                    </SEL>
-                  </div>
-                  <div>
-                    <LBL t="Work Category"/>
-                    <SEL value={issueForm.work_category} onChange={e=>setIssueForm(p=>({...p,work_category:e.target.value}))}>
-                      <option value="">-- Select Category --</option>
-                      {issueWorkCats.map(c=><option key={c} value={c}>{c}</option>)}
-                    </SEL>
-                  </div>
-                </div>
                 {/* Photo upload */}
                 <div style={{marginBottom:9}}>
-                  <LBL t="Attach Photo"/>
+                  <TaskLBL t="Attach Photo"/>
                   <label style={{display:"flex",alignItems:"center",gap:7,padding:"8px 12px",border:"1.5px dashed #E2E8F0",borderRadius:7,cursor:"pointer",background:"#F8FAFC"}}>
                     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                     <span style={{fontSize:12,color:"#94A3B8"}}>{issueUploading?"Uploading...":issueForm.photo_url?"Photo attached ✓":"Click to attach photo"}</span>
@@ -4198,7 +4178,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 <button onClick={async()=>{
                   if(!issueForm.title.trim()) return alert("Title required");
                   const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
-                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});setShowIssueForm(false);}
+                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:""});setShowIssueForm(false);}
                   else alert(res.message||"Failed");
                 }} style={{width:"100%",padding:"10px",borderRadius:7,background:"#DC2626",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Create Issue</button>
               </div>
@@ -4225,13 +4205,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                   </div>
                   {isExp&&(
                     <div style={{padding:"0 13px 12px",borderTop:"1px solid #F1F5F9"}}>
-                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:8,marginTop:8}}>{issue.description}</div>}
-                      {(issue.assigned_to||issue.work_category)&&(
-                        <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
-                          {issue.assigned_to&&<span style={{fontSize:11,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
-                          {issue.work_category&&<span style={{fontSize:11,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>🔧 {issue.work_category}</span>}
-                        </div>
-                      )}
+                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:10,marginTop:8}}>{issue.description}</div>}
                       {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{width:"100%",borderRadius:6,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
                       {/* Status change */}
                       <div style={{marginBottom:8}}>
