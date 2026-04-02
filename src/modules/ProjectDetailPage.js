@@ -3420,7 +3420,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   // Issues
   const [issues,setIssues]=useState([]);
   const [showIssueForm,setShowIssueForm]=useState(false);
-  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:""});
+  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});
+  const [issueWorkCats,setIssueWorkCats]=useState([]);
+  const [issueTeam,setIssueTeam]=useState([]);
   const [issueUploading,setIssueUploading]=useState(false);
   const [expandedIssue,setExpandedIssue]=useState(null);
 
@@ -3480,7 +3482,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     }
     if(tab==="labour"  && labours.length===0) api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
     if(tab==="photos"  && photos.length===0)  api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
-    if(tab==="issues"  && issues.length===0)  api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+    if(tab==="issues"  && issues.length===0){
+      api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+      if(issueWorkCats.length===0) api.get("/library/work-categories").then(r=>{if(r.success)setIssueWorkCats((r.data||[]).map(c=>c.name));}).catch(()=>{});
+      if(issueTeam.length===0) api.get("/settings/users").then(r=>{if(r.success)setIssueTeam((r.data||[]).map(u=>u.name));}).catch(()=>{});
+    }
   },[tab]);
 
   const sendComment=async()=>{
@@ -3508,29 +3514,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
 
     {/* Full photo viewer */}
     {fullPhoto&&(
-      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-        <img src={fullPhoto.photo_url} style={{maxWidth:"95vw",maxHeight:"82vh",objectFit:"contain",borderRadius:8}}/>
-        {/* Info bar — date, time, GPS */}
-        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.75)",padding:"10px 18px",display:"flex",alignItems:"center",gap:18,flexWrap:"wrap"}}>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><rect x={3} y={4} width={18} height={18} rx={2}/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
-            <span style={{color:"white",fontSize:12,fontWeight:600}}>
-              {new Date(fullPhoto.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
-            </span>
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:6}}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 6v6l4 2"/></svg>
-            <span style={{color:"white",fontSize:12,fontWeight:600}}>
-              {new Date(fullPhoto.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})}
-            </span>
-          </div>
-          {(fullPhoto.lat||fullPhoto.lng)&&<div style={{display:"flex",alignItems:"center",gap:6}}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#4ADE80" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
-            <span style={{color:"#4ADE80",fontSize:12,fontWeight:600}}>
-              {Number(fullPhoto.lat).toFixed(6)}, {Number(fullPhoto.lng).toFixed(6)}
-            </span>
-          </div>}
-        </div>
+      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
+        <img src={fullPhoto.photo_url} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        {(fullPhoto.lat||fullPhoto.lng)&&<div style={{position:"absolute",bottom:20,left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,.7)",borderRadius:20,padding:"6px 14px",color:"white",fontSize:11,display:"flex",alignItems:"center",gap:6}}>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
+          {Number(fullPhoto.lat).toFixed(6)}, {Number(fullPhoto.lng).toFixed(6)}
+        </div>}
         <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -4128,22 +4117,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 <div key={p.id} style={{borderRadius:10,overflow:"hidden",border:"1px solid #E2E8F0",background:"white",cursor:"zoom-in"}} onClick={()=>setFullPhoto(p)}>
                   <div style={{position:"relative"}}>
                     <img src={p.photo_url} alt="site" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/>
-                    {/* Date + Time overlay — bottom right */}
-                    <div style={{position:"absolute",bottom:4,right:4,background:"rgba(0,0,0,.65)",borderRadius:6,padding:"2px 6px"}}>
-                      <div style={{fontSize:9,color:"white",fontWeight:600,lineHeight:1.4}}>
-                        {new Date(p.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}
-                      </div>
-                      <div style={{fontSize:8,color:"rgba(255,255,255,0.75)",lineHeight:1.3}}>
-                        {new Date(p.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true})}
-                      </div>
-                    </div>
-                    {/* GPS badge — bottom left */}
-                    {(p.lat||p.lng)&&<div style={{position:"absolute",bottom:4,left:4,background:"rgba(22,163,74,.85)",borderRadius:6,padding:"2px 6px",display:"flex",alignItems:"center",gap:3}}>
-                      <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
-                      <span style={{fontSize:8,color:"white",fontWeight:600}}>GPS</span>
+                    {(p.lat||p.lng)&&<div style={{position:"absolute",bottom:4,left:4,background:"rgba(0,0,0,.6)",borderRadius:10,padding:"2px 7px",display:"flex",alignItems:"center",gap:3}}>
+                      <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
+                      <span style={{fontSize:8,color:"white"}}>GPS</span>
                     </div>}
                   </div>
-                  <div style={{padding:"5px 9px",display:"flex",justifyContent:"flex-end",alignItems:"center"}}>
+                  <div style={{padding:"6px 9px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:10,color:"#94A3B8"}}>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
                     <button onClick={async e=>{e.stopPropagation();if(window.confirm("Delete photo?")){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
                       style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:2,display:"flex"}}>
                       <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
@@ -4184,6 +4164,23 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                     ))}
                   </div>
                 </div>
+                {/* Assigned To + Work Category */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:9}}>
+                  <div>
+                    <LBL t="Assign To"/>
+                    <SEL value={issueForm.assigned_to} onChange={e=>setIssueForm(p=>({...p,assigned_to:e.target.value}))}>
+                      <option value="">-- Select Member --</option>
+                      {issueTeam.map(m=><option key={m} value={m}>{m}</option>)}
+                    </SEL>
+                  </div>
+                  <div>
+                    <LBL t="Work Category"/>
+                    <SEL value={issueForm.work_category} onChange={e=>setIssueForm(p=>({...p,work_category:e.target.value}))}>
+                      <option value="">-- Select Category --</option>
+                      {issueWorkCats.map(c=><option key={c} value={c}>{c}</option>)}
+                    </SEL>
+                  </div>
+                </div>
                 {/* Photo upload */}
                 <div style={{marginBottom:9}}>
                   <LBL t="Attach Photo"/>
@@ -4201,7 +4198,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 <button onClick={async()=>{
                   if(!issueForm.title.trim()) return alert("Title required");
                   const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
-                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:""});setShowIssueForm(false);}
+                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});setShowIssueForm(false);}
                   else alert(res.message||"Failed");
                 }} style={{width:"100%",padding:"10px",borderRadius:7,background:"#DC2626",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Create Issue</button>
               </div>
@@ -4228,7 +4225,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                   </div>
                   {isExp&&(
                     <div style={{padding:"0 13px 12px",borderTop:"1px solid #F1F5F9"}}>
-                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:10,marginTop:8}}>{issue.description}</div>}
+                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:8,marginTop:8}}>{issue.description}</div>}
+                      {(issue.assigned_to||issue.work_category)&&(
+                        <div style={{display:"flex",gap:10,marginBottom:8,flexWrap:"wrap"}}>
+                          {issue.assigned_to&&<span style={{fontSize:11,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                          {issue.work_category&&<span style={{fontSize:11,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                        </div>
+                      )}
                       {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{width:"100%",borderRadius:6,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
                       {/* Status change */}
                       <div style={{marginBottom:8}}>
