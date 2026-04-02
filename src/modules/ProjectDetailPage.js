@@ -3443,9 +3443,6 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
 
   // Load comments always + tab data
   useEffect(()=>{
-    api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
-  },[]);
-  useEffect(()=>{
     if(tab==="materials" && materials.length===0){
       setMatLoading(true);
       api.get("/tasks/"+task.id+"/material-summary").then(r=>{
@@ -3481,6 +3478,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     if(tab==="labour"  && labours.length===0) api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
     if(tab==="photos"  && photos.length===0)  api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
     if(tab==="issues"  && issues.length===0)  api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+    if(tab==="comments" && comments.length===0) api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
   },[tab]);
 
   const sendComment=async()=>{
@@ -6279,25 +6277,21 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
   const switchTab = (t) => setTab(t);
 
-  // Render only the active tab — prevents all tabs from mounting at once
-  const renderTab = () => {
-    switch(tab) {
-      case "overview":    return <TabOverview    proj={project}/>;
-      case "design":      return <TabDesign      project={project}/>;
-      case "estimate":    return <TabEstimate/>;
-      case "party":       return <TabParty/>;
-      case "transaction": return <TabTransaction/>;
-      case "todo":        return <TabTodo/>;
-      case "task":        return <TabTasks        projectId={project.id}/>;
-      case "attendance":  return <TabAttendance/>;
-      case "material":    return <TabMaterial     project={project}/>;
-      case "subcon":      return <TabSubcon/>;
-      case "equipment":   return <TabEquipment/>;
-      case "files":       return <TabFiles/>;
-      case "site":        return <TabSite/>;
-      case "mom":         return <TabMOM/>;
-      default:            return <TabOverview    proj={project}/>;
-    }
+  const tabContent = {
+    overview:    <TabOverview    proj={project}/>,
+    design:      <TabDesign project={project}/>,
+    estimate:    <TabEstimate/>,
+    party:       <TabParty/>,
+    transaction: <TabTransaction/>,
+    todo:        <TabTodo/>,
+    task:        <TabTasks projectId={project.id}/>,
+    attendance:  <TabAttendance/>,
+    material:    <TabMaterial project={project}/>,
+    subcon:      <TabSubcon/>,
+    equipment:   <TabEquipment/>,
+    files:       <TabFiles/>,
+    site:        <TabSite/>,
+    mom:         <TabMOM/>,
   };
 
   return (
@@ -6358,7 +6352,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
       {/* ── CONTENT ── */}
       <div style={{flex:1, overflowY:"auto", background:T.bg}}>
-        {renderTab()}
+        {tabContent[tab]}
       </div>
     </div>
   );
