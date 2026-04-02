@@ -3183,7 +3183,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
     const row=grnRows[mr.id]||{};
     if(!row.challan) return alert("Challan number required");
     setGrnSaving(true);
-    const res=await api.post("/procurement/grn",{
+    const res=await api.post("/procurement/grns",{
       project_id: projectId,
       po_id: mr.linked_po_id||null,
       vendor_name: mr.vendor_name||"Vendor",
@@ -3210,7 +3210,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   const handleDirectSave=async()=>{
     if(!form.material_name.trim()||!form.received_qty) return alert("Material name and received qty required");
     setSaving(true);
-    const res=await api.post("/procurement/grn",{
+    const res=await api.post("/procurement/grns",{
       project_id: projectId,
       vendor_name: form.vendor_name||"Direct",
       received_by: "Site",
