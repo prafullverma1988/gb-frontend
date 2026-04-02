@@ -3046,7 +3046,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
   useEffect(()=>{
     // Fetch material library
     if(projectId){
-      api.get("/tasks/material-list/"+projectId).then(r=>{
+      api.get("/library/materials").then(r=>{
         if(r.success) setMatLib(r.data||[]);
       }).catch(()=>{});
     }
@@ -3164,7 +3164,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   // Load ordered MRs + material library
   useEffect(()=>{
     if(!projectId) return;
-    api.get("/tasks/material-list/"+projectId).then(r=>{if(r.success)setGrnMatLib(r.data||[]);}).catch(()=>{});
+    api.get("/library/materials").then(r=>{if(r.success)setGrnMatLib(r.data||[]);}).catch(()=>{});
     api.get("/procurement/mrs?project_id="+projectId+"&mr_status=Approved&mat_status=Ordered").then(r=>{
       if(r.success){
         const mrs=(r.data||[]).filter(m=>m.mat_status==="Ordered"||m.mat_status==="Pending");
@@ -4729,7 +4729,7 @@ function TabMaterial({ project }) {
 
   // Fetch material library from backend
   useEffect(() => {
-    api.get("/tasks/material-list/" + projectId).then(r => {
+    api.get("/library/materials").then(r => {
       if (r.success && r.data && r.data.length > 0) setMatLibReal(r.data);
     }).catch(() => {});
   }, [projectId]);
