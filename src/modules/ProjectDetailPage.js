@@ -3071,17 +3071,15 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
         </div>
         <div style={{marginBottom:10}}>
           <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name *</label>
-          <input value={form.item_name} onChange={e=>{
-              setForm(p=>({...p,item_name:e.target.value}));
-              // Auto-fill unit from library
+          <select value={form.item_name} onChange={e=>{
               const found=matLib.find(m=>m.name===e.target.value);
-              if(found&&found.unit) setForm(p=>({...p,item_name:e.target.value,unit:found.unit}));
-            }} placeholder="Type to search material..." list="task-mr-mat-list"
-            style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-            onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
-          <datalist id="task-mr-mat-list">
+              setForm(p=>({...p,item_name:e.target.value,unit:found?found.unit||"Bag":p.unit}));
+            }}
+            style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white",cursor:"pointer"}}
+            onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}>
+            <option value="">-- Select Material --</option>
             {matLib.map(m=><option key={m.name} value={m.name}>{m.name} ({m.unit||"Nos"})</option>)}
-          </datalist>
+          </select>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
