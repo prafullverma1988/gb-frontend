@@ -3415,8 +3415,6 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   // Site Photos
   const [photos,setPhotos]=useState([]);
   const [uploading,setUploading]=useState(false);
-  const [uploadErr,setUploadErr]=useState("");
-  const [uploadStep,setUploadStep]=useState(""); // "gps" | "compress" | "cloudinary" | "saving"
   const [fullPhoto,setFullPhoto]=useState(null);
 
   // Issues
@@ -3493,35 +3491,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     setSendingComment(false);
   };
 
-  const compressImage=async(file,maxPx=1600,quality=0.82)=>{
-    return new Promise(resolve=>{
-      const img=new Image();
-      const url=URL.createObjectURL(file);
-      img.onload=()=>{
-        let w=img.width,h=img.height;
-        if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}
-        const canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;
-        canvas.getContext("2d").drawImage(img,0,0,w,h);
-        URL.revokeObjectURL(url);
-        canvas.toBlob(blob=>resolve(blob||file),"image/jpeg",quality);
-      };
-      img.onerror=()=>{URL.revokeObjectURL(url);resolve(file);};
-      img.src=url;
-    });
-  };
-
   const uploadToCloudinary=async(file,folder)=>{
-    const compressed=await compressImage(file);
-    const fd=new FormData();
-    fd.append("file",compressed);
-    fd.append("upload_preset","gb_buildcon_drawings");
-    fd.append("folder",folder);
+    const fd=new FormData(); fd.append("file",file); fd.append("upload_preset","gb_buildcon_drawings"); fd.append("folder",folder);
     const cr=await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload",{method:"POST",body:fd});
-    if(!cr.ok) throw new Error("Network error: "+cr.status);
-    const data=await cr.json();
-    if(data.error) throw new Error("Cloudinary: "+data.error.message);
-    if(!data.secure_url) throw new Error("Upload failed — no URL returned");
-    return data;
+    return await cr.json();
   };
 
   const LBL=({t})=><label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t}</label>;
@@ -3535,12 +3508,29 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
 
     {/* Full photo viewer */}
     {fullPhoto&&(
-      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.9)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-        <img src={fullPhoto.photo_url} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
-        {(fullPhoto.lat||fullPhoto.lng)&&<div style={{position:"absolute",bottom:20,left:"50%",transform:"translateX(-50%)",background:"rgba(0,0,0,.7)",borderRadius:20,padding:"6px 14px",color:"white",fontSize:11,display:"flex",alignItems:"center",gap:6}}>
-          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
-          {Number(fullPhoto.lat).toFixed(6)}, {Number(fullPhoto.lng).toFixed(6)}
-        </div>}
+      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
+        <img src={fullPhoto.photo_url} style={{maxWidth:"95vw",maxHeight:"82vh",objectFit:"contain",borderRadius:8}}/>
+        {/* Info bar — date, time, GPS */}
+        <div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.75)",padding:"10px 18px",display:"flex",alignItems:"center",gap:18,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><rect x={3} y={4} width={18} height={18} rx={2}/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+            <span style={{color:"white",fontSize:12,fontWeight:600}}>
+              {new Date(fullPhoto.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}
+            </span>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6}}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 6v6l4 2"/></svg>
+            <span style={{color:"white",fontSize:12,fontWeight:600}}>
+              {new Date(fullPhoto.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",second:"2-digit",hour12:true})}
+            </span>
+          </div>
+          {(fullPhoto.lat||fullPhoto.lng)&&<div style={{display:"flex",alignItems:"center",gap:6}}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#4ADE80" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
+            <span style={{color:"#4ADE80",fontSize:12,fontWeight:600}}>
+              {Number(fullPhoto.lat).toFixed(6)}, {Number(fullPhoto.lng).toFixed(6)}
+            </span>
+          </div>}
+        </div>
         <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
@@ -4110,39 +4100,25 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".5px"}}>Site Photos ({photos.length})</span>
-              <label style={{padding:"6px 14px",borderRadius:6,background:uploading?"#94A3B8":"#2563EB",color:"white",fontSize:12,fontWeight:600,cursor:uploading?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5}}>
+              <label style={{padding:"6px 14px",borderRadius:6,background:uploading?"#94A3B8":"#2563EB",color:"white",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
                 <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
-                {uploading?(uploadStep==="gps"?"Getting GPS...":(uploadStep==="cloudinary"?"Uploading...":(uploadStep==="saving"?"Saving...":"Please wait..."))):"Take / Upload"}
+                {uploading?"Uploading...":"Take / Upload"}
                 <input type="file" accept="image/*" capture="environment" style={{display:"none"}} disabled={uploading} onChange={async(e)=>{
                   const file=e.target.files[0]; if(!file) return;
-                  setUploading(true); setUploadErr("");
+                  setUploading(true);
                   let lat=null,lng=null;
-                  try{
-                    setUploadStep("gps");
-                    if(navigator.geolocation){
-                      await new Promise(resolve=>navigator.geolocation.getCurrentPosition(
-                        p=>{lat=p.coords.latitude;lng=p.coords.longitude;resolve();},
-                        ()=>resolve(),{timeout:4000}
-                      ));
-                    }
-                    setUploadStep("cloudinary");
-                    const cd=await uploadToCloudinary(file,"site_photos");
-                    setUploadStep("saving");
-                    const res=await api.post("/tasks/"+task.id+"/photos",{photo_url:cd.secure_url,caption:"",lat,lng});
-                    if(res.success){ setPhotos(p=>[res.data,...p]); setUploadStep(""); }
-                    else throw new Error(res.message||"Backend save failed");
-                  }catch(e){
-                    setUploadErr(e.message||"Upload failed");
-                    setUploadStep("");
+                  if(navigator.geolocation){
+                    await new Promise(resolve=>navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lng=p.coords.longitude;resolve();},resolve,{timeout:5000}));
                   }
-                  setUploading(false); e.target.value="";
+                  try{
+                    const cd=await uploadToCloudinary(file,"site_photos");
+                    const res=await api.post("/tasks/"+task.id+"/photos",{photo_url:cd.secure_url,caption:"",lat,lng});
+                    if(res.success) setPhotos(p=>[res.data,...p]);
+                  }catch(e){alert("Upload failed");}
+                  setUploading(false);e.target.value="";
                 }}/>
               </label>
             </div>
-            {uploadErr&&<div style={{margin:"0 0 10px",padding:"8px 12px",background:"#FEE2E2",border:"1px solid #FECACA",borderRadius:7,fontSize:12,color:"#DC2626",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span>Upload failed: {uploadErr}</span>
-              <button onClick={()=>setUploadErr("")} style={{background:"none",border:"none",cursor:"pointer",color:"#DC2626",fontWeight:700,fontSize:14,lineHeight:1}}>x</button>
-            </div>}
             {photos.length===0?<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>
               <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{marginBottom:8}}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
               <div>No photos yet</div>
@@ -4152,13 +4128,22 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 <div key={p.id} style={{borderRadius:10,overflow:"hidden",border:"1px solid #E2E8F0",background:"white",cursor:"zoom-in"}} onClick={()=>setFullPhoto(p)}>
                   <div style={{position:"relative"}}>
                     <img src={p.photo_url} alt="site" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/>
-                    {(p.lat||p.lng)&&<div style={{position:"absolute",bottom:4,left:4,background:"rgba(0,0,0,.6)",borderRadius:10,padding:"2px 7px",display:"flex",alignItems:"center",gap:3}}>
-                      <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
-                      <span style={{fontSize:8,color:"white"}}>GPS</span>
+                    {/* Date + Time overlay — bottom right */}
+                    <div style={{position:"absolute",bottom:4,right:4,background:"rgba(0,0,0,.65)",borderRadius:6,padding:"2px 6px"}}>
+                      <div style={{fontSize:9,color:"white",fontWeight:600,lineHeight:1.4}}>
+                        {new Date(p.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"})}
+                      </div>
+                      <div style={{fontSize:8,color:"rgba(255,255,255,0.75)",lineHeight:1.3}}>
+                        {new Date(p.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true})}
+                      </div>
+                    </div>
+                    {/* GPS badge — bottom left */}
+                    {(p.lat||p.lng)&&<div style={{position:"absolute",bottom:4,left:4,background:"rgba(22,163,74,.85)",borderRadius:6,padding:"2px 6px",display:"flex",alignItems:"center",gap:3}}>
+                      <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
+                      <span style={{fontSize:8,color:"white",fontWeight:600}}>GPS</span>
                     </div>}
                   </div>
-                  <div style={{padding:"6px 9px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:10,color:"#94A3B8"}}>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
+                  <div style={{padding:"5px 9px",display:"flex",justifyContent:"flex-end",alignItems:"center"}}>
                     <button onClick={async e=>{e.stopPropagation();if(window.confirm("Delete photo?")){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
                       style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:2,display:"flex"}}>
                       <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
