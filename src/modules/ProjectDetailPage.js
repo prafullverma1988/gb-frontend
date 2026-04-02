@@ -3415,6 +3415,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   // Site Photos
   const [photos,setPhotos]=useState([]);
   const [uploading,setUploading]=useState(false);
+  const [uploadErr,setUploadErr]=useState("");
+  const [uploadStep,setUploadStep]=useState(""); // "gps" | "compress" | "cloudinary" | "saving"
   const [fullPhoto,setFullPhoto]=useState(null);
 
   // Issues
@@ -3442,6 +3444,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
 
   // Load comments always + tab data
+  useEffect(()=>{
+    api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
+  },[]);
   useEffect(()=>{
     if(tab==="materials" && materials.length===0){
       setMatLoading(true);
@@ -3478,7 +3483,6 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     if(tab==="labour"  && labours.length===0) api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
     if(tab==="photos"  && photos.length===0)  api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
     if(tab==="issues"  && issues.length===0)  api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
-    if(tab==="comments" && comments.length===0) api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
   },[tab]);
 
   const sendComment=async()=>{
@@ -3489,10 +3493,35 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     setSendingComment(false);
   };
 
+  const compressImage=async(file,maxPx=1600,quality=0.82)=>{
+    return new Promise(resolve=>{
+      const img=new Image();
+      const url=URL.createObjectURL(file);
+      img.onload=()=>{
+        let w=img.width,h=img.height;
+        if(w>maxPx||h>maxPx){if(w>h){h=Math.round(h*maxPx/w);w=maxPx;}else{w=Math.round(w*maxPx/h);h=maxPx;}}
+        const canvas=document.createElement("canvas");canvas.width=w;canvas.height=h;
+        canvas.getContext("2d").drawImage(img,0,0,w,h);
+        URL.revokeObjectURL(url);
+        canvas.toBlob(blob=>resolve(blob||file),"image/jpeg",quality);
+      };
+      img.onerror=()=>{URL.revokeObjectURL(url);resolve(file);};
+      img.src=url;
+    });
+  };
+
   const uploadToCloudinary=async(file,folder)=>{
-    const fd=new FormData(); fd.append("file",file); fd.append("upload_preset","gb_buildcon_drawings"); fd.append("folder",folder);
+    const compressed=await compressImage(file);
+    const fd=new FormData();
+    fd.append("file",compressed);
+    fd.append("upload_preset","gb_buildcon_drawings");
+    fd.append("folder",folder);
     const cr=await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload",{method:"POST",body:fd});
-    return await cr.json();
+    if(!cr.ok) throw new Error("Network error: "+cr.status);
+    const data=await cr.json();
+    if(data.error) throw new Error("Cloudinary: "+data.error.message);
+    if(!data.secure_url) throw new Error("Upload failed — no URL returned");
+    return data;
   };
 
   const LBL=({t})=><label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t}</label>;
@@ -4081,25 +4110,39 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           <div>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
               <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".5px"}}>Site Photos ({photos.length})</span>
-              <label style={{padding:"6px 14px",borderRadius:6,background:uploading?"#94A3B8":"#2563EB",color:"white",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              <label style={{padding:"6px 14px",borderRadius:6,background:uploading?"#94A3B8":"#2563EB",color:"white",fontSize:12,fontWeight:600,cursor:uploading?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5}}>
                 <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
-                {uploading?"Uploading...":"Take / Upload"}
+                {uploading?(uploadStep==="gps"?"Getting GPS...":(uploadStep==="cloudinary"?"Uploading...":(uploadStep==="saving"?"Saving...":"Please wait..."))):"Take / Upload"}
                 <input type="file" accept="image/*" capture="environment" style={{display:"none"}} disabled={uploading} onChange={async(e)=>{
                   const file=e.target.files[0]; if(!file) return;
-                  setUploading(true);
+                  setUploading(true); setUploadErr("");
                   let lat=null,lng=null;
-                  if(navigator.geolocation){
-                    await new Promise(resolve=>navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lng=p.coords.longitude;resolve();},resolve,{timeout:5000}));
-                  }
                   try{
+                    setUploadStep("gps");
+                    if(navigator.geolocation){
+                      await new Promise(resolve=>navigator.geolocation.getCurrentPosition(
+                        p=>{lat=p.coords.latitude;lng=p.coords.longitude;resolve();},
+                        ()=>resolve(),{timeout:4000}
+                      ));
+                    }
+                    setUploadStep("cloudinary");
                     const cd=await uploadToCloudinary(file,"site_photos");
+                    setUploadStep("saving");
                     const res=await api.post("/tasks/"+task.id+"/photos",{photo_url:cd.secure_url,caption:"",lat,lng});
-                    if(res.success) setPhotos(p=>[res.data,...p]);
-                  }catch(e){alert("Upload failed");}
-                  setUploading(false);e.target.value="";
+                    if(res.success){ setPhotos(p=>[res.data,...p]); setUploadStep(""); }
+                    else throw new Error(res.message||"Backend save failed");
+                  }catch(e){
+                    setUploadErr(e.message||"Upload failed");
+                    setUploadStep("");
+                  }
+                  setUploading(false); e.target.value="";
                 }}/>
               </label>
             </div>
+            {uploadErr&&<div style={{margin:"0 0 10px",padding:"8px 12px",background:"#FEE2E2",border:"1px solid #FECACA",borderRadius:7,fontSize:12,color:"#DC2626",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <span>Upload failed: {uploadErr}</span>
+              <button onClick={()=>setUploadErr("")} style={{background:"none",border:"none",cursor:"pointer",color:"#DC2626",fontWeight:700,fontSize:14,lineHeight:1}}>x</button>
+            </div>}
             {photos.length===0?<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>
               <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{marginBottom:8}}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
               <div>No photos yet</div>
