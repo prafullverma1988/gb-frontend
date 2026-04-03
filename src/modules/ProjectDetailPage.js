@@ -2446,6 +2446,18 @@ function TabTasks({ projectId }) {
   const completed=allFlat.filter(t=>t.status==="Completed").length;
   const delayed=allFlat.filter(t=>ptDelayDays(t)>0).length;
   const dhyanCount=allFlat.filter(t=>t.dhyanRakhen).length;
+  const [showTaskIssues,setShowTaskIssues]=useState(false);
+  const [taskIssues,setTaskIssues]=useState([]);
+  const [taskIssuesLoading,setTaskIssuesLoading]=useState(false);
+  const [taskIssueFilter,setTaskIssueFilter]=useState("Open");
+
+  const loadTaskIssues=()=>{
+    setTaskIssuesLoading(true);
+    api.get("/tasks/all-issues?project_id="+projectId).then(r=>{
+      if(r.success) setTaskIssues(r.data||[]);
+      setTaskIssuesLoading(false);
+    }).catch(()=>setTaskIssuesLoading(false));
+  };
 
   const toggleCollapse=(id)=>setCollapsed(p=>({...p,[id]:!p[id]}));
 
@@ -2646,13 +2658,20 @@ function TabTasks({ projectId }) {
           {l:"Ongoing",v:ongoing,c:T.blu},
           {l:"Completed",v:completed,c:T.grn},
           {l:"Delayed",v:delayed,c:delayed>0?T.red:T.grn},
-          {l:"DHYAN Alerts",v:dhyanCount,c:T.red},
         ].map((s,i)=>(
           <div key={i} style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
             <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
           </div>
         ))}
+        {/* Open Issues — clickable card */}
+        <div onClick={()=>{setShowTaskIssues(true);loadTaskIssues();}}
+          style={{padding:"9px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,borderTop:`3px solid ${T.red}`,cursor:"pointer",transition:"box-shadow .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 12px rgba(220,38,38,.15)"}
+          onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+          <div style={{fontSize:9,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Open Issues</div>
+          <div style={{fontSize:18,fontWeight:700,color:T.red}}>{taskIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length||0}</div>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -2947,6 +2966,7 @@ function TabTasks({ projectId }) {
 
       {/* Task Detail drawer */}
       {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}}/>}
+      {showTaskIssues&&<TaskIssueDrawer issues={taskIssues} loading={taskIssuesLoading} filter={taskIssueFilter} setFilter={setTaskIssueFilter} onClose={()=>setShowTaskIssues(false)} onStatusChange={(id,s)=>setTaskIssues(p=>p.map(x=>x.id===id?{...x,status:s}:x))}/>}
 
       {/* Edit Task drawer */}
       {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
@@ -3379,6 +3399,132 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
             {saving?"Saving...":"Record GRN"}
           </button>
         )}
+      </div>
+    </div>
+  </>);
+}
+
+// ── Task Issue Drawer ────────────────────────────────────────────────
+function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusChange}){
+  const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
+  const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
+  const FILTERS=["All","Open","In Progress","Resolved","Closed"];
+  const filtered=filter==="All"?issues:issues.filter(i=>i.status===filter);
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
+  const [expandedChat,setExpandedChat]=useState(null);
+  const [fullPhoto,setFullPhoto]=useState(null);
+  const [closingId,setClosingId]=useState(null);
+
+  // Group by task
+  const byTask = filtered.reduce((acc,i)=>{
+    const key=(i.task_no||"")+" "+(i.task_name||"Unknown Task");
+    if(!acc[key]) acc[key]=[];
+    acc[key].push(i);
+    return acc;
+  },{});
+
+  const handleClose=async(issueId)=>{
+    setClosingId(issueId);
+    const r=await api.put("/tasks/issues/"+issueId,{status:"Closed"}).catch(()=>null);
+    if(r?.success) onStatusChange(issueId,"Closed");
+    setClosingId(null);
+  };
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    {fullPhoto&&(
+      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
+        <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    )}
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+      {/* Header */}
+      <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Issues — This Project</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{filtered.length} issue{filtered.length!==1?"s":""} · task-wise</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        {/* Filter tabs */}
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {FILTERS.map(f=>(
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
+              {f}{f!=="All"&&<span style={{marginLeft:4,fontSize:10,opacity:.8}}>{issues.filter(i=>i.status===f).length}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
+        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
+        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found</div>}
+
+        {Object.entries(byTask).map(([taskLabel,taskIssues])=>(
+          <div key={taskLabel} style={{marginBottom:14}}>
+            {/* Task header */}
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7,padding:"5px 10px",background:"#1E293B",borderRadius:7}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/></svg>
+              <span style={{fontSize:11.5,fontWeight:700,color:"white"}}>{taskLabel.trim()||"Unknown Task"}</span>
+              <span style={{marginLeft:"auto",fontSize:10,color:"#94A3B8"}}>{taskIssues.length} issue{taskIssues.length!==1?"s":""}</span>
+            </div>
+
+            {taskIssues.map(issue=>{
+              const pc=priC[issue.priority]||priC["Medium"];
+              const ic=issC[issue.status]||issC["Open"];
+              const isClosed=issue.status==="Closed"||issue.status==="Resolved";
+              return(
+                <div key={issue.id} style={{background:"white",borderRadius:9,padding:"11px 13px",marginBottom:8,border:"1px solid #E2E8F0",borderLeft:`3px solid ${ic.c}`,opacity:isClosed?.7:1}}>
+                  {/* Title + badges */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#1E293B",flex:1,marginRight:8}}>{issue.title}</div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.priority}</span>
+                      <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.status}</span>
+                    </div>
+                  </div>
+                  {/* Photo + assigned + category */}
+                  <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+                    {issue.photo_url&&(
+                      <img src={issue.photo_url} alt="issue" onClick={()=>setFullPhoto(issue.photo_url)}
+                        style={{width:44,height:44,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0",cursor:"zoom-in",flexShrink:0}}/>
+                    )}
+                    <div style={{flex:1,display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
+                      {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                      {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                      <span style={{fontSize:10,color:"#94A3B8",marginLeft:"auto"}}>{fmtD(issue.created_at)}</span>
+                    </div>
+                  </div>
+                  {/* Action buttons */}
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>setExpandedChat(expandedChat===issue.id?null:issue.id)}
+                      style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,border:"1px solid #E2E8F0",background:expandedChat===issue.id?"#DBEAFE":"white",cursor:"pointer",fontSize:11,color:expandedChat===issue.id?"#2563EB":"#64748B",fontWeight:600}}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                      Message
+                    </button>
+                    {!isClosed&&(
+                      <button onClick={()=>handleClose(issue.id)} disabled={closingId===issue.id}
+                        style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,border:"1px solid #D1FAE5",background:"#ECFDF5",cursor:"pointer",fontSize:11,color:"#16A34A",fontWeight:600,marginLeft:"auto"}}>
+                        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
+                        {closingId===issue.id?"Closing...":"Close Issue"}
+                      </button>
+                    )}
+                  </div>
+                  {/* Chat */}
+                  {expandedChat===issue.id&&<div style={{marginTop:8}}><TaskIssueChat issueId={issue.id}/></div>}
+                </div>
+              );
+            })}
+          </div>
+        ))}
       </div>
     </div>
   </>);
