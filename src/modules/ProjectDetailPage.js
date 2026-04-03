@@ -2446,6 +2446,18 @@ function TabTasks({ projectId }) {
   const completed=allFlat.filter(t=>t.status==="Completed").length;
   const delayed=allFlat.filter(t=>ptDelayDays(t)>0).length;
   const dhyanCount=allFlat.filter(t=>t.dhyanRakhen).length;
+  const [showTaskIssues,setShowTaskIssues]=useState(false);
+  const [taskIssues,setTaskIssues]=useState([]);
+  const [taskIssuesLoading,setTaskIssuesLoading]=useState(false);
+  const [taskIssueFilter,setTaskIssueFilter]=useState("Open");
+
+  const loadTaskIssues=()=>{
+    setTaskIssuesLoading(true);
+    api.get("/tasks/all-issues?project_id="+projectId).then(r=>{
+      if(r.success) setTaskIssues(r.data||[]);
+      setTaskIssuesLoading(false);
+    }).catch(()=>setTaskIssuesLoading(false));
+  };
 
   const toggleCollapse=(id)=>setCollapsed(p=>({...p,[id]:!p[id]}));
 
@@ -2646,13 +2658,20 @@ function TabTasks({ projectId }) {
           {l:"Ongoing",v:ongoing,c:T.blu},
           {l:"Completed",v:completed,c:T.grn},
           {l:"Delayed",v:delayed,c:delayed>0?T.red:T.grn},
-          {l:"DHYAN Alerts",v:dhyanCount,c:T.red},
         ].map((s,i)=>(
           <div key={i} style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
             <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
           </div>
         ))}
+        {/* Open Issues — clickable card */}
+        <div onClick={()=>{setShowTaskIssues(true);loadTaskIssues();}}
+          style={{padding:"9px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,borderTop:`3px solid ${T.red}`,cursor:"pointer",transition:"box-shadow .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 12px rgba(220,38,38,.15)"}
+          onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
+          <div style={{fontSize:9,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Open Issues</div>
+          <div style={{fontSize:18,fontWeight:700,color:T.red}}>{taskIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length||0}</div>
+        </div>
       </div>
 
       {/* Toolbar */}
@@ -2947,6 +2966,7 @@ function TabTasks({ projectId }) {
 
       {/* Task Detail drawer */}
       {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}}/>}
+      {showTaskIssues&&<TaskIssueDrawer issues={taskIssues} loading={taskIssuesLoading} filter={taskIssueFilter} setFilter={setTaskIssueFilter} onClose={()=>setShowTaskIssues(false)} onStatusChange={(id,s)=>setTaskIssues(p=>p.map(x=>x.id===id?{...x,status:s}:x))}/>}
 
       {/* Edit Task drawer */}
       {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
@@ -3384,6 +3404,191 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   </>);
 }
 
+// ── Task Issue Drawer ────────────────────────────────────────────────
+function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusChange}){
+  const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
+  const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
+  const FILTERS=["All","Open","In Progress","Resolved","Closed"];
+  const filtered=filter==="All"?issues:issues.filter(i=>i.status===filter);
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
+  const [expandedChat,setExpandedChat]=useState(null);
+  const [fullPhoto,setFullPhoto]=useState(null);
+  const [closingId,setClosingId]=useState(null);
+
+  // Group by task
+  const byTask = filtered.reduce((acc,i)=>{
+    const key=(i.task_no||"")+" "+(i.task_name||"Unknown Task");
+    if(!acc[key]) acc[key]=[];
+    acc[key].push(i);
+    return acc;
+  },{});
+
+  const handleClose=async(issueId)=>{
+    setClosingId(issueId);
+    const r=await api.put("/tasks/issues/"+issueId,{status:"Closed"}).catch(()=>null);
+    if(r?.success) onStatusChange(issueId,"Closed");
+    setClosingId(null);
+  };
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    {fullPhoto&&(
+      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
+        <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    )}
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+      {/* Header */}
+      <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Issues — This Project</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{filtered.length} issue{filtered.length!==1?"s":""} · task-wise</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        {/* Filter tabs */}
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {FILTERS.map(f=>(
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
+              {f}{f!=="All"&&<span style={{marginLeft:4,fontSize:10,opacity:.8}}>{issues.filter(i=>i.status===f).length}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Body */}
+      <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
+        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
+        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found</div>}
+
+        {Object.entries(byTask).map(([taskLabel,taskIssues])=>(
+          <div key={taskLabel} style={{marginBottom:14}}>
+            {/* Task header */}
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7,padding:"5px 10px",background:"#1E293B",borderRadius:7}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/></svg>
+              <span style={{fontSize:11.5,fontWeight:700,color:"white"}}>{taskLabel.trim()||"Unknown Task"}</span>
+              <span style={{marginLeft:"auto",fontSize:10,color:"#94A3B8"}}>{taskIssues.length} issue{taskIssues.length!==1?"s":""}</span>
+            </div>
+
+            {taskIssues.map(issue=>{
+              const pc=priC[issue.priority]||priC["Medium"];
+              const ic=issC[issue.status]||issC["Open"];
+              const isClosed=issue.status==="Closed"||issue.status==="Resolved";
+              return(
+                <div key={issue.id} style={{background:"white",borderRadius:9,padding:"11px 13px",marginBottom:8,border:"1px solid #E2E8F0",borderLeft:`3px solid ${ic.c}`,opacity:isClosed?.7:1}}>
+                  {/* Title + badges */}
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                    <div style={{fontSize:13,fontWeight:700,color:"#1E293B",flex:1,marginRight:8}}>{issue.title}</div>
+                    <div style={{display:"flex",gap:4,flexShrink:0}}>
+                      <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.priority}</span>
+                      <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.status}</span>
+                    </div>
+                  </div>
+                  {/* Photo + assigned + category */}
+                  <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+                    {issue.photo_url&&(
+                      <img src={issue.photo_url} alt="issue" onClick={()=>setFullPhoto(issue.photo_url)}
+                        style={{width:44,height:44,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0",cursor:"zoom-in",flexShrink:0}}/>
+                    )}
+                    <div style={{flex:1,display:"flex",gap:5,flexWrap:"wrap",alignItems:"center"}}>
+                      {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                      {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                      <span style={{fontSize:10,color:"#94A3B8",marginLeft:"auto"}}>{fmtD(issue.created_at)}</span>
+                    </div>
+                  </div>
+                  {/* Action buttons */}
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>setExpandedChat(expandedChat===issue.id?null:issue.id)}
+                      style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,border:"1px solid #E2E8F0",background:expandedChat===issue.id?"#DBEAFE":"white",cursor:"pointer",fontSize:11,color:expandedChat===issue.id?"#2563EB":"#64748B",fontWeight:600}}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                      Message
+                    </button>
+                    {!isClosed&&(
+                      <button onClick={()=>handleClose(issue.id)} disabled={closingId===issue.id}
+                        style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:6,border:"1px solid #D1FAE5",background:"#ECFDF5",cursor:"pointer",fontSize:11,color:"#16A34A",fontWeight:600,marginLeft:"auto"}}>
+                        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
+                        {closingId===issue.id?"Closing...":"Close Issue"}
+                      </button>
+                    )}
+                  </div>
+                  {/* Chat */}
+                  {expandedChat===issue.id&&<div style={{marginTop:8}}><TaskIssueChat issueId={issue.id}/></div>}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+    </div>
+  </>);
+}
+
+// ── Issue Chat Component ─────────────────────────────────────────────
+function TaskIssueChat({issueId}){
+  const [comments,setComments]=useState([]);
+  const [text,setText]=useState("");
+  const [sending,setSending]=useState(false);
+  const [loaded,setLoaded]=useState(false);
+  const fmtT=d=>d?new Date(d).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"";
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+  useEffect(()=>{
+    api.get("/tasks/issues/"+issueId+"/comments").then(r=>{
+      if(r.success)setComments(r.data||[]);
+      setLoaded(true);
+    }).catch(()=>setLoaded(true));
+  },[issueId]);
+  const send=async()=>{
+    if(!text.trim())return;
+    setSending(true);
+    const r=await api.post("/tasks/issues/"+issueId+"/comments",{text});
+    if(r.success){setComments(p=>[...p,r.data]);setText("");}
+    setSending(false);
+  };
+  return(
+    <div style={{background:"#F8FAFC",borderRadius:8,padding:"10px 12px",marginBottom:10,border:"1px solid #E2E8F0"}}>
+      <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Chat ({comments.length})
+      </div>
+      {!loaded&&<div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"4px 0"}}>Loading...</div>}
+      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"4px 0"}}>No messages yet — start the conversation</div>}
+      <div style={{maxHeight:160,overflowY:"auto",marginBottom:8}}>
+        {comments.map(c=>(
+          <div key={c.id} style={{display:"flex",gap:7,marginBottom:8}}>
+            <div style={{width:26,height:26,borderRadius:"50%",background:"linear-gradient(135deg,#2563EB,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:700,color:"white"}}>
+              {(c.user_name||"?").charAt(0).toUpperCase()}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:2}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#1E293B"}}>{c.user_name||"—"}</span>
+                <span style={{fontSize:9.5,color:"#94A3B8"}}>{fmtD(c.created_at)} {fmtT(c.created_at)}</span>
+              </div>
+              <div style={{padding:"6px 9px",background:"white",borderRadius:"0 8px 8px 8px",border:"1px solid #E2E8F0",fontSize:12,color:"#334155",lineHeight:1.5}}>{c.text}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input value={text} onChange={e=>setText(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&!sending&&send()}
+          placeholder="Type message... (Enter to send)"
+          style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:12,color:"#1E293B",outline:"none",fontFamily:"inherit",background:"white"}}/>
+        <button onClick={send} disabled={sending||!text.trim()}
+          style={{padding:"7px 13px",borderRadius:7,background:!text.trim()?"#E2E8F0":"#2563EB",color:!text.trim()?"#94A3B8":"white",border:"none",cursor:text.trim()?"pointer":"default",fontSize:12,fontWeight:600,flexShrink:0}}>
+          {sending?"...":"Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [tab,setTab]=useState("progress");
   const [prog,setProg]=useState(task.progress||0);
@@ -3420,9 +3625,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   // Issues
   const [issues,setIssues]=useState([]);
   const [showIssueForm,setShowIssueForm]=useState(false);
-  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:""});
+  const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});
   const [issueUploading,setIssueUploading]=useState(false);
   const [expandedIssue,setExpandedIssue]=useState(null);
+  const [expandedIssueChat,setExpandedIssueChat]=useState(null);
+  const [issueWorkCats,setIssueWorkCats]=useState([]);
+  const [issueTeam,setIssueTeam]=useState([]);
 
   // Comments — always loaded, fixed at bottom
   const [comments,setComments]=useState([]);
@@ -3480,7 +3688,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     }
     if(tab==="labour"  && labours.length===0) api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
     if(tab==="photos"  && photos.length===0)  api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
-    if(tab==="issues"  && issues.length===0)  api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+    if(tab==="issues" && issues.length===0){
+      api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
+      if(issueWorkCats.length===0) api.get("/library/work-categories").then(r=>{if(r.success)setIssueWorkCats((r.data||[]).map(c=>c.name));}).catch(()=>{});
+      if(issueTeam.length===0) api.get("/settings/users").then(r=>{if(r.success)setIssueTeam((r.data||[]).map(u=>u.name));}).catch(()=>{});
+    }
   },[tab]);
 
   const sendComment=async()=>{
@@ -3643,351 +3855,154 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 }}/>
             )}
 
-            {/* ── MATERIAL SUB-TABS ── */}
-            <div style={{display:"flex",gap:4,marginBottom:12,background:"#F8FAFC",borderRadius:8,padding:4,border:"1px solid #E2E8F0"}}>
-              {[
-                {id:"summary",l:"Summary"},
-                {id:"inventory",l:"Inventory"},
-                {id:"usedlog",l:"Used Log"},
-              ].map(st=>(
-                <button key={st.id} onClick={()=>setMatTab(st.id)}
-                  style={{flex:1,padding:"7px 4px",border:"none",borderRadius:6,fontSize:11.5,fontWeight:matTab===st.id?700:500,
-                    background:matTab===st.id?"white":"transparent",
-                    color:matTab===st.id?"#2563EB":"#64748B",
-                    boxShadow:matTab===st.id?"0 1px 4px rgba(0,0,0,0.1)":"none",
-                    cursor:"pointer",transition:"all 0.15s"}}>
-                  {st.l}
-                </button>
-              ))}
+            {/* ── 3 ACTION BUTTONS ── */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+              <button onClick={()=>setMatTab(matTab==="usedlog"?"none":"usedlog")}
+                style={{padding:"10px 6px",borderRadius:8,border:"1.5px solid "+(matTab==="usedlog"?"#16A34A":"#BBF7D0"),background:matTab==="usedlog"?"#DCFCE7":"#F0FDF4",color:"#16A34A",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h4"/></svg>
+                Mark Used
+              </button>
+              <button onClick={()=>setShowMRModal(true)}
+                style={{padding:"10px 6px",borderRadius:8,border:"1.5px solid #BFDBFE",background:"#EFF6FF",color:"#2563EB",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14"/></svg>
+                New Request
+              </button>
+              <button onClick={()=>setShowGRNModal(true)}
+                style={{padding:"10px 6px",borderRadius:8,border:"1.5px solid #A7F3D0",background:"#ECFDF5",color:"#059669",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                Record GRN
+              </button>
             </div>
 
-            {/* ── SUMMARY SUB-TAB ── */}
-            {matTab==="summary"&&(
-              <div>
-                {matLoading&&<div style={{textAlign:"center",padding:"30px 0",color:"#94A3B8"}}>Loading...</div>}
-                {/* Summary tiles */}
-                {!matLoading&&materials.length>0&&(
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
-                    {[
-                      {l:"Required",v:materials.reduce((s,m)=>s+Number(m.required_qty||0),0).toFixed(1),c:"#64748B",bg:"#F8FAFC"},
-                      {l:"Received",v:materials.reduce((s,m)=>s+Number(m.received_qty||0),0).toFixed(1),c:"#2563EB",bg:"#DBEAFE"},
-                      {l:"Used",v:materials.reduce((s,m)=>s+Number(m.used_qty||0),0).toFixed(1),c:"#16A34A",bg:"#DCFCE7"},
-                    ].map(s=>(
-                      <div key={s.l} style={{background:s.bg,borderRadius:8,padding:"10px",textAlign:"center",border:"1px solid "+s.c+"33"}}>
-                        <div style={{fontSize:17,fontWeight:800,color:s.c}}>{s.v}</div>
-                        <div style={{fontSize:9,color:"#64748B",marginTop:2}}>{s.l}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {/* Action buttons */}
-                {!matLoading&&(
-                  <div style={{display:"flex",gap:8,marginBottom:12}}>
-                    <button onClick={()=>{setMrMaterial(null);setShowMRModal(true);}}
-                      style={{flex:1,padding:"9px",borderRadius:8,background:"#EFF6FF",color:"#2563EB",border:"1px solid #BFDBFE",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
-                      New Request (MR)
-                    </button>
-                    <button onClick={()=>{setMrMaterial(null);setShowGRNModal(true);}}
-                      style={{flex:1,padding:"9px",borderRadius:8,background:"#F0FDF4",color:"#16A34A",border:"1px solid #BBF7D0",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                      Record GRN
-                    </button>
-                  </div>
-                )}
-                {/* Empty state */}
-                {!matLoading&&materials.length===0&&(
-                  <div style={{textAlign:"center",padding:"30px 0",color:"#94A3B8"}}>
-                    <div style={{fontSize:13,marginBottom:4}}>No material activity yet</div>
-                    <div style={{fontSize:11}}>Raise MR or record GRN from above</div>
-                  </div>
-                )}
-                {/* Material cards */}
-                {materials.map((m,i)=>{
-                  const req=Number(m.required_qty||0);
-                  const rec=Number(m.received_qty||0);
-                  const used=Number(m.used_qty||0);
-                  const usedPct=rec>0?Math.min(100,Math.round((used/rec)*100)):0;
-                  const over=used>rec&&rec>0;
-                  const mrStatus=m.mr_status||"";
-                  const matStatus=m.mat_status||"";
-                  const flowColor=matStatus==="Received"||matStatus==="Used"?"#16A34A":
-                    matStatus==="Ordered"?"#D97706":
-                    mrStatus==="Approved"?"#2563EB":
-                    mrStatus==="Rejected"?"#DC2626":"#64748B";
-                  const flowLabel=matStatus==="Received"?"Received":
-                    matStatus==="Ordered"?"Ordered":
-                    mrStatus==="Approved"?"MR Approved":
-                    mrStatus==="Rejected"?"MR Rejected":
-                    mrStatus?"MR Pending":"No MR";
-                  return(
-                    <div key={m.material_name+i} style={{background:"white",borderRadius:10,padding:"12px 14px",border:"1px solid #E2E8F0",marginBottom:8,borderLeft:"3px solid "+flowColor}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
-                        <div style={{flex:1}}>
-                          <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{m.material_name}</div>
-                          <div style={{display:"flex",gap:5,marginTop:3,alignItems:"center",flexWrap:"wrap"}}>
-                            <span style={{fontSize:9,fontWeight:700,color:"white",background:flowColor,padding:"1px 7px",borderRadius:3}}>{flowLabel}</span>
-                            <span style={{fontSize:10,color:"#94A3B8"}}>{m.unit}</span>
-                          </div>
-                        </div>
-                        <div style={{display:"flex",gap:5,flexShrink:0,marginLeft:8}}>
-                          {rec===0&&<button onClick={()=>{setMrMaterial(m);setShowMRModal(true);}}
-                            style={{padding:"4px 9px",borderRadius:5,background:"#EFF6FF",color:"#2563EB",border:"1px solid #BFDBFE",fontSize:10,fontWeight:600,cursor:"pointer"}}>
-                            + MR
-                          </button>}
-                          {rec===0&&mrStatus==="Approved"&&<button onClick={()=>{setMrMaterial(m);setShowGRNModal(true);}}
-                            style={{padding:"4px 9px",borderRadius:5,background:"#F0FDF4",color:"#16A34A",border:"1px solid #BBF7D0",fontSize:10,fontWeight:600,cursor:"pointer"}}>
-                            GRN
-                          </button>}
-                        </div>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
-                        {[
-                          {l:"Required",v:req,c:"#64748B"},
-                          {l:"Received",v:rec,c:"#2563EB"},
-                          {l:"Used",v:used,c:over?"#DC2626":"#16A34A"},
-                        ].map(col=>(
-                          <div key={col.l} style={{textAlign:"center",padding:"7px 4px",background:"#F8FAFC",borderRadius:7,border:"1px solid #E2E8F0"}}>
-                            <div style={{fontSize:16,fontWeight:800,color:col.c}}>{col.v}</div>
-                            <div style={{fontSize:8.5,color:"#94A3B8",marginTop:1}}>{col.l}</div>
-                          </div>
-                        ))}
-                      </div>
-                      {rec>0&&<div style={{display:"flex",alignItems:"center",gap:6,marginBottom:6}}>
-                        <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
-                          <div style={{height:"100%",width:Math.min(100,usedPct)+"%",background:over?"#EF4444":"#22C55E",borderRadius:2}}/>
-                        </div>
-                        <span style={{fontSize:9,fontWeight:700,color:over?"#DC2626":"#16A34A",minWidth:28}}>{usedPct}%</span>
-                      </div>}
-                      <button onClick={()=>{
-                        setUsedLogForm(f=>({...f,material_name:m.material_name,unit:m.unit||"Nos",used_date:new Date().toISOString().split("T")[0]}));
-                        setShowUsedLogForm(true);
-                        setMatTab("usedlog");
-                      }} style={{width:"100%",padding:"7px",borderRadius:6,background:"#F0FDF4",color:"#16A34A",border:"1px solid #BBF7D0",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
-                        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
-                        Mark Used
-                      </button>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* ── INVENTORY SUB-TAB ── */}
-            {matTab==="inventory"&&(
-              <div>
-                <div style={{fontSize:11,color:"#64748B",marginBottom:10,padding:"8px 10px",background:"#F8FAFC",borderRadius:6,border:"1px solid #E2E8F0"}}>
-                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth={2} style={{marginRight:5,verticalAlign:"middle"}}><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                  Project site ka total material stock — sabhi tasks ka GRN received minus used
-                </div>
-                {invLoading&&<div style={{textAlign:"center",padding:"30px 0",color:"#94A3B8"}}>Loading...</div>}
-                {!invLoading&&inventory.length===0&&(
-                  <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
-                    <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 8px",display:"block"}}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                    <div style={{fontSize:13}}>No GRN received for this project yet</div>
-                  </div>
-                )}
-                {!invLoading&&inventory.length>0&&(
-                  <>
-                    {/* Summary row */}
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:12}}>
-                      {[
-                        {l:"Total Received",v:inventory.reduce((s,i)=>s+Number(i.total_received||0),0).toFixed(1),c:"#2563EB",bg:"#DBEAFE"},
-                        {l:"Total Used",v:inventory.reduce((s,i)=>s+Number(i.total_used||0),0).toFixed(1),c:"#D97706",bg:"#FEF3C7"},
-                        {l:"Balance",v:inventory.reduce((s,i)=>s+Number(i.balance||0),0).toFixed(1),c:"#16A34A",bg:"#DCFCE7"},
-                      ].map(s=>(
-                        <div key={s.l} style={{background:s.bg,borderRadius:8,padding:"10px",textAlign:"center",border:"1px solid "+s.c+"33"}}>
-                          <div style={{fontSize:16,fontWeight:800,color:s.c}}>{s.v}</div>
-                          <div style={{fontSize:9,color:"#64748B",marginTop:2}}>{s.l}</div>
-                        </div>
-                      ))}
-                    </div>
-                    {/* Material rows */}
-                    {inventory.map((item,i)=>{
-                      const rec=Number(item.total_received||0);
-                      const used=Number(item.total_used||0);
-                      const bal=Number(item.balance||0);
-                      const usedPct=rec>0?Math.min(100,Math.round((used/rec)*100)):0;
-                      const stC=item.status==="Exhausted"?"#DC2626":item.status==="Low"?"#D97706":"#16A34A";
-                      const stBg=item.status==="Exhausted"?"#FEE2E2":item.status==="Low"?"#FEF3C7":"#DCFCE7";
-                      return(
-                        <div key={item.material_name+i} style={{background:"white",borderRadius:10,padding:"12px 14px",border:"1px solid #E2E8F0",marginBottom:8,borderLeft:"3px solid "+stC}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                            <div>
-                              <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{item.material_name}</div>
-                              <span style={{fontSize:9,color:"#94A3B8",marginTop:2,display:"block"}}>{item.unit}</span>
-                            </div>
-                            <span style={{fontSize:9,fontWeight:700,color:stC,background:stBg,padding:"3px 8px",borderRadius:4}}>{item.status}</span>
-                          </div>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
-                            {[
-                              {l:"Received",v:rec,c:"#2563EB"},
-                              {l:"Used",v:used,c:"#D97706"},
-                              {l:"Balance",v:bal,c:bal<=0?"#DC2626":"#16A34A"},
-                            ].map(col=>(
-                              <div key={col.l} style={{textAlign:"center",padding:"7px 4px",background:"#F8FAFC",borderRadius:7,border:"1px solid #E2E8F0"}}>
-                                <div style={{fontSize:15,fontWeight:800,color:col.c}}>{col.v}</div>
-                                <div style={{fontSize:8.5,color:"#94A3B8",marginTop:1}}>{col.l}</div>
-                              </div>
-                            ))}
-                          </div>
-                          {rec>0&&<div style={{display:"flex",alignItems:"center",gap:6}}>
-                            <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
-                              <div style={{height:"100%",width:usedPct+"%",background:usedPct>=100?"#EF4444":usedPct>60?"#F59E0B":"#22C55E",borderRadius:2}}/>
-                            </div>
-                            <span style={{fontSize:9,fontWeight:700,color:"#64748B",minWidth:32}}>{usedPct}% used</span>
-                          </div>}
-                        </div>
-                      );
-                    })}
-                  </>
-                )}
-              </div>
-            )}
-
-            {/* ── USED LOG SUB-TAB ── */}
+            {/* ── USED SECTION (expandable) ── */}
             {matTab==="usedlog"&&(
-              <div>
-                {/* Add Used Entry Button */}
-                <button onClick={()=>{setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});setShowUsedLogForm(true);}}
-                  style={{width:"100%",padding:"9px",borderRadius:8,background:"#F0FDF4",color:"#16A34A",border:"1px solid #BBF7D0",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginBottom:12}}>
-                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                  Add Used Entry
+              <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"14px",marginBottom:12}}>
+                <div style={{fontSize:12,fontWeight:700,color:"#15803D",marginBottom:10,display:"flex",justifyContent:"space-between"}}>
+                  <span>Mark Material Used</span>
+                  <button onClick={()=>setMatTab("none")} style={{background:"none",border:"none",cursor:"pointer",color:"#94A3B8",fontSize:18,lineHeight:1}}>×</button>
+                </div>
+
+                {/* Inventory cards — select material */}
+                {invLoading&&<div style={{textAlign:"center",padding:"12px 0",color:"#94A3B8",fontSize:12}}>Loading inventory...</div>}
+                {!invLoading&&inventory.length>0&&(
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10.5,color:"#64748B",fontWeight:600,marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>Select from available stock</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,maxHeight:180,overflowY:"auto"}}>
+                      {inventory.filter(i=>Number(i.balance||0)>0).map((item,i)=>{
+                        const isSelected=usedLogForm.material_name===item.material_name;
+                        return(
+                          <div key={i} onClick={()=>setUsedLogForm(f=>({...f,material_name:item.material_name,unit:item.unit||"Nos"}))}
+                            style={{padding:"8px 10px",borderRadius:7,border:"1.5px solid "+(isSelected?"#16A34A":"#BBF7D0"),background:isSelected?"#DCFCE7":"white",cursor:"pointer",transition:"all .15s"}}>
+                            <div style={{fontSize:11.5,fontWeight:700,color:isSelected?"#15803D":"#1E293B"}}>{item.material_name}</div>
+                            <div style={{fontSize:10,color:"#64748B",marginTop:2}}>Balance: <b style={{color:isSelected?"#15803D":"#16A34A"}}>{item.balance} {item.unit}</b></div>
+                          </div>
+                        );
+                      })}
+                      {inventory.filter(i=>Number(i.balance||0)>0).length===0&&(
+                        <div style={{gridColumn:"1/-1",textAlign:"center",padding:"12px 0",color:"#94A3B8",fontSize:12}}>No stock available — record GRN first</div>
+                      )}
+                    </div>
+                    {/* Or type custom */}
+                    <button onClick={()=>setUsedLogForm(f=>({...f,material_name:"__custom__"}))}
+                      style={{marginTop:6,background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:11,padding:0}}>
+                      + Type custom material name
+                    </button>
+                  </div>
+                )}
+                {!invLoading&&inventory.length===0&&(
+                  <div style={{marginBottom:10}}>
+                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Material</label>
+                    <select value={usedLogForm.material_name}
+                      onChange={e=>{const mat=materials.find(m=>m.material_name===e.target.value);setUsedLogForm(f=>({...f,material_name:e.target.value,unit:mat?mat.unit||"Nos":"Nos"}));}}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,background:"white",outline:"none"}}>
+                      <option value="">-- Select Material --</option>
+                      {materials.map(m=>(<option key={m.material_name} value={m.material_name}>{m.material_name} ({m.unit})</option>))}
+                      <option value="__custom__">+ Type custom name</option>
+                    </select>
+                  </div>
+                )}
+                {usedLogForm.material_name==="__custom__"&&(
+                  <div style={{marginBottom:8}}>
+                    <input placeholder="Material name" value={usedLogForm._customName||""}
+                      onChange={e=>setUsedLogForm(f=>({...f,_customName:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
+                  </div>
+                )}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                  <div>
+                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Qty Used *</label>
+                    <input type="number" min={0} placeholder="0" value={usedLogForm.used_qty}
+                      onChange={e=>setUsedLogForm(f=>({...f,used_qty:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:13,fontWeight:700,boxSizing:"border-box",outline:"none"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Unit</label>
+                    <select value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,background:"white",outline:"none"}}>
+                      {["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"].map(u=>(<option key={u}>{u}</option>))}
+                    </select>
+                  </div>
+                </div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+                  <div>
+                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Date</label>
+                    <input type="date" value={usedLogForm.used_date} onChange={e=>setUsedLogForm(f=>({...f,used_date:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Remark</label>
+                    <input placeholder="Optional" value={usedLogForm.remark}
+                      onChange={e=>setUsedLogForm(f=>({...f,remark:e.target.value}))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
+                  </div>
+                </div>
+                <button disabled={usedLogSaving} onClick={async()=>{
+                  const matName=usedLogForm.material_name==="__custom__"?usedLogForm._customName||"":usedLogForm.material_name;
+                  if(!matName||!usedLogForm.used_qty) return alert("Material aur qty required hai");
+                  setUsedLogSaving(true);
+                  const res=await api.post("/tasks/"+task.id+"/used-log",{
+                    material_name:matName, used_qty:Number(usedLogForm.used_qty),
+                    unit:usedLogForm.unit, remark:usedLogForm.remark,
+                    used_date:usedLogForm.used_date, project_id:projectId,
+                  });
+                  if(res.success){
+                    setUsedLog(l=>[res.data,...l]);
+                    setMatTab("none");
+                    setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});
+                    api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);});
+                    api.get("/tasks/project/"+projectId+"/inventory").then(r=>{if(r.success)setInventory(r.data||[]);});
+                  } else alert(res.message||"Save failed");
+                  setUsedLogSaving(false);
+                }}
+                  style={{width:"100%",padding:"9px",borderRadius:7,background:usedLogSaving?"#94A3B8":"#16A34A",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:usedLogSaving?"default":"pointer"}}>
+                  {usedLogSaving?"Saving...":"✓ Save Used Entry"}
                 </button>
+              </div>
+            )}
 
-                {/* Add Form (inline) */}
-                {showUsedLogForm&&(
-                  <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"14px",marginBottom:12}}>
-                    <div style={{fontSize:12,fontWeight:700,color:"#15803D",marginBottom:10}}>Mark Material Used</div>
-                    {/* Material dropdown from materials list */}
-                    <div style={{marginBottom:8}}>
-                      <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Material</label>
-                      <select value={usedLogForm.material_name}
-                        onChange={e=>{
-                          const mat=materials.find(m=>m.material_name===e.target.value);
-                          setUsedLogForm(f=>({...f,material_name:e.target.value,unit:mat?mat.unit||"Nos":"Nos"}));
-                        }}
-                        style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,background:"white",outline:"none"}}>
-                        <option value="">-- Select Material --</option>
-                        {materials.map(m=>(
-                          <option key={m.material_name} value={m.material_name}>{m.material_name} ({m.unit})</option>
-                        ))}
-                        <option value="__custom__">+ Type custom name</option>
-                      </select>
+            {/* ── RECENT USED LOG ── */}
+            {usedLog.length>0&&matTab!=="usedlog"&&(
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Recent Used ({usedLog.length})</div>
+                {usedLog.slice(0,3).map((entry,i)=>(
+                  <div key={entry.id||i} style={{background:"white",borderRadius:7,padding:"8px 10px",border:"1px solid #E2E8F0",marginBottom:5,borderLeft:"3px solid #16A34A",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:700,color:"#1E293B"}}>{entry.material_name}</div>
+                      <div style={{fontSize:10.5,color:"#94A3B8"}}>{new Date(entry.used_date||entry.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}{entry.remark?" · "+entry.remark:""}</div>
                     </div>
-                    {usedLogForm.material_name==="__custom__"&&(
-                      <div style={{marginBottom:8}}>
-                        <input placeholder="Material name" value={usedLogForm._customName||""}
-                          onChange={e=>setUsedLogForm(f=>({...f,_customName:e.target.value}))}
-                          style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
-                      </div>
-                    )}
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                      <div>
-                        <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Qty Used</label>
-                        <input type="number" min={0} placeholder="0" value={usedLogForm.used_qty}
-                          onChange={e=>setUsedLogForm(f=>({...f,used_qty:e.target.value}))}
-                          style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:13,fontWeight:700,boxSizing:"border-box",outline:"none"}}/>
-                      </div>
-                      <div>
-                        <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Unit</label>
-                        <select value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
-                          style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,background:"white",outline:"none"}}>
-                          {["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"].map(u=>(<option key={u}>{u}</option>))}
-                        </select>
-                      </div>
-                    </div>
-                    <div style={{marginBottom:8}}>
-                      <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Date</label>
-                      <input type="date" value={usedLogForm.used_date} onChange={e=>setUsedLogForm(f=>({...f,used_date:e.target.value}))}
-                        style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
-                    </div>
-                    <div style={{marginBottom:12}}>
-                      <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Remark (optional)</label>
-                      <input placeholder="e.g. Used in foundation work" value={usedLogForm.remark}
-                        onChange={e=>setUsedLogForm(f=>({...f,remark:e.target.value}))}
-                        style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
-                    </div>
-                    <div style={{display:"flex",gap:8}}>
-                      <button onClick={()=>setShowUsedLogForm(false)}
-                        style={{flex:1,padding:"8px",borderRadius:6,background:"white",color:"#64748B",border:"1px solid #E2E8F0",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                        Cancel
-                      </button>
-                      <button disabled={usedLogSaving} onClick={async()=>{
-                        const matName=usedLogForm.material_name==="__custom__"?usedLogForm._customName||"":usedLogForm.material_name;
-                        if(!matName||!usedLogForm.used_qty) return alert("Material aur qty required hai");
-                        setUsedLogSaving(true);
-                        const res=await api.post("/tasks/"+task.id+"/used-log",{
-                          material_name:matName,
-                          used_qty:Number(usedLogForm.used_qty),
-                          unit:usedLogForm.unit,
-                          remark:usedLogForm.remark,
-                          used_date:usedLogForm.used_date,
-                          project_id:projectId,
-                        });
-                        if(res.success){
-                          setUsedLog(l=>[res.data,...l]);
-                          setShowUsedLogForm(false);
-                          setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});
-                          // Refresh summary + inventory
-                          api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);});
-                          api.get("/tasks/project/"+projectId+"/inventory").then(r=>{if(r.success)setInventory(r.data||[]);});
-                        } else alert(res.message||"Save failed");
-                        setUsedLogSaving(false);
-                      }}
-                        style={{flex:2,padding:"8px",borderRadius:6,background:usedLogSaving?"#94A3B8":"#16A34A",color:"white",border:"none",fontSize:12,fontWeight:700,cursor:usedLogSaving?"default":"pointer"}}>
-                        {usedLogSaving?"Saving...":"Save Entry"}
-                      </button>
-                    </div>
+                    <div style={{fontSize:13,fontWeight:800,color:"#16A34A",flexShrink:0}}>{entry.used_qty} <span style={{fontSize:9,color:"#94A3B8"}}>{entry.unit}</span></div>
                   </div>
-                )}
+                ))}
+                {usedLog.length>3&&<div style={{textAlign:"center",fontSize:11,color:"#64748B",padding:"4px 0"}}>+{usedLog.length-3} more entries</div>}
+              </div>
+            )}
 
-                {/* Log list */}
-                {usedLogLoading&&<div style={{textAlign:"center",padding:"30px 0",color:"#94A3B8"}}>Loading...</div>}
-                {!usedLogLoading&&usedLog.length===0&&!showUsedLogForm&&(
-                  <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
-                    <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 8px",display:"block"}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2M9 12h6M9 16h4"/></svg>
-                    <div style={{fontSize:13}}>Koi used entry nahi hai</div>
-                    <div style={{fontSize:11,marginTop:4}}>Above button se material consumption log karo</div>
-                  </div>
-                )}
-                {!usedLogLoading&&usedLog.length>0&&(
-                  <>
-                    {/* Total used summary */}
-                    <div style={{background:"#DCFCE7",borderRadius:8,padding:"10px 12px",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",border:"1px solid #BBF7D0"}}>
-                      <span style={{fontSize:11,color:"#15803D",fontWeight:600}}>{usedLog.length} entries</span>
-                      <span style={{fontSize:12,fontWeight:800,color:"#15803D"}}>
-                        Total Used: {usedLog.reduce((s,e)=>s+Number(e.used_qty||0),0).toFixed(2)}
-                      </span>
-                    </div>
-                    {usedLog.map((entry,i)=>(
-                      <div key={entry.id||i} style={{background:"white",borderRadius:8,padding:"10px 12px",border:"1px solid #E2E8F0",marginBottom:6,borderLeft:"3px solid #16A34A",display:"flex",alignItems:"flex-start",gap:8}}>
-                        <div style={{flex:1,minWidth:0}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                            <div style={{fontSize:12.5,fontWeight:700,color:"#1E293B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:"60%"}}>{entry.material_name}</div>
-                            <div style={{fontSize:14,fontWeight:800,color:"#16A34A",flexShrink:0}}>{Number(entry.used_qty||0)} <span style={{fontSize:9,color:"#94A3B8"}}>{entry.unit}</span></div>
-                          </div>
-                          <div style={{display:"flex",gap:8,marginTop:4,flexWrap:"wrap"}}>
-                            <span style={{fontSize:10,color:"#94A3B8"}}>{entry.used_date||""}</span>
-                            {entry.by_name&&<span style={{fontSize:10,color:"#64748B"}}>by {entry.by_name}</span>}
-                            {entry.remark&&<span style={{fontSize:10,color:"#64748B",fontStyle:"italic"}}>"{entry.remark}"</span>}
-                          </div>
-                        </div>
-                        <button onClick={async()=>{
-                          if(!window.confirm("Delete this entry?")) return;
-                          const res=await api.del("/tasks/"+task.id+"/used-log/"+entry.id);
-                          if(res.success){
-                            setUsedLog(l=>l.filter(e=>e.id!==entry.id));
-                            api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);});
-                            api.get("/tasks/project/"+projectId+"/inventory").then(r=>{if(r.success)setInventory(r.data||[]);});
-                          }
-                        }} style={{background:"none",border:"none",cursor:"pointer",color:"#94A3B8",padding:"2px",flexShrink:0}}>
-                          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6M10 11v6M14 11v6M9 6V4h6v2"/></svg>
-                        </button>
-                      </div>
-                    ))}
-                  </>
-                )}
+            {/* Empty state */}
+            {!matLoading&&materials.length===0&&usedLog.length===0&&matTab!=="usedlog"&&(
+              <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
+                <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 8px",display:"block"}}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                <div style={{fontSize:13}}>No material activity yet</div>
+                <div style={{fontSize:11,marginTop:4,color:"#CBD5E1"}}>Raise MR or record GRN from above</div>
               </div>
             )}
           </div>
@@ -4158,6 +4173,25 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                     ))}
                   </div>
                 </div>
+                {/* Assign To + Work Category */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:9}}>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Assign To</label>
+                    <select value={issueForm.assigned_to} onChange={e=>setIssueForm(p=>({...p,assigned_to:e.target.value}))}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit"}}>
+                      <option value="">-- Select Member --</option>
+                      {issueTeam.map(m=><option key={m} value={m}>{m}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Work Category</label>
+                    <select value={issueForm.work_category} onChange={e=>setIssueForm(p=>({...p,work_category:e.target.value}))}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit"}}>
+                      <option value="">-- Select Category --</option>
+                      {issueWorkCats.map(c=><option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                </div>
                 {/* Photo upload */}
                 <div style={{marginBottom:9}}>
                   <LBL t="Attach Photo"/>
@@ -4175,7 +4209,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 <button onClick={async()=>{
                   if(!issueForm.title.trim()) return alert("Title required");
                   const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
-                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:""});setShowIssueForm(false);}
+                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});setShowIssueForm(false);}
                   else alert(res.message||"Failed");
                 }} style={{width:"100%",padding:"10px",borderRadius:7,background:"#DC2626",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Create Issue</button>
               </div>
@@ -4192,8 +4226,19 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                       <div style={{flex:1,marginRight:8}}>
                         <div style={{fontSize:13,fontWeight:700,color:"#1E293B",marginBottom:3}}>{issue.title}</div>
                         {issue.description&&!isExp&&<div style={{fontSize:11,color:"#64748B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{issue.description}</div>}
+                        {!isExp&&(issue.assigned_to||issue.work_category)&&(
+                          <div style={{display:"flex",gap:5,marginTop:4,flexWrap:"wrap"}}>
+                            {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 6px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                            {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 6px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                          </div>
+                        )}
                       </div>
                       <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+                        {issue.photo_url&&!isExp&&(
+                          <img src={issue.photo_url} alt="p"
+                            onClick={e=>{e.stopPropagation();setFullPhoto({photo_url:issue.photo_url,created_at:issue.created_at});}}
+                            style={{width:36,height:36,borderRadius:5,objectFit:"cover",cursor:"zoom-in",border:"1px solid #E2E8F0",flexShrink:0}}/>
+                        )}
                         <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.priority}</span>
                         <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.status}</span>
                         <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d={isExp?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"}/></svg>
@@ -4202,8 +4247,16 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                   </div>
                   {isExp&&(
                     <div style={{padding:"0 13px 12px",borderTop:"1px solid #F1F5F9"}}>
-                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:10,marginTop:8}}>{issue.description}</div>}
+                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:8,marginTop:8}}>{issue.description}</div>}
+                      {(issue.assigned_to||issue.work_category)&&(
+                        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+                          {issue.assigned_to&&<span style={{fontSize:11,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                          {issue.work_category&&<span style={{fontSize:11,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                        </div>
+                      )}
                       {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{width:"100%",borderRadius:6,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
+                      {/* Chat */}
+                      <TaskIssueChat issueId={issue.id}/>
                       {/* Status change */}
                       <div style={{marginBottom:8}}>
                         <div style={{fontSize:9.5,fontWeight:600,color:"#94A3B8",marginBottom:5,textTransform:"uppercase"}}>Change Status</div>
