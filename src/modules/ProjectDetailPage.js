@@ -4917,18 +4917,21 @@ function TabMaterial({ project }) {
         alert("GRN created: " + res.grn_number);
         setShowGRN(false);
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
-        // Add to direct GRNs display list
-        const newGrns = validRows.map(r => ({
-          grn_number: res.grn_number,
-          material_name: r.item_name,
-          vendor: r.vendor || "Direct",
-          qty: r.qty,
-          unit: r.unit,
+        // Add direct GRN items to materials list as "Received" stage
+        const newMatEntries = validRows.map((r,i) => ({
+          id: "direct-"+Date.now()+i,
+          name: r.item_name,
+          qty: r.qty + " " + (r.unit||"Bags"),
+          stage: "Received",
+          by: r.received_by || "Site",
+          date: new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+          vendor: r.vendor || null,
+          amt: 0,
+          isDirect: true,
           challan: r.challan,
-          received_by: r.received_by || "—",
-          date: new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
+          grn_number: res.grn_number,
         }));
-        setDirectGrns(p => [...newGrns, ...p]);
+        setMaterials(prev => [...newMatEntries, ...prev]);
         // Directly reload ledger + inventory data
         setLedgerLoading(true);
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
@@ -5106,33 +5109,6 @@ function TabMaterial({ project }) {
             );
           })}
         </div>
-
-        {/* Direct GRN receipts log */}
-        {directGrns.length>0&&(
-          <div style={{marginBottom:14}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.grn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:7,display:"flex",alignItems:"center",gap:6}}>
-              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-              Direct GRN Received ({directGrns.length})
-            </div>
-            <div style={{background:T.surface,borderRadius:8,overflow:"hidden",border:"1px solid "+T.b1}}>
-              <div style={{display:"grid",gridTemplateColumns:"90px 1fr 90px 80px 100px 100px",background:"#1E293B",padding:"6px 12px",gap:8}}>
-                {["Date","Material","Vendor","Qty","Challan","Received By"].map(h=>(
-                  <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
-                ))}
-              </div>
-              {directGrns.map((g,i)=>(
-                <div key={i} style={{display:"grid",gridTemplateColumns:"90px 1fr 90px 80px 100px 100px",padding:"8px 12px",gap:8,borderTop:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
-                  <div style={{fontSize:11,color:T.t3}}>{g.date}</div>
-                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{g.material_name}</div>
-                  <div style={{fontSize:11.5,color:T.t2}}>{g.vendor}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:T.grn}}>{g.qty} <span style={{fontSize:9,color:T.t4}}>{g.unit}</span></div>
-                  <div style={{fontSize:10.5,color:T.blu,fontFamily:"monospace"}}>{g.challan}</div>
-                  <div style={{fontSize:11.5,color:T.t2}}>{g.received_by}</div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* GRN MODAL */}
         {showGRN&&(<>
@@ -5319,7 +5295,11 @@ function TabMaterial({ project }) {
                       <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
                     </div>
                     <div style={{fontSize:20,fontWeight:800,color:T.t1,marginBottom:2}}>{m.qty}</div>
-                    {m.vendor&&<div style={{fontSize:11,color:T.blu,marginBottom:4}}>🏪 {m.vendor}</div>}
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+                      {m.vendor&&<span style={{fontSize:11,color:T.blu}}>🏪 {m.vendor}</span>}
+                      {m.isDirect&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"#DCFCE7",color:"#16A34A",border:"1px solid #BBF7D0"}}>Direct</span>}
+                      {m.challan&&<span style={{fontSize:9,color:T.t4}}>CH: {m.challan}</span>}
+                    </div>
                     <div style={{fontSize:11,color:T.t4}}>{m.date} · {m.by}</div>
                   </div>
                   <div style={{padding:"7px 12px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -5346,7 +5326,7 @@ function TabMaterial({ project }) {
                   <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.name}</span>
                   <span style={{fontSize:12,color:T.t2}}>{m.qty}</span>
                   <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
-                  <span style={{fontSize:12,color:T.t2}}>{m.vendor||"—"}</span>
+                  <span style={{fontSize:12,color:T.t2}}>{m.vendor||"—"}{m.isDirect&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:"#DCFCE7",color:"#16A34A"}}>Direct</span>}</span>
                   <span style={{fontSize:12,color:T.t2}}>{(m.by||"—").split(" ")[0]}</span>
                   <span style={{fontSize:13,fontWeight:600,color:T.t1}}>Rs.{fmtN(m.amt||0)}</span>
                 </div>
