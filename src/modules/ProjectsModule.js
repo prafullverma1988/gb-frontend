@@ -1052,12 +1052,11 @@ function ProjectsPage({onSelectProject}){
         setLoading(false);
       }
     };
-    fetchProjects().then(()=>{
-      loadApprovalCounts();
-      api.get("/tasks/all-issues").then(r=>{
-        if(r.success) setAllIssues(r.data||[]);
-      }).catch(()=>{});
-    });
+    fetchProjects().then(()=>{ loadApprovalCounts(); });
+    // Load issues independently — don't wait for projects
+    api.get("/tasks/all-issues").then(r=>{
+      if(r.success) setAllIssues(r.data||[]);
+    }).catch(()=>{});
   },[]);
 
   const cities=["All",...new Set(allProjects.map(p=>p.city))];
@@ -1080,7 +1079,12 @@ function ProjectsPage({onSelectProject}){
     {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalInitTab("mr");setShowApprovals(true);}},
     {label:"My To-Do",          val:5,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
     {label:"Open Issues", val:allIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length, Icon:IcWarn, color:T.red,bg:T.redL,bdr:T.redM,
-      onClick:()=>{setIssueFilter("Open");setShowIssuesDrawer(true);}},
+      onClick:()=>{
+      setIssueFilter("Open");
+      setShowIssuesDrawer(true);
+      // Refresh on open
+      api.get("/tasks/all-issues").then(r=>{ if(r.success) setAllIssues(r.data||[]); }).catch(()=>{});
+    }},
     {label:"Site Pulse",        val:"LIVE",Icon:IcPulse,color:T.pur,bg:T.purL,bdr:"#C4B5FD",live:true,onClick:()=>setShowPulse(true)},
   ];
 

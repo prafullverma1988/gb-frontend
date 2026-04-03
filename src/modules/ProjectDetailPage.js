@@ -2451,13 +2451,17 @@ function TabTasks({ projectId }) {
   const [projIssuesLoading,setProjIssuesLoading]=useState(false);
   const [projIssueFilter,setProjIssueFilter]=useState("All");
 
-  const loadProjIssues=()=>{
+  const loadProjIssues=(force=false)=>{
+    if(projIssues.length>0&&!force) return;
     setProjIssuesLoading(true);
     api.get("/tasks/all-issues?project_id="+projectId).then(r=>{
       if(r.success) setProjIssues(r.data||[]);
       setProjIssuesLoading(false);
     }).catch(()=>setProjIssuesLoading(false));
   };
+
+  // Load issue count on mount
+  useEffect(()=>{ if(projectId) loadProjIssues(); },[projectId]);
 
   const toggleCollapse=(id)=>setCollapsed(p=>({...p,[id]:!p[id]}));
 
@@ -2671,7 +2675,7 @@ function TabTasks({ projectId }) {
           onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
           <div style={{fontSize:9,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Open Issues</div>
           <div style={{fontSize:18,fontWeight:700,color:T.red}}>
-            {projIssues.length>0?projIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length:"—"}
+            {projIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length||0}
           </div>
         </div>
       </div>
@@ -4272,6 +4276,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                     <div style={{padding:"0 13px 12px",borderTop:"1px solid #F1F5F9"}}>
                       {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:10,marginTop:8}}>{issue.description}</div>}
                       {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{width:"100%",borderRadius:6,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
+                      {/* Chat */}
+                      <ProjIssueChat issueId={issue.id}/>
                       {/* Status change */}
                       <div style={{marginBottom:8}}>
                         <div style={{fontSize:9.5,fontWeight:600,color:"#94A3B8",marginBottom:5,textTransform:"uppercase"}}>Change Status</div>
