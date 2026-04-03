@@ -4868,7 +4868,25 @@ function TabMaterial({ project }) {
         challan_no: row.challan,
         received_qty: parseFloat(row.received_qty) || parseFloat(mr?.quantity) || 0,
       });
-      if (res.success) { setGrnDone(p => [...p, mrId]); setLedgerLoaded(false); }
+      if (res.success) {
+        setGrnDone(p => [...p, mrId]);
+        // Reload ledger + requests directly
+        api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
+          if (r.success) { setLedger(r.data || []); setLedgerLoaded(true); }
+        }).catch(() => {});
+        api.get("/procurement/mrs?project_id=" + projectId).then(res2 => {
+          if (res2.success && Array.isArray(res2.data)) {
+            setMaterials(res2.data.map(m => ({
+              id: m.id, name: m.item_name,
+              qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
+              stage: m.stage || "Requested",
+              by: m.requested_by || "Site Team",
+              date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+              vendor: m.linked_vendor || null, amt: parseFloat(m.approx_amount) || 0,
+            })));
+          }
+        }).catch(() => {});
+      }
       else alert(res.message || "Failed");
     } catch(e) { alert(e.message); }
     setGrnSaving(false);
@@ -4894,7 +4912,31 @@ function TabMaterial({ project }) {
         alert("GRN created: " + res.grn_number);
         setShowGRN(false);
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
-        setLedgerLoaded(false); setInvLoaded(false);
+        // Directly reload ledger + inventory data
+        setLedgerLoading(true);
+        api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
+          if (r.success) setLedger(r.data || []);
+          setLedgerLoaded(true); setLedgerLoading(false);
+        }).catch(() => setLedgerLoading(false));
+        setInvLoading(true);
+        api.get("/tasks/project/" + projectId + "/inventory").then(r => {
+          if (r.success) setInventory(r.data || []);
+          setInvLoaded(true); setInvLoading(false);
+        }).catch(() => setInvLoading(false));
+        // Also refresh requests list
+        api.get("/procurement/mrs?project_id=" + projectId).then(res2 => {
+          if (res2.success && Array.isArray(res2.data)) {
+            setMaterials(res2.data.map(m => ({
+              id: m.id, name: m.item_name,
+              qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
+              stage: m.stage || "Requested",
+              by: m.requested_by || "Site Team",
+              date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+              vendor: m.linked_vendor || null,
+              amt: parseFloat(m.approx_amount) || 0,
+            })));
+          }
+        }).catch(() => {});
       } else alert(res.message || "GRN failed");
     } catch(e) { alert(e.message); }
     setGrnSaving(false);
