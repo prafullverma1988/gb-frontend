@@ -4787,6 +4787,8 @@ function TabMaterial({ project }) {
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
   const [grnSaving, setGrnSaving] = useState(false);
   const [grnDone, setGrnDone] = useState([]);
+  const [directGrns, setDirectGrns] = useState([]); // Direct GRNs without MR
+  const [vendorList, setVendorList] = useState([]);
   const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
   const [matLibReal, setMatLibReal] = useState([]);
   const MAT_LIB = matLibReal.map(m => m.name);
@@ -4810,6 +4812,9 @@ function TabMaterial({ project }) {
   useEffect(() => {
     api.get("/library/materials").then(r => {
       if (r.success && r.data?.length > 0) setMatLibReal(r.data);
+    }).catch(() => {});
+    api.get("/procurement/vendors").then(r => {
+      if (r.success) setVendorList(r.data || []);
     }).catch(() => {});
   }, [projectId]);
 
@@ -4912,6 +4917,18 @@ function TabMaterial({ project }) {
         alert("GRN created: " + res.grn_number);
         setShowGRN(false);
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
+        // Add to direct GRNs display list
+        const newGrns = validRows.map(r => ({
+          grn_number: res.grn_number,
+          material_name: r.item_name,
+          vendor: r.vendor || "Direct",
+          qty: r.qty,
+          unit: r.unit,
+          challan: r.challan,
+          received_by: r.received_by || "—",
+          date: new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}),
+        }));
+        setDirectGrns(p => [...newGrns, ...p]);
         // Directly reload ledger + inventory data
         setLedgerLoading(true);
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
@@ -5090,6 +5107,33 @@ function TabMaterial({ project }) {
           })}
         </div>
 
+        {/* Direct GRN receipts log */}
+        {directGrns.length>0&&(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.grn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:7,display:"flex",alignItems:"center",gap:6}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+              Direct GRN Received ({directGrns.length})
+            </div>
+            <div style={{background:T.surface,borderRadius:8,overflow:"hidden",border:"1px solid "+T.b1}}>
+              <div style={{display:"grid",gridTemplateColumns:"90px 1fr 90px 80px 100px 100px",background:"#1E293B",padding:"6px 12px",gap:8}}>
+                {["Date","Material","Vendor","Qty","Challan","Received By"].map(h=>(
+                  <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
+                ))}
+              </div>
+              {directGrns.map((g,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"90px 1fr 90px 80px 100px 100px",padding:"8px 12px",gap:8,borderTop:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
+                  <div style={{fontSize:11,color:T.t3}}>{g.date}</div>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{g.material_name}</div>
+                  <div style={{fontSize:11.5,color:T.t2}}>{g.vendor}</div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.grn}}>{g.qty} <span style={{fontSize:9,color:T.t4}}>{g.unit}</span></div>
+                  <div style={{fontSize:10.5,color:T.blu,fontFamily:"monospace"}}>{g.challan}</div>
+                  <div style={{fontSize:11.5,color:T.t2}}>{g.received_by}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* GRN MODAL */}
         {showGRN&&(<>
           <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:400,backdropFilter:"blur(2px)"}}/>
@@ -5171,8 +5215,11 @@ function TabMaterial({ project }) {
                         <div>
                           <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor</label>
                           <input value={row.vendor} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:e.target.value}:r))}
-                            placeholder="Vendor name"
+                            placeholder="Select or type vendor" list="vendor-list-grn"
                             style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                          <datalist id="vendor-list-grn">
+                            {vendorList.map(v=><option key={v.id} value={v.name}>{v.name}{v.city?" — "+v.city:""}</option>)}
+                          </datalist>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:8,marginBottom:8}}>
