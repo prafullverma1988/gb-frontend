@@ -2446,22 +2446,6 @@ function TabTasks({ projectId }) {
   const completed=allFlat.filter(t=>t.status==="Completed").length;
   const delayed=allFlat.filter(t=>ptDelayDays(t)>0).length;
   const dhyanCount=allFlat.filter(t=>t.dhyanRakhen).length;
-  const [showProjIssues,setShowProjIssues]=useState(false);
-  const [projIssues,setProjIssues]=useState([]);
-  const [projIssuesLoading,setProjIssuesLoading]=useState(false);
-  const [projIssueFilter,setProjIssueFilter]=useState("All");
-
-  const loadProjIssues=(force=false)=>{
-    if(projIssues.length>0&&!force) return;
-    setProjIssuesLoading(true);
-    api.get("/tasks/all-issues?project_id="+projectId).then(r=>{
-      if(r.success) setProjIssues(r.data||[]);
-      setProjIssuesLoading(false);
-    }).catch(()=>setProjIssuesLoading(false));
-  };
-
-  // Load issue count on mount
-  useEffect(()=>{ if(projectId) loadProjIssues(); },[projectId]);
 
   const toggleCollapse=(id)=>setCollapsed(p=>({...p,[id]:!p[id]}));
 
@@ -2659,25 +2643,16 @@ function TabTasks({ projectId }) {
       <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:9,marginBottom:12}}>
         {[
           {l:"Total Tasks",v:allFlat.length,c:T.slt},
-          {l:"Ongoing",    v:ongoing,       c:T.blu},
-          {l:"Completed",  v:completed,     c:T.grn},
-          {l:"Delayed",    v:delayed,       c:delayed>0?T.red:T.grn},
+          {l:"Ongoing",v:ongoing,c:T.blu},
+          {l:"Completed",v:completed,c:T.grn},
+          {l:"Delayed",v:delayed,c:delayed>0?T.red:T.grn},
+          {l:"DHYAN Alerts",v:dhyanCount,c:T.red},
         ].map((s,i)=>(
           <div key={i} style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
             <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
           </div>
         ))}
-        {/* Open Issues card — clickable */}
-        <div onClick={()=>{setShowProjIssues(true);loadProjIssues();}}
-          style={{padding:"9px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,borderTop:`3px solid ${T.red}`,cursor:"pointer",transition:"box-shadow .15s"}}
-          onMouseEnter={e=>e.currentTarget.style.boxShadow="0 3px 10px rgba(220,38,38,0.15)"}
-          onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-          <div style={{fontSize:9,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Open Issues</div>
-          <div style={{fontSize:18,fontWeight:700,color:T.red}}>
-            {projIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length||0}
-          </div>
-        </div>
       </div>
 
       {/* Toolbar */}
@@ -2974,7 +2949,6 @@ function TabTasks({ projectId }) {
       {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}}/>}
 
       {/* Edit Task drawer */}
-      {showProjIssues&&<ProjectIssuesDrawer issues={projIssues} loading={projIssuesLoading} filter={projIssueFilter} setFilter={setProjIssueFilter} onClose={()=>setShowProjIssues(false)}/>}
       {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
         await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen });
         setTasks(updateInTree(tasks,id,u)); setEditTask(null);
@@ -3410,11 +3384,64 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
   </>);
 }
 
-// ── Shared micro-components — defined OUTSIDE to prevent remount on re-render ──
-function TaskLBL({t}){ return <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t}</label>; }
-function TaskINP(props){ return <input {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style}}
-    onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>; }
-function TaskSEL(props){ return <select {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit",...props.style}}/>; }
+// ── Issue Chat Component ─────────────────────────────────────────────
+function TaskIssueChat({issueId}){
+  const [comments,setComments]=useState([]);
+  const [text,setText]=useState("");
+  const [sending,setSending]=useState(false);
+  const [loaded,setLoaded]=useState(false);
+  const fmtT=d=>d?new Date(d).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"";
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+  useEffect(()=>{
+    api.get("/tasks/issues/"+issueId+"/comments").then(r=>{
+      if(r.success)setComments(r.data||[]);
+      setLoaded(true);
+    }).catch(()=>setLoaded(true));
+  },[issueId]);
+  const send=async()=>{
+    if(!text.trim())return;
+    setSending(true);
+    const r=await api.post("/tasks/issues/"+issueId+"/comments",{text});
+    if(r.success){setComments(p=>[...p,r.data]);setText("");}
+    setSending(false);
+  };
+  return(
+    <div style={{background:"#F8FAFC",borderRadius:8,padding:"10px 12px",marginBottom:10,border:"1px solid #E2E8F0"}}>
+      <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        Chat ({comments.length})
+      </div>
+      {!loaded&&<div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"4px 0"}}>Loading...</div>}
+      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"4px 0"}}>No messages yet — start the conversation</div>}
+      <div style={{maxHeight:160,overflowY:"auto",marginBottom:8}}>
+        {comments.map(c=>(
+          <div key={c.id} style={{display:"flex",gap:7,marginBottom:8}}>
+            <div style={{width:26,height:26,borderRadius:"50%",background:"linear-gradient(135deg,#2563EB,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:10,fontWeight:700,color:"white"}}>
+              {(c.user_name||"?").charAt(0).toUpperCase()}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:2}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#1E293B"}}>{c.user_name||"—"}</span>
+                <span style={{fontSize:9.5,color:"#94A3B8"}}>{fmtD(c.created_at)} {fmtT(c.created_at)}</span>
+              </div>
+              <div style={{padding:"6px 9px",background:"white",borderRadius:"0 8px 8px 8px",border:"1px solid #E2E8F0",fontSize:12,color:"#334155",lineHeight:1.5}}>{c.text}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input value={text} onChange={e=>setText(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&!sending&&send()}
+          placeholder="Type message... (Enter to send)"
+          style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:12,color:"#1E293B",outline:"none",fontFamily:"inherit",background:"white"}}/>
+        <button onClick={send} disabled={sending||!text.trim()}
+          style={{padding:"7px 13px",borderRadius:7,background:!text.trim()?"#E2E8F0":"#2563EB",color:!text.trim()?"#94A3B8":"white",border:"none",cursor:text.trim()?"pointer":"default",fontSize:12,fontWeight:600,flexShrink:0}}>
+          {sending?"...":"Send"}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [tab,setTab]=useState("progress");
@@ -3453,10 +3480,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [issues,setIssues]=useState([]);
   const [showIssueForm,setShowIssueForm]=useState(false);
   const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});
-  const [issueWorkCats,setIssueWorkCats]=useState([]);
-  const [issueTeam,setIssueTeam]=useState([]);
   const [issueUploading,setIssueUploading]=useState(false);
   const [expandedIssue,setExpandedIssue]=useState(null);
+  const [expandedIssueChat,setExpandedIssueChat]=useState(null);
+  const [issueWorkCats,setIssueWorkCats]=useState([]);
+  const [issueTeam,setIssueTeam]=useState([]);
 
   // Comments — always loaded, fixed at bottom
   const [comments,setComments]=useState([]);
@@ -3535,7 +3563,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     return await cr.json();
   };
 
-
+  const LBL=({t})=><label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t}</label>;
+  const INP=(props)=><input {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style}}
+    onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>;
+  const SEL=(props)=><select {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit",...props.style}}/>;
 
   return(<>
     {/* Backdrop */}
@@ -4056,7 +4087,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               <div style={{background:"white",borderRadius:10,padding:"14px",border:"1px solid #E2E8F0",marginBottom:12}}>
                 {/* Labour Type selector */}
                 <div style={{marginBottom:10}}>
-                  <TaskLBL t="Type"/>
+                  <LBL t="Type"/>
                   <div style={{display:"flex",gap:6}}>
                     {["Direct","Subcon","Vendor"].map(t=>(
                       <button key={t} onClick={()=>setLabForm(p=>({...p,labour_type:t,labour_name:"",vendor_name:""}))}
@@ -4068,14 +4099,14 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 </div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                   {labForm.labour_type==="Direct"
-                    ?<div style={{gridColumn:"1/-1"}}><TaskLBL t="Labour Name *"/><TaskINP value={labForm.labour_name} onChange={e=>setLabForm(p=>({...p,labour_name:e.target.value}))} placeholder="e.g. Ramesh Kumar"/></div>
-                    :<><div style={{gridColumn:"1/-1"}}><TaskLBL t={labForm.labour_type+" Name *"}/><TaskINP value={labForm.vendor_name} onChange={e=>setLabForm(p=>({...p,vendor_name:e.target.value}))} placeholder={"e.g. "+labForm.labour_type+" company name"}/></div></>
+                    ?<div style={{gridColumn:"1/-1"}}><LBL t="Labour Name *"/><INP value={labForm.labour_name} onChange={e=>setLabForm(p=>({...p,labour_name:e.target.value}))} placeholder="e.g. Ramesh Kumar"/></div>
+                    :<><div style={{gridColumn:"1/-1"}}><LBL t={labForm.labour_type+" Name *"}/><INP value={labForm.vendor_name} onChange={e=>setLabForm(p=>({...p,vendor_name:e.target.value}))} placeholder={"e.g. "+labForm.labour_type+" company name"}/></div></>
                   }
-                  <div><TaskLBL t="Role"/><TaskSEL value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}>{ROLES.map(r=><option key={r}>{r}</option>)}</TaskSEL></div>
-                  <div><TaskLBL t="Count"/><TaskINP type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}/></div>
-                  <div><TaskLBL t="Work Date"/><TaskINP type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}/></div>
-                  <div><TaskLBL t="Hours/Day"/><TaskINP type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}/></div>
-                  <div style={{gridColumn:"1/-1"}}><TaskLBL t="Remark"/><TaskINP value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"/></div>
+                  <div><LBL t="Role"/><SEL value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}>{ROLES.map(r=><option key={r}>{r}</option>)}</SEL></div>
+                  <div><LBL t="Count"/><INP type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}/></div>
+                  <div><LBL t="Work Date"/><INP type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}/></div>
+                  <div><LBL t="Hours/Day"/><INP type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}/></div>
+                  <div style={{gridColumn:"1/-1"}}><LBL t="Remark"/><INP value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"/></div>
                 </div>
                 <button onClick={async()=>{
                   const name=labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name;
@@ -4176,22 +4207,14 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
             </div>
             {showIssueForm&&(
               <div style={{background:"white",borderRadius:10,padding:"14px",border:"1.5px solid #FECACA",marginBottom:12}}>
-                <div style={{marginBottom:9}}>
-                  <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Issue Title *</label>
-                  <input
-                    value={issueForm.title}
-                    onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))}
-                    placeholder="Describe the issue briefly"
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                  />
-                </div>
-                <div style={{marginBottom:9}}><TaskLBL t="Description"/>
+                <div style={{marginBottom:9}}><LBL t="Issue Title *"/><INP value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))} placeholder="Describe the issue briefly"/></div>
+                <div style={{marginBottom:9}}><LBL t="Description"/>
                   <textarea value={issueForm.description} onChange={e=>setIssueForm(p=>({...p,description:e.target.value}))} rows={2} placeholder="More details..."
                     style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
                 </div>
                 {/* Priority */}
                 <div style={{marginBottom:9}}>
-                  <TaskLBL t="Priority"/>
+                  <LBL t="Priority"/>
                   <div style={{display:"flex",gap:6}}>
                     {PRIORITIES.map(p=>(
                       <button key={p} onClick={()=>setIssueForm(prev=>({...prev,priority:p}))}
@@ -4222,7 +4245,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 </div>
                 {/* Photo upload */}
                 <div style={{marginBottom:9}}>
-                  <TaskLBL t="Attach Photo"/>
+                  <LBL t="Attach Photo"/>
                   <label style={{display:"flex",alignItems:"center",gap:7,padding:"8px 12px",border:"1.5px dashed #E2E8F0",borderRadius:7,cursor:"pointer",background:"#F8FAFC"}}>
                     <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
                     <span style={{fontSize:12,color:"#94A3B8"}}>{issueUploading?"Uploading...":issueForm.photo_url?"Photo attached ✓":"Click to attach photo"}</span>
@@ -4255,7 +4278,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                         <div style={{fontSize:13,fontWeight:700,color:"#1E293B",marginBottom:3}}>{issue.title}</div>
                         {issue.description&&!isExp&&<div style={{fontSize:11,color:"#64748B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{issue.description}</div>}
                         {!isExp&&(issue.assigned_to||issue.work_category)&&(
-                          <div style={{display:"flex",gap:6,marginTop:4,flexWrap:"wrap"}}>
+                          <div style={{display:"flex",gap:5,marginTop:4,flexWrap:"wrap"}}>
                             {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 6px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
                             {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 6px",fontWeight:600}}>🔧 {issue.work_category}</span>}
                           </div>
@@ -4263,7 +4286,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                       </div>
                       <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
                         {issue.photo_url&&!isExp&&(
-                          <img src={issue.photo_url} alt="p" onClick={e=>{e.stopPropagation();setFullPhoto({photo_url:issue.photo_url,created_at:issue.created_at});}}
+                          <img src={issue.photo_url} alt="p"
+                            onClick={e=>{e.stopPropagation();setFullPhoto({photo_url:issue.photo_url,created_at:issue.created_at});}}
                             style={{width:36,height:36,borderRadius:5,objectFit:"cover",cursor:"zoom-in",border:"1px solid #E2E8F0",flexShrink:0}}/>
                         )}
                         <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.priority}</span>
@@ -4274,10 +4298,16 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                   </div>
                   {isExp&&(
                     <div style={{padding:"0 13px 12px",borderTop:"1px solid #F1F5F9"}}>
-                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:10,marginTop:8}}>{issue.description}</div>}
+                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:8,marginTop:8}}>{issue.description}</div>}
+                      {(issue.assigned_to||issue.work_category)&&(
+                        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
+                          {issue.assigned_to&&<span style={{fontSize:11,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                          {issue.work_category&&<span style={{fontSize:11,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                        </div>
+                      )}
                       {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{width:"100%",borderRadius:6,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
                       {/* Chat */}
-                      <ProjIssueChat issueId={issue.id}/>
+                      <TaskIssueChat issueId={issue.id}/>
                       {/* Status change */}
                       <div style={{marginBottom:8}}>
                         <div style={{fontSize:9.5,fontWeight:600,color:"#94A3B8",marginBottom:5,textTransform:"uppercase"}}>Change Status</div>
@@ -4333,149 +4363,6 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
           </button>
         </div>
-      </div>
-    </div>
-  </>);
-}
-
-// ── Issue Chat (reusable) ─────────────────────────────────────────────
-function ProjIssueChat({issueId}){
-  const [comments,setComments]=useState([]);
-  const [text,setText]=useState("");
-  const [sending,setSending]=useState(false);
-  const [loaded,setLoaded]=useState(false);
-  const fmtT=d=>d?new Date(d).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"";
-  const fmtD2=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
-  useEffect(()=>{
-    api.get("/tasks/issues/"+issueId+"/comments").then(r=>{
-      if(r.success)setComments(r.data||[]);
-      setLoaded(true);
-    }).catch(()=>setLoaded(true));
-  },[issueId]);
-  const send=async()=>{
-    if(!text.trim())return;
-    setSending(true);
-    const r=await api.post("/tasks/issues/"+issueId+"/comments",{text});
-    if(r.success){setComments(p=>[...p,r.data]);setText("");}
-    setSending(false);
-  };
-  return(
-    <div style={{borderTop:"1px solid #F1F5F9",paddingTop:9,marginTop:8}}>
-      <div style={{fontSize:9.5,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Chat ({comments.length})</div>
-      {!loaded&&<div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"6px 0"}}>Loading...</div>}
-      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"6px 0"}}>No messages yet</div>}
-      <div style={{maxHeight:150,overflowY:"auto",marginBottom:8}}>
-        {comments.map(c=>(
-          <div key={c.id} style={{display:"flex",gap:7,marginBottom:7}}>
-            <div style={{width:24,height:24,borderRadius:"50%",background:"linear-gradient(135deg,#2563EB,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:9,fontWeight:700,color:"white"}}>
-              {(c.user_name||"?").charAt(0).toUpperCase()}
-            </div>
-            <div style={{flex:1}}>
-              <div style={{display:"flex",gap:6,marginBottom:2}}>
-                <span style={{fontSize:10.5,fontWeight:700,color:"#1E293B"}}>{c.user_name||"—"}</span>
-                <span style={{fontSize:9,color:"#94A3B8"}}>{fmtD2(c.created_at)} {fmtT(c.created_at)}</span>
-              </div>
-              <div style={{padding:"6px 9px",background:"#F8FAFC",borderRadius:"0 7px 7px 7px",border:"1px solid #E2E8F0",fontSize:12,color:"#334155",lineHeight:1.5}}>{c.text}</div>
-            </div>
-          </div>
-        ))}
-      </div>
-      <div style={{display:"flex",gap:6}}>
-        <input value={text} onChange={e=>setText(e.target.value)}
-          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
-          placeholder="Type message... (Enter to send)"
-          style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:12,color:"#1E293B",outline:"none",fontFamily:"inherit"}}/>
-        <button onClick={send} disabled={sending||!text.trim()}
-          style={{padding:"7px 12px",borderRadius:7,background:!text.trim()?"#E2E8F0":"#2563EB",color:!text.trim()?"#94A3B8":"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>Send</button>
-      </div>
-    </div>
-  );
-}
-
-// ── Project Issues Drawer (from Tasks tab) ────────────────────────────
-function ProjectIssuesDrawer({issues, loading, filter, setFilter, onClose}){
-  const [expandedChat,setExpandedChat]=useState(null);
-  const [fullPhoto,setFullPhoto]=useState(null);
-  const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
-  const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
-  const FILTERS=["All","Open","In Progress","Resolved","Closed"];
-  const filtered=filter==="All"?issues:issues.filter(i=>i.status===filter);
-  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
-
-  return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400,backdropFilter:"blur(1px)"}}/>
-    {fullPhoto&&(
-      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
-        <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
-        <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-    )}
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(500px,96vw)",background:"#F8FAFC",zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
-      {/* Header */}
-      <div style={{background:"#0F172A",padding:"14px 18px",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-          <div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Issues — This Project</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{filtered.length} issue{filtered.length!==1?"s":""}</div>
-          </div>
-          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-          </button>
-        </div>
-        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-          {FILTERS.map(f=>(
-            <button key={f} onClick={()=>setFilter(f)}
-              style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
-              {f}{f!=="All"&&<span style={{marginLeft:4,fontSize:10,opacity:.8}}>{issues.filter(i=>i.status===f).length}</span>}
-            </button>
-          ))}
-        </div>
-      </div>
-      {/* List */}
-      <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
-        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
-        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found</div>}
-        {filtered.map(issue=>{
-          const pc=priC[issue.priority]||priC["Medium"];
-          const ic=issC[issue.status]||issC["Open"];
-          return(
-            <div key={issue.id} style={{background:"white",borderRadius:10,padding:"12px 14px",marginBottom:8,border:"1px solid #E2E8F0",borderLeft:`3px solid ${ic.c}`}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:5}}>
-                <div style={{fontSize:13,fontWeight:700,color:"#1E293B",flex:1,marginRight:8}}>{issue.title}</div>
-                <div style={{display:"flex",gap:4,flexShrink:0}}>
-                  <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.priority}</span>
-                  <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.status}</span>
-                </div>
-              </div>
-              {/* Task name */}
-              <div style={{fontSize:11,color:"#64748B",marginBottom:5,display:"flex",alignItems:"center",gap:5}}>
-                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2"/></svg>
-                <span style={{fontWeight:600,color:"#475569"}}>{issue.task_name||issue.task_no||"-"}</span>
-              </div>
-              {/* Photo + Badges + Chat + Date */}
-              <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
-                {issue.photo_url&&(
-                  <img src={issue.photo_url} alt="issue"
-                    onClick={()=>setFullPhoto(issue.photo_url)}
-                    style={{width:44,height:44,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0",cursor:"zoom-in",flexShrink:0}}/>
-                )}
-                <div style={{flex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                  {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
-                  {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>🔧 {issue.work_category}</span>}
-                  <span style={{fontSize:10,color:"#94A3B8",marginLeft:"auto"}}>{fmtD(issue.created_at)}</span>
-                  <button onClick={()=>setExpandedChat(expandedChat===issue.id?null:issue.id)}
-                    style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,border:"1px solid #E2E8F0",background:expandedChat===issue.id?"#DBEAFE":"white",cursor:"pointer",fontSize:10,color:expandedChat===issue.id?"#2563EB":"#64748B",fontWeight:600}}>
-                    <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
-                    Chat
-                  </button>
-                </div>
-              </div>
-              {expandedChat===issue.id&&<ProjIssueChat issueId={issue.id}/>}
-            </div>
-          );
-        })}
       </div>
     </div>
   </>);
@@ -4944,34 +4831,6 @@ function TabMaterial({ project }) {
   const [matLibReal, setMatLibReal] = useState([]);
   const MAT_LIB = matLibReal.map(m => m.name);
 
-  // ── Inventory section ──────────────────────────────────────
-  const [showInv, setShowInv] = useState(false);
-  const [invView, setInvView] = useState("summary"); // summary | received | used | inventory
-  const [invData, setInvData] = useState(null);
-  const [invLoading, setInvLoading] = useState(false);
-  const [grnHistory, setGrnHistory] = useState([]);
-  const [usedHistory, setUsedHistory] = useState([]);
-
-  const loadInvData = () => {
-    if(invData) return; // already loaded
-    setInvLoading(true);
-    Promise.all([
-      api.get("/tasks/project/"+projectId+"/material-summary"),
-      api.get("/procurement/grns?project_id="+projectId),
-      api.get("/tasks/project/"+projectId+"/used-history"),
-    ]).then(([sumRes, grnRes, usedRes])=>{
-      if(sumRes.success) setInvData(sumRes.data);
-      if(grnRes.success) setGrnHistory(grnRes.data||[]);
-      if(usedRes.success) setUsedHistory(usedRes.data||[]);
-      setInvLoading(false);
-    }).catch(()=>setInvLoading(false));
-  };
-
-  const toggleInv = () => {
-    if(!showInv) loadInvData();
-    setShowInv(s=>!s);
-  };
-
   // Fetch material library from backend
   useEffect(() => {
     api.get("/library/materials").then(r => {
@@ -5431,159 +5290,6 @@ function TabMaterial({ project }) {
           {filtered.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4}}>No materials found</div>}
         </Panel>
       )}
-
-      {/* ── INVENTORY SECTION (Toggle) ─────────────────────────── */}
-      <div style={{marginTop:16,border:"1px solid "+T.b1,borderRadius:10,overflow:"hidden",background:T.surface}}>
-        {/* Toggle Header */}
-        <button onClick={toggleInv}
-          style={{width:"100%",padding:"11px 16px",background:showInv?"#1E293B":T.surface,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",transition:"background .15s"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={showInv?"white":T.t2} strokeWidth={2}><path d="M20 7H4a2 2 0 00-2 2v6a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2z"/><path d="M16 3H8v4h8V3z"/><circle cx={12} cy={12} r={1}/></svg>
-            <span style={{fontSize:13,fontWeight:700,color:showInv?"white":T.t1}}>Material Inventory & History</span>
-            {invData?.summary?.length>0&&<span style={{fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:10,background:showInv?"rgba(255,255,255,.15)":"#DBEAFE",color:showInv?"white":T.blu}}>{invData.summary.length} materials</span>}
-          </div>
-          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={showInv?"white":T.t4} strokeWidth={2}><path d={showInv?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"}/></svg>
-        </button>
-
-        {showInv&&(
-          <div style={{padding:"12px 16px"}}>
-            {/* View selector */}
-            <div style={{display:"flex",gap:4,marginBottom:12,background:T.surfaceB,borderRadius:7,padding:4}}>
-              {[
-                {id:"summary",  l:"Summary"},
-                {id:"received", l:"Received"},
-                {id:"used",     l:"Used Log"},
-                {id:"inventory",l:"Inventory"},
-              ].map(v=>(
-                <button key={v.id} onClick={()=>setInvView(v.id)}
-                  style={{flex:1,padding:"6px",borderRadius:5,border:"none",background:invView===v.id?T.blu:"none",color:invView===v.id?"white":T.t3,fontSize:11.5,fontWeight:invView===v.id?700:400,cursor:"pointer",transition:"all .15s"}}>
-                  {v.l}
-                </button>
-              ))}
-            </div>
-
-            {invLoading&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>Loading...</div>}
-
-            {/* SUMMARY VIEW */}
-            {!invLoading&&invView==="summary"&&(
-              <div>
-                {(!invData?.summary||invData.summary.length===0)&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No data yet — raise MR or record GRN</div>}
-                <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
-                  {invData?.summary?.length>0&&(
-                    <>
-                      <div style={{display:"grid",gridTemplateColumns:"2fr 70px 80px 80px 80px 80px",background:"#1E293B",padding:"7px 12px",gap:4}}>
-                        {["Material","Unit","Required","Received","Used","Balance"].map(h=>(
-                          <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.6)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
-                        ))}
-                      </div>
-                      {invData.summary.map((m,i)=>{
-                        const balColor=m.balance<=0?T.red:m.balance<m.received_qty*0.2?T.amb:T.grn;
-                        return(
-                          <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 70px 80px 80px 80px 80px",padding:"8px 12px",gap:4,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
-                            <div>
-                              <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{m.material_name}</div>
-                              {m.tasks?.length>0&&<div style={{fontSize:9.5,color:T.t4}}>{m.tasks[0]}{m.tasks.length>1?" +more":""}</div>}
-                            </div>
-                            <div style={{fontSize:11.5,color:T.t3}}>{m.unit||"—"}</div>
-                            <div style={{fontSize:12,fontWeight:600,color:T.t2}}>{m.required_qty||"—"}</div>
-                            <div style={{fontSize:12,fontWeight:600,color:m.received_qty>0?T.grn:T.t3}}>{m.received_qty||0}</div>
-                            <div style={{fontSize:12,fontWeight:600,color:m.used_qty>0?T.amb:T.t3}}>{m.used_qty||0}</div>
-                            <div style={{fontSize:13,fontWeight:700,color:balColor}}>{m.balance||0}</div>
-                          </div>
-                        );
-                      })}
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* RECEIVED VIEW */}
-            {!invLoading&&invView==="received"&&(
-              <div>
-                {grnHistory.length===0&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No GRN entries recorded yet</div>}
-                {grnHistory.map((grn,i)=>(
-                  <div key={grn.id||i} style={{background:T.surface,borderRadius:8,padding:"10px 13px",marginBottom:8,border:"1px solid "+T.b1,borderLeft:"3px solid "+T.grn}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
-                      <div>
-                        <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{grn.grn_number||"GRN"}</div>
-                        <div style={{fontSize:11,color:T.t4,marginTop:2}}>
-                          {grn.vendor_name||"Direct"} · Challan: {grn.challan_no||"—"} · {grn.received_date?new Date(grn.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}
-                        </div>
-                      </div>
-                      <span style={{fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:4,background:T.grnL,color:T.grn}}>Received</span>
-                    </div>
-                    {(grn.items||[]).map((item,j)=>(
-                      <div key={j} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderTop:j===0?"1px solid "+T.b1:"none"}}>
-                        <span style={{fontSize:12,color:T.t2}}>{item.description||item.item_name}</span>
-                        <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{item.received_qty} {item.unit}</span>
-                      </div>
-                    ))}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* USED LOG VIEW */}
-            {!invLoading&&invView==="used"&&(
-              <div>
-                {usedHistory.length===0&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No used log entries yet</div>}
-                {usedHistory.map((u,i)=>(
-                  <div key={u.id||i} style={{background:T.surface,borderRadius:8,padding:"10px 13px",marginBottom:6,border:"1px solid "+T.b1,borderLeft:"3px solid "+T.amb,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{u.material_name}</div>
-                      <div style={{fontSize:11,color:T.t4,marginTop:2}}>
-                        {u.task_name||u.task_no||"—"} · {u.user_name||"Site Team"} · {u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}
-                      </div>
-                      {u.remark&&<div style={{fontSize:10.5,color:T.t3,marginTop:1}}>{u.remark}</div>}
-                    </div>
-                    <div style={{textAlign:"right",flexShrink:0}}>
-                      <div style={{fontSize:13,fontWeight:700,color:T.amb}}>{u.used_qty} {u.unit}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* INVENTORY VIEW */}
-            {!invLoading&&invView==="inventory"&&(
-              <div>
-                {(!invData?.summary||invData.summary.length===0)&&<div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:13}}>No inventory data yet</div>}
-                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:8}}>
-                  {(invData?.summary||[]).map((m,i)=>{
-                    const pct=m.received_qty>0?Math.min(100,Math.round((m.used_qty/m.received_qty)*100)):0;
-                    const balColor=m.balance<=0?T.red:m.balance<m.received_qty*0.2?T.amb:T.grn;
-                    const status=m.balance<=0&&m.received_qty>0?"Exhausted":m.received_qty===0?"Pending":m.balance<m.received_qty*0.2?"Low":"Available";
-                    const statusBg={"Available":T.grnL,"Low":T.ambL,"Exhausted":T.redL,"Pending":T.sltL};
-                    const statusC={"Available":T.grn,"Low":T.amb,"Exhausted":T.red,"Pending":T.slt};
-                    return(
-                      <div key={i} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,padding:"11px 13px",borderTop:"3px solid "+balColor}}>
-                        <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:2}}>{m.material_name}</div>
-                        <div style={{fontSize:10.5,color:T.t4,marginBottom:8}}>{m.unit||"—"}</div>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                          <span style={{fontSize:10,color:T.t4}}>Balance</span>
-                          <span style={{fontSize:15,fontWeight:800,color:balColor}}>{m.balance||0}</span>
-                        </div>
-                        {/* Progress bar: used/received */}
-                        {m.received_qty>0&&(
-                          <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:6}}>
-                            <div style={{height:"100%",width:pct+"%",background:pct>80?T.red:pct>50?T.amb:T.grn,borderRadius:2,transition:"width .4s"}}/>
-                          </div>
-                        )}
-                        <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:T.t4}}>
-                          <span>Rcvd: <b style={{color:T.grn}}>{m.received_qty}</b></span>
-                          <span>Used: <b style={{color:T.amb}}>{m.used_qty}</b></span>
-                        </div>
-                        <span style={{display:"inline-block",marginTop:6,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:4,background:statusBg[status]||T.sltL,color:statusC[status]||T.slt}}>{status}</span>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
