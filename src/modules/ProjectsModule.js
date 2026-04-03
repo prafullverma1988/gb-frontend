@@ -1353,7 +1353,7 @@ function ProjectsPage({onSelectProject}){
       {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
       {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} initTab={approvalInitTab}/>}
-      {showIssuesDrawer&&<IssuesDrawer issues={allIssues} loading={issuesLoading} filter={issueFilter} setFilter={setIssueFilter} onClose={()=>setShowIssuesDrawer(false)}/>}
+      {showIssuesDrawer&&<IssuesDrawer issues={allIssues} loading={issuesLoading} filter={issueFilter} setFilter={setIssueFilter} onClose={()=>setShowIssuesDrawer(false)} onIssueClose={(id)=>setAllIssues(p=>p.map(x=>x.id===id?{...x,status:"Closed"}:x))}/>}
       {settingsOf&&<ProjectSettingsModal
         project={settingsOf}
         onClose={()=>setSettingsOf(null)}
@@ -1454,14 +1454,38 @@ function IssueChat({issueId}){
   );
 }
 
-function IssuesDrawer({issues, loading, filter, setFilter, onClose}){
+function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose}){
   const [expandedChat,setExpandedChat]=useState(null);
   const [fullPhoto,setFullPhoto]=useState(null);
+  const [sortBy,setSortBy]=useState("date");      // date | project | assigned | category
+  const [closingId,setClosingId]=useState(null);
+  const [closeMsg,setCloseMsg]=useState("");
+  const [showCloseFor,setShowCloseFor]=useState(null); // issue id
   const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
   const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
   const FILTERS=["All","Open","In Progress","Resolved","Closed"];
-  const filtered=filter==="All"?issues:issues.filter(i=>i.status===filter);
   const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
+
+  const filtered = (filter==="All"?issues:issues.filter(i=>i.status===filter)).slice().sort((a,b)=>{
+    if(sortBy==="project")  return (a.project_name||"").localeCompare(b.project_name||"");
+    if(sortBy==="assigned") return (a.assigned_to||"").localeCompare(b.assigned_to||"");
+    if(sortBy==="category") return (a.work_category||"").localeCompare(b.work_category||"");
+    return new Date(b.created_at)-new Date(a.created_at);
+  });
+
+  const handleCloseIssue=async(issueId)=>{
+    setClosingId(issueId);
+    try{
+      // Post closing message first if any
+      if(closeMsg.trim()){
+        await api.post("/tasks/issues/"+issueId+"/comments",{text:"[Closed] "+closeMsg.trim()});
+      }
+      const r=await api.put("/tasks/issues/"+issueId,{status:"Closed"});
+      if(r.success){ onIssueClose(issueId); setShowCloseFor(null); setCloseMsg(""); }
+      else alert(r.message||"Failed");
+    }catch(e){alert(e.message);}
+    setClosingId(null);
+  };
 
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
@@ -1475,23 +1499,32 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose}){
     )}
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
       {/* Header */}
-      <div style={{background:"#0F172A",padding:"14px 18px",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+      <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
           <div>
             <div style={{fontSize:15,fontWeight:700,color:"white"}}>Open Issues</div>
-            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{filtered.length} issue{filtered.length!==1?"s":""} · All projects</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>{filtered.length} issue{filtered.length!==1?"s":""} · All projects</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
         {/* Filter tabs */}
-        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:8}}>
           {FILTERS.map(f=>(
             <button key={f} onClick={()=>setFilter(f)}
               style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
-              {f}
-              {f!=="All"&&<span style={{marginLeft:4,fontSize:10}}>{issues.filter(i=>i.status===f).length}</span>}
+              {f}{f!=="All"&&<span style={{marginLeft:4,fontSize:10,opacity:.8}}>{issues.filter(i=>i.status===f).length}</span>}
+            </button>
+          ))}
+        </div>
+        {/* Sort row */}
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:10,color:"rgba(255,255,255,0.35)",whiteSpace:"nowrap"}}>Sort:</span>
+          {[["date","Date"],["project","Project"],["assigned","Assigned"],["category","Category"]].map(([id,lbl])=>(
+            <button key={id} onClick={()=>setSortBy(id)}
+              style={{padding:"3px 9px",borderRadius:12,border:"none",background:sortBy===id?"rgba(255,255,255,.2)":"rgba(255,255,255,.07)",color:sortBy===id?"white":"rgba(255,255,255,.45)",fontSize:10.5,fontWeight:sortBy===id?700:400,cursor:"pointer"}}>
+              {lbl}
             </button>
           ))}
         </div>
@@ -1504,8 +1537,9 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose}){
         {filtered.map(issue=>{
           const pc=priC[issue.priority]||priC["Medium"];
           const ic=issC[issue.status]||issC["Open"];
+          const isClosed=issue.status==="Closed"||issue.status==="Resolved";
           return(
-            <div key={issue.id} style={{background:"white",borderRadius:10,padding:"12px 14px",marginBottom:8,border:"1px solid #E2E8F0",borderLeft:`3px solid ${ic.c}`}}>
+            <div key={issue.id} style={{background:"white",borderRadius:10,padding:"12px 14px",marginBottom:8,border:"1px solid #E2E8F0",borderLeft:`3px solid ${ic.c}`,opacity:isClosed?.7:1}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                 <div style={{fontSize:13,fontWeight:700,color:"#1E293B",flex:1,marginRight:8}}>{issue.title}</div>
                 <div style={{display:"flex",gap:4,flexShrink:0}}>
@@ -1537,9 +1571,33 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose}){
                     <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
                     Chat
                   </button>
+                  {!isClosed&&(
+                    <button onClick={()=>{setShowCloseFor(showCloseFor===issue.id?null:issue.id);setCloseMsg("");}}
+                      style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,border:"1px solid #BBF7D0",background:showCloseFor===issue.id?"#DCFCE7":"white",cursor:"pointer",fontSize:10,color:"#16A34A",fontWeight:600}}>
+                      <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
+                      Close
+                    </button>
+                  )}
                 </div>
               </div>
               {expandedChat===issue.id&&<IssueChat issueId={issue.id}/>}
+              {/* Close Issue section */}
+              {!isClosed&&showCloseFor===issue.id&&(
+                <div style={{marginTop:8,padding:"10px 12px",background:"#F0FDF4",borderRadius:8,border:"1px solid #BBF7D0"}}>
+                  <div style={{fontSize:10.5,fontWeight:600,color:"#16A34A",marginBottom:6}}>Closing message (optional)</div>
+                  <textarea value={closeMsg} onChange={e=>setCloseMsg(e.target.value)} rows={2}
+                    placeholder="Reason for closing / resolution note..."
+                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+                  <div style={{display:"flex",gap:6,marginTop:7}}>
+                    <button onClick={()=>{setShowCloseFor(null);setCloseMsg("");}}
+                      style={{flex:1,padding:"6px",borderRadius:6,background:"white",border:"1px solid #E2E8F0",fontSize:11.5,color:"#64748B",cursor:"pointer",fontWeight:500}}>Cancel</button>
+                    <button onClick={()=>handleCloseIssue(issue.id)} disabled={closingId===issue.id}
+                      style={{flex:2,padding:"6px",borderRadius:6,background:"#16A34A",border:"none",fontSize:11.5,color:"white",cursor:"pointer",fontWeight:700}}>
+                      {closingId===issue.id?"Closing...":"✓ Confirm Close"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
