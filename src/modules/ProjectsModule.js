@@ -1009,7 +1009,11 @@ function ProjectsPage({onSelectProject}){
   const [cardMenu,setCardMenu]=useState(null); // project id with open menu
   const [settingsOf,setSettingsOf]=useState(null); // project object for settings
   const [showApprovals,setShowApprovals]=useState(false);
-  const [approvalInitTab,setApprovalInitTab]=useState("mr"); // which tab to open
+  const [approvalInitTab,setApprovalInitTab]=useState("mr");
+  const [showIssuesDrawer,setShowIssuesDrawer]=useState(false);
+  const [allIssues,setAllIssues]=useState([]);
+  const [issuesLoading,setIssuesLoading]=useState(false);
+  const [issueFilter,setIssueFilter]=useState("Open"); // which tab to open
   const [approvalCount,setApprovalCount]=useState(0);
   const [mrPendingCount,setMrPendingCount]=useState(0);
   const [prPendingCount,setPrPendingCount]=useState(0);
@@ -1038,18 +1042,21 @@ function ProjectsPage({onSelectProject}){
         if(res.success&&res.data){
           setAllProjects(res.data.map(mapProject));
         }else{
+          // Fallback to hardcoded data
           setAllProjects(PROJECTS_DATA);
         }
       }catch(err){
+        console.error("Failed to fetch projects:",err);
         setAllProjects(PROJECTS_DATA);
       }finally{
         setLoading(false);
       }
-      return true;
     };
     fetchProjects().then(()=>{
-      // Load approval counts after projects — non-blocking
-      setTimeout(loadApprovalCounts, 100);
+      loadApprovalCounts();
+      api.get("/tasks/all-issues").then(r=>{
+        if(r.success) setAllIssues(r.data||[]);
+      }).catch(()=>{});
     });
   },[]);
 
@@ -1072,7 +1079,8 @@ function ProjectsPage({onSelectProject}){
     {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalInitTab("mr");setShowApprovals(true);}},
     {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalInitTab("mr");setShowApprovals(true);}},
     {label:"My To-Do",          val:5,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
-    {label:"Open Issues",       val:3,   Icon:IcWarn,  color:T.red,bg:T.redL,bdr:T.redM},
+    {label:"Open Issues", val:allIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length, Icon:IcWarn, color:T.red,bg:T.redL,bdr:T.redM,
+      onClick:()=>{setIssueFilter("Open");setShowIssuesDrawer(true);}},
     {label:"Site Pulse",        val:"LIVE",Icon:IcPulse,color:T.pur,bg:T.purL,bdr:"#C4B5FD",live:true,onClick:()=>setShowPulse(true)},
   ];
 
@@ -1341,6 +1349,7 @@ function ProjectsPage({onSelectProject}){
       {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
       {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} initTab={approvalInitTab}/>}
+      {showIssuesDrawer&&<IssuesDrawer issues={allIssues} loading={issuesLoading} filter={issueFilter} setFilter={setIssueFilter} onClose={()=>setShowIssuesDrawer(false)}/>}
       {settingsOf&&<ProjectSettingsModal
         project={settingsOf}
         onClose={()=>setSettingsOf(null)}
@@ -1382,5 +1391,157 @@ function ProjectsPage({onSelectProject}){
   );
 }
 
+
+// ── Issues Drawer ─────────────────────────────────────────────────────
+function IssueChat({issueId}){
+  const [comments,setComments]=useState([]);
+  const [text,setText]=useState("");
+  const [sending,setSending]=useState(false);
+  const [loaded,setLoaded]=useState(false);
+  const fmtT=d=>d?new Date(d).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}):"";
+  const fmtD=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+  useEffect(()=>{
+    api.get("/tasks/issues/"+issueId+"/comments").then(r=>{
+      if(r.success)setComments(r.data||[]);
+      setLoaded(true);
+    }).catch(()=>setLoaded(true));
+  },[issueId]);
+  const send=async()=>{
+    if(!text.trim())return;
+    setSending(true);
+    const r=await api.post("/tasks/issues/"+issueId+"/comments",{text});
+    if(r.success){setComments(p=>[...p,r.data]);setText("");}
+    setSending(false);
+  };
+  return(
+    <div style={{borderTop:"1px solid #F1F5F9",paddingTop:10,marginTop:8}}>
+      <div style={{fontSize:9.5,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
+        Chat ({comments.length})
+      </div>
+      {!loaded&&<div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"6px 0"}}>Loading...</div>}
+      {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"6px 0"}}>No messages yet</div>}
+      <div style={{maxHeight:160,overflowY:"auto",marginBottom:8}}>
+        {comments.map(c=>(
+          <div key={c.id} style={{display:"flex",gap:7,marginBottom:7,alignItems:"flex-start"}}>
+            <div style={{width:24,height:24,borderRadius:"50%",background:"linear-gradient(135deg,#2563EB,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:9,fontWeight:700,color:"white"}}>
+              {(c.user_name||"?").charAt(0).toUpperCase()}
+            </div>
+            <div style={{flex:1}}>
+              <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:2}}>
+                <span style={{fontSize:10.5,fontWeight:700,color:"#1E293B"}}>{c.user_name||"—"}</span>
+                <span style={{fontSize:9,color:"#94A3B8"}}>{fmtD(c.created_at)} {fmtT(c.created_at)}</span>
+              </div>
+              <div style={{padding:"6px 9px",background:"#F8FAFC",borderRadius:"0 7px 7px 7px",border:"1px solid #E2E8F0",fontSize:12,color:"#334155",lineHeight:1.5}}>{c.text}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <input value={text} onChange={e=>setText(e.target.value)}
+          onKeyDown={e=>e.key==="Enter"&&!e.shiftKey&&send()}
+          placeholder="Type message..."
+          style={{flex:1,padding:"7px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:12,color:"#1E293B",outline:"none",fontFamily:"inherit"}}/>
+        <button onClick={send} disabled={sending||!text.trim()}
+          style={{padding:"7px 12px",borderRadius:7,background:sending||!text.trim()?"#E2E8F0":"#2563EB",color:sending||!text.trim()?"#94A3B8":"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>
+          Send
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function IssuesDrawer({issues, loading, filter, setFilter, onClose}){
+  const [expandedChat,setExpandedChat]=useState(null);
+  const [fullPhoto,setFullPhoto]=useState(null);
+  const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
+  const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
+  const FILTERS=["All","Open","In Progress","Resolved","Closed"];
+  const filtered=filter==="All"?issues:issues.filter(i=>i.status===filter);
+  const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
+    {fullPhoto&&(
+      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
+        <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
+        <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+    )}
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+      {/* Header */}
+      <div style={{background:"#0F172A",padding:"14px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Open Issues</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:2}}>{filtered.length} issue{filtered.length!==1?"s":""} · All projects</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        {/* Filter tabs */}
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {FILTERS.map(f=>(
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
+              {f}
+              {f!=="All"&&<span style={{marginLeft:4,fontSize:10}}>{issues.filter(i=>i.status===f).length}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* List */}
+      <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
+        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading issues...</div>}
+        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found</div>}
+        {filtered.map(issue=>{
+          const pc=priC[issue.priority]||priC["Medium"];
+          const ic=issC[issue.status]||issC["Open"];
+          return(
+            <div key={issue.id} style={{background:"white",borderRadius:10,padding:"12px 14px",marginBottom:8,border:"1px solid #E2E8F0",borderLeft:`3px solid ${ic.c}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#1E293B",flex:1,marginRight:8}}>{issue.title}</div>
+                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                  <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.priority}</span>
+                  <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4}}>{issue.status}</span>
+                </div>
+              </div>
+              {/* Project + Task */}
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:5,flexWrap:"wrap"}}>
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>
+                <span style={{fontSize:11,color:"#475569",fontWeight:600}}>{issue.project_name}</span>
+                <span style={{fontSize:10,color:"#94A3B8"}}>·</span>
+                <span style={{fontSize:11,color:"#64748B"}}>{issue.task_name}</span>
+                {issue.city&&<span style={{fontSize:10,color:"#94A3B8",marginLeft:2}}>· {issue.city}</span>}
+              </div>
+              {/* Photo + Assigned + Category + Chat + Date */}
+              <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",marginBottom:issue.photo_url?8:0}}>
+                {issue.photo_url&&(
+                  <img src={issue.photo_url} alt="issue"
+                    onClick={()=>setFullPhoto(issue.photo_url)}
+                    style={{width:44,height:44,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0",cursor:"zoom-in",flexShrink:0}}/>
+                )}
+                <div style={{flex:1,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                  {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                  {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 7px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                  <span style={{fontSize:10,color:"#94A3B8",marginLeft:"auto"}}>{fmtDate(issue.created_at)}</span>
+                  <button onClick={()=>setExpandedChat(expandedChat===issue.id?null:issue.id)}
+                    style={{display:"flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:5,border:"1px solid #E2E8F0",background:expandedChat===issue.id?"#DBEAFE":"white",cursor:"pointer",fontSize:10,color:expandedChat===issue.id?"#2563EB":"#64748B",fontWeight:600}}>
+                    <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                    Chat
+                  </button>
+                </div>
+              </div>
+              {expandedChat===issue.id&&<IssueChat issueId={issue.id}/>}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </>);
+}
 
 export default ProjectsPage;
