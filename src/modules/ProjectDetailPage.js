@@ -4943,10 +4943,10 @@ function TabMaterial({ project }) {
           if (r.success) setInventory(r.data || []);
           setInvLoaded(true); setInvLoading(false);
         }).catch(() => setInvLoading(false));
-        // Also refresh requests list
+        // Refresh requests list — merge with existing direct GRN entries
         api.get("/procurement/mrs?project_id=" + projectId).then(res2 => {
           if (res2.success && Array.isArray(res2.data)) {
-            setMaterials(res2.data.map(m => ({
+            const mrEntries = res2.data.map(m => ({
               id: m.id, name: m.item_name,
               qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
               stage: m.stage || "Requested",
@@ -4954,7 +4954,12 @@ function TabMaterial({ project }) {
               date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
               vendor: m.linked_vendor || null,
               amt: parseFloat(m.approx_amount) || 0,
-            })));
+            }));
+            // Keep direct GRN entries (isDirect=true) + fresh MR list
+            setMaterials(prev => {
+              const directEntries = prev.filter(m => m.isDirect);
+              return [...directEntries, ...mrEntries];
+            });
           }
         }).catch(() => {});
       } else alert(res.message || "GRN failed");
