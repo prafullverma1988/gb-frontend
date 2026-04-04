@@ -5418,7 +5418,7 @@ function TabMaterial({ project }) {
         <div>
           {ledgerLoading&&<div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>Loading ledger...</div>}
           {!ledgerLoading&&(
-            <>
+            <div>
               {/* Search + Vendor filter */}
               <div style={{display:"flex",gap:8,marginBottom:12}}>
                 <div style={{position:"relative",flex:1}}>
@@ -5539,7 +5539,7 @@ function TabMaterial({ project }) {
                   </div>
                 );
               })}
-            </>
+            </div>
           )}
         </div>
       )}
@@ -5558,7 +5558,7 @@ function TabMaterial({ project }) {
             </div>
           )}
           {!invLoading&&inventory.length>0&&(
-            <>
+            <div>
               {/* Summary stats */}
               <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9,marginBottom:14}}>
                 {[
@@ -5672,7 +5672,7 @@ function TabMaterial({ project }) {
                   );
                 })}
               </div>
-            </>
+            </div>
           )}
         </div>
       )}
