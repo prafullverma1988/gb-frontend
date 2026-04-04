@@ -4846,7 +4846,7 @@ function TabMaterial({ project }) {
               directEntries.push({
                 id: "d-" + g.id + "-" + i,
                 name: item.description || item.item_name || "Material",
-                qty: (item.received_qty || 0) + " " + (item.unit || ""),
+                qty: (Number.isInteger(Number(item.received_qty)) ? Number(item.received_qty) : parseFloat(item.received_qty||0)) + " " + (item.unit || ""),
                 stage: "Received",
                 by: g.received_by || "Site",
                 date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
