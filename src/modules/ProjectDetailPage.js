@@ -5184,7 +5184,6 @@ function TabMaterial({ project }) {
         </>)}
 
         {/* GRN MODAL */}
-        {showGRN&&(<>        {/* GRN MODAL */}
         {showGRN&&(<>
           <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:400,backdropFilter:"blur(2px)"}}/>
           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:401,width:580,maxHeight:"85vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
@@ -5409,7 +5408,6 @@ function TabMaterial({ project }) {
             {filtered.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4}}>No materials found</div>}
           </Panel>
         )}
-      </>)}
       </>)}
 
       {/* ══════════════════════════════════════════════════════
