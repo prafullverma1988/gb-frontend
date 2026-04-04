@@ -4789,6 +4789,12 @@ function TabMaterial({ project }) {
   const [grnDone, setGrnDone] = useState([]);
   const [directGrns, setDirectGrns] = useState([]); // Direct GRNs without MR
   const [vendorList, setVendorList] = useState([]);
+  const [usedLog, setUsedLog] = useState([]);
+  const [usedLogLoading, setUsedLogLoading] = useState(false);
+  const [showUsedLog, setShowUsedLog] = useState(false);
+  const [invExpandedMat, setInvExpandedMat] = useState(null);
+  const [invUsedForm, setInvUsedForm] = useState({});
+  const [invUsedSaving, setInvUsedSaving] = useState(false);
   const UNITS_MR = ["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT","Brass"];
   const [matLibReal, setMatLibReal] = useState([]);
   const MAT_LIB = matLibReal.map(m => m.name);
@@ -5113,7 +5119,18 @@ function TabMaterial({ project }) {
           {stageData.map((s,i)=>{
             const isA=fStage===s.stage;
             return(
-              <div key={s.stage} onClick={()=>setFStage(isA?"All":s.stage)}
+              <div key={s.stage} onClick={()=>{
+                if(s.stage==="Used"){
+                  setUsedLogLoading(true);
+                  setShowUsedLog(true);
+                  api.get("/tasks/project/"+projectId+"/used-history").then(r=>{
+                    if(r.success) setUsedLog(r.data||[]);
+                    setUsedLogLoading(false);
+                  }).catch(()=>setUsedLogLoading(false));
+                } else {
+                  setFStage(isA?"All":s.stage);
+                }
+              }}
                 style={{padding:"9px 12px",background:isA?s.bg:T.surface,border:"1.5px solid "+(isA?s.c:T.b1),borderRadius:8,borderTop:"3px solid "+s.c,cursor:"pointer",transition:"all .15s",textAlign:"center"}}>
                 {i>0&&<div style={{display:"flex",justifyContent:"center",marginBottom:3}}>
                   <svg width={12} height={8} viewBox="0 0 12 8" fill="none"><path d="M1 4h8M6 1l3 3-3 3" stroke={isA?s.c:T.b2} strokeWidth={1.5} strokeLinecap="round"/></svg>
@@ -5125,7 +5142,49 @@ function TabMaterial({ project }) {
           })}
         </div>
 
+        {/* USED LOG DRAWER */}
+        {showUsedLog&&(<>
+          <div onClick={()=>setShowUsedLog(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+          <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+            <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+                <div style={{fontSize:15,fontWeight:700,color:"white"}}>Material Used Log</div>
+                <button onClick={()=>setShowUsedLog(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{projectName} · {usedLog.length} entries</div>
+            </div>
+            <div style={{flex:1,overflowY:"auto"}}>
+              {usedLogLoading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>Loading...</div>}
+              {!usedLogLoading&&usedLog.length===0&&<div style={{textAlign:"center",padding:"60px",color:T.t4,fontSize:13}}>No used entries yet — go to Inventory tab to mark used</div>}
+              {!usedLogLoading&&usedLog.length>0&&(
+                <div>
+                  <div style={{display:"grid",gridTemplateColumns:"85px 1fr 70px 100px 1fr",background:"#1E293B",padding:"7px 16px",gap:8}}>
+                    {["Date","Material","Qty","Used By","Remark"].map(h=>(
+                      <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
+                    ))}
+                  </div>
+                  {usedLog.map((u,i)=>(
+                    <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 70px 100px 1fr",padding:"10px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
+                      <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
+                      <div>
+                        <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{u.material_name}</div>
+                        {u.task_name&&<div style={{fontSize:10,color:T.t4}}>{u.task_no} {u.task_name}</div>}
+                      </div>
+                      <div style={{fontSize:13,fontWeight:700,color:T.amb}}>{u.used_qty} <span style={{fontSize:9,color:T.t4}}>{u.unit}</span></div>
+                      <div style={{fontSize:11.5,color:T.t2}}>{u.user_name||"Site"}</div>
+                      <div style={{fontSize:11,color:T.t3}}>{u.remark||"—"}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </>)}
+
         {/* GRN MODAL */}
+        {showGRN&&(<>        {/* GRN MODAL */}
         {showGRN&&(<>
           <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:400,backdropFilter:"blur(2px)"}}/>
           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:401,width:580,maxHeight:"85vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
@@ -5522,10 +5581,16 @@ function TabMaterial({ project }) {
                   const pct=rec>0?Math.min(100,Math.round((used/rec)*100)):0;
                   const stC=item.status==="Exhausted"?T.red:item.status==="Low"?T.amb:T.grn;
                   const stBg=item.status==="Exhausted"?T.redL:item.status==="Low"?T.ambL:T.grnL;
+                  const isExpanded = invExpandedMat===item.material_name;
+                  const today = new Date().toISOString().split("T")[0];
+                  const uForm = invUsedForm[item.material_name]||{qty:"",remark:"",used_date:today};
                   return(
-                    <div key={i} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,padding:"11px 13px",borderTop:"3px solid "+stC}}>
-                      <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:1}}>{item.material_name}</div>
-                      <div style={{fontSize:10,color:T.t4,marginBottom:10}}>{item.unit}</div>
+                    <div key={i} style={{background:T.surface,borderRadius:9,border:"1.5px solid "+(isExpanded?T.grn:T.b1),padding:"11px 13px",borderTop:"3px solid "+stC,transition:"border .2s"}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:1}}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{item.material_name}</div>
+                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stBg,color:stC}}>{item.status}</span>
+                      </div>
+                      <div style={{fontSize:10,color:T.t4,marginBottom:8}}>{item.unit}</div>
                       <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
                         <div style={{textAlign:"center"}}>
                           <div style={{fontSize:15,fontWeight:800,color:T.grn}}>{rec}</div>
@@ -5540,10 +5605,69 @@ function TabMaterial({ project }) {
                           <div style={{fontSize:8.5,color:T.t4}}>Balance</div>
                         </div>
                       </div>
-                      {rec>0&&<div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:6}}>
+                      {rec>0&&<div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:8}}>
                         <div style={{height:"100%",width:pct+"%",background:pct>=100?T.red:pct>60?T.amb:T.grn,borderRadius:2,transition:"width .4s"}}/>
                       </div>}
-                      <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stBg,color:stC}}>{item.status}</span>
+                      {/* Mark Used button */}
+                      {bal>0&&<button onClick={()=>{
+                        setInvExpandedMat(isExpanded?null:item.material_name);
+                        if(!isExpanded) setInvUsedForm(p=>({...p,[item.material_name]:{qty:"",remark:"",used_date:today}}));
+                      }}
+                        style={{width:"100%",padding:"5px",borderRadius:6,border:"1.5px solid "+(isExpanded?T.grn:T.grnM),background:isExpanded?T.grn:T.grnL,color:isExpanded?"white":T.grn,fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:isExpanded?8:0,transition:"all .15s"}}>
+                        {isExpanded?"▲ Cancel":"▼ Mark Used"}
+                      </button>}
+                      {/* Inline form */}
+                      {isExpanded&&bal>0&&(
+                        <div style={{borderTop:"1px solid "+T.grnM,paddingTop:8}}>
+                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:7}}>
+                            <div>
+                              <label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Qty Used *</label>
+                              <input type="number" value={uForm.qty}
+                                onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,qty:e.target.value}}))}
+                                placeholder={"max "+bal}
+                                style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:13,fontWeight:700,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                            </div>
+                            <div>
+                              <label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Date</label>
+                              <input type="date" value={uForm.used_date}
+                                onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,used_date:e.target.value}}))}
+                                style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                            </div>
+                          </div>
+                          <input value={uForm.remark}
+                            onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,remark:e.target.value}}))}
+                            placeholder="Remark (optional)"
+                            style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:7}}/>
+                          <button onClick={async()=>{
+                            if(!uForm.qty||parseFloat(uForm.qty)<=0) return alert("Qty required");
+                            if(parseFloat(uForm.qty)>bal) return alert("Qty exceeds balance ("+bal+")");
+                            setInvUsedSaving(item.material_name);
+                            try{
+                              const res=await api.post("/tasks/project/"+projectId+"/mark-used",{
+                                material_name:item.material_name,
+                                used_qty:parseFloat(uForm.qty),
+                                unit:item.unit,
+                                remark:uForm.remark||null,
+                                used_date:uForm.used_date,
+                              });
+                              if(res.success){
+                                setInvExpandedMat(null);
+                                // Reload inventory
+                                setInvLoading(true);
+                                api.get("/tasks/project/"+projectId+"/inventory").then(r=>{
+                                  if(r.success)setInventory(r.data||[]);
+                                  setInvLoading(false);
+                                });
+                                setLedgerLoaded(false);
+                              } else alert(res.message||"Failed");
+                            }catch(e){alert(e.message);}
+                            setInvUsedSaving(null);
+                          }} disabled={invUsedSaving===item.material_name}
+                            style={{width:"100%",padding:"7px",borderRadius:6,background:invUsedSaving===item.material_name?T.b1:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+                            {invUsedSaving===item.material_name?"Saving...":"✓ Save Used Entry"}
+                          </button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
