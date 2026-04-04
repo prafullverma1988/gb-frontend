@@ -4818,7 +4818,7 @@ function TabMaterial({ project }) {
     }).catch(() => {});
   }, [projectId]);
 
-  const loadMRs = (keepDirect=true) => {
+  const loadMRs = () => {
     api.get("/procurement/mrs?project_id=" + projectId)
       .then(res => {
         if (res.success && Array.isArray(res.data)) {
@@ -4831,21 +4831,18 @@ function TabMaterial({ project }) {
             vendor: m.linked_vendor || null,
             amt: parseFloat(m.approx_amount) || 0,
           }));
-          if (keepDirect) {
-            setMaterials(prev => {
-              const direct = prev.filter(m => m.isDirect);
-              return [...direct, ...mrEntries];
-            });
-          } else {
-            setMaterials(mrEntries);
-          }
+          // Always preserve isDirect entries on top
+          setMaterials(prev => {
+            const direct = prev.filter(m => m.isDirect);
+            return [...direct, ...mrEntries];
+          });
         }
       }).catch(() => {});
   };
 
   useEffect(() => {
     if (!projectId) return;
-    loadMRs(false);
+    loadMRs();
   }, [projectId]);
 
   // Load ledger on tab switch
@@ -4915,48 +4912,57 @@ function TabMaterial({ project }) {
     setGrnSaving(true);
     try {
       const res = await api.post("/procurement/grns", {
-        po_id: null, vendor_name: validRows[0].vendor || null,
-        project_id: projectId, project_name: projectName,
+        po_id: null,
+        vendor_name: validRows[0].vendor || null,
+        project_id: projectId,
+        project_name: projectName,
         challan_no: validRows[0].challan,
         received_by: validRows[0].received_by || null,
         received_date: new Date().toISOString().split("T")[0],
         items: validRows.map(r => ({
-          po_item_id: null, description: r.item_name,
-          ordered_qty: parseFloat(r.qty), received_qty: parseFloat(r.qty), unit: r.unit || "Bags",
+          po_item_id: null,
+          description: r.item_name,
+          ordered_qty: parseFloat(r.qty),
+          received_qty: parseFloat(r.qty),
+          unit: r.unit || "Bags",
         })),
       });
       if (res.success) {
-        alert("GRN created: " + res.grn_number);
         setShowGRN(false);
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
-        // Add direct GRN items to materials list as "Received" stage
-        const newMatEntries = validRows.map((r,i) => ({
-          id: "direct-"+Date.now()+i,
+        // Add to materials list as Received — persists in UI
+        const today = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
+        const newEntries = validRows.map((r, i) => ({
+          id: "d-" + Date.now() + i,
           name: r.item_name,
-          qty: r.qty + " " + (r.unit||"Bags"),
+          qty: r.qty + " " + (r.unit || "Bags"),
           stage: "Received",
           by: r.received_by || "Site",
-          date: new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+          date: today,
           vendor: r.vendor || null,
           amt: 0,
           isDirect: true,
           challan: r.challan,
           grn_number: res.grn_number,
         }));
-        setMaterials(prev => [...newMatEntries, ...prev]);
-        // Directly reload ledger + inventory data
+        setMaterials(prev => [...newEntries, ...prev]);
+        // Reload ledger + inventory
         setLedgerLoading(true);
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
           if (r.success) setLedger(r.data || []);
-          setLedgerLoaded(true); setLedgerLoading(false);
+          setLedgerLoaded(true);
+          setLedgerLoading(false);
         }).catch(() => setLedgerLoading(false));
         setInvLoading(true);
         api.get("/tasks/project/" + projectId + "/inventory").then(r => {
           if (r.success) setInventory(r.data || []);
-          setInvLoaded(true); setInvLoading(false);
+          setInvLoaded(true);
+          setInvLoading(false);
         }).catch(() => setInvLoading(false));
-        loadMRs(true);
-      } else alert(res.message || "GRN failed");
+        alert("GRN created: " + res.grn_number);
+      } else {
+        alert(res.message || "GRN failed");
+      }
     } catch(e) { alert(e.message); }
     setGrnSaving(false);
   };
