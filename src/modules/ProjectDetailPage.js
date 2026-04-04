@@ -4819,10 +4819,13 @@ function TabMaterial({ project }) {
   }, [projectId]);
 
   const loadMRs = () => {
-    api.get("/procurement/mrs?project_id=" + projectId)
-      .then(res => {
-        if (res.success && Array.isArray(res.data)) {
-          const mrEntries = res.data.map(m => ({
+    // Fetch both MRs and direct GRNs (no linked MR) in parallel
+    Promise.all([
+      api.get("/procurement/mrs?project_id=" + projectId),
+      api.get("/procurement/grns?project_id=" + projectId),
+    ]).then(([mrRes, grnRes]) => {
+      const mrEntries = (mrRes.success && Array.isArray(mrRes.data))
+        ? mrRes.data.map(m => ({
             id: m.id, name: m.item_name,
             qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
             stage: m.stage || "Requested",
@@ -4830,14 +4833,35 @@ function TabMaterial({ project }) {
             date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
             vendor: m.linked_vendor || null,
             amt: parseFloat(m.approx_amount) || 0,
-          }));
-          // Always preserve isDirect entries on top
-          setMaterials(prev => {
-            const direct = prev.filter(m => m.isDirect);
-            return [...direct, ...mrEntries];
+          }))
+        : [];
+
+      // Direct GRNs = grn_entries with po_id=null (no PO/MR linked)
+      const directEntries = [];
+      if (grnRes.success && Array.isArray(grnRes.data)) {
+        grnRes.data
+          .filter(g => !g.po_id && !g.linked_mr_id)
+          .forEach(g => {
+            (g.items || []).forEach((item, i) => {
+              directEntries.push({
+                id: "d-" + g.id + "-" + i,
+                name: item.description || item.item_name || "Material",
+                qty: (item.received_qty || 0) + " " + (item.unit || ""),
+                stage: "Received",
+                by: g.received_by || "Site",
+                date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+                vendor: g.vendor_name || null,
+                amt: 0,
+                isDirect: true,
+                challan: g.challan_no,
+                grn_number: g.grn_number,
+              });
+            });
           });
-        }
-      }).catch(() => {});
+      }
+
+      setMaterials([...directEntries, ...mrEntries]);
+    }).catch(() => {});
   };
 
   useEffect(() => {
@@ -4930,22 +4954,8 @@ function TabMaterial({ project }) {
       if (res.success) {
         setShowGRN(false);
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
-        // Add to materials list as Received — persists in UI
-        const today = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
-        const newEntries = validRows.map((r, i) => ({
-          id: "d-" + Date.now() + i,
-          name: r.item_name,
-          qty: r.qty + " " + (r.unit || "Bags"),
-          stage: "Received",
-          by: r.received_by || "Site",
-          date: today,
-          vendor: r.vendor || null,
-          amt: 0,
-          isDirect: true,
-          challan: r.challan,
-          grn_number: res.grn_number,
-        }));
-        setMaterials(prev => [...newEntries, ...prev]);
+        // Reload MRs + direct GRNs + ledger + inventory
+        loadMRs();
         // Reload ledger + inventory
         setLedgerLoading(true);
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
