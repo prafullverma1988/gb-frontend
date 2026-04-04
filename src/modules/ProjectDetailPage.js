@@ -5488,8 +5488,8 @@ function TabMaterial({ project }) {
                       <div style={{overflowX:"auto"}}>
                         {/* Column headers */}
                         <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",background:"#1E293B",padding:"7px 14px",gap:8,minWidth:900}}>
-                          {["Date","Vendor","Challan","Remark / Task","Ref#","Cr (In)","Dr (Out)","Balance","By"].map(h=>(
-                            <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".5px"}}>{h}</div>
+                          {["Date","Vendor","Challan","Remark / Task","Ref#","Cr (In)","Dr (Out)","Balance","By"].map((h,hi)=>(
+                            <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".5px",textAlign:hi>=5&&hi<=7?"right":"left"}}>{h}</div>
                           ))}
                         </div>
 
