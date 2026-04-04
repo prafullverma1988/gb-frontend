@@ -5437,102 +5437,109 @@ function TabMaterial({ project }) {
               {ledgerFiltered.map((mat,mi)=>{
                 const isOpen=expandedMat===mat.material_name;
                 const balColor=mat.balance<=0?T.red:mat.balance<mat.total_received*0.2?T.amb:T.grn;
+
+                // Build chronological rows with running balance
+                const allRows=[];
+                let runBal=0;
+                const allEntries=[
+                  ...(mat.receipts||[]).map(r=>({...r,_type:"grn",_date:new Date(r.received_date||0)})),
+                  ...(mat.usage||[]).map(u=>({...u,_type:"used",_date:new Date(u.used_date||0)})),
+                ].sort((a,b)=>a._date-b._date);
+                allEntries.forEach((e,i)=>{
+                  if(e._type==="grn"){
+                    runBal+=Number(e.qty||0);
+                    allRows.push({...e,runBal,idx:i});
+                  } else {
+                    runBal-=Number(e.qty||0);
+                    allRows.push({...e,runBal,idx:i});
+                  }
+                });
+
                 return(
-                  <div key={mat.material_name} style={{marginBottom:8,background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+                  <div key={mat.material_name} style={{marginBottom:10,background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
                     {/* Accordion header */}
                     <div onClick={()=>setExpandedMat(isOpen?null:mat.material_name)}
-                      style={{padding:"11px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:12,background:isOpen?"#1E293B":T.surface,transition:"background .15s"}}
-                      onMouseEnter={e=>{if(!isOpen)e.currentTarget.style.background=T.surfaceB}}
-                      onMouseLeave={e=>{if(!isOpen)e.currentTarget.style.background=T.surface}}>
-                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={isOpen?"#94A3B8":T.t3} strokeWidth={2}><path d={isOpen?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"}/></svg>
-                      <div style={{flex:1}}>
-                        <div style={{fontSize:13.5,fontWeight:700,color:isOpen?"white":T.t1}}>{mat.material_name}</div>
-                        <div style={{fontSize:10.5,color:isOpen?"rgba(255,255,255,0.4)":T.t4,marginTop:1}}>{mat.unit} · {mat.receipts.length} GRN · {mat.usage.length} used entries</div>
+                      style={{padding:"11px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",background:isOpen?"#0F172A":T.surface,transition:"background .15s"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={isOpen?"white":T.t3} strokeWidth={2.5} style={{transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}><path d="M9 18l6-6-6-6"/></svg>
+                        <div>
+                          <span style={{fontSize:13,fontWeight:700,color:isOpen?"white":T.t1}}>{mat.material_name}</span>
+                          <span style={{fontSize:10.5,color:isOpen?"rgba(255,255,255,0.5)":T.t4,marginLeft:8}}>{mat.unit} · {mat.receipts?.length||0} GRN · {mat.usage?.length||0} used entries</span>
+                        </div>
                       </div>
-                      {/* Quick stats */}
-                      <div style={{display:"flex",gap:12,flexShrink:0}}>
+                      <div style={{display:"flex",gap:20,alignItems:"center"}}>
                         <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:11,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Received</div>
+                          <div style={{fontSize:10,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Received</div>
                           <div style={{fontSize:14,fontWeight:700,color:isOpen?"#4ADE80":T.grn}}>{mat.total_received}</div>
                         </div>
                         <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:11,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Used</div>
+                          <div style={{fontSize:10,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Used</div>
                           <div style={{fontSize:14,fontWeight:700,color:isOpen?"#FCD34D":T.amb}}>{mat.total_used}</div>
                         </div>
                         <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:11,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Balance</div>
-                          <div style={{fontSize:14,fontWeight:700,color:isOpen?"white":balColor}}>{mat.balance}</div>
+                          <div style={{fontSize:10,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Balance</div>
+                          <div style={{fontSize:14,fontWeight:800,color:mat.balance<=0?"#F87171":isOpen?"white":balColor}}>{mat.balance}</div>
                         </div>
                       </div>
                     </div>
 
-                    {/* Expanded content */}
+                    {/* Finance-style ledger table */}
                     {isOpen&&(
-                      <div style={{padding:"12px 14px"}}>
-                        {/* Receipts */}
-                        {mat.receipts.length>0&&(
-                          <div style={{marginBottom:14}}>
-                            <div style={{fontSize:10,fontWeight:700,color:T.grn,textTransform:"uppercase",letterSpacing:".5px",marginBottom:7,display:"flex",alignItems:"center",gap:6}}>
-                              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                              GRN RECEIVED ({mat.receipts.length})
-                            </div>
-                            <div style={{background:"white",borderRadius:8,overflow:"hidden",border:"1px solid "+T.b1}}>
-                              <div style={{display:"grid",gridTemplateColumns:"90px 1fr 80px 100px 100px 60px",background:"#F8FAFC",padding:"6px 12px",gap:8}}>
-                                {["Date","Vendor / Challan","Qty","GRN No.","Received By",""].map(h=>(
-                                  <div key={h} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
-                                ))}
-                              </div>
-                              {mat.receipts.map((r,i)=>(
-                                <div key={i} style={{display:"grid",gridTemplateColumns:"90px 1fr 80px 100px 100px 60px",padding:"8px 12px",gap:8,borderTop:"1px solid "+T.b1,alignItems:"center",
-                                  background:i%2===0?"white":T.surface}}>
-                                  <div style={{fontSize:11.5,color:T.t2,fontWeight:500}}>{fmtDate(r.received_date)}</div>
-                                  <div>
-                                    <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{r.vendor_name}</div>
-                                    <div style={{fontSize:10.5,color:T.t4}}>Challan: {r.challan_no}</div>
-                                  </div>
-                                  <div style={{fontSize:13,fontWeight:700,color:T.grn}}>{r.qty} <span style={{fontSize:9,color:T.t4}}>{r.unit}</span></div>
-                                  <div style={{fontSize:10.5,color:T.blu,fontFamily:"monospace"}}>{r.grn_number}</div>
-                                  <div style={{fontSize:11.5,color:T.t2}}>{r.received_by}</div>
-                                  <div/>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
+                      <div style={{overflowX:"auto"}}>
+                        {/* Column headers */}
+                        <div style={{display:"grid",gridTemplateColumns:"90px 130px 100px minmax(120px,1fr) 90px 80px 80px 90px 100px",background:"#1E293B",padding:"7px 14px",gap:8,minWidth:900}}>
+                          {["Date","Vendor","Challan","Remark / Task","Ref#","Cr (In)","Dr (Out)","Balance","By"].map(h=>(
+                            <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".5px"}}>{h}</div>
+                          ))}
+                        </div>
 
-                        {/* Usage */}
-                        {mat.usage.length>0&&(
-                          <div>
-                            <div style={{fontSize:10,fontWeight:700,color:T.amb,textTransform:"uppercase",letterSpacing:".5px",marginBottom:7,display:"flex",alignItems:"center",gap:6}}>
-                              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.amb} strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h4"/></svg>
-                              USED ENTRIES ({mat.usage.length})
-                            </div>
-                            <div style={{background:"white",borderRadius:8,overflow:"hidden",border:"1px solid "+T.b1}}>
-                              <div style={{display:"grid",gridTemplateColumns:"90px 1fr 80px 100px 1fr",background:"#F8FAFC",padding:"6px 12px",gap:8}}>
-                                {["Date","Task","Qty","Used By","Remark"].map(h=>(
-                                  <div key={h} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
-                                ))}
+                        {/* Rows */}
+                        {allRows.length===0&&(
+                          <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>No entries yet</div>
+                        )}
+                        {allRows.map((row,ri)=>{
+                          const isGRN=row._type==="grn";
+                          const balNeg=row.runBal<0;
+                          const balLow=row.runBal>=0&&row.runBal<mat.total_received*0.2;
+                          const balColor=balNeg?T.red:balLow?T.amb:T.grn;
+                          const dateStr=row._date?row._date.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—";
+                          return(
+                            <div key={ri} style={{display:"grid",gridTemplateColumns:"90px 130px 100px minmax(120px,1fr) 90px 80px 80px 90px 100px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:900,borderLeft:"3px solid "+(isGRN?T.grn:T.amb)}}>
+                              {/* Date */}
+                              <div style={{fontSize:11.5,color:T.t3,fontWeight:500}}>{dateStr}</div>
+                              {/* Vendor */}
+                              <div style={{fontSize:12,color:T.t2,fontWeight:isGRN?500:400}}>{isGRN?(row.vendor_name||"—"):"—"}</div>
+                              {/* Challan */}
+                              <div style={{fontSize:11,color:T.blu,fontFamily:"monospace"}}>{isGRN?(row.challan_no||"—"):"—"}</div>
+                              {/* Remark/Task */}
+                              <div style={{fontSize:12,color:T.t1}}>
+                                {isGRN
+                                  ? <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>GRN Received</span>
+                                  : <span>{row.task_name?<span style={{fontSize:10,color:T.t4,marginRight:4}}>{row.task_no}</span>:""}{row.task_name||""}{row.remark?<span style={{color:T.t3}}>{row.task_name?" · ":""}{row.remark}</span>:<span style={{color:T.t4,fontSize:10}}>{!row.task_name?"Project level":""}</span>}</span>
+                                }
                               </div>
-                              {mat.usage.map((u,i)=>(
-                                <div key={i} style={{display:"grid",gridTemplateColumns:"90px 1fr 80px 100px 1fr",padding:"8px 12px",gap:8,borderTop:"1px solid "+T.b1,alignItems:"center",
-                                  background:i%2===0?"white":T.surface}}>
-                                  <div style={{fontSize:11.5,color:T.t2,fontWeight:500}}>{fmtDate(u.used_date)}</div>
-                                  <div>
-                                    <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{u.task_name}</div>
-                                    <div style={{fontSize:10,color:T.t4,fontFamily:"monospace"}}>{u.task_no}</div>
-                                  </div>
-                                  <div style={{fontSize:13,fontWeight:700,color:T.amb}}>{u.qty} <span style={{fontSize:9,color:T.t4}}>{u.unit}</span></div>
-                                  <div style={{fontSize:11.5,color:T.t2}}>{u.used_by}</div>
-                                  <div style={{fontSize:11,color:T.t3}}>{u.remark||"—"}</div>
-                                </div>
-                              ))}
+                              {/* Ref# */}
+                              <div style={{fontSize:11,fontWeight:700,color:isGRN?T.grn:T.amb,fontFamily:"monospace"}}>{isGRN?(row.grn_number||"—"):("USE-"+(ri+1))}</div>
+                              {/* Cr (In) */}
+                              <div style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>{isGRN?row.qty:"—"}</div>
+                              {/* Dr (Out) */}
+                              <div style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>{!isGRN?row.qty:"—"}</div>
+                              {/* Running Balance */}
+                              <div style={{fontSize:13,fontWeight:800,color:balColor,textAlign:"right",background:balNeg?T.redL:"transparent",borderRadius:4,padding:"1px 4px"}}>{row.runBal}</div>
+                              {/* By */}
+                              <div style={{fontSize:11.5,color:T.t2}}>{isGRN?(row.received_by||"—"):(row.used_by||row.user_name||"—")}</div>
                             </div>
-                          </div>
-                        )}
+                          );
+                        })}
 
-                        {mat.receipts.length===0&&mat.usage.length===0&&(
-                          <div style={{textAlign:"center",padding:"20px 0",color:T.t4,fontSize:12}}>No data available</div>
-                        )}
+                        {/* Footer summary */}
+                        <div style={{display:"grid",gridTemplateColumns:"90px 130px 100px minmax(120px,1fr) 90px 80px 80px 90px 100px",padding:"8px 14px",gap:8,background:"#0F172A",minWidth:900,borderTop:"2px solid "+T.b1}}>
+                          <div style={{gridColumn:"1/6",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px"}}>Total</div>
+                          <div style={{fontSize:13,fontWeight:800,color:"#4ADE80",textAlign:"right"}}>{mat.total_received}</div>
+                          <div style={{fontSize:13,fontWeight:800,color:"#F87171",textAlign:"right"}}>{mat.total_used}</div>
+                          <div style={{fontSize:13,fontWeight:800,color:mat.balance<=0?"#F87171":"#4ADE80",textAlign:"right"}}>{mat.balance}</div>
+                          <div/>
+                        </div>
                       </div>
                     )}
                   </div>
