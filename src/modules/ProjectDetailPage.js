@@ -5410,6 +5410,7 @@ function TabMaterial({ project }) {
           </Panel>
         )}
       </>)}
+      </>)}
 
       {/* ══════════════════════════════════════════════════════
           TAB 2: MATERIAL LEDGER
