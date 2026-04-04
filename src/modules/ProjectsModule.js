@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api from "../config/api";
+import apiCache from "../utils/apiCache";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -286,6 +287,7 @@ function NewProjectModal({onClose,onCreated}){
         end_date:form.end_date||null,
       });
       if(res.success&&res.data){
+        apiCache.invalidate("projects");
         onCreated(mapProject(res.data));
         onClose();
       }else{
@@ -491,6 +493,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
       };
       const res = await api.put("/projects/"+project.id, payload);
       if(res.success) {
+        apiCache.invalidate("projects");
         onUpdated(mapProject(res.data));
         onClose();
       } else {
@@ -504,7 +507,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     setSaving(true);
     try {
       const res = await api.patch("/projects/"+project.id+"/archive", { archived: true });
-      if(res.success){ onDeleted(project.id,"archived"); onClose(); }
+      if(res.success){ apiCache.invalidate("projects"); onDeleted(project.id,"archived"); onClose(); }
       else setError(res.message||"Archive failed");
     } catch(e) { setError(e.message); }
     finally { setSaving(false); }
@@ -515,7 +518,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     setSaving(true);
     try {
       const res = await api.del("/projects/"+project.id);
-      if(res.success){ onDeleted(project.id,"deleted"); onClose(); }
+      if(res.success){ apiCache.invalidate("projects"); onDeleted(project.id,"deleted"); onClose(); }
       else setError(res.message||"Delete failed");
     } catch(e) { setError(e.message); }
     finally { setSaving(false); }
@@ -1020,6 +1023,14 @@ function ProjectsPage({onSelectProject}){
 
   // Load real approval counts
   const loadApprovalCounts=async()=>{
+    // Check cache first
+    const cached = apiCache.get("approval-counts");
+    if(cached){
+      setMrPendingCount(cached.mrCount);
+      setPrPendingCount(cached.prCount);
+      setApprovalCount(cached.mrCount+cached.prCount);
+      return;
+    }
     try{
       const [mrRes,prRes]=await Promise.all([
         api.get("/procurement/mrs?mr_status=Pending"),
@@ -1027,6 +1038,7 @@ function ProjectsPage({onSelectProject}){
       ]);
       const mrCount=(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested").length;
       const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
+      apiCache.set("approval-counts",{mrCount,prCount},30000); // 30 sec cache
       setMrPendingCount(mrCount);
       setPrPendingCount(prCount);
       setApprovalCount(mrCount+prCount);
@@ -1036,13 +1048,31 @@ function ProjectsPage({onSelectProject}){
   // Fetch projects from backend
   useEffect(()=>{
     const fetchProjects=async()=>{
+      // Check cache — show instantly if available
+      const cached = apiCache.get("projects");
+      if(cached){
+        setAllProjects(cached);
+        setLoading(false);
+        // Silently refresh in background
+        try{
+          const res=await api.get("/projects");
+          if(res.success&&res.data){
+            const fresh=res.data.map(mapProject);
+            apiCache.set("projects",fresh,60000);
+            setAllProjects(fresh);
+          }
+        }catch(err){}
+        return;
+      }
+      // No cache — normal fetch with loading spinner
       try{
         setLoading(true);
         const res=await api.get("/projects");
         if(res.success&&res.data){
-          setAllProjects(res.data.map(mapProject));
+          const mapped=res.data.map(mapProject);
+          apiCache.set("projects",mapped,60000); // 60 sec cache
+          setAllProjects(mapped);
         }else{
-          // Fallback to hardcoded data
           setAllProjects(PROJECTS_DATA);
         }
       }catch(err){
@@ -1053,9 +1083,16 @@ function ProjectsPage({onSelectProject}){
       }
     };
     fetchProjects().then(()=>{ loadApprovalCounts(); });
-    // Load issues independently — don't wait for projects
+    // Load issues independently — check cache first
+    const cachedIssues = apiCache.get("all-issues");
+    if(cachedIssues){
+      setAllIssues(cachedIssues);
+    }
     api.get("/tasks/all-issues").then(r=>{
-      if(r.success) setAllIssues(r.data||[]);
+      if(r.success){
+        apiCache.set("all-issues",r.data||[],60000);
+        setAllIssues(r.data||[]);
+      }
     }).catch(()=>{});
   },[]);
 

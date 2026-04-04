@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import api, { getUser, getToken, clearAuth } from "./config/api";
+import apiCache from "./utils/apiCache";
 import FinanceModule from "./modules/FinanceModule";
 import ProcurementModule from "./modules/ProcurementModule";
 import DesignModule from "./modules/DesignModule";
@@ -542,7 +543,7 @@ export default function App(){
   },[loggedIn]);
 
   const handleLogin=(userData)=>{setUser(userData);};
-  const handleLogout=()=>{clearAuth();setUser(null);setEnabledModules(null);};
+  const handleLogout=()=>{apiCache.clear();clearAuth();setUser(null);setEnabledModules(null);};
 
   if(!loggedIn) return <LoginScreen onLogin={handleLogin}/>;
 
