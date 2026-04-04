@@ -5487,7 +5487,7 @@ function TabMaterial({ project }) {
                     {isOpen&&(
                       <div style={{overflowX:"auto"}}>
                         {/* Column headers */}
-                        <div style={{display:"grid",gridTemplateColumns:"90px 130px 100px minmax(120px,1fr) 90px 80px 80px 90px 100px",background:"#1E293B",padding:"7px 14px",gap:8,minWidth:900}}>
+                        <div style={{display:"grid",gridTemplateColumns:"85px 140px 80px 1fr 90px 75px 75px 85px 90px",background:"#1E293B",padding:"7px 14px",gap:8,minWidth:900}}>
                           {["Date","Vendor","Challan","Remark / Task","Ref#","Cr (In)","Dr (Out)","Balance","By"].map(h=>(
                             <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".5px"}}>{h}</div>
                           ))}
@@ -5504,7 +5504,7 @@ function TabMaterial({ project }) {
                           const balColor=balNeg?T.red:balLow?T.amb:T.grn;
                           const dateStr=row._date?row._date.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—";
                           return(
-                            <div key={ri} style={{display:"grid",gridTemplateColumns:"90px 130px 100px minmax(120px,1fr) 90px 80px 80px 90px 100px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:900,borderLeft:"3px solid "+(isGRN?T.grn:T.amb)}}>
+                            <div key={ri} style={{display:"grid",gridTemplateColumns:"85px 140px 80px 1fr 90px 75px 75px 85px 90px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:900,borderLeft:"3px solid "+(isGRN?T.grn:T.amb)}}>
                               {/* Date */}
                               <div style={{fontSize:11.5,color:T.t3,fontWeight:500}}>{dateStr}</div>
                               {/* Vendor */}
@@ -5521,9 +5521,9 @@ function TabMaterial({ project }) {
                               {/* Ref# */}
                               <div style={{fontSize:11,fontWeight:700,color:isGRN?T.grn:T.amb,fontFamily:"monospace"}}>{isGRN?(row.grn_number||"—"):("USE-"+(ri+1))}</div>
                               {/* Cr (In) */}
-                              <div style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>{isGRN?row.qty:"—"}</div>
+                              <div style={{fontSize:13,fontWeight:800,color:isGRN?T.grn:T.t4,textAlign:"right"}}>{isGRN?row.qty:"—"}</div>
                               {/* Dr (Out) */}
-                              <div style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>{!isGRN?row.qty:"—"}</div>
+                              <div style={{fontSize:13,fontWeight:800,color:!isGRN?T.red:T.t4,textAlign:"right"}}>{!isGRN?row.qty:"—"}</div>
                               {/* Running Balance */}
                               <div style={{fontSize:13,fontWeight:800,color:balColor,textAlign:"right",background:balNeg?T.redL:"transparent",borderRadius:4,padding:"1px 4px"}}>{row.runBal}</div>
                               {/* By */}
@@ -5533,7 +5533,7 @@ function TabMaterial({ project }) {
                         })}
 
                         {/* Footer summary */}
-                        <div style={{display:"grid",gridTemplateColumns:"90px 130px 100px minmax(120px,1fr) 90px 80px 80px 90px 100px",padding:"8px 14px",gap:8,background:"#0F172A",minWidth:900,borderTop:"2px solid "+T.b1}}>
+                        <div style={{display:"grid",gridTemplateColumns:"85px 140px 80px 1fr 90px 75px 75px 85px 90px",padding:"8px 14px",gap:8,background:"#0F172A",minWidth:900,borderTop:"2px solid "+T.b1}}>
                           <div style={{gridColumn:"1/6",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px"}}>Total</div>
                           <div style={{fontSize:13,fontWeight:800,color:"#4ADE80",textAlign:"right"}}>{mat.total_received}</div>
                           <div style={{fontSize:13,fontWeight:800,color:"#F87171",textAlign:"right"}}>{mat.total_used}</div>
