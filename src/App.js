@@ -70,7 +70,7 @@ const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
 const NAV_GROUPS=[
   {section:null,items:[
     {id:"dashboard", label:"Dashboard",    Icon:IcHome, sc:"H"},
-    {id:"projects",  label:"Projects",     Icon:IcProj, sc:"P"},
+    {id:"projects",  label:"Projects",     Icon:IcProj, sc:"J"},
     {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
     {id:"team",      label:"Team Schedule",Icon:IcTeam, sc:"T"},
@@ -78,9 +78,15 @@ const NAV_GROUPS=[
   ]},
   {section:"FINANCE & OPS",items:[
     {id:"finance",     label:"Finance",     Icon:IcFin,  sc:"F"},
-    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"R", badge:11,bc:C.p},
+    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P", badge:11,bc:C.p},
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
     {id:"payroll",     label:"Payroll",     Icon:IcPay,  sc:"Y"},
+  ]},
+  {section:"REPORTS",items:[
+    {id:"reports",  label:"Reports",    Icon:IcRep, sc:"B"},
+    {id:"library",  label:"Library",    Icon:IcLib, sc:"L"},
+    {id:"settings", label:"Settings",   Icon:IcSet, sc:"S"},
+    {id:"saas",     label:"SaaS Admin", Icon:IcStar,badge:"SA",bc:"#7C3AED"},
   ]},
   {section:"REPORTS",items:[{id:"reports",label:"Reports",Icon:IcRep},{id:"library",label:"Library",Icon:IcLib},{id:"settings",label:"Settings",Icon:IcSet},{id:"saas",label:"SaaS Admin",Icon:IcStar,badge:"SA",bc:"#7C3AED"}]},
 ];
@@ -298,22 +304,20 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
                 const isA=active===item.id;
                 return(
                   <button key={item.id} onClick={()=>setActive(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label}
-                    style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:collapsed?"10px 0":"8px 14px 8px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:0,padding:collapsed?"10px 0":"7px 12px 7px 14px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
                     onMouseEnter={e=>{if(!isA){e.currentTarget.style.background=C.sbH;e.currentTarget.style.color="white";}}}
                     onMouseLeave={e=>{if(!isA){e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.52)";}}}
                   >
-                    {/* Icon — fixed width so all labels start at same x */}
-                    <span style={{width:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                    <span style={{width:32,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                       <item.Icon size={16} color="currentColor"/>
                     </span>
                     {!collapsed&&<span style={{fontSize:12.5,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap",letterSpacing:"0.1px"}}>{item.label}</span>}
-                    {/* Right side — badge OR shortcut, always same width slot */}
                     {!collapsed&&(
-                      <span style={{width:36,display:"flex",justifyContent:"flex-end",alignItems:"center",flexShrink:0}}>
+                      <span style={{width:40,display:"flex",justifyContent:"flex-end",alignItems:"center",flexShrink:0}}>
                         {item.badge
-                          ?<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10,lineHeight:1.5}}>{item.badge}</span>
+                          ?<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10,lineHeight:1.6}}>{item.badge}</span>
                           :item.sc
-                            ?<span style={{fontSize:8.5,color:"rgba(255,255,255,0.18)",fontWeight:500,letterSpacing:"0.2px"}}>Alt+{item.sc}</span>
+                            ?<span style={{fontSize:8,color:"rgba(255,255,255,0.18)",fontWeight:500}}>Alt+{item.sc}</span>
                             :null
                         }
                       </span>
@@ -577,9 +581,9 @@ export default function App(){
       if(!e.altKey) return;
       const map={
         h:"dashboard",  // Alt+H → Home/Dashboard
-        p:"projects",   // Alt+P → Projects
+        j:"projects",   // Alt+J → Projects
         f:"finance",    // Alt+F → Finance
-        r:"procurement",// Alt+R → Requisition/Procurement
+        p:"procurement",// Alt+P → Procurement
         l:"library",    // Alt+L → Library
         s:"settings",   // Alt+S → Settings
         c:"crm",        // Alt+C → CRM
