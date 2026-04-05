@@ -4787,6 +4787,11 @@ function TabMaterial({ project }) {
   const [usedLog, setUsedLog] = useState([]);
   const [usedLogLoading, setUsedLogLoading] = useState(false);
   const [showUsedLog, setShowUsedLog] = useState(false);
+  const [ulFilterMat, setUlFilterMat] = useState("");
+  const [ulFilterTask, setUlFilterTask] = useState("");
+  const [ulFilterBy, setUlFilterBy] = useState("");
+  const [ulFilterFrom, setUlFilterFrom] = useState("");
+  const [ulFilterTo, setUlFilterTo] = useState("");
   const [invExpandedMat, setInvExpandedMat] = useState(null);
   const [invUsedForm, setInvUsedForm] = useState({});
   const [invUsedSaving, setInvUsedSaving] = useState(false);
@@ -5140,7 +5145,8 @@ function TabMaterial({ project }) {
         {/* USED LOG DRAWER */}
         {showUsedLog&&(<>
           <div onClick={()=>setShowUsedLog(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
-          <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+          <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(580px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+            {/* Header */}
             <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
               <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
                 <div style={{fontSize:15,fontWeight:700,color:"white"}}>Material Used Log</div>
@@ -5150,30 +5156,80 @@ function TabMaterial({ project }) {
               </div>
               <div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{projectName} · {usedLog.length} entries</div>
             </div>
+            {/* Filters */}
+            <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.b1,background:"#F8FAFC",flexShrink:0}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:7}}>
+                <input value={ulFilterMat} onChange={e=>setUlFilterMat(e.target.value)} placeholder="Filter by material..."
+                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+                <input value={ulFilterTask} onChange={e=>setUlFilterTask(e.target.value)} placeholder="Filter by task..."
+                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7}}>
+                <input value={ulFilterBy} onChange={e=>setUlFilterBy(e.target.value)} placeholder="Used by..."
+                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+                <input type="date" value={ulFilterFrom} onChange={e=>setUlFilterFrom(e.target.value)}
+                  title="From date"
+                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+                <input type="date" value={ulFilterTo} onChange={e=>setUlFilterTo(e.target.value)}
+                  title="To date"
+                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              {(ulFilterMat||ulFilterTask||ulFilterBy||ulFilterFrom||ulFilterTo)&&(
+                <button onClick={()=>{setUlFilterMat("");setUlFilterTask("");setUlFilterBy("");setUlFilterFrom("");setUlFilterTo("");}}
+                  style={{marginTop:6,background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:11,padding:0,fontWeight:600}}>
+                  × Clear filters
+                </button>
+              )}
+            </div>
+            {/* Table */}
             <div style={{flex:1,overflowY:"auto"}}>
               {usedLogLoading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>Loading...</div>}
-              {!usedLogLoading&&usedLog.length===0&&<div style={{textAlign:"center",padding:"60px",color:T.t4,fontSize:13}}>No used entries yet — go to Inventory tab to mark used</div>}
-              {!usedLogLoading&&usedLog.length>0&&(
-                <div>
-                  <div style={{display:"grid",gridTemplateColumns:"85px 1fr 70px 100px 1fr",background:"#1E293B",padding:"7px 16px",gap:8}}>
-                    {["Date","Material","Qty","Used By","Remark"].map(h=>(
-                      <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
-                    ))}
+              {!usedLogLoading&&(()=>{
+                const filtered=usedLog.filter(u=>{
+                  if(ulFilterMat&&!u.material_name?.toLowerCase().includes(ulFilterMat.toLowerCase())) return false;
+                  if(ulFilterTask&&!(u.task_name||"").toLowerCase().includes(ulFilterTask.toLowerCase())) return false;
+                  if(ulFilterBy&&!(u.user_name||"").toLowerCase().includes(ulFilterBy.toLowerCase())) return false;
+                  if(ulFilterFrom&&u.used_date&&u.used_date<ulFilterFrom) return false;
+                  if(ulFilterTo&&u.used_date&&u.used_date>ulFilterTo) return false;
+                  return true;
+                });
+                return filtered.length===0?(
+                  <div style={{textAlign:"center",padding:"60px",color:T.t4,fontSize:13}}>
+                    {usedLog.length===0?"No used entries yet":"No entries match filters"}
                   </div>
-                  {usedLog.map((u,i)=>(
-                    <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 70px 100px 1fr",padding:"10px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
-                      <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
-                      <div>
-                        <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{u.material_name}</div>
-                        {u.task_name&&<div style={{fontSize:10,color:T.t4}}>{u.task_no} {u.task_name}</div>}
-                      </div>
-                      <div style={{fontSize:13,fontWeight:700,color:T.amb}}>{u.used_qty} <span style={{fontSize:9,color:T.t4}}>{u.unit}</span></div>
-                      <div style={{fontSize:11.5,color:T.t2}}>{u.user_name||"Site"}</div>
-                      <div style={{fontSize:11,color:T.t3}}>{u.remark||"—"}</div>
+                ):(
+                  <div>
+                    <div style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr",background:"#1E293B",padding:"7px 16px",gap:8}}>
+                      {["Date","Material","Qty","Used By","Remark/Task"].map(h=>(
+                        <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-              )}
+                    {filtered.map((u,i)=>(
+                      <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr",padding:"9px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
+                        <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
+                        <div>
+                          <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{u.material_name}</div>
+                          <div style={{fontSize:10,color:T.t4}}>{u.unit}</div>
+                        </div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.amb}}>{u.used_qty}</div>
+                        <div style={{fontSize:11.5,color:T.t2}}>{u.user_name||"Site"}</div>
+                        <div style={{fontSize:11,color:T.t3}}>
+                          {u.task_name&&<div style={{color:T.blu,fontWeight:600,fontSize:10.5}}>{u.task_no} {u.task_name}</div>}
+                          {u.remark&&<div>{u.remark}</div>}
+                          {!u.task_name&&!u.remark&&"—"}
+                        </div>
+                      </div>
+                    ))}
+                    {/* Summary footer */}
+                    <div style={{padding:"8px 16px",background:"#0F172A",borderTop:"2px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>{filtered.length} entries shown</span>
+                      <span style={{fontSize:13,fontWeight:800,color:T.amb}}>
+                        Total: {filtered.reduce((s,u)=>s+Number(u.used_qty||0),0).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
         </>)}
