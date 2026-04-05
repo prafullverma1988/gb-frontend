@@ -5739,7 +5739,7 @@ function TabMaterial({ project }) {
 }
 
 
-function TabSubcon({ projectId, api, T }) {
+function TabSubcon({ projectId }) {
   const [wos, setWos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selWo, setSelWo] = useState(null);
@@ -5923,7 +5923,7 @@ function TabSubcon({ projectId, api, T }) {
                   <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:T.grnL,color:T.grn}}>Total: {fmtC(selWo.total_value)}</span>
                 </div>
                 {/* WO items table - load from API */}
-                <WoItemsTable woId={selWo.id} api={api} T={T} fmtC={fmtC}/>
+                <WoItemsTable woId={selWo.id} fmtC={fmtC}/>
               </div>
             )}
 
@@ -5956,7 +5956,7 @@ function TabSubcon({ projectId, api, T }) {
                           </div>
                         ))}
                       </div>
-                      <div style={{display:"flex",gap:8"}}>
+                      <div style={{display:"flex",gap:8}}>
                         {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
                         {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>₹ Record Payment</button>}
                       </div>
@@ -5968,7 +5968,7 @@ function TabSubcon({ projectId, api, T }) {
 
             {/* PAYMENTS TAB */}
             {subTab==="pay"&&(
-              <PaymentsTab woId={selWo.id} api={api} T={T} fmtC={fmtC}/>
+              <PaymentsTab woId={selWo.id} fmtC={fmtC}/>
             )}
           </div>
         </>)}
@@ -6038,7 +6038,7 @@ function TabSubcon({ projectId, api, T }) {
 
       {/* NEW RA BILL MODAL */}
       {showNewBill&&selWo&&(
-        <NewRaBillModal woId={selWo.id} api={api} T={T} fmtC={fmtC} inpStyle={inpStyle} lblStyle={lblStyle}
+        <NewRaBillModal woId={selWo.id} fmtC={fmtC} inpStyle={inpStyle} lblStyle={lblStyle}
           billForm={billForm} setBillForm={setBillForm} saving={saving}
           onClose={()=>setShowNewBill(false)} onSave={submitBill}/>
       )}
@@ -6080,7 +6080,7 @@ function TabSubcon({ projectId, api, T }) {
   );
 }
 
-function WoItemsTable({ woId, api, T, fmtC }) {
+function WoItemsTable({ woId, fmtC }) {
   const [items, setItems] = useState([]);
   useEffect(()=>{
     api.get("/subcon/work-orders/"+woId).then(r=>{ if(r.success) setItems(r.data.items||[]); }).catch(()=>{});
@@ -6108,7 +6108,7 @@ function WoItemsTable({ woId, api, T, fmtC }) {
   );
 }
 
-function NewRaBillModal({ woId, api, T, fmtC, inpStyle, lblStyle, billForm, setBillForm, saving, onClose, onSave }) {
+function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm, saving, onClose, onSave }) {
   const [woItems, setWoItems] = useState([]);
   const [prevCums, setPrevCums] = useState({});
   useEffect(()=>{
@@ -6172,7 +6172,7 @@ function NewRaBillModal({ woId, api, T, fmtC, inpStyle, lblStyle, billForm, setB
   );
 }
 
-function PaymentsTab({ woId, api, T, fmtC }) {
+function PaymentsTab({ woId, fmtC }) {
   const [payments, setPayments] = useState([]);
   useEffect(()=>{
     api.get("/subcon/payments?wo_id="+woId).then(r=>{ if(r.success) setPayments(r.data||[]); }).catch(()=>{});
@@ -6781,7 +6781,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     task:        <TabTasks projectId={project.id}/>,
     attendance:  <TabAttendance/>,
     material:    <TabMaterial project={project}/>,
-    subcon:      <TabSubcon projectId={projectId} api={api} T={T}/>,
+    subcon:      <TabSubcon projectId={projectId}/>,
     equipment:   <TabEquipment/>,
     files:       <TabFiles/>,
     site:        <TabSite/>,
