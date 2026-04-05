@@ -5739,543 +5739,466 @@ function TabMaterial({ project }) {
 }
 
 
-const SC_DATA = [
-  {
-    id:1, contractor:"Subcontractor 1", category:"Civil", contact:"9000000001",
-    rate:"15000", status:"Active",
-    workOrder:{
-      sections:[
-        { id:"s1", title:"Foundation",
-          subsections:[
-            { id:"s1a", title:"Excavation",
-              items:[{ id:"i1", desc:"Earthwork excavation", qty:100, unit:"Cum", rate:150, amount:15000, done:false }]
-            }
-          ]
-        }
-      ]
-    },
-    bills:[], attendance:[], materials:[], milestones:[],
-    agenda:[], attendees:[], decisions:[],
-  },
-];
+function TabSubcon({ projectId, api, T }) {
+  const [wos, setWos] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selWo, setSelWo] = useState(null);
+  const [subTab, setSubTab] = useState("wo");
+  const [bills, setBills] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [summary, setSummary] = useState(null);
+  const [subcons, setSubcons] = useState([]);
+  const [showNewWO, setShowNewWO] = useState(false);
+  const [showNewBill, setShowNewBill] = useState(false);
+  const [showPayModal, setShowPayModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [woForm, setWoForm] = useState({ subcon_id:"", subcon_name:"", description:"", retention_pct:5, tds_pct:2, start_date:"", end_date:"", items:[{description:"",unit:"",qty:"",rate:""}] });
+  const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
+  const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"" });
 
-function TabSubcon() {
-  const [sel,  setSel]  = useState(SC_DATA[0]);
-  const [subTab,setSubTab]=useState("wo");
-  const [showNewWO,setShowNewWO]=useState(false);
-  const [openSections,setOpenSections]=useState({"s1":true,"s2":true,"e1":true});
-  const [openSubsecs,setOpenSubsecs]=useState({"s1a":true,"s1b":true,"s2a":true,"e1a":true});
+  useEffect(()=>{
+    loadWOs();
+    api.get("/library/subcontractors").then(r=>{ if(r.success) setSubcons(r.data||[]); }).catch(()=>{});
+  },[projectId]);
 
-  // Work order computed totals
-  const woTotal=(sc)=>sc.workOrder.sections.flatMap(s=>s.subsections.flatMap(ss=>ss.items)).reduce((s,it)=>s+it.amount,0);
-  const woDone=(sc)=>{
-    const items=sc.workOrder.sections.flatMap(s=>s.subsections.flatMap(ss=>ss.items));
-    const doneAmt=items.reduce((s,it)=>s+(it.amount*(it.done/100)),0);
-    return {amt:doneAmt,pct:items.length>0?Math.round(doneAmt/items.reduce((s,it)=>s+it.amount,0)*100):0};
+  const loadWOs = async () => {
+    setLoading(true);
+    const r = await api.get("/subcon/work-orders?project_id="+projectId).catch(()=>({success:false}));
+    if(r.success) setWos(r.data||[]);
+    setLoading(false);
   };
 
-  const toggleSec=(id)=>setOpenSections(p=>({...p,[id]:!p[id]}));
-  const toggleSub=(id)=>setOpenSubsecs(p=>({...p,[id]:!p[id]}));
-
-  // ── Work Order Builder Modal ──────────────────────────────────────
-  const WorkOrderBuilder=()=>{
-    const [sections,setSections]=useState([
-      {id:"ns1",title:"Section 1",subsections:[
-        {id:"nss1",title:"Subsection 1",items:[
-          {id:1,desc:"",unit:"CuM",qty:"",rate:"",amount:0,done:0}
-        ]}
-      ]}
+  const selectWo = async (wo) => {
+    setSelWo(wo); setSubTab("wo");
+    const [bRes, sRes] = await Promise.all([
+      api.get("/subcon/ra-bills?wo_id="+wo.id).catch(()=>({success:false})),
+      api.get("/subcon/work-orders/"+wo.id+"/summary").catch(()=>({success:false})),
     ]);
-    const [form,setForm]=useState({contractor:SC_DATA[0].contractor,startDate:"",endDate:"",notes:""});
-
-    const calcAmt=(qty,rate)=>Math.round((Number(qty)||0)*(Number(rate)||0));
-    const totalAmt=sections.flatMap(s=>s.subsections.flatMap(ss=>ss.items)).reduce((s,it)=>s+it.amount,0);
-
-    const addSection=()=>setSections(p=>[...p,{id:"ns"+Date.now(),title:"New Section",subsections:[{id:"nss"+Date.now(),title:"Subsection 1",items:[{id:Date.now(),desc:"",unit:"CuM",qty:"",rate:"",amount:0,done:0}]}]}]);
-    const addSubsec=(sId)=>setSections(p=>p.map(s=>s.id===sId?{...s,subsections:[...s.subsections,{id:"nss"+Date.now(),title:"New Subsection",items:[{id:Date.now(),desc:"",unit:"CuM",qty:"",rate:"",amount:0,done:0}]}]}:s));
-    const addItem=(sId,ssId)=>setSections(p=>p.map(s=>s.id===sId?{...s,subsections:s.subsections.map(ss=>ss.id===ssId?{...ss,items:[...ss.items,{id:Date.now(),desc:"",unit:"CuM",qty:"",rate:"",amount:0,done:0}]}:ss)}:s));
-    const updateItem=(sId,ssId,iId,key,val)=>setSections(p=>p.map(s=>s.id===sId?{...s,subsections:s.subsections.map(ss=>ss.id===ssId?{...ss,items:ss.items.map(it=>{
-      if(it.id!==iId) return it;
-      const upd={...it,[key]:val};
-      upd.amount=calcAmt(key==="qty"?val:upd.qty,key==="rate"?val:upd.rate);
-      return upd;
-    })}:ss)}:s));
-    const updateSecTitle=(sId,title)=>setSections(p=>p.map(s=>s.id===sId?{...s,title}:s));
-    const updateSubTitle=(sId,ssId,title)=>setSections(p=>p.map(s=>s.id===sId?{...s,subsections:s.subsections.map(ss=>ss.id===ssId?{...ss,title}:ss)}:s));
-    const removeItem=(sId,ssId,iId)=>setSections(p=>p.map(s=>s.id===sId?{...s,subsections:s.subsections.map(ss=>ss.id===ssId?{...ss,items:ss.items.filter(it=>it.id!==iId)}:ss)}:s));
-
-    const UNITS=["CuM","SqM","SqFt","Mtrs","Nos","KG","MT","Bags","Lump","Point","Rft"];
-
-    return(<>
-      <div onClick={()=>setShowNewWO(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(1px)"}}/>
-      <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(720px,90vw)",background:T.bg,zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn 0.2s ease"}}>
-        {/* Header */}
-        <div style={{background:"#0D1B2A",padding:"14px 18px",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <div>
-            <div style={{fontSize:15,fontWeight:700,color:"white"}}>New Work Order</div>
-            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:2}}>Define scope, items, quantities and rates</div>
-          </div>
-          <div style={{display:"flex",gap:8,alignItems:"center"}}>
-            <div style={{padding:"5px 12px",background:"rgba(255,255,255,0.1)",borderRadius:6,fontSize:12,fontWeight:600,color:"white"}}>Total: ₹{fmtN(totalAmt)}</div>
-            <button onClick={()=>setShowNewWO(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
-              <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-          </div>
-        </div>
-
-        {/* Basic details */}
-        <div style={{background:T.surface,borderBottom:`1px solid ${T.b1}`,padding:"12px 18px",flexShrink:0}}>
-          <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:12}}>
-            {[
-              {l:"Contractor",key:"contractor",type:"select",opts:SC_DATA.map(s=>s.contractor)},
-              {l:"Start Date",key:"startDate",type:"date"},
-              {l:"End Date",key:"endDate",type:"date"},
-            ].map(f=>(
-              <div key={f.key}>
-                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{f.l}</div>
-                {f.type==="select"
-                  ?<select value={form[f.key]} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))}
-                      style={{width:"100%",height:30,padding:"0 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                      {f.opts.map(o=><option key={o}>{o}</option>)}
-                    </select>
-                  :<input type="date" value={form[f.key]} onChange={e=>setForm(p=>({...p,[f.key]:e.target.value}))}
-                      style={{width:"100%",height:30,padding:"0 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                }
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* Sections builder */}
-        <div style={{flex:1,overflowY:"auto",padding:"12px 18px"}}>
-          {sections.map((sec,si)=>(
-            <div key={sec.id} style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,marginBottom:12,overflow:"hidden"}}>
-              {/* Section header */}
-              <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`}}>
-                <div style={{width:24,height:24,borderRadius:6,background:T.blu,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                  <span style={{fontSize:11,fontWeight:700,color:"white"}}>{si+1}</span>
-                </div>
-                <input value={sec.title} onChange={e=>updateSecTitle(sec.id,e.target.value)}
-                  style={{flex:1,background:"none",border:"none",outline:"none",fontSize:13,fontWeight:700,color:T.blu,fontFamily:"inherit"}}
-                  placeholder="Section title..."/>
-                <span style={{fontSize:11,color:T.blu,fontWeight:600}}>
-                  ₹{fmtN(sec.subsections.flatMap(ss=>ss.items).reduce((s,it)=>s+it.amount,0))}
-                </span>
-              </div>
-
-              {sec.subsections.map((ss,ssi)=>(
-                <div key={ss.id} style={{borderBottom:`1px solid ${T.b1}`}}>
-                  {/* Subsection header */}
-                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px 8px 28px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
-                    <span style={{fontSize:10,color:T.t4,fontWeight:600}}>{si+1}.{ssi+1}</span>
-                    <input value={ss.title} onChange={e=>updateSubTitle(sec.id,ss.id,e.target.value)}
-                      style={{flex:1,background:"none",border:"none",outline:"none",fontSize:12.5,fontWeight:600,color:T.t2,fontFamily:"inherit"}}
-                      placeholder="Subsection title..."/>
-                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>
-                      ₹{fmtN(ss.items.reduce((s,it)=>s+it.amount,0))}
-                    </span>
-                  </div>
-
-                  {/* Table header */}
-                  <div style={{display:"grid",gridTemplateColumns:"30px 1fr 70px 70px 70px 90px 60px 28px",padding:"5px 14px 5px 28px",background:T.surfaceB}}>
-                    {["#","Description","Unit","Qty","Rate","Amount","Done%",""].map((h,i)=>(
-                      <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
-                    ))}
-                  </div>
-
-                  {/* Items */}
-                  {ss.items.map((it,ii)=>(
-                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"30px 1fr 70px 70px 70px 90px 60px 28px",padding:"6px 14px 6px 28px",borderBottom:`1px dashed ${T.b1}`,alignItems:"center",gap:4}}>
-                      <span style={{fontSize:10,color:T.t4}}>{si+1}.{ssi+1}.{ii+1}</span>
-                      <input value={it.desc} onChange={e=>updateItem(sec.id,ss.id,it.id,"desc",e.target.value)}
-                        placeholder="Item description..." style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",fontFamily:"inherit",background:T.surface,width:"100%",boxSizing:"border-box"}}
-                        onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                      <select value={it.unit} onChange={e=>updateItem(sec.id,ss.id,it.id,"unit",e.target.value)}
-                        style={{height:28,padding:"0 4px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                        {UNITS.map(u=><option key={u}>{u}</option>)}
-                      </select>
-                      {["qty","rate"].map(k=>(
-                        <input key={k} type="number" value={it[k]} onChange={e=>updateItem(sec.id,ss.id,it.id,k,e.target.value)}
-                          placeholder={k==="qty"?"0":"0.00"} style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",fontFamily:"inherit",background:T.surface,width:"100%",boxSizing:"border-box"}}
-                          onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                      ))}
-                      <span style={{fontSize:12.5,fontWeight:600,color:it.amount>0?T.blu:T.t4,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(it.amount)}</span>
-                      <input type="number" value={it.done} onChange={e=>updateItem(sec.id,ss.id,it.id,"done",Math.min(100,Math.max(0,Number(e.target.value))))}
-                        min={0} max={100} style={{padding:"4px 5px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,color:T.t1,outline:"none",fontFamily:"inherit",background:T.surface,width:"100%",boxSizing:"border-box"}}/>
-                      <button onClick={()=>removeItem(sec.id,ss.id,it.id)}
-                        style={{width:24,height:24,borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-                      </button>
-                    </div>
-                  ))}
-
-                  {/* Add item */}
-                  <button onClick={()=>addItem(sec.id,ss.id)}
-                    style={{display:"flex",alignItems:"center",gap:5,padding:"6px 28px",width:"100%",border:"none",background:"none",cursor:"pointer",color:T.blu,fontSize:11.5,fontWeight:600,borderTop:`1px dashed ${T.b1}`}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.bluL}
-                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                    Add Item
-                  </button>
-                </div>
-              ))}
-
-              {/* Add subsection */}
-              <button onClick={()=>addSubsec(sec.id)}
-                style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",width:"100%",border:"none",background:T.surfaceB,cursor:"pointer",color:T.slt,fontSize:11.5,fontWeight:600}}
-                onMouseEnter={e=>e.currentTarget.style.background=T.b1}
-                onMouseLeave={e=>e.currentTarget.style.background=T.surfaceB}>
-                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                Add Subsection
-              </button>
-            </div>
-          ))}
-
-          {/* Add section */}
-          <button onClick={addSection}
-            style={{display:"flex",alignItems:"center",gap:7,padding:"10px 16px",width:"100%",border:`2px dashed ${T.b2}`,borderRadius:9,background:"none",cursor:"pointer",color:T.slt,fontSize:12.5,fontWeight:600,justifyContent:"center"}}
-            onMouseEnter={e=>{e.currentTarget.style.background=T.surfaceB;e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.color=T.blu;}}
-            onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.slt;}}>
-            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-            Add Section
-          </button>
-        </div>
-
-        {/* Footer */}
-        <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:8,alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-          <div style={{fontSize:13,color:T.t2}}>
-            Total: <span style={{fontSize:16,fontWeight:700,color:T.blu}}>₹{fmtN(totalAmt)}</span>
-            <span style={{fontSize:11,color:T.t4,marginLeft:8}}>{sections.flatMap(s=>s.subsections.flatMap(ss=>ss.items)).length} items</span>
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            <button onClick={()=>setShowNewWO(false)} style={{padding:"8px 18px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-            <button style={{padding:"8px 20px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}>Save Work Order</button>
-          </div>
-        </div>
-      </div>
-    </>);
+    if(bRes.success) setBills(bRes.data||[]);
+    if(sRes.success) setSummary(sRes.data);
   };
 
-  // ── Subcon list card ──────────────────────────────────────────────
-  const wo=sel?.workOrder;
-  const allItems=wo?.sections.flatMap(s=>s.subsections.flatMap(ss=>ss.items))||[];
-  const woGrand=allItems.reduce((s,it)=>s+it.amount,0);
-  const woDoneAmt=allItems.reduce((s,it)=>s+(it.amount*(it.done/100)),0);
-  const woDonePct=woGrand>0?Math.round(woDoneAmt/woGrand*100):0;
+  const fmtC = (v) => "₹"+(parseFloat(v)||0).toLocaleString("en-IN",{maximumFractionDigits:0});
 
-  const SUBTABS=[
-    {id:"wo",l:"Work Order"},
-    {id:"payments",l:"Payments"},
-    {id:"milestones",l:"Milestones"},
-    {id:"bills",l:"Bills"},
-    {id:"material",l:"Material Issued"},
-  ];
+  // ── NEW WO SUBMIT ──
+  const submitWO = async () => {
+    const validItems = woForm.items.filter(i=>i.description&&i.qty&&i.rate);
+    if(!woForm.subcon_name || validItems.length===0) return alert("Subcontractor and at least 1 item required");
+    setSaving(true);
+    const res = await api.post("/subcon/work-orders",{
+      project_id: projectId,
+      subcon_name: woForm.subcon_name,
+      description: woForm.description,
+      retention_pct: parseFloat(woForm.retention_pct||5),
+      tds_pct: parseFloat(woForm.tds_pct||2),
+      start_date: woForm.start_date||null,
+      end_date: woForm.end_date||null,
+      items: validItems.map(i=>({ description:i.description, unit:i.unit, qty:parseFloat(i.qty), rate:parseFloat(i.rate) })),
+    }).catch(()=>({success:false}));
+    setSaving(false);
+    if(res.success){ setShowNewWO(false); loadWOs(); setWoForm({subcon_id:"",subcon_name:"",description:"",retention_pct:5,tds_pct:2,start_date:"",end_date:"",items:[{description:"",unit:"",qty:"",rate:""}]}); }
+    else alert(res.message||"Failed");
+  };
 
-  return(
-    <div style={{padding:"14px 18px"}}>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
-        <button onClick={()=>setShowNewWO(true)}
-          style={{display:"inline-flex",alignItems:"center",gap:5,padding:"6px 14px",border:`1px solid ${T.blu}`,borderRadius:6,background:T.bluL,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer",transition:"all .15s"}}
-          onMouseEnter={e=>{e.currentTarget.style.background=T.blu;e.currentTarget.style.color="#fff";}}
-          onMouseLeave={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.color=T.blu;}}>
-          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-          New Work Order
-        </button>
+  // ── NEW RA BILL SUBMIT ──
+  const submitBill = async () => {
+    if(!selWo) return;
+    setSaving(true);
+    const woDetail = await api.get("/subcon/work-orders/"+selWo.id).catch(()=>({success:false}));
+    const woItems = woDetail.success ? (woDetail.data.items||[]) : [];
+    const res = await api.post("/subcon/ra-bills",{
+      wo_id: selWo.id,
+      bill_date: billForm.bill_date,
+      remark: billForm.remark,
+      items: woItems.map((it,i)=>({
+        wo_item_id: it.id,
+        cumulative_qty: parseFloat(billForm.items[i]?.cumulative_qty||0),
+        rate: parseFloat(it.rate),
+      })),
+    }).catch(()=>({success:false}));
+    setSaving(false);
+    if(res.success){ setShowNewBill(false); selectWo(selWo); }
+    else alert(res.message||"Failed");
+  };
+
+  // ── RECORD PAYMENT ──
+  const submitPayment = async (billId) => {
+    if(!payForm.amount_paid) return alert("Amount required");
+    setSaving(true);
+    const res = await api.post("/subcon/payments",{
+      bill_id: billId, wo_id: selWo.id,
+      amount_paid: parseFloat(payForm.amount_paid),
+      payment_date: payForm.payment_date,
+      payment_mode: payForm.payment_mode,
+      reference_no: payForm.reference_no,
+      remark: payForm.remark,
+    }).catch(()=>({success:false}));
+    setSaving(false);
+    if(res.success){ setShowPayModal(false); selectWo(selWo); setPayForm({amount_paid:"",payment_date:new Date().toISOString().split("T")[0],payment_mode:"Bank Transfer",reference_no:"",remark:""}); }
+    else alert(res.message||"Failed");
+  };
+
+  const inpStyle = {padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
+  const lblStyle = {fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3};
+
+  return (
+    <div style={{display:"flex",gap:0,height:"100%",minHeight:500}}>
+      {/* LEFT — WO List */}
+      <div style={{width:220,borderRight:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
+        <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Work Orders ({wos.length})</span>
+          <button onClick={()=>setShowNewWO(true)} style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>+ New</button>
+        </div>
+        {loading&&<div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>Loading...</div>}
+        {!loading&&wos.length===0&&<div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>No work orders yet</div>}
+        {wos.map(wo=>{
+          const isSel=selWo?.id===wo.id;
+          const stC=wo.status==="Active"?T.grn:wo.status==="Completed"?T.blu:T.t4;
+          return(
+            <div key={wo.id} onClick={()=>selectWo(wo)}
+              style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1,background:isSel?"#EFF6FF":T.surfaceB,borderLeft:isSel?"3px solid "+T.blu:"3px solid transparent"}}>
+              <div style={{fontSize:12,fontWeight:700,color:isSel?T.blu:T.t1,marginBottom:2}}>{wo.subcon_name}</div>
+              <div style={{fontSize:10,color:T.t4,marginBottom:4}}>{wo.subcon_category||"Civil"}</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:10,fontWeight:700,color:T.grn}}>{fmtC(wo.total_value)}</span>
+                <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:stC+"22",color:stC}}>{wo.status}</span>
+              </div>
+              {wo.bill_count>0&&<div style={{fontSize:9.5,color:T.t4,marginTop:3}}>{wo.bill_count} bill{wo.bill_count>1?"s":""}</div>}
+            </div>
+          );
+        })}
       </div>
 
-      <div style={{display:"grid",gridTemplateColumns:"280px 1fr",gap:14}}>
-        {/* Left: subcon list */}
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {SC_DATA.map(sc=>{
-            const isSel=sel?.id===sc.id;
-            const scPct=Math.round(sc.paid/sc.totalValue*100);
-            return(
-              <div key={sc.id} onClick={()=>{setSel(sc);setSubTab("wo");}}
-                style={{background:T.surface,borderRadius:9,padding:"12px 14px",border:`1.5px solid ${isSel?T.blu:T.b1}`,cursor:"pointer",borderLeft:`4px solid ${isSel?T.blu:T.b1}`,transition:"all .15s",boxShadow:isSel?"0 2px 10px rgba(37,99,235,0.1)":"none"}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:4}}>
-                  <span style={{fontSize:12.5,fontWeight:700,color:isSel?T.blu:T.t1,lineHeight:1.3}}>{sc.contractor}</span>
-                  <Pill label={sc.status} c={T.grn} bg={T.grnL}/>
-                </div>
-                <div style={{fontSize:11,color:T.t3,marginBottom:2}}>{sc.no} · {sc.type}</div>
-                <div style={{fontSize:11,color:T.t4,marginBottom:10}}>{sc.work}</div>
-                <div style={{display:"flex",gap:12,marginBottom:8}}>
-                  {[["Contract",`₹${fmt(sc.totalValue)}`,T.slt],["Paid",`₹${fmt(sc.paid)}`,T.grn],["Balance",`₹${fmt(sc.totalValue-sc.paid)}`,T.red]].map(([l,v,vc])=>(
-                    <div key={l}><div style={{fontSize:9,color:T.t4,textTransform:"uppercase",marginBottom:1}}>{l}</div><div style={{fontSize:12.5,fontWeight:700,color:vc}}>{v}</div></div>
-                  ))}
-                </div>
-                <PBar pct={scPct} color={T.grn}/>
-                <div style={{fontSize:10,color:T.t4,marginTop:2}}>{scPct}% paid</div>
-              </div>
-            );
-          })}
-        </div>
+      {/* RIGHT — WO Detail */}
+      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+        {!selWo&&(
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.t4,flexDirection:"column",gap:8}}>
+            <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5}><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <div style={{fontSize:13,color:T.t3}}>Select a work order</div>
+          </div>
+        )}
 
-        {/* Right: detail panel */}
-        {sel&&(
-          <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-            {/* Panel header */}
-            <div style={{padding:"11px 16px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        {selWo&&(<>
+          {/* Header */}
+          <div style={{padding:"12px 16px",borderBottom:"1px solid "+T.b1,background:"#0F172A",flexShrink:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
-                <div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>{sel.contractor}</div>
-                <div style={{fontSize:10.5,color:T.t4}}>{sel.no} · {sel.start} → {sel.end}</div>
+                <div style={{fontSize:15,fontWeight:700,color:"white"}}>{selWo.subcon_name}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{selWo.description||selWo.subcon_category}</div>
               </div>
-              <div style={{display:"flex",gap:10}}>
-                {[["WO Value",`₹${fmt(woGrand)}`,T.slt],[`Done ${woDonePct}%`,`₹${fmt(woDoneAmt)}`,T.blu],["Paid",`₹${fmt(sel.paid)}`,T.grn],["Balance",`₹${fmt(sel.totalValue-sel.paid)}`,T.red]].map(([l,v,c])=>(
-                  <div key={l} style={{textAlign:"right"}}>
-                    <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",marginBottom:1}}>{l}</div>
-                    <div style={{fontSize:13,fontWeight:700,color:c}}>{v}</div>
+              <div style={{display:"flex",gap:16,alignItems:"center"}}>
+                {summary&&[
+                  {l:"WO Value",v:fmtC(summary.wo_value),c:"#94A3B8"},
+                  {l:"Billed",v:fmtC(summary.total_billed),c:"#60A5FA"},
+                  {l:"Paid",v:fmtC(summary.total_paid),c:"#4ADE80"},
+                  {l:"Retention",v:fmtC(summary.retention_held),c:"#FCD34D"},
+                  {l:"Balance",v:fmtC(summary.balance),c:"#F87171"},
+                ].map(s=>(
+                  <div key={s.l} style={{textAlign:"right"}}>
+                    <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{s.l}</div>
+                    <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
                   </div>
                 ))}
               </div>
             </div>
-
-            {/* Inner tabs */}
-            <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0}}>
-              {SUBTABS.map(t=>(
-                <button key={t.id} onClick={()=>setSubTab(t.id)}
-                  style={{padding:"8px 14px",border:"none",background:"none",color:subTab===t.id?T.blu:T.t3,fontWeight:subTab===t.id?700:400,fontSize:12,cursor:"pointer",borderBottom:subTab===t.id?`2px solid ${T.blu}`:"2px solid transparent",fontFamily:"inherit",whiteSpace:"nowrap",transition:"all .15s"}}>
-                  {t.l}
-                </button>
-              ))}
-            </div>
-
-            <div style={{flex:1,overflowY:"auto"}}>
-
-              {/* ── WORK ORDER TAB ── */}
-              {subTab==="wo"&&(
-                <div>
-                  {wo.sections.map((sec,si)=>{
-                    const secTotal=sec.subsections.flatMap(ss=>ss.items).reduce((s,it)=>s+it.amount,0);
-                    const secDone=sec.subsections.flatMap(ss=>ss.items).reduce((s,it)=>s+(it.amount*(it.done/100)),0);
-                    const isSecOpen=openSections[sec.id]!==false;
-                    return(
-                      <div key={sec.id}>
-                        {/* Section row */}
-                        <div onClick={()=>toggleSec(sec.id)}
-                          style={{display:"grid",gridTemplateColumns:"20px 1fr 90px 90px 60px",padding:"9px 16px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`,cursor:"pointer",alignItems:"center",borderLeft:`3px solid ${T.blu}`}}>
-                          <svg width={10} height={10} viewBox="0 0 12 12" fill="none" stroke={T.blu} strokeWidth={2} style={{transform:isSecOpen?"none":"rotate(-90deg)",transition:"transform .2s"}}><path d="M2 4l4 4 4-4"/></svg>
-                          <span style={{fontSize:13,fontWeight:700,color:T.blu}}>{si+1}. {sec.title}</span>
-                          <span style={{fontSize:11.5,fontWeight:600,color:T.t3,textAlign:"right"}}>{Math.round(secDone/secTotal*100)||0}% done</span>
-                          <span style={{fontSize:13,fontWeight:700,color:T.blu,textAlign:"right"}}>₹{fmtN(secTotal)}</span>
-                          <span/>
-                        </div>
-
-                        {isSecOpen&&sec.subsections.map((ss,ssi)=>{
-                          const ssTotal=ss.items.reduce((s,it)=>s+it.amount,0);
-                          const isSSOpen=openSubsecs[ss.id]!==false;
-                          return(
-                            <div key={ss.id}>
-                              {/* Subsection row */}
-                              <div onClick={()=>toggleSub(ss.id)}
-                                style={{display:"grid",gridTemplateColumns:"20px 1fr 90px 90px 60px",padding:"7px 16px 7px 28px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,cursor:"pointer",alignItems:"center"}}>
-                                <svg width={9} height={9} viewBox="0 0 12 12" fill="none" stroke={T.t4} strokeWidth={2} style={{transform:isSSOpen?"none":"rotate(-90deg)",transition:"transform .2s"}}><path d="M2 4l4 4 4-4"/></svg>
-                                <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{si+1}.{ssi+1} {ss.title}</span>
-                                <span/>
-                                <span style={{fontSize:12,fontWeight:600,color:T.t2,textAlign:"right"}}>₹{fmtN(ssTotal)}</span>
-                                <span/>
-                              </div>
-
-                              {isSSOpen&&(
-                                <>
-                                  {/* Items table header */}
-                                  <div style={{display:"grid",gridTemplateColumns:"50px 1fr 70px 70px 70px 100px 70px",padding:"5px 16px 5px 36px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
-                                    {["Item#","Description","Unit","Qty","Rate","Amount","Done%"].map((h,i)=>(
-                                      <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
-                                    ))}
-                                  </div>
-                                  {ss.items.map((it,ii)=>{
-                                    const donePct=it.done;
-                                    const doneAmt=Math.round(it.amount*donePct/100);
-                                    return(
-                                      <div key={it.id} style={{display:"grid",gridTemplateColumns:"50px 1fr 70px 70px 70px 100px 70px",padding:"8px 16px 8px 36px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background .1s"}}
-                                        onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                                        <span style={{fontSize:10,color:T.t4,fontFamily:"monospace"}}>{si+1}.{ssi+1}.{ii+1}</span>
-                                        <span style={{fontSize:12.5,color:T.t1}}>{it.desc}</span>
-                                        <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
-                                        <span style={{fontSize:12,color:T.t2,fontVariantNumeric:"tabular-nums"}}>{it.qty}</span>
-                                        <span style={{fontSize:12,color:T.t2,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(it.rate)}</span>
-                                        <span style={{fontSize:13,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(it.amount)}</span>
-                                        <div>
-                                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-                                            <span style={{fontSize:10,color:donePct===100?T.grn:T.t4,fontWeight:600}}>{donePct}%</span>
-                                          </div>
-                                          <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
-                                            <div style={{height:"100%",width:`${donePct}%`,background:donePct===100?T.grn:T.blu,borderRadius:2}}/>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    );
-                                  })}
-                                </>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
-
-                  {/* Grand total row */}
-                  <div style={{display:"grid",gridTemplateColumns:"50px 1fr 70px 70px 70px 100px 70px",padding:"10px 16px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,position:"sticky",bottom:0}}>
-                    <span/>
-                    <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Grand Total</span>
-                    <span/><span/><span/>
-                    <span style={{fontSize:15,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(woGrand)}</span>
-                    <div>
-                      <span style={{fontSize:11,fontWeight:600,color:T.grn}}>{woDonePct}%</span>
-                      <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginTop:2}}>
-                        <div style={{height:"100%",width:`${woDonePct}%`,background:T.grn,borderRadius:2}}/>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* ── PAYMENTS TAB ── */}
-              {subTab==="payments"&&(
-                <div style={{padding:"14px 16px"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
-                    {[{l:"Work Order",v:`₹${fmt(woGrand)}`,c:T.slt},{l:"Paid",v:`₹${fmt(sel.paid)}`,c:T.grn},{l:"Balance Due",v:`₹${fmt(sel.totalValue-sel.paid)}`,c:T.red}].map((s,i)=>(
-                      <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-                        <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{s.l}</div>
-                        <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
-                      </div>
-                    ))}
-                  </div>
-                  {/* Payment progress */}
-                  <div style={{marginBottom:14,padding:"11px 14px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                      <span style={{fontSize:12,fontWeight:600,color:T.t2}}>Payment Progress</span>
-                      <span style={{fontSize:12,fontWeight:700,color:T.grn}}>{Math.round(sel.paid/sel.totalValue*100)}%</span>
-                    </div>
-                    <div style={{height:8,background:T.b1,borderRadius:4,overflow:"hidden"}}>
-                      <div style={{height:"100%",width:`${Math.round(sel.paid/sel.totalValue*100)}%`,background:`linear-gradient(90deg,${T.grn},#34d399)`,borderRadius:4}}/>
-                    </div>
-                    <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
-                      <span style={{fontSize:10.5,color:T.grn}}>Paid ₹{fmt(sel.paid)}</span>
-                      <span style={{fontSize:10.5,color:T.red}}>Remaining ₹{fmt(sel.totalValue-sel.paid)}</span>
-                    </div>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:8,alignItems:"center"}}>
-                    <span style={{fontSize:12,fontWeight:600,color:T.t1}}>Payment History</span>
-                    <AddBtn label="Record Payment"/>
-                  </div>
-                  <Panel>
-                    <THead cols="80px 1fr 130px 80px" headers={["Date","Description","Amount","Status"]}/>
-                    {sel.bills.filter(b=>b.status==="Paid").map((b,i)=>(
-                      <div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 130px 80px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background .1s"}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <span style={{fontSize:11.5,color:T.t4}}>{b.date}</span>
-                        <span style={{fontSize:12.5,color:T.t1}}>{b.desc}</span>
-                        <span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{fmtN(b.amount)}</span>
-                        <Pill label="Paid" c={T.grn} bg={T.grnL}/>
-                      </div>
-                    ))}
-                  </Panel>
-                </div>
-              )}
-
-              {/* ── MILESTONES TAB ── */}
-              {subTab==="milestones"&&(
-                <div style={{padding:"14px 16px"}}>
-                  <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-                    <AddBtn label="Add Milestone"/>
-                  </div>
-                  {sel.milestones.map((m,i)=>{
-                    const ms=m.status==="Paid"?{c:T.grn,bg:T.grnL,brd:T.grnM}:m.status==="Pending"?{c:T.amb,bg:T.ambL,brd:T.ambM}:{c:T.slt,bg:T.sltL,brd:T.b2};
-                    return(
-                      <div key={m.id} style={{background:T.surface,borderRadius:8,border:`1px solid ${ms.brd}`,marginBottom:8,padding:"11px 14px",display:"flex",alignItems:"center",gap:12,boxShadow:m.status==="Pending"?`0 2px 8px ${T.amb}18`:"0 1px 3px rgba(0,0,0,0.04)"}}>
-                        <div style={{width:36,height:36,borderRadius:8,background:ms.bg,border:`1px solid ${ms.brd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                          <span style={{fontSize:13,fontWeight:700,color:ms.c}}>{i+1}</span>
-                        </div>
-                        <div style={{flex:1}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                            <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.title}</span>
-                            <Pill label={m.status} c={ms.c} bg={ms.bg} brd={ms.brd}/>
-                            <span style={{fontSize:10.5,color:T.t4}}>{m.pct}% of contract</span>
-                          </div>
-                          <div style={{fontSize:10.5,color:T.t4}}>Target: {m.date}</div>
-                        </div>
-                        <div style={{textAlign:"right",flexShrink:0}}>
-                          <div style={{fontSize:15,fontWeight:700,color:m.status==="Paid"?T.grn:T.t1}}>₹{fmtN(m.amount)}</div>
-                          {m.status==="Pending"&&<button style={{marginTop:6,padding:"4px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>Mark Paid</button>}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* ── BILLS TAB ── */}
-              {subTab==="bills"&&(
-                <div style={{padding:"14px 16px"}}>
-                  <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-                    <AddBtn label="New Bill"/>
-                  </div>
-                  <Panel>
-                    <THead cols="80px 1fr 130px 90px 80px" headers={["Date","Description","Amount","Status","Action"]}/>
-                    {sel.bills.map((b,i)=>{
-                      const bs=b.status==="Paid"?{c:T.grn,bg:T.grnL}:{c:T.red,bg:T.redL};
-                      return(
-                        <div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 130px 90px 80px",padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${bs.c}44`,transition:"background .1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          <span style={{fontSize:11.5,color:T.t4}}>{b.date}</span>
-                          <span style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{b.desc}</span>
-                          <span style={{fontSize:13,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(b.amount)}</span>
-                          <Pill label={b.status} c={bs.c} bg={bs.bg}/>
-                          {b.status==="Unpaid"
-                            ?<button style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>Pay</button>
-                            :<span style={{fontSize:11,color:T.t4}}>—</span>
-                          }
-                        </div>
-                      );
-                    })}
-                  </Panel>
-                </div>
-              )}
-
-              {/* ── MATERIAL ISSUED TAB ── */}
-              {subTab==="material"&&(
-                <div style={{padding:"14px 16px"}}>
-                  <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-                    <AddBtn label="Issue Material"/>
-                  </div>
-                  {sel.materials.length===0
-                    ?<div style={{padding:"48px",textAlign:"center",color:T.t4,fontSize:13}}>No material issued yet</div>
-                    :<Panel>
-                      <THead cols="80px 1fr 130px 130px" headers={["Date","Item","Qty Issued","Issued By"]}/>
-                      {sel.materials.map((m,i)=>(
-                        <div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 130px 130px",padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background .1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          <span style={{fontSize:11.5,color:T.t4}}>{m.date}</span>
-                          <span style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{m.item}</span>
-                          <span style={{fontSize:12.5,fontWeight:600,color:T.t2}}>{m.qty}</span>
-                          <span style={{fontSize:12,color:T.t3}}>{m.issuedBy}</span>
-                        </div>
-                      ))}
-                    </Panel>
-                  }
-                </div>
-              )}
-            </div>
           </div>
-        )}
+
+          {/* Sub Tabs */}
+          <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
+            {[{id:"wo",label:"Work Order"},{id:"bills",label:`RA Bills (${bills.length})`},{id:"pay",label:"Payments"}].map(t=>(
+              <button key={t.id} onClick={()=>setSubTab(t.id)}
+                style={{padding:"8px 16px",border:"none",background:"transparent",color:subTab===t.id?T.blu:T.t3,fontSize:12,fontWeight:subTab===t.id?700:400,cursor:"pointer",borderBottom:subTab===t.id?"2px solid "+T.blu:"2px solid transparent"}}>
+                {t.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Tab Content */}
+          <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+            {/* WORK ORDER TAB */}
+            {subTab==="wo"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                  <div style={{fontSize:11,fontWeight:700,color:T.t2}}>Retention: {selWo.retention_pct}% · TDS: {selWo.tds_pct}%</div>
+                  <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:T.grnL,color:T.grn}}>Total: {fmtC(selWo.total_value)}</span>
+                </div>
+                {/* WO items table - load from API */}
+                <WoItemsTable woId={selWo.id} api={api} T={T} fmtC={fmtC}/>
+              </div>
+            )}
+
+            {/* RA BILLS TAB */}
+            {subTab==="bills"&&(
+              <div>
+                <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
+                  <button onClick={()=>setShowNewBill(true)}
+                    style={{background:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    + New RA Bill
+                  </button>
+                </div>
+                {bills.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No bills raised yet</div>}
+                {bills.map(b=>{
+                  const stC=b.status==="Paid"?T.grn:b.status==="Approved"?T.blu:b.status==="Submitted"?T.amb:T.t4;
+                  return(
+                    <div key={b.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+stC}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                        <div>
+                          <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{b.bill_no}</span>
+                          <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>{b.bill_date?new Date(b.bill_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</span>
+                        </div>
+                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{b.status}</span>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
+                        {[{l:"Gross",v:fmtC(b.gross_amount),c:T.t1},{l:"Retention",v:fmtC(b.retention_amt),c:T.amb},{l:"TDS",v:fmtC(b.tds_amt),c:T.red},{l:"Net Payable",v:fmtC(b.net_payable),c:T.grn}].map(s=>(
+                          <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
+                            <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
+                            <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{display:"flex",gap:8"}}>
+                        {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
+                        {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>₹ Record Payment</button>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* PAYMENTS TAB */}
+            {subTab==="pay"&&(
+              <PaymentsTab woId={selWo.id} api={api} T={T} fmtC={fmtC}/>
+            )}
+          </div>
+        </>)}
       </div>
 
-      {/* Work Order Builder Modal */}
-      {showNewWO&&<WorkOrderBuilder/>}
+      {/* NEW WO MODAL */}
+      {showNewWO&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:T.surface,borderRadius:12,width:"min(640px,94vw)",maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
+            <div style={{background:"#0F172A",padding:"13px 16px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:14,fontWeight:700,color:"white"}}>New Work Order</div>
+              <button onClick={()=>setShowNewWO(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={lblStyle}>Subcontractor *</label>
+                  <input list="sc-list" value={woForm.subcon_name} onChange={e=>setWoForm(p=>({...p,subcon_name:e.target.value}))} placeholder="Select or type..." style={inpStyle}/>
+                  <datalist id="sc-list">{subcons.map(s=><option key={s.id} value={s.name}/>)}</datalist>
+                </div>
+                <div>
+                  <label style={lblStyle}>Retention %</label>
+                  <input type="number" value={woForm.retention_pct} onChange={e=>setWoForm(p=>({...p,retention_pct:e.target.value}))} style={inpStyle}/>
+                </div>
+                <div>
+                  <label style={lblStyle}>TDS %</label>
+                  <input type="number" value={woForm.tds_pct} onChange={e=>setWoForm(p=>({...p,tds_pct:e.target.value}))} style={inpStyle}/>
+                </div>
+                <div>
+                  <label style={lblStyle}>Start Date</label>
+                  <input type="date" value={woForm.start_date} onChange={e=>setWoForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
+                </div>
+                <div>
+                  <label style={lblStyle}>End Date</label>
+                  <input type="date" value={woForm.end_date} onChange={e=>setWoForm(p=>({...p,end_date:e.target.value}))} style={inpStyle}/>
+                </div>
+              </div>
+
+              {/* BOQ Items */}
+              <div style={{fontSize:10.5,fontWeight:700,color:T.t2,marginBottom:8,textTransform:"uppercase"}}>BOQ Items</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 24px",gap:6,marginBottom:6}}>
+                {["Description","Unit","Qty","Rate",""].map(h=><div key={h} style={{fontSize:9,color:T.t4,textTransform:"uppercase",fontWeight:700}}>{h}</div>)}
+              </div>
+              {woForm.items.map((it,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 24px",gap:6,marginBottom:6}}>
+                  <input value={it.description} onChange={e=>setWoForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,description:e.target.value}:r)}))} placeholder="Item description" style={inpStyle}/>
+                  <input value={it.unit} onChange={e=>setWoForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,unit:e.target.value}:r)}))} placeholder="Cum" style={inpStyle}/>
+                  <input type="number" value={it.qty} onChange={e=>setWoForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,qty:e.target.value}:r)}))} placeholder="0" style={inpStyle}/>
+                  <input type="number" value={it.rate} onChange={e=>setWoForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,rate:e.target.value}:r)}))} placeholder="0" style={inpStyle}/>
+                  <button onClick={()=>setWoForm(p=>({...p,items:p.items.filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",color:T.red,cursor:"pointer",fontSize:16,padding:0}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>setWoForm(p=>({...p,items:[...p.items,{description:"",unit:"",qty:"",rate:""}]}))} style={{background:"none",border:"none",color:T.blu,cursor:"pointer",fontSize:12,fontWeight:600,padding:"4px 0"}}>+ Add Item</button>
+              
+              {/* Total preview */}
+              <div style={{textAlign:"right",marginTop:8,fontSize:13,fontWeight:700,color:T.grn}}>
+                Total: {fmtC(woForm.items.reduce((s,i)=>s+(parseFloat(i.qty)||0)*(parseFloat(i.rate)||0),0))}
+              </div>
+            </div>
+            <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8"}}>
+              <button onClick={()=>setShowNewWO(false)} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
+              <button onClick={submitWO} disabled={saving} style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Create Work Order"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NEW RA BILL MODAL */}
+      {showNewBill&&selWo&&(
+        <NewRaBillModal woId={selWo.id} api={api} T={T} fmtC={fmtC} inpStyle={inpStyle} lblStyle={lblStyle}
+          billForm={billForm} setBillForm={setBillForm} saving={saving}
+          onClose={()=>setShowNewBill(false)} onSave={submitBill}/>
+      )}
+
+      {/* PAYMENT MODAL */}
+      {showPayModal&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:T.surface,borderRadius:10,width:"min(400px,94vw)",padding:20,boxShadow:"0 20px 50px rgba(0,0,0,0.2)"}}>
+            <div style={{fontSize:14,fontWeight:700,color:T.t1,marginBottom:14}}>Record Payment</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
+              <div>
+                <label style={lblStyle}>Amount *</label>
+                <input type="number" value={payForm.amount_paid} onChange={e=>setPayForm(p=>({...p,amount_paid:e.target.value}))} style={inpStyle} placeholder="0"/>
+              </div>
+              <div>
+                <label style={lblStyle}>Date</label>
+                <input type="date" value={payForm.payment_date} onChange={e=>setPayForm(p=>({...p,payment_date:e.target.value}))} style={inpStyle}/>
+              </div>
+              <div>
+                <label style={lblStyle}>Mode</label>
+                <select value={payForm.payment_mode} onChange={e=>setPayForm(p=>({...p,payment_mode:e.target.value}))} style={inpStyle}>
+                  {["Bank Transfer","Cheque","Cash","NEFT","RTGS","UPI"].map(m=><option key={m}>{m}</option>)}
+                </select>
+              </div>
+              <div>
+                <label style={lblStyle}>Reference No.</label>
+                <input value={payForm.reference_no} onChange={e=>setPayForm(p=>({...p,reference_no:e.target.value}))} style={inpStyle} placeholder="UTR/Cheque no."/>
+              </div>
+            </div>
+            <input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} placeholder="Remark (optional)" style={{...inpStyle,marginBottom:12}}/>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setShowPayModal(false)} style={{flex:1,padding:"8px",borderRadius:6,border:"1px solid "+T.b1,background:T.surface,cursor:"pointer",fontSize:12}}>Cancel</button>
+              <button onClick={()=>submitPayment(showPayModal)} disabled={saving} style={{flex:2,padding:"8px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Save Payment"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function WoItemsTable({ woId, api, T, fmtC }) {
+  const [items, setItems] = useState([]);
+  useEffect(()=>{
+    api.get("/subcon/work-orders/"+woId).then(r=>{ if(r.success) setItems(r.data.items||[]); }).catch(()=>{});
+  },[woId]);
+  if(items.length===0) return <div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12}}>No BOQ items</div>;
+  return(
+    <div style={{overflowX:"auto"}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 100px",background:"#1E293B",padding:"6px 12px",gap:8,minWidth:500,borderRadius:"6px 6px 0 0"}}>
+        {["Description","Unit","Qty","Rate","Amount"].map((h,i)=><div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>)}
+      </div>
+      {items.map((it,i)=>(
+        <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 100px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:"#F8FAFC",minWidth:500}}>
+          <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
+          <div style={{fontSize:11.5,color:T.t3}}>{it.unit}</div>
+          <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
+          <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</div>
+          <div style={{fontSize:12,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.amount)}</div>
+        </div>
+      ))}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 100px",padding:"8px 12px",gap:8,background:"#0F172A",borderRadius:"0 0 6px 6px",minWidth:500}}>
+        <div style={{gridColumn:"1/5",fontSize:10,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase"}}>Total</div>
+        <div style={{fontSize:13,fontWeight:800,color:"#4ADE80",textAlign:"right"}}>{fmtC(items.reduce((s,i)=>s+parseFloat(i.amount||0),0))}</div>
+      </div>
+    </div>
+  );
+}
+
+function NewRaBillModal({ woId, api, T, fmtC, inpStyle, lblStyle, billForm, setBillForm, saving, onClose, onSave }) {
+  const [woItems, setWoItems] = useState([]);
+  const [prevCums, setPrevCums] = useState({});
+  useEffect(()=>{
+    api.get("/subcon/work-orders/"+woId).then(r=>{
+      if(r.success){
+        const items = r.data.items||[];
+        setWoItems(items);
+        const initItems = items.map(i=>({ wo_item_id:i.id, cumulative_qty:"", rate:i.rate }));
+        setBillForm(p=>({...p, items: initItems}));
+      }
+    }).catch(()=>{});
+  },[woId]);
+
+  const gross = woItems.reduce((sum,it,i)=>{
+    const cumQty = parseFloat(billForm.items[i]?.cumulative_qty||0);
+    const prev   = parseFloat(prevCums[it.id]||0);
+    return sum + Math.max(0, cumQty-prev) * parseFloat(it.rate||0);
+  },0);
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:T.surface,borderRadius:12,width:"min(680px,94vw)",maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
+        <div style={{background:"#0F172A",padding:"13px 16px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>New RA Bill</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+            <div>
+              <label style={lblStyle}>Bill Date</label>
+              <input type="date" value={billForm.bill_date} onChange={e=>setBillForm(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>Remark</label>
+              <input value={billForm.remark||""} onChange={e=>setBillForm(p=>({...p,remark:e.target.value}))} style={inpStyle} placeholder="Optional"/>
+            </div>
+          </div>
+          <div style={{fontSize:10.5,fontWeight:700,color:T.t2,marginBottom:8,textTransform:"uppercase"}}>Cumulative Quantities</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 90px",background:"#1E293B",padding:"6px 12px",gap:8,borderRadius:"6px 6px 0 0"}}>
+            {["Item","Unit","WO Qty","Prev Cum","This Cum"].map((h,i)=><div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>)}
+          </div>
+          {woItems.map((it,i)=>(
+            <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 90px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
+              <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
+              <div style={{fontSize:11.5,color:T.t3}}>{it.unit}</div>
+              <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
+              <div style={{fontSize:12,color:T.t3,textAlign:"right"}}>{parseFloat(prevCums[it.id]||0)}</div>
+              <input type="number" value={billForm.items[i]?.cumulative_qty||""} min={0} max={it.qty}
+                onChange={e=>setBillForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,cumulative_qty:e.target.value}:r)}))}
+                style={{...inpStyle,textAlign:"right",fontWeight:700,padding:"4px 8px"}}/>
+            </div>
+          ))}
+          <div style={{textAlign:"right",marginTop:10,fontSize:14,fontWeight:800,color:T.grn}}>Gross: {fmtC(gross)}</div>
+        </div>
+        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8}}>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onSave} disabled={saving} style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Submit RA Bill"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PaymentsTab({ woId, api, T, fmtC }) {
+  const [payments, setPayments] = useState([]);
+  useEffect(()=>{
+    api.get("/subcon/payments?wo_id="+woId).then(r=>{ if(r.success) setPayments(r.data||[]); }).catch(()=>{});
+  },[woId]);
+  if(payments.length===0) return <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No payments recorded yet</div>;
+  const total = payments.reduce((s,p)=>s+parseFloat(p.amount_paid||0),0);
+  return(
+    <div>
+      {payments.map((p,i)=>(
+        <div key={p.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"10px 14px",marginBottom:8,borderLeft:"3px solid "+T.grn,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:T.grn}}>{fmtC(p.amount_paid)}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{p.payment_mode} · {p.payment_date?new Date(p.payment_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            {p.reference_no&&<div style={{fontSize:11,color:T.blu,fontFamily:"monospace"}}>{p.reference_no}</div>}
+            {p.remark&&<div style={{fontSize:11,color:T.t3}}>{p.remark}</div>}
+          </div>
+        </div>
+      ))}
+      <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,marginTop:8}}>Total Paid: {fmtC(total)}</div>
     </div>
   );
 }
 
 
-// ═══════════════════════════════════════════════════════════════════
-// TAB 11 — EQUIPMENT
-// ═══════════════════════════════════════════════════════════════════
 function TabEquipment() {
   const [selEq, setSelEq] = useState(D.equipment[0]);
 
@@ -6825,20 +6748,20 @@ function TaskSkeleton(){
 // PROJECT DETAIL PAGE — SHELL
 // ═══════════════════════════════════════════════════════════════════
 const TABS = [
-  {id:"overview",   label:"Overview",    key:"o"},
-  {id:"design",     label:"Design",      key:"d"},
-  {id:"estimate",   label:"Estimate",    key:"e"},
-  {id:"party",      label:"Party",       key:"p"},
-  {id:"transaction",label:"Transaction", key:"t"},
-  {id:"todo",       label:"To Do",       key:"k"},
-  {id:"task",       label:"Tasks",       key:"j"},
-  {id:"attendance", label:"Attendance",  key:"a"},
-  {id:"material",   label:"Material",    key:"m"},
-  {id:"subcon",     label:"Subcon",      key:"b"},
-  {id:"equipment",  label:"Equipment",   key:"q"},
-  {id:"files",      label:"Files",       key:"i"},
-  {id:"site",       label:"Site / DPR",  key:"y"},
-  {id:"mom",        label:"MOM",         key:"n"},
+  {id:"overview",   label:"Overview"},
+  {id:"design",     label:"Design"},
+  {id:"estimate",   label:"Estimate"},
+  {id:"party",      label:"Party"},
+  {id:"transaction",label:"Transaction"},
+  {id:"todo",       label:"To Do"},
+  {id:"task",       label:"Tasks"},
+  {id:"attendance", label:"Attendance"},
+  {id:"material",   label:"Material"},
+  {id:"subcon",     label:"Subcon"},
+  {id:"equipment",  label:"Equipment"},
+  {id:"files",      label:"Files"},
+  {id:"site",       label:"Site / DPR"},
+  {id:"mom",        label:"MOM"},
 ];
 
 function ProjectDetailPage({project=PROJ, onBack}) {
@@ -6847,27 +6770,6 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   const margin = project.boq - project.expense;
 
   const switchTab = (t) => setTab(t);
-
-  // ── Ctrl+key tab shortcuts ──────────────────────────────────────────
-  useEffect(()=>{
-    const handler=(e)=>{
-      const tag=document.activeElement?.tagName;
-      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
-      if(!e.ctrlKey) return;
-      const match=TABS.find(t=>t.key===e.key.toLowerCase());
-      if(match){ e.preventDefault(); setTab(match.id); }
-      // Escape key handled separately
-    };
-    const escHandler=(e)=>{
-      if(e.key==="Escape"&&onBack) onBack();
-    };
-    window.addEventListener("keydown",handler);
-    window.addEventListener("keydown",escHandler);
-    return()=>{
-      window.removeEventListener("keydown",handler);
-      window.removeEventListener("keydown",escHandler);
-    };
-  },[onBack]);
 
   const tabContent = {
     overview:    <TabOverview    proj={project}/>,
@@ -6879,7 +6781,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     task:        <TabTasks projectId={project.id}/>,
     attendance:  <TabAttendance/>,
     material:    <TabMaterial project={project}/>,
-    subcon:      <TabSubcon/>,
+    subcon:      <TabSubcon projectId={projectId} api={api} T={T}/>,
     equipment:   <TabEquipment/>,
     files:       <TabFiles/>,
     site:        <TabSite/>,
@@ -6936,10 +6838,8 @@ function ProjectDetailPage({project=PROJ, onBack}) {
         <style>{`* { scrollbar-width: none; } *::-webkit-scrollbar { display: none; }`}</style>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
-            title={`${t.label}  (Ctrl+${t.key.toUpperCase()})`}
-            style={{padding:"10px 16px 8px", border:"none", background:"none", cursor:"pointer", color:tab===t.id?T.blu:T.t3, fontWeight:tab===t.id?700:400, fontSize:12.5, whiteSpace:"nowrap", borderBottom:tab===t.id?`2.5px solid ${T.blu}`:"2.5px solid transparent", transition:"all .15s", flexShrink:0, fontFamily:"inherit", letterSpacing:0, position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:1}}>
+            style={{padding:"10px 16px", border:"none", background:"none", cursor:"pointer", color:tab===t.id?T.blu:T.t3, fontWeight:tab===t.id?700:400, fontSize:12.5, whiteSpace:"nowrap", borderBottom:tab===t.id?`2.5px solid ${T.blu}`:"2.5px solid transparent", transition:"all .15s", flexShrink:0, fontFamily:"inherit", letterSpacing:0}}>
             {t.label}
-            <span style={{fontSize:8, color:tab===t.id?T.blu:T.t4, opacity:tab===t.id?0.6:0.4, letterSpacing:0, fontWeight:400, lineHeight:1}}>^{t.key.toUpperCase()}</span>
           </button>
         ))}
       </div>
