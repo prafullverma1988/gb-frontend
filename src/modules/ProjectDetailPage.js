@@ -3974,20 +3974,28 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               </div>
             )}
 
-            {/* MR Status List */}
+            {/* Material Activity List */}
             {!matLoading&&materials.length>0&&matTab!=="usedlog"&&(
               <div style={{marginBottom:10}}>
-                <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Material Requests ({materials.length})</div>
+                <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Material Activity ({materials.length})</div>
                 {materials.map((m,i)=>{
-                  const mrC=m.mat_status==="Received"||m.mat_status==="PartialReceived"?"#16A34A":m.mat_status==="Ordered"?"#D97706":m.mr_status==="Approved"?"#2563EB":"#64748B";
-                  const mrL=m.mat_status==="Received"?"Received":m.mat_status==="PartialReceived"?"Partial":m.mat_status==="Ordered"?"Ordered":m.mr_status==="Approved"?"Approved":m.mr_status||"Pending";
+                  const hasReq=m.required_qty>0;
+                  const hasRcv=m.received_qty>0;
+                  const hasUsed=m.used_qty>0;
+                  const mrC=m.mat_status==="Received"||m.mat_status==="PartialReceived"?"#16A34A":m.mat_status==="Ordered"?"#D97706":m.mr_status==="Approved"?"#2563EB":hasRcv?"#16A34A":hasUsed?"#D97706":"#64748B";
+                  const mrL=m.mat_status==="Received"?"Received":m.mat_status==="PartialReceived"?"Partial Rcvd":m.mat_status==="Ordered"?"Ordered":m.mr_status==="Approved"?"Approved":hasRcv?"Received":hasUsed?"Used":m.mr_status||"Pending";
                   return(
-                    <div key={i} style={{background:"white",borderRadius:8,padding:"9px 11px",border:"1px solid #E2E8F0",marginBottom:6,borderLeft:"3px solid "+mrC,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <div>
+                    <div key={i} style={{background:"white",borderRadius:8,padding:"9px 11px",border:"1px solid #E2E8F0",marginBottom:6,borderLeft:"3px solid "+mrC}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:hasRcv||hasUsed?4:0}}>
                         <div style={{fontSize:12,fontWeight:700,color:"#1E293B"}}>{m.material_name}</div>
-                        <div style={{fontSize:10.5,color:"#94A3B8"}}>Req: {m.required_qty} {m.unit}{m.received_qty>0?" · Rcvd: "+m.received_qty:""}</div>
+                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:mrC+"22",color:mrC}}>{mrL}</span>
                       </div>
-                      <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:mrC+"22",color:mrC}}>{mrL}</span>
+                      <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                        {hasReq&&<span style={{fontSize:10.5,color:"#94A3B8"}}>Req: <b style={{color:"#475569"}}>{m.required_qty} {m.unit}</b></span>}
+                        {hasRcv&&<span style={{fontSize:10.5,color:"#94A3B8"}}>Rcvd: <b style={{color:"#16A34A"}}>{m.received_qty} {m.unit}</b></span>}
+                        {hasUsed&&<span style={{fontSize:10.5,color:"#94A3B8"}}>Used: <b style={{color:"#D97706"}}>{m.used_qty} {m.unit}</b></span>}
+                        {hasRcv&&!hasReq&&<span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:"#F0FDF4",color:"#16A34A",fontWeight:600}}>GRN</span>}
+                      </div>
                     </div>
                   );
                 })}
