@@ -3644,23 +3644,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
   },[]);
   useEffect(()=>{
-    if(tab==="materials" && materials.length===0){
+    if(tab==="materials"){
       setMatLoading(true);
       api.get("/tasks/"+task.id+"/material-summary").then(r=>{
-        if(r.success && r.data && r.data.length>0){
-          setMaterials(r.data);
-        } else {
-          api.get("/tasks/"+task.id+"/materials").then(r2=>{
-            if(r2.success) setMaterials((r2.data||[]).map(m=>({
-              material_name: m.material_name,
-              unit: m.unit,
-              required_qty: m.required_qty||0,
-              received_qty: m.received_qty||0,
-              used_qty: m.used_qty||0,
-              remark: m.remark||"",
-            })));
-          }).catch(()=>{});
-        }
+        if(r.success) setMaterials(r.data||[]);
         setMatLoading(false);
       }).catch(()=>setMatLoading(false));
       // Load project inventory
