@@ -5740,9 +5740,22 @@ function TabMaterial({ project }) {
 
 
 const SC_DATA = [
-  { id:1, contractor:"Subcontractor 1", category:"Civil", contact:"9000000001", rate:"15000", status:"Active",
-    workOrder:{ sections:[{ id:"s1", title:"Foundation", subsections:[{ id:"s1a", title:"Excavation", items:[{ id:"i1", desc:"Earthwork", qty:100, unit:"Cum", rate:150, amount:15000, done:false }]}]}] },
-    bills:[], attendance:[] },
+  {
+    id:1, contractor:"Subcontractor 1", category:"Civil", contact:"9000000001",
+    rate:"15000", status:"Active",
+    workOrder:{
+      sections:[
+        { id:"s1", title:"Foundation",
+          subsections:[
+            { id:"s1a", title:"Excavation",
+              items:[{ id:"i1", desc:"Earthwork excavation", qty:100, unit:"Cum", rate:150, amount:15000, done:false }]
+            }
+          ]
+        }
+      ]
+    },
+    bills:[], attendance:[], materials:[],
+  },
 ];
 
 function TabSubcon() {
