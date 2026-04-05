@@ -6781,7 +6781,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     task:        <TabTasks projectId={project.id}/>,
     attendance:  <TabAttendance/>,
     material:    <TabMaterial project={project}/>,
-    subcon:      <TabSubcon projectId={projectId}/>,
+    subcon:      <TabSubcon projectId={project.id}/>,
     equipment:   <TabEquipment/>,
     files:       <TabFiles/>,
     site:        <TabSite/>,
