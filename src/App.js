@@ -70,7 +70,7 @@ const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
 const NAV_GROUPS=[
   {section:null,items:[
     {id:"dashboard", label:"Dashboard",    Icon:IcHome, sc:"H"},
-    {id:"projects",  label:"Projects",     Icon:IcProj, sc:"J"},
+    {id:"projects",  label:"Projects",     Icon:IcProj, sc:"P"},
     {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
     {id:"team",      label:"Team Schedule",Icon:IcTeam, sc:"T"},
@@ -78,15 +78,9 @@ const NAV_GROUPS=[
   ]},
   {section:"FINANCE & OPS",items:[
     {id:"finance",     label:"Finance",     Icon:IcFin,  sc:"F"},
-    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P", badge:11,bc:C.p},
+    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"R", badge:11,bc:C.p},
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
     {id:"payroll",     label:"Payroll",     Icon:IcPay,  sc:"Y"},
-  ]},
-  {section:"REPORTS",items:[
-    {id:"reports",  label:"Reports",    Icon:IcRep, sc:"B"},
-    {id:"library",  label:"Library",    Icon:IcLib, sc:"L"},
-    {id:"settings", label:"Settings",   Icon:IcSet, sc:"S"},
-    {id:"saas",     label:"SaaS Admin", Icon:IcStar,badge:"SA",bc:"#7C3AED"},
   ]},
   {section:"REPORTS",items:[{id:"reports",label:"Reports",Icon:IcRep},{id:"library",label:"Library",Icon:IcLib},{id:"settings",label:"Settings",Icon:IcSet},{id:"saas",label:"SaaS Admin",Icon:IcStar,badge:"SA",bc:"#7C3AED"}]},
 ];
@@ -278,6 +272,149 @@ function LoginScreen({onLogin}){
   );
 }
 
+// ── QUICK SEARCH (Ctrl+K) ─────────────────────────────────────────────
+const SEARCH_ITEMS=[
+  {id:"dashboard", label:"Dashboard",     icon:"M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z", sc:"Alt+H", section:"Navigation"},
+  {id:"projects",  label:"Projects",      icon:"M3 7h18M3 12h18M3 17h18",                                 sc:"Alt+J", section:"Navigation"},
+  {id:"finance",   label:"Finance",       icon:"M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",  sc:"Alt+F", section:"Finance & Ops"},
+  {id:"procurement",label:"Procurement",  icon:"M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18",  sc:"Alt+P", section:"Finance & Ops"},
+  {id:"warehouse", label:"Warehouse",     icon:"M3 21V8l9-5 9 5v13M9 21v-6h6v6",                          sc:"Alt+W", section:"Finance & Ops"},
+  {id:"payroll",   label:"Payroll",       icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
+  {id:"crm",       label:"CRM",           icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+C", section:"Navigation"},
+  {id:"design",    label:"Design",        icon:"M12 19l7-7 3 3-7 7-3-3z",                                 sc:"Alt+D", section:"Navigation"},
+  {id:"team",      label:"Team Schedule", icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+T", section:"Navigation"},
+  {id:"mom",       label:"MOM",           icon:"M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7",    sc:"Alt+M", section:"Navigation"},
+  {id:"reports",   label:"Reports",       icon:"M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5",           sc:"Alt+B", section:"Reports"},
+  {id:"library",   label:"Library",       icon:"M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5",            sc:"Alt+L", section:"Reports"},
+  {id:"settings",  label:"Settings",      icon:"M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0", sc:"Alt+S", section:"Reports"},
+];
+
+function QuickSearch({onNavigate, onClose}){
+  const [q,setQ]=useState("");
+  const [idx,setIdx]=useState(0);
+  const inputRef=React.useRef(null);
+
+  const filtered=q.trim()
+    ?SEARCH_ITEMS.filter(i=>i.label.toLowerCase().includes(q.toLowerCase())||i.section.toLowerCase().includes(q.toLowerCase()))
+    :SEARCH_ITEMS;
+
+  useEffect(()=>{
+    inputRef.current?.focus();
+    const handler=(e)=>{
+      if(e.key==="ArrowDown"){e.preventDefault();setIdx(i=>Math.min(i+1,filtered.length-1));}
+      if(e.key==="ArrowUp"){e.preventDefault();setIdx(i=>Math.max(i-1,0));}
+      if(e.key==="Enter"&&filtered[idx]){onNavigate(filtered[idx].id);}
+      if(e.key==="Escape"){onClose();}
+    };
+    window.addEventListener("keydown",handler);
+    return()=>window.removeEventListener("keydown",handler);
+  },[filtered,idx]);
+
+  useEffect(()=>setIdx(0),[q]);
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:1000,backdropFilter:"blur(4px)"}}/>
+    <div style={{position:"fixed",top:"18%",left:"50%",transform:"translateX(-50%)",width:520,maxWidth:"92vw",background:"#1E293B",borderRadius:14,boxShadow:"0 24px 80px rgba(0,0,0,0.5)",zIndex:1001,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
+      {/* Search input */}
+      <div style={{display:"flex",alignItems:"center",gap:10,padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={2} strokeLinecap="round"><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+        <input ref={inputRef} value={q} onChange={e=>{setQ(e.target.value);}}
+          placeholder="Search modules... (↑↓ navigate, Enter select)"
+          style={{flex:1,background:"none",border:"none",outline:"none",color:"white",fontSize:14,fontFamily:"inherit",caretColor:"#3B82F6"}}/>
+        <span style={{fontSize:10,color:"rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.07)",padding:"2px 7px",borderRadius:5,fontWeight:600}}>ESC</span>
+      </div>
+      {/* Results */}
+      <div style={{maxHeight:360,overflowY:"auto",padding:"6px 0"}}>
+        {filtered.length===0&&<div style={{padding:"28px 0",textAlign:"center",color:"rgba(255,255,255,0.3)",fontSize:13}}>No results for "{q}"</div>}
+        {filtered.map((item,i)=>(
+          <div key={item.id} onClick={()=>onNavigate(item.id)}
+            style={{display:"flex",alignItems:"center",gap:12,padding:"10px 16px",cursor:"pointer",background:i===idx?"rgba(59,130,246,0.2)":"none",transition:"background 0.1s",borderLeft:i===idx?"3px solid #3B82F6":"3px solid transparent"}}
+            onMouseEnter={()=>setIdx(i)}>
+            <span style={{width:30,height:30,borderRadius:8,background:"rgba(255,255,255,0.07)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={i===idx?"#60A5FA":"rgba(255,255,255,0.45)"} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={item.icon}/></svg>
+            </span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:600,color:i===idx?"white":"rgba(255,255,255,0.75)"}}>{item.label}</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.3)",marginTop:1}}>{item.section}</div>
+            </div>
+            <span style={{fontSize:9.5,color:"rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.06)",padding:"2px 7px",borderRadius:5}}>{item.sc}</span>
+          </div>
+        ))}
+      </div>
+      {/* Footer */}
+      <div style={{padding:"8px 16px",borderTop:"1px solid rgba(255,255,255,0.06)",display:"flex",gap:14,alignItems:"center"}}>
+        {[["↑↓","Navigate"],["↵","Open"],["Esc","Close"]].map(([k,l])=>(
+          <span key={k} style={{display:"flex",alignItems:"center",gap:5,fontSize:10.5,color:"rgba(255,255,255,0.3)"}}>
+            <span style={{background:"rgba(255,255,255,0.08)",borderRadius:4,padding:"1px 6px",fontSize:10,fontWeight:600,color:"rgba(255,255,255,0.4)"}}>{k}</span>{l}
+          </span>
+        ))}
+        <span style={{marginLeft:"auto",fontSize:10,color:"rgba(255,255,255,0.2)"}}>Ctrl+K to open anytime</span>
+      </div>
+    </div>
+  </>);
+}
+
+// ── SHORTCUT CHEATSHEET (? key) ──────────────────────────────────────
+function ShortcutCheatsheet({onClose}){
+  const GLOBAL=[
+    ["Alt+H","Dashboard"],["Alt+J","Projects"],["Alt+F","Finance"],["Alt+P","Procurement"],
+    ["Alt+W","Warehouse"],["Alt+Y","Payroll"],["Alt+C","CRM"],["Alt+D","Design"],
+    ["Alt+T","Team Schedule"],["Alt+M","MOM"],["Alt+B","Reports"],["Alt+L","Library"],["Alt+S","Settings"],
+  ];
+  const PROJ=[
+    ["Ctrl+O","Overview"],["Ctrl+D","Design"],["Ctrl+E","Estimate"],["Ctrl+P","Party"],
+    ["Ctrl+T","Transaction"],["Ctrl+K","To Do"],["Ctrl+J","Tasks"],["Ctrl+A","Attendance"],
+    ["Ctrl+M","Material"],["Ctrl+B","Subcon"],["Ctrl+Q","Equipment"],["Ctrl+I","Files"],
+    ["Ctrl+Y","Site/DPR"],["Ctrl+N","MOM"],
+  ];
+  const GENERAL=[
+    ["Ctrl+K","Quick Search"],["?","This cheatsheet"],["Escape","Back / Close"],
+  ];
+
+  const KBD=({k})=>(
+    <span style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.2)",borderRadius:5,padding:"2px 8px",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.85)",fontFamily:"monospace",whiteSpace:"nowrap"}}>{k}</span>
+  );
+  const Section=({title,items,color})=>(
+    <div>
+      <div style={{fontSize:9,fontWeight:700,letterSpacing:"1px",textTransform:"uppercase",color,marginBottom:8}}>{title}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px 12px"}}>
+        {items.map(([k,l])=>(
+          <div key={k} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0"}}>
+            <KBD k={k}/>
+            <span style={{fontSize:12,color:"rgba(255,255,255,0.55)"}}>{l}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:1000,backdropFilter:"blur(4px)"}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:580,maxWidth:"94vw",background:"#0F172A",borderRadius:16,boxShadow:"0 30px 90px rgba(0,0,0,0.6)",zIndex:1001,overflow:"hidden",border:"1px solid rgba(255,255,255,0.1)"}}>
+      {/* Header */}
+      <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>Keyboard Shortcuts</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2}}>GB Buildcon — Press ? to toggle</div>
+        </div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:7,padding:"5px 10px",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>ESC</button>
+      </div>
+      {/* Content */}
+      <div style={{padding:"18px 20px",display:"flex",flexDirection:"column",gap:20,maxHeight:"70vh",overflowY:"auto"}}>
+        <Section title="General" items={GENERAL} color="#60A5FA"/>
+        <div style={{height:1,background:"rgba(255,255,255,0.06)"}}/>
+        <Section title="Global Navigation (Alt + Key)" items={GLOBAL} color="#34D399"/>
+        <div style={{height:1,background:"rgba(255,255,255,0.06)"}}/>
+        <Section title="Project Detail Tabs (Ctrl + Key)" items={PROJ} color="#F59E0B"/>
+      </div>
+      {/* Footer */}
+      <div style={{padding:"10px 20px",borderTop:"1px solid rgba(255,255,255,0.06)",textAlign:"center"}}>
+        <span style={{fontSize:10.5,color:"rgba(255,255,255,0.2)"}}>Shortcuts are disabled when typing in input fields</span>
+      </div>
+    </div>
+  </>);
+}
+
 // ── SIDEBAR ───────────────────────────────────────────────────────────
 function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules}){
   // Filter nav items — disabled modules hidden from sidebar
@@ -303,25 +440,14 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
               {visibleItems.map(item=>{
                 const isA=active===item.id;
                 return(
-                  <button key={item.id} onClick={()=>setActive(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label}
-                    style={{width:"100%",display:"flex",alignItems:"center",gap:0,padding:collapsed?"10px 0":"7px 12px 7px 14px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
+                  <button key={item.id} onClick={()=>setActive(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:collapsed?"10px 0":"9px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
                     onMouseEnter={e=>{if(!isA){e.currentTarget.style.background=C.sbH;e.currentTarget.style.color="white";}}}
                     onMouseLeave={e=>{if(!isA){e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.52)";}}}
                   >
-                    <span style={{width:32,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <item.Icon size={16} color="currentColor"/>
-                    </span>
-                    {!collapsed&&<span style={{fontSize:12.5,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap",letterSpacing:"0.1px"}}>{item.label}</span>}
-                    {!collapsed&&(
-                      <span style={{width:40,display:"flex",justifyContent:"flex-end",alignItems:"center",flexShrink:0}}>
-                        {item.badge
-                          ?<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10,lineHeight:1.6}}>{item.badge}</span>
-                          :item.sc
-                            ?<span style={{fontSize:8,color:"rgba(255,255,255,0.18)",fontWeight:500}}>Alt+{item.sc}</span>
-                            :null
-                        }
-                      </span>
-                    )}
+                    <item.Icon size={17} color="currentColor"/>
+                    {!collapsed&&<span style={{fontSize:13,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap"}}>{item.label}</span>}
+                    {!collapsed&&item.sc&&<span style={{fontSize:8,color:"rgba(255,255,255,0.2)",fontWeight:400,marginRight:item.badge?4:0}}>Alt+{item.sc}</span>}
+                    {!collapsed&&item.badge&&<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{item.badge}</span>}
                     {isA&&collapsed&&<div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:C.a,borderRadius:"2px 0 0 2px"}}/>}
                   </button>
                 );
@@ -349,11 +475,25 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
 
 
 // ── TOPBAR ────────────────────────────────────────────────────────────
-function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout}){
+function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSearch,onCheatsheet}){
   return(
     <div style={{height:60,background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",padding:"0 20px",gap:14,flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
       <button onClick={()=>setCollapsed(!collapsed)} style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}><IcMenu size={19}/></button>
       <div style={{flex:1}}><div style={{fontSize:15,fontWeight:700,color:T.t1}}>{title}</div>{sub&&<div style={{fontSize:11,color:T.t3}}>{sub}</div>}</div>
+      {/* Ctrl+K Search button */}
+      <button onClick={onSearch} title="Quick Search (Ctrl+K)"
+        style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,transition:"all 0.15s"}}
+        onMouseEnter={e=>{e.currentTarget.style.background=T.sltL;e.currentTarget.style.borderColor=T.b2;}}
+        onMouseLeave={e=>{e.currentTarget.style.background=T.bg;e.currentTarget.style.borderColor=T.b1;}}>
+        <IcSrch size={14} color={T.t4}/>
+        <span style={{fontSize:12,color:T.t4,whiteSpace:"nowrap"}}>Search...</span>
+        <span style={{fontSize:9.5,background:T.b1,borderRadius:4,padding:"1px 6px",color:T.t4,fontWeight:600,letterSpacing:"0.3px"}}>Ctrl+K</span>
+      </button>
+      {/* ? Cheatsheet button */}
+      <button onClick={onCheatsheet} title="Keyboard Shortcuts (?)"
+        style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,transition:"all 0.15s"}}
+        onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
+        onMouseLeave={e=>e.currentTarget.style.background=T.bg}>?</button>
       <button style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,position:"relative"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
         <IcBell size={19}/>
         {alertCount>0&&<div style={{position:"absolute",top:4,right:4,width:16,height:16,borderRadius:"50%",background:T.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"white",border:"2px solid white"}}>{alertCount}</div>}
@@ -546,6 +686,8 @@ export default function App(){
   const [user,setUser]=useState(()=>getUser());
   const [nav,setNav]=useState("dashboard");
   const [collapsed,setCollapsed]=useState(false);
+  const [showSearch,setShowSearch]=useState(false);
+  const [showCheatsheet,setShowCheatsheet]=useState(false);
   // enabledModules: null=loading, {}=map of key→boolean
   const [enabledModules,setEnabledModules]=useState(null);
 
@@ -572,36 +714,38 @@ export default function App(){
       .catch(()=>setEnabledModules({})); // on error: show all
   },[loggedIn]);
 
-  // ── Global keyboard shortcuts (Alt + key) ──────────────────────────
+  // ── Global keyboard shortcuts ────────────────────────────────────────
   useEffect(()=>{
     const handler=(e)=>{
-      // Only fire when not typing in input/textarea/select
       const tag=document.activeElement?.tagName;
-      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
-      if(!e.altKey) return;
-      const map={
-        h:"dashboard",  // Alt+H → Home/Dashboard
-        j:"projects",   // Alt+J → Projects
-        f:"finance",    // Alt+F → Finance
-        p:"procurement",// Alt+P → Procurement
-        l:"library",    // Alt+L → Library
-        s:"settings",   // Alt+S → Settings
-        c:"crm",        // Alt+C → CRM
-        w:"warehouse",  // Alt+W → Warehouse
-        y:"payroll",    // Alt+Y → paYroll
-        t:"team",       // Alt+T → Team Schedule
-        m:"mom",        // Alt+M → MOM
-        d:"design",     // Alt+D → Design
-        b:"reports",    // Alt+B → Reports
-      };
-      if(map[e.key]){
-        e.preventDefault();
-        setNav(map[e.key]);
+      const typing=tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT";
+
+      // Ctrl+K → Quick Search (always works)
+      if(e.ctrlKey&&e.key==="k"){e.preventDefault();setShowSearch(s=>!s);return;}
+
+      // ? → Cheatsheet (only when not typing)
+      if(!typing&&e.key==="?"&&!e.ctrlKey&&!e.altKey){setShowCheatsheet(s=>!s);return;}
+
+      // Escape → close modals first
+      if(e.key==="Escape"){
+        if(showSearch){setShowSearch(false);return;}
+        if(showCheatsheet){setShowCheatsheet(false);return;}
+        return;
+      }
+
+      // Alt+key nav (only when not typing)
+      if(!typing&&e.altKey){
+        const map={
+          h:"dashboard", j:"projects",  f:"finance",  p:"procurement",
+          l:"library",   s:"settings",  c:"crm",      w:"warehouse",
+          y:"payroll",   t:"team",      m:"mom",       d:"design",   b:"reports",
+        };
+        if(map[e.key]){e.preventDefault();setNav(map[e.key]);}
       }
     };
     window.addEventListener("keydown",handler);
     return()=>window.removeEventListener("keydown",handler);
-  },[]);
+  },[showSearch,showCheatsheet]);
   const handleLogout=()=>{apiCache.clear();clearAuth();setUser(null);setEnabledModules(null);};
 
   if(!loggedIn) return <LoginScreen onLogin={handleLogin}/>;
@@ -661,11 +805,15 @@ export default function App(){
       `}</style>
       <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules}/>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={ALERTS.length} user={user} onLogout={handleLogout}/>
+        <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={ALERTS.length} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>
         <div style={{flex:1,overflowY:"auto"}}>
           {MODULE_MAP[nav]||<DashboardModule/>}
         </div>
       </div>
+      {/* Quick Search Modal */}
+      {showSearch&&<QuickSearch onNavigate={(id)=>{setNav(id);setShowSearch(false);}} onClose={()=>setShowSearch(false)}/>}
+      {/* Shortcut Cheatsheet Modal */}
+      {showCheatsheet&&<ShortcutCheatsheet onClose={()=>setShowCheatsheet(false)}/>}
     </div>
   );
 }
