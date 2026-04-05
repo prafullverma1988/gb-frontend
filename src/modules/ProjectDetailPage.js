@@ -6028,7 +6028,7 @@ function TabSubcon({ projectId }) {
                 Total: {fmtC(woForm.items.reduce((s,i)=>s+(parseFloat(i.qty)||0)*(parseFloat(i.rate)||0),0))}
               </div>
             </div>
-            <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8"}}>
+            <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8}}>
               <button onClick={()=>setShowNewWO(false)} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
               <button onClick={submitWO} disabled={saving} style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Create Work Order"}</button>
             </div>
