@@ -5754,7 +5754,8 @@ const SC_DATA = [
         }
       ]
     },
-    bills:[], attendance:[], materials:[],
+    bills:[], attendance:[], materials:[], milestones:[],
+    agenda:[], attendees:[], decisions:[],
   },
 ];
 
