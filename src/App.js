@@ -68,8 +68,20 @@ const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
 
 // ── NAV GROUPS ────────────────────────────────────────────────────────
 const NAV_GROUPS=[
-  {section:null,items:[{id:"dashboard",label:"Dashboard",Icon:IcHome},{id:"projects",label:"Projects",Icon:IcProj},{id:"crm",label:"CRM",Icon:IcCRM},{id:"mom",label:"MOM",Icon:IcMOM},{id:"team",label:"Team Schedule",Icon:IcTeam},{id:"design",label:"Design",Icon:IcDes,badge:"NEW",bc:C.a}]},
-  {section:"FINANCE & OPS",items:[{id:"finance",label:"Finance",Icon:IcFin},{id:"procurement",label:"Procurement",Icon:IcProc,badge:11,bc:C.p},{id:"warehouse",label:"Warehouse",Icon:IcWH},{id:"payroll",label:"Payroll",Icon:IcPay}]},
+  {section:null,items:[
+    {id:"dashboard", label:"Dashboard",    Icon:IcHome, sc:"H"},
+    {id:"projects",  label:"Projects",     Icon:IcProj, sc:"P"},
+    {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
+    {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
+    {id:"team",      label:"Team Schedule",Icon:IcTeam, sc:"T"},
+    {id:"design",    label:"Design",       Icon:IcDes,  sc:"D", badge:"NEW",bc:C.a},
+  ]},
+  {section:"FINANCE & OPS",items:[
+    {id:"finance",     label:"Finance",     Icon:IcFin,  sc:"F"},
+    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"R", badge:11,bc:C.p},
+    {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
+    {id:"payroll",     label:"Payroll",     Icon:IcPay,  sc:"Y"},
+  ]},
   {section:"REPORTS",items:[{id:"reports",label:"Reports",Icon:IcRep},{id:"library",label:"Library",Icon:IcLib},{id:"settings",label:"Settings",Icon:IcSet},{id:"saas",label:"SaaS Admin",Icon:IcStar,badge:"SA",bc:"#7C3AED"}]},
 ];
 
@@ -285,12 +297,13 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
               {visibleItems.map(item=>{
                 const isA=active===item.id;
                 return(
-                  <button key={item.id} onClick={()=>setActive(item.id)} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:collapsed?"10px 0":"9px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
+                  <button key={item.id} onClick={()=>setActive(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:collapsed?"10px 0":"9px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
                     onMouseEnter={e=>{if(!isA){e.currentTarget.style.background=C.sbH;e.currentTarget.style.color="white";}}}
                     onMouseLeave={e=>{if(!isA){e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.52)";}}}
                   >
                     <item.Icon size={17} color="currentColor"/>
                     {!collapsed&&<span style={{fontSize:13,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap"}}>{item.label}</span>}
+                    {!collapsed&&item.sc&&<span style={{fontSize:8,color:"rgba(255,255,255,0.2)",fontWeight:400,marginRight:item.badge?4:0}}>Alt+{item.sc}</span>}
                     {!collapsed&&item.badge&&<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{item.badge}</span>}
                     {isA&&collapsed&&<div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:C.a,borderRadius:"2px 0 0 2px"}}/>}
                   </button>
@@ -542,7 +555,36 @@ export default function App(){
       .catch(()=>setEnabledModules({})); // on error: show all
   },[loggedIn]);
 
-  const handleLogin=(userData)=>{setUser(userData);};
+  // ── Global keyboard shortcuts (Alt + key) ──────────────────────────
+  useEffect(()=>{
+    const handler=(e)=>{
+      // Only fire when not typing in input/textarea/select
+      const tag=document.activeElement?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
+      if(!e.altKey) return;
+      const map={
+        h:"dashboard",  // Alt+H → Home/Dashboard
+        p:"projects",   // Alt+P → Projects
+        f:"finance",    // Alt+F → Finance
+        r:"procurement",// Alt+R → Requisition/Procurement
+        l:"library",    // Alt+L → Library
+        s:"settings",   // Alt+S → Settings
+        c:"crm",        // Alt+C → CRM
+        w:"warehouse",  // Alt+W → Warehouse
+        y:"payroll",    // Alt+Y → paYroll
+        t:"team",       // Alt+T → Team Schedule
+        m:"mom",        // Alt+M → MOM
+        d:"design",     // Alt+D → Design
+        b:"reports",    // Alt+B → Reports
+      };
+      if(map[e.key]){
+        e.preventDefault();
+        setNav(map[e.key]);
+      }
+    };
+    window.addEventListener("keydown",handler);
+    return()=>window.removeEventListener("keydown",handler);
+  },[]);
   const handleLogout=()=>{apiCache.clear();clearAuth();setUser(null);setEnabledModules(null);};
 
   if(!loggedIn) return <LoginScreen onLogin={handleLogin}/>;

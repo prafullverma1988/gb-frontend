@@ -6825,20 +6825,20 @@ function TaskSkeleton(){
 // PROJECT DETAIL PAGE — SHELL
 // ═══════════════════════════════════════════════════════════════════
 const TABS = [
-  {id:"overview",   label:"Overview"},
-  {id:"design",     label:"Design"},
-  {id:"estimate",   label:"Estimate"},
-  {id:"party",      label:"Party"},
-  {id:"transaction",label:"Transaction"},
-  {id:"todo",       label:"To Do"},
-  {id:"task",       label:"Tasks"},
-  {id:"attendance", label:"Attendance"},
-  {id:"material",   label:"Material"},
-  {id:"subcon",     label:"Subcon"},
-  {id:"equipment",  label:"Equipment"},
-  {id:"files",      label:"Files"},
-  {id:"site",       label:"Site / DPR"},
-  {id:"mom",        label:"MOM"},
+  {id:"overview",   label:"Overview",    key:"o"},
+  {id:"design",     label:"Design",      key:"d"},
+  {id:"estimate",   label:"Estimate",    key:"e"},
+  {id:"party",      label:"Party",       key:"p"},
+  {id:"transaction",label:"Transaction", key:"t"},
+  {id:"todo",       label:"To Do",       key:"k"},
+  {id:"task",       label:"Tasks",       key:"j"},
+  {id:"attendance", label:"Attendance",  key:"a"},
+  {id:"material",   label:"Material",    key:"m"},
+  {id:"subcon",     label:"Subcon",      key:"b"},
+  {id:"equipment",  label:"Equipment",   key:"q"},
+  {id:"files",      label:"Files",       key:"i"},
+  {id:"site",       label:"Site / DPR",  key:"y"},
+  {id:"mom",        label:"MOM",         key:"n"},
 ];
 
 function ProjectDetailPage({project=PROJ, onBack}) {
@@ -6847,6 +6847,27 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   const margin = project.boq - project.expense;
 
   const switchTab = (t) => setTab(t);
+
+  // ── Ctrl+key tab shortcuts ──────────────────────────────────────────
+  useEffect(()=>{
+    const handler=(e)=>{
+      const tag=document.activeElement?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
+      if(!e.ctrlKey) return;
+      const match=TABS.find(t=>t.key===e.key.toLowerCase());
+      if(match){ e.preventDefault(); setTab(match.id); }
+      // Escape key handled separately
+    };
+    const escHandler=(e)=>{
+      if(e.key==="Escape"&&onBack) onBack();
+    };
+    window.addEventListener("keydown",handler);
+    window.addEventListener("keydown",escHandler);
+    return()=>{
+      window.removeEventListener("keydown",handler);
+      window.removeEventListener("keydown",escHandler);
+    };
+  },[onBack]);
 
   const tabContent = {
     overview:    <TabOverview    proj={project}/>,
@@ -6915,8 +6936,10 @@ function ProjectDetailPage({project=PROJ, onBack}) {
         <style>{`* { scrollbar-width: none; } *::-webkit-scrollbar { display: none; }`}</style>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:"10px 16px", border:"none", background:"none", cursor:"pointer", color:tab===t.id?T.blu:T.t3, fontWeight:tab===t.id?700:400, fontSize:12.5, whiteSpace:"nowrap", borderBottom:tab===t.id?`2.5px solid ${T.blu}`:"2.5px solid transparent", transition:"all .15s", flexShrink:0, fontFamily:"inherit", letterSpacing:0}}>
+            title={`${t.label}  (Ctrl+${t.key.toUpperCase()})`}
+            style={{padding:"10px 16px 8px", border:"none", background:"none", cursor:"pointer", color:tab===t.id?T.blu:T.t3, fontWeight:tab===t.id?700:400, fontSize:12.5, whiteSpace:"nowrap", borderBottom:tab===t.id?`2.5px solid ${T.blu}`:"2.5px solid transparent", transition:"all .15s", flexShrink:0, fontFamily:"inherit", letterSpacing:0, position:"relative", display:"flex", flexDirection:"column", alignItems:"center", gap:1}}>
             {t.label}
+            <span style={{fontSize:8, color:tab===t.id?T.blu:T.t4, opacity:tab===t.id?0.6:0.4, letterSpacing:0, fontWeight:400, lineHeight:1}}>^{t.key.toUpperCase()}</span>
           </button>
         ))}
       </div>
