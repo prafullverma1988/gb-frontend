@@ -297,14 +297,27 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
               {visibleItems.map(item=>{
                 const isA=active===item.id;
                 return(
-                  <button key={item.id} onClick={()=>setActive(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:collapsed?"10px 0":"9px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
+                  <button key={item.id} onClick={()=>setActive(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:collapsed?"10px 0":"8px 14px 8px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
                     onMouseEnter={e=>{if(!isA){e.currentTarget.style.background=C.sbH;e.currentTarget.style.color="white";}}}
                     onMouseLeave={e=>{if(!isA){e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.52)";}}}
                   >
-                    <item.Icon size={17} color="currentColor"/>
-                    {!collapsed&&<span style={{fontSize:13,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap"}}>{item.label}</span>}
-                    {!collapsed&&item.sc&&<span style={{fontSize:8,color:"rgba(255,255,255,0.2)",fontWeight:400,marginRight:item.badge?4:0}}>Alt+{item.sc}</span>}
-                    {!collapsed&&item.badge&&<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{item.badge}</span>}
+                    {/* Icon — fixed width so all labels start at same x */}
+                    <span style={{width:18,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <item.Icon size={16} color="currentColor"/>
+                    </span>
+                    {!collapsed&&<span style={{fontSize:12.5,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap",letterSpacing:"0.1px"}}>{item.label}</span>}
+                    {/* Right side — badge OR shortcut, always same width slot */}
+                    {!collapsed&&(
+                      <span style={{width:36,display:"flex",justifyContent:"flex-end",alignItems:"center",flexShrink:0}}>
+                        {item.badge
+                          ?<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10,lineHeight:1.5}}>{item.badge}</span>
+                          :item.sc
+                            ?<span style={{fontSize:8.5,color:"rgba(255,255,255,0.18)",fontWeight:500,letterSpacing:"0.2px"}}>Alt+{item.sc}</span>
+                            :null
+                        }
+                      </span>
+                    )}
                     {isA&&collapsed&&<div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:C.a,borderRadius:"2px 0 0 2px"}}/>}
                   </button>
                 );
