@@ -5754,6 +5754,8 @@ function TabSubcon({ projectId }) {
   const [saving, setSaving] = useState(false);
   const [showEditWO, setShowEditWO] = useState(false);
   const [amendments, setAmendments] = useState([]);
+  const [expandedBill, setExpandedBill] = useState(null);
+  const [billItems, setBillItems] = useState({});
   const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
   const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"" });
 
@@ -5959,6 +5961,7 @@ function TabSubcon({ projectId }) {
                 {bills.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No bills raised yet</div>}
                 {bills.map(b=>{
                   const stC=b.status==="Paid"?T.grn:b.status==="Approved"?T.blu:b.status==="Submitted"?T.amb:T.t4;
+                  const isExp = expandedBill===b.id;
                   return(
                     <div key={b.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+stC}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -5976,10 +5979,57 @@ function TabSubcon({ projectId }) {
                           </div>
                         ))}
                       </div>
-                      <div style={{display:"flex",gap:8}}>
+                      <div style={{display:"flex",gap:8,marginBottom:8}}>
                         {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
                         {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>₹ Record Payment</button>}
                       </div>
+
+                      {/* View Item Detail toggle */}
+                      <button
+                        onClick={async()=>{
+                          const next = isExp ? null : b.id;
+                          setExpandedBill(next);
+                          if(next && !billItems[b.id]){
+                            const r = await api.get("/subcon/ra-bills/"+b.id);
+                            if(r.success) setBillItems(p=>({...p,[b.id]:r.data.items||[]}));
+                          }
+                        }}
+                        style={{background:"none",border:"none",color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:4}}
+                      >
+                        <span style={{fontSize:9}}>{isExp?"▲":"▼"}</span>
+                        {isExp?"Hide Item Detail":"View Item Detail"}
+                      </button>
+
+                      {/* Expanded item breakdown */}
+                      {isExp&&(
+                        <div style={{marginTop:8,border:"1px solid "+T.b1,borderRadius:6,overflow:"hidden"}}>
+                          <div style={{display:"grid",gridTemplateColumns:"2fr 50px 70px 70px 70px 70px 80px",background:"#1E293B",padding:"6px 10px",gap:6}}>
+                            {["Description","Unit","WO Qty","Prev Cum","This Bill","Rate","Amount"].map((h,i)=>(
+                              <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.5)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
+                            ))}
+                          </div>
+                          {!(billItems[b.id]?.length)&&(
+                            <div style={{padding:"12px",textAlign:"center",fontSize:12,color:T.t4}}>Loading...</div>
+                          )}
+                          {(billItems[b.id]||[]).map(it=>(
+                            <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 50px 70px 70px 70px 70px 80px",padding:"7px 10px",gap:6,borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
+                              <div style={{fontSize:11.5,color:T.t1}}>{it.description}</div>
+                              <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
+                              <div style={{fontSize:11,color:T.t2,textAlign:"right"}}>{parseFloat(it.wo_qty||0)}</div>
+                              <div style={{fontSize:11,color:T.t3,textAlign:"right"}}>{parseFloat(it.prev_cumulative||0)>0?parseFloat(it.prev_cumulative||0):"—"}</div>
+                              <div style={{fontSize:11,fontWeight:700,color:T.t1,textAlign:"right"}}>{parseFloat(it.this_bill_qty||0)}</div>
+                              <div style={{fontSize:11,color:T.blu,textAlign:"right",fontWeight:600}}>₹{parseFloat(it.rate||0).toLocaleString("en-IN")}</div>
+                              <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.this_bill_amount)}</div>
+                            </div>
+                          ))}
+                          {(billItems[b.id]?.length>0)&&(
+                            <div style={{display:"grid",gridTemplateColumns:"2fr 50px 70px 70px 70px 70px 80px",padding:"7px 10px",gap:6,background:T.surfaceB}}>
+                              <div style={{fontSize:11,fontWeight:700,color:T.t2,gridColumn:"1/7"}}>Total</div>
+                              <div style={{fontSize:12,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtC(b.gross_amount)}</div>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
