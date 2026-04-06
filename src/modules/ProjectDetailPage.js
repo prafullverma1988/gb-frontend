@@ -5752,11 +5752,10 @@ function TabSubcon({ projectId }) {
   const [showNewBill, setShowNewBill] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [woForm, setWoForm] = useState({ subcon_id:"", subcon_name:"", description:"", retention_pct:5, tds_pct:2, start_date:"", end_date:"", items:[{description:"",unit:"",qty:"",rate:""}] });
+  const [showEditWO, setShowEditWO] = useState(false);
+  const [amendments, setAmendments] = useState([]);
   const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
   const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"" });
-  const [expandedBill, setExpandedBill] = useState(null);
-  const [billItemsCache, setBillItemsCache] = useState({});
 
   useEffect(()=>{
     loadWOs();
@@ -5772,12 +5771,14 @@ function TabSubcon({ projectId }) {
 
   const selectWo = async (wo) => {
     setSelWo(wo); setSubTab("wo");
-    const [bRes, sRes] = await Promise.all([
+    const [bRes, sRes, aRes] = await Promise.all([
       api.get("/subcon/ra-bills?wo_id="+wo.id).catch(()=>({success:false})),
       api.get("/subcon/work-orders/"+wo.id+"/summary").catch(()=>({success:false})),
+      api.get("/subcon/amendments?wo_id="+wo.id).catch(()=>({success:false})),
     ]);
     if(bRes.success) setBills(bRes.data||[]);
     if(sRes.success) setSummary(sRes.data);
+    if(aRes.success) setAmendments(aRes.data||[]);
   };
 
   const fmtC = (v) => "₹"+(parseFloat(v)||0).toLocaleString("en-IN",{maximumFractionDigits:0});
@@ -5807,14 +5808,22 @@ function TabSubcon({ projectId }) {
     if(!selWo) return;
     setSaving(true);
     const woDetail = await api.get("/subcon/work-orders/"+selWo.id).catch(()=>({success:false}));
-    const woItems = woDetail.success ? (woDetail.data.items||[]) : [];
+    // Flatten all items from sections
+    const allItems = [];
+    if(woDetail.success){
+      (woDetail.data.sections||[]).forEach(sec=>{
+        (sec.items||[]).forEach(it=>allItems.push(it));
+      });
+      // Also unsectioned items
+      (woDetail.data.unsectioned||[]).forEach(it=>allItems.push(it));
+    }
     const res = await api.post("/subcon/ra-bills",{
       wo_id: selWo.id,
       bill_date: billForm.bill_date,
       remark: billForm.remark,
-      items: woItems.map((it,i)=>({
+      items: allItems.map((it)=>({
         wo_item_id: it.id,
-        cumulative_qty: parseFloat(billForm.items[i]?.cumulative_qty||0),
+        cumulative_qty: parseFloat(billForm.items.find(bi=>bi.wo_item_id===it.id)?.cumulative_qty||0),
         rate: parseFloat(it.rate),
       })),
     }).catch(()=>({success:false}));
@@ -5901,13 +5910,22 @@ function TabSubcon({ projectId }) {
                     <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
                   </div>
                 ))}
+                <button onClick={()=>setShowEditWO(true)}
+                  style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"white",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+                  ✏ Edit
+                </button>
               </div>
             </div>
           </div>
 
           {/* Sub Tabs */}
           <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
-            {[{id:"wo",label:"Work Order"},{id:"bills",label:`RA Bills (${bills.length})`},{id:"pay",label:"Payments"}].map(t=>(
+            {[
+              {id:"wo",label:"Work Order"},
+              {id:"bills",label:`RA Bills (${bills.length})`},
+              {id:"pay",label:"Payments"},
+              {id:"amend",label:"Amendments"+(amendments.filter(a=>a.status==="Pending").length>0 ? ` 🔴${amendments.filter(a=>a.status==="Pending").length}` : ` (${amendments.length})`)},
+            ].map(t=>(
               <button key={t.id} onClick={()=>setSubTab(t.id)}
                 style={{padding:"8px 16px",border:"none",background:"transparent",color:subTab===t.id?T.blu:T.t3,fontSize:12,fontWeight:subTab===t.id?700:400,cursor:"pointer",borderBottom:subTab===t.id?"2px solid "+T.blu:"2px solid transparent"}}>
                 {t.label}
@@ -5941,8 +5959,6 @@ function TabSubcon({ projectId }) {
                 {bills.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No bills raised yet</div>}
                 {bills.map(b=>{
                   const stC=b.status==="Paid"?T.grn:b.status==="Approved"?T.blu:b.status==="Submitted"?T.amb:T.t4;
-                  const isExpanded = expandedBill===b.id;
-                  const cachedItems = billItemsCache[b.id];
                   return(
                     <div key={b.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+stC}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -5960,45 +5976,9 @@ function TabSubcon({ projectId }) {
                           </div>
                         ))}
                       </div>
-                      <div style={{display:"flex",gap:8,marginBottom:6}}>
+                      <div style={{display:"flex",gap:8}}>
                         {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
                         {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>₹ Record Payment</button>}
-                      </div>
-                      {/* View Items Toggle */}
-                      <div>
-                        <button
-                          onClick={async()=>{
-                            const newVal = isExpanded ? null : b.id;
-                            setExpandedBill(newVal);
-                            if(newVal && !billItemsCache[b.id]){
-                              const r = await api.get("/subcon/ra-bills/"+b.id);
-                              if(r.success) setBillItemsCache(p=>({...p,[b.id]:r.data.items||[]}));
-                            }
-                          }}
-                          style={{background:"none",border:"none",color:T.blu,fontSize:11,cursor:"pointer",fontWeight:600,padding:0}}
-                        >
-                          {isExpanded ? "▲ Hide Items" : "▼ View Items"}
-                        </button>
-                        {isExpanded&&(
-                          <div style={{marginTop:8,border:"1px solid "+T.b1,borderRadius:6,overflow:"hidden"}}>
-                            <div style={{display:"grid",gridTemplateColumns:"2fr 55px 70px 70px 70px 80px",background:"#1E293B",padding:"6px 10px",gap:6}}>
-                              {["Description","Unit","WO Qty","Prev Cum","This Bill","Amount"].map((h,i)=>(
-                                <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
-                              ))}
-                            </div>
-                            {!cachedItems&&<div style={{padding:"10px",textAlign:"center",fontSize:12,color:T.t4}}>Loading...</div>}
-                            {(cachedItems||[]).map(it=>(
-                              <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 55px 70px 70px 70px 80px",padding:"7px 10px",gap:6,borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
-                                <div style={{fontSize:11.5,color:T.t1}}>{it.description}</div>
-                                <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
-                                <div style={{fontSize:11,color:T.t2,textAlign:"right"}}>{it.wo_qty}</div>
-                                <div style={{fontSize:11,color:T.t3,textAlign:"right"}}>{parseFloat(it.prev_cumulative||0)}</div>
-                                <div style={{fontSize:11,fontWeight:700,color:T.t1,textAlign:"right"}}>{parseFloat(it.this_bill_qty||0)}</div>
-                                <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.this_bill_amount)}</div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
                       </div>
                     </div>
                   );
@@ -6010,9 +5990,24 @@ function TabSubcon({ projectId }) {
             {subTab==="pay"&&(
               <PaymentsTab woId={selWo.id} fmtC={fmtC}/>
             )}
+
+            {/* AMENDMENTS TAB */}
+            {subTab==="amend"&&(
+              <AmendmentsTab amendments={amendments} fmtC={fmtC} onRefresh={()=>selectWo(selWo)}/>
+            )}
           </div>
         </>)}
       </div>
+
+      {/* EDIT WO MODAL */}
+      {showEditWO&&selWo&&(
+        <EditWOModal
+          wo={selWo} subcons={subcons} fmtC={fmtC}
+          inpStyle={inpStyle} lblStyle={lblStyle}
+          onClose={()=>setShowEditWO(false)}
+          onSaved={()=>{ setShowEditWO(false); loadWOs(); selectWo(selWo); }}
+        />
+      )}
 
       {/* NEW WO MODAL */}
       {showNewWO&&(
@@ -6081,6 +6076,8 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
   const [libItems, setLibItems] = useState([]);
   const [showLibFor, setShowLibFor] = useState(null); // {secIdx, itemIdx}
   const [libSearch, setLibSearch] = useState("");
+  const [secCollapsed, setSecCollapsed] = useState({});
+  const toggleSecCollapse = (si) => setSecCollapsed(p=>({...p,[si]:!p[si]}));
 
   // Load library items when category changes
   useEffect(()=>{
@@ -6194,8 +6191,15 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
               <div key={si} style={{background:T.surfaceB,border:"1.5px solid "+T.b1,borderRadius:9,marginBottom:12,overflow:"hidden"}}>
                 {/* Section header */}
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1E293B",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div onClick={()=>toggleSecCollapse(si)} style={{cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center"}}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth={2.5}
+                      style={{transition:"transform .2s",transform:!secCollapsed[si]?"rotate(90deg)":"rotate(0deg)"}}>
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </div>
                   <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",minWidth:20}}>#{si+1}</span>
                   <input value={sec.title} onChange={e=>updateSection(si,"title",e.target.value)}
+                    onClick={e=>e.stopPropagation()}
                     placeholder="Section name (e.g. Plinth Work, Lintel Level, Slab...)"
                     style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
                   <span style={{fontSize:11,fontWeight:700,color:"#4ADE80",minWidth:80,textAlign:"right"}}>{fmtC(secTotal)}</span>
@@ -6204,8 +6208,8 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
                   )}
                 </div>
 
-                {/* Items */}
-                <div style={{padding:"10px 12px"}}>
+                {/* Items — hidden when collapsed */}
+                {!secCollapsed[si]&&(<div style={{padding:"10px 12px"}}>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:5}}>
                     {["Description","Unit","Qty","Rate/Unit","Amt",""].map(h=><div key={h} style={{fontSize:8.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
                   </div>
@@ -6232,7 +6236,7 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
                     style={{background:"none",border:"1px dashed "+T.b1,color:T.blu,cursor:"pointer",fontSize:11,fontWeight:600,padding:"5px 10px",borderRadius:5,width:"100%",marginTop:2}}>
                     + Add Item
                   </button>
-                </div>
+                </div>)}
               </div>
             );
           })}
@@ -6289,9 +6293,378 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
 }
 
 
+function EditWOModal({ wo, subcons, fmtC, inpStyle, lblStyle, onClose, onSaved }) {
+  const CATS = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
+  const blankItem = () => ({ description:"", unit:"", qty:"", rate:"", isNew:true });
+  const blankSection = () => ({ id: null, title:"", items:[blankItem()], isNew:true });
+
+  const [form, setForm] = useState({
+    subcon_name: wo.subcon_name||"",
+    subcon_category: wo.subcon_category||"Civil",
+    description: wo.description||"",
+    retention_pct: wo.retention_pct||5,
+    tds_pct: wo.tds_pct||2,
+    start_date: wo.start_date ? wo.start_date.split("T")[0] : "",
+    end_date: wo.end_date ? wo.end_date.split("T")[0] : "",
+    status: wo.status||"Active",
+  });
+  const [sections, setSections] = useState([]);
+  const [loadingSecs, setLoadingSecs] = useState(true);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [secCollapsed, setSecCollapsed] = useState({});
+  const [libItems, setLibItems] = useState([]);
+  const [showLibFor, setShowLibFor] = useState(null);
+  const [libSearch, setLibSearch] = useState("");
+
+  useEffect(()=>{
+    api.get("/subcon/work-orders/"+wo.id).then(r=>{
+      if(r.success){
+        const secs = (r.data.sections||[]).map(s=>({
+          ...s, items: (s.items||[]).map(it=>({...it, isNew:false})), isNew:false
+        }));
+        setSections(secs);
+      }
+      setLoadingSecs(false);
+    }).catch(()=>setLoadingSecs(false));
+    api.get("/library/materials").then(r=>{ if(r.success) setLibItems(r.data||[]); }).catch(()=>{});
+  },[wo.id]);
+
+  // Section helpers
+  const addSection = () => setSections(p=>[...p, blankSection()]);
+  const removeSection = (si) => setSections(p=>p.filter((_,i)=>i!==si));
+  const updateSection = (si,key,val) => setSections(p=>p.map((s,i)=>i===si?{...s,[key]:val}:s));
+  const addItem = (si) => setSections(p=>p.map((s,i)=>i===si?{...s,items:[...s.items,blankItem()]}:s));
+  const removeItem = (si,ii) => setSections(p=>p.map((s,i)=>i===si?{...s,items:s.items.filter((_,j)=>j!==ii)}:s));
+  const updateItem = (si,ii,key,val) => setSections(p=>p.map((s,i)=>i===si?{...s,items:s.items.map((it,j)=>j===ii?{...it,[key]:val}:it)}:s));
+  const pickLibItem = (item) => {
+    if(!showLibFor) return;
+    const {si,ii} = showLibFor;
+    updateItem(si,ii,"description",item.name);
+    updateItem(si,ii,"unit",item.unit||"");
+    updateItem(si,ii,"rate",item.rate||"");
+    setShowLibFor(null); setLibSearch("");
+  };
+
+  const grandTotal = sections.reduce((st,sec)=>st+sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0),0);
+
+  const submit = async () => {
+    if(!form.subcon_name) return alert("Subcontractor required");
+    if(!reason.trim()) return alert("Change reason required for approval");
+    const validSecs = sections.filter(s=>s.title.trim());
+    setSaving(true);
+    const res = await api.post("/subcon/work-orders/"+wo.id+"/amendment",{
+      proposed_form: form,
+      proposed_sections: validSecs.map(s=>({
+        id: s.id||null,
+        title: s.title,
+        items: s.items.filter(i=>i.description&&i.qty&&i.rate).map(i=>({
+          id: i.id||null,
+          description:i.description, unit:i.unit||"", qty:parseFloat(i.qty), rate:parseFloat(i.rate)
+        }))
+      })),
+      reason,
+    }).catch(()=>({success:false,message:"Network error"}));
+    setSaving(false);
+    if(res.success) onSaved();
+    else alert(res.message||"Failed");
+  };
+
+  const filteredLib = libItems.filter(i=>!libSearch||i.name.toLowerCase().includes(libSearch.toLowerCase()));
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:T.surface,borderRadius:12,width:"min(800px,97vw)",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.35)"}}>
+
+        {/* Header */}
+        <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Edit Work Order</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}}>Changes will require admin approval before applying</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:22,cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+
+          {/* Basic Info */}
+          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Basic Details</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:16,background:T.surfaceB,padding:12,borderRadius:8,border:"1px solid "+T.b1}}>
+            <div style={{gridColumn:"1/3"}}>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Subcontractor *</label>
+              <input list="sc-edit-list" value={form.subcon_name} onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))} style={inpStyle}/>
+              <datalist id="sc-edit-list">{subcons.map(s=><option key={s.id} value={s.name}/>)}</datalist>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Category</label>
+              <select value={form.subcon_category} onChange={e=>setForm(p=>({...p,subcon_category:e.target.value}))} style={inpStyle}>
+                {CATS.map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Status</label>
+              <select value={form.status} onChange={e=>setForm(p=>({...p,status:e.target.value}))} style={inpStyle}>
+                {["Active","On Hold","Completed","Cancelled"].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Retention %</label>
+              <input type="number" value={form.retention_pct} onChange={e=>setForm(p=>({...p,retention_pct:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>TDS %</label>
+              <input type="number" value={form.tds_pct} onChange={e=>setForm(p=>({...p,tds_pct:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Start Date</label>
+              <input type="date" value={form.start_date} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>End Date</label>
+              <input type="date" value={form.end_date} onChange={e=>setForm(p=>({...p,end_date:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div style={{gridColumn:"1/4"}}>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Description / Remark</label>
+              <input value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} style={inpStyle} placeholder="Optional"/>
+            </div>
+          </div>
+
+          {/* Sections & BOQ */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>
+              Sections & BOQ Items
+              <span style={{marginLeft:8,fontSize:10,fontWeight:700,color:T.grn}}>Grand Total: {fmtC(grandTotal)}</span>
+            </div>
+            <button onClick={addSection}
+              style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              + Add Section
+            </button>
+          </div>
+
+          {loadingSecs&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading sections...</div>}
+
+          {sections.map((sec,si)=>{
+            const secTotal = sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
+            const isOpen = !secCollapsed[si];
+            return(
+              <div key={si} style={{background:T.surfaceB,border:"1.5px solid "+(sec.isNew?T.blu:T.b1),borderRadius:9,marginBottom:10,overflow:"hidden"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1E293B",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div onClick={()=>setSecCollapsed(p=>({...p,[si]:!p[si]}))} style={{cursor:"pointer",flexShrink:0}}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth={2.5}
+                      style={{transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}>
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </div>
+                  {sec.isNew&&<span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:"#1D4ED8",color:"white"}}>NEW</span>}
+                  <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",minWidth:20}}>#{si+1}</span>
+                  <input value={sec.title} onChange={e=>updateSection(si,"title",e.target.value)}
+                    onClick={e=>e.stopPropagation()}
+                    placeholder="Section name..."
+                    style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:"#4ADE80",minWidth:80,textAlign:"right"}}>{fmtC(secTotal)}</span>
+                  <button onClick={()=>removeSection(si)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}}>×</button>
+                </div>
+
+                {isOpen&&(<div style={{padding:"10px 12px"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:5}}>
+                    {["Description","Unit","Qty","Rate/Unit","Amt",""].map(h=><div key={h} style={{fontSize:8.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
+                  </div>
+                  {sec.items.map((it,ii)=>{
+                    const amt=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);
+                    return(
+                      <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:6,alignItems:"center",
+                        background:it.isNew?"#EFF6FF":"transparent",borderRadius:it.isNew?4:0,padding:it.isNew?"2px 4px":"0"}}>
+                        <div style={{position:"relative"}}>
+                          <input value={it.description} onChange={e=>updateItem(si,ii,"description",e.target.value)}
+                            placeholder="Item description" style={{...inpStyle,paddingRight:28}}/>
+                          <button onClick={()=>{setShowLibFor({si,ii});setLibSearch("");}}
+                            style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:0}}>📚</button>
+                        </div>
+                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder="Sqft" style={inpStyle}/>
+                        <input type="number" value={it.qty} onChange={e=>updateItem(si,ii,"qty",e.target.value)} placeholder="0" style={inpStyle}/>
+                        <input type="number" value={it.rate} onChange={e=>updateItem(si,ii,"rate",e.target.value)} placeholder="0" style={inpStyle}/>
+                        <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{amt>0?fmtC(amt):""}</div>
+                        <button onClick={()=>removeItem(si,ii)} style={{background:"none",border:"none",color:T.red,cursor:"pointer",fontSize:15,padding:0,lineHeight:1}}>×</button>
+                      </div>
+                    );
+                  })}
+                  <button onClick={()=>addItem(si)}
+                    style={{background:"none",border:"1px dashed "+T.b1,color:T.blu,cursor:"pointer",fontSize:11,fontWeight:600,padding:"5px 10px",borderRadius:5,width:"100%",marginTop:2}}>
+                    + Add Item
+                  </button>
+                </div>)}
+              </div>
+            );
+          })}
+
+          {/* Change Reason */}
+          <div style={{marginTop:14,background:"#FFF7ED",border:"1.5px solid #FED7AA",borderRadius:8,padding:12}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#92400E",textTransform:"uppercase",marginBottom:6}}>⚠ Change Reason (Required for Approval)</div>
+            <textarea value={reason} onChange={e=>setReason(e.target.value)}
+              placeholder="Reason for this change (e.g. Scope change — added FF slab work, rate revision approved by PM...)"
+              style={{width:"100%",minHeight:60,padding:"8px 10px",borderRadius:6,border:"1.5px solid #FED7AA",fontSize:12,outline:"none",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",background:"white"}}/>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,flexShrink:0,background:T.surfaceB}}>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={submit} disabled={saving||!reason.trim()}
+            style={{flex:2,padding:"9px",borderRadius:7,background:saving||!reason.trim()?T.t4:"#D97706",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:saving||!reason.trim()?"not-allowed":"pointer"}}>
+            {saving?"Submitting...":"Submit for Approval"}
+          </button>
+        </div>
+
+        {/* Library picker */}
+        {showLibFor&&(
+          <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.3)",zIndex:10,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{background:T.surface,borderRadius:10,width:"min(400px,94vw)",maxHeight:"70vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 40px rgba(0,0,0,0.2)"}}>
+              <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.b1,display:"flex",gap:8,alignItems:"center"}}>
+                <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} autoFocus
+                  placeholder="Search materials..." style={{...inpStyle,flex:1}}/>
+                <button onClick={()=>setShowLibFor(null)} style={{background:"none",border:"none",color:T.t3,cursor:"pointer",fontSize:18}}>×</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto"}}>
+                {filteredLib.map(item=>(
+                  <div key={item.id} onClick={()=>pickLibItem(item)}
+                    style={{padding:"9px 14px",borderBottom:"1px solid "+T.b1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#F0F9FF"}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{item.name}</div>
+                      <div style={{fontSize:10,color:T.t4}}>{item.unit} · {item.category_name}</div>
+                    </div>
+                    {item.rate&&<div style={{fontSize:12,fontWeight:700,color:T.grn}}>₹{item.rate}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AmendmentsTab({ amendments, fmtC, onRefresh }) {
+  const [actioning, setActioning] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const action = async (id, status) => {
+    setActioning(id+status);
+    await api.patch("/subcon/amendments/"+id+"/action", {status}).catch(()=>{});
+    setActioning(null);
+    onRefresh();
+  };
+
+  if(amendments.length===0) return(
+    <div style={{textAlign:"center",padding:"48px 20px",color:T.t4}}>
+      <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 10px",display:"block"}}><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <div style={{fontSize:13,color:T.t3}}>No amendments yet</div>
+      <div style={{fontSize:11,color:T.t4,marginTop:4}}>Edit WO pe click karo changes propose karne ke liye</div>
+    </div>
+  );
+
+  return(
+    <div>
+      {amendments.map(a=>{
+        const stC = a.status==="Approved"?T.grn:a.status==="Rejected"?T.red:T.amb;
+        const isExp = expandedId===a.id;
+        let proposed = {};
+        try { proposed = typeof a.proposed_data==="string" ? JSON.parse(a.proposed_data) : a.proposed_data; } catch(e){}
+        return(
+          <div key={a.id} style={{border:"1px solid "+T.b1,borderRadius:8,marginBottom:8,overflow:"hidden",borderLeft:"3px solid "+stC}}>
+            <div onClick={()=>setExpandedId(isExp?null:a.id)}
+              style={{padding:"10px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surfaceB}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>Amendment #{a.id}</div>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{a.reason}</div>
+                <div style={{fontSize:10,color:T.t4,marginTop:2}}>{a.created_at ? new Date(a.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{a.status}</span>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.t3} strokeWidth={2.5}
+                  style={{transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s"}}>
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+            </div>
+
+            {isExp&&(
+              <div style={{padding:"12px 14px",borderTop:"1px solid "+T.b1}}>
+                {/* Proposed basic changes */}
+                {proposed.proposed_form&&(
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Proposed Changes</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                      {[
+                        {l:"Subcontractor",v:proposed.proposed_form.subcon_name},
+                        {l:"Category",v:proposed.proposed_form.subcon_category},
+                        {l:"Status",v:proposed.proposed_form.status},
+                        {l:"Retention",v:proposed.proposed_form.retention_pct+"%"},
+                        {l:"TDS",v:proposed.proposed_form.tds_pct+"%"},
+                        {l:"Start",v:proposed.proposed_form.start_date||"—"},
+                      ].map(f=>(
+                        <div key={f.l} style={{background:T.surfaceB,borderRadius:5,padding:"6px 8px"}}>
+                          <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{f.l}</div>
+                          <div style={{fontSize:11,fontWeight:600,color:T.t1}}>{f.v||"—"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Sections summary */}
+                {proposed.proposed_sections&&proposed.proposed_sections.length>0&&(
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Sections ({proposed.proposed_sections.length})</div>
+                    {proposed.proposed_sections.map((sec,si)=>{
+                      const secTotal = (sec.items||[]).reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
+                      return(
+                        <div key={si} style={{background:T.surfaceB,border:"1px solid "+T.b1,borderRadius:6,marginBottom:6,overflow:"hidden"}}>
+                          <div style={{padding:"6px 10px",background:"#1E293B",display:"flex",justifyContent:"space-between"}}>
+                            <span style={{fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</span>
+                            <span style={{fontSize:11,fontWeight:700,color:"#4ADE80"}}>{fmtC(secTotal)}</span>
+                          </div>
+                          {(sec.items||[]).map((it,ii)=>(
+                            <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 80px 80px",padding:"5px 10px",gap:6,borderBottom:"1px solid "+T.b1,fontSize:11}}>
+                              <span style={{color:T.t1}}>{it.description}</span>
+                              <span style={{color:T.t3}}>{it.unit}</span>
+                              <span style={{color:T.t2,textAlign:"right"}}>{it.qty}</span>
+                              <span style={{color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</span>
+                              <span style={{fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC((parseFloat(it.qty)||0)*(parseFloat(it.rate)||0))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Approve/Reject buttons */}
+                {a.status==="Pending"&&(
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>action(a.id,"Rejected")} disabled={!!actioning}
+                      style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+T.red,background:"white",color:T.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      ✕ Reject
+                    </button>
+                    <button onClick={()=>action(a.id,"Approved")} disabled={!!actioning}
+                      style={{flex:2,padding:"7px",borderRadius:6,background:actioning?T.t4:T.grn,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      {actioning===a.id+"Approved"?"Applying...":"✓ Approve & Apply"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function WoItemsTable({ woId, fmtC }) {
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState({});
   useEffect(()=>{
     setLoading(true);
     api.get("/subcon/work-orders/"+woId).then(r=>{
@@ -6299,6 +6672,8 @@ function WoItemsTable({ woId, fmtC }) {
       setLoading(false);
     }).catch(()=>setLoading(false));
   },[woId]);
+
+  const toggleSec = (id) => setCollapsed(p=>({...p,[id]:!p[id]}));
 
   if(loading) return <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>Loading...</div>;
   if(sections.length===0) return <div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12}}>No BOQ items</div>;
@@ -6309,26 +6684,40 @@ function WoItemsTable({ woId, fmtC }) {
     <div>
       {sections.map((sec,si)=>{
         const secTotal = (sec.items||[]).reduce((s,it)=>s+parseFloat(it.amount||0),0);
+        const isOpen = !collapsed[sec.id];
         return(
-          <div key={sec.id} style={{marginBottom:10,border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#1E293B"}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</span>
+          <div key={sec.id} style={{marginBottom:8,border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden"}}>
+            {/* Section header — clickable to collapse */}
+            <div onClick={()=>toggleSec(sec.id)}
+              style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"#1E293B",cursor:"pointer",userSelect:"none"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {/* Chevron */}
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2.5}
+                  style={{transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}>
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+                <span style={{fontSize:12.5,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</span>
+                <span style={{fontSize:9.5,color:"rgba(255,255,255,0.4)",fontWeight:400}}>{(sec.items||[]).length} items</span>
+              </div>
               <span style={{fontSize:12,fontWeight:700,color:"#4ADE80"}}>{fmtC(secTotal)}</span>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",background:"#374151",padding:"5px 12px",gap:8}}>
-              {["Description","Unit","Qty","Rate","Amount"].map((h,i)=>(
-                <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.4)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
-              ))}
-            </div>
-            {(sec.items||[]).map((it,i)=>(
-              <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",padding:"7px 12px",gap:8,borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:"#F8FAFC"}}>
-                <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
-                <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
-                <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
-                <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</div>
-                <div style={{fontSize:12,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.amount)}</div>
+            {/* Items — hidden when collapsed */}
+            {isOpen&&(<>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",background:"#374151",padding:"5px 12px",gap:8}}>
+                {["Description","Unit","Qty","Rate","Amount"].map((h,i)=>(
+                  <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.4)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
+                ))}
               </div>
-            ))}
+              {(sec.items||[]).map((it,i)=>(
+                <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",padding:"7px 12px",gap:8,borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:"#F8FAFC"}}>
+                  <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
+                  <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
+                  <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
+                  <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.amount)}</div>
+                </div>
+              ))}
+            </>)}
           </div>
         );
       })}
@@ -6340,115 +6729,177 @@ function WoItemsTable({ woId, fmtC }) {
 }
 
 function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm, saving, onClose, onSave }) {
-  const [woItems, setWoItems] = useState([]);
+  const [sections, setSections] = useState([]); // [{title, items:[{id,description,unit,qty,rate,prev_cum}]}]
+  const [loadingWO, setLoadingWO] = useState(true);
+  const [cumQtys, setCumQtys] = useState({}); // {item_id: cumulative_qty_string}
 
-  useEffect(() => {
-    api.get("/subcon/work-orders/" + woId).then(r => {
-      if (r.success) {
-        const secItems = (r.data.sections || []).flatMap(s => s.items || []);
-        const unsec    = r.data.unsectioned || [];
-        const all      = [...secItems, ...unsec];
-        setWoItems(all);
-        const initItems = all.map(i => ({
-          wo_item_id:      i.id,
-          cumulative_qty:  "",
-          rate:            i.rate,
-          prev_cumulative: parseFloat(i.prev_cumulative || 0),
-        }));
-        setBillForm(p => ({ ...p, items: initItems }));
-      }
-    }).catch(() => {});
-  }, [woId]);
+  useEffect(()=>{
+    setLoadingWO(true);
+    api.get("/subcon/work-orders/"+woId).then(async r=>{
+      if(!r.success){ setLoadingWO(false); return; }
+      const secs = r.data.sections||[];
+      const unsec = r.data.unsectioned||[];
 
-  const gross = woItems.reduce((sum, it, i) => {
-    const cumQty   = parseFloat(billForm.items[i]?.cumulative_qty || 0);
-    const prev     = parseFloat(billForm.items[i]?.prev_cumulative || 0);
-    const thisBill = Math.max(0, cumQty - prev);
-    return sum + thisBill * parseFloat(it.rate || 0);
-  }, 0);
+      // Flatten all items to get prev cumulatives
+      const allItems = [];
+      secs.forEach(s=>(s.items||[]).forEach(it=>allItems.push(it)));
+      unsec.forEach(it=>allItems.push(it));
 
-  return (
-    <div style={{ position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center" }}>
-      <div style={{ background:T.surface,borderRadius:12,width:"min(820px,97vw)",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+      // Fetch prev cumulative per item from last bill
+      const prevMap = {};
+      await Promise.all(allItems.map(async it=>{
+        try{
+          const pr = await api.get("/subcon/prev-cumulative?wo_item_id="+it.id+"&wo_id="+woId);
+          prevMap[it.id] = parseFloat(pr.data?.prev_cum||0);
+        } catch(e){ prevMap[it.id]=0; }
+      }));
+
+      // Build sections with prev_cum
+      const builtSecs = secs.map(s=>({
+        ...s,
+        items:(s.items||[]).map(it=>({...it, prev_cum: prevMap[it.id]||0}))
+      }));
+      if(unsec.length>0) builtSecs.push({ title:"Other Items", items: unsec.map(it=>({...it, prev_cum: prevMap[it.id]||0})) });
+
+      setSections(builtSecs);
+      // Init cumQtys = prev_cum (so user starts from where last bill ended)
+      const initCums = {};
+      allItems.forEach(it=>{ initCums[it.id] = String(prevMap[it.id]||""); });
+      setCumQtys(initCums);
+      // Also update billForm items for submit
+      setBillForm(p=>({...p, items: allItems.map(it=>({ wo_item_id:it.id, cumulative_qty: prevMap[it.id]||0, rate:it.rate }))}));
+      setLoadingWO(false);
+    }).catch(()=>setLoadingWO(false));
+  },[woId]);
+
+  // When user updates a cumQty, sync to billForm.items
+  const updateCum = (itemId, val) => {
+    setCumQtys(p=>({...p,[itemId]:val}));
+    setBillForm(p=>({
+      ...p,
+      items: p.items.map(bi=>bi.wo_item_id===itemId ? {...bi, cumulative_qty: parseFloat(val)||0} : bi)
+    }));
+  };
+
+  // Live gross calculation
+  const gross = sections.reduce((st,sec)=>
+    st + sec.items.reduce((s,it)=>{
+      const cum = parseFloat(cumQtys[it.id]||0);
+      const thisBill = Math.max(0, cum - (it.prev_cum||0));
+      return s + thisBill * parseFloat(it.rate||0);
+    },0)
+  ,0);
+
+  // Get WO retention/tds — from first section item or default
+  const allWoItems = sections.flatMap(s=>s.items);
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:T.surface,borderRadius:12,width:"min(740px,96vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+
         {/* Header */}
-        <div style={{ background:"#0F172A",padding:"13px 16px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center" }}>
-          <div style={{ fontSize:14,fontWeight:700,color:"white" }}>New RA Bill</div>
-          <button onClick={onClose} style={{ background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer" }}>×</button>
+        <div style={{background:"#0F172A",padding:"13px 16px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>New RA Bill</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:1}}>Running Account Bill — enter cumulative qty up to this bill</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
         </div>
 
-        <div style={{ flex:1,overflowY:"auto",padding:"16px" }}>
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+
           {/* Date + Remark */}
-          <div style={{ display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14 }}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:16}}>
             <div>
-              <label style={lblStyle}>Bill Date</label>
-              <input type="date" value={billForm.bill_date} onChange={e => setBillForm(p => ({ ...p, bill_date: e.target.value }))} style={inpStyle}/>
+              <label style={lblStyle}>Bill Date *</label>
+              <input type="date" value={billForm.bill_date} onChange={e=>setBillForm(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
             </div>
             <div>
               <label style={lblStyle}>Remark</label>
-              <input value={billForm.remark || ""} onChange={e => setBillForm(p => ({ ...p, remark: e.target.value }))} style={inpStyle} placeholder="Optional"/>
+              <input value={billForm.remark||""} onChange={e=>setBillForm(p=>({...p,remark:e.target.value}))} style={inpStyle} placeholder="e.g. Bill for plinth work completion..."/>
             </div>
           </div>
 
-          {/* Table header */}
-          <div style={{ fontSize:10.5,fontWeight:700,color:T.t2,marginBottom:6,textTransform:"uppercase" }}>Item-wise Billing</div>
-          <div style={{ display:"grid",gridTemplateColumns:"2fr 55px 75px 75px 75px 85px 90px",background:"#1E293B",padding:"7px 12px",gap:6,borderRadius:"6px 6px 0 0" }}>
-            {["Description","Unit","WO Qty","Prev Cum","Unbilled","This Cum ▼","This Bill Qty"].map((h, i) => (
-              <div key={h} style={{ fontSize:9,fontWeight:700,color:"rgba(255,255,255,.55)",textTransform:"uppercase",textAlign:i>1?"right":"left" }}>{h}</div>
+          {/* Column headers */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",background:"#1E293B",padding:"7px 12px",gap:8,borderRadius:"7px 7px 0 0"}}>
+            {["Item","Unit","WO Qty","Prev Cum","Rate","This Cum ▼","This Bill Amt"].map((h,i)=>(
+              <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
             ))}
           </div>
 
-          {woItems.map((it, i) => {
-            const prev      = parseFloat(billForm.items[i]?.prev_cumulative || 0);
-            const woQty     = parseFloat(it.qty || 0);
-            const unbilled  = Math.max(0, woQty - prev);
-            const thisCum   = parseFloat(billForm.items[i]?.cumulative_qty || 0);
-            const thisBill  = Math.max(0, thisCum - prev);
-            const amt       = thisBill * parseFloat(it.rate || 0);
-            const overLimit = thisCum > woQty;
+          {loadingWO&&<div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>Loading WO items...</div>}
 
-            return (
-              <div key={it.id} style={{ display:"grid",gridTemplateColumns:"2fr 55px 75px 75px 75px 85px 90px",padding:"8px 12px",gap:6,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit?"#fff1f2":"transparent" }}>
-                <div style={{ fontSize:12,color:T.t1 }}>{it.description}</div>
-                <div style={{ fontSize:11,color:T.t3 }}>{it.unit}</div>
-                <div style={{ fontSize:12,color:T.t2,textAlign:"right" }}>{woQty}</div>
-                <div style={{ fontSize:12,color:T.t3,textAlign:"right" }}>{prev > 0 ? prev : "—"}</div>
-                {/* Unbilled — highlighted */}
-                <div style={{ fontSize:12,fontWeight:700,color:unbilled > 0 ? T.blu : T.t4,textAlign:"right" }}>
-                  {unbilled > 0 ? unbilled : "✓"}
+          {!loadingWO&&sections.map((sec,si)=>{
+            const secThisBillAmt = sec.items.reduce((s,it)=>{
+              const cum=parseFloat(cumQtys[it.id]||0);
+              return s + Math.max(0,cum-(it.prev_cum||0))*parseFloat(it.rate||0);
+            },0);
+            return(
+              <div key={si}>
+                {/* Section header */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"6px 12px",gap:8,background:"#374151",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div style={{gridColumn:"1/7",fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#4ADE80",textAlign:"right"}}>{fmtC(secThisBillAmt)}</div>
                 </div>
-                {/* Cumulative Qty input */}
-                <input
-                  type="number"
-                  value={billForm.items[i]?.cumulative_qty || ""}
-                  min={prev}
-                  max={woQty}
-                  placeholder={String(prev || 0)}
-                  onChange={e => setBillForm(p => ({
-                    ...p,
-                    items: p.items.map((r, j) => j === i ? { ...r, cumulative_qty: e.target.value } : r)
-                  }))}
-                  style={{ ...inpStyle, textAlign:"right", fontWeight:700, padding:"4px 8px", border:overLimit ? "1.5px solid "+T.red : inpStyle.border }}
-                />
-                {/* This Bill Qty + Amount */}
-                <div style={{ textAlign:"right" }}>
-                  <div style={{ fontSize:12,fontWeight:700,color:thisBill > 0 ? T.grn : T.t4 }}>
-                    {thisBill > 0 ? thisBill : "—"}
-                  </div>
-                  {thisBill > 0 && <div style={{ fontSize:10,color:T.t3 }}>{fmtC(amt)}</div>}
-                </div>
+                {sec.items.map(it=>{
+                  const cum = parseFloat(cumQtys[it.id]||0);
+                  const thisBill = Math.max(0, cum-(it.prev_cum||0));
+                  const thisAmt = thisBill * parseFloat(it.rate||0);
+                  const overLimit = cum > parseFloat(it.qty||0);
+                  return(
+                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit?"#FEF2F2":T.surface}}>
+                      <div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{it.description}</div>
+                      <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit}</div>
+                      <div style={{fontSize:12,color:T.t2,textAlign:"right",fontWeight:500}}>{it.qty}</div>
+                      <div style={{fontSize:12,color:T.t3,textAlign:"right"}}>{it.prev_cum||0}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:T.blu,textAlign:"right"}}>₹{parseFloat(it.rate||0).toLocaleString("en-IN")}</div>
+                      <div>
+                        <input type="number" value={cumQtys[it.id]||""} min={0}
+                          onChange={e=>updateCum(it.id, e.target.value)}
+                          style={{...inpStyle,textAlign:"right",fontWeight:700,padding:"5px 8px",
+                            border:"1.5px solid "+(overLimit?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
+                            color:overLimit?T.red:T.t1}}/>
+                        {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>Exceeds WO!</div>}
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:12,fontWeight:700,color:thisAmt>0?T.grn:T.t4}}>{thisAmt>0?fmtC(thisAmt):"—"}</div>
+                        {thisBill>0&&<div style={{fontSize:9,color:T.t4,marginTop:1}}>{thisBill} {it.unit}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             );
           })}
 
-          {/* Gross Total */}
-          <div style={{ display:"flex",justifyContent:"flex-end",marginTop:10,padding:"8px 14px",background:T.surfaceB,borderRadius:6 }}>
-            <span style={{ fontSize:13,fontWeight:800,color:T.grn }}>Gross Total: {fmtC(gross)}</span>
-          </div>
+          {/* Bill Summary */}
+          {gross>0&&(
+            <div style={{marginTop:14,background:"#0F172A",borderRadius:8,padding:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",marginBottom:10}}>Bill Summary</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                {[
+                  {l:"Gross Amount",v:fmtC(gross),c:"#94A3B8"},
+                  {l:"Retention (5%)",v:fmtC(gross*0.05),c:"#FCD34D"},
+                  {l:"TDS (2%)",v:fmtC(gross*0.02),c:"#F87171"},
+                  {l:"Net Payable",v:fmtC(gross*0.93),c:"#4ADE80"},
+                ].map(s=>(
+                  <div key={s.l} style={{textAlign:"center",background:"rgba(255,255,255,0.05)",borderRadius:6,padding:"8px"}}>
+                    <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",marginBottom:3}}>{s.l}</div>
+                    <div style={{fontSize:14,fontWeight:800,color:s.c}}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
-        <div style={{ padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8 }}>
-          <button onClick={onClose} style={{ flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer" }}>Cancel</button>
-          <button onClick={onSave} disabled={saving} style={{ flex:2,padding:"9px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer" }}>{saving ? "Saving..." : "Submit RA Bill"}</button>
+        {/* Footer */}
+        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={onSave} disabled={saving||gross===0}
+            style={{flex:2,padding:"9px",borderRadius:7,background:saving||gross===0?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:saving||gross===0?"not-allowed":"pointer"}}>
+            {saving?"Submitting...":gross>0?"Submit RA Bill — "+fmtC(gross):"Enter quantities to proceed"}
+          </button>
         </div>
       </div>
     </div>
@@ -7031,20 +7482,20 @@ function TaskSkeleton(){
 // PROJECT DETAIL PAGE — SHELL
 // ═══════════════════════════════════════════════════════════════════
 const TABS = [
-  {id:"overview",   label:"Overview"},
-  {id:"design",     label:"Design"},
-  {id:"estimate",   label:"Estimate"},
-  {id:"party",      label:"Party"},
-  {id:"transaction",label:"Transaction"},
-  {id:"todo",       label:"To Do"},
-  {id:"task",       label:"Tasks"},
-  {id:"attendance", label:"Attendance"},
-  {id:"material",   label:"Material"},
-  {id:"subcon",     label:"Subcon"},
-  {id:"equipment",  label:"Equipment"},
-  {id:"files",      label:"Files"},
-  {id:"site",       label:"Site / DPR"},
-  {id:"mom",        label:"MOM"},
+  {id:"overview",   label:"Overview",    key:"o"},
+  {id:"design",     label:"Design",      key:"d"},
+  {id:"estimate",   label:"Estimate",    key:"e"},
+  {id:"party",      label:"Party",       key:"p"},
+  {id:"transaction",label:"Transaction", key:"t"},
+  {id:"todo",       label:"To Do",       key:"k"},
+  {id:"task",       label:"Tasks",       key:"j"},
+  {id:"attendance", label:"Attendance",  key:"a"},
+  {id:"material",   label:"Material",    key:"m"},
+  {id:"subcon",     label:"Subcon",      key:"b"},
+  {id:"equipment",  label:"Equipment",   key:"q"},
+  {id:"files",      label:"Files",       key:"i"},
+  {id:"site",       label:"Site / DPR",  key:"y"},
+  {id:"mom",        label:"MOM",         key:"n"},
 ];
 
 function ProjectDetailPage({project=PROJ, onBack}) {
@@ -7053,6 +7504,26 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   const margin = project.boq - project.expense;
 
   const switchTab = (t) => setTab(t);
+
+  // ── Ctrl+key tab shortcuts ──────────────────────────────────────
+  useEffect(()=>{
+    const handler=(e)=>{
+      const tag=document.activeElement?.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
+      if(!e.ctrlKey) return;
+      const match=TABS.find(t=>t.key===e.key.toLowerCase());
+      if(match){e.preventDefault();setTab(match.id);}
+    };
+    const escHandler=(e)=>{
+      if(e.key==="Escape"&&onBack) onBack();
+    };
+    window.addEventListener("keydown",handler);
+    window.addEventListener("keydown",escHandler);
+    return()=>{
+      window.removeEventListener("keydown",handler);
+      window.removeEventListener("keydown",escHandler);
+    };
+  },[onBack]);
 
   const tabContent = {
     overview:    <TabOverview    proj={project}/>,
@@ -7121,8 +7592,10 @@ function ProjectDetailPage({project=PROJ, onBack}) {
         <style>{`* { scrollbar-width: none; } *::-webkit-scrollbar { display: none; }`}</style>
         {TABS.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:"10px 16px", border:"none", background:"none", cursor:"pointer", color:tab===t.id?T.blu:T.t3, fontWeight:tab===t.id?700:400, fontSize:12.5, whiteSpace:"nowrap", borderBottom:tab===t.id?`2.5px solid ${T.blu}`:"2.5px solid transparent", transition:"all .15s", flexShrink:0, fontFamily:"inherit", letterSpacing:0}}>
+            title={`${t.label}  (Ctrl+${t.key.toUpperCase()})`}
+            style={{padding:"10px 16px 8px", border:"none", background:"none", cursor:"pointer", color:tab===t.id?T.blu:T.t3, fontWeight:tab===t.id?700:400, fontSize:12.5, whiteSpace:"nowrap", borderBottom:tab===t.id?`2.5px solid ${T.blu}`:"2.5px solid transparent", transition:"all .15s", flexShrink:0, fontFamily:"inherit", letterSpacing:0, display:"flex", flexDirection:"column", alignItems:"center", gap:1}}>
             {t.label}
+            <span style={{fontSize:8, color:tab===t.id?T.blu:T.t4, opacity:tab===t.id?0.6:0.35, fontWeight:400, lineHeight:1}}>^{t.key.toUpperCase()}</span>
           </button>
         ))}
       </div>
