@@ -5752,7 +5752,8 @@ function TabSubcon({ projectId }) {
   const [showNewBill, setShowNewBill] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [woForm, setWoForm] = useState({ subcon_id:"", subcon_name:"", description:"", retention_pct:5, tds_pct:2, start_date:"", end_date:"", items:[{description:"",unit:"",qty:"",rate:""}] });
+  const [showEditWO, setShowEditWO] = useState(false);
+  const [amendments, setAmendments] = useState([]);
   const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
   const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"" });
 
@@ -5770,12 +5771,14 @@ function TabSubcon({ projectId }) {
 
   const selectWo = async (wo) => {
     setSelWo(wo); setSubTab("wo");
-    const [bRes, sRes] = await Promise.all([
+    const [bRes, sRes, aRes] = await Promise.all([
       api.get("/subcon/ra-bills?wo_id="+wo.id).catch(()=>({success:false})),
       api.get("/subcon/work-orders/"+wo.id+"/summary").catch(()=>({success:false})),
+      api.get("/subcon/amendments?wo_id="+wo.id).catch(()=>({success:false})),
     ]);
     if(bRes.success) setBills(bRes.data||[]);
     if(sRes.success) setSummary(sRes.data);
+    if(aRes.success) setAmendments(aRes.data||[]);
   };
 
   const fmtC = (v) => "₹"+(parseFloat(v)||0).toLocaleString("en-IN",{maximumFractionDigits:0});
@@ -5899,13 +5902,22 @@ function TabSubcon({ projectId }) {
                     <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
                   </div>
                 ))}
+                <button onClick={()=>setShowEditWO(true)}
+                  style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"white",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>
+                  ✏ Edit
+                </button>
               </div>
             </div>
           </div>
 
           {/* Sub Tabs */}
           <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
-            {[{id:"wo",label:"Work Order"},{id:"bills",label:`RA Bills (${bills.length})`},{id:"pay",label:"Payments"}].map(t=>(
+            {[
+              {id:"wo",label:"Work Order"},
+              {id:"bills",label:`RA Bills (${bills.length})`},
+              {id:"pay",label:"Payments"},
+              {id:"amend",label:"Amendments"+(amendments.filter(a=>a.status==="Pending").length>0 ? ` 🔴${amendments.filter(a=>a.status==="Pending").length}` : ` (${amendments.length})`)},
+            ].map(t=>(
               <button key={t.id} onClick={()=>setSubTab(t.id)}
                 style={{padding:"8px 16px",border:"none",background:"transparent",color:subTab===t.id?T.blu:T.t3,fontSize:12,fontWeight:subTab===t.id?700:400,cursor:"pointer",borderBottom:subTab===t.id?"2px solid "+T.blu:"2px solid transparent"}}>
                 {t.label}
@@ -5970,9 +5982,24 @@ function TabSubcon({ projectId }) {
             {subTab==="pay"&&(
               <PaymentsTab woId={selWo.id} fmtC={fmtC}/>
             )}
+
+            {/* AMENDMENTS TAB */}
+            {subTab==="amend"&&(
+              <AmendmentsTab amendments={amendments} fmtC={fmtC} onRefresh={()=>selectWo(selWo)}/>
+            )}
           </div>
         </>)}
       </div>
+
+      {/* EDIT WO MODAL */}
+      {showEditWO&&selWo&&(
+        <EditWOModal
+          wo={selWo} subcons={subcons} fmtC={fmtC}
+          inpStyle={inpStyle} lblStyle={lblStyle}
+          onClose={()=>setShowEditWO(false)}
+          onSaved={()=>{ setShowEditWO(false); loadWOs(); selectWo(selWo); }}
+        />
+      )}
 
       {/* NEW WO MODAL */}
       {showNewWO&&(
@@ -6257,6 +6284,374 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
   );
 }
 
+
+function EditWOModal({ wo, subcons, fmtC, inpStyle, lblStyle, onClose, onSaved }) {
+  const CATS = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
+  const blankItem = () => ({ description:"", unit:"", qty:"", rate:"", isNew:true });
+  const blankSection = () => ({ id: null, title:"", items:[blankItem()], isNew:true });
+
+  const [form, setForm] = useState({
+    subcon_name: wo.subcon_name||"",
+    subcon_category: wo.subcon_category||"Civil",
+    description: wo.description||"",
+    retention_pct: wo.retention_pct||5,
+    tds_pct: wo.tds_pct||2,
+    start_date: wo.start_date ? wo.start_date.split("T")[0] : "",
+    end_date: wo.end_date ? wo.end_date.split("T")[0] : "",
+    status: wo.status||"Active",
+  });
+  const [sections, setSections] = useState([]);
+  const [loadingSecs, setLoadingSecs] = useState(true);
+  const [reason, setReason] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [secCollapsed, setSecCollapsed] = useState({});
+  const [libItems, setLibItems] = useState([]);
+  const [showLibFor, setShowLibFor] = useState(null);
+  const [libSearch, setLibSearch] = useState("");
+
+  useEffect(()=>{
+    api.get("/subcon/work-orders/"+wo.id).then(r=>{
+      if(r.success){
+        const secs = (r.data.sections||[]).map(s=>({
+          ...s, items: (s.items||[]).map(it=>({...it, isNew:false})), isNew:false
+        }));
+        setSections(secs);
+      }
+      setLoadingSecs(false);
+    }).catch(()=>setLoadingSecs(false));
+    api.get("/library/materials").then(r=>{ if(r.success) setLibItems(r.data||[]); }).catch(()=>{});
+  },[wo.id]);
+
+  // Section helpers
+  const addSection = () => setSections(p=>[...p, blankSection()]);
+  const removeSection = (si) => setSections(p=>p.filter((_,i)=>i!==si));
+  const updateSection = (si,key,val) => setSections(p=>p.map((s,i)=>i===si?{...s,[key]:val}:s));
+  const addItem = (si) => setSections(p=>p.map((s,i)=>i===si?{...s,items:[...s.items,blankItem()]}:s));
+  const removeItem = (si,ii) => setSections(p=>p.map((s,i)=>i===si?{...s,items:s.items.filter((_,j)=>j!==ii)}:s));
+  const updateItem = (si,ii,key,val) => setSections(p=>p.map((s,i)=>i===si?{...s,items:s.items.map((it,j)=>j===ii?{...it,[key]:val}:it)}:s));
+  const pickLibItem = (item) => {
+    if(!showLibFor) return;
+    const {si,ii} = showLibFor;
+    updateItem(si,ii,"description",item.name);
+    updateItem(si,ii,"unit",item.unit||"");
+    updateItem(si,ii,"rate",item.rate||"");
+    setShowLibFor(null); setLibSearch("");
+  };
+
+  const grandTotal = sections.reduce((st,sec)=>st+sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0),0);
+
+  const submit = async () => {
+    if(!form.subcon_name) return alert("Subcontractor required");
+    if(!reason.trim()) return alert("Change reason required for approval");
+    const validSecs = sections.filter(s=>s.title.trim());
+    setSaving(true);
+    const res = await api.post("/subcon/work-orders/"+wo.id+"/amendment",{
+      proposed_form: form,
+      proposed_sections: validSecs.map(s=>({
+        id: s.id||null,
+        title: s.title,
+        items: s.items.filter(i=>i.description&&i.qty&&i.rate).map(i=>({
+          id: i.id||null,
+          description:i.description, unit:i.unit||"", qty:parseFloat(i.qty), rate:parseFloat(i.rate)
+        }))
+      })),
+      reason,
+    }).catch(()=>({success:false,message:"Network error"}));
+    setSaving(false);
+    if(res.success) onSaved();
+    else alert(res.message||"Failed");
+  };
+
+  const filteredLib = libItems.filter(i=>!libSearch||i.name.toLowerCase().includes(libSearch.toLowerCase()));
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:T.surface,borderRadius:12,width:"min(800px,97vw)",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.35)"}}>
+
+        {/* Header */}
+        <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Edit Work Order</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:2}}>Changes will require admin approval before applying</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:22,cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+
+          {/* Basic Info */}
+          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Basic Details</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:16,background:T.surfaceB,padding:12,borderRadius:8,border:"1px solid "+T.b1}}>
+            <div style={{gridColumn:"1/3"}}>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Subcontractor *</label>
+              <input list="sc-edit-list" value={form.subcon_name} onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))} style={inpStyle}/>
+              <datalist id="sc-edit-list">{subcons.map(s=><option key={s.id} value={s.name}/>)}</datalist>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Category</label>
+              <select value={form.subcon_category} onChange={e=>setForm(p=>({...p,subcon_category:e.target.value}))} style={inpStyle}>
+                {CATS.map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Status</label>
+              <select value={form.status} onChange={e=>setForm(p=>({...p,status:e.target.value}))} style={inpStyle}>
+                {["Active","On Hold","Completed","Cancelled"].map(s=><option key={s}>{s}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Retention %</label>
+              <input type="number" value={form.retention_pct} onChange={e=>setForm(p=>({...p,retention_pct:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>TDS %</label>
+              <input type="number" value={form.tds_pct} onChange={e=>setForm(p=>({...p,tds_pct:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Start Date</label>
+              <input type="date" value={form.start_date} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>End Date</label>
+              <input type="date" value={form.end_date} onChange={e=>setForm(p=>({...p,end_date:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div style={{gridColumn:"1/4"}}>
+              <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Description / Remark</label>
+              <input value={form.description} onChange={e=>setForm(p=>({...p,description:e.target.value}))} style={inpStyle} placeholder="Optional"/>
+            </div>
+          </div>
+
+          {/* Sections & BOQ */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>
+              Sections & BOQ Items
+              <span style={{marginLeft:8,fontSize:10,fontWeight:700,color:T.grn}}>Grand Total: {fmtC(grandTotal)}</span>
+            </div>
+            <button onClick={addSection}
+              style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              + Add Section
+            </button>
+          </div>
+
+          {loadingSecs&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading sections...</div>}
+
+          {sections.map((sec,si)=>{
+            const secTotal = sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
+            const isOpen = !secCollapsed[si];
+            return(
+              <div key={si} style={{background:T.surfaceB,border:"1.5px solid "+(sec.isNew?T.blu:T.b1),borderRadius:9,marginBottom:10,overflow:"hidden"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1E293B",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div onClick={()=>setSecCollapsed(p=>({...p,[si]:!p[si]}))} style={{cursor:"pointer",flexShrink:0}}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth={2.5}
+                      style={{transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}>
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </div>
+                  {sec.isNew&&<span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:"#1D4ED8",color:"white"}}>NEW</span>}
+                  <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",minWidth:20}}>#{si+1}</span>
+                  <input value={sec.title} onChange={e=>updateSection(si,"title",e.target.value)}
+                    onClick={e=>e.stopPropagation()}
+                    placeholder="Section name..."
+                    style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:"#4ADE80",minWidth:80,textAlign:"right"}}>{fmtC(secTotal)}</span>
+                  <button onClick={()=>removeSection(si)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}}>×</button>
+                </div>
+
+                {isOpen&&(<div style={{padding:"10px 12px"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:5}}>
+                    {["Description","Unit","Qty","Rate/Unit","Amt",""].map(h=><div key={h} style={{fontSize:8.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
+                  </div>
+                  {sec.items.map((it,ii)=>{
+                    const amt=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);
+                    return(
+                      <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:6,alignItems:"center",
+                        background:it.isNew?"#EFF6FF":"transparent",borderRadius:it.isNew?4:0,padding:it.isNew?"2px 4px":"0"}}>
+                        <div style={{position:"relative"}}>
+                          <input value={it.description} onChange={e=>updateItem(si,ii,"description",e.target.value)}
+                            placeholder="Item description" style={{...inpStyle,paddingRight:28}}/>
+                          <button onClick={()=>{setShowLibFor({si,ii});setLibSearch("");}}
+                            style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:0}}>📚</button>
+                        </div>
+                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder="Sqft" style={inpStyle}/>
+                        <input type="number" value={it.qty} onChange={e=>updateItem(si,ii,"qty",e.target.value)} placeholder="0" style={inpStyle}/>
+                        <input type="number" value={it.rate} onChange={e=>updateItem(si,ii,"rate",e.target.value)} placeholder="0" style={inpStyle}/>
+                        <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{amt>0?fmtC(amt):""}</div>
+                        <button onClick={()=>removeItem(si,ii)} style={{background:"none",border:"none",color:T.red,cursor:"pointer",fontSize:15,padding:0,lineHeight:1}}>×</button>
+                      </div>
+                    );
+                  })}
+                  <button onClick={()=>addItem(si)}
+                    style={{background:"none",border:"1px dashed "+T.b1,color:T.blu,cursor:"pointer",fontSize:11,fontWeight:600,padding:"5px 10px",borderRadius:5,width:"100%",marginTop:2}}>
+                    + Add Item
+                  </button>
+                </div>)}
+              </div>
+            );
+          })}
+
+          {/* Change Reason */}
+          <div style={{marginTop:14,background:"#FFF7ED",border:"1.5px solid #FED7AA",borderRadius:8,padding:12}}>
+            <div style={{fontSize:10,fontWeight:700,color:"#92400E",textTransform:"uppercase",marginBottom:6}}>⚠ Change Reason (Required for Approval)</div>
+            <textarea value={reason} onChange={e=>setReason(e.target.value)}
+              placeholder="Reason for this change (e.g. Scope change — added FF slab work, rate revision approved by PM...)"
+              style={{width:"100%",minHeight:60,padding:"8px 10px",borderRadius:6,border:"1.5px solid #FED7AA",fontSize:12,outline:"none",fontFamily:"inherit",resize:"vertical",boxSizing:"border-box",background:"white"}}/>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,flexShrink:0,background:T.surfaceB}}>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={submit} disabled={saving||!reason.trim()}
+            style={{flex:2,padding:"9px",borderRadius:7,background:saving||!reason.trim()?T.t4:"#D97706",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:saving||!reason.trim()?"not-allowed":"pointer"}}>
+            {saving?"Submitting...":"Submit for Approval"}
+          </button>
+        </div>
+
+        {/* Library picker */}
+        {showLibFor&&(
+          <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.3)",zIndex:10,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{background:T.surface,borderRadius:10,width:"min(400px,94vw)",maxHeight:"70vh",display:"flex",flexDirection:"column",boxShadow:"0 12px 40px rgba(0,0,0,0.2)"}}>
+              <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.b1,display:"flex",gap:8,alignItems:"center"}}>
+                <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} autoFocus
+                  placeholder="Search materials..." style={{...inpStyle,flex:1}}/>
+                <button onClick={()=>setShowLibFor(null)} style={{background:"none",border:"none",color:T.t3,cursor:"pointer",fontSize:18}}>×</button>
+              </div>
+              <div style={{flex:1,overflowY:"auto"}}>
+                {filteredLib.map(item=>(
+                  <div key={item.id} onClick={()=>pickLibItem(item)}
+                    style={{padding:"9px 14px",borderBottom:"1px solid "+T.b1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#F0F9FF"}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{item.name}</div>
+                      <div style={{fontSize:10,color:T.t4}}>{item.unit} · {item.category_name}</div>
+                    </div>
+                    {item.rate&&<div style={{fontSize:12,fontWeight:700,color:T.grn}}>₹{item.rate}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AmendmentsTab({ amendments, fmtC, onRefresh }) {
+  const [actioning, setActioning] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+
+  const action = async (id, status) => {
+    setActioning(id+status);
+    await api.patch("/subcon/amendments/"+id+"/action", {status}).catch(()=>{});
+    setActioning(null);
+    onRefresh();
+  };
+
+  if(amendments.length===0) return(
+    <div style={{textAlign:"center",padding:"48px 20px",color:T.t4}}>
+      <svg width={32} height={32} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 10px",display:"block"}}><path d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <div style={{fontSize:13,color:T.t3}}>No amendments yet</div>
+      <div style={{fontSize:11,color:T.t4,marginTop:4}}>Edit WO pe click karo changes propose karne ke liye</div>
+    </div>
+  );
+
+  return(
+    <div>
+      {amendments.map(a=>{
+        const stC = a.status==="Approved"?T.grn:a.status==="Rejected"?T.red:T.amb;
+        const isExp = expandedId===a.id;
+        let proposed = {};
+        try { proposed = typeof a.proposed_data==="string" ? JSON.parse(a.proposed_data) : a.proposed_data; } catch(e){}
+        return(
+          <div key={a.id} style={{border:"1px solid "+T.b1,borderRadius:8,marginBottom:8,overflow:"hidden",borderLeft:"3px solid "+stC}}>
+            <div onClick={()=>setExpandedId(isExp?null:a.id)}
+              style={{padding:"10px 14px",cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center",background:T.surfaceB}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>Amendment #{a.id}</div>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{a.reason}</div>
+                <div style={{fontSize:10,color:T.t4,marginTop:2}}>{a.created_at ? new Date(a.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit",hour:"2-digit",minute:"2-digit"}) : "—"}</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{a.status}</span>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.t3} strokeWidth={2.5}
+                  style={{transform:isExp?"rotate(180deg)":"rotate(0deg)",transition:"transform .2s"}}>
+                  <polyline points="6 9 12 15 18 9"/>
+                </svg>
+              </div>
+            </div>
+
+            {isExp&&(
+              <div style={{padding:"12px 14px",borderTop:"1px solid "+T.b1}}>
+                {/* Proposed basic changes */}
+                {proposed.proposed_form&&(
+                  <div style={{marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Proposed Changes</div>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+                      {[
+                        {l:"Subcontractor",v:proposed.proposed_form.subcon_name},
+                        {l:"Category",v:proposed.proposed_form.subcon_category},
+                        {l:"Status",v:proposed.proposed_form.status},
+                        {l:"Retention",v:proposed.proposed_form.retention_pct+"%"},
+                        {l:"TDS",v:proposed.proposed_form.tds_pct+"%"},
+                        {l:"Start",v:proposed.proposed_form.start_date||"—"},
+                      ].map(f=>(
+                        <div key={f.l} style={{background:T.surfaceB,borderRadius:5,padding:"6px 8px"}}>
+                          <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{f.l}</div>
+                          <div style={{fontSize:11,fontWeight:600,color:T.t1}}>{f.v||"—"}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {/* Sections summary */}
+                {proposed.proposed_sections&&proposed.proposed_sections.length>0&&(
+                  <div style={{marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Sections ({proposed.proposed_sections.length})</div>
+                    {proposed.proposed_sections.map((sec,si)=>{
+                      const secTotal = (sec.items||[]).reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
+                      return(
+                        <div key={si} style={{background:T.surfaceB,border:"1px solid "+T.b1,borderRadius:6,marginBottom:6,overflow:"hidden"}}>
+                          <div style={{padding:"6px 10px",background:"#1E293B",display:"flex",justifyContent:"space-between"}}>
+                            <span style={{fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</span>
+                            <span style={{fontSize:11,fontWeight:700,color:"#4ADE80"}}>{fmtC(secTotal)}</span>
+                          </div>
+                          {(sec.items||[]).map((it,ii)=>(
+                            <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 80px 80px",padding:"5px 10px",gap:6,borderBottom:"1px solid "+T.b1,fontSize:11}}>
+                              <span style={{color:T.t1}}>{it.description}</span>
+                              <span style={{color:T.t3}}>{it.unit}</span>
+                              <span style={{color:T.t2,textAlign:"right"}}>{it.qty}</span>
+                              <span style={{color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</span>
+                              <span style={{fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC((parseFloat(it.qty)||0)*(parseFloat(it.rate)||0))}</span>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Approve/Reject buttons */}
+                {a.status==="Pending"&&(
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>action(a.id,"Rejected")} disabled={!!actioning}
+                      style={{flex:1,padding:"7px",borderRadius:6,border:"1px solid "+T.red,background:"white",color:T.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      ✕ Reject
+                    </button>
+                    <button onClick={()=>action(a.id,"Approved")} disabled={!!actioning}
+                      style={{flex:2,padding:"7px",borderRadius:6,background:actioning?T.t4:T.grn,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      {actioning===a.id+"Approved"?"Applying...":"✓ Approve & Apply"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function WoItemsTable({ woId, fmtC }) {
   const [sections, setSections] = useState([]);
