@@ -5976,64 +5976,12 @@ function TabSubcon({ projectId }) {
 
       {/* NEW WO MODAL */}
       {showNewWO&&(
-        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
-          <div style={{background:T.surface,borderRadius:12,width:"min(640px,94vw)",maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
-            <div style={{background:"#0F172A",padding:"13px 16px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{fontSize:14,fontWeight:700,color:"white"}}>New Work Order</div>
-              <button onClick={()=>setShowNewWO(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
-            </div>
-            <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-                <div style={{gridColumn:"1/-1"}}>
-                  <label style={lblStyle}>Subcontractor *</label>
-                  <input list="sc-list" value={woForm.subcon_name} onChange={e=>setWoForm(p=>({...p,subcon_name:e.target.value}))} placeholder="Select or type..." style={inpStyle}/>
-                  <datalist id="sc-list">{subcons.map(s=><option key={s.id} value={s.name}/>)}</datalist>
-                </div>
-                <div>
-                  <label style={lblStyle}>Retention %</label>
-                  <input type="number" value={woForm.retention_pct} onChange={e=>setWoForm(p=>({...p,retention_pct:e.target.value}))} style={inpStyle}/>
-                </div>
-                <div>
-                  <label style={lblStyle}>TDS %</label>
-                  <input type="number" value={woForm.tds_pct} onChange={e=>setWoForm(p=>({...p,tds_pct:e.target.value}))} style={inpStyle}/>
-                </div>
-                <div>
-                  <label style={lblStyle}>Start Date</label>
-                  <input type="date" value={woForm.start_date} onChange={e=>setWoForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
-                </div>
-                <div>
-                  <label style={lblStyle}>End Date</label>
-                  <input type="date" value={woForm.end_date} onChange={e=>setWoForm(p=>({...p,end_date:e.target.value}))} style={inpStyle}/>
-                </div>
-              </div>
-
-              {/* BOQ Items */}
-              <div style={{fontSize:10.5,fontWeight:700,color:T.t2,marginBottom:8,textTransform:"uppercase"}}>BOQ Items</div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 24px",gap:6,marginBottom:6}}>
-                {["Description","Unit","Qty","Rate",""].map(h=><div key={h} style={{fontSize:9,color:T.t4,textTransform:"uppercase",fontWeight:700}}>{h}</div>)}
-              </div>
-              {woForm.items.map((it,i)=>(
-                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 24px",gap:6,marginBottom:6}}>
-                  <input value={it.description} onChange={e=>setWoForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,description:e.target.value}:r)}))} placeholder="Item description" style={inpStyle}/>
-                  <input value={it.unit} onChange={e=>setWoForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,unit:e.target.value}:r)}))} placeholder="Cum" style={inpStyle}/>
-                  <input type="number" value={it.qty} onChange={e=>setWoForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,qty:e.target.value}:r)}))} placeholder="0" style={inpStyle}/>
-                  <input type="number" value={it.rate} onChange={e=>setWoForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,rate:e.target.value}:r)}))} placeholder="0" style={inpStyle}/>
-                  <button onClick={()=>setWoForm(p=>({...p,items:p.items.filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",color:T.red,cursor:"pointer",fontSize:16,padding:0}}>×</button>
-                </div>
-              ))}
-              <button onClick={()=>setWoForm(p=>({...p,items:[...p.items,{description:"",unit:"",qty:"",rate:""}]}))} style={{background:"none",border:"none",color:T.blu,cursor:"pointer",fontSize:12,fontWeight:600,padding:"4px 0"}}>+ Add Item</button>
-              
-              {/* Total preview */}
-              <div style={{textAlign:"right",marginTop:8,fontSize:13,fontWeight:700,color:T.grn}}>
-                Total: {fmtC(woForm.items.reduce((s,i)=>s+(parseFloat(i.qty)||0)*(parseFloat(i.rate)||0),0))}
-              </div>
-            </div>
-            <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8}}>
-              <button onClick={()=>setShowNewWO(false)} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
-              <button onClick={submitWO} disabled={saving} style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Create Work Order"}</button>
-            </div>
-          </div>
-        </div>
+        <NewWOModal
+          subcons={subcons} projectId={project.id} fmtC={fmtC}
+          inpStyle={inpStyle} lblStyle={lblStyle} saving={saving} setSaving={setSaving}
+          onClose={()=>setShowNewWO(false)}
+          onSaved={()=>{ setShowNewWO(false); loadWOs(); }}
+        />
       )}
 
       {/* NEW RA BILL MODAL */}
@@ -6080,29 +6028,272 @@ function TabSubcon({ projectId }) {
   );
 }
 
-function WoItemsTable({ woId, fmtC }) {
-  const [items, setItems] = useState([]);
+function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setSaving, onClose, onSaved }) {
+  const CATS = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
+  const blankSection = () => ({ title:"", items:[{ description:"", unit:"", qty:"", rate:"", isLibrary:false }] });
+
+  const [form, setForm] = useState({
+    subcon_name:"", subcon_category:"Civil",
+    description:"", retention_pct:5, tds_pct:2,
+    start_date:"", end_date:"",
+    sections:[ blankSection() ],
+  });
+  const [libItems, setLibItems] = useState([]);
+  const [showLibFor, setShowLibFor] = useState(null); // {secIdx, itemIdx}
+  const [libSearch, setLibSearch] = useState("");
+
+  // Load library items when category changes
   useEffect(()=>{
-    api.get("/subcon/work-orders/"+woId).then(r=>{ if(r.success) setItems(r.data.items||[]); }).catch(()=>{});
-  },[woId]);
-  if(items.length===0) return <div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12}}>No BOQ items</div>;
+    api.get("/library/materials").then(r=>{
+      if(r.success) setLibItems(r.data||[]);
+    }).catch(()=>{});
+  },[]);
+
+  // Section helpers
+  const addSection = () => setForm(p=>({...p, sections:[...p.sections, blankSection()]}));
+  const removeSection = (si) => setForm(p=>({...p, sections:p.sections.filter((_,i)=>i!==si)}));
+  const updateSection = (si, key, val) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,[key]:val}:s)}));
+  const addItem = (si) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:[...s.items,{description:"",unit:"",qty:"",rate:"",isLibrary:false}]}:s)}));
+  const removeItem = (si,ii) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:s.items.filter((_,j)=>j!==ii)}:s)}));
+  const updateItem = (si,ii,key,val) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:s.items.map((it,j)=>j===ii?{...it,[key]:val}:it)}:s)}));
+
+  // Pick from library
+  const pickLibItem = (item) => {
+    if(!showLibFor) return;
+    const {secIdx,itemIdx} = showLibFor;
+    updateItem(secIdx,itemIdx,"description",item.name);
+    updateItem(secIdx,itemIdx,"unit",item.unit||"");
+    updateItem(secIdx,itemIdx,"rate",item.rate||"");
+    updateItem(secIdx,itemIdx,"isLibrary",true);
+    setShowLibFor(null); setLibSearch("");
+  };
+
+  const grandTotal = form.sections.reduce((st,sec)=>
+    st + sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0), 0
+  );
+
+  const submit = async () => {
+    if(!form.subcon_name) return alert("Subcontractor required");
+    const validSecs = form.sections.filter(s=>s.title.trim() && s.items.some(i=>i.description&&i.qty&&i.rate));
+    if(validSecs.length===0) return alert("At least 1 section with items required");
+    setSaving(true);
+    const res = await api.post("/subcon/work-orders",{
+      project_id: projectId,
+      subcon_name: form.subcon_name,
+      subcon_category: form.subcon_category,
+      description: form.description,
+      retention_pct: parseFloat(form.retention_pct||5),
+      tds_pct: parseFloat(form.tds_pct||2),
+      start_date: form.start_date||null,
+      end_date: form.end_date||null,
+      sections: validSecs.map(s=>({
+        title: s.title,
+        items: s.items.filter(i=>i.description&&i.qty&&i.rate).map(i=>({
+          description:i.description, unit:i.unit||"", qty:parseFloat(i.qty), rate:parseFloat(i.rate),
+        })),
+      })),
+    }).catch(()=>({success:false,message:"Network error"}));
+    setSaving(false);
+    if(res.success) onSaved();
+    else alert(res.message||"Failed");
+  };
+
+  const filteredLib = libItems.filter(i=>
+    !libSearch || i.name.toLowerCase().includes(libSearch.toLowerCase())
+  );
+
   return(
-    <div style={{overflowX:"auto"}}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 100px",background:"#1E293B",padding:"6px 12px",gap:8,minWidth:500,borderRadius:"6px 6px 0 0"}}>
-        {["Description","Unit","Qty","Rate","Amount"].map((h,i)=><div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>)}
-      </div>
-      {items.map((it,i)=>(
-        <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 100px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:"#F8FAFC",minWidth:500}}>
-          <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
-          <div style={{fontSize:11.5,color:T.t3}}>{it.unit}</div>
-          <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
-          <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</div>
-          <div style={{fontSize:12,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.amount)}</div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:T.surface,borderRadius:12,width:"min(760px,96vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+        {/* Header */}
+        <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:"white"}}>New Work Order</div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
         </div>
-      ))}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 100px",padding:"8px 12px",gap:8,background:"#0F172A",borderRadius:"0 0 6px 6px",minWidth:500}}>
-        <div style={{gridColumn:"1/5",fontSize:10,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase"}}>Total</div>
-        <div style={{fontSize:13,fontWeight:800,color:"#4ADE80",textAlign:"right"}}>{fmtC(items.reduce((s,i)=>s+parseFloat(i.amount||0),0))}</div>
+
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+          {/* Basic Info */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:14}}>
+            <div style={{gridColumn:"1/3"}}>
+              <label style={lblStyle}>Subcontractor *</label>
+              <input list="sc-list-wo" value={form.subcon_name} onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))} placeholder="Select or type..." style={inpStyle}/>
+              <datalist id="sc-list-wo">{subcons.map(s=><option key={s.id} value={s.name}/>)}</datalist>
+            </div>
+            <div>
+              <label style={lblStyle}>Category</label>
+              <select value={form.subcon_category} onChange={e=>setForm(p=>({...p,subcon_category:e.target.value}))} style={inpStyle}>
+                {CATS.map(c=><option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lblStyle}>Retention %</label>
+              <input type="number" value={form.retention_pct} onChange={e=>setForm(p=>({...p,retention_pct:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>TDS %</label>
+              <input type="number" value={form.tds_pct} onChange={e=>setForm(p=>({...p,tds_pct:e.target.value}))} style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>Start Date</label>
+              <input type="date" value={form.start_date} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
+            </div>
+          </div>
+
+          {/* Sections */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".4px"}}>Sections & BOQ Items</div>
+            <button onClick={addSection}
+              style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+              + Add Section
+            </button>
+          </div>
+
+          {form.sections.map((sec,si)=>{
+            const secTotal = sec.items.reduce((s,it)=>s+(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0),0);
+            return(
+              <div key={si} style={{background:T.surfaceB,border:"1.5px solid "+T.b1,borderRadius:9,marginBottom:12,overflow:"hidden"}}>
+                {/* Section header */}
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1E293B",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",minWidth:20}}>#{si+1}</span>
+                  <input value={sec.title} onChange={e=>updateSection(si,"title",e.target.value)}
+                    placeholder="Section name (e.g. Plinth Work, Lintel Level, Slab...)"
+                    style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                  <span style={{fontSize:11,fontWeight:700,color:"#4ADE80",minWidth:80,textAlign:"right"}}>{fmtC(secTotal)}</span>
+                  {form.sections.length>1&&(
+                    <button onClick={()=>removeSection(si)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.4)",cursor:"pointer",fontSize:16,padding:0,lineHeight:1}}>×</button>
+                  )}
+                </div>
+
+                {/* Items */}
+                <div style={{padding:"10px 12px"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:5}}>
+                    {["Description","Unit","Qty","Rate/Unit","Amt",""].map(h=><div key={h} style={{fontSize:8.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
+                  </div>
+                  {sec.items.map((it,ii)=>{
+                    const amt=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);
+                    return(
+                      <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:6,alignItems:"center"}}>
+                        <div style={{position:"relative"}}>
+                          <input value={it.description} onChange={e=>updateItem(si,ii,"description",e.target.value)}
+                            placeholder="Item description" style={{...inpStyle,paddingRight:28}}/>
+                          <button onClick={()=>{setShowLibFor({secIdx:si,itemIdx:ii});setLibSearch("");}}
+                            title="Pick from library"
+                            style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:0}}>📚</button>
+                        </div>
+                        <input value={it.unit} onChange={e=>updateItem(si,ii,"unit",e.target.value)} placeholder="Sqft" style={inpStyle}/>
+                        <input type="number" value={it.qty} onChange={e=>updateItem(si,ii,"qty",e.target.value)} placeholder="0" style={inpStyle}/>
+                        <input type="number" value={it.rate} onChange={e=>updateItem(si,ii,"rate",e.target.value)} placeholder="0" style={inpStyle}/>
+                        <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{amt>0?fmtC(amt):""}</div>
+                        <button onClick={()=>removeItem(si,ii)} style={{background:"none",border:"none",color:T.red,cursor:"pointer",fontSize:15,padding:0,lineHeight:1}}>×</button>
+                      </div>
+                    );
+                  })}
+                  <button onClick={()=>addItem(si)}
+                    style={{background:"none",border:"1px dashed "+T.b1,color:T.blu,cursor:"pointer",fontSize:11,fontWeight:600,padding:"5px 10px",borderRadius:5,width:"100%",marginTop:2}}>
+                    + Add Item
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Grand Total */}
+          <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,padding:"6px 0"}}>
+            Grand Total: {fmtC(grandTotal)}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,flexShrink:0}}>
+          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
+          <button onClick={submit} disabled={saving}
+            style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+            {saving?"Creating...":"Create Work Order"}
+          </button>
+        </div>
+      </div>
+
+      {/* Library picker modal */}
+      {showLibFor&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}}
+          onClick={()=>setShowLibFor(null)}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:10,width:"min(420px,92vw)",maxHeight:"70vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 50px rgba(0,0,0,0.3)"}}>
+            <div style={{background:"#0F172A",padding:"10px 14px",borderRadius:"10px 10px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"white"}}>Library — {form.subcon_category}</div>
+              <button onClick={()=>setShowLibFor(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:18,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1}}>
+              <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="Search items..."
+                style={{...inpStyle,marginBottom:0}}/>
+            </div>
+            <div style={{flex:1,overflowY:"auto"}}>
+              {filteredLib.length===0&&<div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>No items found</div>}
+              {filteredLib.map(item=>(
+                <div key={item.id} onClick={()=>pickLibItem(item)}
+                  style={{padding:"9px 14px",borderBottom:"1px solid "+T.b1,cursor:"pointer",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                  onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                  <div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{item.name}</div>
+                    <div style={{fontSize:10.5,color:T.t4}}>{item.unit||"—"}</div>
+                  </div>
+                  {item.rate&&<div style={{fontSize:12,fontWeight:700,color:T.grn}}>₹{item.rate}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+function WoItemsTable({ woId, fmtC }) {
+  const [sections, setSections] = useState([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(()=>{
+    setLoading(true);
+    api.get("/subcon/work-orders/"+woId).then(r=>{
+      if(r.success) setSections(r.data.sections||[]);
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  },[woId]);
+
+  if(loading) return <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>Loading...</div>;
+  if(sections.length===0) return <div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12}}>No BOQ items</div>;
+
+  const grandTotal = sections.reduce((st,sec)=>st+(sec.items||[]).reduce((s,it)=>s+parseFloat(it.amount||0),0),0);
+
+  return(
+    <div>
+      {sections.map((sec,si)=>{
+        const secTotal = (sec.items||[]).reduce((s,it)=>s+parseFloat(it.amount||0),0);
+        return(
+          <div key={sec.id} style={{marginBottom:10,border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#1E293B"}}>
+              <span style={{fontSize:12.5,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#4ADE80"}}>{fmtC(secTotal)}</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",background:"#374151",padding:"5px 12px",gap:8}}>
+              {["Description","Unit","Qty","Rate","Amount"].map((h,i)=>(
+                <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.4)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
+              ))}
+            </div>
+            {(sec.items||[]).map((it,i)=>(
+              <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",padding:"7px 12px",gap:8,borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:"#F8FAFC"}}>
+                <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
+                <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
+                <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
+                <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</div>
+                <div style={{fontSize:12,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.amount)}</div>
+              </div>
+            ))}
+          </div>
+        );
+      })}
+      <div style={{textAlign:"right",fontSize:13,fontWeight:800,color:T.grn,padding:"6px 0"}}>
+        Grand Total: {fmtC(grandTotal)}
       </div>
     </div>
   );
