@@ -6821,8 +6821,8 @@ function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm,
           </div>
 
           {/* Column headers */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 60px 80px 80px 80px 90px",background:"#1E293B",padding:"7px 12px",gap:8,borderRadius:"7px 7px 0 0"}}>
-            {["Item","Unit","WO Qty","Prev Cum","This Cum ▼","This Bill Amt"].map((h,i)=>(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",background:"#1E293B",padding:"7px 12px",gap:8,borderRadius:"7px 7px 0 0"}}>
+            {["Item","Unit","WO Qty","Prev Cum","Rate","This Cum ▼","This Bill Amt"].map((h,i)=>(
               <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
             ))}
           </div>
@@ -6837,8 +6837,8 @@ function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm,
             return(
               <div key={si}>
                 {/* Section header */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 60px 80px 80px 80px 90px",padding:"6px 12px",gap:8,background:"#374151",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-                  <div style={{gridColumn:"1/6",fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"6px 12px",gap:8,background:"#374151",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div style={{gridColumn:"1/7",fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</div>
                   <div style={{fontSize:11,fontWeight:700,color:"#4ADE80",textAlign:"right"}}>{fmtC(secThisBillAmt)}</div>
                 </div>
                 {sec.items.map(it=>{
@@ -6847,22 +6847,23 @@ function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm,
                   const thisAmt = thisBill * parseFloat(it.rate||0);
                   const overLimit = cum > parseFloat(it.qty||0);
                   return(
-                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 80px 80px 80px 90px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit?"#FEF2F2":T.surface}}>
+                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit?"#FEF2F2":T.surface}}>
                       <div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{it.description}</div>
                       <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit}</div>
                       <div style={{fontSize:12,color:T.t2,textAlign:"right",fontWeight:500}}>{it.qty}</div>
                       <div style={{fontSize:12,color:T.t3,textAlign:"right"}}>{it.prev_cum||0}</div>
+                      <div style={{fontSize:12,fontWeight:700,color:T.blu,textAlign:"right"}}>₹{parseFloat(it.rate||0).toLocaleString("en-IN")}</div>
                       <div>
                         <input type="number" value={cumQtys[it.id]||""} min={0}
                           onChange={e=>updateCum(it.id, e.target.value)}
                           style={{...inpStyle,textAlign:"right",fontWeight:700,padding:"5px 8px",
                             border:"1.5px solid "+(overLimit?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
                             color:overLimit?T.red:T.t1}}/>
-                        {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>Exceeds WO qty!</div>}
+                        {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>Exceeds WO!</div>}
                       </div>
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:12,fontWeight:700,color:thisAmt>0?T.grn:T.t4}}>{thisAmt>0?fmtC(thisAmt):"—"}</div>
-                        {thisBill>0&&<div style={{fontSize:9,color:T.t4}}>{thisBill} {it.unit} × ₹{it.rate}</div>}
+                        {thisBill>0&&<div style={{fontSize:9,color:T.t4,marginTop:1}}>{thisBill} {it.unit}</div>}
                       </div>
                     </div>
                   );
