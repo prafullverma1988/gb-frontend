@@ -70,7 +70,7 @@ const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
 const NAV_GROUPS=[
   {section:null,items:[
     {id:"dashboard", label:"Dashboard",    Icon:IcHome, sc:"H"},
-    {id:"projects",  label:"Projects",     Icon:IcProj, sc:"P"},
+    {id:"projects",  label:"Projects",     Icon:IcProj, sc:"J"},
     {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
     {id:"team",      label:"Team Schedule",Icon:IcTeam, sc:"T"},
@@ -78,11 +78,16 @@ const NAV_GROUPS=[
   ]},
   {section:"FINANCE & OPS",items:[
     {id:"finance",     label:"Finance",     Icon:IcFin,  sc:"F"},
-    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"R", badge:11,bc:C.p},
+    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P", badge:11,bc:C.p},
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
     {id:"payroll",     label:"Payroll",     Icon:IcPay,  sc:"Y"},
   ]},
-  {section:"REPORTS",items:[{id:"reports",label:"Reports",Icon:IcRep},{id:"library",label:"Library",Icon:IcLib},{id:"settings",label:"Settings",Icon:IcSet},{id:"saas",label:"SaaS Admin",Icon:IcStar,badge:"SA",bc:"#7C3AED"}]},
+  {section:"REPORTS",items:[
+    {id:"reports",  label:"Reports",    Icon:IcRep, sc:"B"},
+    {id:"library",  label:"Library",    Icon:IcLib, sc:"L"},
+    {id:"settings", label:"Settings",   Icon:IcSet, sc:"S"},
+    {id:"saas",     label:"SaaS Admin", Icon:IcStar,badge:"SA",bc:"#7C3AED"},
+  ]},
 ];
 
 // Modules that are always ON — cannot be toggled off
