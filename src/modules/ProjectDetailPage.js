@@ -5977,7 +5977,7 @@ function TabSubcon({ projectId }) {
       {/* NEW WO MODAL */}
       {showNewWO&&(
         <NewWOModal
-          subcons={subcons} projectId={project.id} fmtC={fmtC}
+          subcons={subcons} projectId={projectId} fmtC={fmtC}
           inpStyle={inpStyle} lblStyle={lblStyle} saving={saving} setSaving={setSaving}
           onClose={()=>setShowNewWO(false)}
           onSaved={()=>{ setShowNewWO(false); loadWOs(); }}
