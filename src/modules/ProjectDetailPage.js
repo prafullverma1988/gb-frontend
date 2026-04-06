@@ -5808,14 +5808,22 @@ function TabSubcon({ projectId }) {
     if(!selWo) return;
     setSaving(true);
     const woDetail = await api.get("/subcon/work-orders/"+selWo.id).catch(()=>({success:false}));
-    const woItems = woDetail.success ? (woDetail.data.items||[]) : [];
+    // Flatten all items from sections
+    const allItems = [];
+    if(woDetail.success){
+      (woDetail.data.sections||[]).forEach(sec=>{
+        (sec.items||[]).forEach(it=>allItems.push(it));
+      });
+      // Also unsectioned items
+      (woDetail.data.unsectioned||[]).forEach(it=>allItems.push(it));
+    }
     const res = await api.post("/subcon/ra-bills",{
       wo_id: selWo.id,
       bill_date: billForm.bill_date,
       remark: billForm.remark,
-      items: woItems.map((it,i)=>({
+      items: allItems.map((it)=>({
         wo_item_id: it.id,
-        cumulative_qty: parseFloat(billForm.items[i]?.cumulative_qty||0),
+        cumulative_qty: parseFloat(billForm.items.find(bi=>bi.wo_item_id===it.id)?.cumulative_qty||0),
         rate: parseFloat(it.rate),
       })),
     }).catch(()=>({success:false}));
@@ -6721,63 +6729,176 @@ function WoItemsTable({ woId, fmtC }) {
 }
 
 function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm, saving, onClose, onSave }) {
-  const [woItems, setWoItems] = useState([]);
-  const [prevCums, setPrevCums] = useState({});
+  const [sections, setSections] = useState([]); // [{title, items:[{id,description,unit,qty,rate,prev_cum}]}]
+  const [loadingWO, setLoadingWO] = useState(true);
+  const [cumQtys, setCumQtys] = useState({}); // {item_id: cumulative_qty_string}
+
   useEffect(()=>{
-    api.get("/subcon/work-orders/"+woId).then(r=>{
-      if(r.success){
-        const items = r.data.items||[];
-        setWoItems(items);
-        const initItems = items.map(i=>({ wo_item_id:i.id, cumulative_qty:"", rate:i.rate }));
-        setBillForm(p=>({...p, items: initItems}));
-      }
-    }).catch(()=>{});
+    setLoadingWO(true);
+    api.get("/subcon/work-orders/"+woId).then(async r=>{
+      if(!r.success){ setLoadingWO(false); return; }
+      const secs = r.data.sections||[];
+      const unsec = r.data.unsectioned||[];
+
+      // Flatten all items to get prev cumulatives
+      const allItems = [];
+      secs.forEach(s=>(s.items||[]).forEach(it=>allItems.push(it)));
+      unsec.forEach(it=>allItems.push(it));
+
+      // Fetch prev cumulative per item from last bill
+      const prevMap = {};
+      await Promise.all(allItems.map(async it=>{
+        try{
+          const pr = await api.get("/subcon/prev-cumulative?wo_item_id="+it.id+"&wo_id="+woId);
+          prevMap[it.id] = parseFloat(pr.data?.prev_cum||0);
+        } catch(e){ prevMap[it.id]=0; }
+      }));
+
+      // Build sections with prev_cum
+      const builtSecs = secs.map(s=>({
+        ...s,
+        items:(s.items||[]).map(it=>({...it, prev_cum: prevMap[it.id]||0}))
+      }));
+      if(unsec.length>0) builtSecs.push({ title:"Other Items", items: unsec.map(it=>({...it, prev_cum: prevMap[it.id]||0})) });
+
+      setSections(builtSecs);
+      // Init cumQtys = prev_cum (so user starts from where last bill ended)
+      const initCums = {};
+      allItems.forEach(it=>{ initCums[it.id] = String(prevMap[it.id]||""); });
+      setCumQtys(initCums);
+      // Also update billForm items for submit
+      setBillForm(p=>({...p, items: allItems.map(it=>({ wo_item_id:it.id, cumulative_qty: prevMap[it.id]||0, rate:it.rate }))}));
+      setLoadingWO(false);
+    }).catch(()=>setLoadingWO(false));
   },[woId]);
 
-  const gross = woItems.reduce((sum,it,i)=>{
-    const cumQty = parseFloat(billForm.items[i]?.cumulative_qty||0);
-    const prev   = parseFloat(prevCums[it.id]||0);
-    return sum + Math.max(0, cumQty-prev) * parseFloat(it.rate||0);
-  },0);
+  // When user updates a cumQty, sync to billForm.items
+  const updateCum = (itemId, val) => {
+    setCumQtys(p=>({...p,[itemId]:val}));
+    setBillForm(p=>({
+      ...p,
+      items: p.items.map(bi=>bi.wo_item_id===itemId ? {...bi, cumulative_qty: parseFloat(val)||0} : bi)
+    }));
+  };
+
+  // Live gross calculation
+  const gross = sections.reduce((st,sec)=>
+    st + sec.items.reduce((s,it)=>{
+      const cum = parseFloat(cumQtys[it.id]||0);
+      const thisBill = Math.max(0, cum - (it.prev_cum||0));
+      return s + thisBill * parseFloat(it.rate||0);
+    },0)
+  ,0);
+
+  // Get WO retention/tds — from first section item or default
+  const allWoItems = sections.flatMap(s=>s.items);
 
   return(
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:T.surface,borderRadius:12,width:"min(680px,94vw)",maxHeight:"85vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)"}}>
-        <div style={{background:"#0F172A",padding:"13px 16px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>New RA Bill</div>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div style={{background:T.surface,borderRadius:12,width:"min(740px,96vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+
+        {/* Header */}
+        <div style={{background:"#0F172A",padding:"13px 16px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>New RA Bill</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:1}}>Running Account Bill — enter cumulative qty up to this bill</div>
+          </div>
           <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
         </div>
-        <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+
+          {/* Date + Remark */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 2fr",gap:10,marginBottom:16}}>
             <div>
-              <label style={lblStyle}>Bill Date</label>
+              <label style={lblStyle}>Bill Date *</label>
               <input type="date" value={billForm.bill_date} onChange={e=>setBillForm(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
             </div>
             <div>
               <label style={lblStyle}>Remark</label>
-              <input value={billForm.remark||""} onChange={e=>setBillForm(p=>({...p,remark:e.target.value}))} style={inpStyle} placeholder="Optional"/>
+              <input value={billForm.remark||""} onChange={e=>setBillForm(p=>({...p,remark:e.target.value}))} style={inpStyle} placeholder="e.g. Bill for plinth work completion..."/>
             </div>
           </div>
-          <div style={{fontSize:10.5,fontWeight:700,color:T.t2,marginBottom:8,textTransform:"uppercase"}}>Cumulative Quantities</div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 90px",background:"#1E293B",padding:"6px 12px",gap:8,borderRadius:"6px 6px 0 0"}}>
-            {["Item","Unit","WO Qty","Prev Cum","This Cum"].map((h,i)=><div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>)}
+
+          {/* Column headers */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 60px 80px 80px 80px 90px",background:"#1E293B",padding:"7px 12px",gap:8,borderRadius:"7px 7px 0 0"}}>
+            {["Item","Unit","WO Qty","Prev Cum","This Cum ▼","This Bill Amt"].map((h,i)=>(
+              <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
+            ))}
           </div>
-          {woItems.map((it,i)=>(
-            <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 90px 90px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
-              <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
-              <div style={{fontSize:11.5,color:T.t3}}>{it.unit}</div>
-              <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
-              <div style={{fontSize:12,color:T.t3,textAlign:"right"}}>{parseFloat(prevCums[it.id]||0)}</div>
-              <input type="number" value={billForm.items[i]?.cumulative_qty||""} min={0} max={it.qty}
-                onChange={e=>setBillForm(p=>({...p,items:p.items.map((r,j)=>j===i?{...r,cumulative_qty:e.target.value}:r)}))}
-                style={{...inpStyle,textAlign:"right",fontWeight:700,padding:"4px 8px"}}/>
+
+          {loadingWO&&<div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>Loading WO items...</div>}
+
+          {!loadingWO&&sections.map((sec,si)=>{
+            const secThisBillAmt = sec.items.reduce((s,it)=>{
+              const cum=parseFloat(cumQtys[it.id]||0);
+              return s + Math.max(0,cum-(it.prev_cum||0))*parseFloat(it.rate||0);
+            },0);
+            return(
+              <div key={si}>
+                {/* Section header */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 60px 80px 80px 80px 90px",padding:"6px 12px",gap:8,background:"#374151",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div style={{gridColumn:"1/6",fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</div>
+                  <div style={{fontSize:11,fontWeight:700,color:"#4ADE80",textAlign:"right"}}>{fmtC(secThisBillAmt)}</div>
+                </div>
+                {sec.items.map(it=>{
+                  const cum = parseFloat(cumQtys[it.id]||0);
+                  const thisBill = Math.max(0, cum-(it.prev_cum||0));
+                  const thisAmt = thisBill * parseFloat(it.rate||0);
+                  const overLimit = cum > parseFloat(it.qty||0);
+                  return(
+                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 80px 80px 80px 90px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit?"#FEF2F2":T.surface}}>
+                      <div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{it.description}</div>
+                      <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit}</div>
+                      <div style={{fontSize:12,color:T.t2,textAlign:"right",fontWeight:500}}>{it.qty}</div>
+                      <div style={{fontSize:12,color:T.t3,textAlign:"right"}}>{it.prev_cum||0}</div>
+                      <div>
+                        <input type="number" value={cumQtys[it.id]||""} min={0}
+                          onChange={e=>updateCum(it.id, e.target.value)}
+                          style={{...inpStyle,textAlign:"right",fontWeight:700,padding:"5px 8px",
+                            border:"1.5px solid "+(overLimit?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
+                            color:overLimit?T.red:T.t1}}/>
+                        {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>Exceeds WO qty!</div>}
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        <div style={{fontSize:12,fontWeight:700,color:thisAmt>0?T.grn:T.t4}}>{thisAmt>0?fmtC(thisAmt):"—"}</div>
+                        {thisBill>0&&<div style={{fontSize:9,color:T.t4}}>{thisBill} {it.unit} × ₹{it.rate}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+
+          {/* Bill Summary */}
+          {gross>0&&(
+            <div style={{marginTop:14,background:"#0F172A",borderRadius:8,padding:14}}>
+              <div style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",marginBottom:10}}>Bill Summary</div>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+                {[
+                  {l:"Gross Amount",v:fmtC(gross),c:"#94A3B8"},
+                  {l:"Retention (5%)",v:fmtC(gross*0.05),c:"#FCD34D"},
+                  {l:"TDS (2%)",v:fmtC(gross*0.02),c:"#F87171"},
+                  {l:"Net Payable",v:fmtC(gross*0.93),c:"#4ADE80"},
+                ].map(s=>(
+                  <div key={s.l} style={{textAlign:"center",background:"rgba(255,255,255,0.05)",borderRadius:6,padding:"8px"}}>
+                    <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",marginBottom:3}}>{s.l}</div>
+                    <div style={{fontSize:14,fontWeight:800,color:s.c}}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
-          <div style={{textAlign:"right",marginTop:10,fontSize:14,fontWeight:800,color:T.grn}}>Gross: {fmtC(gross)}</div>
+          )}
         </div>
-        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8}}>
+
+        {/* Footer */}
+        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,flexShrink:0}}>
           <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
-          <button onClick={onSave} disabled={saving} style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Submit RA Bill"}</button>
+          <button onClick={onSave} disabled={saving||gross===0}
+            style={{flex:2,padding:"9px",borderRadius:7,background:saving||gross===0?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:saving||gross===0?"not-allowed":"pointer"}}>
+            {saving?"Submitting...":gross>0?"Submit RA Bill — "+fmtC(gross):"Enter quantities to proceed"}
+          </button>
         </div>
       </div>
     </div>
