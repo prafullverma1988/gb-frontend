@@ -6041,6 +6041,8 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
   const [libItems, setLibItems] = useState([]);
   const [showLibFor, setShowLibFor] = useState(null); // {secIdx, itemIdx}
   const [libSearch, setLibSearch] = useState("");
+  const [secCollapsed, setSecCollapsed] = useState({});
+  const toggleSecCollapse = (si) => setSecCollapsed(p=>({...p,[si]:!p[si]}));
 
   // Load library items when category changes
   useEffect(()=>{
@@ -6154,8 +6156,15 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
               <div key={si} style={{background:T.surfaceB,border:"1.5px solid "+T.b1,borderRadius:9,marginBottom:12,overflow:"hidden"}}>
                 {/* Section header */}
                 <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1E293B",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                  <div onClick={()=>toggleSecCollapse(si)} style={{cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center"}}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.45)" strokeWidth={2.5}
+                      style={{transition:"transform .2s",transform:!secCollapsed[si]?"rotate(90deg)":"rotate(0deg)"}}>
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </div>
                   <span style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.4)",minWidth:20}}>#{si+1}</span>
                   <input value={sec.title} onChange={e=>updateSection(si,"title",e.target.value)}
+                    onClick={e=>e.stopPropagation()}
                     placeholder="Section name (e.g. Plinth Work, Lintel Level, Slab...)"
                     style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
                   <span style={{fontSize:11,fontWeight:700,color:"#4ADE80",minWidth:80,textAlign:"right"}}>{fmtC(secTotal)}</span>
@@ -6164,8 +6173,8 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
                   )}
                 </div>
 
-                {/* Items */}
-                <div style={{padding:"10px 12px"}}>
+                {/* Items — hidden when collapsed */}
+                {!secCollapsed[si]&&<div style={{padding:"10px 12px"}}>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:5}}>
                     {["Description","Unit","Qty","Rate/Unit","Amt",""].map(h=><div key={h} style={{fontSize:8.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
                   </div>
