@@ -6174,7 +6174,7 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
                 </div>
 
                 {/* Items — hidden when collapsed */}
-                {!secCollapsed[si]&&<div style={{padding:"10px 12px"}}>
+                {!secCollapsed[si]&&(<div style={{padding:"10px 12px"}}>
                   <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:5}}>
                     {["Description","Unit","Qty","Rate/Unit","Amt",""].map(h=><div key={h} style={{fontSize:8.5,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{h}</div>)}
                   </div>
@@ -6201,7 +6201,7 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
                     style={{background:"none",border:"1px dashed "+T.b1,color:T.blu,cursor:"pointer",fontSize:11,fontWeight:600,padding:"5px 10px",borderRadius:5,width:"100%",marginTop:2}}>
                     + Add Item
                   </button>
-                </div>
+                </div>)}
               </div>
             );
           })}
