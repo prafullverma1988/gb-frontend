@@ -6252,6 +6252,7 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
 function WoItemsTable({ woId, fmtC }) {
   const [sections, setSections] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed] = useState({});
   useEffect(()=>{
     setLoading(true);
     api.get("/subcon/work-orders/"+woId).then(r=>{
@@ -6259,6 +6260,8 @@ function WoItemsTable({ woId, fmtC }) {
       setLoading(false);
     }).catch(()=>setLoading(false));
   },[woId]);
+
+  const toggleSec = (id) => setCollapsed(p=>({...p,[id]:!p[id]}));
 
   if(loading) return <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>Loading...</div>;
   if(sections.length===0) return <div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12}}>No BOQ items</div>;
@@ -6269,26 +6272,40 @@ function WoItemsTable({ woId, fmtC }) {
     <div>
       {sections.map((sec,si)=>{
         const secTotal = (sec.items||[]).reduce((s,it)=>s+parseFloat(it.amount||0),0);
+        const isOpen = !collapsed[sec.id];
         return(
-          <div key={sec.id} style={{marginBottom:10,border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",background:"#1E293B"}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</span>
+          <div key={sec.id} style={{marginBottom:8,border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden"}}>
+            {/* Section header — clickable to collapse */}
+            <div onClick={()=>toggleSec(sec.id)}
+              style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",background:"#1E293B",cursor:"pointer",userSelect:"none"}}>
+              <div style={{display:"flex",alignItems:"center",gap:8}}>
+                {/* Chevron */}
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2.5}
+                  style={{transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}>
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+                <span style={{fontSize:12.5,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</span>
+                <span style={{fontSize:9.5,color:"rgba(255,255,255,0.4)",fontWeight:400}}>{(sec.items||[]).length} items</span>
+              </div>
               <span style={{fontSize:12,fontWeight:700,color:"#4ADE80"}}>{fmtC(secTotal)}</span>
             </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",background:"#374151",padding:"5px 12px",gap:8}}>
-              {["Description","Unit","Qty","Rate","Amount"].map((h,i)=>(
-                <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.4)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
-              ))}
-            </div>
-            {(sec.items||[]).map((it,i)=>(
-              <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",padding:"7px 12px",gap:8,borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:"#F8FAFC"}}>
-                <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
-                <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
-                <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
-                <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</div>
-                <div style={{fontSize:12,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.amount)}</div>
+            {/* Items — hidden when collapsed */}
+            {isOpen&&(<>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",background:"#374151",padding:"5px 12px",gap:8}}>
+                {["Description","Unit","Qty","Rate","Amount"].map((h,i)=>(
+                  <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.4)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
+                ))}
               </div>
-            ))}
+              {(sec.items||[]).map((it,i)=>(
+                <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px",padding:"7px 12px",gap:8,borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:"#F8FAFC"}}>
+                  <div style={{fontSize:12,color:T.t1}}>{it.description}</div>
+                  <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
+                  <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{it.qty}</div>
+                  <div style={{fontSize:12,color:T.t2,textAlign:"right"}}>{fmtC(it.rate)}</div>
+                  <div style={{fontSize:12,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.amount)}</div>
+                </div>
+              ))}
+            </>)}
           </div>
         );
       })}
