@@ -339,7 +339,7 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,stages}){
 }
 
 // ── KANBAN BOARD ─────────────────────────────────────────────────
-function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp}){
+function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onAddLead}){
   const stagesShow=STAGES.filter(s=>s.id!=="lost"||leads.some(l=>l.stage==="lost"));
 
   const filterLeads=(stageId)=>leads.filter(l=>{
@@ -398,7 +398,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp}){
 
               {/* Add lead shortcut */}
               {stage.id!=="lost"&&(
-                <button style={{width:"100%",padding:"7px",borderRadius:7,border:`1.5px dashed ${stage.color}66`,background:"transparent",color:`${stage.color}BB`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginTop:4}}
+                <button onClick={()=>onAddLead(stage.id)} style={{width:"100%",padding:"7px",borderRadius:7,border:`1.5px dashed ${stage.color}66`,background:"transparent",color:`${stage.color}BB`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginTop:4}}
                   onMouseEnter={e=>{e.currentTarget.style.background=`${stage.color}11`;}}
                   onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
                   <IcAdd size={12} color="currentColor"/> Add {stage.label}
@@ -413,15 +413,85 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp}){
 }
 
 // ── LEAD DETAIL DRAWER ───────────────────────────────────────────
-function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp}){
-  const [tab,setTab]=useState("overview");
+function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}){
+  const [tab,setTab]=useState(initialTab||"overview");
   const [newNote,setNewNote]=useState("");
   const [history,setHistory]=useState(lead.followupHistory||[]);
   const [editContact,setEditContact]=useState(lead.contactDate||"");
   const [contactSaved,setContactSaved]=useState(false);
+  const [quotations,setQuotations]=useState([]);
+  const [quotLoading,setQuotLoading]=useState(false);
+  const [uploadPct,setUploadPct]=useState(0);
+  const [uploading,setUploading]=useState(false);
+  const [qForm,setQForm]=useState({title:"",amount:"",notes:""});
+  const qFileRef=useRef(null);
   const stage=STAGES.find(s=>s.id===lead.stage);
   const ps=PRIO_S[lead.priority]||PRIO_S["Medium"];
   const diff=daysDiff(lead.contactDate);
+
+  // Load quotations
+  useEffect(()=>{
+    const loadQ=async()=>{
+      setQuotLoading(true);
+      try{
+        const res=await api.get("/crm/leads/"+lead.id+"/quotations");
+        if(res.success) setQuotations(res.data);
+      }catch(e){}
+      setQuotLoading(false);
+    };
+    loadQ();
+  },[lead.id]);
+
+  const uploadQuotation=async()=>{
+    const file=qFileRef.current?.files?.[0];
+    if(!file) return alert("Please select a PDF file");
+    setUploading(true);setUploadPct(0);
+    try{
+      // Upload to Cloudinary
+      const fd=new FormData();
+      fd.append("file",file);
+      fd.append("upload_preset","gb_buildcon_drawings");
+      fd.append("folder","gb_buildcon/quotations");
+      const cld=await new Promise((resolve,reject)=>{
+        const xhr=new XMLHttpRequest();
+        xhr.upload.onprogress=e=>{if(e.lengthComputable) setUploadPct(Math.round(e.loaded/e.total*90));};
+        xhr.onload=()=>{const d=JSON.parse(xhr.responseText);xhr.status===200?resolve(d):reject(new Error(d.error?.message||"Upload failed"));};
+        xhr.onerror=()=>reject(new Error("Network error"));
+        xhr.open("POST","https://api.cloudinary.com/v1_1/dd632nqfm/raw/upload");
+        xhr.send(fd);
+      });
+      setUploadPct(95);
+      // Save metadata
+      const res=await api.post("/crm/leads/"+lead.id+"/quotations",{
+        title:qForm.title||`Quotation V${quotations.length+1}`,
+        amount:Number(qForm.amount)||0,
+        file_url:cld.secure_url,
+        file_size:file.size>1048576?`${(file.size/1048576).toFixed(1)} MB`:`${Math.round(file.size/1024)} KB`,
+        notes:qForm.notes||null,
+      });
+      if(res.success){setQuotations(p=>[res.data,...p]);setQForm({title:"",amount:"",notes:""});if(qFileRef.current) qFileRef.current.value="";}
+      setUploadPct(100);
+    }catch(e){alert(e.message||"Upload failed");}
+    setUploading(false);setUploadPct(0);
+  };
+
+  const acceptQuotation=async(qid)=>{
+    try{
+      const res=await api.patch("/crm/quotations/"+qid+"/accept");
+      if(res.success){
+        setQuotations(p=>p.map(q=>({...q,status:q.id===qid?"accepted":"rejected"})));
+        onUpdate(lead.id,{stage:"converted"});
+      }
+    }catch(e){alert(e.message||"Error accepting quotation");}
+  };
+
+  const deleteQuotation=async(qid)=>{
+    if(!window.confirm("Delete this quotation?")) return;
+    try{
+      const res=await api.del("/crm/quotations/"+qid);
+      if(res.success) setQuotations(p=>p.filter(q=>q.id!==qid));
+    }catch(e){alert(e.message||"Error deleting");}
+  };
 
   const addNote=async()=>{
     if(!newNote.trim()) return;
@@ -488,7 +558,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp}){
 
       {/* Inner tabs */}
       <div style={{background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",flexShrink:0,overflowX:"auto"}}>
-        {[{id:"overview",l:"Overview"},{id:"followup",l:`Follow Ups (${history.length})`},{id:"contact",l:"Contact Date"},{id:"move",l:"Move Stage"}].map(t=>(
+        {[{id:"overview",l:"Overview"},{id:"followup",l:`Follow Ups (${history.length})`},{id:"quotations",l:`Quotations (${quotations.length})`},{id:"contact",l:"Contact Date"},{id:"move",l:"Move Stage"}].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             style={{padding:"10px 14px",border:"none",background:"none",fontSize:12,fontWeight:tab===t.id?700:400,color:tab===t.id?T.blu:T.t3,borderBottom:tab===t.id?`2px solid ${T.blu}`:"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>
             {t.l}
@@ -545,6 +615,82 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp}){
                 onKeyDown={e=>e.key==="Enter"&&addNote()}/>
               <button onClick={addNote} style={{padding:"9px 14px",borderRadius:8,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>Add</button>
             </div>
+          </div>
+        )}
+
+        {/* QUOTATIONS */}
+        {tab==="quotations"&&(
+          <div>
+            {/* Upload section */}
+            <div style={{padding:"13px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:10}}>Upload Quotation (PDF)</div>
+              <input ref={qFileRef} type="file" accept=".pdf" style={{display:"block",marginBottom:8,fontSize:12,color:T.t2}}/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                <div>
+                  <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Title</label>
+                  <input value={qForm.title} onChange={e=>setQForm(p=>({...p,title:e.target.value}))} placeholder={`Quotation V${quotations.length+1}`}
+                    style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Amount (₹)</label>
+                  <input type="number" value={qForm.amount} onChange={e=>setQForm(p=>({...p,amount:e.target.value}))} placeholder="e.g. 2500000"
+                    style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+              </div>
+              <input value={qForm.notes} onChange={e=>setQForm(p=>({...p,notes:e.target.value}))} placeholder="Notes (optional)"
+                style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:8}}/>
+              {uploading&&<div style={{marginBottom:8}}>
+                <div style={{height:5,background:T.b1,borderRadius:5,overflow:"hidden"}}>
+                  <div style={{height:"100%",width:`${uploadPct}%`,background:T.blu,borderRadius:5,transition:"width .3s"}}/>
+                </div>
+                <div style={{fontSize:10.5,color:T.blu,marginTop:3}}>{uploadPct}% uploading...</div>
+              </div>}
+              <button onClick={uploadQuotation} disabled={uploading}
+                style={{padding:"8px 16px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:uploading?"not-allowed":"pointer",opacity:uploading?0.6:1}}>
+                {uploading?"Uploading...":"Upload Quotation"}
+              </button>
+            </div>
+
+            {/* Quotation list */}
+            {quotLoading&&<div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading quotations...</div>}
+            {!quotLoading&&quotations.length===0&&<div style={{textAlign:"center",padding:"30px",color:T.t4,fontSize:13}}>No quotations uploaded yet</div>}
+            {quotations.map(q=>{
+              const STATUS_Q={"sent":{c:T.blu,bg:T.bluL,brd:T.bluM},"draft":{c:T.slt,bg:T.sltL,brd:T.b2},"accepted":{c:T.grn,bg:T.grnL,brd:T.grnM},"rejected":{c:T.red,bg:T.redL,brd:T.redM}};
+              const ss=STATUS_Q[q.status]||STATUS_Q["sent"];
+              return(
+                <div key={q.id} style={{padding:"12px 14px",background:q.status==="accepted"?T.grnL:T.surface,border:`1.5px solid ${q.status==="accepted"?T.grnM:T.b1}`,borderRadius:9,marginBottom:8,borderLeft:`4px solid ${ss.c}`}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
+                    <div>
+                      <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:3}}>
+                        <span style={{fontSize:10.5,fontWeight:800,color:T.blu,background:T.bluL,padding:"1px 7px",borderRadius:4,fontFamily:"monospace"}}>V{q.version}</span>
+                        <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{q.title||`Quotation V${q.version}`}</span>
+                        <span style={{display:"inline-block",background:ss.bg,color:ss.c,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${ss.brd}`}}>{q.status}</span>
+                      </div>
+                      <div style={{fontSize:11,color:T.t4}}>{q.created_by_name||"—"} · {q.created_at?new Date(q.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—"} · {q.file_size||"—"}</div>
+                    </div>
+                    {q.amount>0&&<div style={{fontSize:15,fontWeight:700,color:T.grn}}>₹{fmtN(q.amount)}</div>}
+                  </div>
+                  {q.notes&&<div style={{fontSize:11.5,color:T.t3,fontStyle:"italic",marginBottom:6}}>"{q.notes}"</div>}
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>window.open(q.file_url,"_blank")}
+                      style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.bluM}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      View PDF
+                    </button>
+                    {lead.stage==="converted"&&q.status!=="accepted"&&(
+                      <button onClick={()=>acceptQuotation(q.id)}
+                        style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                        ✓ Mark as Final
+                      </button>
+                    )}
+                    {q.status==="accepted"&&<span style={{padding:"5px 11px",fontSize:11,fontWeight:700,color:T.grn}}>✓ Final Quotation</span>}
+                    <button onClick={()=>deleteQuotation(q.id)}
+                      style={{padding:"5px 11px",borderRadius:5,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",marginLeft:"auto"}}>
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -632,9 +778,9 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp}){
 }
 
 // ── ADD LEAD MODAL ───────────────────────────────────────────────
-function AddLeadModal({onClose,onSave,assignedToList}){
+function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
   const ASSIGNED_TO=assignedToList||["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka"];
-  const [form,setForm]=useState({name:"",phone:"",email:"",city:"",projType:"Residential",budget:"",source:"Direct Call",assignedTo:"Prafull",stage:"lead",priority:"Medium",contactDate:"",notes:"",tags:""});
+  const [form,setForm]=useState({name:"",phone:"",email:"",city:"",projType:"Residential",budget:"",source:"Direct Call",assignedTo:ASSIGNED_TO[0]||"Prafull",stage:defaultStage||"lead",priority:"Medium",contactDate:"",notes:"",tags:""});
   const [show,setShow]=useState(false);
   const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
   const FIELDS=[
@@ -710,14 +856,233 @@ function AddLeadModal({onClose,onSave,assignedToList}){
   </>);
 }
 
+// ── SELECT FINAL QUOTATION (inline) ──────────────────────────────
+function SelectFinalQuotation({leadId,onDone,onSkip}){
+  const [quots,setQuots]=useState([]);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    (async()=>{
+      try{const res=await api.get("/crm/leads/"+leadId+"/quotations");if(res.success)setQuots(res.data);}catch(e){}
+      setLoading(false);
+    })();
+  },[leadId]);
+
+  const accept=async(qid)=>{
+    try{const res=await api.patch("/crm/quotations/"+qid+"/accept");if(res.success)onDone();}catch(e){alert("Error");}
+  };
+
+  if(loading) return <div style={{textAlign:"center",padding:"12px",color:T.t4,fontSize:12}}>Loading...</div>;
+  if(quots.length===0) return(
+    <div style={{textAlign:"center"}}>
+      <div style={{fontSize:12,color:T.t4,marginBottom:12}}>No quotations uploaded for this lead</div>
+      <button onClick={onSkip} style={{padding:"9px 20px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>OK</button>
+    </div>
+  );
+  return(
+    <div>
+      {quots.map(q=>(
+        <div key={q.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:8,marginBottom:6,cursor:"pointer"}}
+          onClick={()=>accept(q.id)}
+          onMouseEnter={e=>e.currentTarget.style.borderColor=T.grn}
+          onMouseLeave={e=>e.currentTarget.style.borderColor=T.b1}>
+          <span style={{fontSize:10,fontWeight:800,color:T.blu,background:T.bluL,padding:"1px 6px",borderRadius:4,fontFamily:"monospace"}}>V{q.version}</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{q.title||`Quotation V${q.version}`}</div>
+            <div style={{fontSize:10.5,color:T.t4}}>{q.file_size||"—"}</div>
+          </div>
+          {q.amount>0&&<span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{fmtN(q.amount)}</span>}
+          <span style={{fontSize:10,color:T.grn,fontWeight:700}}>Select →</span>
+        </div>
+      ))}
+      <button onClick={onSkip} style={{width:"100%",padding:"8px",borderRadius:7,background:"transparent",border:`1px solid ${T.b1}`,fontSize:11.5,fontWeight:600,color:T.t4,cursor:"pointer",marginTop:6}}>Skip</button>
+    </div>
+  );
+}
+
+// ── TEMPLATE BUILDER MODAL ──────────────────────────────────────
+function TemplateBuilderModal({onClose}){
+  const [templates,setTemplates]=useState([]);
+  const [selTpl,setSelTpl]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
+  const emptyForm={name:"",company_name:"",company_address:"",company_phone:"",company_email:"",terms_conditions:"",notes:""};
+  const [form,setForm]=useState({...emptyForm});
+  const [items,setItems]=useState([{description:"",qty:1,unit:"SqFt",rate:0}]);
+  const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
+
+  useEffect(()=>{
+    (async()=>{
+      try{const res=await api.get("/crm/templates");if(res.success)setTemplates(res.data);}catch(e){}
+      setLoading(false);
+    })();
+  },[]);
+
+  const selectTemplate=(t)=>{
+    setSelTpl(t);
+    setForm({name:t.name||"",company_name:t.company_name||"",company_address:t.company_address||"",company_phone:t.company_phone||"",company_email:t.company_email||"",terms_conditions:t.terms_conditions||"",notes:t.notes||""});
+    setItems(t.line_items?.length>0?t.line_items:[{description:"",qty:1,unit:"SqFt",rate:0}]);
+  };
+
+  const newTemplate=()=>{
+    setSelTpl(null);
+    setForm({...emptyForm});
+    setItems([{description:"",qty:1,unit:"SqFt",rate:0}]);
+  };
+
+  const addRow=()=>setItems(p=>[...p,{description:"",qty:1,unit:"SqFt",rate:0}]);
+  const removeRow=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
+  const updItem=(i,k,v)=>setItems(p=>p.map((it,j)=>j===i?{...it,[k]:v}:it));
+
+  const total=items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
+
+  const save=async()=>{
+    if(!form.name.trim()) return alert("Template name is required");
+    setSaving(true);
+    try{
+      const payload={...form,line_items:items.map(it=>({...it,qty:Number(it.qty)||0,rate:Number(it.rate)||0,amount:(Number(it.qty)||0)*(Number(it.rate)||0)}))};
+      if(selTpl){
+        await api.patch("/crm/templates/"+selTpl.id,payload);
+        setTemplates(p=>p.map(t=>t.id===selTpl.id?{...t,...payload,line_items:payload.line_items}:t));
+      }else{
+        const res=await api.post("/crm/templates",payload);
+        if(res.success){setTemplates(p=>[res.data,...p]);setSelTpl(res.data);}
+      }
+    }catch(e){alert(e.message||"Error saving");}
+    setSaving(false);
+  };
+
+  const deleteTpl=async(tid)=>{
+    if(!window.confirm("Delete this template?")) return;
+    try{
+      await api.del("/crm/templates/"+tid);
+      setTemplates(p=>p.filter(t=>t.id!==tid));
+      if(selTpl?.id===tid) newTemplate();
+    }catch(e){}
+  };
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.bg,borderRadius:14,width:"min(860px,95vw)",height:"min(620px,90vh)",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,display:"flex",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+
+      {/* Left: Template List */}
+      <div style={{width:220,flexShrink:0,background:T.sb,display:"flex",flexDirection:"column"}}>
+        <div style={{padding:"14px 16px",borderBottom:"1px solid rgba(255,255,255,0.1)"}}>
+          <div style={{fontSize:14,fontWeight:700,color:"white",marginBottom:8}}>Templates</div>
+          <button onClick={newTemplate} style={{width:"100%",padding:"7px",borderRadius:6,background:"rgba(255,255,255,0.1)",border:"1px dashed rgba(255,255,255,0.3)",color:"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+            + New Template
+          </button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"8px"}}>
+          {loading&&<div style={{color:"rgba(255,255,255,0.4)",fontSize:11,padding:"10px",textAlign:"center"}}>Loading...</div>}
+          {templates.map(t=>(
+            <div key={t.id} onClick={()=>selectTemplate(t)}
+              style={{padding:"9px 11px",borderRadius:7,marginBottom:4,cursor:"pointer",background:selTpl?.id===t.id?"rgba(37,99,235,0.2)":"transparent",border:selTpl?.id===t.id?"1px solid rgba(37,99,235,0.4)":"1px solid transparent"}}
+              onMouseEnter={e=>{if(selTpl?.id!==t.id)e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
+              onMouseLeave={e=>{if(selTpl?.id!==t.id)e.currentTarget.style.background="transparent";}}>
+              <div style={{fontSize:12,fontWeight:600,color:"white",marginBottom:2}}>{t.name}</div>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{t.line_items?.length||0} items · ₹{fmtN(t.line_items?.reduce((s,it)=>s+(it.amount||0),0)||0)}</div>
+            </div>
+          ))}
+        </div>
+        <div style={{padding:"10px 14px",borderTop:"1px solid rgba(255,255,255,0.1)"}}>
+          <button onClick={onClose} style={{width:"100%",padding:"8px",borderRadius:6,background:"rgba(255,255,255,0.08)",border:"none",color:"rgba(255,255,255,0.5)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Close</button>
+        </div>
+      </div>
+
+      {/* Right: Form */}
+      <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,background:T.surface,flexShrink:0}}>
+          <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{selTpl?"Edit Template":"New Template"}</div>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+          {/* Template name */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Template Name *</label>
+            <input value={form.name} onChange={upd("name")} placeholder="e.g. Standard Residential Quotation"
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:600,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          {/* Company info */}
+          <div style={{padding:"12px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Company Details</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {[{l:"Company Name",k:"company_name",ph:"GB Buildcon"},{l:"Phone",k:"company_phone",ph:"+91-XXXXX"},{l:"Email",k:"company_email",ph:"info@gbbuildcon.com"},{l:"Address",k:"company_address",ph:"Raipur, CG"}].map(f=>(
+                <div key={f.k}>
+                  <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:2}}>{f.l}</label>
+                  <input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph}
+                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Line Items */}
+          <div style={{marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>Line Items</div>
+              <button onClick={addRow} style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.bluM}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>+ Add Row</button>
+            </div>
+            <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 90px 90px 30px",padding:"6px 10px",background:T.sb}}>
+                {["Description","Qty","Unit","Rate","Amount",""].map((h,i)=>(
+                  <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+                ))}
+              </div>
+              {items.map((it,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 90px 90px 30px",padding:"5px 10px",borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
+                  <input value={it.description} onChange={e=>updItem(i,"description",e.target.value)} placeholder="Work description"
+                    style={{padding:"5px 7px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
+                  <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)}
+                    style={{padding:"5px 5px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",width:"90%",fontFamily:"inherit"}}/>
+                  <select value={it.unit} onChange={e=>updItem(i,"unit",e.target.value)}
+                    style={{padding:"4px 2px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11,color:T.t2,outline:"none",fontFamily:"inherit"}}>
+                    {["SqFt","SqM","CuM","Rft","LS","Nos","KG","MT","Bags","Set"].map(u=><option key={u}>{u}</option>)}
+                  </select>
+                  <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="₹"
+                    style={{padding:"5px 5px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",width:"90%",fontFamily:"inherit"}}/>
+                  <span style={{fontSize:12,fontWeight:600,color:T.blu,paddingLeft:4}}>₹{fmtN((Number(it.qty)||0)*(Number(it.rate)||0))}</span>
+                  {items.length>1&&<button onClick={()=>removeRow(i)} style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:14,padding:0}}>×</button>}
+                </div>
+              ))}
+              <div style={{display:"flex",justifyContent:"flex-end",padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
+                <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Total: ₹{fmtN(total)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Terms */}
+          <div style={{marginBottom:12}}>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Terms & Conditions</label>
+            <textarea value={form.terms_conditions} onChange={upd("terms_conditions")} rows={4} placeholder="Payment terms, validity, scope of work..."
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:8,flexShrink:0}}>
+          {selTpl&&<button onClick={()=>deleteTpl(selTpl.id)} style={{padding:"9px 14px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>Delete</button>}
+          <div style={{flex:1}}/>
+          <button onClick={save} disabled={saving}
+            style={{padding:"9px 20px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",opacity:saving?0.7:1}}>
+            {saving?"Saving...":selTpl?"Update Template":"Save Template"}
+          </button>
+        </div>
+      </div>
+    </div>
+  </>);
+}
+
 // ── MAIN CRM MODULE ──────────────────────────────────────────────
 function CRMModule(){
   const [leads,setLeads]=useState([]);
   const [selLead,setSelLead]=useState(null);
   const [waLead,setWaLead]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
+  const [addStage,setAddStage]=useState("lead");
   const [reminderLead,setReminderLead]=useState(null);
   const [dismissedReminders,setDismissedReminders]=useState([]);
+  const [quotPromptLead,setQuotPromptLead]=useState(null);
+  const [selectFinalLead,setSelectFinalLead]=useState(null);
+  const [showTemplates,setShowTemplates]=useState(false);
   const [loading,setLoading]=useState(true);
   const [teamMembers,setTeamMembers]=useState([]);
 
@@ -790,6 +1155,15 @@ function CRMModule(){
     if(selLead?.id===id) setSelLead(p=>({...p,...update}));
     try{
       await api.patch("/crm/leads/"+id,update);
+      // Stage change prompts (non-blocking — stage already changed)
+      if(update.stage==="proposal"){
+        const lead=leads.find(l=>l.id===id);
+        if(lead) setQuotPromptLead({...lead,...update});
+      }
+      if(update.stage==="converted"){
+        const lead=leads.find(l=>l.id===id);
+        if(lead) setSelectFinalLead({...lead,...update});
+      }
     }catch(e){console.error("Update lead error:",e);loadLeads();}
   };
 
@@ -869,7 +1243,11 @@ function CRMModule(){
             <IcAlert size={11} color={T.amb}/>
             <span style={{fontSize:10.5,fontWeight:700,color:T.ambM}}>{todayDueCount} due today</span>
           </div>}
-          <button onClick={()=>setShowAdd(true)}
+          <button onClick={()=>setShowTemplates(true)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            📋 Templates
+          </button>
+          <button onClick={()=>{setAddStage("lead");setShowAdd(true);}}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
             <IcAdd size={13} color="white"/> New Lead
           </button>
@@ -907,6 +1285,7 @@ function CRMModule(){
           onOpenLead={(lead)=>setSelLead(lead)}
           onMoveLead={moveLead}
           onWhatsApp={(lead)=>setWaLead(lead)}
+          onAddLead={(stageId)=>{setAddStage(stageId);setShowAdd(true);}}
         />
       </div>
 
@@ -926,10 +1305,55 @@ function CRMModule(){
           onClose={()=>setSelLead(null)}
           onUpdate={updateLead}
           onWhatsApp={(l)=>{setWaLead(l);setSelLead(null);}}
+          initialTab={selLead._openTab||"overview"}
         />
       )}
       {waLead&&<WhatsAppModal lead={waLead} onClose={()=>setWaLead(null)}/>}
-      {showAdd&&<AddLeadModal onClose={()=>setShowAdd(false)} onSave={addLead} assignedToList={ASSIGNED_TO}/>}
+      {showAdd&&<AddLeadModal onClose={()=>setShowAdd(false)} onSave={addLead} assignedToList={ASSIGNED_TO} defaultStage={addStage}/>}
+
+      {/* Proposal stage prompt */}
+      {quotPromptLead&&(<>
+        <div onClick={()=>setQuotPromptLead(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:500,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(400px,90vw)",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:501,overflow:"hidden",animation:"popIn .2s ease",fontFamily:"'Segoe UI',sans-serif"}}>
+          <div style={{background:"#D97706",padding:"16px 20px",textAlign:"center"}}>
+            <div style={{fontSize:28,marginBottom:6}}>📋</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Lead moved to Proposal!</div>
+            <div style={{fontSize:11.5,color:"rgba(255,255,255,0.8)",marginTop:3}}>{quotPromptLead.name}</div>
+          </div>
+          <div style={{padding:"18px 20px",textAlign:"center"}}>
+            <div style={{fontSize:13,color:T.t2,marginBottom:16}}>Kya aap is lead ke liye quotation upload karna chahte ho?</div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setQuotPromptLead(null)}
+                style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
+                Baad mein
+              </button>
+              <button onClick={()=>{setSelLead({...quotPromptLead,_openTab:"quotations"});setQuotPromptLead(null);}}
+                style={{flex:2,padding:"10px",borderRadius:7,background:"#D97706",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}>
+                Upload Now
+              </button>
+            </div>
+          </div>
+        </div>
+      </>)}
+
+      {/* Converted stage — select final quotation */}
+      {selectFinalLead&&(<>
+        <div onClick={()=>setSelectFinalLead(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:500,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(420px,90vw)",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:501,overflow:"hidden",animation:"popIn .2s ease",fontFamily:"'Segoe UI',sans-serif"}}>
+          <div style={{background:"#059669",padding:"16px 20px",textAlign:"center"}}>
+            <div style={{fontSize:28,marginBottom:6}}>🎉</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Deal Converted!</div>
+            <div style={{fontSize:11.5,color:"rgba(255,255,255,0.8)",marginTop:3}}>{selectFinalLead.name}</div>
+          </div>
+          <div style={{padding:"18px 20px"}}>
+            <div style={{fontSize:13,color:T.t2,marginBottom:12,textAlign:"center"}}>Final quotation select karo ya skip karo:</div>
+            <SelectFinalQuotation leadId={selectFinalLead.id} onDone={()=>{setSelectFinalLead(null);loadLeads();}} onSkip={()=>setSelectFinalLead(null)}/>
+          </div>
+        </div>
+      </>)}
+
+      {/* Template Builder */}
+      {showTemplates&&<TemplateBuilderModal onClose={()=>setShowTemplates(false)}/>}
 
       <style>{`
         @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
