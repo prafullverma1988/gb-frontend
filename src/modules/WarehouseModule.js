@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import api from "../config/api";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -79,54 +80,11 @@ const CATEGORIES=["All","Cement & Concrete","Steel & Iron","Bricks & Blocks","Sa
 const PROJECTS=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office"];
 const UNITS=["Bags","MT","CuM","SqM","SqFt","Nos","Ltrs","Rft","KG","Box","Set"];
 
-const STOCK_DATA=[
-  {id:"M001",name:"OPC 53 Cement",category:"Cement & Concrete",unit:"Bags",qty:450,minQty:200,maxQty:1000,rate:380,location:"Rack A1",lastIn:"12 Mar",lastOut:"14 Mar",img:"🏗️"},
-  {id:"M002",name:"TMT Steel 12mm",category:"Steel & Iron",unit:"KG",qty:2800,minQty:1000,maxQty:8000,rate:68,location:"Yard B2",lastIn:"10 Mar",lastOut:"13 Mar",img:"🔩"},
-  {id:"M003",name:"TMT Steel 8mm",category:"Steel & Iron",unit:"KG",qty:320,minQty:500,maxQty:3000,rate:70,location:"Yard B2",lastIn:"05 Mar",lastOut:"12 Mar",img:"🔩"},
-  {id:"M004",name:"Red Bricks (9\")",category:"Bricks & Blocks",unit:"Nos",qty:12000,minQty:5000,maxQty:30000,rate:8.5,location:"Yard C1",lastIn:"08 Mar",lastOut:"15 Mar",img:"🧱"},
-  {id:"M005",name:"River Sand",category:"Sand & Aggregate",unit:"CuM",qty:18,minQty:10,maxQty:60,rate:1800,location:"Yard D1",lastIn:"11 Mar",lastOut:"14 Mar",img:"⛏️"},
-  {id:"M006",name:"20mm Aggregate",category:"Sand & Aggregate",unit:"CuM",qty:22,minQty:8,maxQty:50,rate:1600,location:"Yard D2",lastIn:"09 Mar",lastOut:"13 Mar",img:"⛏️"},
-  {id:"M007",name:"AAC Blocks 200mm",category:"Bricks & Blocks",unit:"Nos",qty:800,minQty:1000,maxQty:5000,rate:55,location:"Rack A2",lastIn:"06 Mar",lastOut:"14 Mar",img:"🧱"},
-  {id:"M008",name:"Vitrified Tiles 800x800",category:"Tiles & Flooring",unit:"SqM",qty:0,minQty:50,maxQty:500,rate:950,location:"Rack E1",lastIn:"01 Mar",lastOut:"01 Mar",img:"🟦"},
-  {id:"M009",name:"Binding Wire",category:"Steel & Iron",unit:"KG",qty:85,minQty:50,maxQty:300,rate:75,location:"Rack A3",lastIn:"07 Mar",lastOut:"10 Mar",img:"🔗"},
-  {id:"M010",name:"PVC Conduit 25mm",category:"Electrical",unit:"Rft",qty:600,minQty:300,maxQty:1500,rate:22,location:"Rack F1",lastIn:"04 Mar",lastOut:"12 Mar",img:"⚡"},
-  {id:"M011",name:"CPVC Pipe 25mm",category:"Plumbing",unit:"Rft",qty:240,minQty:200,maxQty:800,rate:85,location:"Rack F2",lastIn:"03 Mar",lastOut:"11 Mar",img:"🔧"},
-  {id:"M012",name:"Wall Putty 40kg",category:"Paint & Finishing",unit:"Bags",qty:35,minQty:50,maxQty:200,rate:950,location:"Rack G1",lastIn:"28 Feb",lastOut:"10 Mar",img:"🖌️"},
-  {id:"M013",name:"Plywood 19mm (8x4)",category:"Wood & Carpentry",unit:"Nos",qty:28,minQty:20,maxQty:100,rate:1800,location:"Rack H1",lastIn:"25 Feb",lastOut:"09 Mar",img:"🪵"},
-  {id:"M014",name:"Safety Helmet",category:"Safety & Tools",unit:"Nos",qty:22,minQty:15,maxQty:50,rate:280,location:"Rack I1",lastIn:"20 Feb",lastOut:"05 Mar",img:"⛑️"},
-  {id:"M015",name:"WPC 53 Cement (White)",category:"Cement & Concrete",unit:"Bags",qty:60,minQty:30,maxQty:200,rate:820,location:"Rack A1",lastIn:"01 Mar",lastOut:"08 Mar",img:"🏗️"},
-];
-
-const GRN_DATA=[
-  {id:"GRN-001",date:"14 Mar 2026",poNo:"PO-2026-018",vendor:"Ambuja Cement Ltd",project:"Central Warehouse",items:[{matId:"M001",name:"OPC 53 Cement",unit:"Bags",ordQty:500,recQty:500,rate:380,amount:190000}],total:190000,by:"Vijay Sahu",status:"Verified"},
-  {id:"GRN-002",date:"13 Mar 2026",poNo:"PO-2026-017",vendor:"Tata Steel",project:"Central Warehouse",items:[{matId:"M002",name:"TMT Steel 12mm",unit:"KG",ordQty:3000,recQty:2800,rate:68,amount:190400},{matId:"M009",name:"Binding Wire",unit:"KG",ordQty:100,recQty:85,rate:75,amount:6375}],total:196775,by:"Niranjan",status:"Partial"},
-  {id:"GRN-003",date:"12 Mar 2026",poNo:"PO-2026-015",vendor:"National Bricks",project:"Central Warehouse",items:[{matId:"M004",name:"Red Bricks",unit:"Nos",ordQty:15000,recQty:12000,rate:8.5,amount:102000}],total:102000,by:"Ramesh",status:"Partial"},
-  {id:"GRN-004",date:"10 Mar 2026",poNo:"PO-2026-012",vendor:"Shree Aggregates",project:"Central Warehouse",items:[{matId:"M005",name:"River Sand",unit:"CuM",ordQty:20,recQty:18,rate:1800,amount:32400},{matId:"M006",name:"20mm Aggregate",unit:"CuM",ordQty:25,recQty:22,rate:1600,amount:35200}],total:67600,by:"Vijay Sahu",status:"Partial"},
-  {id:"GRN-005",date:"08 Mar 2026",poNo:"PO-2026-010",vendor:"Somany Tiles",project:"Central Warehouse",items:[{matId:"M008",name:"Vitrified Tiles 800x800",unit:"SqM",ordQty:200,recQty:0,rate:950,amount:0}],total:0,by:"—",status:"Pending"},
-];
-
-const ISSUE_DATA=[
-  {id:"ISS-001",date:"15 Mar 2026",project:"Shubham & NK 623",issuedTo:"Vijay Sahu",items:[{matId:"M001",name:"OPC 53 Cement",unit:"Bags",qty:80,rate:380},{matId:"M002",name:"TMT Steel 12mm",unit:"KG",qty:500,rate:68}],total:64400,by:"Niranjan",remarks:"GF slab concreting"},
-  {id:"ISS-002",date:"14 Mar 2026",project:"Tikendra Residence",issuedTo:"Niranjan",items:[{matId:"M004",name:"Red Bricks",unit:"Nos",qty:3000,rate:8.5},{matId:"M005",name:"River Sand",unit:"CuM",qty:4,rate:1800}],total:32700,by:"Vijay Sahu",remarks:"1F brickwork"},
-  {id:"ISS-003",date:"13 Mar 2026",project:"Esther Risali",issuedTo:"Harsh Sahu",items:[{matId:"M001",name:"OPC 53 Cement",unit:"Bags",qty:50,rate:380}],total:19000,by:"Niranjan",remarks:"Column grouting"},
-  {id:"ISS-004",date:"12 Mar 2026",project:"Amarendra Villa",issuedTo:"Vijay Sahu",items:[{matId:"M002",name:"TMT Steel 12mm",unit:"KG",qty:800,rate:68},{matId:"M009",name:"Binding Wire",unit:"KG",qty:20,rate:75}],total:55900,by:"Vijay Sahu",remarks:"Foundation steel work"},
-  {id:"ISS-005",date:"11 Mar 2026",project:"Shubham & NK 623",issuedTo:"Ramesh",items:[{matId:"M003",name:"TMT Steel 8mm",unit:"KG",qty:200,rate:70}],total:14000,by:"Niranjan",remarks:"Slab stirrups"},
-  {id:"ISS-006",date:"10 Mar 2026",project:"Neha Sagar Office",issuedTo:"Priyanka",items:[{matId:"M010",name:"PVC Conduit 25mm",unit:"Rft",qty:150,rate:22},{matId:"M011",name:"CPVC Pipe 25mm",unit:"Rft",qty:80,rate:85}],total:10100,by:"Ramesh",remarks:"Electrical + plumbing rough-in"},
-];
-
-const MR_DATA=[
-  {id:"MR-042",date:"15 Mar 2026",project:"Shubham & NK 623",requestedBy:"Vijay Sahu",items:[{name:"OPC 53 Cement",unit:"Bags",qty:200,note:"GF 2nd pour"},{name:"TMT Steel 10mm",unit:"KG",qty:600,note:"Lintel bars"}],status:"Pending",priority:"High"},
-  {id:"MR-043",date:"14 Mar 2026",project:"Amarendra Villa",requestedBy:"Niranjan",items:[{name:"AAC Blocks 200mm",unit:"Nos",qty:500,note:"GF partition walls"}],status:"Pending",priority:"Medium"},
-  {id:"MR-044",date:"13 Mar 2026",project:"Tikendra Residence",requestedBy:"Ramesh",items:[{name:"Wall Putty 40kg",unit:"Bags",qty:30,note:"Internal walls GF"}],status:"Issued",priority:"Low"},
-  {id:"MR-045",date:"12 Mar 2026",project:"Esther Risali",requestedBy:"Harsh Sahu",items:[{name:"River Sand",unit:"CuM",qty:8,note:"Plastering mortar"}],status:"Pending",priority:"High"},
-  {id:"MR-046",date:"11 Mar 2026",project:"Neha Sagar Office",requestedBy:"Priyanka",items:[{name:"Vitrified Tiles 800x800",unit:"SqM",qty:120,note:"GF flooring"},{name:"White Cement",unit:"Bags",qty:10,note:"Tile grouting"}],status:"Pending",priority:"Medium"},
-];
-
-const TRANSFER_DATA=[
-  {id:"TRF-001",date:"13 Mar 2026",from:"Central Warehouse",to:"Shubham & NK 623 Site",items:[{name:"OPC 53 Cement",unit:"Bags",qty:50},{name:"River Sand",unit:"CuM",qty:3}],by:"Vijay Sahu",status:"Completed"},
-  {id:"TRF-002",date:"11 Mar 2026",from:"Central Warehouse",to:"Tikendra Site Store",items:[{name:"Red Bricks",unit:"Nos",qty:2000}],by:"Ramesh",status:"Completed"},
-  {id:"TRF-003",date:"09 Mar 2026",from:"Shubham & NK 623 Site",to:"Amarendra Villa Site",items:[{name:"Binding Wire",unit:"KG",qty:15}],by:"Niranjan",status:"Completed"},
-];
+// Data loaded from API — no hardcoded data
+const getCategoryEmoji=(cat)=>{
+  const map={"Cement & Concrete":"🏗️","Steel & Iron":"🔩","Bricks & Blocks":"🧱","Sand & Aggregate":"⛏️","Tiles & Flooring":"🟦","Electrical":"⚡","Plumbing":"🔧","Paint & Finishing":"🖌️","Wood & Carpentry":"🪵","Safety & Tools":"⛑️"};
+  return map[cat]||"📦";
+};
 
 // ── SHARED COMPONENTS ─────────────────────────────────────────────
 const Pill=({label,c,bg,brd})=>(
@@ -162,7 +120,7 @@ function StockTab({stock,onIssue,onAddStock}){
   const filtered=stock.filter(m=>{
     if(cat!=="All"&&m.category!==cat) return false;
     if(showLow&&m.qty>m.minQty) return false;
-    if(search&&!m.name.toLowerCase().includes(search.toLowerCase())&&!m.id.toLowerCase().includes(search.toLowerCase())) return false;
+    if(search&&!m.name.toLowerCase().includes(search.toLowerCase())&&!String(m.id).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
@@ -595,10 +553,25 @@ function TransfersTab({transfers}){
 
 // ── ISSUE MODAL ───────────────────────────────────────────────────
 function IssueModal({material,onClose}){
-  const [form,setForm]=useState({project:PROJECTS[0],issuedTo:"Vijay Sahu",qty:"",remarks:""});
+  const [form,setForm]=useState({project:PROJECTS[0],issuedTo:"",qty:"",remarks:""});
+  const [saving,setSaving]=useState(false);
   const maxQty=material?.qty||0;
   const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
   const team=["Vijay Sahu","Niranjan","Harsh Sahu","Priyanka","Ramesh"];
+
+  const handleSubmit=async()=>{
+    if(!form.qty||Number(form.qty)<=0||Number(form.qty)>maxQty) return;
+    setSaving(true);
+    try{
+      const res=await api.post("/warehouse/issues",{
+        items:[{material_id:material.id,qty:Number(form.qty),rate:material.rate}],
+        remarks:form.remarks||null,
+      });
+      if(res.success) onClose();
+      else alert(res.message||"Issue failed");
+    }catch(e){alert(e.response?.data?.message||e.message||"Error issuing material");}
+    setSaving(false);
+  };
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(460px,95vw)",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -644,9 +617,9 @@ function IssueModal({material,onClose}){
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-          <button onClick={onClose} disabled={!form.qty||Number(form.qty)>maxQty}
+          <button onClick={handleSubmit} disabled={!form.qty||Number(form.qty)>maxQty||saving}
             style={{flex:2,padding:"10px",borderRadius:7,background:form.qty&&Number(form.qty)<=maxQty?T.amb:T.b1,color:form.qty&&Number(form.qty)<=maxQty?"white":T.t4,fontSize:12.5,fontWeight:700,border:"none",cursor:form.qty?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            <IcOut size={14} color={form.qty?"white":T.t4}/> Confirm Issue
+            <IcOut size={14} color={form.qty?"white":T.t4}/> {saving?"Issuing...":"Confirm Issue"}
           </button>
         </div>
       </div>
@@ -657,7 +630,22 @@ function IssueModal({material,onClose}){
 // ── ADD STOCK MODAL ───────────────────────────────────────────────
 function AddStockModal({material,onClose}){
   const [form,setForm]=useState({qty:"",vendor:"",poNo:"",rate:material?.rate||"",remarks:""});
+  const [saving,setSaving]=useState(false);
   const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
+
+  const handleSubmit=async()=>{
+    if(!form.qty||Number(form.qty)<=0) return;
+    setSaving(true);
+    try{
+      const res=await api.post(`/warehouse/materials/${material.id}/add-stock`,{
+        qty:Number(form.qty),
+        rate:Number(form.rate)||material?.rate||0,
+      });
+      if(res.success) onClose();
+      else alert(res.message||"Failed to add stock");
+    }catch(e){alert(e.response?.data?.message||e.message||"Error adding stock");}
+    setSaving(false);
+  };
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(440px,95vw)",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -689,9 +677,9 @@ function AddStockModal({material,onClose}){
         </div>
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-          <button onClick={onClose} disabled={!form.qty}
+          <button onClick={handleSubmit} disabled={!form.qty||saving}
             style={{flex:2,padding:"10px",borderRadius:7,background:form.qty?T.grn:T.b1,color:form.qty?"white":T.t4,fontSize:12.5,fontWeight:700,border:"none",cursor:form.qty?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-            <IcIn size={14} color={form.qty?"white":T.t4}/> Add to Warehouse
+            <IcIn size={14} color={form.qty?"white":T.t4}/> {saving?"Adding...":"Add to Warehouse"}
           </button>
         </div>
       </div>
@@ -702,20 +690,49 @@ function AddStockModal({material,onClose}){
 // ── WAREHOUSE MODULE ──────────────────────────────────────────────
 function WarehouseModule(){
   const [tab,setTab]=useState("stock");
-  const [stock] =useState(STOCK_DATA);
+  const [stock,setStock]=useState([]);
+  const [grns,setGrns]=useState([]);
+  const [issues,setIssues]=useState([]);
+  const [mrs,setMrs]=useState([]);
+  const [transfers,setTransfers]=useState([]);
+  const [loading,setLoading]=useState(true);
   const [issueTarget,setIssueTarget]=useState(null);
   const [addStockTarget,setAddStockTarget]=useState(null);
+
+  // Load all warehouse data
+  const loadAll=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const [sRes,gRes,iRes,mRes,tRes]=await Promise.all([
+        api.get("/warehouse/materials"),
+        api.get("/warehouse/grn"),
+        api.get("/warehouse/issues"),
+        api.get("/warehouse/mr"),
+        api.get("/warehouse/transfers"),
+      ]);
+      if(sRes.success) setStock(sRes.data.map(m=>({...m,qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0,img:getCategoryEmoji(m.category)})));
+      const fmtDate=(d)=>{if(!d)return"—";const dt=new Date(d);return isNaN(dt)?"—":dt.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});};
+      if(gRes.success) setGrns(gRes.data.map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
+      if(iRes.success) setIssues(iRes.data.map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
+      if(mRes.success) setMrs(mRes.data.map(m=>({...m,project:m.project_name||"—",requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,date:fmtDate(m.date),items:m.items||[]})));
+      if(tRes.success) setTransfers(tRes.data.map(t=>({...t,from:t.from_location||"—",to:t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,date:fmtDate(t.date),items:t.items||[]})));
+    }catch(e){console.error("Warehouse load error:",e);}
+    setLoading(false);
+  },[]);
+
+  useEffect(()=>{loadAll();},[loadAll]);
 
   const lowStock=stock.filter(m=>m.qty<m.minQty);
   const outOfStock=stock.filter(m=>m.qty===0);
   const totalValue=stock.reduce((s,m)=>s+m.qty*m.rate,0);
   const totalItems=stock.length;
+  const pendingMRs=mrs.filter(m=>m.status==="Pending").length;
 
   const TABS=[
     {id:"stock",  l:"Stock",         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
     {id:"grn",    l:"Material In",   I:IcIn,   badge:null},
     {id:"issue",  l:"Material Out",  I:IcOut,  badge:null},
-    {id:"mr",     l:"Requests",      I:IcMR,   badge:MR_DATA.filter(m=>m.status==="Pending").length, bc:T.amb},
+    {id:"mr",     l:"Requests",      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
     {id:"transfer",l:"Transfers",    I:IcTrns, badge:null},
   ];
 
@@ -723,8 +740,16 @@ function WarehouseModule(){
     {l:"Total Items",    v:totalItems,       sub:`${CATEGORIES.length-1} categories`,      c:T.blu, I:IcBox},
     {l:"Total Value",    v:`₹${fmt(totalValue)}`,  sub:"Current stock value",         c:T.grn, I:IcIn},
     {l:"Low Stock",      v:lowStock.length,  sub:`${outOfStock.length} out of stock`, c:lowStock.length>0?T.red:T.grn, I:IcAlert},
-    {l:"Pending MRs",    v:MR_DATA.filter(m=>m.status==="Pending").length, sub:"Need to be issued", c:T.amb, I:IcMR},
+    {l:"Pending MRs",    v:pendingMRs, sub:"Need to be issued", c:pendingMRs>0?T.amb:T.grn, I:IcMR},
   ];
+
+  if(loading) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",flexDirection:"column",gap:14}}>
+      <div style={{width:36,height:36,border:"3px solid #E2E8F0",borderTopColor:"#1565C0",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+      <div style={{fontSize:13,color:"#8896A6"}}>Loading Warehouse...</div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -768,15 +793,15 @@ function WarehouseModule(){
       {/* Tab Content */}
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
         {tab==="stock"&&<StockTab stock={stock} onIssue={m=>setIssueTarget(m)} onAddStock={m=>setAddStockTarget(m||null)}/>}
-        {tab==="grn"&&<GrnTab grns={GRN_DATA}/>}
-        {tab==="issue"&&<IssueTab issues={ISSUE_DATA}/>}
-        {tab==="mr"&&<MRTab mrs={MR_DATA} onIssueFromMR={mr=>{setTab("issue");}}/>}
-        {tab==="transfer"&&<TransfersTab transfers={TRANSFER_DATA}/>}
+        {tab==="grn"&&<GrnTab grns={grns}/>}
+        {tab==="issue"&&<IssueTab issues={issues}/>}
+        {tab==="mr"&&<MRTab mrs={mrs} onIssueFromMR={mr=>{setTab("issue");}}/>}
+        {tab==="transfer"&&<TransfersTab transfers={transfers}/>}
       </div>
 
       {/* Modals */}
-      {issueTarget&&<IssueModal material={issueTarget} onClose={()=>setIssueTarget(null)}/>}
-      {addStockTarget!==null&&<AddStockModal material={addStockTarget} onClose={()=>setAddStockTarget(null)}/>}
+      {issueTarget&&<IssueModal material={issueTarget} onClose={()=>{setIssueTarget(null);loadAll();}}/>}
+      {addStockTarget!==null&&<AddStockModal material={addStockTarget} onClose={()=>{setAddStockTarget(null);loadAll();}}/>}
 
       <style>{`
         @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}

@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
+import api from "../config/api";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -66,22 +67,7 @@ const STAGES=[
 
 const SOURCES=["Direct Call","Reference","Site Visit","Facebook Ad","Instagram","Google","Newspaper","Banner","Just Dial","Builder Fair","Other"];
 const PROJ_TYPES=["Residential","Commercial","Industrial","Interior","Renovation","Bungalow","Apartment","Villa","Township","Other"];
-const ASSIGNED_TO=["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka"];
-
-// ── CRM DATA ─────────────────────────────────────────────────────
-const INIT_LEADS=[
-  {id:"L001",name:"Suresh Agarwal",phone:"9876543210",email:"suresh@gmail.com",city:"Raipur",projType:"Residential",budget:3500000,source:"Reference",assignedTo:"Prafull",stage:"lead",priority:"High",contactDate:"2026-03-16",notes:"3BHK house in Tatibandh. Discussed layout. Very interested.",followupHistory:[{date:"2026-03-14",note:"First call. Interested in 3BHK.",by:"Prafull"},{date:"2026-03-15",note:"Sent portfolio PDF.",by:"Prafull"}],createdAt:"2026-03-14",tags:["hot","3bhk"]},
-  {id:"L002",name:"Priya Mehta",phone:"9765432100",email:"priya.mehta@yahoo.com",city:"Bilaspur",projType:"Interior",budget:800000,source:"Instagram",assignedTo:"Vijay Sahu",stage:"lead",priority:"Medium",contactDate:"2026-03-18",notes:"Interior design for new flat. Budget flexible.",followupHistory:[{date:"2026-03-13",note:"Enquiry via Instagram DM.",by:"Vijay Sahu"}],createdAt:"2026-03-13",tags:["interior"]},
-  {id:"L003",name:"Rakesh Jain",phone:"9654321000",email:"rakesh.jain@rediffmail.com",city:"Durg",projType:"Commercial",budget:12000000,source:"Builder Fair",assignedTo:"Prafull",stage:"followup",priority:"High",contactDate:"2026-03-17",notes:"Showroom + office complex 4000 sqft. Site visit done.",followupHistory:[{date:"2026-03-10",note:"Met at Builder Fair. Very serious buyer.",by:"Prafull"},{date:"2026-03-13",note:"Site visit done. Liked layout concept.",by:"Prafull"},{date:"2026-03-15",note:"Sent initial estimate ₹1.2Cr.",by:"Niranjan"}],createdAt:"2026-03-10",tags:["commercial","high-value"]},
-  {id:"L004",name:"Deepa Sharma",phone:"9543210900",email:"deepa.s@gmail.com",city:"Raipur",projType:"Renovation",budget:1200000,source:"Direct Call",assignedTo:"Niranjan",stage:"followup",priority:"Medium",contactDate:"2026-03-19",notes:"Old house renovation. Kitchen + 2 bathrooms.",followupHistory:[{date:"2026-03-12",note:"Called directly. Old house renovation.",by:"Niranjan"},{date:"2026-03-14",note:"Site measurement done.",by:"Niranjan"}],createdAt:"2026-03-12",tags:["renovation"]},
-  {id:"L005",name:"Amit Tiwari",phone:"9432109800",email:"amit.t@gmail.com",city:"Raipur",projType:"Villa",budget:8500000,source:"Reference",assignedTo:"Prafull",stage:"proposal",priority:"High",contactDate:"2026-03-16",notes:"Duplex villa 3500 sqft in Kota. Sent BOQ ₹85L. Pending approval.",followupHistory:[{date:"2026-03-05",note:"Reference from Shyam ji.",by:"Prafull"},{date:"2026-03-08",note:"Site visit + measurement.",by:"Vijay Sahu"},{date:"2026-03-12",note:"BOQ submitted ₹85L.",by:"Prafull"},{date:"2026-03-15",note:"Client reviewing. Will revert in 2 days.",by:"Prafull"}],createdAt:"2026-03-05",tags:["high-value","villa","duplex"]},
-  {id:"L006",name:"Sunita Verma",phone:"9321098700",email:"sunita.v@hotmail.com",city:"Bhilai",projType:"Apartment",budget:2200000,source:"Facebook Ad",assignedTo:"Vijay Sahu",stage:"proposal",priority:"Medium",contactDate:"2026-03-20",notes:"2BHK apartment finishing. Tiles + paint + electrical.",followupHistory:[{date:"2026-03-08",note:"Enquiry via Facebook.",by:"Vijay Sahu"},{date:"2026-03-11",note:"Site visit.",by:"Vijay Sahu"},{date:"2026-03-14",note:"Quotation sent ₹22L.",by:"Vijay Sahu"}],createdAt:"2026-03-08",tags:[]},
-  {id:"L007",name:"Nand Kishor Agrawal",phone:"9210987600",email:"nk.agrawal@gmail.com",city:"Raipur",projType:"Residential",budget:4250000,source:"Reference",assignedTo:"Prafull",stage:"converted",priority:"High",contactDate:null,notes:"Project started Jan 2025. Running successfully. 68% progress.",followupHistory:[{date:"2025-12-20",note:"Contract signed. Advance received.",by:"Prafull"}],createdAt:"2025-12-15",convertedValue:4250000,convertedDate:"2025-12-20",tags:["ongoing"]},
-  {id:"L008",name:"Esther Risali",phone:"9109876500",email:"esther@esthergroup.com",city:"Bilaspur",projType:"Commercial",budget:8750000,source:"Direct Call",assignedTo:"Niranjan",stage:"converted",priority:"High",contactDate:null,notes:"Commercial complex 91% complete. Final billing pending.",followupHistory:[{date:"2024-05-28",note:"Agreement signed. Work started.",by:"Niranjan"}],createdAt:"2024-05-25",convertedValue:8750000,convertedDate:"2024-05-28",tags:["commercial","ongoing"]},
-  {id:"L009",name:"Rajesh Patel",phone:"9098765400",email:"r.patel@gmail.com",city:"Raipur",projType:"Bungalow",budget:6000000,source:"Site Visit",assignedTo:"Vijay Sahu",stage:"lost",priority:"Low",contactDate:null,notes:"Went with another contractor. Price difference was main issue.",followupHistory:[{date:"2026-02-20",note:"Final follow up. Client chose another contractor.",by:"Vijay Sahu"}],createdAt:"2026-02-01",tags:[]},
-  {id:"L010",name:"Kavita Mishra",phone:"8987654300",email:"kavita.m@gmail.com",city:"Korba",projType:"Residential",budget:2800000,source:"Just Dial",assignedTo:"Priyanka",stage:"lead",priority:"Low",contactDate:"2026-03-21",notes:"2.5BHK in Korba. Early stage enquiry. Distance is concern.",followupHistory:[{date:"2026-03-15",note:"First contact via Just Dial.",by:"Priyanka"}],createdAt:"2026-03-15",tags:[]},
-  {id:"L011",name:"Dinesh Sahu",phone:"8876543200",email:"dinesh.sahu@gmail.com",city:"Raipur",projType:"Residential",budget:5500000,source:"Google",assignedTo:"Prafull",stage:"followup",priority:"High",contactDate:"2026-03-16",notes:"4BHK premium residence. Site finalized. Needs detailed estimate.",followupHistory:[{date:"2026-03-14",note:"Found on Google. Very clear requirement.",by:"Prafull"},{date:"2026-03-15",note:"Detailed discussion. Meeting fixed.",by:"Prafull"}],createdAt:"2026-03-14",tags:["hot","4bhk"]},
-];
+// ASSIGNED_TO will be fetched from API (/crm/team)
 
 // ── NAV ──────────────────────────────────────────────────────────
 const NAV=[
@@ -437,11 +423,20 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp}){
   const ps=PRIO_S[lead.priority]||PRIO_S["Medium"];
   const diff=daysDiff(lead.contactDate);
 
-  const addNote=()=>{
+  const addNote=async()=>{
     if(!newNote.trim()) return;
-    const entry={date:"2026-03-16",note:newNote,by:"Prafull"};
-    setHistory(p=>[...p,entry]);
-    setNewNote("");
+    try{
+      const res=await api.post("/crm/leads/"+lead.id+"/followups",{note:newNote});
+      if(res.success){
+        setHistory(p=>[...p,res.data]);
+        setNewNote("");
+      }
+    }catch(e){
+      // Fallback to local
+      const entry={date:new Date().toISOString().split("T")[0],note:newNote,by:"You"};
+      setHistory(p=>[...p,entry]);
+      setNewNote("");
+    }
   };
 
   const saveContactDate=()=>{
@@ -637,7 +632,8 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp}){
 }
 
 // ── ADD LEAD MODAL ───────────────────────────────────────────────
-function AddLeadModal({onClose,onSave}){
+function AddLeadModal({onClose,onSave,assignedToList}){
+  const ASSIGNED_TO=assignedToList||["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka"];
   const [form,setForm]=useState({name:"",phone:"",email:"",city:"",projType:"Residential",budget:"",source:"Direct Call",assignedTo:"Prafull",stage:"lead",priority:"Medium",contactDate:"",notes:"",tags:""});
   const [show,setShow]=useState(false);
   const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
@@ -716,12 +712,14 @@ function AddLeadModal({onClose,onSave}){
 
 // ── MAIN CRM MODULE ──────────────────────────────────────────────
 function CRMModule(){
-  const [leads,setLeads]=useState(INIT_LEADS);
+  const [leads,setLeads]=useState([]);
   const [selLead,setSelLead]=useState(null);
   const [waLead,setWaLead]=useState(null);
   const [showAdd,setShowAdd]=useState(false);
   const [reminderLead,setReminderLead]=useState(null);
   const [dismissedReminders,setDismissedReminders]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [teamMembers,setTeamMembers]=useState([]);
 
   // Filters
   const [search,setSearch]=useState("");
@@ -733,6 +731,41 @@ function CRMModule(){
 
   const filters={search,assignedTo:fAssignee,source:fSource,projType:fProjType,priority:fPriority};
   const activeF=[fAssignee!=="All",fSource!=="All",fProjType!=="All",fPriority!=="All"].filter(Boolean).length;
+
+  const ASSIGNED_TO=teamMembers.length>0?teamMembers.map(m=>m.name):["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka"];
+
+  // Load leads from API
+  const loadLeads=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const res=await api.get("/crm/leads");
+      if(res.success){
+        const mapped=res.data.map(l=>({
+          ...l,
+          projType:l.proj_type||l.projType||"Residential",
+          assignedTo:l.assigned_to_name||l.assignedTo||"—",
+          contactDate:l.contact_date?new Date(l.contact_date).toISOString().split("T")[0]:null,
+          createdAt:l.created_at?new Date(l.created_at).toISOString().split("T")[0]:null,
+          followupHistory:l.followupHistory||[],
+          tags:Array.isArray(l.tags)?l.tags:(typeof l.tags==="string"?JSON.parse(l.tags||"[]"):[]),
+          convertedValue:l.converted_value||l.convertedValue||null,
+          convertedDate:l.converted_date?new Date(l.converted_date).toISOString().split("T")[0]:null,
+        }));
+        setLeads(mapped);
+      }
+    }catch(e){console.error("Load leads error:",e);}
+    setLoading(false);
+  },[]);
+
+  // Load team members
+  const loadTeam=useCallback(async()=>{
+    try{
+      const res=await api.get("/crm/team");
+      if(res.success) setTeamMembers(res.data);
+    }catch(e){}
+  },[]);
+
+  useEffect(()=>{loadLeads();loadTeam();},[loadLeads,loadTeam]);
 
   // Auto-trigger reminder for today's contacts
   useEffect(()=>{
@@ -751,21 +784,29 @@ function CRMModule(){
     updateLead(lead.id,{stage:STAGES[newIdx].id});
   };
 
-  const updateLead=(id,update)=>{
+  const updateLead=async(id,update)=>{
+    // Optimistic update
     setLeads(p=>p.map(l=>l.id===id?{...l,...update}:l));
     if(selLead?.id===id) setSelLead(p=>({...p,...update}));
+    try{
+      await api.patch("/crm/leads/"+id,update);
+    }catch(e){console.error("Update lead error:",e);loadLeads();}
   };
 
-  const addLead=(form)=>{
-    const newLead={
-      id:`L${String(leads.length+1).padStart(3,"0")}`,
-      ...form,
-      budget:Number(form.budget)||0,
-      tags:form.tags?form.tags.split(",").map(t=>t.trim()).filter(Boolean):[],
-      followupHistory:[{date:"2026-03-16",note:`First entry: ${form.notes||"New lead added"}`,by:form.assignedTo}],
-      createdAt:"2026-03-16",
-    };
-    setLeads(p=>[newLead,...p]);
+  const addLead=async(form)=>{
+    try{
+      const res=await api.post("/crm/leads",{
+        name:form.name,phone:form.phone,email:form.email,city:form.city,
+        projType:form.projType,budget:Number(form.budget)||0,source:form.source,
+        assignedTo:teamMembers.find(m=>m.name===form.assignedTo)?.id||null,
+        stage:form.stage,priority:form.priority,
+        contactDate:form.contactDate||null,notes:form.notes||null,
+        tags:form.tags?form.tags.split(",").map(t=>t.trim()).filter(Boolean):[],
+      });
+      if(res.success){
+        loadLeads(); // Reload from API
+      }
+    }catch(e){console.error("Add lead error:",e);}
   };
 
   // KPI data
@@ -781,6 +822,14 @@ function CRMModule(){
     {l:"Converted",v:`₹${fmt(convertedValue)}`,sub:`${leads.filter(l=>l.stage==="converted").length} deals · ${conversionRate}% rate`,c:T.grn,I:IcChk},
     {l:"Follow Up Today",v:todayDueCount,sub:"Contact date due",c:todayDueCount>0?T.red:T.grn,I:IcCal},
   ];
+
+  if(loading) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",flexDirection:"column",gap:14}}>
+      <div style={{width:36,height:36,border:"3px solid #E2E8F0",borderTopColor:"#1565C0",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+      <div style={{fontSize:13,color:"#8896A6"}}>Loading CRM...</div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -880,7 +929,7 @@ function CRMModule(){
         />
       )}
       {waLead&&<WhatsAppModal lead={waLead} onClose={()=>setWaLead(null)}/>}
-      {showAdd&&<AddLeadModal onClose={()=>setShowAdd(false)} onSave={addLead}/>}
+      {showAdd&&<AddLeadModal onClose={()=>setShowAdd(false)} onSave={addLead} assignedToList={ASSIGNED_TO}/>}
 
       <style>{`
         @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
