@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import api from "../config/api";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -71,73 +72,15 @@ const MONTHS=["January","February","March","April","May","June","July","August",
 const CUR_MONTH=new Date().getMonth();
 const CUR_YEAR=new Date().getFullYear();
 const WORKING_DAYS=26; // working days in month
-const PROJECTS=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Central Office"];
+let PROJECTS=[];
 
-// ── EMPLOYEE DATA (Monthly Salary) ────────────────────────────────
-// paymentType: "fixed"      → full monthly salary regardless of attendance
-//              "attendance"  → (gross / WORKING_DAYS) × effectiveDays  (pro-rata)
-const MONTHLY_STAFF=[
-  {id:"E001",name:"Vijay Sahu",role:"Project Manager",dept:"Management",paymentType:"fixed",basicSalary:35000,hra:8750,conveyance:2000,medical:1250,phone:500,bankAcc:"SBI 4521XXXX",ifsc:"SBIN0001234",pan:"ABCDE1234F",joinDate:"2020-01-15",project:"All Projects",photo:"VS"},
-  {id:"E002",name:"Niranjan",role:"Site Engineer",dept:"Civil",paymentType:"attendance",basicSalary:28000,hra:7000,conveyance:1500,medical:1000,phone:300,bankAcc:"BOI 7823XXXX",ifsc:"BKID0001234",pan:"FGHIJ5678K",joinDate:"2021-03-01",project:"Shubham & NK 623",photo:"NR"},
-  {id:"E003",name:"Harsh Sahu",role:"Design Engineer",dept:"Design",paymentType:"fixed",basicSalary:30000,hra:7500,conveyance:1500,medical:1000,phone:500,bankAcc:"HDFC 3421XXXX",ifsc:"HDFC0001234",pan:"LMNOP9012Q",joinDate:"2021-06-10",project:"All Projects",photo:"HS"},
-  {id:"E004",name:"Priyanka",role:"Electrical Engineer",dept:"Electrical",paymentType:"attendance",basicSalary:25000,hra:6250,conveyance:1500,medical:1000,phone:300,bankAcc:"SBI 6543XXXX",ifsc:"SBIN0005678",pan:"RSTUV3456W",joinDate:"2022-01-20",project:"Neha Sagar Office",photo:"PK"},
-  {id:"E005",name:"Ramesh",role:"Supervisor",dept:"Civil",paymentType:"attendance",basicSalary:20000,hra:5000,conveyance:1000,medical:750,phone:250,bankAcc:"PNB 2134XXXX",ifsc:"PUNB0001234",pan:"XYZAB7890C",joinDate:"2022-08-05",project:"Esther Risali",photo:"RM"},
-  {id:"E006",name:"Rajesh Elec.",role:"Electrical Foreman",dept:"Electrical",paymentType:"fixed",basicSalary:18000,hra:4500,conveyance:1000,medical:500,phone:0,bankAcc:"UCO 9876XXXX",ifsc:"UCBA0001234",pan:"DEFGH2345I",joinDate:"2023-02-12",project:"Multiple",photo:"RE"},
-];
+// ── EMPLOYEE DATA (loaded from API) ────────────────────────────────
+let MONTHLY_STAFF=[];
 
-// ── ATTENDANCE (Monthly staff) ─────────────────────────────────────
-// present(P), absent(A), half-day(H), leave(L)
-const initMonthlyAtt=()=>{
-  const att={};
-  MONTHLY_STAFF.forEach(e=>{
-    att[e.id]={};
-    for(let d=1;d<=31;d++){
-      // Simulate attendance
-      const r=Math.random();
-      att[e.id][d]=r>0.88?"A":r>0.82?"H":r>0.78?"L":"P";
-    }
-    // First 15 days of March
-    for(let d=16;d<=31;d++) att[e.id][d]=null; // future
-  });
-  return att;
-};
+// ── ATTENDANCE (loaded from API) ─────────────────────────────────────
 
-// ── DAILY WAGE WORKERS ─────────────────────────────────────────────
-const DAILY_WORKERS=[
-  {id:"D001",name:"Suresh Kumar",trade:"Mason",ratePerDay:700,rateOT:100,project:"Shubham & NK 623",contractor:"Self",phone:"9876501001"},
-  {id:"D002",name:"Manoj Yadav",trade:"Mason",ratePerDay:700,rateOT:100,project:"Shubham & NK 623",contractor:"Self",phone:"9876501002"},
-  {id:"D003",name:"Raju Helper",trade:"Helper",ratePerDay:450,rateOT:70,project:"Shubham & NK 623",contractor:"Self",phone:"9876501003"},
-  {id:"D004",name:"Santosh Mistri",trade:"Carpenter",ratePerDay:800,rateOT:120,project:"Tikendra Residence",contractor:"Ramesh",phone:"9876501004"},
-  {id:"D005",name:"Arun Plumber",trade:"Plumber",ratePerDay:750,rateOT:110,project:"Amarendra Villa",contractor:"Self",phone:"9876501005"},
-  {id:"D006",name:"Brijesh Helper",trade:"Helper",ratePerDay:450,rateOT:70,project:"Tikendra Residence",contractor:"Ramesh",phone:"9876501006"},
-  {id:"D007",name:"Deepak Electric",trade:"Electrician",ratePerDay:700,rateOT:100,project:"Neha Sagar Office",contractor:"Self",phone:"9876501007"},
-  {id:"D008",name:"Govind Mistri",trade:"Bar Bender",ratePerDay:750,rateOT:110,project:"Esther Risali",contractor:"Self",phone:"9876501008"},
-  {id:"D009",name:"Harish Painter",trade:"Painter",ratePerDay:650,rateOT:90,project:"Esther Risali",contractor:"Self",phone:"9876501009"},
-  {id:"D010",name:"Rakesh Welder",trade:"Welder",ratePerDay:850,rateOT:130,project:"Multiple",contractor:"Self",phone:"9876501010"},
-];
-
-// Daily attendance — days 1-16 of March, P/A/H/OT
-const initDailyAtt=()=>{
-  const att={};
-  DAILY_WORKERS.forEach(w=>{
-    att[w.id]={};
-    for(let d=1;d<=15;d++){
-      const r=Math.random();
-      if(r>0.85) att[w.id][d]={status:"A",ot:0};
-      else if(r>0.75) att[w.id][d]={status:"H",ot:0};
-      else att[w.id][d]={status:"P",ot:r>0.5?2:0};
-    }
-    for(let d=16;d<=31;d++) att[w.id][d]=null;
-  });
-  return att;
-};
-
-const DEDUCTIONS=["PF","ESI","TDS","Advance","Other"];
-const ADVANCE_DATA=[
-  {id:"ADV001",empId:"E002",name:"Niranjan",amount:5000,date:"2026-03-05",reason:"Medical emergency",status:"Pending deduction"},
-  {id:"ADV002",empId:"D001",name:"Suresh Kumar",amount:3000,date:"2026-03-08",reason:"Personal",status:"Pending deduction"},
-  {id:"ADV003",empId:"E005",name:"Ramesh",amount:4000,date:"2026-02-20",reason:"House rent",status:"Deducted"},
-];
+let DAILY_WORKERS=[];
+let ADVANCE_DATA=[];
 
 // ── SHARED COMPONENTS ─────────────────────────────────────────────
 const Pill=({label,c,bg,brd})=>(
@@ -155,9 +98,9 @@ function Avatar({name,size=32,color=T.blu}){
 
 
 // ── MONTHLY ATTENDANCE GRID ───────────────────────────────────────
-function MonthlyAttGrid({staff,att,setAtt,month,year}){
+function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange}){
   const daysInMonth=new Date(year,month+1,0).getDate();
-  const today=16; // 16 March
+  const now=new Date();const today=(now.getMonth()===month&&now.getFullYear()===year)?now.getDate():month<now.getMonth()||year<now.getFullYear()?daysInMonth:0;
   const ATT_COLORS={"P":{bg:"#ECFDF5",c:"#059669",label:"P"},"A":{bg:"#FEF2F2",c:"#DC2626",label:"A"},"H":{bg:"#FFFBEB",c:"#D97706",label:"H"},"L":{bg:"#EFF6FF",c:"#2563EB",label:"L"},null:{bg:T.surfaceB,c:T.t4,label:"·"}};
 
   const toggleAtt=(empId,day)=>{
@@ -166,6 +109,7 @@ function MonthlyAttGrid({staff,att,setAtt,month,year}){
     const cycle=["P","A","H","L"];
     const next=cur===null||!cycle.includes(cur)?"P":cycle[(cycle.indexOf(cur)+1)%cycle.length];
     setAtt(p=>({...p,[empId]:{...p[empId],[day]:next}}));
+    if(onAttChange) onAttChange(empId,day,next);
   };
 
   const getStats=(empId)=>{
@@ -250,7 +194,8 @@ function MonthlyAttGrid({staff,att,setAtt,month,year}){
 }
 
 // ── SALARY SLIP MODAL ─────────────────────────────────────────────
-function SalarySlipModal({emp,att,month,year,onClose,paymentType}){
+function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
+  const WD=workingDays||26;
   const days=att[emp.id]||{};
   const P=Object.values(days).filter(v=>v==="P").length;
   const H=Object.values(days).filter(v=>v==="H").length;
@@ -260,7 +205,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType}){
   const pType=paymentType||emp.paymentType||"fixed";
   const grossEarned=pType==="fixed"
     ? fullGross
-    : Math.round((fullGross/WORKING_DAYS)*effective);
+    : Math.round((fullGross/WD)*effective);
   const pf=Math.round(emp.basicSalary*0.12);
   const esi=emp.basicSalary<=21000?Math.round(grossEarned*0.0075):0;
   const tds=grossEarned>15000?Math.round(grossEarned*0.05):0;
@@ -273,7 +218,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType}){
   const printSlip=()=>{
     const w=window.open("","_blank","width=600,height=700");
     const calcRow = isAttBased
-      ? "<tr><td>Calculation</td><td>\u20b9" + fmtN(fullGross) + " \u00f7 " + WORKING_DAYS + " \u00d7 " + effective + " = \u20b9" + fmtN(grossEarned) + "</td></tr>"
+      ? "<tr><td>Calculation</td><td>\u20b9" + fmtN(fullGross) + " \u00f7 " + WD + " \u00d7 " + effective + " = \u20b9" + fmtN(grossEarned) + "</td></tr>"
       : "<tr><td>Calculation</td><td>Full monthly salary (attendance not deducted)</td></tr>";
     const salaryTypeColor = isAttBased ? "#7C3AED" : "#059669";
     const salaryTypeLabel = isAttBased ? "Attendance Based (Pro-rata)" : "Fixed Monthly Salary";
@@ -297,7 +242,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType}){
     <tr><td>IFSC</td><td>${emp.ifsc}</td></tr>
     <tr><th colspan="2">Attendance</th></tr>
     <tr><td>Salary Type</td><td><b style="color:${salaryTypeColor}">${salaryTypeLabel}</b></td></tr>
-    <tr><td>Working Days</td><td>${WORKING_DAYS}</td></tr>
+    <tr><td>Working Days</td><td>${WD}</td></tr>
     <tr><td>Present</td><td>${P} days (+ ${H} Half days)</td></tr>
     <tr><td>Effective Days</td><td>${effective}</td></tr>
     ${calcRow}
@@ -355,7 +300,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType}){
             </span>
             {isAttBased
               ?<span style={{fontSize:11,color:T.pur,marginLeft:8}}>
-                ₹{fmtN(fullGross)} ÷ {WORKING_DAYS} days × {effective} eff. days = ₹{fmtN(grossEarned)}
+                ₹{fmtN(fullGross)} ÷ {WD} days × {effective} eff. days = ₹{fmtN(grossEarned)}
               </span>
               :<span style={{fontSize:11,color:T.grn,marginLeft:8}}>
                 Full gross paid regardless of attendance ({P}P {H>0?`${H}H `:""}{A>0?`${A}A`:""})
@@ -423,12 +368,12 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType}){
 }
 
 // ── DAILY WAGES SECTION ───────────────────────────────────────────
-function DailyWagesTab({workers,att,setAtt,selProject,setSelProject}){
+function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,onDailyAttChange}){
   const [selWorker,setSelWorker]=useState(null);
-  const [view,setView]=useState("grid"); // grid | worker
-  const today=16;
+  const [view,setView]=useState("grid");
+  const now=new Date();const today=(now.getMonth()===month&&now.getFullYear()===year)?now.getDate():month<now.getMonth()||year<now.getFullYear()?new Date(year,month+1,0).getDate():0;
 
-  const filteredWorkers=selProject==="All"?workers:workers.filter(w=>w.project===selProject||w.project==="Multiple");
+  const filteredWorkers=selProject==="All"?workers:workers.filter(w=>w.project===selProject||w.project==="Multiple"||w.project===null);
 
   const calcWorkerPay=(w)=>{
     const days=att[w.id]||{};
@@ -444,7 +389,9 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject}){
   const toggleDailyAtt=(wId,day,field,val)=>{
     setAtt(p=>{
       const cur=p[wId]?.[day]||{status:"A",ot:0};
-      return{...p,[wId]:{...p[wId],[day]:{...cur,[field]:val}}};
+      const updated={...cur,[field]:val};
+      if(onDailyAttChange) onDailyAttChange(wId,day,updated.status,updated.ot||0);
+      return{...p,[wId]:{...p[wId],[day]:updated}};
     });
   };
 
@@ -488,7 +435,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject}){
         <div style={{overflowX:"auto"}}>
           {/* Days header */}
           <div style={{display:"flex",marginBottom:3,paddingLeft:180}}>
-            {Array.from({length:16},(_,i)=>i+1).map(d=>(
+            {Array.from({length:new Date(year,month+1,0).getDate()},(_,i)=>i+1).map(d=>(
               <div key={d} style={{width:32,flexShrink:0,textAlign:"center",fontSize:9.5,fontWeight:400,color:d===today?T.blu:T.t4}}>{d}</div>
             ))}
             <div style={{width:70,textAlign:"center",fontSize:9.5,color:T.t4,paddingLeft:4}}>Days</div>
@@ -507,7 +454,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject}){
                 </div>
 
                 {/* Day cells */}
-                {Array.from({length:16},(_,i)=>i+1).map(d=>{
+                {Array.from({length:new Date(year,month+1,0).getDate()},(_,i)=>i+1).map(d=>{
                   const dayAtt=att[w.id]?.[d];
                   const status=dayAtt?.status||"A";
                   const sc=ATT_C[status]||ATT_C["A"];
@@ -569,7 +516,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject}){
 
                 {/* Mini attendance strip */}
                 <div style={{display:"flex",gap:2,flexWrap:"wrap"}}>
-                  {Array.from({length:16},(_,i)=>i+1).map(d=>{
+                  {Array.from({length:new Date(year,month+1,0).getDate()},(_,i)=>i+1).map(d=>{
                     const status=att[w.id]?.[d]?.status||"A";
                     const c=status==="P"?T.grn:status==="H"?T.amb:T.red;
                     return<div key={d} style={{width:14,height:14,borderRadius:3,background:c+"33",border:`1px solid ${c}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:7,fontWeight:700,color:c}}>{d}</div>;
@@ -581,7 +528,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject}){
                   <div style={{marginTop:10,padding:"10px 11px",background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7}} onClick={e=>e.stopPropagation()}>
                     <div style={{fontSize:10.5,fontWeight:700,color:T.pur,marginBottom:7}}>OT Hours per day (rate: ₹{w.rateOT}/hr)</div>
                     <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                      {Array.from({length:16},(_,i)=>i+1).map(d=>{
+                      {Array.from({length:new Date(year,month+1,0).getDate()},(_,i)=>i+1).map(d=>{
                         const dayAtt=att[w.id]?.[d];
                         if(!dayAtt||dayAtt.status!=="P") return null;
                         return(
@@ -606,7 +553,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject}){
 }
 
 // ── MONTHLY SALARY TAB ────────────────────────────────────────────
-function MonthlySalaryTab({staff,att,month,year,onViewSlip}){
+function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays}){
   const [search,setSearch]=useState("");
   const [payStatus,setPayStatus]=useState({});
   // local paymentType overrides — can be toggled per employee
@@ -622,6 +569,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip}){
 
   const filtered=staff.filter(e=>!search||e.name.toLowerCase().includes(search.toLowerCase())||e.role.toLowerCase().includes(search.toLowerCase()));
 
+  const WD=workingDays||26;
   const calcNet=(emp)=>{
     const days=att[emp.id]||{};
     const P=Object.values(days).filter(v=>v==="P").length;
@@ -630,13 +578,12 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip}){
     const effective=P+(H*0.5);
     const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone;
     const pType=paymentTypes[emp.id]||emp.paymentType||"fixed";
-    // fixed → full gross every month; attendance → pro-rata by effective days
     const gross=pType==="fixed"
       ? fullGross
-      : Math.round((fullGross/WORKING_DAYS)*effective);
+      : Math.round((fullGross/WD)*effective);
     const pf=Math.round(emp.basicSalary*0.12);
     const esi=emp.basicSalary<=21000?Math.round(gross*0.0075):0;
-    const adv=ADVANCE_DATA.find(a=>a.empId===emp.id&&a.status==="Pending deduction")?.amount||0;
+    const adv=(advances||[]).find(a=>a.empId===emp.id&&a.status==="Pending deduction")?.amount||0;
     return{gross,net:gross-pf-esi-adv,effective,pf,esi,pType,P,H,A,fullGross};
   };
 
@@ -683,7 +630,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip}){
         {filtered.map((emp,ei)=>{
           const {gross,net,effective,pf,esi,pType,P,H,A,fullGross}=calcNet(emp);
           const isPaid=payStatus[emp.id]==="Paid";
-          const hasAdv=ADVANCE_DATA.find(a=>a.empId===emp.id&&a.status==="Pending deduction");
+          const hasAdv=(advances||[]).find(a=>a.empId===emp.id&&a.status==="Pending deduction");
           const deptColor=emp.dept==="Management"?T.pur:emp.dept==="Civil"?T.blu:emp.dept==="Design"?T.grn:emp.dept==="Electrical"?T.amb:T.slt;
           const isAttBased=pType==="attendance";
           return(
@@ -717,7 +664,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip}){
                 </button>
                 {isAttBased&&(
                   <div style={{fontSize:9,color:T.t4,textAlign:"center"}}>
-                    ₹{fmtN(Math.round(fullGross/WORKING_DAYS))}/day
+                    ₹{fmtN(Math.round(fullGross/WD))}/day
                   </div>
                 )}
               </div>
@@ -765,15 +712,18 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip}){
 }
 
 // ── ADVANCES TAB ──────────────────────────────────────────────────
-function AdvancesTab(){
-  const [advances,setAdvances]=useState(ADVANCE_DATA);
+function AdvancesTab({advances,setAdvances}){
   const [showAdd,setShowAdd]=useState(false);
-  const [form,setForm]=useState({name:"",amount:"",date:"2026-03-16",reason:""});
+  const [form,setForm]=useState({name:"",amount:"",date:new Date().toISOString().split("T")[0],reason:""});
 
-  const addAdvance=()=>{
+  const addAdvance=async()=>{
     if(!form.name||!form.amount) return;
-    setAdvances(p=>[...p,{id:`ADV${String(p.length+1).padStart(3,"0")}`,empId:"D999",name:form.name,amount:Number(form.amount),date:form.date,reason:form.reason,status:"Pending deduction"}]);
-    setForm({name:"",amount:"",date:"2026-03-16",reason:""});setShowAdd(false);
+    try{
+      const res=await api.post("/payroll/advances",{name:form.name,amount:Number(form.amount),date:form.date,reason:form.reason});
+      const d=res.data?.data;
+      if(d) setAdvances(p=>[{id:d.id,empId:d.emp_id,name:d.name,amount:Number(d.amount),date:d.date?d.date.split("T")[0]:"",reason:d.reason,status:d.status},...p]);
+    }catch(err){console.error("Add advance:",err);}
+    setForm({name:"",amount:"",date:new Date().toISOString().split("T")[0],reason:""});setShowAdd(false);
   };
 
   const totalPending=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
@@ -830,7 +780,7 @@ function AdvancesTab(){
               <span style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>{adv.reason}</span>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <Pill label={adv.status==="Deducted"?"Deducted":"Pending"} c={isPending?T.amb:T.grn} bg={isPending?T.ambL:T.grnL} brd={isPending?T.ambM:T.grnM}/>
-                {isPending&&<button onClick={()=>setAdvances(p=>p.map(a=>a.id===adv.id?{...a,status:"Deducted"}:a))}
+                {isPending&&<button onClick={async()=>{try{await api.patch("/payroll/advances/"+adv.id,{status:"Deducted"});}catch(err){console.error(err);}setAdvances(p=>p.map(a=>a.id===adv.id?{...a,status:"Deducted"}:a));}}
                   style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,cursor:"pointer",fontWeight:600}}>
                   Deduct
                 </button>}
@@ -869,7 +819,7 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
   const blank={
     name:"",designation:"",phone:"",
     bankName:"",accountNo:"",ifsc:"",
-    daysPresent:"NA",totalDays:WORKING_DAYS,
+    daysPresent:"NA",totalDays:26,
     amount:"",salaryDate:TODAY,
     dueDate:addDays(TODAY,defaultDueDays),
     notes:"",category:"Other"
@@ -897,19 +847,31 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
     setSearch("");
   };
 
-  const handleCreate=()=>{
+  const handleCreate=async()=>{
     if(!form.name.trim()||!form.amount) return;
-    const rec={
-      id:`SAL-${Date.now()}`,
-      name:form.name,designation:form.designation,phone:form.phone,
-      bankName:form.bankName,accountNo:form.accountNo,ifsc:form.ifsc,
-      daysPresent:form.daysPresent,totalDays:form.totalDays,
-      amount:Number(form.amount),salaryDate:form.salaryDate,
-      dueDate:form.dueDate,notes:form.notes,category:form.category,
-      month,year,status:"Pending",createdAt:TODAY,paidDate:null,
-      paidBy:null,txRef:null,
-    };
-    setSalaryRecords(p=>[rec,...p]);
+    try{
+      const res=await api.post("/payroll/salary-records",{
+        name:form.name,designation:form.designation,phone:form.phone,
+        bank_name:form.bankName,account_no:form.accountNo,ifsc:form.ifsc,
+        days_present:form.daysPresent,total_days:form.totalDays,
+        amount:Number(form.amount),salary_date:form.salaryDate,
+        due_date:form.dueDate,notes:form.notes,category:form.category,
+        month_num:month,year_num:year,
+      });
+      const d=res.data?.data;
+      if(d){
+        const rec={
+          id:d.id,name:d.name,designation:d.designation,phone:d.phone,
+          bankName:d.bank_name,accountNo:d.account_no,ifsc:d.ifsc,
+          daysPresent:d.days_present,totalDays:d.total_days,
+          amount:Number(d.amount),salaryDate:d.salary_date?d.salary_date.split("T")[0]:"",
+          dueDate:d.due_date?d.due_date.split("T")[0]:"",notes:d.notes,category:d.category,
+          month:d.month_num,year:d.year_num,status:d.status,
+          createdAt:d.created_at,paidDate:d.paid_date,paidBy:d.paid_by,txRef:d.tx_ref,
+        };
+        setSalaryRecords(p=>[rec,...p]);
+      }
+    }catch(err){console.error("Create salary:",err);}
     setForm(blank);setShowForm(false);
   };
 
@@ -1145,7 +1107,10 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
   const overdue=allRecs.filter(r=>r.status==="Pending"&&daysDiff2(r.dueDate)<0).length;
   const dueSoon=allRecs.filter(r=>r.status==="Pending"&&daysDiff2(r.dueDate)>=0&&daysDiff2(r.dueDate)<=7).length;
 
-  const markPaid=(rec)=>{
+  const markPaid=async(rec)=>{
+    try{
+      await api.patch("/payroll/salary-records/"+rec.id,{status:"Paid",paid_date:payForm.paidDate,paid_by:payForm.paidBy,tx_ref:payForm.txRef});
+    }catch(err){console.error("Mark paid:",err);}
     setSalaryRecords(p=>p.map(r=>r.id===rec.id?{...r,status:"Paid",paidDate:payForm.paidDate,paidBy:payForm.paidBy,txRef:payForm.txRef}:r));
     setMarkPayModal(null);
   };
@@ -1293,43 +1258,63 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
 
 // ── MOBILE PUNCH IN/OUT ───────────────────────────────────────────
 function MobilePunchTab(){
-  const [punchState,setPunchState]=useState("out"); // out | in | confirming-in | confirming-out
+  const [punchState,setPunchState]=useState("out");
   const [selProject,setSelProject]=useState("");
   const [location,setLocation]=useState(null);
   const [locLoading,setLocLoading]=useState(false);
-  const [punchLog,setPunchLog]=useState([
-    {id:1,name:"Vijay Sahu",action:"IN", project:"Shubham & NK 623",time:"08:32 AM",date:"16 Mar",lat:21.2514,lng:81.6296,location:"Site Office, Tatibandh"},
-    {id:2,name:"Niranjan",action:"IN", project:"Shubham & NK 623",time:"08:45 AM",date:"16 Mar",lat:21.2514,lng:81.6296,location:"Site Office, Tatibandh"},
-    {id:3,name:"Ramesh",action:"IN", project:"Esther Risali",time:"09:02 AM",date:"16 Mar",lat:22.0797,lng:82.1391,location:"Bilaspur Site"},
-    {id:4,name:"Vijay Sahu",action:"OUT",project:"Shubham & NK 623",time:"06:15 PM",date:"15 Mar",lat:21.2514,lng:81.6296,location:"Site Office, Tatibandh"},
-  ]);
-  const [workerName,setWorkerName]=useState("Vijay Sahu");
+  const [punchLog,setPunchLog]=useState([]);
+  const [workerName,setWorkerName]=useState("");
   const [punchTime,setPunchTime]=useState(null);
+
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const res=await api.get("/payroll/punch-logs");
+        setPunchLog((res.data?.data||[]).map(p=>{
+          const t=p.punch_time?new Date(p.punch_time):new Date();
+          return{id:p.id,name:p.name,action:p.action,project:p.project||"",
+            time:t.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true}),
+            date:t.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+            lat:p.lat,lng:p.lng,location:p.location||""};
+        }));
+      }catch(err){console.error(err);}
+    })();
+  },[]);
+
+  useEffect(()=>{
+    const allW=[...MONTHLY_STAFF.map(e=>e.name),...DAILY_WORKERS.map(w=>w.name)];
+    if(allW.length>0&&!workerName) setWorkerName(allW[0]);
+  },[workerName]);
 
   const getLocation=()=>{
     setLocLoading(true);
-    // Simulate GPS — in real app use navigator.geolocation.getCurrentPosition
-    setTimeout(()=>{
-      setLocation({lat:21.2514,lng:81.6296,address:"Site Office, Tatibandh, Raipur"});
-      setLocLoading(false);
-    },1500);
+    if(navigator.geolocation){
+      navigator.geolocation.getCurrentPosition(
+        pos=>{setLocation({lat:pos.coords.latitude,lng:pos.coords.longitude,address:`${pos.coords.latitude.toFixed(4)}°N, ${pos.coords.longitude.toFixed(4)}°E`});setLocLoading(false);},
+        ()=>{setLocation({lat:0,lng:0,address:"Location permission denied"});setLocLoading(false);},
+        {timeout:10000}
+      );
+    }else{setLocation({lat:0,lng:0,address:"GPS not available"});setLocLoading(false);}
   };
 
-  const doPunch=(action)=>{
+  const doPunch=async(action)=>{
     const now=new Date();
     const timeStr=now.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});
     const entry={
       id:Date.now(),name:workerName,action,project:selProject||"Unknown",
-      time:timeStr,date:"16 Mar",
+      time:timeStr,date:now.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
       lat:location?.lat||0,lng:location?.lng||0,
       location:location?.address||"Location not captured",
     };
     setPunchLog(p=>[entry,...p]);
     setPunchState(action==="IN"?"in":"out");
     setPunchTime(timeStr);
+    try{
+      await api.post("/payroll/punch-logs",{name:workerName,action,project:selProject||null,punch_time:now.toISOString(),lat:location?.lat||null,lng:location?.lng||null,location:location?.address||null});
+    }catch(err){console.error("Punch:",err);}
   };
 
-  const ALL_WORKERS=[...MONTHLY_STAFF.map(e=>e.name),...DAILY_WORKERS.map(w=>w.name),"Sunny"];
+  const ALL_WORKERS=[...MONTHLY_STAFF.map(e=>e.name),...DAILY_WORKERS.map(w=>w.name)];
 
   return(
     <div style={{maxWidth:480,margin:"0 auto"}}>
@@ -1339,7 +1324,7 @@ function MobilePunchTab(){
         <div style={{fontSize:28,fontWeight:800,color:"white",letterSpacing:"-1px"}}>
           {new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true})}
         </div>
-        <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",marginTop:2}}>Monday, 16 March 2026</div>
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.5)",marginTop:2}}>{new Date().toLocaleDateString("en-IN",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}</div>
       </div>
 
       {/* Worker select */}
@@ -1428,7 +1413,7 @@ function MobilePunchTab(){
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
         <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <span style={{fontSize:12,fontWeight:700,color:T.t1}}>Today's Punch Log</span>
-          <span style={{fontSize:10.5,color:T.t4}}>{punchLog.filter(p=>p.date==="16 Mar").length} entries</span>
+          <span style={{fontSize:10.5,color:T.t4}}>{punchLog.length} entries</span>
         </div>
         {punchLog.slice(0,6).map((p,i)=>(
           <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderBottom:i<punchLog.length-1?`1px solid ${T.b1}`:"none"}}>
@@ -1457,12 +1442,15 @@ function MobilePunchTab(){
 }
 
 // ── PAYROLL SETTINGS SECTION ──────────────────────────────────────
-function PayrollSettingsTab({defaultDueDays,setDefaultDueDays}){
+function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWorkingDays}){
   const [saved,setSaved]=useState(false);
   const [localDays,setLocalDays]=useState(defaultDueDays);
+  const [localWorkDays,setLocalWorkDays]=useState(workingDays);
 
-  const save=()=>{
+  const save=async()=>{
     setDefaultDueDays(Number(localDays));
+    if(setWorkingDays) setWorkingDays(Number(localWorkDays));
+    try{await api.put("/payroll/settings",{default_due_days:Number(localDays),working_days:Number(localWorkDays)});}catch(err){console.error("Save settings:",err);}
     setSaved(true);
     setTimeout(()=>setSaved(false),2000);
   };
@@ -1520,9 +1508,9 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays}){
             <label style={{fontSize:11,fontWeight:700,color:T.t1,display:"block",marginBottom:4}}>Working Days Per Month</label>
             <div style={{fontSize:12,color:T.t3,marginBottom:6}}>Used to calculate pro-rata attendance-based salaries</div>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <input type="number" min={20} max={31} defaultValue={WORKING_DAYS}
+              <input type="number" min={20} max={31} value={localWorkDays} onChange={e=>setLocalWorkDays(e.target.value)}
                 style={{width:70,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:600,color:T.t1,outline:"none",textAlign:"center",fontFamily:"inherit"}}/>
-              <span style={{fontSize:12,color:T.t3}}>days (current: {WORKING_DAYS} days)</span>
+              <span style={{fontSize:12,color:T.t3}}>days (current: {workingDays} days)</span>
             </div>
           </div>
 
@@ -1562,32 +1550,125 @@ function PayrollModule(){
   const [tab,setTab]=useState("monthly-salary");
   const [month,setMonth]=useState(CUR_MONTH);
   const [year,setYear]=useState(CUR_YEAR);
-  const [monthlyAtt,setMonthlyAtt]=useState(initMonthlyAtt);
-  const [dailyAtt,setDailyAtt]=useState(initDailyAtt);
+  const [loading,setLoading]=useState(true);
+  const [staff,setStaff]=useState([]);
+  const [workers,setWorkers]=useState([]);
+  const [advances,setAdvances]=useState([]);
+  const [monthlyAtt,setMonthlyAtt]=useState({});
+  const [dailyAtt,setDailyAtt]=useState({});
   const [selSlipEmp,setSelSlipEmp]=useState(null);
   const [selSlipPayType,setSelSlipPayType]=useState("fixed");
   const [selProject,setSelProject]=useState("All");
-  // New state
-  const [salaryRecords,setSalaryRecords]=useState([
-    {id:"SAL-001",name:"Sunny",designation:"Contract Worker",phone:"",bankName:"SBI",accountNo:"12345XXXXX",ifsc:"SBIN0001234",daysPresent:"NA",totalDays:26,amount:20000,salaryDate:"2026-03-30",dueDate:"2026-04-09",notes:"March salary",category:"Other",month:2,year:2026,status:"Pending",createdAt:"2026-03-16",paidDate:null,paidBy:null,txRef:null},
-    {id:"SAL-002",name:"Mohan Bai",designation:"Cleaning Worker",phone:"9XXXXXXXX1",bankName:"BOI",accountNo:"67890XXXXX",ifsc:"BKID0001234",daysPresent:"22",totalDays:26,amount:8800,salaryDate:"2026-03-30",dueDate:"2026-04-10",notes:"March wages",category:"Daily Worker",month:2,year:2026,status:"Pending",createdAt:"2026-03-10",paidDate:null,paidBy:null,txRef:null},
-    {id:"SAL-003",name:"Ramu Mistri",designation:"Mason",phone:"9XXXXXXXX2",bankName:"PNB",accountNo:"11111XXXXX",ifsc:"PUNB0001234",daysPresent:"20",totalDays:26,amount:14000,salaryDate:"2026-02-28",dueDate:"2026-03-10",notes:"Feb salary",category:"Daily Worker",month:1,year:2026,status:"Paid",createdAt:"2026-02-28",paidDate:"2026-03-09",paidBy:"Prafull",txRef:"UTR2026XXXXX"},
-  ]);
+  const [salaryRecords,setSalaryRecords]=useState([]);
   const [defaultDueDays,setDefaultDueDays]=useState(10);
+  const [workingDays,setWorkingDays]=useState(26);
+
+  // Map API staff row to frontend format
+  const mapStaff=s=>({
+    id:s.id,name:s.name,role:s.role||"",dept:s.dept||"",
+    paymentType:s.payment_type||"fixed",
+    basicSalary:Number(s.basic_salary)||0,hra:Number(s.hra)||0,
+    conveyance:Number(s.conveyance)||0,medical:Number(s.medical)||0,
+    phone:Number(s.phone_allowance)||0,
+    bankAcc:s.bank_acc||"",ifsc:s.ifsc||"",pan:s.pan||"",
+    joinDate:s.join_date?s.join_date.split("T")[0]:"",project:s.project||"",photo:s.photo||"",
+  });
+  const mapWorker=w=>({
+    id:w.id,name:w.name,trade:w.trade||"",
+    ratePerDay:Number(w.rate_per_day)||0,rateOT:Number(w.rate_ot)||0,
+    project:w.project||"",contractor:w.contractor||"Self",phone:w.phone||"",
+  });
+  const mapSalaryRec=d=>({
+    id:d.id,name:d.name,designation:d.designation,phone:d.phone,
+    bankName:d.bank_name,accountNo:d.account_no,ifsc:d.ifsc,
+    daysPresent:d.days_present,totalDays:d.total_days,
+    amount:Number(d.amount),
+    salaryDate:d.salary_date?d.salary_date.split("T")[0]:"",
+    dueDate:d.due_date?d.due_date.split("T")[0]:"",
+    notes:d.notes,category:d.category,
+    month:d.month_num,year:d.year_num,status:d.status,
+    createdAt:d.created_at,paidDate:d.paid_date?d.paid_date.split("T")[0]:null,
+    paidBy:d.paid_by,txRef:d.tx_ref,
+  });
+  const mapAdvance=a=>({
+    id:a.id,empId:a.emp_id,name:a.name,
+    amount:Number(a.amount),
+    date:a.date?a.date.split("T")[0]:"",
+    reason:a.reason,status:a.status,
+  });
+
+  const loadAll=useCallback(async()=>{
+    try{
+      const [staffRes,workerRes,advRes,salRes,settRes,projRes]=await Promise.all([
+        api.get("/payroll/staff"),
+        api.get("/payroll/workers"),
+        api.get("/payroll/advances"),
+        api.get("/payroll/salary-records"),
+        api.get("/payroll/settings"),
+        api.get("/team-schedule/sites"),
+      ]);
+      const staffData=(staffRes.data?.data||[]).map(mapStaff);
+      const workerData=(workerRes.data?.data||[]).map(mapWorker);
+      MONTHLY_STAFF=staffData;setStaff(staffData);
+      DAILY_WORKERS=workerData;setWorkers(workerData);
+      ADVANCE_DATA=(advRes.data?.data||[]).map(mapAdvance);
+      setAdvances(ADVANCE_DATA);
+      setSalaryRecords((salRes.data?.data||[]).map(mapSalaryRec));
+      const sett=settRes.data?.data||{};
+      setDefaultDueDays(sett.default_due_days||10);
+      setWorkingDays(sett.working_days||26);
+      PROJECTS=(projRes.data?.data||[]).map(p=>p.name);
+    }catch(err){console.error("Load payroll:",err);}
+    finally{setLoading(false);}
+  },[]);
+
+  // Load attendance when month/year changes
+  const loadAttendance=useCallback(async()=>{
+    try{
+      const [mRes,dRes]=await Promise.all([
+        api.get("/payroll/attendance/monthly?month="+month+"&year="+year),
+        api.get("/payroll/attendance/daily?month="+month+"&year="+year),
+      ]);
+      setMonthlyAtt(mRes.data?.data||{});
+      setDailyAtt(dRes.data?.data||{});
+    }catch(err){console.error("Load attendance:",err);}
+  },[month,year]);
+
+  useEffect(()=>{loadAll();},[loadAll]);
+  useEffect(()=>{loadAttendance();},[loadAttendance]);
+
+  // Attendance API callbacks
+  const onMonthlyAttChange=(empId,day,status)=>{
+    const m=month+1;const dateStr=`${year}-${String(m).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    api.post("/payroll/attendance/monthly",{staff_id:empId,date:dateStr,status}).catch(err=>console.error(err));
+  };
+  const onDailyAttChange=(wId,day,status,ot)=>{
+    const m=month+1;const dateStr=`${year}-${String(m).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+    api.post("/payroll/attendance/daily",{worker_id:wId,date:dateStr,status,ot_hours:ot||0}).catch(err=>console.error(err));
+  };
+
+  if(loading) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",background:T.bg}}>
+      <div style={{textAlign:"center",color:T.t3}}>
+        <div style={{fontSize:14,fontWeight:600}}>Loading Payroll...</div>
+      </div>
+    </div>
+  );
 
   // Summary KPIs
-  const totalMonthlyNet=MONTHLY_STAFF.reduce((s,emp)=>{
+  const WORKING_DAYS=workingDays;
+  const totalMonthlyNet=staff.reduce((s,emp)=>{
     const days=monthlyAtt[emp.id]||{};
     const P=Object.values(days).filter(v=>v==="P").length;
     const H=Object.values(days).filter(v=>v==="H").length;
     const eff=P+(H*0.5);
-    const perDay=(emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone)/WORKING_DAYS;
+    const perDay=(emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone)/(WORKING_DAYS||26);
     const gross=Math.round(perDay*eff);
     const pf=Math.round(emp.basicSalary*0.12);
     return s+(gross-pf);
   },0);
 
-  const totalDailyPayable=DAILY_WORKERS.reduce((s,w)=>{
+  const totalDailyPayable=workers.reduce((s,w)=>{
     let total=0;
     Object.entries(dailyAtt[w.id]||{}).forEach(([d,v])=>{
       if(!v) return;
@@ -1597,7 +1678,7 @@ function PayrollModule(){
     return s+total;
   },0);
 
-  const pendingAdvances=ADVANCE_DATA.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
+  const pendingAdvances=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
 
   const TABS=[
     {id:"monthly-salary",  l:"Monthly Salary",    sub:"Staff payroll"},
@@ -1613,9 +1694,9 @@ function PayrollModule(){
   const manualPending=salaryRecords.filter(r=>r.status==="Pending").reduce((s,r)=>s+r.amount,0);
 
   const TILES=[
-    {l:"Monthly Staff",        v:MONTHLY_STAFF.length,        sub:"Permanent employees",               c:T.blu},
+    {l:"Monthly Staff",        v:staff.length,        sub:"Permanent employees",               c:T.blu},
     {l:"Monthly Net Payroll",  v:`₹${fmt(totalMonthlyNet)}`,  sub:`${MONTHS[month]} ${year}`,          c:T.grn},
-    {l:"Daily Workers",        v:DAILY_WORKERS.length,        sub:`₹${fmt(totalDailyPayable)} this month`, c:T.pur},
+    {l:"Daily Workers",        v:workers.length,        sub:`₹${fmt(totalDailyPayable)} this month`, c:T.pur},
     {l:"Salary Pending",       v:`₹${fmt(manualPending)}`,    sub:`${salaryRecords.filter(r=>r.status==="Pending").length} entries unpaid`, c:manualPending>0?T.amb:T.grn},
   ];
 
@@ -1665,13 +1746,13 @@ function PayrollModule(){
       {/* Content */}
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
         {tab==="monthly-salary"&&(
-          <MonthlySalaryTab staff={MONTHLY_STAFF} att={monthlyAtt} month={month} year={year} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}}/>
+          <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}}/>
         )}
         {tab==="monthly-att"&&(
-          <MonthlyAttGrid staff={MONTHLY_STAFF} att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year}/>
+          <MonthlyAttGrid staff={staff} att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange}/>
         )}
         {tab==="daily-wages"&&(
-          <DailyWagesTab workers={DAILY_WORKERS} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject}/>
+          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange}/>
         )}
         {tab==="manual-salary"&&(
           <ManualSalaryTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} defaultDueDays={defaultDueDays} month={month} year={year}/>
@@ -1680,14 +1761,14 @@ function PayrollModule(){
           <SalaryLedgerTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} month={month} year={year}/>
         )}
         {tab==="mobile-punch"&&<MobilePunchTab/>}
-        {tab==="advances"&&<AdvancesTab/>}
+        {tab==="advances"&&<AdvancesTab advances={advances} setAdvances={setAdvances}/>}
         {tab==="pay-settings"&&(
-          <PayrollSettingsTab defaultDueDays={defaultDueDays} setDefaultDueDays={setDefaultDueDays}/>
+          <PayrollSettingsTab defaultDueDays={defaultDueDays} setDefaultDueDays={setDefaultDueDays} workingDays={workingDays} setWorkingDays={setWorkingDays}/>
         )}
       </div>
 
       {/* Salary slip modal */}
-      {selSlipEmp&&<SalarySlipModal emp={selSlipEmp} att={monthlyAtt} month={month} year={year} onClose={()=>setSelSlipEmp(null)} paymentType={selSlipPayType}/>}
+      {selSlipEmp&&<SalarySlipModal emp={selSlipEmp} att={monthlyAtt} month={month} year={year} onClose={()=>setSelSlipEmp(null)} paymentType={selSlipPayType} workingDays={workingDays}/>}
 
       <style>{`
         *{box-sizing:border-box}

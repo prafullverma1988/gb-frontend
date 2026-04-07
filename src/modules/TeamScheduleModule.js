@@ -1,4 +1,5 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import api from "../config/api";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -55,23 +56,12 @@ const T={
 };
 const fmtN=n=>n==null?"—":Number(n).toLocaleString("en-IN");
 
-// ── CONSTANTS ──────────────────────────────────────────────────
-const TEAM_MEMBERS=[
-  {id:"T01",name:"Vijay Sahu",  role:"Project Manager", dept:"Management",color:"#7C3AED",avatar:"VS"},
-  {id:"T02",name:"Niranjan",    role:"Site Engineer",   dept:"Civil",     color:"#2563EB",avatar:"NR"},
-  {id:"T03",name:"Harsh Sahu",  role:"Design Engineer", dept:"Design",    color:"#059669",avatar:"HS"},
-  {id:"T04",name:"Priyanka",    role:"Elec. Engineer",  dept:"Electrical",color:"#D97706",avatar:"PK"},
-  {id:"T05",name:"Ramesh",      role:"Supervisor",      dept:"Civil",     color:"#0891B2",avatar:"RM"},
-  {id:"T06",name:"Rajesh Elec.",role:"Elec. Foreman",   dept:"Electrical",color:"#EA580C",avatar:"RE"},
-];
-const SITES=[
-  {id:"S01",name:"Shubham & NK 623",  city:"Raipur",  color:"#2563EB"},
-  {id:"S02",name:"Tikendra Residence",city:"Raipur",  color:"#7C3AED"},
-  {id:"S03",name:"Esther Risali",     city:"Bilaspur",color:"#059669"},
-  {id:"S04",name:"Amarendra Villa",   city:"Raipur",  color:"#D97706"},
-  {id:"S05",name:"Neha Sagar Office", city:"Durg",    color:"#DC2626"},
-  {id:"S06",name:"Central Office",    city:"Raipur",  color:"#64748B"},
-];
+// ── CONSTANTS (loaded from API, defaults empty) ──────────────
+// These will be populated by the main module via props/context
+let TEAM_MEMBERS=[];
+let SITES=[];
+const MEMBER_COLORS=["#7C3AED","#2563EB","#059669","#D97706","#0891B2","#EA580C","#DC2626","#6366F1","#0D9488","#BE185D"];
+const SITE_COLORS=["#2563EB","#7C3AED","#059669","#D97706","#DC2626","#64748B","#0891B2","#6366F1"];
 const PRIORITY_META={
   "High":  {c:T.red, bg:T.redL, brd:T.redM},
   "Medium":{c:T.amb, bg:T.ambL, brd:T.ambM},
@@ -96,28 +86,7 @@ const daysDiff=(a,b)=>Math.round((new Date(b)-new Date(a))/(1000*86400));
 const isOverdue=item=>item.dueDate&&item.status!=="Done"&&item.dueDate<TODAY;
 const isDueSoon=item=>item.dueDate&&item.status!=="Done"&&item.dueDate>=TODAY&&daysDiff(TODAY,item.dueDate)<=3;
 
-// ── INITIAL WORK ITEMS DATA ────────────────────────────────────
-const INIT_ITEMS=[
-  // Tasks
-  {id:"W001",type:"Task",title:"GF Slab Shuttering Inspection",assignee:"T02",site:"S01",priority:"High",status:"In Progress",startDate:"2026-03-14",dueDate:"2026-03-17",tags:["Civil","Slab"],description:"Check all shuttering alignment before concrete pour. Refer drawing D-12.",createdBy:"T01",createdAt:"2026-03-13",completedAt:null},
-  {id:"W002",type:"Task",title:"Submit BOQ for Amarendra Villa Phase 2",assignee:"T01",site:"S04",priority:"High",status:"Todo",startDate:"2026-03-16",dueDate:"2026-03-20",tags:["BOQ","Design"],description:"Prepare detailed BOQ for Phase 2 — include all finishing items.",createdBy:"T01",createdAt:"2026-03-15",completedAt:null},
-  {id:"W003",type:"Task",title:"Electrical Conduit Layout Drawing",assignee:"T03",site:"S05",priority:"Medium",status:"In Progress",startDate:"2026-03-12",dueDate:"2026-03-18",tags:["Design","Electrical"],description:"Prepare conduit layout for all floors. Coordinate with Priyanka.",createdBy:"T01",createdAt:"2026-03-11",completedAt:null},
-  {id:"W004",type:"Task",title:"Brickwork 1F Completion",assignee:"T02",site:"S02",priority:"Medium",status:"Todo",startDate:"2026-03-18",dueDate:"2026-03-28",tags:["Civil","Brickwork"],description:"Complete all 1F internal partition walls. Target: 1200 bricks/day.",createdBy:"T01",createdAt:"2026-03-15",completedAt:null},
-  {id:"W005",type:"Task",title:"Site Safety Audit — Esther Risali",assignee:"T05",site:"S03",priority:"High",status:"Todo",startDate:"2026-03-16",dueDate:"2026-03-16",tags:["Safety"],description:"Monthly safety audit. Check helmets, scaffolding, PPE compliance.",createdBy:"T01",createdAt:"2026-03-14",completedAt:null},
-  {id:"W006",type:"Task",title:"Plumbing Rough-In Neha Office GF",assignee:"T04",site:"S05",priority:"Medium",status:"Done",startDate:"2026-03-08",dueDate:"2026-03-14",tags:["Plumbing","Electrical"],description:"Complete GF plumbing rough-in before plastering starts.",createdBy:"T01",createdAt:"2026-03-07",completedAt:"2026-03-13"},
-  {id:"W007",type:"Task",title:"Prepare Monthly Progress Report",assignee:"T01",site:"S06",priority:"Low",status:"Todo",startDate:"2026-03-28",dueDate:"2026-03-31",tags:["Report"],description:"Compile all site progress data for March month-end report.",createdBy:"T01",createdAt:"2026-03-15",completedAt:null},
-  {id:"W008",type:"Task",title:"Column Casting Alignment Check",assignee:"T02",site:"S01",priority:"High",status:"Done",startDate:"2026-03-10",dueDate:"2026-03-12",tags:["Civil","Structure"],description:"Verify all column positions before concreting.",createdBy:"T01",createdAt:"2026-03-09",completedAt:"2026-03-12"},
-  // Issues
-  {id:"W009",type:"Issue",title:"Water seepage in 1F slab — Shubham site",assignee:"T02",site:"S01",priority:"High",status:"In Progress",startDate:"2026-03-15",dueDate:"2026-03-18",tags:["Civil","Urgent"],description:"Client reported water seepage at 2 spots in 1F slab. Site engineer to inspect and fix. May need waterproofing treatment.",createdBy:"T05",createdAt:"2026-03-15",completedAt:null},
-  {id:"W010",type:"Issue",title:"Wrong tile batch delivered — Esther",assignee:"T05",site:"S03",priority:"High",status:"Todo",startDate:"2026-03-16",dueDate:"2026-03-17",tags:["Procurement","Tiles"],description:"600×600 tiles delivered instead of 800×800. Contact Somany and arrange replacement. Hold tiling work.",createdBy:"T03",createdAt:"2026-03-16",completedAt:null},
-  {id:"W011",type:"Issue",title:"Electrical short circuit risk — Neha Office",assignee:"T04",site:"S05",priority:"High",status:"Blocked",startDate:"2026-03-14",dueDate:"2026-03-15",tags:["Electrical","Safety"],description:"Exposed wiring found near water pipe. Work stopped. Needs immediate re-routing. Rajesh to assist.",createdBy:"T04",createdAt:"2026-03-14",completedAt:null},
-  {id:"W012",type:"Issue",title:"Labour dispute — Tikendra site",assignee:"T01",site:"S02",priority:"Medium",status:"Done",startDate:"2026-03-12",dueDate:"2026-03-13",tags:["Labour"],description:"Mason team demanding daily wage increase. Resolved with ₹50/day increment agreement.",createdBy:"T05",createdAt:"2026-03-12",completedAt:"2026-03-13"},
-  // Todos
-  {id:"W013",type:"Todo",title:"Order cement for Amarendra foundation",assignee:"T01",site:"S04",priority:"Medium",status:"Todo",startDate:"2026-03-16",dueDate:"2026-03-17",tags:["Procurement"],description:"Order 200 bags OPC 53 for foundation work starting 18th.",createdBy:"T01",createdAt:"2026-03-16",completedAt:null},
-  {id:"W014",type:"Todo",title:"Update project photos on client portal",assignee:"T03",site:"S01",priority:"Low",status:"Done",startDate:"2026-03-14",dueDate:"2026-03-15",tags:["Documentation"],description:"Upload latest site photos to client WhatsApp group and portal.",createdBy:"T01",createdAt:"2026-03-13",completedAt:"2026-03-15"},
-  {id:"W015",type:"Todo",title:"Renew site safety insurance",assignee:"T01",site:"S06",priority:"High",status:"Todo",startDate:"2026-03-16",dueDate:"2026-03-20",tags:["Legal","Insurance"],description:"Site insurance expires 25 March. Contact Bajaj Allianz for renewal.",createdBy:"T01",createdAt:"2026-03-15",completedAt:null},
-  {id:"W016",type:"Todo",title:"Steel delivery coordination",assignee:"T05",site:"S04",priority:"Medium",status:"In Progress",startDate:"2026-03-16",dueDate:"2026-03-19",tags:["Procurement"],description:"Coordinate with Tata Steel dealer for TMT delivery. Need 2 MT 12mm.",createdBy:"T02",createdAt:"2026-03-15",completedAt:null},
-];
+// Data loaded from API — no hardcoded work items
 
 // ── NAV ──────────────────────────────────────────────────────
 const NAV=[
@@ -197,7 +166,7 @@ function WorkCard({item,onOpen,onStatusChange,compact=false}){
       {/* Status selector inline */}
       {!compact&&<div style={{display:"flex",gap:4,marginTop:8,flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
         {Object.keys(STATUS_META).map(s=>(
-          <button key={s} onClick={()=>onStatusChange(item.id,s)}
+          <button key={s} onClick={()=>onStatusChange(item.id,{status:s})}
             style={{padding:"2px 8px",borderRadius:20,border:`1px solid ${item.status===s?STATUS_META[s].brd:T.b1}`,background:item.status===s?STATUS_META[s].bg:"none",color:item.status===s?STATUS_META[s].c:T.t4,fontSize:9.5,fontWeight:item.status===s?700:400,cursor:"pointer",transition:"all .1s"}}>
             {s}
           </button>
@@ -212,9 +181,8 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete}){
   const [editMode,setEditMode]=useState(false);
   const [form,setForm]=useState({...item});
   const [comment,setComment]=useState("");
-  const [comments,setComments]=useState([
-    {id:1,user:"Prafull",text:"Please prioritize this before end of day.",date:"15 Mar 10:30"},
-  ]);
+  const [comments,setComments]=useState([]);
+  const [cLoading,setCLoading]=useState(false);
   const member=TEAM_MEMBERS.find(m=>m.id===item.assignee);
   const site=SITES.find(s=>s.id===item.site);
   const sm=STATUS_META[item.status]||STATUS_META["Todo"];
@@ -222,12 +190,26 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete}){
   const typeC=TYPES[item.type]||TYPES["Task"];
   const overdue=isOverdue(item);
 
+  useEffect(()=>{
+    (async()=>{
+      try{
+        const res=await api.get("/team-schedule/items/"+item.id);
+        const d=res.data?.data;
+        if(d?.comments) setComments(d.comments.map(c=>({id:c.id,user:c.user_name||"User",text:c.text,date:fmtDate(c.created_at)})));
+      }catch(err){console.error("Load comments:",err);}
+    })();
+  },[item.id]);
+
   const upd=k=>e=>setForm(p=>({...p,[k]:e.target.value}));
 
-  const addComment=()=>{
+  const addComment=async()=>{
     if(!comment.trim()) return;
-    setComments(p=>[...p,{id:Date.now(),user:"Prafull",text:comment,date:"Today"}]);
-    setComment("");
+    try{
+      const res=await api.post("/team-schedule/items/"+item.id+"/comments",{text:comment.trim()});
+      const c=res.data?.data;
+      if(c) setComments(p=>[...p,{id:c.id,user:c.user_name||"You",text:c.text,date:"Just now"}]);
+      setComment("");
+    }catch(err){console.error("Add comment:",err);}
   };
 
   const save=()=>{
@@ -310,7 +292,7 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete}){
           </div>
         ):(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-            {[{l:"Assigned To",v:member?.name||"—"},{l:"Site",v:site?.name||"—"},{l:"Start Date",v:fmtDate(item.startDate)},{l:"Due Date",v:fmtDate(item.dueDate)},{l:"Created By",v:item.createdBy==="T01"?"Prafull":TEAM_MEMBERS.find(m=>m.id===item.createdBy)?.name||"—"},{l:"Created",v:fmtDate(item.createdAt)}].map(({l,v})=>(
+            {[{l:"Assigned To",v:member?.name||"—"},{l:"Site",v:site?.name||"—"},{l:"Start Date",v:fmtDate(item.startDate)},{l:"Due Date",v:fmtDate(item.dueDate)},{l:"Created By",v:TEAM_MEMBERS.find(m=>m.id===item.createdBy)?.name||"—"},{l:"Created",v:fmtDate(item.createdAt)}].map(({l,v})=>(
               <div key={l} style={{padding:"8px 11px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`}}>
                 <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{l}</div>
                 <div style={{fontSize:12.5,fontWeight:500,color:T.t1}}>{v}</div>
@@ -388,8 +370,8 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete}){
 function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",defaultSite=""}){
   const [form,setForm]=useState({
     type:defaultType,title:"",description:"",
-    assignee:defaultAssignee||TEAM_MEMBERS[0].id,
-    site:defaultSite||SITES[0].id,
+    assignee:defaultAssignee||TEAM_MEMBERS[0]?.id||"",
+    site:defaultSite||SITES[0]?.id||"",
     priority:"Medium",status:"Todo",
     startDate:TODAY,dueDate:"",tags:"",
   });
@@ -512,13 +494,15 @@ function CreateWorkModal({onClose,onSave,defaultType="Task",defaultAssignee="",d
 function ScheduleGanttView({items}){
   const [hov,setHov]=useState(null);
   const days=[];
-  const start=new Date("2026-03-01");
-  for(let i=0;i<31;i++){const d=new Date(start);d.setDate(d.getDate()+i);days.push(d);}
+  const now=new Date();const start=new Date(now.getFullYear(),now.getMonth(),1);
+  const daysInMonth=new Date(now.getFullYear(),now.getMonth()+1,0).getDate();
+  for(let i=0;i<daysInMonth;i++){const d=new Date(start);d.setDate(d.getDate()+i);days.push(d);}
+  const monthStart=start.toISOString().split("T")[0];
   const dateToX=dateStr=>{
     if(!dateStr) return null;
     const d=new Date(dateStr);
-    const diff=daysDiff("2026-03-01",dateStr);
-    if(diff<0||diff>30) return null;
+    const diff=daysDiff(monthStart,dateStr);
+    if(diff<0||diff>=daysInMonth) return null;
     return 180+diff*36;
   };
   const DAY_W=36;
@@ -603,7 +587,7 @@ function ScheduleGanttView({items}){
 
 // ── MEMBER VIEW ────────────────────────────────────────────────
 function MemberView({items,onOpen,onStatusChange,onCreateFor}){
-  const [expanded,setExpanded]=useState(TEAM_MEMBERS.reduce((a,m)=>({...a,[m.id]:true}),{}));
+  const [expanded,setExpanded]=useState({});
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -612,7 +596,7 @@ function MemberView({items,onOpen,onStatusChange,onCreateFor}){
         const open=memberItems.filter(i=>i.status!=="Done").length;
         const done=memberItems.filter(i=>i.status==="Done").length;
         const urgent=memberItems.filter(i=>(isOverdue(i)||isDueSoon(i))&&i.status!=="Done").length;
-        const isExp=expanded[member.id];
+        const isExp=expanded[member.id]!==false;
 
         return(
           <div key={member.id} style={{background:T.surface,borderRadius:10,border:`1.5px solid ${T.b1}`,overflow:"hidden"}}>
@@ -673,7 +657,7 @@ function MemberView({items,onOpen,onStatusChange,onCreateFor}){
 
 // ── SITE VIEW ──────────────────────────────────────────────────
 function SiteView({items,onOpen,onStatusChange,onCreateFor}){
-  const [expanded,setExpanded]=useState(SITES.reduce((a,s)=>({...a,[s.id]:true}),{}));
+  const [expanded,setExpanded]=useState({});
 
   return(
     <div style={{display:"flex",flexDirection:"column",gap:10}}>
@@ -681,7 +665,7 @@ function SiteView({items,onOpen,onStatusChange,onCreateFor}){
         const siteItems=items.filter(i=>i.site===site.id);
         if(siteItems.length===0) return null;
         const issues=siteItems.filter(i=>i.type==="Issue"&&i.status!=="Done").length;
-        const isExp=expanded[site.id];
+        const isExp=expanded[site.id]!==false;
 
         return(
           <div key={site.id} style={{background:T.surface,borderRadius:10,border:`1.5px solid ${T.b1}`,overflow:"hidden"}}>
@@ -715,8 +699,9 @@ function SiteView({items,onOpen,onStatusChange,onCreateFor}){
 
 // ── MAIN TEAM SCHEDULE MODULE ──────────────────────────────────
 function TeamScheduleModule(){
-  const [items,setItems]=useState(INIT_ITEMS);
-  const [view,setView]=useState("board"); // board | member | site | gantt | list
+  const [items,setItems]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [view,setView]=useState("board");
   const [selItem,setSelItem]=useState(null);
   const [showCreate,setShowCreate]=useState(false);
   const [createDefaults,setCreateDefaults]=useState({type:"Task",assignee:"",site:""});
@@ -726,11 +711,46 @@ function TeamScheduleModule(){
   const [fSite,setFSite]=useState("All");
   const [fType,setFType]=useState("All");
   const [fPriority,setFPriority]=useState("All");
-  const [fDateFrom,setFDateFrom]=useState("2026-03-01");
-  const [fDateTo,setFDateTo]=useState("2026-03-31");
-  const [fStatus,setFStatus]=useState("Active"); // Active | All | Done
+  const [fDateFrom,setFDateFrom]=useState("");
+  const [fDateTo,setFDateTo]=useState("");
+  const [fStatus,setFStatus]=useState("Active");
   const [search,setSearch]=useState("");
   const [showFilters,setShowFilters]=useState(false);
+
+  // ── Data loading ─────────────────────────────────────────
+  const mapItem=i=>({
+    id:i.id, type:i.type||"Task", title:i.title, description:i.description||"",
+    assignee:i.assignee, site:i.site_id, priority:i.priority||"Medium", status:i.status||"Todo",
+    startDate:i.start_date?i.start_date.split("T")[0]:"",
+    dueDate:i.due_date?i.due_date.split("T")[0]:"",
+    completedAt:i.completed_at?i.completed_at.split("T")[0]:null,
+    tags:i.tags||[], createdBy:i.created_by, createdAt:i.created_at,
+    assigneeName:i.assignee_name, siteName:i.site_name,
+  });
+
+  const loadAll=useCallback(async()=>{
+    try{
+      const [itemsRes,membersRes,sitesRes]=await Promise.all([
+        api.get("/team-schedule/items"),
+        api.get("/team-schedule/members"),
+        api.get("/team-schedule/sites"),
+      ]);
+      setItems((itemsRes.data?.data||[]).map(mapItem));
+
+      TEAM_MEMBERS=(membersRes.data?.data||[]).map((m,idx)=>({
+        id:m.id, name:m.name, role:m.role||"", dept:m.designation||"",
+        color:MEMBER_COLORS[idx%MEMBER_COLORS.length],
+      }));
+
+      SITES=(sitesRes.data?.data||[]).map((s,idx)=>({
+        id:s.id, name:s.name, city:s.city||"",
+        color:SITE_COLORS[idx%SITE_COLORS.length],
+      }));
+    }catch(err){console.error("Load team schedule:",err);}
+    finally{setLoading(false);}
+  },[]);
+
+  useEffect(()=>{loadAll();},[loadAll]);
 
   const filteredItems=useMemo(()=>items.filter(item=>{
     if(fMember!=="All"&&item.assignee!==fMember) return false;
@@ -747,25 +767,59 @@ function TeamScheduleModule(){
 
   const activeF=[fMember!=="All",fSite!=="All",fType!=="All",fPriority!=="All",fStatus!=="Active"].filter(Boolean).length;
 
-  const updateItem=(id,update)=>{
+  // ── CRUD operations ──────────────────────────────────────
+  const updateItem=async(id,update)=>{
     setItems(p=>p.map(i=>i.id===id?{...i,...update}:i));
     if(selItem?.id===id) setSelItem(p=>({...p,...update}));
+    try{
+      const payload={};
+      if(update.type!==undefined) payload.type=update.type;
+      if(update.title!==undefined) payload.title=update.title;
+      if(update.description!==undefined) payload.description=update.description;
+      if(update.assignee!==undefined) payload.assignee=update.assignee;
+      if(update.site!==undefined) payload.site_id=update.site;
+      if(update.priority!==undefined) payload.priority=update.priority;
+      if(update.status!==undefined) payload.status=update.status;
+      if(update.startDate!==undefined) payload.start_date=update.startDate||null;
+      if(update.dueDate!==undefined) payload.due_date=update.dueDate||null;
+      if(update.tags!==undefined) payload.tags=update.tags;
+      await api.patch("/team-schedule/items/"+id,payload);
+    }catch(err){console.error("Update item:",err);loadAll();}
   };
 
-  const addItem=(form)=>{
-    const newItem={
-      id:`W${String(items.length+1).padStart(3,"0")}`,
-      ...form,
-      id:`W${String(Date.now()).slice(-4)}`,
-      createdBy:"T01",createdAt:TODAY,completedAt:null,
-    };
-    setItems(p=>[newItem,...p]);
+  const addItem=async(form)=>{
+    try{
+      const res=await api.post("/team-schedule/items",{
+        type:form.type, title:form.title, description:form.description||null,
+        assignee:form.assignee||null, site_id:form.site||null,
+        priority:form.priority, status:form.status,
+        start_date:form.startDate||null, due_date:form.dueDate||null,
+        tags:form.tags||[],
+      });
+      const d=res.data?.data;
+      if(d) setItems(p=>[mapItem(d),...p]);
+    }catch(err){console.error("Add item:",err);}
+  };
+
+  const deleteItem=async(id)=>{
+    setItems(p=>p.filter(i=>i.id!==id));
+    setSelItem(null);
+    try{await api.del("/team-schedule/items/"+id);}
+    catch(err){console.error("Delete item:",err);loadAll();}
   };
 
   const openCreateFor=(memberId,type,mode="member")=>{
     setCreateDefaults({type,assignee:mode==="member"?memberId:"",site:mode==="site"?memberId:""});
     setShowCreate(true);
   };
+
+  if(loading) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",background:T.bg}}>
+      <div style={{textAlign:"center",color:T.t3}}>
+        <div style={{fontSize:14,fontWeight:600}}>Loading Team Schedule...</div>
+      </div>
+    </div>
+  );
 
   // KPIs
   const all=items;
@@ -775,7 +829,7 @@ function TeamScheduleModule(){
   const TILES=[
     {l:"Total Items",v:all.length,sub:`${all.filter(i=>i.status!=="Done").length} active`,c:T.blu},
     {l:"Urgent / Overdue",v:urgent,sub:"Needs attention",c:urgent>0?T.red:T.grn},
-    {l:"Due Today",v:todayItems,sub:"16 March 2026",c:todayItems>0?T.amb:T.grn},
+    {l:"Due Today",v:todayItems,sub:new Date().toLocaleDateString("en-IN",{day:"numeric",month:"long",year:"numeric"}),c:todayItems>0?T.amb:T.grn},
     {l:"Issues Open",v:all.filter(i=>i.type==="Issue"&&i.status!=="Done").length,sub:"Unresolved issues",c:T.red},
   ];
 
@@ -992,7 +1046,7 @@ function TeamScheduleModule(){
       </div>
 
       {/* Modals */}
-      {selItem&&<WorkDetailDrawer item={selItem} items={items} onClose={()=>setSelItem(null)} onUpdate={updateItem} onDelete={id=>setItems(p=>p.filter(i=>i.id!==id))}/>}
+      {selItem&&<WorkDetailDrawer item={selItem} items={items} onClose={()=>setSelItem(null)} onUpdate={updateItem} onDelete={deleteItem}/>}
       {showCreate&&<CreateWorkModal defaultType={createDefaults.type} defaultAssignee={createDefaults.assignee} defaultSite={createDefaults.site} onClose={()=>setShowCreate(false)} onSave={addItem}/>}
 
       <style>{`
