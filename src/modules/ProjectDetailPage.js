@@ -7627,15 +7627,18 @@ const TABS = [
 
 // ── SOLAR EPC TABS (only for project_type = 'solar_epc') ──────────
 const SOLAR_TABS = [
-  {id:"overview",      label:"Overview",       key:"o"},
-  {id:"solar_stages",  label:"Surya Ghar",     key:"s"},
-  {id:"solar_boq",     label:"BOQ / Quotation",key:"e"},
-  {id:"solar_docs",    label:"Documents",      key:"d"},
-  {id:"solar_install", label:"Installation",   key:"i"},
-  {id:"solar_subsidy", label:"Subsidy",        key:"u"},
-  {id:"material",      label:"Material",       key:"m"},
-  {id:"transaction",   label:"Finance",        key:"t"},
-  {id:"files",         label:"Files",          key:"f"},
+  {id:"overview",      label:"Overview",        key:"o"},
+  {id:"solar_stages",  label:"Surya Ghar",      key:"s"},
+  {id:"solar_boq",     label:"BOQ / Quotation", key:"e"},
+  {id:"solar_install", label:"Installation",    key:"i"},
+  {id:"solar_subsidy", label:"Subsidy",         key:"u"},
+  {id:"material",      label:"Material",        key:"m"},
+  {id:"transaction",   label:"Finance",         key:"t"},
+  {id:"design",        label:"Design",          key:"d"},
+  {id:"party",         label:"Party",           key:"p"},
+  {id:"todo",          label:"To Do",           key:"k"},
+  {id:"task",          label:"Tasks",           key:"j"},
+  {id:"files",         label:"Files",           key:"f"},
 ];
 
 // ──────────────────────────────────────────────────────────────────
