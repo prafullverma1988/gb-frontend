@@ -3607,7 +3607,15 @@ function TaskIssueChat({issueId}){
 }
 
 function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
-  const [tab,setTab]=useState("progress");
+  // ── Scrollspy: active nav section ───────────────────────────────────
+  const [activeSection,setActiveSection]=useState("progress");
+  const scrollRef=useRef(null);
+  const progressRef=useRef(null);
+  const materialsRef=useRef(null);
+  const labourRef=useRef(null);
+  const photosRef=useRef(null);
+  const issuesRef=useRef(null);
+
   const [prog,setProg]=useState(task.progress||0);
   const [saving,setSaving]=useState(false);
 
@@ -3616,31 +3624,33 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [showMRModal,setShowMRModal]=useState(false);
   const [showGRNModal,setShowGRNModal]=useState(false);
   const [mrMaterial,setMrMaterial]=useState(null);
-  const [matLoading,setMatLoading]=useState(false);
+  const [matLoading,setMatLoading]=useState(true);
   const [showUsedModal,setShowUsedModal]=useState(false);
   const [usedEntries,setUsedEntries]=useState({});
-  // Materials sub-tabs
   const [matTab,setMatTab]=useState("summary");
   const [inventory,setInventory]=useState([]);
-  const [invLoading,setInvLoading]=useState(false);
+  const [invLoading,setInvLoading]=useState(true);
   const [usedLog,setUsedLog]=useState([]);
-  const [usedLogLoading,setUsedLogLoading]=useState(false);
+  const [usedLogLoading,setUsedLogLoading]=useState(true);
   const [showUsedLogForm,setShowUsedLogForm]=useState(false);
   const [usedLogForm,setUsedLogForm]=useState({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});
   const [usedLogSaving,setUsedLogSaving]=useState(false);
 
   // Labour
   const [labours,setLabours]=useState([]);
+  const [labLoading,setLabLoading]=useState(true);
   const [showLabForm,setShowLabForm]=useState(false);
   const [labForm,setLabForm]=useState({labour_type:"Direct",labour_name:"",vendor_name:"",role:"Mason",count:1,work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});
 
-  // Site Photos
+  // Photos
   const [photos,setPhotos]=useState([]);
+  const [phLoading,setPhLoading]=useState(true);
   const [uploading,setUploading]=useState(false);
   const [fullPhoto,setFullPhoto]=useState(null);
 
   // Issues
   const [issues,setIssues]=useState([]);
+  const [issLoading,setIssLoading]=useState(true);
   const [showIssueForm,setShowIssueForm]=useState(false);
   const [issueForm,setIssueForm]=useState({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});
   const [issueUploading,setIssueUploading]=useState(false);
@@ -3649,7 +3659,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [issueWorkCats,setIssueWorkCats]=useState([]);
   const [issueTeam,setIssueTeam]=useState([]);
 
-  // Comments — always loaded, fixed at bottom
+  // Comments
   const [comments,setComments]=useState([]);
   const [commentText,setCommentText]=useState("");
   const [sendingComment,setSendingComment]=useState(false);
@@ -3666,38 +3676,41 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const priC={"Low":{c:"#64748B",bg:"#F1F5F9"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"High":{c:"#DC2626",bg:"#FEE2E2"},"Critical":{c:"#7C3AED",bg:"#EDE9FE"}};
   const issC={"Open":{c:"#DC2626",bg:"#FEE2E2"},"In Progress":{c:"#2563EB",bg:"#DBEAFE"},"Resolved":{c:"#16A34A",bg:"#DCFCE7"},"Closed":{c:"#64748B",bg:"#F1F5F9"}};
 
-  // Load comments always + tab data
+  // ── Load all data on mount ───────────────────────────────────────────
   useEffect(()=>{
     api.get("/tasks/"+task.id+"/comments").then(r=>{if(r.success)setComments(r.data||[]);}).catch(()=>{});
+    // Materials
+    api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);setMatLoading(false);}).catch(()=>setMatLoading(false));
+    api.get("/tasks/project/"+projectId+"/inventory").then(r=>{if(r.success)setInventory(r.data||[]);setInvLoading(false);}).catch(()=>setInvLoading(false));
+    api.get("/tasks/"+task.id+"/used-log").then(r=>{if(r.success)setUsedLog(r.data||[]);setUsedLogLoading(false);}).catch(()=>setUsedLogLoading(false));
+    // Labour
+    api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);setLabLoading(false);}).catch(()=>setLabLoading(false));
+    // Photos
+    api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);setPhLoading(false);}).catch(()=>setPhLoading(false));
+    // Issues
+    api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);setIssLoading(false);}).catch(()=>setIssLoading(false));
+    api.get("/library/work-categories").then(r=>{if(r.success)setIssueWorkCats((r.data||[]).map(c=>c.name));}).catch(()=>{});
+    api.get("/settings/users").then(r=>{if(r.success)setIssueTeam((r.data||[]).map(u=>u.name));}).catch(()=>{});
   },[]);
+
+  // ── Scrollspy via IntersectionObserver ──────────────────────────────
   useEffect(()=>{
-    if(tab==="materials"){
-      setMatLoading(true);
-      api.get("/tasks/"+task.id+"/material-summary").then(r=>{
-        if(r.success) setMaterials(r.data||[]);
-        setMatLoading(false);
-      }).catch(()=>setMatLoading(false));
-      // Load project inventory
-      setInvLoading(true);
-      api.get("/tasks/project/"+projectId+"/inventory").then(r=>{
-        if(r.success) setInventory(r.data||[]);
-        setInvLoading(false);
-      }).catch(()=>setInvLoading(false));
-      // Load used log
-      setUsedLogLoading(true);
-      api.get("/tasks/"+task.id+"/used-log").then(r=>{
-        if(r.success) setUsedLog(r.data||[]);
-        setUsedLogLoading(false);
-      }).catch(()=>setUsedLogLoading(false));
-    }
-    if(tab==="labour"  && labours.length===0) api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);}).catch(()=>{});
-    if(tab==="photos"  && photos.length===0)  api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);}).catch(()=>{});
-    if(tab==="issues" && issues.length===0){
-      api.get("/tasks/"+task.id+"/issues").then(r=>{if(r.success)setIssues(r.data||[]);}).catch(()=>{});
-      if(issueWorkCats.length===0) api.get("/library/work-categories").then(r=>{if(r.success)setIssueWorkCats((r.data||[]).map(c=>c.name));}).catch(()=>{});
-      if(issueTeam.length===0) api.get("/settings/users").then(r=>{if(r.success)setIssueTeam((r.data||[]).map(u=>u.name));}).catch(()=>{});
-    }
-  },[tab]);
+    const root=scrollRef.current; if(!root) return;
+    const refs=[
+      {id:"progress",ref:progressRef},
+      {id:"materials",ref:materialsRef},
+      {id:"labour",ref:labourRef},
+      {id:"photos",ref:photosRef},
+      {id:"issues",ref:issuesRef},
+    ];
+    const observer=new IntersectionObserver((entries)=>{
+      // pick the entry closest to top that is intersecting
+      const visible=entries.filter(e=>e.isIntersecting).sort((a,b)=>a.boundingClientRect.top-b.boundingClientRect.top);
+      if(visible.length>0) setActiveSection(visible[0].target.dataset.section);
+    },{root,threshold:0.15,rootMargin:"-10% 0px -60% 0px"});
+    refs.forEach(({ref})=>{ if(ref.current) observer.observe(ref.current); });
+    return()=>observer.disconnect();
+  },[]);
 
   const sendComment=async()=>{
     if(!commentText.trim()) return;
@@ -3713,10 +3726,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     return await cr.json();
   };
 
-  const LBL=({t})=><label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>{t}</label>;
-  const INP=(props)=><input {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",...props.style}}
-    onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>;
-  const SEL=(props)=><select {...props} style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit",...props.style}}/>;
+  const scrollToSection=(id)=>{
+    const refs={progress:progressRef,materials:materialsRef,labour:labourRef,photos:photosRef,issues:issuesRef};
+    refs[id]?.current?.scrollIntoView({behavior:"smooth",block:"start"});
+    setActiveSection(id);
+  };
 
   return(<>
     {/* Backdrop */}
@@ -3730,37 +3744,38 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
           {Number(fullPhoto.lat).toFixed(6)}, {Number(fullPhoto.lng).toFixed(6)}
         </div>}
-        <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:40,height:40,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
         </button>
       </div>
     )}
 
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(600px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-8px 0 40px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+    {/* ── DRAWER ── */}
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(600px,100vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-8px 0 40px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
 
-      {/* ── HEADER ── */}
+      {/* ── HEADER (fixed) ── */}
       <div style={{background:"#0F172A",padding:"12px 16px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-          <div style={{flex:1}}>
+          <div style={{flex:1,minWidth:0}}>
             <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
               <span style={{fontSize:9.5,color:"rgba(255,255,255,0.35)",fontFamily:"monospace"}}>{task.tsk_no||task.no}</span>
               <span style={{background:sm.bg,color:sm.c,fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{autoStatus(prog)}</span>
               {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>⚠ DHYAN</span>}
               {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{delay}d delayed</span>}
             </div>
-            <div style={{fontSize:15,fontWeight:700,color:"white",lineHeight:1.3}}>{task.name}</div>
+            <div style={{fontSize:15,fontWeight:700,color:"white",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.name}</div>
             <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:3}}>{task.category}{task.assignee?" · "+task.assignee:""}</div>
           </div>
-          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",padding:4,display:"flex"}}>
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.8)",padding:8,display:"flex",borderRadius:8,flexShrink:0}}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        {/* Progress bar in header */}
-        <div style={{marginTop:10,display:"flex",alignItems:"center",gap:8}}>
-          <div style={{flex:1,height:4,background:"rgba(255,255,255,0.15)",borderRadius:2,overflow:"hidden"}}>
-            <div style={{height:"100%",width:prog+"%",background:prog===100?"#10B981":"#3B82F6",borderRadius:2,transition:"width .3s"}}/>
+        {/* Progress bar */}
+        <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,height:5,background:"rgba(255,255,255,0.15)",borderRadius:3,overflow:"hidden"}}>
+            <div style={{height:"100%",width:prog+"%",background:prog===100?"#10B981":"#3B82F6",borderRadius:3,transition:"width .3s"}}/>
           </div>
-          <span style={{fontSize:11,fontWeight:700,color:prog===100?"#10B981":"white",minWidth:30}}>{prog}%</span>
+          <span style={{fontSize:12,fontWeight:700,color:prog===100?"#10B981":"white",minWidth:34}}>{prog}%</span>
         </div>
       </div>
 
@@ -3770,578 +3785,581 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
         <div style={{fontSize:11.5,color:"#92400E",lineHeight:1.5}}>{task.dhyanRakhen}</div>
       </div>}
 
-      {/* ── TABS ── */}
-      <div style={{background:"white",borderBottom:"1px solid #E2E8F0",padding:"0 8px",flexShrink:0,display:"flex",overflowX:"auto"}}>
+      {/* ── SCROLLSPY NAV (sticky) ── */}
+      <div style={{background:"white",borderBottom:"2px solid #E2E8F0",padding:"0 10px",flexShrink:0,display:"flex",overflowX:"auto",gap:2,WebkitOverflowScrolling:"touch",scrollbarWidth:"none"}}>
         {[
-          {id:"progress",l:"Progress",ic:"M13 2L3 14h9l-1 8 10-12h-9l1-8z"},
-          {id:"materials",l:"Materials",ic:"M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"},
-          {id:"labour",l:"Labour",ic:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z"},
-          {id:"photos",l:"Photos",ic:"M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"},
-          {id:"issues",l:"Issues",ic:"M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"},
-        ].map(t=>(
-          <button key={t.id} onClick={()=>setTab(t.id)}
-            style={{padding:"10px 12px",border:"none",background:"none",fontSize:12,fontWeight:tab===t.id?700:400,color:tab===t.id?"#2563EB":"#64748B",borderBottom:tab===t.id?"2px solid #2563EB":"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,display:"flex",alignItems:"center",gap:5}}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d={t.ic}/></svg>
-            {t.l}
-          </button>
-        ))}
+          {id:"progress", l:"Progress",  ic:"M13 2L3 14h9l-1 8 10-12h-9l1-8z",       cnt:null},
+          {id:"materials",l:"Materials", ic:"M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", cnt:materials.length||null},
+          {id:"labour",   l:"Labour",    ic:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z", cnt:labours.length||null},
+          {id:"photos",   l:"Photos",    ic:"M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z", cnt:photos.length||null},
+          {id:"issues",   l:"Issues",    ic:"M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01", cnt:issues.filter(i=>i.status==="Open"||i.status==="In Progress").length||null},
+        ].map(t=>{
+          const active=activeSection===t.id;
+          return(
+            <button key={t.id} onClick={()=>scrollToSection(t.id)}
+              style={{padding:"11px 10px",border:"none",background:"none",fontSize:12,fontWeight:active?700:500,
+                color:active?"#2563EB":"#64748B",
+                borderBottom:active?"3px solid #2563EB":"3px solid transparent",
+                cursor:"pointer",whiteSpace:"nowrap",flexShrink:0,
+                display:"flex",alignItems:"center",gap:5,
+                minHeight:44,transition:"color .15s,border-color .15s"}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d={t.ic}/></svg>
+              {t.l}
+              {t.cnt>0&&<span style={{background:active?"#2563EB":"#E2E8F0",color:active?"white":"#64748B",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,lineHeight:1.6,transition:"all .15s"}}>{t.cnt}</span>}
+            </button>
+          );
+        })}
       </div>
 
-      {/* ── CONTENT (scrollable) ── */}
-      <div style={{flex:1,overflowY:"auto",padding:"14px 16px 8px"}}>
+      {/* ── SCROLLABLE CONTENT (all sections) ── */}
+      <div ref={scrollRef} style={{flex:1,overflowY:"auto",WebkitOverflowScrolling:"touch"}}>
 
-        {/* ── PROGRESS TAB ── */}
-        {tab==="progress"&&(
-          <div>
-            <div style={{background:"white",borderRadius:10,padding:18,border:"1px solid #E2E8F0",marginBottom:12,boxShadow:"0 1px 3px rgba(0,0,0,.05)"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-                <span style={{fontSize:13,fontWeight:600,color:"#1E293B"}}>Completion</span>
-                <span style={{fontSize:22,fontWeight:800,color:prog===100?"#10B981":prog>0?"#2563EB":"#94A3B8"}}>{prog}%</span>
-              </div>
-              <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}
-                style={{width:"100%",accentColor:"#2563EB",cursor:"pointer",height:6}}/>
-              <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
-                <span style={{fontSize:9,color:"#94A3B8"}}>0%</span>
-                <span style={{fontSize:9,color:"#94A3B8"}}>50%</span>
-                <span style={{fontSize:9,color:"#94A3B8"}}>100%</span>
-              </div>
+        {/* Modals (rendered inside scroll area to avoid z-index issues) */}
+        {showMRModal&&(
+          <TaskMRModal task={task} prefill={mrMaterial} projectId={projectId}
+            onClose={()=>{setShowMRModal(false);setMrMaterial(null);}}
+            onSaved={()=>{
+              setShowMRModal(false);setMrMaterial(null);
+              api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);});
+            }}/>
+        )}
+        {showGRNModal&&(
+          <TaskGRNModal task={task} prefill={mrMaterial} projectId={projectId}
+            onClose={()=>{setShowGRNModal(false);setMrMaterial(null);}}
+            onSaved={()=>{
+              setShowGRNModal(false);setMrMaterial(null);
+              api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);});
+              api.get("/tasks/project/"+projectId+"/inventory").then(r=>{if(r.success)setInventory(r.data||[]);});
+            }}/>
+        )}
+
+        {/* ════════════ PROGRESS SECTION ════════════ */}
+        <div ref={progressRef} data-section="progress" style={{padding:"16px 14px 6px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <div style={{width:3,height:18,borderRadius:2,background:"#2563EB"}}/>
+            <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Progress</span>
+          </div>
+          <div style={{background:"white",borderRadius:12,padding:16,border:"1px solid #E2E8F0",marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,.04)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <span style={{fontSize:14,fontWeight:600,color:"#1E293B"}}>Completion</span>
+              <span style={{fontSize:26,fontWeight:800,color:prog===100?"#10B981":prog>0?"#2563EB":"#94A3B8",lineHeight:1}}>{prog}%</span>
             </div>
-            {/* Status preview */}
-            <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",background:sm.bg,border:"1px solid "+sm.brd,borderRadius:8,marginBottom:12}}>
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={sm.c} strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
-              <div>
-                <div style={{fontSize:11,color:sm.c,fontWeight:700}}>Status: {autoStatus(prog)}</div>
-                <div style={{fontSize:10.5,color:"#64748B"}}>{prog===0?"Not started yet":prog===100?"Task complete!":"In progress"}</div>
-              </div>
+            <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}
+              style={{width:"100%",accentColor:"#2563EB",cursor:"pointer",height:8}}/>
+            <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+              <span style={{fontSize:9,color:"#94A3B8"}}>0%</span>
+              <span style={{fontSize:9,color:"#94A3B8"}}>50%</span>
+              <span style={{fontSize:9,color:"#94A3B8"}}>100%</span>
             </div>
-            {/* Quick % buttons */}
-            <div style={{display:"flex",gap:7,marginBottom:14}}>
-              {[0,25,50,75,100].map(p=>(
-                <button key={p} onClick={()=>setProg(p)}
-                  style={{flex:1,padding:"8px 0",borderRadius:7,border:"1.5px solid "+(prog===p?"#2563EB":"#E2E8F0"),background:prog===p?"#DBEAFE":"white",color:prog===p?"#2563EB":"#64748B",fontSize:12,fontWeight:prog===p?700:400,cursor:"pointer"}}>
-                  {p}%
-                </button>
-              ))}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",background:sm.bg,border:"1px solid "+sm.brd,borderRadius:10,marginBottom:12}}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={sm.c} strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
+            <div>
+              <div style={{fontSize:12,color:sm.c,fontWeight:700}}>Status: {autoStatus(prog)}</div>
+              <div style={{fontSize:11,color:"#64748B"}}>{prog===0?"Not started yet":prog===100?"Task complete!":"In progress"}</div>
             </div>
-            <button onClick={async()=>{
-              setSaving(true);
-              const res=await api.put("/tasks/"+task.id,{progress:prog});
-              setSaving(false);
-              if(res.success){onUpdate(task.id,{progress:prog,status:autoStatus(prog)});onClose();}
-              else alert(res.message||"Save failed");
-            }} disabled={saving}
-              style={{width:"100%",padding:"12px",borderRadius:8,background:saving?"#94A3B8":"#2563EB",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:saving?"default":"pointer"}}>
-              {saving?"Saving...":"Save Progress"}
+          </div>
+          {/* Quick % buttons — bigger for mobile touch */}
+          <div style={{display:"flex",gap:8,marginBottom:14}}>
+            {[0,25,50,75,100].map(p=>(
+              <button key={p} onClick={()=>setProg(p)}
+                style={{flex:1,padding:"12px 0",borderRadius:9,border:"1.5px solid "+(prog===p?"#2563EB":"#E2E8F0"),background:prog===p?"#2563EB":"white",color:prog===p?"white":"#64748B",fontSize:13,fontWeight:prog===p?700:500,cursor:"pointer",transition:"all .15s"}}>
+                {p}%
+              </button>
+            ))}
+          </div>
+          <button onClick={async()=>{
+            setSaving(true);
+            const res=await api.put("/tasks/"+task.id,{progress:prog});
+            setSaving(false);
+            if(res.success){onUpdate(task.id,{progress:prog,status:autoStatus(prog)});onClose();}
+            else alert(res.message||"Save failed");
+          }} disabled={saving}
+            style={{width:"100%",padding:"14px",borderRadius:10,background:saving?"#94A3B8":"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:saving?"default":"pointer",letterSpacing:".2px"}}>
+            {saving?"Saving...":"Save Progress"}
+          </button>
+        </div>
+
+        {/* ════════════ MATERIALS SECTION ════════════ */}
+        <div ref={materialsRef} data-section="materials" style={{padding:"20px 14px 6px"}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+            <div style={{width:3,height:18,borderRadius:2,background:"#059669"}}/>
+            <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Materials</span>
+            {materials.length>0&&<span style={{background:"#D1FAE5",color:"#065F46",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{materials.length} items</span>}
+          </div>
+          {/* 3 action buttons */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+            <button onClick={()=>setMatTab(matTab==="usedlog"?"none":"usedlog")}
+              style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid "+(matTab==="usedlog"?"#16A34A":"#BBF7D0"),background:matTab==="usedlog"?"#DCFCE7":"#F0FDF4",color:"#16A34A",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h4"/></svg>
+              Mark Used
+            </button>
+            <button onClick={()=>setShowMRModal(true)}
+              style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid #BFDBFE",background:"#EFF6FF",color:"#2563EB",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14"/></svg>
+              New MR
+            </button>
+            <button onClick={()=>setShowGRNModal(true)}
+              style={{padding:"12px 6px",borderRadius:10,border:"1.5px solid #A7F3D0",background:"#ECFDF5",color:"#059669",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+              GRN
             </button>
           </div>
-        )}
-
-        {/* ── MATERIALS TAB ── */}
-        {tab==="materials"&&(
-          <div>
-            {/* MR Modal */}
-            {showMRModal&&(
-              <TaskMRModal task={task} prefill={mrMaterial} projectId={projectId}
-                onClose={()=>{setShowMRModal(false);setMrMaterial(null);}}
-                onSaved={()=>{
-                  setShowMRModal(false);setMrMaterial(null);
-                  api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);});
-                }}/>
-            )}
-            {/* GRN Modal */}
-            {showGRNModal&&(
-              <TaskGRNModal task={task} prefill={mrMaterial} projectId={projectId}
-                onClose={()=>{setShowGRNModal(false);setMrMaterial(null);}}
-                onSaved={()=>{
-                  setShowGRNModal(false);setMrMaterial(null);
-                  api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);});
-                  api.get("/tasks/project/"+projectId+"/inventory").then(r=>{if(r.success)setInventory(r.data||[]);});
-                }}/>
-            )}
-
-            {/* ── 3 ACTION BUTTONS ── */}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
-              <button onClick={()=>setMatTab(matTab==="usedlog"?"none":"usedlog")}
-                style={{padding:"10px 6px",borderRadius:8,border:"1.5px solid "+(matTab==="usedlog"?"#16A34A":"#BBF7D0"),background:matTab==="usedlog"?"#DCFCE7":"#F0FDF4",color:"#16A34A",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 12h6M9 16h4"/></svg>
-                Mark Used
-              </button>
-              <button onClick={()=>setShowMRModal(true)}
-                style={{padding:"10px 6px",borderRadius:8,border:"1.5px solid #BFDBFE",background:"#EFF6FF",color:"#2563EB",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14"/></svg>
-                New Request
-              </button>
-              <button onClick={()=>setShowGRNModal(true)}
-                style={{padding:"10px 6px",borderRadius:8,border:"1.5px solid #A7F3D0",background:"#ECFDF5",color:"#059669",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:3}}>
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                Record GRN
-              </button>
-            </div>
-
-            {/* ── USED SECTION (expandable) ── */}
-            {matTab==="usedlog"&&(
-              <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"14px",marginBottom:12}}>
-                <div style={{fontSize:12,fontWeight:700,color:"#15803D",marginBottom:10,display:"flex",justifyContent:"space-between"}}>
-                  <span>Mark Material Used</span>
-                  <button onClick={()=>setMatTab("none")} style={{background:"none",border:"none",cursor:"pointer",color:"#94A3B8",fontSize:18,lineHeight:1}}>×</button>
-                </div>
-
-                {/* Inventory cards — select material */}
-                {invLoading&&<div style={{textAlign:"center",padding:"12px 0",color:"#94A3B8",fontSize:12}}>Loading inventory...</div>}
-                {!invLoading&&inventory.length>0&&(
-                  <div style={{marginBottom:10}}>
-                    <div style={{fontSize:10.5,color:"#64748B",fontWeight:600,marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>Select from available stock</div>
-                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,maxHeight:180,overflowY:"auto"}}>
-                      {inventory.filter(i=>Number(i.balance||0)>0).map((item,i)=>{
-                        const isSelected=usedLogForm.material_name===item.material_name;
-                        return(
-                          <div key={i} onClick={()=>setUsedLogForm(f=>({...f,material_name:item.material_name,unit:item.unit||"Nos"}))}
-                            style={{padding:"8px 10px",borderRadius:7,border:"1.5px solid "+(isSelected?"#16A34A":"#BBF7D0"),background:isSelected?"#DCFCE7":"white",cursor:"pointer",transition:"all .15s"}}>
-                            <div style={{fontSize:11.5,fontWeight:700,color:isSelected?"#15803D":"#1E293B"}}>{item.material_name}</div>
-                            <div style={{fontSize:10,color:"#64748B",marginTop:2}}>Balance: <b style={{color:isSelected?"#15803D":"#16A34A"}}>{item.balance} {item.unit}</b></div>
-                          </div>
-                        );
-                      })}
-                      {inventory.filter(i=>Number(i.balance||0)>0).length===0&&(
-                        <div style={{gridColumn:"1/-1",textAlign:"center",padding:"12px 0",color:"#94A3B8",fontSize:12}}>No stock available — record GRN first</div>
-                      )}
-                    </div>
-                    {/* Or type custom */}
-                    <button onClick={()=>setUsedLogForm(f=>({...f,material_name:"__custom__"}))}
-                      style={{marginTop:6,background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:11,padding:0}}>
-                      + Type custom material name
-                    </button>
-                  </div>
-                )}
-                {!invLoading&&inventory.length===0&&(
-                  <div style={{marginBottom:10}}>
-                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Material</label>
-                    <select value={usedLogForm.material_name}
-                      onChange={e=>{const mat=materials.find(m=>m.material_name===e.target.value);setUsedLogForm(f=>({...f,material_name:e.target.value,unit:mat?mat.unit||"Nos":"Nos"}));}}
-                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,background:"white",outline:"none"}}>
-                      <option value="">-- Select Material --</option>
-                      {materials.map(m=>(<option key={m.material_name} value={m.material_name}>{m.material_name} ({m.unit})</option>))}
-                      <option value="__custom__">+ Type custom name</option>
-                    </select>
-                  </div>
-                )}
-                {usedLogForm.material_name==="__custom__"&&(
-                  <div style={{marginBottom:8}}>
-                    <input placeholder="Material name" value={usedLogForm._customName||""}
-                      onChange={e=>setUsedLogForm(f=>({...f,_customName:e.target.value}))}
-                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
-                  </div>
-                )}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                  <div>
-                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Qty Used *</label>
-                    <input type="number" min={0} placeholder="0" value={usedLogForm.used_qty}
-                      onChange={e=>setUsedLogForm(f=>({...f,used_qty:e.target.value}))}
-                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:13,fontWeight:700,boxSizing:"border-box",outline:"none"}}/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Unit</label>
-                    <select value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
-                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,background:"white",outline:"none"}}>
-                      {["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"].map(u=>(<option key={u}>{u}</option>))}
-                    </select>
-                  </div>
-                </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                  <div>
-                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Date</label>
-                    <input type="date" value={usedLogForm.used_date} onChange={e=>setUsedLogForm(f=>({...f,used_date:e.target.value}))}
-                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
-                  </div>
-                  <div>
-                    <label style={{fontSize:11,color:"#64748B",display:"block",marginBottom:4}}>Remark</label>
-                    <input placeholder="Optional" value={usedLogForm.remark}
-                      onChange={e=>setUsedLogForm(f=>({...f,remark:e.target.value}))}
-                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #BBF7D0",fontSize:12,boxSizing:"border-box",outline:"none"}}/>
-                  </div>
-                </div>
-                <button disabled={usedLogSaving} onClick={async()=>{
-                  const matName=usedLogForm.material_name==="__custom__"?usedLogForm._customName||"":usedLogForm.material_name;
-                  if(!matName||!usedLogForm.used_qty) return alert("Material aur qty required hai");
-                  setUsedLogSaving(true);
-                  const res=await api.post("/tasks/"+task.id+"/used-log",{
-                    material_name:matName, used_qty:Number(usedLogForm.used_qty),
-                    unit:usedLogForm.unit, remark:usedLogForm.remark,
-                    used_date:usedLogForm.used_date, project_id:projectId,
-                  });
-                  if(res.success){
-                    setUsedLog(l=>[res.data,...l]);
-                    setMatTab("none");
-                    setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});
-                    api.get("/tasks/"+task.id+"/material-summary").then(r=>{if(r.success)setMaterials(r.data||[]);});
-                    api.get("/tasks/project/"+projectId+"/inventory").then(r=>{if(r.success)setInventory(r.data||[]);});
-                  } else alert(res.message||"Save failed");
-                  setUsedLogSaving(false);
-                }}
-                  style={{width:"100%",padding:"9px",borderRadius:7,background:usedLogSaving?"#94A3B8":"#16A34A",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:usedLogSaving?"default":"pointer"}}>
-                  {usedLogSaving?"Saving...":"✓ Save Used Entry"}
-                </button>
+          {/* Mark Used panel */}
+          {matTab==="usedlog"&&(
+            <div style={{background:"#F0FDF4",border:"1px solid #BBF7D0",borderRadius:10,padding:"14px",marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#15803D",marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span>Mark Material Used</span>
+                <button onClick={()=>setMatTab("none")} style={{background:"none",border:"none",cursor:"pointer",color:"#94A3B8",fontSize:22,lineHeight:1,padding:0}}>×</button>
               </div>
-            )}
-
-            {/* ── RECENT USED LOG ── */}
-            {usedLog.length>0&&matTab!=="usedlog"&&(
-              <div style={{marginBottom:10}}>
-                <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Recent Used ({usedLog.length})</div>
-                {usedLog.slice(0,3).map((entry,i)=>(
-                  <div key={entry.id||i} style={{background:"white",borderRadius:7,padding:"8px 10px",border:"1px solid #E2E8F0",marginBottom:5,borderLeft:"3px solid #16A34A",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <div>
-                      <div style={{fontSize:12,fontWeight:700,color:"#1E293B"}}>{entry.material_name}</div>
-                      <div style={{fontSize:10.5,color:"#94A3B8"}}>{new Date(entry.used_date||entry.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}{entry.remark?" · "+entry.remark:""}</div>
-                    </div>
-                    <div style={{fontSize:13,fontWeight:800,color:"#16A34A",flexShrink:0}}>{entry.used_qty} <span style={{fontSize:9,color:"#94A3B8"}}>{entry.unit}</span></div>
-                  </div>
-                ))}
-                {usedLog.length>3&&<div style={{textAlign:"center",fontSize:11,color:"#64748B",padding:"4px 0"}}>+{usedLog.length-3} more entries</div>}
-              </div>
-            )}
-
-            {/* Material Activity List */}
-            {!matLoading&&materials.length>0&&matTab!=="usedlog"&&(
-              <div style={{marginBottom:10}}>
-                <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Material Activity ({materials.length})</div>
-                {materials.map((m,i)=>{
-                  const hasReq=m.required_qty>0;
-                  const hasRcv=m.received_qty>0;
-                  const hasUsed=m.used_qty>0;
-                  const mrC=m.mat_status==="Received"||m.mat_status==="PartialReceived"?"#16A34A":m.mat_status==="Ordered"?"#D97706":m.mr_status==="Approved"?"#2563EB":hasRcv?"#16A34A":hasUsed?"#D97706":"#64748B";
-                  const mrL=m.mat_status==="Received"?"Received":m.mat_status==="PartialReceived"?"Partial Rcvd":m.mat_status==="Ordered"?"Ordered":m.mr_status==="Approved"?"Approved":hasRcv?"Received":hasUsed?"Used":m.mr_status||"Pending";
-                  return(
-                    <div key={i} style={{background:"white",borderRadius:8,padding:"9px 11px",border:"1px solid #E2E8F0",marginBottom:6,borderLeft:"3px solid "+mrC}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:hasRcv||hasUsed?4:0}}>
-                        <div style={{fontSize:12,fontWeight:700,color:"#1E293B"}}>{m.material_name}</div>
-                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:mrC+"22",color:mrC}}>{mrL}</span>
-                      </div>
-                      <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
-                        {hasReq&&<span style={{fontSize:10.5,color:"#94A3B8"}}>Req: <b style={{color:"#475569"}}>{m.required_qty} {m.unit}</b></span>}
-                        {hasRcv&&<span style={{fontSize:10.5,color:"#94A3B8"}}>Rcvd: <b style={{color:"#16A34A"}}>{m.received_qty} {m.unit}</b></span>}
-                        {hasUsed&&<span style={{fontSize:10.5,color:"#94A3B8"}}>Used: <b style={{color:"#D97706"}}>{m.used_qty} {m.unit}</b></span>}
-                        {hasRcv&&!hasReq&&<span style={{fontSize:10,padding:"1px 5px",borderRadius:3,background:"#F0FDF4",color:"#16A34A",fontWeight:600}}>GRN</span>}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Empty state */}
-            {!matLoading&&materials.length===0&&usedLog.length===0&&matTab!=="usedlog"&&(
-              <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
-                <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 8px",display:"block"}}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-                <div style={{fontSize:13}}>No material activity yet</div>
-                <div style={{fontSize:11,marginTop:4,color:"#CBD5E1"}}>Raise MR or record GRN from above</div>
-              </div>
-            )}
-          </div>
-        )}
-        {/* ── LABOUR TAB ── */}
-        {tab==="labour"&&(
-          <div>
-            {/* Summary */}
-            {labours.length>0&&(
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
-                {[
-                  {l:"Workers",v:labours.reduce((s,l)=>s+Number(l.count||1),0),c:"#2563EB"},
-                  {l:"Man-Hours",v:labours.reduce((s,l)=>s+(Number(l.hours||8)*Number(l.count||1)),0),c:"#16A34A"},
-                  {l:"Entries",v:labours.length,c:"#64748B"},
-                ].map(s=>(
-                  <div key={s.l} style={{background:"white",borderRadius:8,padding:"10px",border:"1px solid #E2E8F0",textAlign:"center",borderTop:"3px solid "+s.c}}>
-                    <div style={{fontSize:20,fontWeight:800,color:s.c}}>{s.v}</div>
-                    <div style={{fontSize:9.5,color:"#94A3B8",marginTop:1}}>{s.l}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".5px"}}>Labour ({labours.length})</span>
-              <button onClick={()=>setShowLabForm(s=>!s)}
-                style={{padding:"6px 14px",borderRadius:6,background:showLabForm?"#F1F5F9":"#2563EB",color:showLabForm?"#64748B":"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                {showLabForm?"Cancel":"+ Add Entry"}
-              </button>
-            </div>
-            {showLabForm&&(
-              <div style={{background:"white",borderRadius:10,padding:"14px",border:"1px solid #E2E8F0",marginBottom:12}}>
-                {/* Labour Type selector */}
+              {invLoading&&<div style={{textAlign:"center",padding:"12px 0",color:"#94A3B8",fontSize:12}}>Loading inventory...</div>}
+              {!invLoading&&inventory.filter(i=>Number(i.balance||0)>0).length>0&&(
                 <div style={{marginBottom:10}}>
-                  <LBL t="Type"/>
-                  <div style={{display:"flex",gap:6}}>
-                    {["Direct","Subcon","Vendor"].map(t=>(
-                      <button key={t} onClick={()=>setLabForm(p=>({...p,labour_type:t,labour_name:"",vendor_name:""}))}
-                        style={{flex:1,padding:"7px",borderRadius:6,border:"1.5px solid "+(labForm.labour_type===t?"#2563EB":"#E2E8F0"),background:labForm.labour_type===t?"#DBEAFE":"white",color:labForm.labour_type===t?"#2563EB":"#64748B",fontSize:12,fontWeight:labForm.labour_type===t?700:400,cursor:"pointer"}}>
-                        {t==="Direct"?"👷 Direct":t==="Subcon"?"🏗 Subcon":"🏢 Vendor"}
-                      </button>
-                    ))}
+                  <div style={{fontSize:10.5,color:"#64748B",fontWeight:600,marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>Select from stock</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,maxHeight:180,overflowY:"auto"}}>
+                    {inventory.filter(i=>Number(i.balance||0)>0).map((item,i)=>{
+                      const isSel=usedLogForm.material_name===item.material_name;
+                      return(
+                        <div key={i} onClick={()=>setUsedLogForm(f=>({...f,material_name:item.material_name,unit:item.unit||"Nos"}))}
+                          style={{padding:"10px",borderRadius:8,border:"1.5px solid "+(isSel?"#16A34A":"#BBF7D0"),background:isSel?"#DCFCE7":"white",cursor:"pointer"}}>
+                          <div style={{fontSize:12,fontWeight:700,color:isSel?"#15803D":"#1E293B"}}>{item.material_name}</div>
+                          <div style={{fontSize:10.5,color:"#64748B"}}>Bal: {item.balance} {item.unit}</div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
-                  {labForm.labour_type==="Direct"
-                    ?<div style={{gridColumn:"1/-1"}}><LBL t="Labour Name *"/><INP value={labForm.labour_name} onChange={e=>setLabForm(p=>({...p,labour_name:e.target.value}))} placeholder="e.g. Ramesh Kumar"/></div>
-                    :<><div style={{gridColumn:"1/-1"}}><LBL t={labForm.labour_type+" Name *"}/><INP value={labForm.vendor_name} onChange={e=>setLabForm(p=>({...p,vendor_name:e.target.value}))} placeholder={"e.g. "+labForm.labour_type+" company name"}/></div></>
-                  }
-                  <div><LBL t="Role"/><SEL value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}>{ROLES.map(r=><option key={r}>{r}</option>)}</SEL></div>
-                  <div><LBL t="Count"/><INP type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}/></div>
-                  <div><LBL t="Work Date"/><INP type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}/></div>
-                  <div><LBL t="Hours/Day"/><INP type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}/></div>
-                  <div style={{gridColumn:"1/-1"}}><LBL t="Remark"/><INP value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"/></div>
+              )}
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:8,marginBottom:10}}>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name</label>
+                  <input value={usedLogForm.material_name} onChange={e=>setUsedLogForm(f=>({...f,material_name:e.target.value}))} placeholder="e.g. Cement"
+                    style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
-                <button onClick={async()=>{
-                  const name=labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name;
-                  if(!name.trim()) return alert("Name required");
-                  const payload={...labForm,labour_name:labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name};
-                  const res=await api.post("/tasks/"+task.id+"/labour",payload);
-                  if(res.success){setLabours(p=>[res.data,...p]);setLabForm({labour_type:"Direct",labour_name:"",vendor_name:"",role:"Mason",count:1,work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});setShowLabForm(false);}
-                  else alert(res.message||"Failed");
-                }} style={{width:"100%",padding:"10px",borderRadius:7,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Add Entry</button>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Qty</label>
+                  <input type="number" value={usedLogForm.used_qty} onChange={e=>setUsedLogForm(f=>({...f,used_qty:e.target.value}))} placeholder="0"
+                    style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
               </div>
-            )}
-            {labours.length===0&&!showLabForm&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>No labour entries yet</div>}
-            {labours.map(l=>{
-              const typeBadge=l.labour_type==="Subcon"?"🏗":l.labour_type==="Vendor"?"🏢":"👷";
-              return(
-                <div key={l.id} style={{background:"white",borderRadius:10,padding:"12px 14px",border:"1px solid #E2E8F0",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                  <div style={{flex:1}}>
-                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-                      <div style={{width:30,height:30,borderRadius:"50%",background:"linear-gradient(135deg,#2563EB,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:13,flexShrink:0}}>{typeBadge}</div>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{l.labour_name}</div>
-                        <div style={{fontSize:10.5,color:"#64748B"}}>{l.role} · {l.count} workers · {l.hours}h/day</div>
-                      </div>
-                      <span style={{marginLeft:"auto",fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:4,background:l.labour_type==="Direct"?"#DCFCE7":l.labour_type==="Subcon"?"#DBEAFE":"#EDE9FE",color:l.labour_type==="Direct"?"#16A34A":l.labour_type==="Subcon"?"#2563EB":"#7C3AED"}}>{l.labour_type||"Direct"}</span>
-                    </div>
-                    <div style={{fontSize:10.5,color:"#94A3B8",paddingLeft:38}}>{fmtDate(l.work_date)}{l.remark?" · "+l.remark:""}</div>
-                  </div>
-                  <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/labour/"+l.id);if(r.success)setLabours(p=>p.filter(x=>x.id!==l.id));}}
-                    style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,display:"flex",flexShrink:0}}>
-                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-                  </button>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Unit</label>
+                  <select value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
+                    style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
+                    {UNITS.map(u=><option key={u}>{u}</option>)}
+                  </select>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Date</label>
+                  <input type="date" value={usedLogForm.used_date} onChange={e=>setUsedLogForm(f=>({...f,used_date:e.target.value}))}
+                    style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+              </div>
+              <input value={usedLogForm.remark} onChange={e=>setUsedLogForm(f=>({...f,remark:e.target.value}))} placeholder="Remark (optional)"
+                style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:10}}/>
+              <button disabled={usedLogSaving||!usedLogForm.material_name||!usedLogForm.used_qty} onClick={async()=>{
+                if(!usedLogForm.material_name||!usedLogForm.used_qty) return;
+                setUsedLogSaving(true);
+                const res=await api.post("/tasks/"+task.id+"/used-log",usedLogForm);
+                if(res.success){
+                  setUsedLog(p=>[res.data,...p]);
+                  setUsedLogForm({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});
+                  setMatTab("none");
+                } else alert(res.message||"Failed");
+                setUsedLogSaving(false);
+              }} style={{width:"100%",padding:"12px",borderRadius:8,background:usedLogSaving?"#94A3B8":"#16A34A",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
+                {usedLogSaving?"Saving...":"✓ Log Usage"}
+              </button>
+            </div>
+          )}
+          {/* Used log recent */}
+          {usedLog.length>0&&matTab!=="usedlog"&&(
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Recent Usage</div>
+              {usedLog.slice(0,3).map((u,i)=>(
+                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 11px",background:"#F0FDF4",borderRadius:7,marginBottom:5,border:"1px solid #BBF7D0"}}>
+                  <span style={{fontSize:12,fontWeight:600,color:"#065F46"}}>{u.material_name}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#16A34A"}}>{u.used_qty} {u.unit}</span>
+                </div>
+              ))}
+              {usedLog.length>3&&<div style={{textAlign:"center",fontSize:11,color:"#64748B",padding:"4px 0"}}>+{usedLog.length-3} more</div>}
+            </div>
+          )}
+          {/* Material activity list */}
+          {matLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading materials...</div>}
+          {!matLoading&&materials.length>0&&(
+            <div>
+              <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Material Activity ({materials.length})</div>
+              {materials.map((m,i)=>{
+                const mrC=m.mat_status==="Received"||m.mat_status==="PartialReceived"?"#16A34A":m.mat_status==="Ordered"?"#D97706":m.mr_status==="Approved"?"#2563EB":"#64748B";
+                const mrL=m.mat_status==="Received"?"Received":m.mat_status==="PartialReceived"?"Partial Rcvd":m.mat_status==="Ordered"?"Ordered":m.mr_status==="Approved"?"Approved":m.mr_status||"Pending";
+                return(
+                  <div key={i} style={{background:"white",borderRadius:9,padding:"10px 12px",border:"1px solid #E2E8F0",marginBottom:7,borderLeft:"3px solid "+mrC}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{m.material_name}</div>
+                      <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:mrC+"22",color:mrC}}>{mrL}</span>
+                    </div>
+                    <div style={{display:"flex",gap:12,flexWrap:"wrap"}}>
+                      {m.required_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>Req: <b style={{color:"#475569"}}>{m.required_qty} {m.unit}</b></span>}
+                      {m.received_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>Rcvd: <b style={{color:"#16A34A"}}>{m.received_qty} {m.unit}</b></span>}
+                      {m.used_qty>0&&<span style={{fontSize:11,color:"#94A3B8"}}>Used: <b style={{color:"#D97706"}}>{m.used_qty} {m.unit}</b></span>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {!matLoading&&materials.length===0&&usedLog.length===0&&(
+            <div style={{textAlign:"center",padding:"32px 0",color:"#94A3B8"}}>
+              <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 8px",display:"block"}}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+              <div style={{fontSize:13}}>No material activity yet</div>
+            </div>
+          )}
+        </div>
 
-        {/* ── SITE PHOTOS TAB ── */}
-        {tab==="photos"&&(
-          <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-              <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".5px"}}>Site Photos ({photos.length})</span>
-              <label style={{padding:"6px 14px",borderRadius:6,background:uploading?"#94A3B8":"#2563EB",color:"white",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
-                {uploading?"Uploading...":"Take / Upload"}
-                <input type="file" accept="image/*" capture="environment" style={{display:"none"}} disabled={uploading} onChange={async(e)=>{
-                  const file=e.target.files[0]; if(!file) return;
-                  setUploading(true);
-                  let lat=null,lng=null;
-                  if(navigator.geolocation){
-                    await new Promise(resolve=>navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lng=p.coords.longitude;resolve();},resolve,{timeout:5000}));
-                  }
-                  try{
-                    const cd=await uploadToCloudinary(file,"site_photos");
-                    const res=await api.post("/tasks/"+task.id+"/photos",{photo_url:cd.secure_url,caption:"",lat,lng});
-                    if(res.success) setPhotos(p=>[res.data,...p]);
-                  }catch(e){alert("Upload failed");}
-                  setUploading(false);e.target.value="";
-                }}/>
-              </label>
+        {/* ════════════ LABOUR SECTION ════════════ */}
+        <div ref={labourRef} data-section="labour" style={{padding:"20px 14px 6px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{width:3,height:18,borderRadius:2,background:"#7C3AED"}}/>
+              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Labour</span>
+              {labours.length>0&&<span style={{background:"#EDE9FE",color:"#6D28D9",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{labours.length}</span>}
             </div>
-            {photos.length===0?<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>
-              <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{marginBottom:8}}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
-              <div>No photos yet</div>
+            <button onClick={()=>setShowLabForm(s=>!s)}
+              style={{padding:"9px 16px",borderRadius:8,background:showLabForm?"#F1F5F9":"#7C3AED",color:showLabForm?"#64748B":"white",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",minHeight:40}}>
+              {showLabForm?"Cancel":"+ Add"}
+            </button>
+          </div>
+          {/* Labour summary cards */}
+          {labours.length>0&&(
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
+              {[
+                {l:"Workers",v:labours.reduce((s,l)=>s+Number(l.count||1),0),c:"#2563EB"},
+                {l:"Man-Hours",v:labours.reduce((s,l)=>s+(Number(l.hours||8)*Number(l.count||1)),0),c:"#16A34A"},
+                {l:"Entries",v:labours.length,c:"#64748B"},
+              ].map(s=>(
+                <div key={s.l} style={{background:"white",borderRadius:9,padding:"10px",border:"1px solid #E2E8F0",textAlign:"center",borderTop:"3px solid "+s.c}}>
+                  <div style={{fontSize:22,fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
+                  <div style={{fontSize:10,color:"#94A3B8",marginTop:3}}>{s.l}</div>
+                </div>
+              ))}
             </div>
-            :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          )}
+          {showLabForm&&(
+            <div style={{background:"white",borderRadius:12,padding:"16px",border:"1px solid #E2E8F0",marginBottom:12}}>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:6,textTransform:"uppercase"}}>Type</label>
+                <div style={{display:"flex",gap:6}}>
+                  {["Direct","Subcon","Vendor"].map(t=>(
+                    <button key={t} onClick={()=>setLabForm(p=>({...p,labour_type:t,labour_name:"",vendor_name:""}))}
+                      style={{flex:1,padding:"9px",borderRadius:8,border:"1.5px solid "+(labForm.labour_type===t?"#2563EB":"#E2E8F0"),background:labForm.labour_type===t?"#DBEAFE":"white",color:labForm.labour_type===t?"#2563EB":"#64748B",fontSize:12,fontWeight:labForm.labour_type===t?700:400,cursor:"pointer"}}>
+                      {t==="Direct"?"👷":t==="Subcon"?"🏗":"🏢"} {t}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
+                <div style={{gridColumn:"1/-1"}}>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{labForm.labour_type==="Direct"?"Labour Name *":labForm.labour_type+" Name *"}</label>
+                  <input value={labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name}
+                    onChange={e=>setLabForm(p=>labForm.labour_type==="Direct"?{...p,labour_name:e.target.value}:{...p,vendor_name:e.target.value})}
+                    placeholder={labForm.labour_type==="Direct"?"e.g. Ramesh Kumar":"Company name"}
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Role</label>
+                  <select value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
+                    {ROLES.map(r=><option key={r}>{r}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Count</label>
+                  <input type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Date</label>
+                  <input type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Hours/Day</label>
+                  <input type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Remark</label>
+                  <input value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+              </div>
+              <button onClick={async()=>{
+                const name=labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name;
+                if(!name.trim()) return alert("Name required");
+                const payload={...labForm,labour_name:name};
+                const res=await api.post("/tasks/"+task.id+"/labour",payload);
+                if(res.success){setLabours(p=>[res.data,...p]);setLabForm({labour_type:"Direct",labour_name:"",vendor_name:"",role:"Mason",count:1,work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});setShowLabForm(false);}
+                else alert(res.message||"Failed");
+              }} style={{width:"100%",padding:"13px",borderRadius:9,background:"#7C3AED",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:"pointer"}}>
+                + Add Labour Entry
+              </button>
+            </div>
+          )}
+          {labLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
+          {!labLoading&&labours.length===0&&!showLabForm&&<div style={{textAlign:"center",padding:"32px 0",color:"#94A3B8",fontSize:13}}>No labour entries yet</div>}
+          {labours.map(l=>(
+            <div key={l.id} style={{background:"white",borderRadius:10,padding:"12px 14px",border:"1px solid #E2E8F0",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div style={{flex:1}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                  <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#7C3AED,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:14,flexShrink:0}}>
+                    {l.labour_type==="Subcon"?"🏗":l.labour_type==="Vendor"?"🏢":"👷"}
+                  </div>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{l.labour_name}</div>
+                    <div style={{fontSize:11,color:"#64748B"}}>{l.role} · {l.count} workers · {l.hours}h/day</div>
+                  </div>
+                  <span style={{marginLeft:"auto",fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:4,background:l.labour_type==="Direct"?"#DCFCE7":l.labour_type==="Subcon"?"#DBEAFE":"#EDE9FE",color:l.labour_type==="Direct"?"#16A34A":l.labour_type==="Subcon"?"#2563EB":"#7C3AED"}}>{l.labour_type||"Direct"}</span>
+                </div>
+                <div style={{fontSize:10.5,color:"#94A3B8",paddingLeft:40}}>{fmtDate(l.work_date)}{l.remark?" · "+l.remark:""}</div>
+              </div>
+              <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/labour/"+l.id);if(r.success)setLabours(p=>p.filter(x=>x.id!==l.id));}}
+                style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:8,display:"flex",flexShrink:0}}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+              </button>
+            </div>
+          ))}
+        </div>
+
+        {/* ════════════ PHOTOS SECTION ════════════ */}
+        <div ref={photosRef} data-section="photos" style={{padding:"20px 14px 6px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{width:3,height:18,borderRadius:2,background:"#EA580C"}}/>
+              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Photos</span>
+              {photos.length>0&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{photos.length}</span>}
+            </div>
+            <label style={{padding:"9px 16px",borderRadius:8,background:uploading?"#94A3B8":"#EA580C",color:"white",fontSize:13,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,minHeight:40,boxSizing:"border-box"}}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
+              {uploading?"Uploading...":"📷 Add Photo"}
+              <input type="file" accept="image/*" capture="environment" style={{display:"none"}} disabled={uploading} onChange={async(e)=>{
+                const file=e.target.files[0]; if(!file) return;
+                setUploading(true);
+                let lat=null,lng=null;
+                if(navigator.geolocation){
+                  await new Promise(resolve=>navigator.geolocation.getCurrentPosition(p=>{lat=p.coords.latitude;lng=p.coords.longitude;resolve();},resolve,{timeout:5000}));
+                }
+                try{
+                  const cd=await uploadToCloudinary(file,"site_photos");
+                  const res=await api.post("/tasks/"+task.id+"/photos",{photo_url:cd.secure_url,caption:"",lat,lng});
+                  if(res.success) setPhotos(p=>[res.data,...p]);
+                }catch(e){alert("Upload failed");}
+                setUploading(false);e.target.value="";
+              }}/>
+            </label>
+          </div>
+          {phLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading photos...</div>}
+          {!phLoading&&photos.length===0&&(
+            <div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8"}}>
+              <svg width={44} height={44} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{marginBottom:8}}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
+              <div style={{fontSize:13}}>No photos yet</div>
+              <div style={{fontSize:11,marginTop:4,color:"#CBD5E1"}}>Tap "Add Photo" to upload</div>
+            </div>
+          )}
+          {!phLoading&&photos.length>0&&(
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               {photos.map(p=>(
-                <div key={p.id} style={{borderRadius:10,overflow:"hidden",border:"1px solid #E2E8F0",background:"white",cursor:"zoom-in"}} onClick={()=>setFullPhoto(p)}>
+                <div key={p.id} style={{borderRadius:12,overflow:"hidden",border:"1px solid #E2E8F0",background:"white",cursor:"zoom-in"}} onClick={()=>setFullPhoto(p)}>
                   <div style={{position:"relative"}}>
-                    <img src={p.photo_url} alt="site" style={{width:"100%",height:120,objectFit:"cover",display:"block"}}/>
-                    {(p.lat||p.lng)&&<div style={{position:"absolute",bottom:4,left:4,background:"rgba(0,0,0,.6)",borderRadius:10,padding:"2px 7px",display:"flex",alignItems:"center",gap:3}}>
+                    <img src={p.photo_url} alt="site" style={{width:"100%",height:130,objectFit:"cover",display:"block"}}/>
+                    {(p.lat||p.lng)&&<div style={{position:"absolute",bottom:5,left:5,background:"rgba(0,0,0,.6)",borderRadius:10,padding:"2px 8px",display:"flex",alignItems:"center",gap:3}}>
                       <svg width={8} height={8} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M21 10c0 7-9 13-9 13S3 17 3 10a9 9 0 0118 0z"/><circle cx={12} cy={10} r={3}/></svg>
-                      <span style={{fontSize:8,color:"white"}}>GPS</span>
+                      <span style={{fontSize:8,color:"white",fontWeight:600}}>GPS</span>
                     </div>}
                   </div>
-                  <div style={{padding:"6px 9px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:10,color:"#94A3B8"}}>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
+                  <div style={{padding:"7px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:10.5,color:"#94A3B8"}}>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
                     <button onClick={async e=>{e.stopPropagation();if(window.confirm("Delete photo?")){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
-                      style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:2,display:"flex"}}>
-                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                      style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,display:"flex"}}>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                     </button>
                   </div>
                 </div>
               ))}
-            </div>}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
 
-        {/* ── ISSUES TAB ── */}
-        {tab==="issues"&&(
-          <div>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-              <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".5px"}}>Issues ({issues.length})</span>
-              <button onClick={()=>setShowIssueForm(s=>!s)}
-                style={{padding:"6px 14px",borderRadius:6,background:showIssueForm?"#F1F5F9":"#DC2626",color:showIssueForm?"#64748B":"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                {showIssueForm?"Cancel":"+ Create Issue"}
+        {/* ════════════ ISSUES SECTION ════════════ */}
+        <div ref={issuesRef} data-section="issues" style={{padding:"20px 14px 20px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:8}}>
+              <div style={{width:3,height:18,borderRadius:2,background:"#DC2626"}}/>
+              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Issues</span>
+              {issues.length>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{issues.filter(i=>i.status==="Open"||i.status==="In Progress").length} open</span>}
+            </div>
+            <button onClick={()=>setShowIssueForm(s=>!s)}
+              style={{padding:"9px 16px",borderRadius:8,background:showIssueForm?"#F1F5F9":"#DC2626",color:showIssueForm?"#64748B":"white",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",minHeight:40}}>
+              {showIssueForm?"Cancel":"+ Issue"}
+            </button>
+          </div>
+          {showIssueForm&&(
+            <div style={{background:"white",borderRadius:12,padding:"16px",border:"1.5px solid #FECACA",marginBottom:12}}>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Title *</label>
+                <input value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))} placeholder="Describe the issue"
+                  style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Description</label>
+                <textarea value={issueForm.description} onChange={e=>setIssueForm(p=>({...p,description:e.target.value}))} rows={2} placeholder="More details..."
+                  style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
+              </div>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:6,textTransform:"uppercase"}}>Priority</label>
+                <div style={{display:"flex",gap:6}}>
+                  {PRIORITIES.map(p=>(
+                    <button key={p} onClick={()=>setIssueForm(prev=>({...prev,priority:p}))}
+                      style={{flex:1,padding:"8px",borderRadius:7,border:"1.5px solid "+(issueForm.priority===p?priC[p].c:"#E2E8F0"),background:issueForm.priority===p?priC[p].bg:"white",color:issueForm.priority===p?priC[p].c:"#64748B",fontSize:11,fontWeight:issueForm.priority===p?700:400,cursor:"pointer"}}>
+                      {p}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:12}}>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Assign To</label>
+                  <select value={issueForm.assigned_to} onChange={e=>setIssueForm(p=>({...p,assigned_to:e.target.value}))}
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
+                    <option value="">-- Select --</option>
+                    {issueTeam.map(m=><option key={m} value={m}>{m}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Category</label>
+                  <select value={issueForm.work_category} onChange={e=>setIssueForm(p=>({...p,work_category:e.target.value}))}
+                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
+                    <option value="">-- Select --</option>
+                    {issueWorkCats.map(c=><option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* Photo upload */}
+              <label style={{display:"flex",alignItems:"center",gap:7,padding:"9px 14px",borderRadius:8,border:"1.5px dashed #E2E8F0",cursor:"pointer",marginBottom:12,color:"#64748B",fontSize:12,fontWeight:500}}>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth={2}><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx={12} cy={13} r={4}/></svg>
+                {issueUploading?"Uploading...":"Attach a photo (optional)"}
+                <input type="file" accept="image/*" style={{display:"none"}} disabled={issueUploading} onChange={async(e)=>{
+                  const file=e.target.files[0]; if(!file) return;
+                  setIssueUploading(true);
+                  try{const cd=await uploadToCloudinary(file,"issue_photos");setIssueForm(p=>({...p,photo_url:cd.secure_url}));}catch{alert("Upload failed");}
+                  setIssueUploading(false);e.target.value="";
+                }}/>
+              </label>
+              {issueForm.photo_url&&<img src={issueForm.photo_url} style={{width:"100%",borderRadius:8,marginBottom:12,maxHeight:160,objectFit:"cover"}}/>}
+              <button onClick={async()=>{
+                if(!issueForm.title.trim()) return alert("Title required");
+                const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
+                if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});setShowIssueForm(false);}
+                else alert(res.message||"Failed");
+              }} style={{width:"100%",padding:"13px",borderRadius:9,background:"#DC2626",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:"pointer"}}>
+                + Create Issue
               </button>
             </div>
-            {showIssueForm&&(
-              <div style={{background:"white",borderRadius:10,padding:"14px",border:"1.5px solid #FECACA",marginBottom:12}}>
-                <div style={{marginBottom:9}}><LBL t="Issue Title *"/><INP value={issueForm.title} onChange={e=>setIssueForm(p=>({...p,title:e.target.value}))} placeholder="Describe the issue briefly"/></div>
-                <div style={{marginBottom:9}}><LBL t="Description"/>
-                  <textarea value={issueForm.description} onChange={e=>setIssueForm(p=>({...p,description:e.target.value}))} rows={2} placeholder="More details..."
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
-                </div>
-                {/* Priority */}
-                <div style={{marginBottom:9}}>
-                  <LBL t="Priority"/>
-                  <div style={{display:"flex",gap:6}}>
-                    {PRIORITIES.map(p=>(
-                      <button key={p} onClick={()=>setIssueForm(prev=>({...prev,priority:p}))}
-                        style={{flex:1,padding:"6px",borderRadius:6,border:"1.5px solid "+(issueForm.priority===p?priC[p].c:"#E2E8F0"),background:issueForm.priority===p?priC[p].bg:"white",color:issueForm.priority===p?priC[p].c:"#64748B",fontSize:11,fontWeight:issueForm.priority===p?700:400,cursor:"pointer"}}>
-                        {p}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-                {/* Assign To + Work Category */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:9}}>
-                  <div>
-                    <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Assign To</label>
-                    <select value={issueForm.assigned_to} onChange={e=>setIssueForm(p=>({...p,assigned_to:e.target.value}))}
-                      style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit"}}>
-                      <option value="">-- Select Member --</option>
-                      {issueTeam.map(m=><option key={m} value={m}>{m}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Work Category</label>
-                    <select value={issueForm.work_category} onChange={e=>setIssueForm(p=>({...p,work_category:e.target.value}))}
-                      style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"white",outline:"none",fontFamily:"inherit"}}>
-                      <option value="">-- Select Category --</option>
-                      {issueWorkCats.map(c=><option key={c} value={c}>{c}</option>)}
-                    </select>
-                  </div>
-                </div>
-                {/* Photo upload */}
-                <div style={{marginBottom:9}}>
-                  <LBL t="Attach Photo"/>
-                  <label style={{display:"flex",alignItems:"center",gap:7,padding:"8px 12px",border:"1.5px dashed #E2E8F0",borderRadius:7,cursor:"pointer",background:"#F8FAFC"}}>
-                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
-                    <span style={{fontSize:12,color:"#94A3B8"}}>{issueUploading?"Uploading...":issueForm.photo_url?"Photo attached ✓":"Click to attach photo"}</span>
-                    <input type="file" accept="image/*" style={{display:"none"}} disabled={issueUploading} onChange={async e=>{
-                      const file=e.target.files[0]; if(!file) return;
-                      setIssueUploading(true);
-                      try{const cd=await uploadToCloudinary(file,"issue_photos");setIssueForm(p=>({...p,photo_url:cd.secure_url}));}catch(e){alert("Upload failed");}
-                      setIssueUploading(false);e.target.value="";
-                    }}/>
-                  </label>
-                </div>
-                <button onClick={async()=>{
-                  if(!issueForm.title.trim()) return alert("Title required");
-                  const res=await api.post("/tasks/"+task.id+"/issues",issueForm);
-                  if(res.success){setIssues(p=>[res.data,...p]);setIssueForm({title:"",description:"",priority:"Medium",assigned_to:"",work_category:""});setShowIssueForm(false);}
-                  else alert(res.message||"Failed");
-                }} style={{width:"100%",padding:"10px",borderRadius:7,background:"#DC2626",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Create Issue</button>
-              </div>
-            )}
-            {issues.length===0&&!showIssueForm&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>No issues found for this project.</div>}
-            {issues.map(issue=>{
-              const ic=issC[issue.status]||issC["Open"];
-              const pc=priC[issue.priority]||priC["Medium"];
-              const isExp=expandedIssue===issue.id;
-              return(
-                <div key={issue.id} style={{background:"white",borderRadius:10,border:"1px solid #E2E8F0",marginBottom:8,overflow:"hidden",borderLeft:"3px solid "+ic.c}}>
-                  <div style={{padding:"11px 13px",cursor:"pointer"}} onClick={()=>setExpandedIssue(isExp?null:issue.id)}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-                      <div style={{flex:1,marginRight:8}}>
-                        <div style={{fontSize:13,fontWeight:700,color:"#1E293B",marginBottom:3}}>{issue.title}</div>
-                        {issue.description&&!isExp&&<div style={{fontSize:11,color:"#64748B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{issue.description}</div>}
-                        {!isExp&&(issue.assigned_to||issue.work_category)&&(
-                          <div style={{display:"flex",gap:5,marginTop:4,flexWrap:"wrap"}}>
-                            {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"1px 6px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
-                            {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"1px 6px",fontWeight:600}}>🔧 {issue.work_category}</span>}
-                          </div>
-                        )}
-                      </div>
-                      <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
-                        {issue.photo_url&&!isExp&&(
-                          <img src={issue.photo_url} alt="p"
-                            onClick={e=>{e.stopPropagation();setFullPhoto({photo_url:issue.photo_url,created_at:issue.created_at});}}
-                            style={{width:36,height:36,borderRadius:5,objectFit:"cover",cursor:"zoom-in",border:"1px solid #E2E8F0",flexShrink:0}}/>
-                        )}
-                        <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.priority}</span>
-                        <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.status}</span>
-                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d={isExp?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"}/></svg>
-                      </div>
-                    </div>
-                  </div>
-                  {isExp&&(
-                    <div style={{padding:"0 13px 12px",borderTop:"1px solid #F1F5F9"}}>
-                      {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:8,marginTop:8}}>{issue.description}</div>}
-                      {(issue.assigned_to||issue.work_category)&&(
-                        <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-                          {issue.assigned_to&&<span style={{fontSize:11,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
-                          {issue.work_category&&<span style={{fontSize:11,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"2px 8px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+          )}
+          {issLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading issues...</div>}
+          {!issLoading&&issues.length===0&&!showIssueForm&&(
+            <div style={{textAlign:"center",padding:"32px 0",color:"#94A3B8"}}>
+              <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{marginBottom:8}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+              <div style={{fontSize:13}}>No issues logged</div>
+            </div>
+          )}
+          {issues.map(issue=>{
+            const pc=priC[issue.priority]||priC["Medium"];
+            const ic=issC[issue.status]||issC["Open"];
+            const isExp=expandedIssue===issue.id;
+            return(
+              <div key={issue.id} style={{background:"white",borderRadius:10,border:"1px solid #E2E8F0",marginBottom:8,overflow:"hidden",borderLeft:"3px solid "+ic.c}}>
+                <div style={{padding:"12px 13px",cursor:"pointer"}} onClick={()=>setExpandedIssue(isExp?null:issue.id)}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                    <div style={{flex:1,marginRight:8}}>
+                      <div style={{fontSize:13,fontWeight:700,color:"#1E293B",marginBottom:3}}>{issue.title}</div>
+                      {issue.description&&!isExp&&<div style={{fontSize:11,color:"#64748B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{issue.description}</div>}
+                      {!isExp&&(issue.assigned_to||issue.work_category)&&(
+                        <div style={{display:"flex",gap:5,marginTop:5,flexWrap:"wrap"}}>
+                          {issue.assigned_to&&<span style={{fontSize:10,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"2px 7px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                          {issue.work_category&&<span style={{fontSize:10,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"2px 7px",fontWeight:600}}>🔧 {issue.work_category}</span>}
                         </div>
                       )}
-                      {issue.photo_url&&<img src={issue.photo_url} alt="issue" style={{width:"100%",borderRadius:6,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
-                      {/* Chat */}
-                      <TaskIssueChat issueId={issue.id}/>
-                      {/* Status change */}
-                      <div style={{marginBottom:8}}>
-                        <div style={{fontSize:9.5,fontWeight:600,color:"#94A3B8",marginBottom:5,textTransform:"uppercase"}}>Change Status</div>
-                        <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
-                          {ISSUE_STATUS.map(s=>(
-                            <button key={s} onClick={async()=>{const r=await api.put("/tasks/"+task.id+"/issues/"+issue.id,{status:s});if(r.success)setIssues(p=>p.map(x=>x.id===issue.id?{...x,status:s}:x));}}
-                              style={{padding:"4px 10px",borderRadius:20,border:"1.5px solid "+(issue.status===s?issC[s].c:"#E2E8F0"),background:issue.status===s?issC[s].bg:"white",color:issue.status===s?issC[s].c:"#64748B",fontSize:10.5,fontWeight:issue.status===s?700:400,cursor:"pointer"}}>
-                              {s}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <button onClick={async()=>{if(window.confirm("Delete issue?")){const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success)setIssues(p=>p.filter(x=>x.id!==issue.id));setExpandedIssue(null);}}}
-                        style={{fontSize:11,color:"#EF4444",background:"none",border:"none",cursor:"pointer",padding:0}}>Delete Issue</button>
                     </div>
-                  )}
+                    <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
+                      {issue.photo_url&&!isExp&&<img src={issue.photo_url} style={{width:38,height:38,borderRadius:6,objectFit:"cover",border:"1px solid #E2E8F0"}} onClick={e=>{e.stopPropagation();setFullPhoto({photo_url:issue.photo_url,created_at:issue.created_at});}}/>}
+                      <span style={{background:pc.bg,color:pc.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.priority}</span>
+                      <span style={{background:ic.bg,color:ic.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{issue.status}</span>
+                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d={isExp?"M18 15l-6-6-6 6":"M6 9l6 6 6-6"}/></svg>
+                    </div>
+                  </div>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {isExp&&(
+                  <div style={{padding:"0 13px 14px",borderTop:"1px solid #F1F5F9"}}>
+                    {issue.description&&<div style={{fontSize:12,color:"#475569",lineHeight:1.5,marginBottom:9,marginTop:9}}>{issue.description}</div>}
+                    {(issue.assigned_to||issue.work_category)&&(
+                      <div style={{display:"flex",gap:6,marginBottom:9,flexWrap:"wrap"}}>
+                        {issue.assigned_to&&<span style={{fontSize:11,color:"#2563EB",background:"#DBEAFE",borderRadius:4,padding:"3px 9px",fontWeight:600}}>👤 {issue.assigned_to}</span>}
+                        {issue.work_category&&<span style={{fontSize:11,color:"#7C3AED",background:"#EDE9FE",borderRadius:4,padding:"3px 9px",fontWeight:600}}>🔧 {issue.work_category}</span>}
+                      </div>
+                    )}
+                    {issue.photo_url&&<img src={issue.photo_url} style={{width:"100%",borderRadius:8,marginBottom:10,cursor:"zoom-in",maxHeight:180,objectFit:"cover"}} onClick={()=>setFullPhoto({photo_url:issue.photo_url})}/>}
+                    <TaskIssueChat issueId={issue.id}/>
+                    <div style={{marginBottom:9}}>
+                      <div style={{fontSize:10,fontWeight:600,color:"#94A3B8",marginBottom:6,textTransform:"uppercase",letterSpacing:".4px"}}>Change Status</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                        {ISSUE_STATUS.map(s=>(
+                          <button key={s} onClick={async()=>{const r=await api.put("/tasks/"+task.id+"/issues/"+issue.id,{status:s});if(r.success)setIssues(p=>p.map(x=>x.id===issue.id?{...x,status:s}:x));}}
+                            style={{padding:"6px 12px",borderRadius:20,border:"1.5px solid "+(issue.status===s?issC[s].c:"#E2E8F0"),background:issue.status===s?issC[s].bg:"white",color:issue.status===s?issC[s].c:"#64748B",fontSize:11,fontWeight:issue.status===s?700:400,cursor:"pointer"}}>
+                            {s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    <button onClick={async()=>{if(window.confirm("Delete issue?")){const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success){setIssues(p=>p.filter(x=>x.id!==issue.id));setExpandedIssue(null);}}}}
+                      style={{fontSize:11,color:"#EF4444",background:"none",border:"none",cursor:"pointer",padding:0}}>Delete Issue</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-      </div>
+      </div>{/* end scrollable body */}
 
-      {/* ── COMMENTS — Fixed at bottom (WhatsApp style) ── */}
+      {/* ── COMMENTS — Fixed at bottom ── */}
       <div style={{borderTop:"1px solid #E2E8F0",background:"white",flexShrink:0}}>
-        {/* Comment list — max 3 visible */}
         {comments.length>0&&(
-          <div style={{maxHeight:120,overflowY:"auto",padding:"8px 14px 4px"}}>
+          <div style={{maxHeight:110,overflowY:"auto",padding:"8px 14px 4px"}}>
             {comments.slice(-20).map(c=>(
-              <div key={c.id} style={{display:"flex",gap:7,marginBottom:7}}>
-                <div style={{width:22,height:22,borderRadius:"50%",background:"linear-gradient(135deg,#2563EB,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:9,fontWeight:700,flexShrink:0}}>
+              <div key={c.id} style={{display:"flex",gap:8,marginBottom:7}}>
+                <div style={{width:24,height:24,borderRadius:"50%",background:"linear-gradient(135deg,#2563EB,#7C3AED)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:10,fontWeight:700,flexShrink:0}}>
                   {(c.user_name||"?").charAt(0)}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
-                  <span style={{fontSize:10.5,fontWeight:600,color:"#1E293B"}}>{c.user_name||"User"} </span>
+                  <span style={{fontSize:11,fontWeight:600,color:"#1E293B"}}>{c.user_name||"User"} </span>
                   <span style={{fontSize:10,color:"#94A3B8"}}>{new Date(c.created_at).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"})}</span>
-                  <div style={{fontSize:12,color:"#334155",marginTop:1,lineHeight:1.4}}>{c.text}</div>
+                  <div style={{fontSize:12.5,color:"#334155",marginTop:1,lineHeight:1.4}}>{c.text}</div>
                 </div>
               </div>
             ))}
           </div>
         )}
-        {/* Input box */}
-        <div style={{display:"flex",gap:8,padding:"8px 12px",alignItems:"center"}}>
+        <div style={{display:"flex",gap:8,padding:"8px 12px 10px",alignItems:"center"}}>
           <input value={commentText} onChange={e=>setCommentText(e.target.value)}
             placeholder="Add a comment..."
             onKeyDown={e=>{if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendComment();}}}
-            style={{flex:1,padding:"8px 12px",borderRadius:20,border:"1.5px solid #E2E8F0",fontSize:12.5,color:"#1E293B",background:"#F8FAFC",outline:"none",fontFamily:"inherit"}}
+            style={{flex:1,padding:"10px 14px",borderRadius:22,border:"1.5px solid #E2E8F0",fontSize:13,color:"#1E293B",background:"#F8FAFC",outline:"none",fontFamily:"inherit"}}
             onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
           <button onClick={sendComment} disabled={sendingComment||!commentText.trim()}
-            style={{width:34,height:34,borderRadius:"50%",background:commentText.trim()?"#2563EB":"#E2E8F0",border:"none",cursor:commentText.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
+            style={{width:40,height:40,borderRadius:"50%",background:commentText.trim()?"#2563EB":"#E2E8F0",border:"none",cursor:commentText.trim()?"pointer":"default",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M22 2L11 13M22 2L15 22l-4-9-9-4 20-7z"/></svg>
           </button>
         </div>
       </div>
