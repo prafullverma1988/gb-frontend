@@ -642,27 +642,95 @@ function RolesAccess() {
 function ApprovalSettings() {
   const allRoles = ["Site Supervisor", "Project Manager", "Accountant", "Admin"];
 
-  const [approvals, setApprovals] = useState([
-    { id: 1,  module: "Design Approval",       cat: "DESIGN",       enabled: true,  levels: [{ role: "Project Manager", limit: null }] },
-    { id: 2,  module: "Site Expense",           cat: "FINANCE",      enabled: true,  levels: [{ role: "Site Supervisor", limit: 25000 }, { role: "Project Manager", limit: 100000 }, { role: "Admin", limit: null }] },
-    { id: 3,  module: "Purchase Order (PO)",    cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Site Supervisor", limit: 50000 }, { role: "Project Manager", limit: 200000 }, { role: "Admin", limit: null }] },
-    { id: 4,  module: "RFQ",                    cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Project Manager", limit: 100000 }, { role: "Admin", limit: null }] },
-    { id: 5,  module: "Material Purchase",      cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Site Supervisor", limit: 30000 }, { role: "Project Manager", limit: null }] },
-    { id: 6,  module: "GRN (Goods Received)",   cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Site Supervisor", limit: null }] },
-    { id: 7,  module: "Subcontractor Bill",     cat: "FINANCE",      enabled: true,  levels: [{ role: "Project Manager", limit: 300000 }, { role: "Admin", limit: null }] },
-    { id: 8,  module: "Customer Invoice",       cat: "FINANCE",      enabled: true,  levels: [{ role: "Accountant", limit: 500000 }, { role: "Admin", limit: null }] },
-    { id: 9,  module: "Retention Release",      cat: "FINANCE",      enabled: true,  levels: [{ role: "Accountant", limit: 100000 }, { role: "Admin", limit: null }] },
-    { id: 10, module: "Detention Charges",      cat: "FINANCE",      enabled: false, levels: [{ role: "Project Manager", limit: null }] },
-    { id: 11, module: "Payment Entry",          cat: "PAYMENTS",     enabled: true,  levels: [{ role: "Accountant", limit: 100000 }, { role: "Admin", limit: null }] },
-    { id: 12, module: "Payment Request",        cat: "PAYMENTS",     enabled: true,  levels: [{ role: "Project Manager", limit: 200000 }, { role: "Admin", limit: null }] },
-  ]);
+  const DEFAULTS = [
+    { id: 0,  module: "Design Approval",       cat: "DESIGN",       enabled: true,  levels: [{ role: "Project Manager", limit: null }] },
+    { id: 0,  module: "Material Request",      cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Project Manager", limit: 100000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Purchase Order (PO)",    cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Accountant", limit: 50000 }, { role: "Project Manager", limit: 100000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "RFQ",                    cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Project Manager", limit: 100000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Material Purchase",      cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Site Supervisor", limit: 30000 }, { role: "Project Manager", limit: null }] },
+    { id: 0,  module: "GRN (Goods Received)",   cat: "PROCUREMENT",  enabled: true,  levels: [{ role: "Site Supervisor", limit: null }] },
+    { id: 0,  module: "Material Site Transfer", cat: "WAREHOUSE",    enabled: true,  levels: [{ role: "Project Manager", limit: null }] },
+    { id: 0,  module: "Material Issue",         cat: "WAREHOUSE",    enabled: true,  levels: [{ role: "Project Manager", limit: null }] },
+    { id: 0,  module: "Site Expense",           cat: "FINANCE",      enabled: true,  levels: [{ role: "Site Supervisor", limit: 25000 }, { role: "Project Manager", limit: 100000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Subcontractor Bill",     cat: "FINANCE",      enabled: true,  levels: [{ role: "Project Manager", limit: 300000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Subcon WO Amendment",    cat: "FINANCE",      enabled: true,  levels: [{ role: "Project Manager", limit: null }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "RA Bill",                cat: "FINANCE",      enabled: true,  levels: [{ role: "Project Manager", limit: 500000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Customer Invoice",       cat: "FINANCE",      enabled: true,  levels: [{ role: "Accountant", limit: 500000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Retention Release",      cat: "FINANCE",      enabled: true,  levels: [{ role: "Accountant", limit: 100000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Detention Charges",      cat: "FINANCE",      enabled: false, levels: [{ role: "Project Manager", limit: null }] },
+    { id: 0,  module: "Payment Entry",          cat: "PAYMENTS",     enabled: true,  levels: [{ role: "Accountant", limit: 100000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Payment Request",        cat: "PAYMENTS",     enabled: true,  levels: [{ role: "Project Manager", limit: 200000 }, { role: "Admin", limit: null }] },
+  ];
+
+  const [approvals, setApprovals] = useState(DEFAULTS);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saveMsg, setSaveMsg] = useState("");
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [editLevels, setEditLevels] = useState([]);
 
-  const categories = ["DESIGN", "PROCUREMENT", "FINANCE", "PAYMENTS"];
-  const catColors = { DESIGN: T.purple, PROCUREMENT: T.teal, FINANCE: T.amber, PAYMENTS: T.green };
+  // Load from API on mount
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await api.get("/approvals/workflows");
+        if (res.success && res.data && res.data.length > 0) {
+          const mapped = res.data.map(wf => ({
+            id: wf.id,
+            module: wf.module,
+            cat: wf.category,
+            enabled: !!wf.enabled,
+            escalation_hours: wf.escalation_hours || 24,
+            notify_channel: wf.notify_channel || "all",
+            levels: (wf.levels || []).map(lv => ({ role: lv.role, limit: lv.amount_limit ? Number(lv.amount_limit) : null })),
+          }));
+          // Merge: keep API data, add any DEFAULTS not in API
+          const apiModules = new Set(mapped.map(m => m.module));
+          const merged = [...mapped, ...DEFAULTS.filter(d => !apiModules.has(d.module))];
+          setApprovals(merged);
+        }
+      } catch (e) { console.error("Load approval workflows:", e); }
+      setLoading(false);
+    })();
+  }, []);
+
+  // Save to API
+  const saveAll = async () => {
+    setSaving(true); setSaveMsg("");
+    try {
+      const payload = approvals.map(a => ({
+        id: a.id > 0 ? a.id : undefined,
+        module: a.module,
+        category: a.cat,
+        enabled: a.enabled,
+        escalation_hours: a.escalation_hours || 24,
+        notify_channel: a.notify_channel || "all",
+        levels: a.levels,
+      }));
+      const res = await api.put("/approvals/workflows", { workflows: payload });
+      if (res.success) {
+        setSaveMsg("Saved successfully!");
+        // Reload to get IDs
+        const r2 = await api.get("/approvals/workflows");
+        if (r2.success && r2.data) {
+          const mapped = r2.data.map(wf => ({
+            id: wf.id, module: wf.module, cat: wf.category, enabled: !!wf.enabled,
+            escalation_hours: wf.escalation_hours || 24, notify_channel: wf.notify_channel || "all",
+            levels: (wf.levels || []).map(lv => ({ role: lv.role, limit: lv.amount_limit ? Number(lv.amount_limit) : null })),
+          }));
+          const apiModules = new Set(mapped.map(m => m.module));
+          setApprovals([...mapped, ...DEFAULTS.filter(d => !apiModules.has(d.module))]);
+        }
+      } else setSaveMsg("Failed to save: " + (res.message || "Unknown error"));
+    } catch (e) { console.error("Save approvals:", e); setSaveMsg("Failed to save"); }
+    setSaving(false);
+    setTimeout(() => setSaveMsg(""), 3000);
+  };
+
+  const categories = ["DESIGN", "PROCUREMENT", "WAREHOUSE", "FINANCE", "PAYMENTS"];
+  const catColors = { DESIGN: T.purple, PROCUREMENT: T.teal, WAREHOUSE: T.blue, FINANCE: T.amber, PAYMENTS: T.green };
 
   const openEdit = (a) => {
     setEditItem(a);
@@ -681,6 +749,8 @@ function ApprovalSettings() {
 
   const toggleApproval = (id) => setApprovals(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
 
+  if (loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.textLight,fontSize:13}}>Loading approval workflows...</div>;
+
   return (
     <div>
       {/* Info banner */}
@@ -696,7 +766,7 @@ function ApprovalSettings() {
         return (
           <SectionCard key={cat} title={cat.charAt(0) + cat.slice(1).toLowerCase() + " Approvals"}
             desc={`${catApprovals.filter(a => a.enabled).length} of ${catApprovals.length} workflows active`}
-            action={<SaveBtn />}>
+            action={<>{saveMsg&&<span style={{fontSize:12,color:saveMsg.includes("Failed")?T.red:T.green,marginRight:8}}>{saveMsg}</span>}<SaveBtn onClick={saveAll} label={saving?"Saving...":"Save Changes"}/></>}>
 
             {catApprovals.map((a, ai) => (
               <div key={a.id} style={{ borderBottom: ai < catApprovals.length - 1 ? `1px solid ${T.borderLight}` : "none", padding: "14px 0" }}>

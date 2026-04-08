@@ -859,6 +859,15 @@ function TabDesign({ project, isAdmin }) {
       });
       setUploadPct(100);
       if (res.success) {
+        api.post("/approvals/submit", {
+          module: "Design Approval",
+          ref_id: res.data.id,
+          ref_no: res.data.drawing_no || "",
+          title: res.data.title || uForm.title || "Drawing",
+          amount: 0,
+          project_id: projectId || res.data.project_id,
+          project_name: projectName || res.data.project_name || "",
+        }).catch(e => console.error("Approval submit:", e));
         setDrawings(p => [res.data, ...p]);
         setShowUpload(false);
         setUForm({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
@@ -3155,7 +3164,18 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
               task_name: task.name,
             });
             setSaving(false);
-            if(res.success) onSaved();
+            if(res.success){
+              api.post("/approvals/submit", {
+                module: "Material Request",
+                ref_id: res.data.id,
+                ref_no: res.data.mr_number || "",
+                title: form.item_name + " (" + form.quantity + " " + form.unit + ")",
+                amount: Number(form.approx_amount) || 0,
+                project_id: projectId,
+                project_name: "",
+              }).catch(e => console.error("Approval submit:", e));
+              onSaved();
+            }
             else alert(res.message||"Failed");
           }} disabled={saving}
             style={{flex:2,padding:"10px",borderRadius:7,background:saving?"#94A3B8":"#2563EB",color:"white",border:"none",cursor:saving?"default":"pointer",fontSize:13,fontWeight:700}}>
@@ -5002,6 +5022,15 @@ function TabMaterial({ project }) {
         notes: form.notes || null, requested_by: "Site Team",
       });
       if (res.success) {
+        api.post("/approvals/submit", {
+          module: "Material Request",
+          ref_id: res.data.id,
+          ref_no: res.data.mr_number || "",
+          title: form.item_name + " (" + form.quantity + " " + form.unit + ")",
+          amount: Number(form.approx_amount) || 0,
+          project_id: projectId,
+          project_name: projectName || "",
+        }).catch(e => console.error("Approval submit:", e));
         const m = res.data;
         setMaterials(prev => [{ id:m.id, name:m.item_name, qty:m.quantity+" "+m.unit,
           stage:"Requested", by:"Site Team",
@@ -5837,7 +5866,18 @@ function TabSubcon({ projectId }) {
       })),
     }).catch(()=>({success:false}));
     setSaving(false);
-    if(res.success){ setShowNewBill(false); selectWo(selWo); }
+    if(res.success){
+      api.post("/approvals/submit", {
+        module: "RA Bill",
+        ref_id: res.data.id,
+        ref_no: res.data.bill_no || "",
+        title: (selWo.subcon_name||selWo.name||"") + " - RA Bill",
+        amount: res.data.total_amount || 0,
+        project_id: projectId,
+        project_name: projectName || "",
+      }).catch(e => console.error("Approval submit:", e));
+      setShowNewBill(false); selectWo(selWo);
+    }
     else alert(res.message||"Failed");
   };
 
@@ -6423,7 +6463,19 @@ function EditWOModal({ wo, subcons, fmtC, inpStyle, lblStyle, onClose, onSaved }
       reason,
     }).catch(()=>({success:false,message:"Network error"}));
     setSaving(false);
-    if(res.success) onSaved();
+    if(res.success){
+      api.post("/approvals/submit", {
+        module: "Subcon WO Amendment",
+        ref_id: res.data.id,
+        ref_no: res.data.amendment_no || wo.wo_number || "",
+        title: (form.subcon_name||"") + " - WO Amendment",
+        amount: grandTotal || 0,
+        project_id: wo.project_id || projectId,
+        project_name: wo.project_name || "",
+        notes: reason || "",
+      }).catch(e => console.error("Approval submit:", e));
+      onSaved();
+    }
     else alert(res.message||"Failed");
   };
 
@@ -7563,6 +7615,19 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   const sm = STATUS_S[project.status]||{c:T.slt, bg:T.sltL};
   const margin = project.boq - project.expense;
 
+  // Approval counts for this project
+  const [approvalCount, setApprovalCount] = useState(0);
+  const [approvalsByModule, setApprovalsByModule] = useState([]);
+  useEffect(()=>{
+    if(!project?.id) return;
+    api.get("/approvals/counts?project_id="+project.id).then(r=>{
+      if(r.success&&r.data){
+        setApprovalCount(r.data.total||0);
+        setApprovalsByModule(r.data.byModule||[]);
+      }
+    }).catch(()=>{});
+  },[project?.id]);
+
   const switchTab = (t) => setTab(t);
 
   // ── Ctrl+key tab shortcuts ──────────────────────────────────────
@@ -7628,6 +7693,12 @@ function ProjectDetailPage({project=PROJ, onBack}) {
             </div>
             {/* Financial chips */}
             <div style={{display:"flex", gap:12, flexShrink:0}}>
+              {approvalCount>0&&(
+                <div style={{background:"rgba(217,119,6,0.15)",border:"1px solid rgba(217,119,6,0.3)",borderRadius:8,padding:"7px 13px",textAlign:"right",cursor:"pointer"}} title="Pending approvals for this project">
+                  <div style={{fontSize:9.5,color:"rgba(255,255,255,.35)",textTransform:"uppercase",letterSpacing:".5px",marginBottom:3}}>Approvals</div>
+                  <div style={{fontSize:14,fontWeight:700,color:"#FBBF24",fontVariantNumeric:"tabular-nums"}}>{approvalCount} pending</div>
+                </div>
+              )}
               {[["BOQ",`₹${fmt(project.boq)}`,T.sltL,T.t4],["Spent",`₹${fmt(project.expense)}`,"#FFF7ED","#D97706"],["Margin",`₹${fmt(Math.abs(margin))}`,margin>0?"#F0FDF4":"#FEF2F2",margin>0?"#059669":"#DC2626"]].map(([l,v,bg,vc])=>(
                 <div key={l} style={{background:"rgba(255,255,255,.07)", border:"1px solid rgba(255,255,255,.1)", borderRadius:8, padding:"7px 13px", textAlign:"right"}}>
                   <div style={{fontSize:9.5, color:"rgba(255,255,255,.35)", textTransform:"uppercase", letterSpacing:".5px", marginBottom:3}}>{l}</div>

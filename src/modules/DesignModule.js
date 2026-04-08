@@ -116,6 +116,15 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
       });
       setPct(100);
       if (res.success) {
+        api.post("/approvals/submit", {
+          module: "Design Approval",
+          ref_id: res.data.id,
+          ref_no: res.data.drawing_no || "",
+          title: res.data.title || form.title || "Drawing",
+          amount: 0,
+          project_id: form.project_id || res.data.project_id,
+          project_name: proj?.name || res.data.project_name || "",
+        }).catch(e => console.error("Approval submit:", e));
         onUploaded(res.data);
         onClose();
         setFile(null); setForm({project_id:"",title:"",category:"Architectural",drawing_type:"2D",note:""}); setPct(0);

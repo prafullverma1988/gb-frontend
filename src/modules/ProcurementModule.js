@@ -1533,6 +1533,16 @@ function ProcurementModule(){
           notes: newPO.notes||"",
         });
         if(res.success){
+          // Submit for approval
+          api.post("/approvals/submit", {
+            module: "Purchase Order",
+            ref_id: res.data.id,
+            ref_no: res.data.po_number || "",
+            title: newPO.vendor + " - " + (newPO.items||[]).length + " items",
+            amount: res.data.total_amount || newPO.items.reduce((s,it)=>(s+(it.qty||0)*(it.rate||0)),0),
+            project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 1,
+            project_name: newPO.project || "",
+          }).catch(e => console.error("Approval submit:", e));
           // PO created as Draft — MRs stay in Approved tab until admin approves PO
           setPOs(prev=>[mapPO(res.data),...prev]);
         } else {

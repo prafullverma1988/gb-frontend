@@ -790,9 +790,9 @@ function MRApprovalCard({mr, onApprove, onReject}){
   );
 }
 
-function ApprovalsDrawer({onClose,initTab="mr"}){
-  const [activeTab,setActiveTab]=useState(initTab); // "mr" | "pr"
-  const [data,setData]=useState({procurement:[],finance:[]});
+function ApprovalsDrawer({onClose,initTab="all"}){
+  const [activeTab,setActiveTab]=useState(initTab); // "all" | "mr" | "pr"
+  const [data,setData]=useState({procurement:[],finance:[],centralized:[]});
   const [loading,setLoading]=useState(true);
   const [acting,setActing]=useState({});
   const [rejectId,setRejectId]=useState(null);
@@ -802,19 +802,42 @@ function ApprovalsDrawer({onClose,initTab="mr"}){
   const load=async()=>{
     setLoading(true);
     try{
-      const [mrRes,prRes]=await Promise.all([
+      const [mrRes,prRes,apRes]=await Promise.all([
         api.get("/procurement/mrs?mr_status=Pending"),
         api.get("/finance/payment-requests"),
+        api.get("/approvals/pending").catch(()=>({success:false})),
       ]);
       setData({
         procurement:(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested"),
         finance:(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending"),
+        centralized:apRes.success?apRes.data||[]:[],
       });
     }catch(e){ setSaveErr("Data load failed"); }
     setLoading(false);
   };
 
   useEffect(()=>{load();},[]);
+
+  // Centralized approve/reject
+  const approveItem=async(id)=>{
+    setSaveErr("");setActing(p=>({...p,["c"+id]:"approving"}));
+    try{
+      const res=await api.patch("/approvals/"+id+"/action",{action:"approve"});
+      if(res.success) setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==id)}));
+      else setSaveErr(res.message||"Approve failed");
+    }catch(e){setSaveErr(e.message);}
+    setActing(p=>({...p,["c"+id]:null}));
+  };
+  const rejectItem=async(id)=>{
+    setSaveErr("");setActing(p=>({...p,["c"+id]:"rejecting"}));
+    try{
+      const res=await api.patch("/approvals/"+id+"/action",{action:"reject",remarks:rejectNote||"Rejected"});
+      if(res.success) setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==id)}));
+      else setSaveErr(res.message||"Reject failed");
+    }catch(e){setSaveErr(e.message);}
+    setActing(p=>({...p,["c"+id]:null}));
+    setRejectId(null);setRejectNote("");
+  };
 
   const approveMR=async(id,approvedQty)=>{
     setSaveErr(""); setActing(p=>({...p,[id]:"approving"}));
@@ -862,7 +885,7 @@ function ApprovalsDrawer({onClose,initTab="mr"}){
     setRejectId(null); setRejectNote("");
   };
 
-  const totalCount=data.procurement.length+data.finance.length;
+  const totalCount=data.procurement.length+data.finance.length+data.centralized.length;
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(1)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${n}`;
 
   const SectionHead=({label,count,color,bg,bdr})=>(
@@ -919,6 +942,7 @@ function ApprovalsDrawer({onClose,initTab="mr"}){
         {/* Module tabs */}
         <div style={{display:"flex",gap:0,marginTop:10,borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,0.12)"}}>
           {[
+            {id:"all",label:"All Approvals",     count:data.centralized.length, color:"#7C3AED"},
             {id:"mr", label:"Material Requests", count:data.procurement.length, color:"#F59E0B"},
             {id:"pr", label:"Payment Requests",  count:data.finance.length,     color:"#3B82F6"},
           ].map(t=>(
@@ -962,6 +986,64 @@ function ApprovalsDrawer({onClose,initTab="mr"}){
               {data.procurement.map(mr=>(
                 <MRApprovalCard key={mr.id} mr={mr} onApprove={approveMR} onReject={rejectMR}/>
               ))}
+            </div>
+          </>
+        )}
+
+        {/* ── ALL APPROVALS TAB (Centralized) ── */}
+        {!loading&&activeTab==="all"&&data.centralized.length===0&&(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <div style={{fontSize:32,marginBottom:8}}>✅</div>
+            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>No pending approvals!</div>
+            <div style={{fontSize:12,color:T.t4,marginTop:4}}>All approval requests are clear</div>
+          </div>
+        )}
+        {!loading&&activeTab==="all"&&data.centralized.length>0&&(
+          <>
+            <SectionHead label="All Pending Approvals" count={data.centralized.length} color="#7C3AED" bg="#F5F3FF" bdr="#DDD6FE"/>
+            <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+              {data.centralized.map(item=>{
+                const modColors={"Material Request":T.amb,"Design Approval":"#7C3AED","Purchase Order (PO)":T.blu,"RA Bill":"#0891B2","Subcon WO Amendment":"#EA580C","Payment Request":T.blu,"Material Site Transfer":"#059669","Material Issue":"#059669"};
+                const mc=modColors[item.module]||T.slt;
+                const act=acting["c"+item.id];
+                return(
+                  <div key={item.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+                      <div style={{flex:1}}>
+                        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3}}>
+                          <span style={{fontSize:9.5,fontWeight:700,color:mc,background:mc+"18",padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{item.module}</span>
+                          <span style={{fontSize:9.5,color:T.t4}}>{item.ref_no}</span>
+                        </div>
+                        <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{item.title}</div>
+                        <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name} · L{item.current_level}/{item.max_level}</div>
+                      </div>
+                      {item.amount>0&&<span style={{fontSize:13,fontWeight:700,color:mc,flexShrink:0}}>{fmtAmt(item.amount)}</span>}
+                    </div>
+                    {/* Level progress */}
+                    <div style={{display:"flex",gap:4,margin:"6px 0",alignItems:"center"}}>
+                      {Array.from({length:item.max_level},(_, i)=>{
+                        const lvl=i+1;const done=lvl<item.current_level;const pending=lvl===item.current_level;
+                        return <div key={i} style={{display:"flex",alignItems:"center",gap:3}}>
+                          <div style={{width:16,height:16,borderRadius:"50%",background:done?"#059669":pending?mc:"#E5E7EB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:done||pending?"white":"#9CA3AF"}}>{done?"✓":"L"+(lvl)}</div>
+                          {i<item.max_level-1&&<div style={{width:16,height:2,background:done?"#059669":"#E5E7EB"}}/>}
+                        </div>;
+                      })}
+                      <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
+                    </div>
+                    {/* Approve/Reject */}
+                    <div style={{display:"flex",gap:6,marginTop:6}}>
+                      <button onClick={()=>rejectItem(item.id)} disabled={!!act}
+                        style={{flex:1,padding:"6px",borderRadius:6,background:act==="rejecting"?T.b1:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                        {act==="rejecting"?"Rejecting...":"✕ Reject"}
+                      </button>
+                      <button onClick={()=>approveItem(item.id)} disabled={!!act}
+                        style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                        {act==="approving"?"Approving...":"✓ Approve"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </>
         )}
@@ -1029,16 +1111,31 @@ function ProjectsPage({onSelectProject}){
   const [mrPendingCount,setMrPendingCount]=useState(0);
   const [prPendingCount,setPrPendingCount]=useState(0);
 
-  // Load real approval counts
+  // Load real approval counts from centralized engine
   const loadApprovalCounts=async()=>{
-    // Check cache first
     const cached = apiCache.get("approval-counts");
     if(cached){
       setMrPendingCount(cached.mrCount);
       setPrPendingCount(cached.prCount);
-      setApprovalCount(cached.mrCount+cached.prCount);
+      setApprovalCount(cached.total);
       return;
     }
+    try{
+      // Try centralized approval counts first
+      const countRes=await api.get("/approvals/counts");
+      if(countRes.success&&countRes.data){
+        const byMod=countRes.data.byModule||[];
+        const mrCount=byMod.find(m=>m.module==="Material Request")?.count||0;
+        const prCount=byMod.find(m=>m.module==="Payment Request")?.count||0;
+        const total=countRes.data.total||0;
+        apiCache.set("approval-counts",{mrCount,prCount,total},30000);
+        setMrPendingCount(mrCount);
+        setPrPendingCount(prCount);
+        setApprovalCount(total);
+        return;
+      }
+    }catch(e){}
+    // Fallback to direct queries
     try{
       const [mrRes,prRes]=await Promise.all([
         api.get("/procurement/mrs?mr_status=Pending"),
@@ -1046,7 +1143,7 @@ function ProjectsPage({onSelectProject}){
       ]);
       const mrCount=(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested").length;
       const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
-      apiCache.set("approval-counts",{mrCount,prCount},30000); // 30 sec cache
+      apiCache.set("approval-counts",{mrCount,prCount,total:mrCount+prCount},30000);
       setMrPendingCount(mrCount);
       setPrPendingCount(prCount);
       setApprovalCount(mrCount+prCount);
@@ -1141,7 +1238,7 @@ function ProjectsPage({onSelectProject}){
   const SM={"Ongoing":{c:T.grn,bg:T.grnL},"Completed":{c:T.blu,bg:T.bluL},"Hold":{c:T.amb,bg:T.ambL},"Not Started":{c:T.slt,bg:T.sltL}};
 
   const ACTION_TILES=[
-    {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalInitTab("mr");setShowApprovals(true);}},
+    {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalInitTab("all");setShowApprovals(true);}},
     {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalInitTab("mr");setShowApprovals(true);}},
     {label:"My To-Do",          val:5,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
     {label:"Open Issues", val:allIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length, Icon:IcWarn, color:T.red,bg:T.redL,bdr:T.redM,
