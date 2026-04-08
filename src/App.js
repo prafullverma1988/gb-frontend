@@ -2,43 +2,54 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import api, { getUser, getToken, clearAuth } from "./config/api";
 import apiCache from "./utils/apiCache";
 
-// ── LAZY-LOADED MODULES (code-split per route) ──────────────────────
-const FinanceModule      = lazy(() => import("./modules/FinanceModule"));
-const ProcurementModule  = lazy(() => import("./modules/ProcurementModule"));
-const DesignModule       = lazy(() => import("./modules/DesignModule"));
-const ClientPreview3D    = lazy(() => import("./pages/ClientPreview3D"));
-const PayrollModule      = lazy(() => import("./modules/PayrollModule"));
-const SettingsModule     = lazy(() => import("./modules/SettingsModule"));
-const CRMModule          = lazy(() => import("./modules/CRMModule"));
-const TeamScheduleModule = lazy(() => import("./modules/TeamScheduleModule"));
-const MOMModule          = lazy(() => import("./modules/MOMModule"));
-const MasterLibraryModule= lazy(() => import("./modules/MasterLibraryModule"));
-const WarehouseModule    = lazy(() => import("./modules/WarehouseModule"));
-const ReportsModule      = lazy(() => import("./modules/ReportsModule"));
-const ProjectDetailPage  = lazy(() => import("./modules/ProjectDetailPage"));
-const ProjectsPage       = lazy(() => import("./modules/ProjectsModule"));
-const SaaSModule         = lazy(() => import("./modules/SaaSModule"));
+// ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
+// When preload() resolves, React.lazy gets already-resolved promise = NO spinner
+const _cache = {};
+function lazyWithPreload(key, fn) {
+  const load = () => { if (!_cache[key]) _cache[key] = fn(); return _cache[key]; };
+  const Comp = lazy(load);
+  Comp.preload = load;
+  return Comp;
+}
 
-// ── PREFETCH: Dashboard load hone ke baad background me sab modules load karo ──
+const FinanceModule      = lazyWithPreload("finance",      () => import("./modules/FinanceModule"));
+const ProcurementModule  = lazyWithPreload("procurement",  () => import("./modules/ProcurementModule"));
+const DesignModule       = lazyWithPreload("design",       () => import("./modules/DesignModule"));
+const ClientPreview3D    = lazyWithPreload("preview3d",    () => import("./pages/ClientPreview3D"));
+const PayrollModule      = lazyWithPreload("payroll",      () => import("./modules/PayrollModule"));
+const SettingsModule     = lazyWithPreload("settings",     () => import("./modules/SettingsModule"));
+const CRMModule          = lazyWithPreload("crm",          () => import("./modules/CRMModule"));
+const TeamScheduleModule = lazyWithPreload("team",         () => import("./modules/TeamScheduleModule"));
+const MOMModule          = lazyWithPreload("mom",          () => import("./modules/MOMModule"));
+const MasterLibraryModule= lazyWithPreload("library",     () => import("./modules/MasterLibraryModule"));
+const WarehouseModule    = lazyWithPreload("warehouse",    () => import("./modules/WarehouseModule"));
+const ReportsModule      = lazyWithPreload("reports",      () => import("./modules/ReportsModule"));
+const ProjectDetailPage  = lazyWithPreload("projectDetail",() => import("./modules/ProjectDetailPage"));
+const ProjectsPage       = lazyWithPreload("projects",     () => import("./modules/ProjectsModule"));
+const SaaSModule         = lazyWithPreload("saas",         () => import("./modules/SaaSModule"));
+
+// ── PREFETCH: Dashboard load hone ke baad background me sab load karo ──
 function prefetchAllModules(){
+  // Wave 1 — heavy/frequent modules (1s after dashboard)
   setTimeout(()=>{
-    import("./modules/ProjectsModule");
-    import("./modules/ProjectDetailPage");
-    import("./modules/FinanceModule");
-    import("./modules/ProcurementModule");
-  },1500); // 1.5s baad heavy modules
+    ProjectsPage.preload();
+    ProjectDetailPage.preload();
+    FinanceModule.preload();
+    ProcurementModule.preload();
+  }, 800);
+  // Wave 2 — remaining modules (2s after dashboard)
   setTimeout(()=>{
-    import("./modules/DesignModule");
-    import("./modules/CRMModule");
-    import("./modules/SettingsModule");
-    import("./modules/PayrollModule");
-    import("./modules/TeamScheduleModule");
-    import("./modules/MOMModule");
-    import("./modules/MasterLibraryModule");
-    import("./modules/WarehouseModule");
-    import("./modules/ReportsModule");
-    import("./modules/SaaSModule");
-  },3000); // 3s baad remaining modules
+    DesignModule.preload();
+    CRMModule.preload();
+    SettingsModule.preload();
+    PayrollModule.preload();
+    TeamScheduleModule.preload();
+    MOMModule.preload();
+    MasterLibraryModule.preload();
+    WarehouseModule.preload();
+    ReportsModule.preload();
+    SaaSModule.preload();
+  }, 2000);
 }
 
 // ── ICONS ─────────────────────────────────────────────────────────────
@@ -85,7 +96,11 @@ const IcStar  =(p)=><Ic {...p} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 1
 const IcLock  =(p)=><Ic {...p} d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"/>;
 
 // ── LAZY LOADING FALLBACK ─────────────────────────────────────────────
+// Minimal fallback — spinner only shows after 300ms delay (avoids flash for cached modules)
 function ModuleLoader(){
+  const [show,setShow]=useState(false);
+  useEffect(()=>{const t=setTimeout(()=>setShow(true),300);return()=>clearTimeout(t);},[]);
+  if(!show) return <div style={{height:"100%"}}/>;
   return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",minHeight:300,flexDirection:"column",gap:12}}>
       <div style={{width:36,height:36,border:"3px solid #E5E7EB",borderTopColor:"#2563EB",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
