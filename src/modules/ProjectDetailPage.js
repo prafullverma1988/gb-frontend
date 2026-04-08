@@ -7642,8 +7642,8 @@ const SOLAR_TABS = [
 // SOLAR TAB COMPONENTS
 // ──────────────────────────────────────────────────────────────────
 
-// Stage status colors
-const STAGE_S = {
+// Stage status colors (solar)
+const SOLAR_STAGE_S = {
   pending:     {c:"#6B7280",bg:"#F3F4F6",bdr:"#D1D5DB"},
   in_progress: {c:"#D97706",bg:"#FFFBEB",bdr:"#FDE68A"},
   completed:   {c:"#059669",bg:"#ECFDF5",bdr:"#A7F3D0"},
@@ -7748,7 +7748,7 @@ function TabSuryaGhar({ projectId }) {
       {/* Stage list */}
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {stages.map((stage, idx) => {
-          const ss = STAGE_S[stage.status] || STAGE_S.pending;
+          const ss = SOLAR_STAGE_S[stage.status] || SOLAR_STAGE_S.pending;
           const isActing = acting === stage.stage_number;
           const isDone = stage.status === "completed";
           const isSkipped = stage.status === "skipped";
