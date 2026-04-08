@@ -790,8 +790,10 @@ function MRApprovalCard({mr, onApprove, onReject}){
   );
 }
 
-function ApprovalsDrawer({onClose,initTab="all"}){
-  const [activeTab,setActiveTab]=useState(initTab); // "all" | "mr" | "pr"
+function ApprovalsDrawer({onClose,mode="approvals"}){
+  // mode: "approvals" → Design/Finance/Payment tabs
+  //       "materials" → Procurement/Material Request/Warehouse tabs
+  const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"procurement");
   const [data,setData]=useState({procurement:[],finance:[],centralized:[]});
   const [loading,setLoading]=useState(true);
   const [acting,setActing]=useState({});
@@ -885,7 +887,20 @@ function ApprovalsDrawer({onClose,initTab="all"}){
     setRejectId(null); setRejectNote("");
   };
 
-  const totalCount=data.procurement.length+data.finance.length+data.centralized.length;
+  // ── Data splits by category ──────────────────────────────────────────
+  const designItems   = data.centralized.filter(i=>i._source==="design");
+  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","purchase_order"].includes(i._source));
+  const paymentItems  = [
+    ...data.centralized.filter(i=>i._source==="payment_request"),
+    ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
+  ];
+  const procMRItems   = data.procurement;
+  const centralMRItems= data.centralized.filter(i=>i._source==="material_request");
+
+  const totalCount = mode==="approvals"
+    ? designItems.length+financeItems.length+paymentItems.length
+    : procMRItems.length+centralMRItems.length;
+
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(1)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${n}`;
 
   const SectionHead=({label,count,color,bg,bdr})=>(
@@ -922,200 +937,212 @@ function ApprovalsDrawer({onClose,initTab="all"}){
     );
   };
 
+  const CentralCard=({item})=>{
+    const modColors={"Material Request":T.amb,"Design Approval":"#7C3AED","Purchase Order (PO)":T.blu,"RA Bill":"#0891B2","Subcon WO Amendment":"#EA580C","Payment Request":T.blu,"Material Site Transfer":"#059669","Material Issue":"#059669"};
+    const mc=modColors[item.module]||T.slt;
+    const act=acting["c"+item.id];
+    const src=item._source;
+    const srcAction=async(actionType)=>{
+      const key="c"+item.id;
+      const isRej=actionType==="reject"||actionType==="Rejected";
+      setSaveErr("");setActing(p=>({...p,[key]:isRej?"rejecting":"approving"}));
+      try{
+        let res;
+        if(src==="design"){
+          const status=actionType==="Revision"?"Revision":isRej?"Rejected":"Approved";
+          res=await api.patch("/design/drawings/"+item._source_id+"/status",{status,note:status==="Revision"?"Revision requested":undefined});
+        } else if(src==="material_request"){
+          res=await api.patch("/procurement/mrs/"+item._source_id+"/approve",{action:isRej?"Rejected":"Approved",approved_qty:item.quantity||null});
+        } else if(src==="payment_request"){
+          res=await api.put("/finance/payment-requests/"+item._source_id+"/approve",{action:isRej?"reject":"approve"});
+        } else if(src==="purchase_order"){
+          res=await api.patch("/procurement/pos/"+item._source_id+"/approve",{approved_by:""});
+        } else if(src==="ra_bill"){
+          res=await api.patch("/subcon/ra-bills/"+item._source_id+"/status",{status:isRej?"Rejected":"Approved"});
+        } else if(src==="wo_amendment"){
+          res=await api.patch("/subcon/amendments/"+item._source_id+"/action",{status:isRej?"Rejected":"Approved"});
+        } else {
+          res=await api.patch("/approvals/"+item.id+"/action",{action:isRej?"reject":"approve"});
+        }
+        if(res&&res.success!==false) setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==item.id)}));
+        else setSaveErr((res&&res.message)||"Action failed");
+      }catch(e){setSaveErr(e.message);}
+      setActing(p=>({...p,["c"+item.id]:null}));
+    };
+    return(
+      <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3}}>
+              <span style={{fontSize:9.5,fontWeight:700,color:mc,background:mc+"18",padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{item.module}</span>
+              <span style={{fontSize:9.5,color:T.t4}}>{item.ref_no}</span>
+              {src==="design"&&item.category&&<span style={{fontSize:9,color:T.t4}}>{item.category} · {item.drawing_type||"2D"}</span>}
+            </div>
+            <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{item.title}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name}{!src?" · L"+item.current_level+"/"+item.max_level:""}</div>
+          </div>
+          {item.amount>0&&<span style={{fontSize:13,fontWeight:700,color:mc,flexShrink:0}}>{fmtAmt(item.amount)}</span>}
+        </div>
+        {!src&&item.max_level>0&&(
+          <div style={{display:"flex",gap:4,margin:"6px 0",alignItems:"center"}}>
+            {Array.from({length:item.max_level},(_,i)=>{
+              const lvl=i+1;const done=lvl<item.current_level;const pending=lvl===item.current_level;
+              return <div key={i} style={{display:"flex",alignItems:"center",gap:3}}>
+                <div style={{width:16,height:16,borderRadius:"50%",background:done?"#059669":pending?mc:"#E5E7EB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:done||pending?"white":"#9CA3AF"}}>{done?"✓":"L"+(lvl)}</div>
+                {i<item.max_level-1&&<div style={{width:16,height:2,background:done?"#059669":"#E5E7EB"}}/>}
+              </div>;
+            })}
+            <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
+          </div>
+        )}
+        <div style={{display:"flex",gap:6,marginTop:6}}>
+          {src!=="purchase_order"&&(
+            <button onClick={()=>srcAction("reject")} disabled={!!act}
+              style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+              {act==="rejecting"?"...":"✕ Reject"}
+            </button>
+          )}
+          {src==="design"&&(
+            <button onClick={()=>srcAction("Revision")} disabled={!!act}
+              style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+              ↻ Revision
+            </button>
+          )}
+          <button onClick={()=>srcAction("approve")} disabled={!!act}
+            style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+            {act==="approving"?"Approving...":"✓ Approve"}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const EmptyState=({msg,sub})=>(
+    <div style={{textAlign:"center",padding:"60px 20px"}}>
+      <div style={{fontSize:36,marginBottom:8}}>✅</div>
+      <div style={{fontSize:14,fontWeight:700,color:T.t2}}>{msg}</div>
+      <div style={{fontSize:12,color:T.t4,marginTop:4}}>{sub}</div>
+    </div>
+  );
+
+  const APPROVAL_TABS=[
+    {id:"design",  label:"Design",  color:"#7C3AED", count:designItems.length},
+    {id:"finance", label:"Finance", color:T.blu,     count:financeItems.length},
+    {id:"payment", label:"Payment", color:T.grn,     count:paymentItems.length},
+  ];
+  const MATERIAL_TABS=[
+    {id:"procurement", label:"Procurement",      color:T.amb, count:procMRItems.length},
+    {id:"mr",          label:"Material Request",  color:T.blu, count:centralMRItems.length},
+    {id:"warehouse",   label:"Warehouse",         color:T.grn, count:0},
+  ];
+  const tabs=mode==="approvals"?APPROVAL_TABS:MATERIAL_TABS;
+  const drawerTitle=mode==="approvals"?"Pending Approvals":"Material Approvals";
+  const headerAccent=mode==="approvals"?T.amb:T.blu;
+
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:300,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:440,background:T.bg,zIndex:301,boxShadow:"-4px 0 28px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
 
       {/* Header */}
       <div style={{background:"#0D1B2A",padding:"14px 18px",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-          <div style={{fontSize:15,fontWeight:700,color:"white"}}>Pending Approvals</div>
-          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}>
-            <IcX size={15}/>
-          </button>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>{drawerTitle}</div>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <button onClick={load} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>↻ Refresh</button>
+            <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}><IcX size={15}/></button>
+          </div>
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <span style={{background:T.amb,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{totalCount} pending</span>
-          <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>All modules</span>
-          <button onClick={load} style={{marginLeft:"auto",background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>↻ Refresh</button>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10}}>
+          <span style={{background:headerAccent,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{totalCount} pending</span>
+          <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{mode==="approvals"?"Design · Finance · Payment":"Procurement · MR · Warehouse"}</span>
         </div>
-        {/* Module tabs */}
-        <div style={{display:"flex",gap:0,marginTop:10,borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,0.12)"}}>
-          {[
-            {id:"all",label:"All Approvals",     count:data.centralized.length, color:"#7C3AED"},
-            {id:"mr", label:"Material Requests", count:data.procurement.length, color:"#F59E0B"},
-            {id:"pr", label:"Payment Requests",  count:data.finance.length,     color:"#3B82F6"},
-          ].map(t=>(
+        <div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,0.12)"}}>
+          {tabs.map(t=>(
             <button key={t.id} onClick={()=>setActiveTab(t.id)}
-              style={{flex:1,padding:"7px 10px",border:"none",background:activeTab===t.id?"rgba(255,255,255,0.15)":"none",
+              style={{flex:1,padding:"8px 6px",border:"none",
+                background:activeTab===t.id?"rgba(255,255,255,0.15)":"none",
                 color:activeTab===t.id?"white":"rgba(255,255,255,0.5)",
                 fontSize:11,fontWeight:activeTab===t.id?700:400,cursor:"pointer",
                 borderBottom:activeTab===t.id?"2px solid "+t.color:"2px solid transparent",
-                display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                display:"flex",alignItems:"center",justifyContent:"center",gap:4,transition:"all .15s"}}>
               {t.label}
-              {t.count>0&&<span style={{background:t.color,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{t.count}</span>}
+              {t.count>0&&<span style={{background:t.color,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,lineHeight:1.6}}>{t.count}</span>}
             </button>
           ))}
         </div>
       </div>
 
+      {/* Body */}
       <div style={{flex:1,overflowY:"auto"}}>
         {saveErr&&<div style={{margin:"8px 14px",padding:"8px 12px",background:T.redL,border:"1px solid "+T.redM,borderRadius:7,fontSize:12,color:T.red}}>{saveErr}</div>}
-        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading approvals...</div>}
+        {loading&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading...</div>}
 
-        {!loading&&activeTab==="mr"&&data.procurement.length===0&&(
-          <div style={{textAlign:"center",padding:"60px 20px"}}>
-            <div style={{fontSize:32,marginBottom:8}}>✅</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>Koi pending MR nahi!</div>
-            <div style={{fontSize:12,color:T.t4,marginTop:4}}>Sab material requests clear hain</div>
-          </div>
+        {/* ── APPROVALS MODE ── */}
+        {!loading&&mode==="approvals"&&activeTab==="design"&&(
+          designItems.length===0
+            ?<EmptyState msg="Koi pending Design approval nahi!" sub="Sab drawings reviewed hain"/>
+            :<><SectionHead label="Design Approvals" count={designItems.length} color="#7C3AED" bg="#F5F3FF" bdr="#DDD6FE"/>
+              <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                {designItems.map(item=><CentralCard key={item.id} item={item}/>)}
+              </div></>
         )}
-        {!loading&&activeTab==="pr"&&data.finance.length===0&&(
-          <div style={{textAlign:"center",padding:"60px 20px"}}>
-            <div style={{fontSize:32,marginBottom:8}}>✅</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>Koi pending Payment Request nahi!</div>
-            <div style={{fontSize:12,color:T.t4,marginTop:4}}>Sab payments clear hain</div>
-          </div>
+        {!loading&&mode==="approvals"&&activeTab==="finance"&&(
+          financeItems.length===0
+            ?<EmptyState msg="Koi pending Finance approval nahi!" sub="PO, RA Bills, Subcon WO sab clear hain"/>
+            :<><SectionHead label="Finance Approvals" count={financeItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
+              <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                {financeItems.map(item=><CentralCard key={item.id} item={item}/>)}
+              </div></>
         )}
-
-        {/* ── MATERIAL REQUESTS TAB ── */}
-        {!loading&&activeTab==="mr"&&(
-          <>
-            <SectionHead label="Procurement — Material Requests" count={data.procurement.length} color={T.amb} bg={T.ambL} bdr={T.ambM}/>
-            <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
-              {data.procurement.map(mr=>(
-                <MRApprovalCard key={mr.id} mr={mr} onApprove={approveMR} onReject={rejectMR}/>
-              ))}
-            </div>
-          </>
-        )}
-
-        {/* ── ALL APPROVALS TAB (Centralized) ── */}
-        {!loading&&activeTab==="all"&&data.centralized.length===0&&(
-          <div style={{textAlign:"center",padding:"60px 20px"}}>
-            <div style={{fontSize:32,marginBottom:8}}>✅</div>
-            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>No pending approvals!</div>
-            <div style={{fontSize:12,color:T.t4,marginTop:4}}>All approval requests are clear</div>
-          </div>
-        )}
-        {!loading&&activeTab==="all"&&data.centralized.length>0&&(
-          <>
-            <SectionHead label="All Pending Approvals" count={data.centralized.length} color="#7C3AED" bg="#F5F3FF" bdr="#DDD6FE"/>
-            <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
-              {data.centralized.map(item=>{
-                const modColors={"Material Request":T.amb,"Design Approval":"#7C3AED","Purchase Order (PO)":T.blu,"RA Bill":"#0891B2","Subcon WO Amendment":"#EA580C","Payment Request":T.blu,"Material Site Transfer":"#059669","Material Issue":"#059669"};
-                const mc=modColors[item.module]||T.slt;
-                const act=acting["c"+item.id];
-                const src=item._source;
-
-                // Universal source action handler
-                const srcAction=async(actionType)=>{
-                  const key="c"+item.id;
-                  const isRej=actionType==="reject"||actionType==="Rejected";
-                  setSaveErr("");setActing(p=>({...p,[key]:isRej?"rejecting":"approving"}));
-                  try{
-                    let res;
-                    if(src==="design"){
-                      const status=actionType==="Revision"?"Revision":actionType==="reject"||actionType==="Rejected"?"Rejected":"Approved";
-                      res=await api.patch("/design/drawings/"+item._source_id+"/status",{status,note:status==="Revision"?"Revision requested":undefined});
-                    } else if(src==="material_request"){
-                      res=await api.patch("/procurement/mrs/"+item._source_id+"/approve",{action:isRej?"Rejected":"Approved",approved_qty:item.quantity||null});
-                    } else if(src==="payment_request"){
-                      res=await api.put("/finance/payment-requests/"+item._source_id+"/approve",{action:isRej?"reject":"approve"});
-                    } else if(src==="purchase_order"){
-                      res=await api.patch("/procurement/pos/"+item._source_id+"/approve",{approved_by:""});
-                    } else if(src==="ra_bill"){
-                      res=await api.patch("/subcon/ra-bills/"+item._source_id+"/status",{status:isRej?"Rejected":"Approved"});
-                    } else if(src==="wo_amendment"){
-                      res=await api.patch("/subcon/amendments/"+item._source_id+"/action",{status:isRej?"Rejected":"Approved"});
-                    } else {
-                      // centralized approval engine
-                      res=await api.patch("/approvals/"+item.id+"/action",{action:isRej?"reject":"approve"});
-                    }
-                    if(res&&res.success!==false) setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==item.id)}));
-                    else setSaveErr((res&&res.message)||"Action failed");
-                  }catch(e){setSaveErr(e.message);}
-                  setActing(p=>({...p,[key]:null}));
-                };
-
-                return(
-                  <div key={item.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc}}>
+        {!loading&&mode==="approvals"&&activeTab==="payment"&&(
+          paymentItems.length===0
+            ?<EmptyState msg="Koi pending Payment Request nahi!" sub="Sab PRs clear hain"/>
+            :<><SectionHead label="Payment Requests" count={paymentItems.length} color={T.grn} bg={T.grnL} bdr={T.grnM}/>
+              <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                {data.centralized.filter(i=>i._source==="payment_request").map(item=><CentralCard key={item.id} item={item}/>)}
+                {data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")).map(pr=>(
+                  <div key={pr.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.grn}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                       <div style={{flex:1}}>
                         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3}}>
-                          <span style={{fontSize:9.5,fontWeight:700,color:mc,background:mc+"18",padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{item.module}</span>
-                          <span style={{fontSize:9.5,color:T.t4}}>{item.ref_no}</span>
-                          {src==="design"&&item.category&&<span style={{fontSize:9,color:T.t4}}>{item.category} · {item.drawing_type||"2D"}</span>}
+                          <span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>PAYMENT REQUEST</span>
+                          <span style={{fontSize:9.5,color:T.t4}}>PR-{pr.id}</span>
                         </div>
-                        <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{item.title}</div>
-                        <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name}{!src?" · L"+item.current_level+"/"+item.max_level:""}</div>
+                        <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{pr.party_name||pr.party||"—"}</div>
+                        <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{pr.project_name||pr.project||"—"} · {pr.description||pr.note||"—"}</div>
                       </div>
-                      {item.amount>0&&<span style={{fontSize:13,fontWeight:700,color:mc,flexShrink:0}}>{fmtAmt(item.amount)}</span>}
+                      <span style={{fontSize:13,fontWeight:700,color:T.grn,flexShrink:0}}>{fmtAmt(pr.amount||0)}</span>
                     </div>
-                    {/* Level progress — only for centralized items */}
-                    {!src&&item.max_level>0&&(
-                      <div style={{display:"flex",gap:4,margin:"6px 0",alignItems:"center"}}>
-                        {Array.from({length:item.max_level},(_, i)=>{
-                          const lvl=i+1;const done=lvl<item.current_level;const pending=lvl===item.current_level;
-                          return <div key={i} style={{display:"flex",alignItems:"center",gap:3}}>
-                            <div style={{width:16,height:16,borderRadius:"50%",background:done?"#059669":pending?mc:"#E5E7EB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:done||pending?"white":"#9CA3AF"}}>{done?"✓":"L"+(lvl)}</div>
-                            {i<item.max_level-1&&<div style={{width:16,height:2,background:done?"#059669":"#E5E7EB"}}/>}
-                          </div>;
-                        })}
-                        <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
-                      </div>
-                    )}
-                    {/* Action buttons */}
-                    <div style={{display:"flex",gap:6,marginTop:6}}>
-                      {src!=="purchase_order"&&(
-                        <button onClick={()=>srcAction("reject")} disabled={!!act}
-                          style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                          {act==="rejecting"?"...":"✕ Reject"}
-                        </button>
-                      )}
-                      {src==="design"&&(
-                        <button onClick={()=>srcAction("Revision")} disabled={!!act}
-                          style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                          ↻ Revision
-                        </button>
-                      )}
-                      <button onClick={()=>srcAction("approve")} disabled={!!act}
-                        style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                        {act==="approving"?"Approving...":"✓ Approve"}
-                      </button>
-                    </div>
+                    <ApproveRejectBtns id={pr.id} prefix="pr" onApprove={()=>approvePR(pr.id)} onReject={()=>rejectPR(pr.id)}/>
                   </div>
-                );
-              })}
-            </div>
-          </>
+                ))}
+              </div></>
         )}
 
-        {/* ── PAYMENT REQUESTS TAB ── */}
-        {!loading&&activeTab==="pr"&&(
-          <>
-            <SectionHead label="Finance — Payment Requests" count={data.finance.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
-            <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
-              {data.finance.map(pr=>(
-                <div key={pr.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.blu}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{pr.party_name||pr.party||"—"}</div>
-                      <div style={{fontSize:11,color:T.t4,marginTop:2}}>{pr.project_name||pr.project||"—"} · {pr.type||"Payment"}</div>
-                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>{pr.description||pr.note||"—"} · PR-{pr.id}</div>
-                    </div>
-                    <span style={{fontSize:13,fontWeight:700,color:T.blu,flexShrink:0}}>{fmtAmt(pr.amount||0)}</span>
-                  </div>
-                  <ApproveRejectBtns
-                    id={pr.id}
-                    prefix="pr"
-                    onApprove={()=>approvePR(pr.id)}
-                    onReject={()=>rejectPR(pr.id)}
-                  />
-                </div>
-              ))}
-            </div>
-          </>
+        {/* ── MATERIALS MODE ── */}
+        {!loading&&mode==="materials"&&activeTab==="procurement"&&(
+          procMRItems.length===0
+            ?<EmptyState msg="Koi pending MR nahi!" sub="Sab material requests approved/rejected hain"/>
+            :<><SectionHead label="Procurement — Material Requests" count={procMRItems.length} color={T.amb} bg={T.ambL} bdr={T.ambM}/>
+              <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                {procMRItems.map(mr=><MRApprovalCard key={mr.id} mr={mr} onApprove={approveMR} onReject={rejectMR}/>)}
+              </div></>
+        )}
+        {!loading&&mode==="materials"&&activeTab==="mr"&&(
+          centralMRItems.length===0
+            ?<EmptyState msg="Koi pending Material Request nahi!" sub="Sab site MRs processed hain"/>
+            :<><SectionHead label="Material Requests" count={centralMRItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
+              <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                {centralMRItems.map(item=><CentralCard key={item.id} item={item}/>)}
+              </div></>
+        )}
+        {!loading&&mode==="materials"&&activeTab==="warehouse"&&(
+          <div style={{textAlign:"center",padding:"60px 20px"}}>
+            <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={1.5} strokeLinecap="round" strokeLinejoin="round" style={{marginBottom:10}}><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg>
+            <div style={{fontSize:14,fontWeight:700,color:T.t2}}>Warehouse Approvals</div>
+            <div style={{fontSize:12,color:T.t4,marginTop:4,lineHeight:1.6}}>Site transfers, material issues aur<br/>warehouse requests yahaan aayenge</div>
+            <div style={{marginTop:12,display:"inline-block",background:T.grnL,color:T.grn,fontSize:11,fontWeight:700,padding:"4px 14px",borderRadius:20,border:"1px solid "+T.grnM}}>Coming Soon</div>
+          </div>
         )}
       </div>
     </div>
@@ -1145,7 +1172,7 @@ function ProjectsPage({onSelectProject}){
   const [cardMenu,setCardMenu]=useState(null); // project id with open menu
   const [settingsOf,setSettingsOf]=useState(null); // project object for settings
   const [showApprovals,setShowApprovals]=useState(false);
-  const [approvalInitTab,setApprovalInitTab]=useState("mr");
+  const [approvalMode,setApprovalMode]=useState("approvals"); // "approvals" | "materials"
   const [showIssuesDrawer,setShowIssuesDrawer]=useState(false);
   const [allIssues,setAllIssues]=useState([]);
   const [issuesLoading,setIssuesLoading]=useState(false);
@@ -1284,8 +1311,8 @@ function ProjectsPage({onSelectProject}){
   const SM={"Ongoing":{c:T.grn,bg:T.grnL},"Completed":{c:T.blu,bg:T.bluL},"Hold":{c:T.amb,bg:T.ambL},"Not Started":{c:T.slt,bg:T.sltL}};
 
   const ACTION_TILES=[
-    {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalInitTab("all");setShowApprovals(true);}},
-    {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalInitTab("mr");setShowApprovals(true);}},
+    {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalMode("approvals");setShowApprovals(true);}},
+    {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalMode("materials");setShowApprovals(true);}},
     {label:"My To-Do",          val:5,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
     {label:"Open Issues", val:allIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length, Icon:IcWarn, color:T.red,bg:T.redL,bdr:T.redM,
       onClick:()=>{
@@ -1602,7 +1629,7 @@ function ProjectsPage({onSelectProject}){
         </div>
       )}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
-      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} initTab={approvalInitTab}/>}
+      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} mode={approvalMode}/>}
       {showIssuesDrawer&&<IssuesDrawer issues={allIssues} loading={issuesLoading} filter={issueFilter} setFilter={setIssueFilter} onClose={()=>setShowIssuesDrawer(false)} onIssueClose={(id)=>setAllIssues(p=>p.map(x=>x.id===id?{...x,status:"Closed"}:x))}/>}
       {settingsOf&&<ProjectSettingsModal
         project={settingsOf}
