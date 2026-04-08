@@ -1006,6 +1006,33 @@ function ApprovalsDrawer({onClose,initTab="all"}){
                 const modColors={"Material Request":T.amb,"Design Approval":"#7C3AED","Purchase Order (PO)":T.blu,"RA Bill":"#0891B2","Subcon WO Amendment":"#EA580C","Payment Request":T.blu,"Material Site Transfer":"#059669","Material Issue":"#059669"};
                 const mc=modColors[item.module]||T.slt;
                 const act=acting["c"+item.id];
+                const isDesignSrc=item._source==="design";
+                const isMRSrc=item._source==="material_request";
+
+                // Design source: approve/revision/reject via /design/drawings/:id/status
+                const designAction=async(status)=>{
+                  const key="c"+item.id;
+                  setSaveErr("");setActing(p=>({...p,[key]:status==="Rejected"?"rejecting":"approving"}));
+                  try{
+                    const res=await api.patch("/design/drawings/"+item._source_id+"/status",{status,note:status==="Revision"?"Revision requested":undefined});
+                    if(res.success) setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==item.id)}));
+                    else setSaveErr(res.message||"Action failed");
+                  }catch(e){setSaveErr(e.message);}
+                  setActing(p=>({...p,[key]:null}));
+                };
+
+                // MR source: approve/reject via /procurement/mrs/:id/approve
+                const mrAction=async(action)=>{
+                  const key="c"+item.id;
+                  setSaveErr("");setActing(p=>({...p,[key]:action==="Rejected"?"rejecting":"approving"}));
+                  try{
+                    const res=await api.patch("/procurement/mrs/"+item._source_id+"/approve",{action,approved_qty:item.quantity||null});
+                    if(res.success!==false) setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==item.id)}));
+                    else setSaveErr(res.message||"Action failed");
+                  }catch(e){setSaveErr(e.message);}
+                  setActing(p=>({...p,[key]:null}));
+                };
+
                 return(
                   <div key={item.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
@@ -1013,34 +1040,65 @@ function ApprovalsDrawer({onClose,initTab="all"}){
                         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3}}>
                           <span style={{fontSize:9.5,fontWeight:700,color:mc,background:mc+"18",padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>{item.module}</span>
                           <span style={{fontSize:9.5,color:T.t4}}>{item.ref_no}</span>
+                          {isDesignSrc&&item.category&&<span style={{fontSize:9,color:T.t4}}>{item.category} · {item.drawing_type||"2D"}</span>}
                         </div>
                         <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{item.title}</div>
-                        <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name} · L{item.current_level}/{item.max_level}</div>
+                        <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name}{!isDesignSrc&&!isMRSrc?" · L"+item.current_level+"/"+item.max_level:""}</div>
                       </div>
                       {item.amount>0&&<span style={{fontSize:13,fontWeight:700,color:mc,flexShrink:0}}>{fmtAmt(item.amount)}</span>}
                     </div>
-                    {/* Level progress */}
-                    <div style={{display:"flex",gap:4,margin:"6px 0",alignItems:"center"}}>
-                      {Array.from({length:item.max_level},(_, i)=>{
-                        const lvl=i+1;const done=lvl<item.current_level;const pending=lvl===item.current_level;
-                        return <div key={i} style={{display:"flex",alignItems:"center",gap:3}}>
-                          <div style={{width:16,height:16,borderRadius:"50%",background:done?"#059669":pending?mc:"#E5E7EB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:done||pending?"white":"#9CA3AF"}}>{done?"✓":"L"+(lvl)}</div>
-                          {i<item.max_level-1&&<div style={{width:16,height:2,background:done?"#059669":"#E5E7EB"}}/>}
-                        </div>;
-                      })}
-                      <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
-                    </div>
-                    {/* Approve/Reject */}
-                    <div style={{display:"flex",gap:6,marginTop:6}}>
-                      <button onClick={()=>rejectItem(item.id)} disabled={!!act}
-                        style={{flex:1,padding:"6px",borderRadius:6,background:act==="rejecting"?T.b1:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                        {act==="rejecting"?"Rejecting...":"✕ Reject"}
-                      </button>
-                      <button onClick={()=>approveItem(item.id)} disabled={!!act}
-                        style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                        {act==="approving"?"Approving...":"✓ Approve"}
-                      </button>
-                    </div>
+                    {/* Level progress — only for centralized items */}
+                    {!isDesignSrc&&!isMRSrc&&item.max_level>0&&(
+                      <div style={{display:"flex",gap:4,margin:"6px 0",alignItems:"center"}}>
+                        {Array.from({length:item.max_level},(_, i)=>{
+                          const lvl=i+1;const done=lvl<item.current_level;const pending=lvl===item.current_level;
+                          return <div key={i} style={{display:"flex",alignItems:"center",gap:3}}>
+                            <div style={{width:16,height:16,borderRadius:"50%",background:done?"#059669":pending?mc:"#E5E7EB",display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:700,color:done||pending?"white":"#9CA3AF"}}>{done?"✓":"L"+(lvl)}</div>
+                            {i<item.max_level-1&&<div style={{width:16,height:2,background:done?"#059669":"#E5E7EB"}}/>}
+                          </div>;
+                        })}
+                        <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
+                      </div>
+                    )}
+                    {/* Action buttons — Design source gets Approve/Revision/Reject */}
+                    {isDesignSrc?(
+                      <div style={{display:"flex",gap:6,marginTop:6}}>
+                        <button onClick={()=>designAction("Rejected")} disabled={!!act}
+                          style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                          {act==="rejecting"?"...":"✕ Reject"}
+                        </button>
+                        <button onClick={()=>designAction("Revision")} disabled={!!act}
+                          style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                          ↻ Revision
+                        </button>
+                        <button onClick={()=>designAction("Approved")} disabled={!!act}
+                          style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                          {act==="approving"?"Approving...":"✓ Approve"}
+                        </button>
+                      </div>
+                    ):isMRSrc?(
+                      <div style={{display:"flex",gap:6,marginTop:6}}>
+                        <button onClick={()=>mrAction("Rejected")} disabled={!!act}
+                          style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                          {act==="rejecting"?"...":"✕ Reject"}
+                        </button>
+                        <button onClick={()=>mrAction("Approved")} disabled={!!act}
+                          style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                          {act==="approving"?"Approving...":"✓ Approve"}
+                        </button>
+                      </div>
+                    ):(
+                      <div style={{display:"flex",gap:6,marginTop:6}}>
+                        <button onClick={()=>rejectItem(item.id)} disabled={!!act}
+                          style={{flex:1,padding:"6px",borderRadius:6,background:act==="rejecting"?T.b1:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                          {act==="rejecting"?"Rejecting...":"✕ Reject"}
+                        </button>
+                        <button onClick={()=>approveItem(item.id)} disabled={!!act}
+                          style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                          {act==="approving"?"Approving...":"✓ Approve"}
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -1137,16 +1195,19 @@ function ProjectsPage({onSelectProject}){
     }catch(e){}
     // Fallback to direct queries
     try{
-      const [mrRes,prRes]=await Promise.all([
+      const [mrRes,prRes,drRes]=await Promise.all([
         api.get("/procurement/mrs?mr_status=Pending"),
         api.get("/finance/payment-requests"),
+        api.get("/design/drawings?status=Pending").catch(()=>({success:false})),
       ]);
       const mrCount=(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested").length;
       const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
-      apiCache.set("approval-counts",{mrCount,prCount,total:mrCount+prCount},30000);
+      const designCount=(drRes.success?drRes.data:[]).length;
+      const total=mrCount+prCount+designCount;
+      apiCache.set("approval-counts",{mrCount,prCount,total},30000);
       setMrPendingCount(mrCount);
       setPrPendingCount(prCount);
-      setApprovalCount(mrCount+prCount);
+      setApprovalCount(total);
     }catch(e){}
   };
 
