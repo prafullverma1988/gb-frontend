@@ -1,21 +1,23 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import api, { getUser, getToken, clearAuth } from "./config/api";
 import apiCache from "./utils/apiCache";
-import FinanceModule from "./modules/FinanceModule";
-import ProcurementModule from "./modules/ProcurementModule";
-import DesignModule from "./modules/DesignModule";
-import ClientPreview3D from "./pages/ClientPreview3D";
-import PayrollModule from "./modules/PayrollModule";
-import SettingsModule from "./modules/SettingsModule";
-import CRMModule from "./modules/CRMModule";
-import TeamScheduleModule from "./modules/TeamScheduleModule";
-import MOMModule from "./modules/MOMModule";
-import MasterLibraryModule from "./modules/MasterLibraryModule";
-import WarehouseModule from "./modules/WarehouseModule";
-import ReportsModule from "./modules/ReportsModule";
-import ProjectDetailPage from "./modules/ProjectDetailPage";
-import ProjectsPage from "./modules/ProjectsModule";
-import SaaSModule from "./modules/SaaSModule";
+
+// ── LAZY-LOADED MODULES (code-split per route) ──────────────────────
+const FinanceModule      = lazy(() => import("./modules/FinanceModule"));
+const ProcurementModule  = lazy(() => import("./modules/ProcurementModule"));
+const DesignModule       = lazy(() => import("./modules/DesignModule"));
+const ClientPreview3D    = lazy(() => import("./pages/ClientPreview3D"));
+const PayrollModule      = lazy(() => import("./modules/PayrollModule"));
+const SettingsModule     = lazy(() => import("./modules/SettingsModule"));
+const CRMModule          = lazy(() => import("./modules/CRMModule"));
+const TeamScheduleModule = lazy(() => import("./modules/TeamScheduleModule"));
+const MOMModule          = lazy(() => import("./modules/MOMModule"));
+const MasterLibraryModule= lazy(() => import("./modules/MasterLibraryModule"));
+const WarehouseModule    = lazy(() => import("./modules/WarehouseModule"));
+const ReportsModule      = lazy(() => import("./modules/ReportsModule"));
+const ProjectDetailPage  = lazy(() => import("./modules/ProjectDetailPage"));
+const ProjectsPage       = lazy(() => import("./modules/ProjectsModule"));
+const SaaSModule         = lazy(() => import("./modules/SaaSModule"));
 
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -59,6 +61,17 @@ const IcCal   =(p)=><Ic {...p} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2
 const IcFilter=(p)=><Ic {...p} d="M22 3H2l8 9.46V19l4 2v-8.54L22 3"/>;
 const IcStar  =(p)=><Ic {...p} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
 const IcLock  =(p)=><Ic {...p} d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"/>;
+
+// ── LAZY LOADING FALLBACK ─────────────────────────────────────────────
+function ModuleLoader(){
+  return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",minHeight:300,flexDirection:"column",gap:12}}>
+      <div style={{width:36,height:36,border:"3px solid #E5E7EB",borderTopColor:"#2563EB",borderRadius:"50%",animation:"spin 0.7s linear infinite"}}/>
+      <div style={{fontSize:13,color:"#9CA3AF",fontWeight:500}}>Loading module...</div>
+      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+    </div>
+  );
+}
 
 // ── THEME ─────────────────────────────────────────────────────────────
 const C={p:"#1565C0",p2:"#1976D2",a:"#FF6F00",sb:"#0D1B2A",sbH:"#1E2E42",w:"#FFFFFF",bg:"#F1F4F8",t:"#1A2332",tm:"#4A5568",tl:"#8896A6",b:"#E2E8F0"};
@@ -685,7 +698,7 @@ function ProjectsWrapper(){
 export default function App(){
   // Public route — 3D client preview (no login needed)
   if(window.location.pathname.startsWith("/3d-preview/")){
-    return <ClientPreview3D/>;
+    return <Suspense fallback={<ModuleLoader/>}><ClientPreview3D/></Suspense>;
   }
 
   const [user,setUser]=useState(()=>getUser());
@@ -812,7 +825,9 @@ export default function App(){
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={ALERTS.length} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>
         <div style={{flex:1,overflowY:"auto"}}>
-          {MODULE_MAP[nav]||<DashboardModule/>}
+          <Suspense fallback={<ModuleLoader/>}>
+            {MODULE_MAP[nav]||<DashboardModule/>}
+          </Suspense>
         </div>
       </div>
       {/* Quick Search Modal */}
