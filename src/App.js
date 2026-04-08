@@ -731,6 +731,8 @@ export default function App(){
   // enabledModules: null=loading, {}=map of key→boolean
   const [enabledModules,setEnabledModules]=useState(null);
 
+  const loggedIn=!!user&&!!getToken();
+
   // Wake up Railway backend on app load — prevents cold start delay
   useEffect(()=>{
     fetch("https://gb-backend-production-7bd2.up.railway.app/api/health").catch(()=>{});
@@ -740,8 +742,6 @@ export default function App(){
   useEffect(()=>{
     if(loggedIn) prefetchAllModules();
   },[loggedIn]);
-
-  const loggedIn=!!user&&!!getToken();
 
   // Fetch module access config when logged in
   useEffect(()=>{
