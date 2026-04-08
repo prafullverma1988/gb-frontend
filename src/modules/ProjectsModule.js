@@ -998,14 +998,22 @@ function ApprovalsDrawer({onClose,initTab="mr"}){
 }
 
 function ProjectsPage({onSelectProject}){
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
+
+  // Inject spin keyframes once
+  if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
+
   const [allProjects,setAllProjects]=useState([]);
   const [loading,setLoading]=useState(true);
+  const [loadError,setLoadError]=useState(null);
   const [view,setView]=useState("tile");
   const [search,setSearch]=useState("");
   const [filterCity,setFilterCity]=useState("All");
   const [filterStatus,setFilterStatus]=useState("All");
   const [hideCompleted,setHideCompleted]=useState(true);
   const [sortBy,setSortBy]=useState("Default");
+  const [page,setPage]=useState(1); const PER_PAGE=20;
   const [showPulse,setShowPulse]=useState(false);
   const [dupOf,setDupOf]=useState(null);
   const [showNew,setShowNew]=useState(false);
@@ -1046,42 +1054,45 @@ function ProjectsPage({onSelectProject}){
   };
 
   // Fetch projects from backend
-  useEffect(()=>{
-    const fetchProjects=async()=>{
-      // Check cache — show instantly if available
-      const cached = apiCache.get("projects");
-      if(cached){
-        setAllProjects(cached);
-        setLoading(false);
-        // Silently refresh in background
-        try{
-          const res=await api.get("/projects");
-          if(res.success&&res.data){
-            const fresh=res.data.map(mapProject);
-            apiCache.set("projects",fresh,60000);
-            setAllProjects(fresh);
-          }
-        }catch(err){}
-        return;
-      }
-      // No cache — normal fetch with loading spinner
+  const fetchProjects=async()=>{
+    // Check cache — show instantly if available
+    const cached = apiCache.get("projects");
+    if(cached){
+      setAllProjects(cached);
+      setLoading(false);
+      setLoadError(null);
+      // Silently refresh in background
       try{
-        setLoading(true);
         const res=await api.get("/projects");
         if(res.success&&res.data){
-          const mapped=res.data.map(mapProject);
-          apiCache.set("projects",mapped,60000); // 60 sec cache
-          setAllProjects(mapped);
-        }else{
-          setAllProjects(PROJECTS_DATA);
+          const fresh=res.data.map(mapProject);
+          apiCache.set("projects",fresh,60000);
+          setAllProjects(fresh);
         }
-      }catch(err){
-        console.error("Failed to fetch projects:",err);
+      }catch(err){}
+      return;
+    }
+    // No cache — normal fetch with loading spinner
+    try{
+      setLoading(true);setLoadError(null);
+      const res=await api.get("/projects");
+      if(res.success&&res.data){
+        const mapped=res.data.map(mapProject);
+        apiCache.set("projects",mapped,60000); // 60 sec cache
+        setAllProjects(mapped);
+      }else{
+        setLoadError(res.message||"Failed to load projects");
         setAllProjects(PROJECTS_DATA);
-      }finally{
-        setLoading(false);
       }
-    };
+    }catch(err){
+      console.error("Failed to fetch projects:",err);
+      setLoadError("Failed to load projects. Using offline data.");
+      setAllProjects(PROJECTS_DATA);
+    }finally{
+      setLoading(false);
+    }
+  };
+  useEffect(()=>{
     fetchProjects().then(()=>{ loadApprovalCounts(); });
     // Load issues independently — check cache first
     const cachedIssues = apiCache.get("all-issues");
@@ -1106,6 +1117,24 @@ function ProjectsPage({onSelectProject}){
     if(search&&!p.name.toLowerCase().includes(search.toLowerCase())&&!p.client.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   }).sort((a,b)=>sortBy==="A→Z"?a.name.localeCompare(b.name):sortBy==="End"?(a.end||"").localeCompare(b.end||""):sortBy==="↓%"?b.progress-a.progress:sortBy==="↑%"?a.progress-b.progress:0);
+
+  // Reset page when filters change
+  useEffect(()=>{setPage(1);},[search,filterCity,filterStatus,hideCompleted,sortBy]);
+
+  const totalPages=Math.ceil(filtered.length/PER_PAGE);
+  const paginated=filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);
+
+  // CSV Export
+  const exportCSV = () => {
+    const headers = ["Name","Client","City","Status","Progress","Start","End"];
+    const rows = filtered.map(p => [p.name, p.client, p.city, p.status, p.progress+"%", p.start||"", p.end||""]);
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c).replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "projects_export.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   const stats={total:allProjects.length,ongoing:allProjects.filter(p=>p.status==="Ongoing").length,hold:allProjects.filter(p=>p.status==="Hold").length,notStarted:allProjects.filter(p=>p.status==="Not Started").length,completed:allProjects.filter(p=>p.status==="Completed").length};
 
@@ -1136,10 +1165,15 @@ function ProjectsPage({onSelectProject}){
 
   if(loading) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontFamily:"'Segoe UI',sans-serif"}}>
-      <div style={{textAlign:"center",color:T.t3}}>
-        <div style={{fontSize:16,fontWeight:600}}>Loading Projects...</div>
-        <div style={{fontSize:12,marginTop:6,color:T.t4}}>Fetching from server</div>
+      <div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}>
+        <div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>
+        Loading...
       </div>
+    </div>
+  );
+  if(loadError&&allProjects.length===0) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>Failed to load data. <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={()=>fetchProjects()}>Retry</span></div>
     </div>
   );
 
@@ -1238,12 +1272,19 @@ function ProjectsPage({onSelectProject}){
           ))}
         </div>
 
+        {/* Export CSV */}
+        <button onClick={exportCSV} style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap",flexShrink:0}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.grn;e.currentTarget.style.color=T.grn;e.currentTarget.style.background=T.grnL;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.color=T.t2;e.currentTarget.style.background=T.surfaceB;}}>
+          <IcDown size={12} color="currentColor"/> Export CSV
+        </button>
+
         {/* New Project */}
-        <button onClick={()=>setShowNew(true)} style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
+        {isAdmin&&<button onClick={()=>setShowNew(true)} style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
           onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 5px 14px ${T.blu}55`}
           onMouseLeave={e=>e.currentTarget.style.boxShadow=`0 3px 8px ${T.blu}44`}>
           <IcAdd size={13} color="white"/> New Project
-        </button>
+        </button>}
       </div>
 
       {/* Results hint */}
@@ -1257,7 +1298,7 @@ function ProjectsPage({onSelectProject}){
       {/* ── TILE VIEW ── */}
       {view==="tile"&&(
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10}}>
-          {filtered.map(p=>{
+          {paginated.map(p=>{
             const sm=SM[p.status]||SM["Ongoing"];
             const margin=p.boq-p.expense;
             const isOpen=cardMenu===p.id;
@@ -1296,16 +1337,16 @@ function ProjectsPage({onSelectProject}){
                             onMouseEnter={e=>e.currentTarget.style.background=T.bluL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                             <IcArrow size={13} color={T.blu}/> Open Project
                           </button>
-                          <button onClick={()=>{setCardMenu(null);setDupOf(p);}}
+                          {isAdmin&&<button onClick={()=>{setCardMenu(null);setDupOf(p);}}
                             style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,borderBottom:"1px solid "+T.b1}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.ambL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                             <IcCopy size={13} color={T.amb}/> Copy Project
-                          </button>
-                          <button onClick={()=>{setCardMenu(null);setSettingsOf(p);}}
+                          </button>}
+                          {isAdmin&&<button onClick={()=>{setCardMenu(null);setSettingsOf(p);}}
                             style={{width:"100%",padding:"8px 12px",border:"none",background:"none",textAlign:"left",fontSize:12,color:T.t1,cursor:"pointer",display:"flex",alignItems:"center",gap:8}}
                             onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                             <IcSet size={13} color={T.slt}/> Settings
-                          </button>
+                          </button>}
                         </div>
                       )}
                     </div>
@@ -1353,7 +1394,7 @@ function ProjectsPage({onSelectProject}){
               <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px"}}>{h}</span>
             ))}
           </div>
-          {filtered.map(p=>{
+          {paginated.map(p=>{
             const sm=SM[p.status]||SM["Ongoing"];
             const margin=p.boq-p.expense;
             return(
@@ -1379,7 +1420,7 @@ function ProjectsPage({onSelectProject}){
                 <span style={{fontSize:12,fontWeight:700,color:margin>0?T.grn:T.red,fontVariantNumeric:"tabular-nums"}}>{margin>0?"+":""}₹{fmt(Math.abs(margin))}</span>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",gap:5}}>
                   <span style={{fontSize:10.5,color:T.t4}}>{p.end}</span>
-                  <button onClick={e=>{e.stopPropagation();setDupOf(p);}} style={{background:"none",border:`1px solid ${T.b1}`,borderRadius:5,padding:"2px 6px",cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontSize:9.5,color:T.t3,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=T.ambL;e.currentTarget.style.color=T.amb;e.currentTarget.style.borderColor=T.ambM;}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}><IcCopy size={10} color="currentColor"/> Copy</button>
+                  {isAdmin&&<button onClick={e=>{e.stopPropagation();setDupOf(p);}} style={{background:"none",border:`1px solid ${T.b1}`,borderRadius:5,padding:"2px 6px",cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontSize:9.5,color:T.t3,transition:"all .12s"}} onMouseEnter={e=>{e.currentTarget.style.background=T.ambL;e.currentTarget.style.color=T.amb;e.currentTarget.style.borderColor=T.ambM;}} onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b1;}}><IcCopy size={10} color="currentColor"/> Copy</button>}
                 </div>
               </div>
             );
@@ -1387,7 +1428,36 @@ function ProjectsPage({onSelectProject}){
         </div>
       )}
 
-      {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
+      {filtered.length===0&&!search&&filterCity==="All"&&filterStatus==="All"&&allProjects.length===0&&(
+        <div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📋</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>No projects yet</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>Create your first project to get started</div></div>
+      )}
+      {filtered.length===0&&(search||filterCity!=="All"||filterStatus!=="All"||allProjects.length>0)&&<div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}><div style={{fontSize:38,marginBottom:10}}>🔍</div><div style={{fontSize:15,fontWeight:600,color:T.t2}}>No projects found</div><div style={{fontSize:12,marginTop:4,color:T.t4}}>Try changing filters or search term</div></div>}
+
+      {/* ── PAGINATION ── */}
+      {totalPages>1&&(
+        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginTop:14,padding:"10px 0"}}>
+          <button onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}
+            style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${page===1?T.b1:T.blu}`,background:page===1?T.surfaceB:T.bluL,fontSize:12,fontWeight:600,color:page===1?T.t4:T.blu,cursor:page===1?"not-allowed":"pointer"}}>
+            ← Prev
+          </button>
+          {Array.from({length:totalPages},(_,i)=>i+1).filter(p=>p===1||p===totalPages||Math.abs(p-page)<=2).map((p,idx,arr)=>{
+            const prev=arr[idx-1];
+            const showEllipsis=prev&&p-prev>1;
+            return(<span key={p}>
+              {showEllipsis&&<span style={{padding:"0 4px",color:T.t4,fontSize:12}}>...</span>}
+              <button onClick={()=>setPage(p)}
+                style={{width:30,height:30,borderRadius:6,border:`1.5px solid ${page===p?T.blu:T.b1}`,background:page===p?T.blu:T.surface,color:page===p?"white":T.t2,fontSize:12,fontWeight:page===p?700:400,cursor:"pointer"}}>
+                {p}
+              </button>
+            </span>);
+          })}
+          <button onClick={()=>setPage(p=>Math.min(totalPages,p+1))} disabled={page===totalPages}
+            style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${page===totalPages?T.b1:T.blu}`,background:page===totalPages?T.surfaceB:T.bluL,fontSize:12,fontWeight:600,color:page===totalPages?T.t4:T.blu,cursor:page===totalPages?"not-allowed":"pointer"}}>
+            Next →
+          </button>
+          <span style={{fontSize:11,color:T.t4,marginLeft:8}}>Page {page} of {totalPages}</span>
+        </div>
+      )}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
       {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} initTab={approvalInitTab}/>}
       {showIssuesDrawer&&<IssuesDrawer issues={allIssues} loading={issuesLoading} filter={issueFilter} setFilter={setIssueFilter} onClose={()=>setShowIssuesDrawer(false)} onIssueClose={(id)=>setAllIssues(p=>p.map(x=>x.id===id?{...x,status:"Closed"}:x))}/>}

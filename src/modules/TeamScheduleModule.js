@@ -177,7 +177,7 @@ function WorkCard({item,onOpen,onStatusChange,compact=false}){
 }
 
 // ── WORK ITEM DETAIL DRAWER ───────────────────────────────────
-function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete}){
+function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
   const [editMode,setEditMode]=useState(false);
   const [form,setForm]=useState({...item});
   const [comment,setComment]=useState("");
@@ -233,9 +233,9 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete}){
             }
           </div>
           <div style={{display:"flex",gap:5}}>
-            <button onClick={()=>setEditMode(!editMode)} style={{background:editMode?"rgba(37,99,235,0.4)":"rgba(255,255,255,0.12)",border:editMode?"1px solid rgba(37,99,235,0.6)":"1px solid rgba(255,255,255,0.2)",cursor:"pointer",color:"white",padding:"5px 9px",borderRadius:6,fontSize:11.5,display:"flex",alignItems:"center",gap:4}}>
+            {isAdmin&&<button onClick={()=>setEditMode(!editMode)} style={{background:editMode?"rgba(37,99,235,0.4)":"rgba(255,255,255,0.12)",border:editMode?"1px solid rgba(37,99,235,0.6)":"1px solid rgba(255,255,255,0.2)",cursor:"pointer",color:"white",padding:"5px 9px",borderRadius:6,fontSize:11.5,display:"flex",alignItems:"center",gap:4}}>
               <IcEdit size={12} color="white"/> {editMode?"Cancel":"Edit"}
-            </button>
+            </button>}
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={15}/></button>
           </div>
         </div>
@@ -586,7 +586,7 @@ function ScheduleGanttView({items}){
 }
 
 // ── MEMBER VIEW ────────────────────────────────────────────────
-function MemberView({items,onOpen,onStatusChange,onCreateFor}){
+function MemberView({items,onOpen,onStatusChange,onCreateFor,isAdmin=false}){
   const [expanded,setExpanded]=useState({});
 
   return(
@@ -615,7 +615,7 @@ function MemberView({items,onOpen,onStatusChange,onCreateFor}){
                 <span style={{background:T.bluL,color:T.blu,fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:20}}>{open} open</span>
                 <span style={{background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:20}}>{done} done</span>
                 {/* Quick create buttons */}
-                {["Task","Issue","Todo"].map(type=>(
+                {isAdmin&&["Task","Issue","Todo"].map(type=>(
                   <button key={type} onClick={e=>{e.stopPropagation();onCreateFor(member.id,type);}}
                     style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:5,background:`${TYPES[type].c}18`,border:`1px solid ${TYPES[type].c}44`,color:TYPES[type].c,fontSize:10,fontWeight:700,cursor:"pointer"}}>
                     <IcAdd size={9} color={TYPES[type].c}/>{type}
@@ -656,7 +656,7 @@ function MemberView({items,onOpen,onStatusChange,onCreateFor}){
 }
 
 // ── SITE VIEW ──────────────────────────────────────────────────
-function SiteView({items,onOpen,onStatusChange,onCreateFor}){
+function SiteView({items,onOpen,onStatusChange,onCreateFor,isAdmin=false}){
   const [expanded,setExpanded]=useState({});
 
   return(
@@ -677,7 +677,7 @@ function SiteView({items,onOpen,onStatusChange,onCreateFor}){
                 <div style={{fontSize:11,color:T.t4}}>{site.city} · {siteItems.length} work items</div>
               </div>
               {issues>0&&<span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,border:`1px solid ${T.redM}`}}>{issues} open issues</span>}
-              {["Task","Issue","Todo"].map(type=>(
+              {isAdmin&&["Task","Issue","Todo"].map(type=>(
                 <button key={type} onClick={e=>{e.stopPropagation();onCreateFor(site.id,type,"site");}}
                   style={{display:"flex",alignItems:"center",gap:3,padding:"3px 8px",borderRadius:5,background:`${TYPES[type].c}18`,border:`1px solid ${TYPES[type].c}44`,color:TYPES[type].c,fontSize:10,fontWeight:700,cursor:"pointer"}}>
                   <IcAdd size={9} color={TYPES[type].c}/>{type}
@@ -699,8 +699,14 @@ function SiteView({items,onOpen,onStatusChange,onCreateFor}){
 
 // ── MAIN TEAM SCHEDULE MODULE ──────────────────────────────────
 function TeamScheduleModule(){
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
+
+  if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
+
   const [items,setItems]=useState([]);
   const [loading,setLoading]=useState(true);
+  const [error,setError]=useState(null);
   const [view,setView]=useState("board");
   const [selItem,setSelItem]=useState(null);
   const [showCreate,setShowCreate]=useState(false);
@@ -729,6 +735,7 @@ function TeamScheduleModule(){
   });
 
   const loadAll=useCallback(async()=>{
+    setError(null);setLoading(true);
     try{
       const [itemsRes,membersRes,sitesRes]=await Promise.all([
         api.get("/team-schedule/items"),
@@ -746,7 +753,7 @@ function TeamScheduleModule(){
         id:s.id, name:s.name, city:s.city||"",
         color:SITE_COLORS[idx%SITE_COLORS.length],
       }));
-    }catch(err){console.error("Load team schedule:",err);}
+    }catch(err){console.error("Load team schedule:",err);setError(err);}
     finally{setLoading(false);}
   },[]);
 
@@ -815,11 +822,31 @@ function TeamScheduleModule(){
 
   if(loading) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",background:T.bg}}>
-      <div style={{textAlign:"center",color:T.t3}}>
-        <div style={{fontSize:14,fontWeight:600}}>Loading Team Schedule...</div>
-      </div>
+      <div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>
     </div>
   );
+
+  if(error) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",background:T.bg}}>
+      <div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>Failed to load. <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={loadAll}>Retry</span></div>
+    </div>
+  );
+
+  // CSV Export
+  const exportCSV = () => {
+    const headers = ["Type","Title","Assignee","Site","Status","Priority","Start","End"];
+    const rows = filteredItems.map(i => {
+      const m=TEAM_MEMBERS.find(mm=>mm.id===i.assignee);
+      const s=SITES.find(ss=>ss.id===i.site);
+      return [i.type, i.title, m?.name||i.assigneeName||"", s?.name||i.siteName||"", i.status, i.priority||"", i.startDate||"", i.dueDate||""];
+    });
+    const csv = [headers, ...rows].map(r => r.map(c => `"${String(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], {type:"text/csv"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = "team_schedule_export.csv"; a.click();
+    URL.revokeObjectURL(url);
+  };
 
   // KPIs
   const all=items;
@@ -883,8 +910,14 @@ function TeamScheduleModule(){
             <IcFilter size={12} color="currentColor"/> Filters {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
           </button>
 
+          {/* Export */}
+          <button onClick={exportCSV}
+            style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+            Export
+          </button>
+
           {/* Create buttons */}
-          {[{type:"Task",c:T.blu},{type:"Issue",c:T.red},{type:"Todo",c:T.grn}].map(({type,c})=>(
+          {isAdmin&&[{type:"Task",c:T.blu},{type:"Issue",c:T.red},{type:"Todo",c:T.grn}].map(({type,c})=>(
             <button key={type} onClick={()=>{setCreateDefaults({type,assignee:"",site:""});setShowCreate(true);}}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,border:`1px solid ${c}66`,background:`${c}22`,color:c,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
               <IcAdd size={11} color={c}/> {type}
@@ -973,6 +1006,9 @@ function TeamScheduleModule(){
       {/* Content */}
       <div style={{flex:1,overflowY:"auto",padding:"10px 18px 16px"}}>
 
+        {/* Empty state */}
+        {items.length===0&&<div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📅</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>No work items yet</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>Create tasks, issues, or todos to get started</div></div>}
+
         {/* BOARD VIEW — Kanban by status */}
         {view==="board"&&(
           <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:12,minHeight:400,alignItems:"flex-start"}}>
@@ -995,10 +1031,10 @@ function TeamScheduleModule(){
         )}
 
         {/* MEMBER VIEW */}
-        {view==="member"&&<MemberView items={filteredItems} onOpen={setSelItem} onStatusChange={updateItem} onCreateFor={openCreateFor}/>}
+        {view==="member"&&<MemberView items={filteredItems} onOpen={setSelItem} onStatusChange={updateItem} onCreateFor={openCreateFor} isAdmin={isAdmin}/>}
 
         {/* SITE VIEW */}
-        {view==="site"&&<SiteView items={filteredItems} onOpen={setSelItem} onStatusChange={updateItem} onCreateFor={openCreateFor}/>}
+        {view==="site"&&<SiteView items={filteredItems} onOpen={setSelItem} onStatusChange={updateItem} onCreateFor={openCreateFor} isAdmin={isAdmin}/>}
 
         {/* GANTT VIEW */}
         {view==="gantt"&&<ScheduleGanttView items={filteredItems}/>}
@@ -1046,8 +1082,8 @@ function TeamScheduleModule(){
       </div>
 
       {/* Modals */}
-      {selItem&&<WorkDetailDrawer item={selItem} items={items} onClose={()=>setSelItem(null)} onUpdate={updateItem} onDelete={deleteItem}/>}
-      {showCreate&&<CreateWorkModal defaultType={createDefaults.type} defaultAssignee={createDefaults.assignee} defaultSite={createDefaults.site} onClose={()=>setShowCreate(false)} onSave={addItem}/>}
+      {selItem&&<WorkDetailDrawer item={selItem} items={items} onClose={()=>setSelItem(null)} onUpdate={updateItem} onDelete={deleteItem} isAdmin={isAdmin}/>}
+      {isAdmin&&showCreate&&<CreateWorkModal defaultType={createDefaults.type} defaultAssignee={createDefaults.assignee} defaultSite={createDefaults.site} onClose={()=>setShowCreate(false)} onSave={addItem}/>}
 
       <style>{`
         *{box-sizing:border-box}

@@ -46,6 +46,24 @@ const T={
 const fmtN=(n)=>n==null?"—":Number(n).toLocaleString("en-IN");
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:String(n||0);
 
+// ── SPIN CSS ──────────────────────────────────────────────────────
+if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
+
+// ── CSV EXPORT ────────────────────────────────────────────────────
+const exportCSV = (headers, rows, filename) => {
+  const csv = [headers, ...rows].map(r => r.map(c => `"${String(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+  const blob = new Blob([csv], {type:"text/csv"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+};
+
+// ── LOADING / ERROR / EMPTY HELPERS ───────────────────────────────
+const LoadingSpinner=()=><div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>;
+const ErrorRetry=({onRetry})=><div style={{textAlign:"center",padding:"60px 0",color:"#EF4444",fontSize:13}}>Failed to load. <span style={{color:"#3B82F6",cursor:"pointer",textDecoration:"underline"}} onClick={onRetry}>Retry</span></div>;
+const EmptyState=({icon,message,sub})=><div style={{textAlign:"center",padding:"50px 0",color:T.t4}}>{icon}<div style={{fontSize:13,marginTop:8}}>{message}</div>{sub&&<div style={{fontSize:11.5,color:T.t4,marginTop:3}}>{sub}</div>}</div>;
+
 // ── NAV ────────────────────────────────────────────────────────────
 const NAV=[
   {sec:null,items:[
@@ -178,6 +196,8 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange}){
           </div>
         );
       })}
+
+      {staff.length===0&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No staff for attendance tracking" sub="Add monthly staff members first"/>}
 
       {/* Legend */}
       <div style={{display:"flex",gap:12,marginTop:10,padding:"6px 10px",background:T.surfaceB,borderRadius:6,width:"fit-content"}}>
@@ -368,7 +388,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
 }
 
 // ── DAILY WAGES SECTION ───────────────────────────────────────────
-function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,onDailyAttChange}){
+function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,onDailyAttChange,isAdmin}){
   const [selWorker,setSelWorker]=useState(null);
   const [view,setView]=useState("grid");
   const now=new Date();const today=(now.getMonth()===month&&now.getFullYear()===year)?now.getDate():month<now.getMonth()||year<now.getFullYear()?new Date(year,month+1,0).getDate():0;
@@ -424,11 +444,22 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
             </button>
           ))}
         </div>
-        <div style={{marginLeft:"auto",padding:"6px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7}}>
-          <span style={{fontSize:11,color:T.grn,fontWeight:600}}>Total Payable (till today): </span>
-          <span style={{fontSize:14,fontWeight:800,color:T.grn}}>₹{fmtN(totalPayable)}</span>
+        <div style={{marginLeft:"auto",display:"flex",gap:8,alignItems:"center"}}>
+          <button onClick={()=>{
+            const headers=["Worker","Trade","Project","Rate/Day","Rate OT","Days Present","OT Hours","Total Pay"];
+            const rows=filteredWorkers.map(w=>{const c=calcWorkerPay(w);return[w.name,w.trade,w.project,w.ratePerDay,w.rateOT,c.presentDays,c.otHours,c.total];});
+            exportCSV(headers,rows,`Daily_Wages_${MONTHS[month]}_${year}.csv`);
+          }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            <IcDown size={12} color={T.t2}/> Export
+          </button>
+          <div style={{padding:"6px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7}}>
+            <span style={{fontSize:11,color:T.grn,fontWeight:600}}>Total Payable (till today): </span>
+            <span style={{fontSize:14,fontWeight:800,color:T.grn}}>₹{fmtN(totalPayable)}</span>
+          </div>
         </div>
       </div>
+
+      {filteredWorkers.length===0&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No daily workers found" sub={selProject!=="All"?`No workers for project "${selProject}"`:"Add daily wage workers to track attendance"}/>}
 
       {/* GRID VIEW — calendar grid for each worker */}
       {view==="grid"&&(
@@ -553,7 +584,7 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
 }
 
 // ── MONTHLY SALARY TAB ────────────────────────────────────────────
-function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays}){
+function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,isAdmin}){
   const [search,setSearch]=useState("");
   const [payStatus,setPayStatus]=useState({});
   // local paymentType overrides — can be toggled per employee
@@ -613,12 +644,22 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays}
           <div style={{padding:"6px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7}}>
             <span style={{fontSize:11,color:T.grn}}>{paidCount}/{filtered.length} Paid</span>
           </div>
-          <button onClick={markAllPaid}
+          {isAdmin&&<button onClick={markAllPaid}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
             <IcChk size={13} color="white"/> Mark All Paid
+          </button>}
+          <button onClick={()=>{
+            const headers=["Employee","ID","Dept","Pay Type","Basic","Gross","PF","ESI","Net Pay"];
+            const rows=filtered.map(emp=>{const c=calcNet(emp);return[emp.name,emp.id,emp.dept,c.pType,emp.basicSalary,c.gross,c.pf,c.esi,c.net];});
+            exportCSV(headers,rows,`Monthly_Salary_${MONTHS[month]}_${year}.csv`);
+          }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            <IcDown size={12} color={T.t2}/> Export
           </button>
         </div>
       </div>
+
+      {filtered.length===0&&!search&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No staff members added yet" sub="Add monthly staff to see salary data"/>}
+      {filtered.length===0&&search&&<EmptyState icon={<IcSearch size={32} color={T.b2}/>} message={`No results for "${search}"`}/>}
 
       {/* Table */}
       <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
@@ -655,13 +696,13 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays}
 
               {/* Pay Type toggle */}
               <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                <button
+                {isAdmin?<button
                   onClick={()=>togglePayType(emp.id)}
                   title={isAttBased?"Switch to Fixed Monthly":"Switch to Attendance Based"}
                   style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:20,border:`1.5px solid ${isAttBased?T.pur:T.grn}`,background:isAttBased?T.purL:T.grnL,color:isAttBased?T.pur:T.grn,fontSize:10.5,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",transition:"all .2s"}}>
                   <div style={{width:7,height:7,borderRadius:"50%",background:isAttBased?T.pur:T.grn,flexShrink:0}}/>
                   {isAttBased?"Attendance":"Fixed"}
-                </button>
+                </button>:<span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 8px",borderRadius:20,border:`1.5px solid ${isAttBased?T.pur:T.grn}`,background:isAttBased?T.purL:T.grnL,color:isAttBased?T.pur:T.grn,fontSize:10.5,fontWeight:700,whiteSpace:"nowrap"}}><div style={{width:7,height:7,borderRadius:"50%",background:isAttBased?T.pur:T.grn,flexShrink:0}}/>{isAttBased?"Attendance":"Fixed"}</span>}
                 {isAttBased&&(
                   <div style={{fontSize:9,color:T.t4,textAlign:"center"}}>
                     ₹{fmtN(Math.round(fullGross/WD))}/day
@@ -712,7 +753,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays}
 }
 
 // ── ADVANCES TAB ──────────────────────────────────────────────────
-function AdvancesTab({advances,setAdvances}){
+function AdvancesTab({advances,setAdvances,isAdmin}){
   const [showAdd,setShowAdd]=useState(false);
   const [form,setForm]=useState({name:"",amount:"",date:new Date().toISOString().split("T")[0],reason:""});
 
@@ -737,10 +778,19 @@ function AdvancesTab({advances,setAdvances}){
             <span style={{fontSize:14,fontWeight:800,color:T.amb}}>₹{fmtN(totalPending)}</span>
           </div>
         </div>
-        <button onClick={()=>setShowAdd(!showAdd)}
-          style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-          <IcAdd size={13} color="white"/> New Advance
-        </button>
+        <div style={{display:"flex",gap:8}}>
+          <button onClick={()=>{
+            const headers=["Adv ID","Employee","Amount","Date","Reason","Status"];
+            const rows=advances.map(a=>[a.id,a.name,a.amount,a.date,a.reason,a.status]);
+            exportCSV(headers,rows,"Advances_Export.csv");
+          }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            <IcDown size={12} color={T.t2}/> Export
+          </button>
+          {isAdmin&&<button onClick={()=>setShowAdd(!showAdd)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+            <IcAdd size={13} color="white"/> New Advance
+          </button>}
+        </div>
       </div>
 
       {/* Add form */}
@@ -767,6 +817,7 @@ function AdvancesTab({advances,setAdvances}){
             <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
           ))}
         </div>
+        {advances.length===0&&<EmptyState icon={<IcFin size={32} color={T.b2}/>} message="No advance records" sub="No salary advances have been recorded yet"/>}
         {advances.map((adv,i)=>{
           const isPending=adv.status==="Pending deduction";
           return(
@@ -780,7 +831,7 @@ function AdvancesTab({advances,setAdvances}){
               <span style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>{adv.reason}</span>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <Pill label={adv.status==="Deducted"?"Deducted":"Pending"} c={isPending?T.amb:T.grn} bg={isPending?T.ambL:T.grnL} brd={isPending?T.ambM:T.grnM}/>
-                {isPending&&<button onClick={async()=>{try{await api.patch("/payroll/advances/"+adv.id,{status:"Deducted"});}catch(err){console.error(err);}setAdvances(p=>p.map(a=>a.id===adv.id?{...a,status:"Deducted"}:a));}}
+                {isPending&&isAdmin&&<button onClick={async()=>{try{await api.patch("/payroll/advances/"+adv.id,{status:"Deducted"});}catch(err){console.error(err);}setAdvances(p=>p.map(a=>a.id===adv.id?{...a,status:"Deducted"}:a));}}
                   style={{fontSize:10,padding:"2px 7px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,cursor:"pointer",fontWeight:600}}>
                   Deduct
                 </button>}
@@ -1547,10 +1598,14 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
 
 // ── MAIN PAYROLL MODULE ───────────────────────────────────────────
 function PayrollModule(){
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
+
   const [tab,setTab]=useState("monthly-salary");
   const [month,setMonth]=useState(CUR_MONTH);
   const [year,setYear]=useState(CUR_YEAR);
   const [loading,setLoading]=useState(true);
+  const [error,setError]=useState(null);
   const [staff,setStaff]=useState([]);
   const [workers,setWorkers]=useState([]);
   const [advances,setAdvances]=useState([]);
@@ -1598,6 +1653,7 @@ function PayrollModule(){
   });
 
   const loadAll=useCallback(async()=>{
+    setError(null);setLoading(true);
     try{
       const [staffRes,workerRes,advRes,salRes,settRes,projRes]=await Promise.all([
         api.get("/payroll/staff"),
@@ -1618,7 +1674,7 @@ function PayrollModule(){
       setDefaultDueDays(sett.default_due_days||10);
       setWorkingDays(sett.working_days||26);
       PROJECTS=(projRes.data?.data||[]).map(p=>p.name);
-    }catch(err){console.error("Load payroll:",err);}
+    }catch(err){console.error("Load payroll:",err);setError(err.message||"Failed to load payroll data");}
     finally{setLoading(false);}
   },[]);
 
@@ -1649,9 +1705,13 @@ function PayrollModule(){
 
   if(loading) return(
     <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",background:T.bg}}>
-      <div style={{textAlign:"center",color:T.t3}}>
-        <div style={{fontSize:14,fontWeight:600}}>Loading Payroll...</div>
-      </div>
+      <LoadingSpinner/>
+    </div>
+  );
+
+  if(error) return(
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",background:T.bg}}>
+      <ErrorRetry onRetry={loadAll}/>
     </div>
   );
 
@@ -1728,6 +1788,28 @@ function PayrollModule(){
               </button>
             ))}
           </div>
+          {/* Export */}
+          <button onClick={()=>{
+            if(tab==="monthly-salary"){
+              const WD=workingDays||26;
+              exportCSV(["Name","Role","Dept","Basic","HRA","Conv","Medical","Phone","Days Present","Gross","PF","Net"],
+                staff.map(emp=>{const days=monthlyAtt[emp.id]||{};const P=Object.values(days).filter(v=>v==="P").length;const H=Object.values(days).filter(v=>v==="H").length;const eff=P+(H*0.5);const perDay=(emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone)/(WD);const gross=Math.round(perDay*eff);const pf=Math.round(emp.basicSalary*0.12);return[emp.name,emp.role,emp.dept,emp.basicSalary,emp.hra,emp.conveyance,emp.medical,emp.phone,eff,gross,pf,gross-pf];}),
+                `monthly_salary_${MONTHS[month]}_${year}.csv`);
+            }else if(tab==="daily-wages"){
+              exportCSV(["Name","Trade","Rate/Day","OT Rate","Project","Days","OT Hours","Total"],
+                workers.map(w=>{let days=0,ot=0,total=0;Object.entries(dailyAtt[w.id]||{}).forEach(([d,v])=>{if(v?.status==="P"){days++;total+=w.ratePerDay+(v.ot||0)*w.rateOT;ot+=(v.ot||0);}else if(v?.status==="H"){days+=0.5;total+=w.ratePerDay/2;}});return[w.name,w.trade,w.ratePerDay,w.rateOT,w.project,days,ot,total];}),
+                `daily_wages_${MONTHS[month]}_${year}.csv`);
+            }else if(tab==="advances"){
+              exportCSV(["Name","Amount","Date","Reason","Status"],advances.map(a=>[a.name,a.amount,a.date,a.reason,a.status]),`advances_${MONTHS[month]}_${year}.csv`);
+            }else if(tab==="salary-ledger"||tab==="manual-salary"){
+              exportCSV(["Name","Designation","Amount","Status","Salary Date","Due Date","Paid Date","Notes"],
+                salaryRecords.filter(r=>r.month===month&&r.year===year).map(r=>[r.name,r.designation,r.amount,r.status,r.salaryDate,r.dueDate,r.paidDate||"",r.notes||""]),
+                `salary_ledger_${MONTHS[month]}_${year}.csv`);
+            }
+          }} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+            <IcDown size={12} color="currentColor"/> Export
+          </button>
+
           {/* Month + Year picker */}
           <div style={{display:"flex",gap:5,padding:"6px 0",alignItems:"center"}}>
             <IcCal size={13} color="rgba(255,255,255,0.5)"/>
@@ -1746,13 +1828,13 @@ function PayrollModule(){
       {/* Content */}
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
         {tab==="monthly-salary"&&(
-          <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}}/>
+          <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin}/>
         )}
         {tab==="monthly-att"&&(
           <MonthlyAttGrid staff={staff} att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange}/>
         )}
         {tab==="daily-wages"&&(
-          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange}/>
+          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange} isAdmin={isAdmin}/>
         )}
         {tab==="manual-salary"&&(
           <ManualSalaryTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} defaultDueDays={defaultDueDays} month={month} year={year}/>
@@ -1761,10 +1843,11 @@ function PayrollModule(){
           <SalaryLedgerTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} month={month} year={year}/>
         )}
         {tab==="mobile-punch"&&<MobilePunchTab/>}
-        {tab==="advances"&&<AdvancesTab advances={advances} setAdvances={setAdvances}/>}
-        {tab==="pay-settings"&&(
+        {tab==="advances"&&<AdvancesTab advances={advances} setAdvances={setAdvances} isAdmin={isAdmin}/>}
+        {isAdmin&&tab==="pay-settings"&&(
           <PayrollSettingsTab defaultDueDays={defaultDueDays} setDefaultDueDays={setDefaultDueDays} workingDays={workingDays} setWorkingDays={setWorkingDays}/>
         )}
+        {!isAdmin&&tab==="pay-settings"&&<div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Settings are only accessible to admins.</div>}
       </div>
 
       {/* Salary slip modal */}

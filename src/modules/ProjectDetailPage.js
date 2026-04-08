@@ -653,7 +653,7 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
   );
 }
 
-function TabDesign({ project }) {
+function TabDesign({ project, isAdmin }) {
   const projectId   = project?.id;
   const projectName = project?.name || "Project";
   const CLOUD_NAME  = "dd632nqfm";
@@ -1148,7 +1148,7 @@ function TabDesign({ project }) {
             <button onClick={()=>setShowVer(null)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:18}}>×</button>
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"12px"}}>
-            {vLoading&&<div style={{textAlign:"center",padding:"30px",color:T.t4}}>Loading...</div>}
+            {vLoading&&<div style={{textAlign:"center",padding:"30px",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>}
             {versions.map((v,i)=>(
               <div key={v.id} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
                 <div style={{width:32,height:32,borderRadius:"50%",background:i===0?T.blu:T.b1,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -1393,10 +1393,10 @@ function TabDesign({ project }) {
           {/* Toolbar */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
             <div style={{fontSize:12,color:T.t3}}>{requests.length} total requests</div>
-            <button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
+            {isAdmin&&<button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
               style={{padding:"6px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
               + New Request
-            </button>
+            </button>}
           </div>
 
           {/* Empty state */}
@@ -1496,14 +1496,14 @@ function TabDesign({ project }) {
                       ⬆ Upload Drawing
                     </button>
                   )}
-                  <button onClick={()=>{setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
+                  {isAdmin&&<button onClick={()=>{setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
                     style={{padding:"4px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}>
                     Edit
-                  </button>
-                  <button onClick={()=>handleDeleteReq(req.id)}
+                  </button>}
+                  {isAdmin&&<button onClick={()=>handleDeleteReq(req.id)}
                     style={{padding:"4px 10px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,cursor:"pointer"}}>
                     Delete
-                  </button>
+                  </button>}
                 </div>
               </div>
             );
@@ -2324,9 +2324,9 @@ function fmtDate(d){
   const [y,m,dd]=s.split("-");
   return dd+"/"+m+"/"+y;
 }
-function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date("2026-03-15")-new Date(t.baseEnd))/(1000*86400));return d>0?d:0;}
+function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date()-new Date(t.baseEnd))/(1000*86400));return d>0?d:0;}
 
-function TabTasks({ projectId }) {
+function TabTasks({ projectId, isAdmin }) {
   const [tasks,setTasks]     = useState([]);
   const [loading, setLoading] = useState(true);
 
@@ -2373,7 +2373,7 @@ function TabTasks({ projectId }) {
   const [savedFilters,setSavedFilters] = useState([
     {name:"Civil Ongoing",  f:{fCat:"Civil",fStatus:"Ongoing",fAssignee:"All",fDelayed:false,fAsSchedule:""}},
     {name:"My Delayed",     f:{fCat:"All",fStatus:"All",fAssignee:"Vijay Sahu",fDelayed:true,fAsSchedule:""}},
-    {name:"Today Schedule", f:{fCat:"All",fStatus:"All",fAssignee:"All",fDelayed:false,fAsSchedule:"2026-03-16"}},
+    {name:"Today Schedule", f:{fCat:"All",fStatus:"All",fAssignee:"All",fDelayed:false,fAsSchedule:new Date().toISOString().split("T")[0]}},
   ]);
   const [filterSaveName,setFilterSaveName] = useState("");
   const [lastUsedFilter,setLastUsedFilter] = useState(null);
@@ -2389,7 +2389,7 @@ function TabTasks({ projectId }) {
   const [depSearch,setDepSearch]     = useState("");
 
   const allFlat = ptFlatten(tasks);
-  const TEAM_PT = ["Vijay Sahu","Niranjan","Harsh Sahu","Priyanka","Ramesh"];
+  const TEAM_PT = [...new Set(allFlat.map(t=>t.assignee).filter(Boolean))];
 
   // Apply a saved filter
   const applyFilter=(f)=>{
@@ -2458,6 +2458,7 @@ function TabTasks({ projectId }) {
       setTaskIssuesLoading(false);
     }).catch(()=>setTaskIssuesLoading(false));
   };
+  useEffect(()=>{ if(projectId) loadTaskIssues(); },[projectId]);
 
   const toggleCollapse=(id)=>setCollapsed(p=>({...p,[id]:!p[id]}));
 
@@ -2483,7 +2484,7 @@ function TabTasks({ projectId }) {
     const r = await api.get("/tasks?project_id=" + projectId);
     if (r.success) {
       const fl = r.data || []; const map = {};
-      fl.forEach((t,i) => { t.children=[]; t.no=t.task_no; t.tsk_no="T"+String(t.id).padStart(4,"0"); t.baseStart=t.base_start; t.baseEnd=t.base_end; t.dhyanRakhen=t.dhyan_rakhen; t.assignee=t.assignee_name||""; t.serial=i+1; map[t.id]=t; });
+      fl.forEach((t,i) => { t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0"); t.baseStart=t.base_start; t.baseEnd=t.base_end; t.actualStart=t.actual_start; t.actualEnd=t.actual_end; t.dhyanRakhen=t.dhyan_rakhen; t.lastUpdate=t.last_update; t.assignee=t.assignee_name||t.assigned_to||""; t.serial=i+1; map[t.id]=t; });
       const roots=[]; fl.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
       setTasks(roots);
     }
@@ -2491,7 +2492,7 @@ function TabTasks({ projectId }) {
 
   function updateInTree(list,id,upd){
     return list.map(t=>{
-      if(t.id===id) return{...t,...upd,lastUpdate:"2026-03-15"};
+      if(t.id===id) return{...t,...upd,lastUpdate:new Date().toISOString().split("T")[0]};
       return{...t,children:updateInTree(t.children||[],id,upd)};
     });
   }
@@ -2560,14 +2561,14 @@ function TabTasks({ projectId }) {
                   style={{width:22,height:22,borderRadius:4,background:infoTask?.id===t.id?"#FEF3C7":T.surface,border:"1px solid "+(infoTask?.id===t.id?"#FCD34D":T.b1),cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={infoTask?.id===t.id?"#D97706":T.t3} strokeWidth={2}><circle cx={12} cy={12} r={10}/><path d="M12 16v-4M12 8h.01"/></svg>
                 </button>
-                {depth<6&&<button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
+                {isAdmin&&depth<6&&<button onClick={()=>{setAddParent(t);setShowAdd(true);}} title="Add Subtask"
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
                 </button>}
-                <button onClick={()=>setEditTask(t)} title="Edit"
+                {isAdmin&&<button onClick={()=>setEditTask(t)} title="Edit"
                   style={{width:22,height:22,borderRadius:4,background:T.surface,border:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                </button>
+                </button>}
             </div>
           </div>
 
@@ -2705,7 +2706,7 @@ function TabTasks({ projectId }) {
           <input type="date" value={fAsSchedule} onChange={e=>setFAsSchedule(e.target.value)}
             style={{height:"100%",padding:"0 8px",border:"none",background:"transparent",fontSize:11.5,color:fAsSchedule?T.grn:T.t2,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer",width:fAsSchedule?130:120}}/>
           {/* Today shortcut */}
-          <button onClick={()=>setFAsSchedule("2026-03-16")}
+          <button onClick={()=>setFAsSchedule(new Date().toISOString().split("T")[0])}
             style={{padding:"0 7px",height:"100%",border:"none",borderLeft:`1px solid ${fAsSchedule?T.grnM:T.b1}`,background:fAsSchedule?"transparent":T.surface,color:fAsSchedule?T.grn:T.t4,fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
             Today
           </button>
@@ -2732,20 +2733,23 @@ function TabTasks({ projectId }) {
           <option value="All">All Levels</option>
           {[1,2,3,4,5,6,7].map(l=><option key={l} value={l}>Level {l}</option>)}
         </select>
-        {/* Excel Export */}
+        {/* CSV Export */}
         <button onClick={()=>{
           const flat=ptFlatten(tasks);
-          const rows=[["Task No","Name","Category","Status","Progress%","Assigned To","Start Date","End Date","Tag"]];
-          flat.forEach(t=>rows.push([t.no,t.name,t.category,t.status,t.progress,t.assignee||"",t.baseStart||"",t.baseEnd||"",t.tag||""]));
-          const csv=rows.map(r=>r.map(v=>'"'+String(v).replace(/"/g,'""')+'"').join(",")).join("\n");
-          const a=document.createElement("a");a.href="data:text/csv;charset=utf-8,"+encodeURIComponent(csv);a.download="tasks.csv";a.click();
-        }} title="Export to Excel"
+          const headers=["Task No","Name","Category","Status","Assignee","Base Start","Base End","Actual Start","Actual End"];
+          const rows=flat.map(t=>[t.task_no||t.no||"",t.name,t.category||"",t.status||"",t.assignee||"",t.baseStart||"",t.baseEnd||"",t.actualStart||"",t.actualEnd||""]);
+          const csv=[headers,...rows].map(r=>r.map(c=>`"${String(c||"").replace(/"/g,'""')}"`).join(",")).join("\n");
+          const blob=new Blob([csv],{type:"text/csv"});
+          const url=URL.createObjectURL(blob);
+          const a=document.createElement("a");a.href=url;a.download="tasks_export.csv";a.click();
+          URL.revokeObjectURL(url);
+        }} title="Export to CSV"
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
           Export
         </button>
         {/* Excel Import */}
-        <label title="Import from Excel/CSV"
+        {isAdmin&&<label title="Import from Excel/CSV"
           style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
           <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
           Import
@@ -2781,11 +2785,11 @@ function TabTasks({ projectId }) {
             alert("Import complete!");
             e.target.value="";
           }}/>
-        </label>
-        <button onClick={()=>{setAddParent(null);setShowAdd(true);}}
+        </label>}
+        {isAdmin&&<button onClick={()=>{setAddParent(null);setShowAdd(true);}}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg> Add Task
-        </button>
+        </button>}
       </div>
 
       {/* Filter panel — 2 rows */}
@@ -2928,7 +2932,10 @@ function TabTasks({ projectId }) {
           <TaskSkeleton/>
         </div>
       )}
-      {!loading && tasks.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>No tasks yet — click + Add Task to create</div>}
+      {!loading && tasks.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>
+        <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke={T.b2} strokeWidth={1.5} style={{margin:"0 auto 10px",display:"block"}}><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+        No tasks yet. Create your first task to start tracking work.
+      </div>}
 
       {/* Context Menu */}
       {contextMenu && <>
@@ -2944,12 +2951,12 @@ function TabTasks({ projectId }) {
               {icon:"M5 15l7-7 7 7",label:"Move Up",action:()=>{moveTask(contextMenu.task.id,"up");setContextMenu(null);}},
               {icon:"M19 9l-7 7-7-7",label:"Move Down",action:()=>{moveTask(contextMenu.task.id,"down");setContextMenu(null);}},
               null, // divider
-              {icon:"M12 5v14M5 12h14",label:"Add Subtask",action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981"},
-              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:"Edit Task",action:()=>{setEditTask(contextMenu.task);setContextMenu(null);}},
+              {icon:"M12 5v14M5 12h14",label:"Add Subtask",action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981",admin:true},
+              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:"Edit Task",action:()=>{setEditTask(contextMenu.task);setContextMenu(null);},admin:true},
               {icon:"M20 6L9 17l-5-5",label:"Mark Complete",action:async()=>{await api.put("/tasks/"+contextMenu.task.id,{progress:100});setTasks(updateInTree(tasks,contextMenu.task.id,{progress:100,status:"Completed"}));setContextMenu(null);}},
               null,
-              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{if(window.confirm("Delete this task?")){{await api.del("/tasks/"+contextMenu.task.id);setTasks(ptFlatten(tasks).filter(t=>t.id!==contextMenu.task.id));setContextMenu(null);}};},color:"#EF4444"},
-            ].map((item,i)=>
+              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{if(window.confirm("Delete this task?")){await api.del("/tasks/"+contextMenu.task.id);const removeFromTree=(list,id)=>list.filter(t=>t.id!==id).map(t=>({...t,children:removeFromTree(t.children||[],id)}));setTasks(removeFromTree(tasks,contextMenu.task.id));setContextMenu(null);}},color:"#EF4444",admin:true},
+            ].filter(item=>item===null||!item.admin||isAdmin).map((item,i)=>
               item === null
               ? <div key={i} style={{height:1,background:"#F3F4F6",margin:"4px 0"}}/>
               : <button key={i} onClick={item.action}
@@ -3009,14 +3016,14 @@ function TabTasks({ projectId }) {
 
 // ── Inline Gantt for project detail ──────────────────────────────
 function PTGantt({tasks}){
-  const allFlat=ptFlatten(tasks);
+  const allFlat=(function flatD(list,depth=0,out=[]){list.forEach(t=>{out.push({...t,level:depth+1});if(t.children?.length)flatD(t.children,depth+1,out);});return out;})(tasks);
   const MONTHS=[];
   let d=new Date("2025-01-01");
   while(d<=new Date("2026-10-01")){MONTHS.push({y:d.getFullYear(),m:d.getMonth(),lbl:`${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]}${d.getFullYear()===2026?"'26":""}`});d=new Date(d.getFullYear(),d.getMonth()+1,1);}
   const ROW_H=26,LBL_W=180,MO_W=36,HDR_H=28,TOTAL_W=LBL_W+MONTHS.length*MO_W,TOTAL_H=HDR_H+allFlat.length*ROW_H;
   const pStart=new Date("2025-01-01");
   const toX=(ds)=>{if(!ds)return null;const dd=(new Date(ds)-pStart)/(1000*86400);const tot=(new Date("2026-10-01")-pStart)/(1000*86400);return LBL_W+dd/tot*(MONTHS.length*MO_W);};
-  const todayX=toX("2026-03-15");
+  const todayX=toX(new Date().toISOString().split("T")[0]);
   return(
     <svg width={TOTAL_W} height={TOTAL_H} style={{display:"block",fontFamily:"'Segoe UI',sans-serif",minWidth:TOTAL_W}}>
       <rect x={0} y={0} width={TOTAL_W} height={HDR_H} fill="#0D1B2A"/>
@@ -3039,7 +3046,7 @@ function PTGantt({tasks}){
             {MONTHS.map((_,mi)=><line key={mi} x1={LBL_W+mi*MO_W} y1={y} x2={LBL_W+mi*MO_W} y2={y+ROW_H} stroke={T.b1} strokeWidth={0.5}/>)}
             <text x={8+indent} y={y+ROW_H/2+4} fontSize={t.level===1?11:t.level===2?10:9.5} fontWeight={t.level===1?700:t.level===2?600:400} fill={T.t1}>{t.no} {t.name.slice(0,t.level===1?18:15)}{t.name.length>(t.level===1?18:15)?"…":""}</text>
             {bx1&&bw>0&&<rect x={bx1} y={y+ROW_H/2-3} width={bw} height={5} rx={2} fill={T.blu} fillOpacity={0.35}/>}
-            {ax1&&aw>0&&<rect x={ax1} y={y+ROW_H/2-5} width={aw} height={9} rx={2} fill={t.status==="Completed"?T.grn:T.grn} fillOpacity={0.8}/>}
+            {ax1&&aw>0&&<rect x={ax1} y={y+ROW_H/2-5} width={aw} height={9} rx={2} fill={t.status==="Completed"?T.grn:t.status==="Ongoing"?T.blu:T.amb} fillOpacity={0.8}/>}
             {t.dhyanRakhen&&bx1&&<circle cx={bx1-5} cy={y+ROW_H/2} r={3.5} fill="#F59E0B"/>}
           </g>
         );
@@ -3455,8 +3462,8 @@ function TaskIssueDrawer({issues, loading, filter, setFilter, onClose, onStatusC
 
       {/* Body */}
       <div style={{flex:1,overflowY:"auto",padding:"12px 14px"}}>
-        {loading&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
-        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found</div>}
+        {loading&&<div style={{textAlign:"center",padding:"60px 0",color:"#94A3B8"}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>}
+        {!loading&&filtered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:"#94A3B8",fontSize:13}}>No issues found for this project.</div>}
 
         {Object.entries(byTask).map(([taskLabel,taskIssues])=>(
           <div key={taskLabel} style={{marginBottom:14}}>
@@ -3547,7 +3554,7 @@ function TaskIssueChat({issueId}){
         <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2}><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
         Chat ({comments.length})
       </div>
-      {!loaded&&<div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"4px 0"}}>Loading...</div>}
+      {!loaded&&<div style={{textAlign:"center",padding:"10px 0",color:"#94A3B8"}}><div style={{width:20,height:20,border:"2px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}></div><span style={{fontSize:11}}>Loading...</span></div>}
       {loaded&&comments.length===0&&<div style={{fontSize:11,color:"#CBD5E1",textAlign:"center",padding:"4px 0"}}>No messages yet — start the conversation</div>}
       <div style={{maxHeight:160,overflowY:"auto",marginBottom:8}}>
         {comments.map(c=>(
@@ -4219,7 +4226,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 }} style={{width:"100%",padding:"10px",borderRadius:7,background:"#DC2626",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>Create Issue</button>
               </div>
             )}
-            {issues.length===0&&!showIssueForm&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>No issues reported</div>}
+            {issues.length===0&&!showIssueForm&&<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>No issues found for this project.</div>}
             {issues.map(issue=>{
               const ic=issC[issue.status]||issC["Open"];
               const pc=priC[issue.priority]||priC["Medium"];
@@ -5183,7 +5190,7 @@ function TabMaterial({ project }) {
             </div>
             {/* Table */}
             <div style={{flex:1,overflowY:"auto"}}>
-              {usedLogLoading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>Loading...</div>}
+              {usedLogLoading&&<div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>}
               {!usedLogLoading&&(()=>{
                 const filtered=usedLog.filter(u=>{
                   if(ulFilterMat&&!u.material_name?.toLowerCase().includes(ulFilterMat.toLowerCase())) return false;
@@ -5862,7 +5869,7 @@ function TabSubcon({ projectId }) {
           <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Work Orders ({wos.length})</span>
           <button onClick={()=>setShowNewWO(true)} style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>+ New</button>
         </div>
-        {loading&&<div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>Loading...</div>}
+        {loading&&<div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>}
         {!loading&&wos.length===0&&<div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>No work orders yet</div>}
         {wos.map(wo=>{
           const isSel=selWo?.id===wo.id;
@@ -6009,7 +6016,7 @@ function TabSubcon({ projectId }) {
                             ))}
                           </div>
                           {!(billItems[b.id]?.length)&&(
-                            <div style={{padding:"12px",textAlign:"center",fontSize:12,color:T.t4}}>Loading...</div>
+                            <div style={{textAlign:"center",padding:"20px 0",color:T.t4}}><div style={{width:22,height:22,border:"2px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}></div><span style={{fontSize:12}}>Loading...</span></div>
                           )}
                           {(billItems[b.id]||[]).map(it=>(
                             <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 50px 70px 70px 70px 70px 80px",padding:"7px 10px",gap:6,borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
@@ -6725,7 +6732,7 @@ function WoItemsTable({ woId, fmtC }) {
 
   const toggleSec = (id) => setCollapsed(p=>({...p,[id]:!p[id]}));
 
-  if(loading) return <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12}}>Loading...</div>;
+  if(loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>;
   if(sections.length===0) return <div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12}}>No BOQ items</div>;
 
   const grandTotal = sections.reduce((st,sec)=>st+(sec.items||[]).reduce((s,it)=>s+parseFloat(it.amount||0),0),0);
@@ -7549,6 +7556,9 @@ const TABS = [
 ];
 
 function ProjectDetailPage({project=PROJ, onBack}) {
+  const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
+  if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
   const [tab, setTab] = useState("overview");
   const sm = STATUS_S[project.status]||{c:T.slt, bg:T.sltL};
   const margin = project.boq - project.expense;
@@ -7577,12 +7587,12 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
   const tabContent = {
     overview:    <TabOverview    proj={project}/>,
-    design:      <TabDesign project={project}/>,
+    design:      <TabDesign project={project} isAdmin={isAdmin}/>,
     estimate:    <TabEstimate/>,
     party:       <TabParty/>,
     transaction: <TabTransaction/>,
     todo:        <TabTodo/>,
-    task:        <TabTasks projectId={project.id}/>,
+    task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
     attendance:  <TabAttendance/>,
     material:    <TabMaterial project={project}/>,
     subcon:      <TabSubcon projectId={project.id}/>,
