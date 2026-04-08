@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
+import uploadManager from "../utils/uploadManager";
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -87,50 +88,56 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
     if (!form.project_id) { setErr("Project select karo"); return; }
     if (!form.title.trim()) { setErr("Title required"); return; }
     if (!file) { setErr("File select karo"); return; }
-    setUploading(true); setErr(""); setPct(5);
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("upload_preset", PRESET);
-      fd.append("folder", "gb_buildcon/drawings");
-      const xhr = new XMLHttpRequest();
-      const cld = await new Promise((res,rej)=>{
-        xhr.upload.onprogress = e => { if(e.lengthComputable) setPct(Math.round(e.loaded/e.total*80)); };
-        xhr.onload = () => { const d=JSON.parse(xhr.responseText); xhr.status===200?res(d):rej(new Error(d.error?.message||"Upload failed")); };
-        xhr.onerror = ()=>rej(new Error("Network error"));
-        const isPDF = file.name.match(/\.(pdf|dwg|dxf)$/i);
-        xhr.open("POST", `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${isPDF?"raw":"image"}/upload`);
-        xhr.send(fd);
-      });
-      setPct(85);
-      const proj = projects.find(p=>p.id===parseInt(form.project_id));
-      const res = await api.post("/design/drawings", {
-        project_id:   form.project_id,
-        project_name: proj?.name||"",
-        title:        form.title,
-        category:     form.category,
-        drawing_type: form.drawing_type,
-        note:         form.note||null,
-        file_url:     cld.secure_url,
-        file_size:    Math.round(file.size/1024)+" KB",
-      });
-      setPct(100);
-      if (res.success) {
-        api.post("/approvals/submit", {
-          module: "Design Approval",
-          ref_id: res.data.id,
-          ref_no: res.data.drawing_no || "",
-          title: res.data.title || form.title || "Drawing",
-          amount: 0,
-          project_id: form.project_id || res.data.project_id,
-          project_name: proj?.name || res.data.project_name || "",
-        }).catch(e => console.error("Approval submit:", e));
-        onUploaded(res.data);
-        onClose();
-        setFile(null); setForm({project_id:"",title:"",category:"Architectural",drawing_type:"2D",note:""}); setPct(0);
-      } else setErr(res.message||"Save failed");
-    } catch(e) { setErr(e.message); }
-    setUploading(false);
+
+    // Capture form values before closing modal
+    const capturedForm = { ...form };
+    const capturedFile = file;
+    const proj = projects.find(p => p.id === parseInt(capturedForm.project_id));
+    const fileSize = Math.round(capturedFile.size / 1024) + " KB";
+
+    // ── CLOSE MODAL IMMEDIATELY — upload runs in background ──
+    onClose();
+    setFile(null);
+    setForm({ project_id: "", title: "", category: "Architectural", drawing_type: "2D", note: "" });
+    setPct(0);
+
+    // ── BACKGROUND UPLOAD via uploadManager ──
+    uploadManager.add({
+      file: capturedFile,
+      folder: "gb_buildcon/drawings",
+      label: capturedForm.title || capturedFile.name,
+      onDone: async (url) => {
+        try {
+          const res = await api.post("/design/drawings", {
+            project_id:   capturedForm.project_id,
+            project_name: proj?.name || "",
+            title:        capturedForm.title,
+            category:     capturedForm.category,
+            drawing_type: capturedForm.drawing_type,
+            note:         capturedForm.note || null,
+            file_url:     url,
+            file_size:    fileSize,
+          });
+          if (res.success) {
+            api.post("/approvals/submit", {
+              module: "Design Approval",
+              ref_id: res.data.id,
+              ref_no: res.data.drawing_no || "",
+              title: res.data.title || capturedForm.title || "Drawing",
+              amount: 0,
+              project_id: capturedForm.project_id || res.data.project_id,
+              project_name: proj?.name || res.data.project_name || "",
+            }).catch(e => console.error("Approval submit:", e));
+            onUploaded(res.data);
+          }
+        } catch (e) {
+          console.error("Save drawing error:", e);
+        }
+      },
+      onError: (msg) => {
+        console.error("Drawing upload failed:", msg);
+      },
+    });
   };
 
   return (
@@ -305,27 +312,27 @@ export default function DesignModule() {
     setActing(p=>({...p,[id]:null}));
   };
 
-  // Upload new version from revision queue
+  // Upload new version from revision queue — BACKGROUND
   const handleNewVersion = async (drawingId, file) => {
     setRevUploading(p=>({...p,[drawingId]:true}));
-    try {
-      const fd = new FormData();
-      fd.append("file", file);
-      fd.append("upload_preset", "gb_buildcon_drawings");
-      const isPDF = file.name.match(/\.(pdf|dwg|dxf)$/i);
-      const xhr = new XMLHttpRequest();
-      const cld = await new Promise((res,rej)=>{
-        xhr.onload = ()=>{ const d=JSON.parse(xhr.responseText); xhr.status===200?res(d):rej(new Error(d.error?.message)); };
-        xhr.onerror = ()=>rej(new Error("Network error"));
-        xhr.open("POST", `https://api.cloudinary.com/v1_1/dd632nqfm/${isPDF?"raw":"image"}/upload`);
-        xhr.send(fd);
-      });
-      const res = await api.post("/design/drawings/"+drawingId+"/versions", {
-        file_url: cld.secure_url, file_size: Math.round(file.size/1024)+" KB",
-      });
-      if (res.success) { await loadAll(); }
-    } catch(e) { alert(e.message); }
-    setRevUploading(p=>({...p,[drawingId]:false}));
+    const fileSize = Math.round(file.size/1024)+" KB";
+    uploadManager.add({
+      file,
+      folder: "gb_buildcon/drawings",
+      label: `Revision — Drawing #${drawingId}`,
+      onDone: async (url) => {
+        try {
+          const res = await api.post("/design/drawings/"+drawingId+"/versions", {
+            file_url: url, file_size: fileSize,
+          });
+          if (res.success) { await loadAll(); }
+        } catch(e) { console.error("Version save error:", e); }
+        setRevUploading(p=>({...p,[drawingId]:false}));
+      },
+      onError: () => {
+        setRevUploading(p=>({...p,[drawingId]:false}));
+      },
+    });
   };
 
   // Update request status

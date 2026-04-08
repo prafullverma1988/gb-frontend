@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import api, { getUser, getToken, clearAuth } from "./config/api";
 import apiCache from "./utils/apiCache";
+import UploadToast from "./components/UploadToast";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
@@ -876,6 +877,8 @@ export default function App(){
       {showSearch&&<QuickSearch onNavigate={(id)=>{setNav(id);setShowSearch(false);}} onClose={()=>setShowSearch(false)}/>}
       {/* Shortcut Cheatsheet Modal */}
       {showCheatsheet&&<ShortcutCheatsheet onClose={()=>setShowCheatsheet(false)}/>}
+      {/* Background Upload Toast — always visible */}
+      <UploadToast/>
     </div>
   );
 }
