@@ -19,6 +19,28 @@ const ProjectDetailPage  = lazy(() => import("./modules/ProjectDetailPage"));
 const ProjectsPage       = lazy(() => import("./modules/ProjectsModule"));
 const SaaSModule         = lazy(() => import("./modules/SaaSModule"));
 
+// ── PREFETCH: Dashboard load hone ke baad background me sab modules load karo ──
+function prefetchAllModules(){
+  setTimeout(()=>{
+    import("./modules/ProjectsModule");
+    import("./modules/ProjectDetailPage");
+    import("./modules/FinanceModule");
+    import("./modules/ProcurementModule");
+  },1500); // 1.5s baad heavy modules
+  setTimeout(()=>{
+    import("./modules/DesignModule");
+    import("./modules/CRMModule");
+    import("./modules/SettingsModule");
+    import("./modules/PayrollModule");
+    import("./modules/TeamScheduleModule");
+    import("./modules/MOMModule");
+    import("./modules/MasterLibraryModule");
+    import("./modules/WarehouseModule");
+    import("./modules/ReportsModule");
+    import("./modules/SaaSModule");
+  },3000); // 3s baad remaining modules
+}
+
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -713,6 +735,11 @@ export default function App(){
   useEffect(()=>{
     fetch("https://gb-backend-production-7bd2.up.railway.app/api/health").catch(()=>{});
   },[]);
+
+  // Prefetch all modules in background after dashboard loads
+  useEffect(()=>{
+    if(loggedIn) prefetchAllModules();
+  },[loggedIn]);
 
   const loggedIn=!!user&&!!getToken();
 
