@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api from "../config/api";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
