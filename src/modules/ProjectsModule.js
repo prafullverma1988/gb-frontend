@@ -267,176 +267,216 @@ function SitePulseDrawer({onClose}){
 // ── DUPLICATE MODAL ───────────────────────────────────────────────────
 
 function NewProjectModal({onClose,onCreated}){
-  // Read company module type — localStorage se (set by Settings) ya API se
-  const [companyModule, setCompanyModule] = useState(
-    localStorage.getItem("gb_company_module") || "loading"
-  );
-  useEffect(() => {
-    if(companyModule !== "loading") return;
-    api.get("/settings/company").then(r => {
-      const mt = r.success ? (r.data?.module_type || "construction") : "construction";
-      localStorage.setItem("gb_company_module", mt);
-      setCompanyModule(mt);
-    }).catch(() => setCompanyModule("construction"));
-  }, []);
+  const companyModule = localStorage.getItem("gb_company_module") || "construction";
+  const isSolarCompany = companyModule === "solar_epc";
+  const isBoth = companyModule === "both";
 
-  // project_type auto-set based on company module (no choice given to user if single-module)
-  const fixedType = companyModule === "solar_epc" ? "solar_epc"
-                  : companyModule === "construction" ? "construction"
-                  : null; // both → user chooses
+  const [step, setStep] = useState(1); // Solar: step 1 = basic, step 2 = consumer docs
+  const [projType, setProjType] = useState(isSolarCompany ? "solar_epc" : "construction");
+  const isSolar = projType === "solar_epc";
 
-  const [form,setForm]=useState({
-    name:"", client_name:"", city:"Raipur",
-    type:"residential",
-    project_type: companyModule === "solar_epc" ? "solar_epc" : "construction",
-    system_kw:"3",
-    boq_value:"", start_date:"", end_date:""
+  const [form, setForm] = useState({
+    // Common
+    name:"", phone:"", city:"Raipur",
+    // Solar specific
+    address:"", system_kw:"3", install_type:"residential",
+    bp_number:"", aadhaar_no:"", pan_no:"",
+    bank_name:"", bank_account:"", ifsc:"",
+    // Construction specific
+    client_name:"", type:"residential", boq_value:"", start_date:"", end_date:"",
   });
-  const [loading,setLoading]=useState(false);
-  const [error,setError]=useState("");
-  const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const setF = (k,v) => setForm(p=>({...p,[k]:v}));
 
-  // If companyModule changes after fetch, sync project_type
-  useEffect(() => {
-    if(companyModule !== "loading" && fixedType) {
-      setF("project_type", fixedType);
-    }
-  }, [companyModule]);
+  const inp = (label, key, ph, type="text", full=false) => (
+    <div style={{gridColumn:full?"1/3":"auto"}}>
+      <label style={{fontSize:10.5,fontWeight:600,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{label}</label>
+      <input type={type} value={form[key]} onChange={e=>setF(key,e.target.value)} placeholder={ph||""}
+        style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+        onFocus={e=>e.target.style.borderColor=isSolar?"#E65100":T.blu}
+        onBlur={e=>e.target.style.borderColor=T.b1}/>
+    </div>
+  );
 
-  const isSolar = form.project_type === "solar_epc";
+  const sel = (label, key, opts, full=false) => (
+    <div style={{gridColumn:full?"1/3":"auto"}}>
+      <label style={{fontSize:10.5,fontWeight:600,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{label}</label>
+      <select value={form[key]} onChange={e=>setF(key,e.target.value)}
+        style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+        {opts.map(o=><option key={o.v||o} value={o.v||o}>{o.l||o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
+      </select>
+    </div>
+  );
 
-  const handleCreate=async()=>{
-    if(!form.name.trim()) return setError("Project name required");
+  const handleCreate = async () => {
+    if (!form.name.trim()) return setError("Name required");
+    if (isSolar && !form.address.trim()) return setError("Address required");
     setLoading(true); setError("");
-    try{
-      const res=await api.post("/projects",{
-        name: form.name.trim(),
-        client_name: form.client_name.trim(),
+    try {
+      const projectName = isSolar
+        ? `${form.name.trim()} — ${form.system_kw}kW Solar`
+        : form.name.trim();
+
+      // Step 1: Create project
+      const res = await api.post("/projects", {
+        name: projectName,
+        client_name: isSolar ? form.name.trim() : form.client_name.trim(),
+        client_phone: form.phone,
         city: form.city,
-        type: isSolar ? "residential" : form.type,
-        project_type: form.project_type,
+        site_address: isSolar ? form.address : "",
+        type: isSolar ? form.install_type : form.type,
+        project_type: isSolar ? "solar_epc" : "construction",
         status: "not_started",
         boq_value: Number(form.boq_value)||0,
         start_date: form.start_date||null,
         end_date: form.end_date||null,
       });
-      if(res.success&&res.data){
-        apiCache.invalidate("projects");
-        onCreated(mapProject(res.data));
-        onClose();
-      }else{
-        setError(res.message||"Failed to create project");
+
+      if (!res.success || !res.data)
+        return setError(res.message || "Failed to create project");
+
+      const pid = res.data.id;
+
+      if (isSolar) {
+        // Step 2: Init stages (19 stages + 9 photo steps)
+        await api.post(`/solar/projects/${pid}/init`, {});
+
+        // Step 3: Save consumer details
+        await api.put(`/solar/projects/${pid}`, {
+          consumer_name: form.name.trim(),
+          consumer_address: form.address,
+          consumer_phone: form.phone,
+          system_kw: parseFloat(form.system_kw) || 3,
+          system_type: form.install_type,
+          bp_number: form.bp_number || undefined,
+        });
       }
-    }catch(err){
+
+      apiCache.invalidate("projects");
+      onCreated(mapProject(res.data));
+      onClose();
+    } catch(err) {
       setError("Server error. Try again.");
     }
     setLoading(false);
   };
 
-  // ── Construction fields ─────────────────────────────────────────
-  const CONSTRUCTION_FIELDS=[
-    {label:"Project Name *",key:"name",type:"text",full:true,ph:"e.g. Sharma Residence"},
-    {label:"Client Name",key:"client_name",type:"text",full:false,ph:"Client full name"},
-    {label:"City",key:"city",type:"text",full:false,ph:"City"},
-    {label:"Project Type",key:"type",type:"select",opts:["residential","commercial","industrial"],full:false},
-    {label:"BOQ Value (₹)",key:"boq_value",type:"number",full:false,ph:"e.g. 5000000"},
-    {label:"Start Date",key:"start_date",type:"date",full:false},
-    {label:"End Date",key:"end_date",type:"date",full:false},
-  ];
+  // ── Header config ───────────────────────────────────────────────
+  const hdr = isSolar
+    ? {grad:"linear-gradient(135deg,#E65100,#FF8F00)", icon:"☀️", title:"New Solar EPC Project", sub:"Consumer details aur system info"}
+    : {grad:`linear-gradient(135deg,${T.blu},#1D4ED8)`,  icon:"🏗️", title:"New Project",           sub:"Add a new construction project"};
 
-  // ── Solar fields ────────────────────────────────────────────────
-  const SOLAR_FIELDS=[
-    {label:"Customer Name *",key:"name",type:"text",full:true,ph:"e.g. Ramesh Kumar"},
-    {label:"Customer Phone",key:"client_name",type:"text",full:false,ph:"Mobile number"},
-    {label:"City",key:"city",type:"text",full:false,ph:"City"},
-    {label:"System Size (kW)",key:"system_kw",type:"select",opts:["1","2","3","4","5","6","7","8","9","10"],full:false},
-    {label:"Installation Type",key:"type",type:"select",opts:["residential","commercial"],full:false},
-    {label:"Expected Start",key:"start_date",type:"date",full:false},
-  ];
-
-  // ── Both — show module selector first ──────────────────────────
-  const BOTH_FIELDS=[
-    {label:"Project Name *",key:"name",type:"text",full:true,ph:"e.g. Sharma Residence"},
-    {label:"Client Name",key:"client_name",type:"text",full:false,ph:"Client full name"},
-    {label:"City",key:"city",type:"text",full:false,ph:"City"},
-    {label:"BOQ Value (₹)",key:"boq_value",type:"number",full:false,ph:"e.g. 5000000"},
-    {label:"Start Date",key:"start_date",type:"date",full:false},
-    {label:"End Date",key:"end_date",type:"date",full:false},
-  ];
-
-  const FIELDS = isSolar ? SOLAR_FIELDS : (companyModule==="both" ? BOTH_FIELDS : CONSTRUCTION_FIELDS);
-
-  // Header config per module
-  const headerCfg = isSolar
-    ? {label:"New Solar EPC Project", sub:"Customer details aur system size", grad:`linear-gradient(135deg,#E65100,#FF8F00)`, icon:"☀️"}
-    : {label:"New Project",            sub:"Add a new construction project",   grad:`linear-gradient(135deg,${T.blu},#1D4ED8)`, icon:"🏗️"};
-
-  if(companyModule==="loading") return (
-    <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:998}}/>
-      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:360,background:T.surface,borderRadius:14,padding:"40px",textAlign:"center",zIndex:999}}>
-        <div style={{color:T.t4,fontSize:13}}>Loading...</div>
-      </div>
-    </>
-  );
-
-  return(<>
+  return (<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:998}}/>
-    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:460,background:T.surface,borderRadius:14,boxShadow:"0 20px 60px rgba(0,0,0,.25)",zIndex:999,overflow:"hidden"}}>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:500,background:T.surface,borderRadius:14,boxShadow:"0 20px 60px rgba(0,0,0,.25)",zIndex:999,overflow:"hidden"}}>
 
       {/* Header */}
-      <div style={{padding:"18px 22px",background:headerCfg.grad,color:"white"}}>
+      <div style={{padding:"16px 20px",background:hdr.grad,color:"white"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
-            <div style={{width:34,height:34,borderRadius:9,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>
-              {headerCfg.icon}
-            </div>
+            <div style={{width:34,height:34,borderRadius:9,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18}}>{hdr.icon}</div>
             <div>
-              <div style={{fontSize:16,fontWeight:700}}>{headerCfg.label}</div>
-              <div style={{fontSize:11,opacity:0.7}}>{headerCfg.sub}</div>
+              <div style={{fontSize:15,fontWeight:700}}>{hdr.title}</div>
+              <div style={{fontSize:11,opacity:0.7}}>{hdr.sub}</div>
             </div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"white",opacity:0.7}}><IcX size={18}/></button>
         </div>
       </div>
 
-      <div style={{padding:"18px 22px",maxHeight:"60vh",overflowY:"auto"}}>
-        {error&&<div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:12,border:`1px solid ${T.redM}`}}>{error}</div>}
+      {/* Module toggle — only for 'both' companies */}
+      {isBoth && (
+        <div style={{display:"flex",gap:6,padding:"12px 20px 0",background:T.surface}}>
+          {[{id:"construction",l:"🏗️ Construction",c:T.blu},{id:"solar_epc",l:"☀️ Solar EPC",c:"#E65100"}].map(opt=>(
+            <button key={opt.id} onClick={()=>{setProjType(opt.id);setStep(1);setError("");}}
+              style={{flex:1,padding:"8px",borderRadius:8,border:`2px solid ${projType===opt.id?opt.c:T.b1}`,background:projType===opt.id?opt.c+"15":"white",color:projType===opt.id?opt.c:T.t3,fontSize:12.5,fontWeight:projType===opt.id?700:400,cursor:"pointer",transition:"all .15s"}}>
+              {opt.l}
+            </button>
+          ))}
+        </div>
+      )}
 
-        {/* Module toggle — only for 'both' companies */}
-        {companyModule==="both"&&(
-          <div style={{display:"flex",gap:6,marginBottom:14}}>
-            {[{id:"construction",label:"🏗️ Construction",c:T.blu,bg:T.bluL},{id:"solar_epc",label:"☀️ Solar EPC",c:"#E65100",bg:"#FFF8E1"}].map(opt=>(
-              <button key={opt.id} onClick={()=>setF("project_type",opt.id)}
-                style={{flex:1,padding:"9px",borderRadius:8,border:`2px solid ${form.project_type===opt.id?opt.c:"#E5E7EB"}`,background:form.project_type===opt.id?opt.bg:"white",color:form.project_type===opt.id?opt.c:T.t3,fontSize:13,fontWeight:form.project_type===opt.id?700:400,cursor:"pointer",transition:"all .15s"}}>
-                {opt.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          {FIELDS.map(f=>(
-            <div key={f.key} style={{gridColumn:f.full?"1/3":"auto"}}>
-              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{f.label}</label>
-              {f.type==="select"?(
-                <select value={form[f.key]} onChange={e=>setF(f.key,e.target.value)} style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                  {f.opts.map(o=><option key={o} value={o}>{o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
-                </select>
-              ):(
-                <input type={f.type} value={form[f.key]} onChange={e=>setF(f.key,e.target.value)} placeholder={f.ph||""}
-                  style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              )}
+      {/* Step indicator — Solar only */}
+      {isSolar && (
+        <div style={{display:"flex",alignItems:"center",padding:"10px 20px 0",gap:6}}>
+          {["Consumer Info","Document Details"].map((s,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:6,flex:i<1?1:"auto"}}>
+              <div style={{width:22,height:22,borderRadius:"50%",background:step>i?"#E65100":step===i+1?"#FF8F00":T.b1,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:step>i||step===i+1?"white":T.t4,flexShrink:0}}>
+                {step>i+1?"✓":i+1}
+              </div>
+              <span style={{fontSize:11,fontWeight:step===i+1?700:400,color:step===i+1?"#E65100":step>i+1?T.grn:T.t4,whiteSpace:"nowrap"}}>{s}</span>
+              {i<1&&<div style={{flex:1,height:2,background:step>1?"#E65100":T.b1,borderRadius:2,margin:"0 4px"}}/>}
             </div>
           ))}
         </div>
+      )}
+
+      {/* Form body */}
+      <div style={{padding:"14px 20px 10px",maxHeight:"62vh",overflowY:"auto"}}>
+        {error && <div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:10,border:`1px solid ${T.redM}`}}>{error}</div>}
+
+        {/* ── SOLAR STEP 1: Consumer Info ── */}
+        {isSolar && step===1 && (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            {inp("Consumer Name *",    "name",         "e.g. Ramesh Kumar",         "text", true)}
+            {inp("Mobile Number",      "phone",        "e.g. 9876543210")}
+            {inp("City",               "city",         "City")}
+            {sel("System Size",        "system_kw",    ["1","2","3","4","5","6","7","8","9","10"].map(v=>({v,l:v+" kW"})))}
+            {sel("Installation Type",  "install_type", [{v:"residential",l:"Residential"},{v:"commercial",l:"Commercial"}], false)}
+            {inp("Full Site Address *", "address",      "House no., Street, Area, District, Pin", "text", true)}
+            {inp("BP Number (Ele Bill)","bp_number",    "e.g. 1008863630")}
+          </div>
+        )}
+
+        {/* ── SOLAR STEP 2: Document Details ── */}
+        {isSolar && step===2 && (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{gridColumn:"1/3",background:"#FFF8E1",borderRadius:8,padding:"9px 12px",border:"1px solid #FFD54F",fontSize:11.5,color:"#E65100"}}>
+              ℹ️ Actual documents Files tab mein upload honge. Abhi reference numbers enter karo.
+            </div>
+            {inp("Aadhaar Number",   "aadhaar_no",   "12-digit Aadhaar")}
+            {inp("PAN Number",       "pan_no",        "e.g. ABCDE1234F")}
+            {inp("Bank Name",        "bank_name",     "e.g. SBI, PNB, HDFC")}
+            {inp("Bank Account No.", "bank_account",  "Account number")}
+            {inp("IFSC Code",        "ifsc",          "e.g. PUNB0053610")}
+          </div>
+        )}
+
+        {/* ── CONSTRUCTION form ── */}
+        {!isSolar && (
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div style={{gridColumn:"1/3"}}>
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>Project Name *</label>
+              <input value={form.name} onChange={e=>setF("name",e.target.value)} placeholder="e.g. Sharma Residence"
+                style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            </div>
+            {inp("Client Name",  "client_name", "Client full name")}
+            {inp("City",         "city",         "City")}
+            {sel("Type",         "type",         [{v:"residential",l:"Residential"},{v:"commercial",l:"Commercial"},{v:"industrial",l:"Industrial"}])}
+            {inp("BOQ Value (₹)","boq_value",    "e.g. 5000000", "number")}
+            {inp("Start Date",   "start_date",   "", "date")}
+            {inp("End Date",     "end_date",     "", "date")}
+          </div>
+        )}
       </div>
 
-      <div style={{padding:"14px 22px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:10}}>
-        <button onClick={onClose} style={{padding:"9px 18px",borderRadius:7,border:`1px solid ${T.b1}`,background:"none",fontSize:13,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-        <button onClick={handleCreate} disabled={loading} style={{padding:"9px 22px",borderRadius:7,border:"none",background:loading?T.t4:isSolar?"linear-gradient(135deg,#E65100,#FF8F00)":`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:13,fontWeight:600,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit"}}>
-          {loading?"Creating...":`Create ${isSolar?"Solar Project":"Project"}`}
-        </button>
+      {/* Footer */}
+      <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:10}}>
+        {isSolar && step===2
+          ? <button onClick={()=>setStep(1)} style={{padding:"9px 16px",borderRadius:7,border:`1px solid ${T.b1}`,background:"none",fontSize:13,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>← Back</button>
+          : <button onClick={onClose} style={{padding:"9px 16px",borderRadius:7,border:`1px solid ${T.b1}`,background:"none",fontSize:13,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+        }
+        {isSolar && step===1
+          ? <button onClick={()=>{if(!form.name.trim()||!form.address.trim())return setError("Name aur address required");setError("");setStep(2);}}
+              style={{padding:"9px 22px",borderRadius:7,border:"none",background:"linear-gradient(135deg,#E65100,#FF8F00)",color:"white",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+              Next: Document Details →
+            </button>
+          : <button onClick={handleCreate} disabled={loading}
+              style={{padding:"9px 22px",borderRadius:7,border:"none",background:loading?T.t4:isSolar?"linear-gradient(135deg,#E65100,#FF8F00)":`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:13,fontWeight:600,cursor:loading?"not-allowed":"pointer",fontFamily:"inherit"}}>
+              {loading?"Creating...":isSolar?"Create Solar Project ☀️":"Create Project"}
+            </button>
+        }
       </div>
     </div>
   </>);
@@ -1581,8 +1621,6 @@ function ProjectsPage({onSelectProject}){
                 </div>
 
                 <div style={{padding:"8px 10px 8px 14px"}}>
-                  {/* Solar EPC badge */}
-                  {p.project_type==="solar_epc"&&<div style={{display:"inline-flex",alignItems:"center",gap:4,background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:4,padding:"1px 7px",fontSize:9.5,fontWeight:700,color:"#E65100",marginBottom:5}}>☀ Solar EPC</div>}
                   {/* Name + Status + menu */}
                   <div style={{display:"flex",alignItems:"flex-start",gap:5,marginBottom:3}}>
                     <div style={{flex:1,minWidth:0}}>
