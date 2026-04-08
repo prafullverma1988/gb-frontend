@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
+import useDebounce from "../utils/useDebounce";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -1297,6 +1298,7 @@ function ProjectsPage({onSelectProject}){
   const [loadError,setLoadError]=useState(null);
   const [view,setView]=useState("tile");
   const [search,setSearch]=useState("");
+  const dSearch=useDebounce(search,250);
   const [filterCity,setFilterCity]=useState("All");
   const [filterStatus,setFilterStatus]=useState("All");
   const [hideCompleted,setHideCompleted]=useState(true);
@@ -1420,12 +1422,12 @@ function ProjectsPage({onSelectProject}){
     if(hideCompleted&&p.status==="Completed") return false;
     if(filterCity!=="All"&&p.city!==filterCity) return false;
     if(filterStatus!=="All"&&p.status!==filterStatus) return false;
-    if(search&&!p.name.toLowerCase().includes(search.toLowerCase())&&!p.client.toLowerCase().includes(search.toLowerCase())) return false;
+    if(dSearch&&!p.name.toLowerCase().includes(dSearch.toLowerCase())&&!p.client.toLowerCase().includes(dSearch.toLowerCase())) return false;
     return true;
   }).sort((a,b)=>sortBy==="A→Z"?a.name.localeCompare(b.name):sortBy==="End"?(a.end||"").localeCompare(b.end||""):sortBy==="↓%"?b.progress-a.progress:sortBy==="↑%"?a.progress-b.progress:0);
 
   // Reset page when filters change
-  useEffect(()=>{setPage(1);},[search,filterCity,filterStatus,hideCompleted,sortBy]);
+  useEffect(()=>{setPage(1);},[dSearch,filterCity,filterStatus,hideCompleted,sortBy]);
 
   const totalPages=Math.ceil(filtered.length/PER_PAGE);
   const paginated=filtered.slice((page-1)*PER_PAGE, page*PER_PAGE);

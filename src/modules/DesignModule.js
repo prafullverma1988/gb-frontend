@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import uploadManager from "../utils/uploadManager";
+import useDebounce from "../utils/useDebounce";
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -247,7 +248,7 @@ export default function DesignModule() {
   const [actionErr, setActionErr] = useState("");
 
   // Drawing filters
-  const [dSearch,   setDSearch]   = useState("");
+  const [dSearch,   setDSearch]   = useState(""); const dSearchD=useDebounce(dSearch,250);
   const [dProject,  setDProject]  = useState("All");
   const [dCat,      setDCat]      = useState("All");
   const [dStatus,   setDStatus]   = useState("All");
@@ -256,7 +257,7 @@ export default function DesignModule() {
   const [showVer,   setShowVer]   = useState(null);
 
   // Request filters
-  const [rSearch,   setRSearch]   = useState("");
+  const [rSearch,   setRSearch]   = useState(""); const rSearchD=useDebounce(rSearch,250);
   const [rProject,  setRProject]  = useState("All");
   const [rStatus,   setRStatus]   = useState("All");
   const [rCat,      setRCat]      = useState("All");
@@ -264,7 +265,7 @@ export default function DesignModule() {
   const [hideUploadedR, setHideUploadedR] = useState(true);
 
   // Revision queue filters
-  const [revSearch,  setRevSearch]  = useState("");
+  const [revSearch,  setRevSearch]  = useState(""); const revSearchD=useDebounce(revSearch,250);
   const [revProject, setRevProject] = useState("All");
   const [revFile,    setRevFile]    = useState({});   // {drawingId: File}
   const [revUploading,setRevUploading]=useState({});
@@ -349,7 +350,7 @@ export default function DesignModule() {
     if (dCat!=="All" && d.category!==dCat) return false;
     if (dStatus!=="All" && d.status!==dStatus) return false;
     if (dType!=="All" && (d.drawing_type||"")!==dType) return false;
-    if (dSearch && !d.title.toLowerCase().includes(dSearch.toLowerCase())) return false;
+    if (dSearchD && !d.title.toLowerCase().includes(dSearchD.toLowerCase())) return false;
     return true;
   });
 
@@ -359,13 +360,13 @@ export default function DesignModule() {
     if (rStatus!=="All" && r.status!==rStatus) return false;
     if (rCat!=="All" && r.category!==rCat) return false;
     if (rPrio!=="All" && r.priority!==rPrio) return false;
-    if (rSearch && !r.title.toLowerCase().includes(rSearch.toLowerCase())) return false;
+    if (rSearchD && !r.title.toLowerCase().includes(rSearchD.toLowerCase())) return false;
     return true;
   });
 
   const revQueue = drawings.filter(d=>d.status==="Revision").filter(d=>{
     if (revProject!=="All" && (d.project_name||"")!==revProject) return false;
-    if (revSearch && !d.title.toLowerCase().includes(revSearch.toLowerCase())) return false;
+    if (revSearchD && !d.title.toLowerCase().includes(revSearchD.toLowerCase())) return false;
     return true;
   });
 

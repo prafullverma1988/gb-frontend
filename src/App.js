@@ -472,7 +472,7 @@ function ShortcutCheatsheet({onClose}){
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────
-function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules}){
+function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile}){
   // Filter nav items — disabled modules hidden from sidebar
   const isVisible=(id)=>{
     if(id==="saas") return user?.role==="super_admin";
@@ -480,31 +480,43 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     if(!enabledModules) return true; // still loading
     return enabledModules[id]!==false;
   };
-  return(
-    <div style={{width:collapsed?62:232,minHeight:"100vh",background:C.sb,display:"flex",flexDirection:"column",transition:"width 0.25s cubic-bezier(.4,0,.2,1)",overflow:"hidden",flexShrink:0,boxShadow:"2px 0 16px rgba(0,0,0,0.28)",zIndex:100}}>
-      <div style={{padding:collapsed?"18px 0":"18px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.07)",minHeight:66,justifyContent:collapsed?"center":"flex-start"}}>
+  // Mobile: sidebar = overlay drawer. Hidden when collapsed.
+  const mobileHidden = isMobile && collapsed;
+  const handleNav=(id)=>{setActive(id); if(isMobile) setCollapsed(true);};
+  return(<>
+    {/* Mobile backdrop */}
+    {isMobile&&!collapsed&&<div onClick={()=>setCollapsed(true)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:199,transition:"opacity 0.2s"}}/>}
+    <div style={{
+      width:mobileHidden?0:(collapsed&&!isMobile)?62:232,
+      minHeight:"100vh",background:C.sb,display:"flex",flexDirection:"column",
+      transition:"all 0.25s cubic-bezier(.4,0,.2,1)",overflow:"hidden",flexShrink:0,
+      boxShadow:"2px 0 16px rgba(0,0,0,0.28)",zIndex:200,
+      ...(isMobile?{position:"fixed",left:mobileHidden?-240:0,top:0,bottom:0,width:mobileHidden?0:250}:{}),
+    }}>
+      <div style={{padding:(!isMobile&&collapsed)?"18px 0":"18px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.07)",minHeight:66,justifyContent:(!isMobile&&collapsed)?"center":"flex-start"}}>
         <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(135deg,${C.p},${C.a})`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg></div>
-        {!collapsed&&<div><div style={{color:"white",fontWeight:800,fontSize:14}}>GB Buildcon</div><div style={{color:"rgba(255,255,255,0.32)",fontSize:9,letterSpacing:"0.8px",textTransform:"uppercase"}}>Construction</div></div>}
+        {(isMobile||!collapsed)&&<div><div style={{color:"white",fontWeight:800,fontSize:14}}>GB Buildcon</div><div style={{color:"rgba(255,255,255,0.32)",fontSize:9,letterSpacing:"0.8px",textTransform:"uppercase"}}>Construction</div></div>}
       </div>
       <nav style={{flex:1,padding:"10px 0",overflowY:"auto"}}>
         {NAV_GROUPS.map((grp,gi)=>{
           const visibleItems=grp.items.filter(item=>isVisible(item.id));
+          const showLabel=isMobile||!collapsed;
           if(!visibleItems.length) return null;
           return(
             <div key={gi}>
-              {grp.section&&!collapsed&&<div style={{marginTop:gi>0?4:0}}><div style={{height:1,background:"rgba(255,255,255,0.06)",margin:"0 12px 2px"}}/><div style={{color:"rgba(255,255,255,0.28)",fontSize:9,fontWeight:700,letterSpacing:"1.2px",textTransform:"uppercase",padding:"8px 16px 4px"}}>{grp.section}</div></div>}
+              {grp.section&&showLabel&&<div style={{marginTop:gi>0?4:0}}><div style={{height:1,background:"rgba(255,255,255,0.06)",margin:"0 12px 2px"}}/><div style={{color:"rgba(255,255,255,0.28)",fontSize:9,fontWeight:700,letterSpacing:"1.2px",textTransform:"uppercase",padding:"8px 16px 4px"}}>{grp.section}</div></div>}
               {visibleItems.map(item=>{
                 const isA=active===item.id;
                 return(
-                  <button key={item.id} onClick={()=>setActive(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:collapsed?"10px 0":"9px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:collapsed?"center":"flex-start",borderLeft:isA&&!collapsed?`3px solid ${C.a}`:"3px solid transparent"}}
+                  <button key={item.id} onClick={()=>handleNav(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:(!isMobile&&collapsed)?"10px 0":isMobile?"12px 16px":"9px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:(!isMobile&&collapsed)?"center":"flex-start",borderLeft:isA&&showLabel?`3px solid ${C.a}`:"3px solid transparent"}}
                     onMouseEnter={e=>{if(!isA){e.currentTarget.style.background=C.sbH;e.currentTarget.style.color="white";}}}
                     onMouseLeave={e=>{if(!isA){e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.52)";}}}
                   >
-                    <item.Icon size={17} color="currentColor"/>
-                    {!collapsed&&<span style={{fontSize:13,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap"}}>{item.label}</span>}
-                    {!collapsed&&item.sc&&<span style={{fontSize:8,color:"rgba(255,255,255,0.2)",fontWeight:400,marginRight:item.badge?4:0}}>Alt+{item.sc}</span>}
-                    {!collapsed&&item.badge&&<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{item.badge}</span>}
-                    {isA&&collapsed&&<div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:C.a,borderRadius:"2px 0 0 2px"}}/>}
+                    <item.Icon size={isMobile?19:17} color="currentColor"/>
+                    {showLabel&&<span style={{fontSize:isMobile?14:13,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap"}}>{item.label}</span>}
+                    {showLabel&&!isMobile&&item.sc&&<span style={{fontSize:8,color:"rgba(255,255,255,0.2)",fontWeight:400,marginRight:item.badge?4:0}}>Alt+{item.sc}</span>}
+                    {showLabel&&item.badge&&<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{item.badge}</span>}
+                    {isA&&!showLabel&&<div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:C.a,borderRadius:"2px 0 0 2px"}}/>}
                   </button>
                 );
               })}
@@ -513,10 +525,10 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
         })}
       </nav>
       {/* User profile + logout */}
-      <div style={{padding:collapsed?"10px 0":"10px 14px",borderTop:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",gap:9,justifyContent:collapsed?"center":"flex-start"}}>
+      <div style={{padding:(!isMobile&&collapsed)?"10px 0":"10px 14px",borderTop:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",gap:9,justifyContent:(!isMobile&&collapsed)?"center":"flex-start"}}>
         <div style={{width:30,height:30,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:12,fontWeight:700,color:"white"}}>{(user?.name||"U")[0].toUpperCase()}</div>
-        {!collapsed&&<div style={{flex:1,overflow:"hidden"}}><div style={{color:"white",fontSize:12.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.name||"User"}</div><div style={{color:"rgba(255,255,255,0.32)",fontSize:10}}>{user?.role||"User"}</div></div>}
-        {!collapsed&&onLogout&&(
+        {(isMobile||!collapsed)&&<div style={{flex:1,overflow:"hidden"}}><div style={{color:"white",fontSize:12.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.name||"User"}</div><div style={{color:"rgba(255,255,255,0.32)",fontSize:10}}>{user?.role||"User"}</div></div>}
+        {(isMobile||!collapsed)&&onLogout&&(
           <button onClick={onLogout} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:6,cursor:"pointer",color:"rgba(255,255,255,0.55)",padding:"5px 8px",display:"flex",alignItems:"center",gap:4,fontSize:11,transition:"all 0.15s"}} title="Logout"
             onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.2)";e.currentTarget.style.color="white";e.currentTarget.style.borderColor="rgba(220,38,38,0.4)";}}
             onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.08)";e.currentTarget.style.color="rgba(255,255,255,0.55)";e.currentTarget.style.borderColor="rgba(255,255,255,0.15)";}}>
@@ -526,7 +538,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
         )}
       </div>
     </div>
-  );
+  </>);
 }
 
 
@@ -741,13 +753,29 @@ export default function App(){
 
   const [user,setUser]=useState(()=>getUser());
   const [nav,setNav]=useState("dashboard");
-  const [collapsed,setCollapsed]=useState(false);
+  const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
+  const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showSearch,setShowSearch]=useState(false);
   const [showCheatsheet,setShowCheatsheet]=useState(false);
   // enabledModules: null=loading, {}=map of key→boolean
   const [enabledModules,setEnabledModules]=useState(null);
 
   const loggedIn=!!user&&!!getToken();
+
+  // M1: Auto-collapse sidebar on mobile + listen for resize
+  useEffect(()=>{
+    let timeout;
+    const onResize=()=>{
+      clearTimeout(timeout);
+      timeout=setTimeout(()=>{
+        const mobile=window.innerWidth<768;
+        setIsMobile(mobile);
+        if(mobile) setCollapsed(true);
+      },150);
+    };
+    window.addEventListener("resize",onResize);
+    return()=>{window.removeEventListener("resize",onResize);clearTimeout(timeout);};
+  },[]);
 
   // Wake up Railway backend on app load — prevents cold start delay
   useEffect(()=>{
@@ -863,8 +891,16 @@ export default function App(){
         *{box-sizing:border-box}
         ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#CBD5E0;border-radius:10px}
         select,input{font-family:'Segoe UI',system-ui,sans-serif}
+        img{loading:lazy}
+        img[loading="lazy"]{content-visibility:auto}
+        table{width:100%}
+        @media(max-width:768px){
+          .hide-mobile{display:none!important}
+          table{font-size:12px}
+          td,th{padding:6px 8px!important}
+        }
       `}</style>
-      <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules}/>
+      <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile}/>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={ALERTS.length} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>
         <div style={{flex:1,overflowY:"auto"}}>
