@@ -7769,37 +7769,32 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
 
   const fmtAmt = n => n >= 100000 ? "₹" + (n / 100000).toFixed(1) + "L" : n >= 1000 ? "₹" + (n / 1000).toFixed(0) + "K" : "₹" + n;
 
-  // Centralized approve/reject
-  const centralAction = async (id, action) => {
-    setErrMsg(""); setActing(p => ({ ...p, [id]: action === "approve" ? "approving" : "rejecting" }));
-    try {
-      const res = await api.patch("/approvals/" + id + "/action", { action });
-      if (res.success) setItems(p => p.filter(i => i.id !== id));
-      else setErrMsg(res.message || "Failed");
-    } catch (e) { setErrMsg(e.message); }
-    setActing(p => ({ ...p, [id]: null }));
-  };
-
-  // Design source approve/revision/reject
-  const designAction = async (item, status) => {
+  // Universal action handler for all source types
+  const handleAction = async (item, actionType) => {
     const key = item.id;
-    setErrMsg(""); setActing(p => ({ ...p, [key]: status === "Rejected" ? "rejecting" : "approving" }));
+    const src = item._source;
+    const isRej = actionType === "reject" || actionType === "Rejected";
+    setErrMsg(""); setActing(p => ({ ...p, [key]: isRej ? "rejecting" : "approving" }));
     try {
-      const res = await api.patch("/design/drawings/" + item._source_id + "/status", { status });
-      if (res.success) setItems(p => p.filter(i => i.id !== item.id));
-      else setErrMsg(res.message || "Failed");
-    } catch (e) { setErrMsg(e.message); }
-    setActing(p => ({ ...p, [key]: null }));
-  };
-
-  // MR source approve/reject
-  const mrAction = async (item, action) => {
-    const key = item.id;
-    setErrMsg(""); setActing(p => ({ ...p, [key]: action === "Rejected" ? "rejecting" : "approving" }));
-    try {
-      const res = await api.patch("/procurement/mrs/" + item._source_id + "/approve", { action, approved_qty: item.quantity || null });
-      if (res.success !== false) setItems(p => p.filter(i => i.id !== item.id));
-      else setErrMsg(res.message || "Failed");
+      let res;
+      if (src === "design") {
+        const status = actionType === "Revision" ? "Revision" : isRej ? "Rejected" : "Approved";
+        res = await api.patch("/design/drawings/" + item._source_id + "/status", { status, note: status === "Revision" ? "Revision requested" : undefined });
+      } else if (src === "material_request") {
+        res = await api.patch("/procurement/mrs/" + item._source_id + "/approve", { action: isRej ? "Rejected" : "Approved", approved_qty: item.quantity || null });
+      } else if (src === "payment_request") {
+        res = await api.put("/finance/payment-requests/" + item._source_id + "/approve", { action: isRej ? "reject" : "approve" });
+      } else if (src === "purchase_order") {
+        res = await api.patch("/procurement/pos/" + item._source_id + "/approve", { approved_by: "" });
+      } else if (src === "ra_bill") {
+        res = await api.patch("/subcon/ra-bills/" + item._source_id + "/status", { status: isRej ? "Rejected" : "Approved" });
+      } else if (src === "wo_amendment") {
+        res = await api.patch("/subcon/amendments/" + item._source_id + "/action", { status: isRej ? "Rejected" : "Approved" });
+      } else {
+        res = await api.patch("/approvals/" + item.id + "/action", { action: isRej ? "reject" : "approve" });
+      }
+      if (res && res.success !== false) setItems(p => p.filter(i => i.id !== item.id));
+      else setErrMsg((res && res.message) || "Failed");
     } catch (e) { setErrMsg(e.message); }
     setActing(p => ({ ...p, [key]: null }));
   };
@@ -7836,8 +7831,7 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
         {!loading && items.map(item => {
           const mc = MOD_COLORS[item.module] || T.slt;
           const act = acting[item.id];
-          const isDesign = item._source === "design";
-          const isMR = item._source === "material_request";
+          const src = item._source;
           return (
             <div key={item.id} style={{ background: T.surface, borderRadius: 8, border: "1px solid " + T.b1, padding: "11px 13px", borderLeft: "3px solid " + mc, marginBottom: 8 }}>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8 }}>
@@ -7845,15 +7839,15 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
                   <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 3 }}>
                     <span style={{ fontSize: 9.5, fontWeight: 700, color: mc, background: mc + "18", padding: "1px 7px", borderRadius: 10, textTransform: "uppercase" }}>{item.module}</span>
                     <span style={{ fontSize: 9.5, color: T.t4 }}>{item.ref_no}</span>
-                    {isDesign && item.category && <span style={{ fontSize: 9, color: T.t4 }}>{item.category} · {item.drawing_type || "2D"}</span>}
+                    {src === "design" && item.category && <span style={{ fontSize: 9, color: T.t4 }}>{item.category} · {item.drawing_type || "2D"}</span>}
                   </div>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{item.title}</div>
-                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{item.project_name || "—"} · by {item.submitted_by_name}{!isDesign && !isMR ? " · L" + item.current_level + "/" + item.max_level : ""}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{item.project_name || "—"} · by {item.submitted_by_name}{!src ? " · L" + item.current_level + "/" + item.max_level : ""}</div>
                 </div>
                 {item.amount > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: mc, flexShrink: 0 }}>{fmtAmt(item.amount)}</span>}
               </div>
               {/* Level progress for centralized items */}
-              {!isDesign && !isMR && item.max_level > 0 && (
+              {!src && item.max_level > 0 && (
                 <div style={{ display: "flex", gap: 4, margin: "6px 0", alignItems: "center" }}>
                   {Array.from({ length: item.max_level }, (_, i) => {
                     const lvl = i + 1; const done = lvl < item.current_level; const pending = lvl === item.current_level;
@@ -7866,44 +7860,24 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
                 </div>
               )}
               {/* Action buttons */}
-              {isDesign ? (
-                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                  <button onClick={() => designAction(item, "Rejected")} disabled={!!act}
+              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                {src !== "purchase_order" && (
+                  <button onClick={() => handleAction(item, "reject")} disabled={!!act}
                     style={{ flex: 1, padding: "6px", borderRadius: 6, background: T.redL, border: "1px solid " + T.redM, color: T.red, fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
                     {act === "rejecting" ? "..." : "✕ Reject"}
                   </button>
-                  <button onClick={() => designAction(item, "Revision")} disabled={!!act}
+                )}
+                {src === "design" && (
+                  <button onClick={() => handleAction(item, "Revision")} disabled={!!act}
                     style={{ flex: 1, padding: "6px", borderRadius: 6, background: "#DBEAFE", border: "1px solid #93C5FD", color: "#1D4ED8", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
                     ↻ Revision
                   </button>
-                  <button onClick={() => designAction(item, "Approved")} disabled={!!act}
-                    style={{ flex: 2, padding: "6px", borderRadius: 6, background: act === "approving" ? T.b1 : T.grn, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                    {act === "approving" ? "Approving..." : "✓ Approve"}
-                  </button>
-                </div>
-              ) : isMR ? (
-                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                  <button onClick={() => mrAction(item, "Rejected")} disabled={!!act}
-                    style={{ flex: 1, padding: "6px", borderRadius: 6, background: T.redL, border: "1px solid " + T.redM, color: T.red, fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                    {act === "rejecting" ? "..." : "✕ Reject"}
-                  </button>
-                  <button onClick={() => mrAction(item, "Approved")} disabled={!!act}
-                    style={{ flex: 2, padding: "6px", borderRadius: 6, background: act === "approving" ? T.b1 : T.grn, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                    {act === "approving" ? "Approving..." : "✓ Approve"}
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                  <button onClick={() => centralAction(item.id, "reject")} disabled={!!act}
-                    style={{ flex: 1, padding: "6px", borderRadius: 6, background: T.redL, border: "1px solid " + T.redM, color: T.red, fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                    {act === "rejecting" ? "..." : "✕ Reject"}
-                  </button>
-                  <button onClick={() => centralAction(item.id, "approve")} disabled={!!act}
-                    style={{ flex: 2, padding: "6px", borderRadius: 6, background: act === "approving" ? T.b1 : T.grn, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                    {act === "approving" ? "Approving..." : "✓ Approve"}
-                  </button>
-                </div>
-              )}
+                )}
+                <button onClick={() => handleAction(item, "approve")} disabled={!!act}
+                  style={{ flex: 2, padding: "6px", borderRadius: 6, background: act === "approving" ? T.b1 : T.grn, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
+                  {act === "approving" ? "Approving..." : "✓ Approve"}
+                </button>
+              </div>
             </div>
           );
         })}
