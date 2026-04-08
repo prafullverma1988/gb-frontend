@@ -7625,11 +7625,723 @@ const TABS = [
   {id:"mom",        label:"MOM",         key:"n"},
 ];
 
+// ── SOLAR EPC TABS (only for project_type = 'solar_epc') ──────────
+const SOLAR_TABS = [
+  {id:"overview",      label:"Overview",       key:"o"},
+  {id:"solar_stages",  label:"Surya Ghar",     key:"s"},
+  {id:"solar_boq",     label:"BOQ / Quotation",key:"e"},
+  {id:"solar_docs",    label:"Documents",      key:"d"},
+  {id:"solar_install", label:"Installation",   key:"i"},
+  {id:"solar_subsidy", label:"Subsidy",        key:"u"},
+  {id:"material",      label:"Material",       key:"m"},
+  {id:"transaction",   label:"Finance",        key:"t"},
+  {id:"files",         label:"Files",          key:"f"},
+];
+
+// ──────────────────────────────────────────────────────────────────
+// SOLAR TAB COMPONENTS
+// ──────────────────────────────────────────────────────────────────
+
+// Stage status colors
+const STAGE_S = {
+  pending:     {c:"#6B7280",bg:"#F3F4F6",bdr:"#D1D5DB"},
+  in_progress: {c:"#D97706",bg:"#FFFBEB",bdr:"#FDE68A"},
+  completed:   {c:"#059669",bg:"#ECFDF5",bdr:"#A7F3D0"},
+  skipped:     {c:"#3B82F6",bg:"#EFF6FF",bdr:"#BFDBFE"},
+};
+
+// ── Tab: Surya Ghar Stage Tracker ────────────────────────────────
+function TabSuryaGhar({ projectId }) {
+  const [stages, setStages] = useState([]);
+  const [solar, setSolar] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [acting, setActing] = useState(null);
+  const [noteFor, setNoteFor] = useState(null);
+  const [noteText, setNoteText] = useState("");
+  const [docFor, setDocFor] = useState(null);
+  const [docUrl, setDocUrl] = useState("");
+  const [docName, setDocName] = useState("");
+  const [err, setErr] = useState("");
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const [sRes, stRes] = await Promise.all([
+        api.get("/solar/projects/" + projectId),
+        api.get("/solar/projects/" + projectId + "/stages"),
+      ]);
+      if (sRes.success)  setSolar(sRes.data);
+      if (stRes.success) setStages(stRes.data);
+    } catch(e) { setErr("Load failed"); }
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [projectId]);
+
+  const markStage = async (stageNum, status) => {
+    setActing(stageNum); setErr("");
+    try {
+      const res = await api.patch(
+        `/solar/projects/${projectId}/stages/${stageNum}`,
+        { status, notes: noteFor === stageNum ? noteText : undefined }
+      );
+      if (res.success) {
+        setStages(p => p.map(s => s.stage_number === stageNum ? res.data : s));
+        if (noteFor === stageNum) { setNoteFor(null); setNoteText(""); }
+      } else { setErr(res.message || "Failed"); }
+    } catch(e) { setErr(e.message); }
+    setActing(null);
+  };
+
+  const addDoc = async (stageNum) => {
+    if (!docUrl.trim()) return;
+    setErr("");
+    try {
+      await api.post(`/solar/projects/${projectId}/stages/${stageNum}/documents`, {
+        document_type: "upload",
+        document_name: docName || "Document",
+        file_url: docUrl,
+      });
+      setDocFor(null); setDocUrl(""); setDocName("");
+      load();
+    } catch(e) { setErr(e.message); }
+  };
+
+  if (loading) return (
+    <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}>Loading stages...</div>
+  );
+
+  const completed = stages.filter(s => s.status === "completed").length;
+  const pct = stages.length ? Math.round((completed / stages.length) * 100) : 0;
+
+  return (
+    <div style={{padding:"16px 0"}}>
+      {err && <div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:12,border:`1px solid ${T.redM}`}}>{err}</div>}
+
+      {/* Progress header */}
+      <div style={{background:T.surface,borderRadius:10,padding:"14px 16px",border:`1px solid ${T.b1}`,marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>PM Surya Ghar Progress</div>
+          <div style={{fontSize:14,fontWeight:800,color:T.grn}}>{pct}% Complete</div>
+        </div>
+        <div style={{height:6,background:T.b1,borderRadius:6,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${pct}%`,background:pct===100?T.grn:T.blu,borderRadius:6,transition:"width .5s"}}/>
+        </div>
+        <div style={{fontSize:11,color:T.t4,marginTop:6}}>{completed} of {stages.length} stages completed</div>
+        {solar && (
+          <div style={{display:"flex",gap:16,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.b1}`,flexWrap:"wrap"}}>
+            {[
+              ["System",solar.system_kw ? solar.system_kw+"kW" : "—"],
+              ["Type",solar.system_type||"—"],
+              ["Portal Mobile",solar.portal_mobile||"—"],
+              ["App No.",solar.portal_app_no||"—"],
+            ].map(([l,v])=>(
+              <div key={l}>
+                <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{l}</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{v}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Stage list */}
+      <div style={{display:"flex",flexDirection:"column",gap:6}}>
+        {stages.map((stage, idx) => {
+          const ss = STAGE_S[stage.status] || STAGE_S.pending;
+          const isActing = acting === stage.stage_number;
+          const isDone = stage.status === "completed";
+          const isSkipped = stage.status === "skipped";
+          const isActive = !isDone && !isSkipped && idx === stages.findIndex(s => s.status !== "completed" && s.status !== "skipped");
+          const docList = stage.doc_names ? stage.doc_names.split("||").filter(Boolean) : [];
+          const urlList = stage.doc_urls  ? stage.doc_urls.split("||").filter(Boolean)  : [];
+
+          return (
+            <div key={stage.id} style={{
+              background:T.surface, borderRadius:9,
+              border:`1.5px solid ${isActive?T.blu:ss.bdr}`,
+              overflow:"hidden",
+              boxShadow:isActive?"0 0 0 3px "+T.bluM:"none",
+              opacity: isSkipped ? 0.6 : 1,
+            }}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 13px"}}>
+                {/* Step number */}
+                <div style={{
+                  width:28,height:28,borderRadius:"50%",flexShrink:0,
+                  background:isDone?T.grn:isSkipped?T.blu:isActive?T.blu:T.b1,
+                  display:"flex",alignItems:"center",justifyContent:"center",
+                  fontSize:10,fontWeight:700,
+                  color:isDone||isSkipped||isActive?"white":T.t3,
+                }}>
+                  {isDone ? "✓" : stage.stage_number}
+                </div>
+                <div style={{flex:1}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{stage.stage_name}</span>
+                    {stage.is_skippable===1&&<span style={{fontSize:9,color:T.blu,background:T.bluL,padding:"1px 6px",borderRadius:10,border:`1px solid ${T.bluM}`}}>Optional</span>}
+                    <span style={{fontSize:9.5,fontWeight:700,background:ss.bg,color:ss.c,padding:"1px 8px",borderRadius:10,border:`1px solid ${ss.bdr}`,marginLeft:"auto"}}>{stage.status.replace("_"," ")}</span>
+                  </div>
+                  {stage.completed_date&&<div style={{fontSize:10.5,color:T.t4}}>Completed: {new Date(stage.completed_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</div>}
+                  {stage.notes&&<div style={{fontSize:11,color:T.t3,marginTop:2,fontStyle:"italic"}}>"{stage.notes}"</div>}
+                  {/* Documents */}
+                  {docList.length>0&&(
+                    <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:6}}>
+                      {docList.map((name,i)=>(
+                        <a key={i} href={urlList[i]||"#"} target="_blank" rel="noreferrer"
+                          style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:4,border:`1px solid ${T.bluM}`,textDecoration:"none"}}>
+                          📎 {name}
+                        </a>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Action bar — only for active/pending stages */}
+              {!isDone && !isSkipped && (
+                <div style={{padding:"8px 13px 10px 51px",display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",borderTop:`1px solid ${T.b1}`,background:T.surfaceB}}>
+                  <button onClick={()=>markStage(stage.stage_number,"completed")} disabled={isActing}
+                    style={{padding:"5px 14px",borderRadius:6,background:isActing?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:isActing?"not-allowed":"pointer"}}>
+                    {isActing?"...":"✓ Mark Complete"}
+                  </button>
+                  {stage.is_skippable===1&&(
+                    <button onClick={()=>markStage(stage.stage_number,"skipped")} disabled={isActing}
+                      style={{padding:"5px 12px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                      Skip (No Loan)
+                    </button>
+                  )}
+                  <button onClick={()=>setNoteFor(noteFor===stage.stage_number?null:stage.stage_number)}
+                    style={{padding:"5px 10px",borderRadius:6,background:"none",border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>
+                    + Note
+                  </button>
+                  <button onClick={()=>setDocFor(docFor===stage.stage_number?null:stage.stage_number)}
+                    style={{padding:"5px 10px",borderRadius:6,background:"none",border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>
+                    📎 Upload Doc
+                  </button>
+                </div>
+              )}
+
+              {/* Note input */}
+              {noteFor===stage.stage_number&&(
+                <div style={{padding:"8px 51px 10px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:6}}>
+                  <input value={noteText} onChange={e=>setNoteText(e.target.value)} placeholder="Stage note..."
+                    style={{flex:1,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                  <button onClick={()=>markStage(stage.stage_number,"completed")}
+                    style={{padding:"6px 12px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                    Save & Complete
+                  </button>
+                </div>
+              )}
+
+              {/* Doc upload input */}
+              {docFor===stage.stage_number&&(
+                <div style={{padding:"8px 51px 10px",borderTop:`1px solid ${T.b1}`}}>
+                  <div style={{display:"flex",gap:6,marginBottom:6}}>
+                    <input value={docName} onChange={e=>setDocName(e.target.value)} placeholder="Document name (e.g. DISCOM Feasibility)"
+                      style={{flex:1,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                  </div>
+                  <div style={{display:"flex",gap:6}}>
+                    <input value={docUrl} onChange={e=>setDocUrl(e.target.value)} placeholder="Cloudinary URL (paste after upload)"
+                      style={{flex:1,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                    <button onClick={()=>addDoc(stage.stage_number)}
+                      style={{padding:"6px 12px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                      Save
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Tab: Solar BOQ & Quotation ───────────────────────────────────
+function TabSolarBOQ({ projectId }) {
+  const [presets, setPresets] = useState([]);
+  const [solar, setSolar] = useState(null);
+  const [activeKw, setActiveKw] = useState(null);
+  const [activeKit, setActiveKit] = useState("A");
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editItems, setEditItems] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    Promise.all([
+      api.get("/solar/projects/" + projectId),
+      api.get("/solar/boq-presets"),
+    ]).then(([sRes, bRes]) => {
+      if (sRes.success) { setSolar(sRes.data); setActiveKw(sRes.data.system_kw || 3); }
+      if (bRes.success) setPresets(bRes.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [projectId]);
+
+  const kws = [...new Set(presets.map(p => p.system_kw))].sort((a,b)=>a-b);
+  const activePresets = presets.filter(p => p.system_kw === activeKw);
+  const currentPreset = activePresets.find(p => p.kit_type === activeKit);
+
+  const startEdit = () => {
+    if (!currentPreset) return;
+    setEditItems(currentPreset.items.map(i => ({...i})));
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    if (!currentPreset) return;
+    setSaving(true);
+    try {
+      const res = await api.put("/solar/boq-presets/" + currentPreset.id + "/items", { items: editItems });
+      if (res.success) {
+        setPresets(p => p.map(pr => pr.id === currentPreset.id ? {...pr, items: res.data} : pr));
+        setEditing(false);
+      }
+    } catch(e) {}
+    setSaving(false);
+  };
+
+  const KIT_LABELS = { A:"Solar Kit", B:"Structure", C:"Electrical" };
+  const KIT_COLORS = { A:{c:"#D97706",bg:"#FFFBEB",bdr:"#FDE68A"}, B:{c:"#059669",bg:"#ECFDF5",bdr:"#A7F3D0"}, C:{c:"#2563EB",bg:"#EFF6FF",bdr:"#BFDBFE"} };
+
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading BOQ...</div>;
+
+  return (
+    <div style={{padding:"16px 0"}}>
+      {/* System size tabs */}
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        <span style={{fontSize:11,color:T.t4,fontWeight:600}}>System Size:</span>
+        {kws.map(kw=>(
+          <button key={kw} onClick={()=>setActiveKw(kw)}
+            style={{padding:"5px 14px",borderRadius:20,border:`1.5px solid ${activeKw===kw?"#F59E0B":"#E5E7EB"}`,
+              background:activeKw===kw?"#FFFBEB":"#fff",color:activeKw===kw?"#D97706":T.t3,
+              fontSize:12,fontWeight:activeKw===kw?700:400,cursor:"pointer"}}>
+            {kw}kW {solar?.system_kw===kw && <span style={{fontSize:9}}>(This Project)</span>}
+          </button>
+        ))}
+        <span style={{fontSize:10,color:T.t4,marginLeft:4}}>* Edit preset → applies to all future projects of same size</span>
+      </div>
+
+      {/* Kit tabs */}
+      <div style={{display:"flex",gap:1,marginBottom:14,background:T.surfaceB,borderRadius:8,padding:3,border:`1px solid ${T.b1}`,width:"fit-content"}}>
+        {["A","B","C"].map(kit=>{
+          const kc = KIT_COLORS[kit];
+          return (
+            <button key={kit} onClick={()=>{setActiveKit(kit);setEditing(false);}}
+              style={{padding:"7px 18px",borderRadius:6,border:"none",
+                background:activeKit===kit?kc.bg:"none",
+                color:activeKit===kit?kc.c:T.t3,
+                fontSize:12,fontWeight:activeKit===kit?700:400,cursor:"pointer",
+                borderBottom:activeKit===kit?`2px solid ${kc.c}`:"2px solid transparent"}}>
+              Kit {kit} — {KIT_LABELS[kit]}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Items table */}
+      {currentPreset ? (
+        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+          <div style={{padding:"12px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>Kit {activeKit} — {KIT_LABELS[activeKit]} | {activeKw}kW</div>
+            {!editing
+              ? <button onClick={startEdit} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,fontWeight:600,color:T.t2,cursor:"pointer"}}>✏ Edit Items</button>
+              : <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>setEditing(false)} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,color:T.t3,cursor:"pointer"}}>Cancel</button>
+                  <button onClick={saveEdit} disabled={saving} style={{padding:"5px 14px",borderRadius:6,background:saving?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Save"}</button>
+                </div>
+            }
+          </div>
+
+          {/* Header row */}
+          <div style={{display:"grid",gridTemplateColumns:editing?"2fr 1.2fr 80px 60px 32px":"2fr 1.2fr 80px 60px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
+            {["Item Description","Brand","Qty","Unit",...(editing?[""]:[])].map((h,i)=>(
+              <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>{h}</span>
+            ))}
+          </div>
+
+          {/* Items */}
+          {(editing ? editItems : currentPreset.items).map((item, idx) => (
+            <div key={item.id||idx} style={{display:"grid",gridTemplateColumns:editing?"2fr 1.2fr 80px 60px 32px":"2fr 1.2fr 80px 60px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
+              {editing ? (
+                <>
+                  <input value={item.item_name} onChange={e=>setEditItems(p=>p.map((x,i)=>i===idx?{...x,item_name:e.target.value}:x))}
+                    style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                  <input value={item.brand||""} onChange={e=>setEditItems(p=>p.map((x,i)=>i===idx?{...x,brand:e.target.value}:x))}
+                    style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                  <input type="number" value={item.quantity||""} onChange={e=>setEditItems(p=>p.map((x,i)=>i===idx?{...x,quantity:e.target.value}:x))}
+                    style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",textAlign:"center"}}/>
+                  <input value={item.unit||""} onChange={e=>setEditItems(p=>p.map((x,i)=>i===idx?{...x,unit:e.target.value}:x))}
+                    style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                  <button onClick={()=>setEditItems(p=>p.filter((_,i)=>i!==idx))}
+                    style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:14,padding:0}}>✕</button>
+                </>
+              ) : (
+                <>
+                  <span style={{fontSize:12.5,color:T.t1}}>{item.item_name}</span>
+                  <span style={{fontSize:12,color:T.t3}}>{item.brand||"—"}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:T.t2,textAlign:"center"}}>{item.quantity}</span>
+                  <span style={{fontSize:12,color:T.t3}}>{item.unit}</span>
+                </>
+              )}
+            </div>
+          ))}
+
+          {editing && (
+            <div style={{padding:"10px 14px",borderTop:`1px solid ${T.b1}`}}>
+              <button onClick={()=>setEditItems(p=>[...p,{item_name:"",brand:"",quantity:"",unit:"Nos"}])}
+                style={{padding:"6px 14px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                + Add Item
+              </button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <div style={{textAlign:"center",padding:"40px",color:T.t4}}>No preset found for {activeKw}kW Kit {activeKit}</div>
+      )}
+    </div>
+  );
+}
+
+// ── Tab: Solar Documents ─────────────────────────────────────────
+function TabSolarDocs({ projectId }) {
+  const [stages, setStages] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    api.get("/solar/projects/" + projectId + "/stages").then(r => {
+      if (r.success) setStages(r.data.filter(s => s.doc_count > 0 || s.status === "completed"));
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [projectId]);
+
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading docs...</div>;
+
+  const allDocs = stages.flatMap(s => {
+    const names = s.doc_names ? s.doc_names.split("||").filter(Boolean) : [];
+    const urls  = s.doc_urls  ? s.doc_urls.split("||").filter(Boolean)  : [];
+    return names.map((name, i) => ({ stage: s.stage_number, stageName: s.stage_name, name, url: urls[i]||"" }));
+  });
+
+  if (allDocs.length === 0) return (
+    <div style={{textAlign:"center",padding:"80px 0"}}>
+      <div style={{fontSize:36,marginBottom:8}}>📂</div>
+      <div style={{fontSize:14,fontWeight:600,color:T.t2}}>No documents yet</div>
+      <div style={{fontSize:12,color:T.t4,marginTop:4}}>Documents uploaded in Surya Ghar stages will appear here</div>
+    </div>
+  );
+
+  // Group by stage
+  const byStage = {};
+  for (const doc of allDocs) {
+    const key = `${doc.stage}. ${doc.stageName}`;
+    if (!byStage[key]) byStage[key] = [];
+    byStage[key].push(doc);
+  }
+
+  return (
+    <div style={{padding:"16px 0"}}>
+      {Object.entries(byStage).map(([stageName, docs]) => (
+        <div key={stageName} style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:7}}>Stage {stageName}</div>
+          <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            {docs.map((doc, i) => (
+              <div key={i} style={{background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`,padding:"9px 13px",display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:20}}>📄</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{doc.name}</div>
+                </div>
+                <a href={doc.url} target="_blank" rel="noreferrer"
+                  style={{padding:"4px 12px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,textDecoration:"none"}}>
+                  View
+                </a>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ── Tab: Solar Installation Photos ───────────────────────────────
+function TabSolarInstall({ projectId }) {
+  const [steps, setSteps] = useState([]);
+  const [serials, setSerials] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [uploadFor, setUploadFor] = useState(null);
+  const [photoUrl, setPhotoUrl] = useState("");
+  const [ocrText, setOcrText] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [editSerials, setEditSerials] = useState([]);
+  const [showSerialEdit, setShowSerialEdit] = useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    const [pRes, sRes] = await Promise.all([
+      api.get("/solar/projects/" + projectId + "/install-photos"),
+      api.get("/solar/projects/" + projectId + "/serial-numbers"),
+    ]);
+    if (pRes.success) setSteps(pRes.data);
+    if (sRes.success) setSerials(sRes.data);
+    setLoading(false);
+  };
+
+  useEffect(() => { load(); }, [projectId]);
+
+  const uploadPhoto = async (stepNum) => {
+    if (!photoUrl.trim()) return;
+    setSaving(true);
+    try {
+      const res = await api.put(`/solar/projects/${projectId}/install-photos/${stepNum}`, {
+        photo_url: photoUrl,
+        ocr_raw_text: ocrText || undefined,
+      });
+      if (res.success) {
+        setSteps(p => p.map(s => s.step_number === stepNum ? res.data : s));
+        setUploadFor(null); setPhotoUrl(""); setOcrText("");
+        if (ocrText && (stepNum === 8 || stepNum === 9)) {
+          // Parse serial numbers from OCR text — split by newline/comma
+          const lines = ocrText.split(/[\n,]+/).map(l => l.trim()).filter(l => l.length > 5);
+          const newSerials = lines.map(l => ({ component_type: "panel", brand: "", serial_number: l }));
+          setEditSerials(newSerials);
+          setShowSerialEdit(true);
+        }
+      }
+    } catch(e) {}
+    setSaving(false);
+  };
+
+  const saveSerials = async () => {
+    setSaving(true);
+    try {
+      const res = await api.post(`/solar/projects/${projectId}/serial-numbers`, { serials: editSerials });
+      if (res.success) { setSerials(res.data); setShowSerialEdit(false); setEditSerials([]); }
+    } catch(e) {}
+    setSaving(false);
+  };
+
+  const completed = steps.filter(s => s.photo_url).length;
+
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading...</div>;
+
+  return (
+    <div style={{padding:"16px 0"}}>
+      {/* Progress */}
+      <div style={{background:T.surface,borderRadius:9,padding:"12px 14px",border:`1px solid ${T.b1}`,marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+          <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Installation Photos</span>
+          <span style={{fontSize:13,fontWeight:700,color:completed===steps.length?T.grn:T.amb}}>{completed}/{steps.length} uploaded</span>
+        </div>
+        <div style={{height:5,background:T.b1,borderRadius:5,overflow:"hidden"}}>
+          <div style={{height:"100%",width:`${steps.length?Math.round(completed/steps.length*100):0}%`,background:T.grn,borderRadius:5}}/>
+        </div>
+      </div>
+
+      {/* Serial numbers section */}
+      {serials.length > 0 && (
+        <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:9,padding:"12px 14px",marginBottom:14}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#D97706",marginBottom:8}}>☀ Serial Numbers Extracted ({serials.length})</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {serials.map(s=>(
+              <div key={s.id} style={{background:"white",border:"1px solid #FDE68A",borderRadius:5,padding:"3px 9px",fontSize:11,color:"#92400E"}}>
+                <span style={{fontWeight:700}}>{s.component_type==="panel"?"Panel":"Inverter"}:</span> {s.brand?s.brand+" — ":""}{s.serial_number}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Serial edit modal */}
+      {showSerialEdit && (
+        <div style={{background:T.surface,border:`1.5px solid ${T.blu}`,borderRadius:10,padding:"14px",marginBottom:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>Review OCR Extracted Serial Numbers</div>
+          {editSerials.map((s,i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 24px",gap:6,marginBottom:6,alignItems:"center"}}>
+              <select value={s.component_type} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,component_type:e.target.value}:x))}
+                style={{padding:"4px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}>
+                <option value="panel">Panel</option>
+                <option value="inverter">Inverter</option>
+              </select>
+              <input value={s.brand||""} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,brand:e.target.value}:x))}
+                placeholder="Brand (e.g. Adani)" style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+              <input value={s.serial_number} onChange={e=>setEditSerials(p=>p.map((x,j)=>j===i?{...x,serial_number:e.target.value}:x))}
+                placeholder="Serial number" style={{padding:"4px 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+              <button onClick={()=>setEditSerials(p=>p.filter((_,j)=>j!==i))}
+                style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:13}}>✕</button>
+            </div>
+          ))}
+          <div style={{display:"flex",gap:6,marginTop:8}}>
+            <button onClick={()=>setEditSerials(p=>[...p,{component_type:"panel",brand:"",serial_number:""}])}
+              style={{padding:"5px 12px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,cursor:"pointer"}}>
+              + Add Row
+            </button>
+            <button onClick={saveSerials} disabled={saving}
+              style={{padding:"5px 16px",borderRadius:6,background:saving?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+              {saving?"Saving...":"✓ Confirm & Save"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Photo steps */}
+      <div style={{display:"flex",flexDirection:"column",gap:7}}>
+        {steps.map(step=>(
+          <div key={step.id} style={{background:T.surface,borderRadius:9,border:`1.5px solid ${step.photo_url?T.grnM:T.b1}`,overflow:"hidden"}}>
+            <div style={{display:"flex",gap:10,padding:"10px 13px",alignItems:"center"}}>
+              <div style={{width:28,height:28,borderRadius:"50%",flexShrink:0,background:step.photo_url?T.grn:T.b1,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:step.photo_url?"white":T.t4}}>
+                {step.photo_url?"✓":step.step_number}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{step.step_name}</div>
+                {step.is_ocr_step===1&&<div style={{fontSize:10,color:"#D97706",marginTop:1}}>⚡ OCR Serial Number Extraction</div>}
+              </div>
+              {step.photo_url && (
+                <a href={step.photo_url} target="_blank" rel="noreferrer">
+                  <img src={step.photo_url} alt="step" style={{width:48,height:48,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`}} onError={e=>e.target.style.display="none"}/>
+                </a>
+              )}
+              <button onClick={()=>setUploadFor(uploadFor===step.step_number?null:step.step_number)}
+                style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${step.photo_url?T.grnM:T.b1}`,background:step.photo_url?T.grnL:"none",color:step.photo_url?T.grn:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                {step.photo_url?"Replace":"Upload"}
+              </button>
+            </div>
+
+            {uploadFor===step.step_number&&(
+              <div style={{padding:"8px 51px 12px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB}}>
+                <input value={photoUrl} onChange={e=>setPhotoUrl(e.target.value)} placeholder="Cloudinary photo URL"
+                  style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:6}}/>
+                {step.is_ocr_step===1&&(
+                  <textarea value={ocrText} onChange={e=>setOcrText(e.target.value)} rows={3}
+                    placeholder={"Paste OCR text here (serial numbers, one per line)\nOR leave blank and enter manually after upload"}
+                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid #FDE68A`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:6,resize:"vertical"}}/>
+                )}
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>{setUploadFor(null);setPhotoUrl("");setOcrText("");}}
+                    style={{flex:1,padding:"6px",borderRadius:6,background:"none",border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t3,cursor:"pointer"}}>Cancel</button>
+                  <button onClick={()=>uploadPhoto(step.step_number)} disabled={saving||!photoUrl}
+                    style={{flex:2,padding:"6px",borderRadius:6,background:saving||!photoUrl?T.b1:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:saving||!photoUrl?"not-allowed":"pointer"}}>
+                    {saving?"Saving...":"Save Photo"}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Tab: Solar Subsidy ───────────────────────────────────────────
+function TabSolarSubsidy({ projectId }) {
+  const [solar, setSolar] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState({});
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    api.get("/solar/projects/" + projectId).then(r => {
+      if (r.success) { setSolar(r.data); setForm({ subsidy_amount: r.data.subsidy_amount||"", subsidy_status: r.data.subsidy_status||"not_applied", loan_required: r.data.loan_required||0, loan_bank: r.data.loan_bank||"", loan_sanction_amount: r.data.loan_sanction_amount||"", loan_disbursed_70: r.data.loan_disbursed_70||"", loan_disbursed_30: r.data.loan_disbursed_30||"" }); }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [projectId]);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const res = await api.put("/solar/projects/" + projectId, form);
+      if (res.success) { setSolar(res.data); setEditing(false); }
+    } catch(e) {}
+    setSaving(false);
+  };
+
+  const SUBSIDY_S = { not_applied:{c:T.t3,bg:T.sltL,l:"Not Applied"}, applied:{c:T.amb,bg:T.ambL,l:"Applied"}, approved:{c:T.blu,bg:T.bluL,l:"Approved"}, disbursed:{c:T.grn,bg:T.grnL,l:"Disbursed"} };
+  const kw = solar?.system_kw||0;
+  // PM Surya Ghar subsidy calculation
+  const subsidyCalc = kw <= 2 ? kw*18000 : kw <= 3 ? 2*18000+(kw-2)*9000 : 36000+9000;
+
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading...</div>;
+
+  const ss = SUBSIDY_S[solar?.subsidy_status||"not_applied"]||SUBSIDY_S.not_applied;
+
+  return (
+    <div style={{padding:"16px 0"}}>
+      {/* Subsidy card */}
+      <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"16px",marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>Subsidy Details</div>
+          {!editing
+            ? <button onClick={()=>setEditing(true)} style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,fontWeight:600,color:T.t2,cursor:"pointer"}}>✏ Edit</button>
+            : <div style={{display:"flex",gap:6}}>
+                <button onClick={()=>setEditing(false)} style={{padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",fontSize:11.5,color:T.t3,cursor:"pointer"}}>Cancel</button>
+                <button onClick={save} disabled={saving} style={{padding:"5px 14px",borderRadius:6,background:saving?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{saving?"Saving...":"Save"}</button>
+              </div>
+          }
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div style={{background:"#FFF8E1",borderRadius:7,padding:"10px 12px",border:"1px solid #FFD54F"}}>
+            <div style={{fontSize:10,color:"#E65100",fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Estimated Subsidy ({kw}kW)</div>
+            <div style={{fontSize:18,fontWeight:800,color:"#E65100"}}>₹{subsidyCalc.toLocaleString("en-IN")}</div>
+            <div style={{fontSize:10,color:"#BF360C",marginTop:2}}>₹18k/kW (≤2kW) + ₹9k/kW (next 1kW)</div>
+          </div>
+          <div style={{background:ss.bg,borderRadius:7,padding:"10px 12px",border:`1px solid ${ss.c}33`}}>
+            <div style={{fontSize:10,color:ss.c,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Subsidy Status</div>
+            {editing
+              ? <select value={form.subsidy_status} onChange={e=>setForm(p=>({...p,subsidy_status:e.target.value}))}
+                  style={{padding:"6px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:13,width:"100%",outline:"none",fontFamily:"inherit"}}>
+                  {Object.entries(SUBSIDY_S).map(([k,v])=><option key={k} value={k}>{v.l}</option>)}
+                </select>
+              : <div style={{fontSize:16,fontWeight:700,color:ss.c}}>{ss.l}</div>
+            }
+          </div>
+          <div>
+            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase",marginBottom:4}}>Actual Subsidy Amount</div>
+            {editing
+              ? <input type="number" value={form.subsidy_amount} onChange={e=>setForm(p=>({...p,subsidy_amount:e.target.value}))} placeholder="₹"
+                  style={{width:"100%",padding:"7px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              : <div style={{fontSize:14,fontWeight:700,color:T.grn}}>₹{solar?.subsidy_amount?Number(solar.subsidy_amount).toLocaleString("en-IN"):"—"}</div>
+            }
+          </div>
+        </div>
+      </div>
+
+      {/* Loan card */}
+      <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"16px"}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:12}}>Loan Details</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {[
+            {l:"Loan Required",v:solar?.loan_required?"Yes":"No"},
+            {l:"Bank",v:solar?.loan_bank||"—"},
+            {l:"Sanction Amount",v:solar?.loan_sanction_amount?`₹${Number(solar.loan_sanction_amount).toLocaleString("en-IN")}`:"—"},
+            {l:"Disbursed 70%",v:solar?.loan_disbursed_70?`₹${Number(solar.loan_disbursed_70).toLocaleString("en-IN")}`:"—"},
+            {l:"Disbursed 30%",v:solar?.loan_disbursed_30?`₹${Number(solar.loan_disbursed_30).toLocaleString("en-IN")}`:"—"},
+          ].map(({l,v})=>(
+            <div key={l}>
+              <div style={{fontSize:10,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{l}</div>
+              <div style={{fontSize:13,fontWeight:600,color:T.t1}}>{v}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
 function ProjectDetailPage({project=PROJ, onBack}) {
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
   if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
   const [tab, setTab] = useState("overview");
+
+  // ── Solar EPC detection — construction tabs untouched ──────────
+  const isSolar = project._raw?.project_type === "solar_epc" || project.project_type === "solar_epc";
+  const activeTabs = isSolar ? SOLAR_TABS : TABS;
+
   const sm = STATUS_S[project.status]||{c:T.slt, bg:T.sltL};
   const margin = project.boq - project.expense;
 
@@ -7656,7 +8368,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       const tag=document.activeElement?.tagName;
       if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT") return;
       if(!e.ctrlKey) return;
-      const match=TABS.find(t=>t.key===e.key.toLowerCase());
+      const match=activeTabs.find(t=>t.key===e.key.toLowerCase());
       if(match){e.preventDefault();setTab(match.id);}
     };
     const escHandler=(e)=>{
@@ -7668,9 +8380,10 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       window.removeEventListener("keydown",handler);
       window.removeEventListener("keydown",escHandler);
     };
-  },[onBack]);
+  },[onBack, activeTabs]);
 
   const tabContent = {
+    // ── Construction tabs (unchanged) ──
     overview:    <TabOverview    proj={project}/>,
     design:      <TabDesign project={project} isAdmin={isAdmin}/>,
     estimate:    <TabEstimate/>,
@@ -7685,6 +8398,12 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     files:       <TabFiles/>,
     site:        <TabSite/>,
     mom:         <TabMOM/>,
+    // ── Solar EPC tabs ──
+    solar_stages:  <TabSuryaGhar  projectId={project.id}/>,
+    solar_boq:     <TabSolarBOQ   projectId={project.id}/>,
+    solar_docs:    <TabSolarDocs  projectId={project.id}/>,
+    solar_install: <TabSolarInstall projectId={project.id}/>,
+    solar_subsidy: <TabSolarSubsidy projectId={project.id}/>,
   };
 
   return (
@@ -7743,7 +8462,8 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       {/* ── TAB BAR ── */}
       <div style={{background:T.surface, borderBottom:`1px solid ${T.b1}`, display:"flex", overflowX:"auto", flexShrink:0}}>
         <style>{`* { scrollbar-width: none; } *::-webkit-scrollbar { display: none; }`}</style>
-        {TABS.map(t=>(
+        {isSolar&&<div style={{display:"flex",alignItems:"center",padding:"0 12px",borderRight:`1px solid ${T.b1}`,flexShrink:0}}><span style={{fontSize:9.5,fontWeight:800,color:"#E65100",background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:4,padding:"2px 7px",letterSpacing:".3px",whiteSpace:"nowrap"}}>☀ Solar EPC</span></div>}
+        {activeTabs.map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             title={`${t.label}  (Ctrl+${t.key.toUpperCase()})`}
             style={{padding:"10px 16px 8px", border:"none", background:"none", cursor:"pointer", color:tab===t.id?T.blu:T.t3, fontWeight:tab===t.id?700:400, fontSize:12.5, whiteSpace:"nowrap", borderBottom:tab===t.id?`2.5px solid ${T.blu}`:"2.5px solid transparent", transition:"all .15s", flexShrink:0, fontFamily:"inherit", letterSpacing:0, display:"flex", flexDirection:"column", alignItems:"center", gap:1}}>
