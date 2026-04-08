@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import api, { getUser, getToken, clearAuth } from "./config/api";
 import apiCache from "./utils/apiCache";
 import FinanceModule from "./modules/FinanceModule";
@@ -297,7 +297,7 @@ const SEARCH_ITEMS=[
 function QuickSearch({onNavigate, onClose}){
   const [q,setQ]=useState("");
   const [idx,setIdx]=useState(0);
-  const inputRef=React.useRef(null);
+  const inputRef=useRef(null);
 
   const filtered=q.trim()
     ?SEARCH_ITEMS.filter(i=>i.label.toLowerCase().includes(q.toLowerCase())||i.section.toLowerCase().includes(q.toLowerCase()))
