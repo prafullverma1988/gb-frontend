@@ -1240,6 +1240,122 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
   </>);
 }
 
+// ── Follow-up Log Section — timeline of multiple calls ───────────
+function FollowupLogSection({leadId, isActive}) {
+  const [logs, setLogs] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({
+    call_date: new Date().toISOString().split("T")[0],
+    summary: "",
+    next_followup_date: "",
+    additional_requirements: "",
+    senior_consultant_needed: false,
+  });
+
+  useEffect(() => {
+    api.get("/solar/leads/"+leadId+"/followup-logs")
+      .then(r => { if(r.success) setLogs(r.data||[]); })
+      .catch(()=>{})
+      .finally(()=>setLoading(false));
+  }, [leadId]);
+
+  const addLog = async () => {
+    if (!form.summary.trim()) return;
+    setSaving(true);
+    try {
+      const res = await api.post("/solar/leads/"+leadId+"/followup-logs", form);
+      if (res.success) {
+        setLogs(p=>[res.data,...p]);
+        setForm({call_date:new Date().toISOString().split("T")[0],summary:"",next_followup_date:"",additional_requirements:"",senior_consultant_needed:false});
+        setShowAdd(false);
+      }
+    } catch(e){}
+    setSaving(false);
+  };
+
+  const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "";
+
+  return (
+    <div style={{padding:"12px 13px",borderBottom:`1px solid ${T.b1}`}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+        <div style={{fontSize:11,fontWeight:700,color:"#0891B2"}}>📞 Follow-up Log ({logs.length})</div>
+        {isActive&&(
+          <button onClick={()=>setShowAdd(s=>!s)}
+            style={{padding:"4px 10px",borderRadius:5,background:showAdd?"#E0F2FE":"#0891B2",border:`1px solid #0891B2`,color:showAdd?"#0891B2":"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+            {showAdd?"Cancel":"+ Add Entry"}
+          </button>
+        )}
+      </div>
+
+      {/* Add new log entry */}
+      {showAdd&&(
+        <div style={{background:"#F0F9FF",borderRadius:8,border:"1px solid #BAE6FD",padding:"10px 12px",marginBottom:10}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Call Date</label>
+              <input type="date" value={form.call_date} onChange={e=>setForm(p=>({...p,call_date:e.target.value}))}
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Next Follow-up</label>
+              <input type="date" value={form.next_followup_date} onChange={e=>setForm(p=>({...p,next_followup_date:e.target.value}))}
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${form.next_followup_date?T.grn:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:form.next_followup_date?T.grnL:"white"}}/>
+            </div>
+            <div style={{gridColumn:"1/3"}}>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Conversation Summary *</label>
+              <textarea value={form.summary} onChange={e=>setForm(p=>({...p,summary:e.target.value}))}
+                placeholder="Customer ne kya kaha, interest level, concerns..." rows={2}
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+            </div>
+            <div style={{gridColumn:"1/3"}}>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Additional Requirements</label>
+              <textarea value={form.additional_requirements} onChange={e=>setForm(p=>({...p,additional_requirements:e.target.value}))}
+                placeholder="Battery, special structure, shade issue, loan required..." rows={1}
+                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+            </div>
+            <div style={{gridColumn:"1/3",display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}
+              onClick={()=>setForm(p=>({...p,senior_consultant_needed:!p.senior_consultant_needed}))}>
+              <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${form.senior_consultant_needed?"#E65100":T.b2}`,background:form.senior_consultant_needed?"#E65100":"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                {form.senior_consultant_needed&&<span style={{color:"white",fontSize:11,fontWeight:800}}>✓</span>}
+              </div>
+              <span style={{fontSize:12,color:"#E65100",fontWeight:600}}>Senior Consultant Required</span>
+            </div>
+          </div>
+          <button onClick={addLog} disabled={saving||!form.summary.trim()}
+            style={{width:"100%",padding:"8px",borderRadius:6,background:saving||!form.summary.trim()?T.b1:"#0891B2",color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            {saving?"Saving...":"Save Follow-up Log"}
+          </button>
+        </div>
+      )}
+
+      {/* Log timeline */}
+      {loading&&<div style={{fontSize:11,color:T.t4,textAlign:"center",padding:"8px"}}>Loading...</div>}
+      {!loading&&logs.length===0&&<div style={{fontSize:11,color:T.t4,textAlign:"center",padding:"8px"}}>No follow-up entries yet</div>}
+      {logs.map((log,i)=>(
+        <div key={log.id} style={{display:"flex",gap:10,marginBottom:8,alignItems:"flex-start"}}>
+          <div style={{display:"flex",flexDirection:"column",alignItems:"center",flexShrink:0}}>
+            <div style={{width:28,height:28,borderRadius:"50%",background:"#0891B2",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:10,fontWeight:700}}>
+              {logs.length-i}
+            </div>
+            {i<logs.length-1&&<div style={{width:2,flex:1,minHeight:12,background:"#BAE6FD",margin:"3px 0"}}/>}
+          </div>
+          <div style={{flex:1,background:"#F0F9FF",borderRadius:7,padding:"8px 10px",border:"1px solid #BAE6FD"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+              <span style={{fontSize:11,fontWeight:700,color:"#0891B2"}}>{fmtDate(log.call_date)}</span>
+              {log.next_followup_date&&<span style={{fontSize:10,color:T.grn,fontWeight:600}}>Next: {fmtDate(log.next_followup_date)}</span>}
+              {log.senior_consultant_needed===1&&<span style={{fontSize:9,fontWeight:700,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 5px"}}>Senior Req.</span>}
+            </div>
+            <div style={{fontSize:12,color:T.t1,lineHeight:1.5}}>{log.summary}</div>
+            {log.additional_requirements&&<div style={{fontSize:11,color:T.t3,marginTop:3,fontStyle:"italic"}}>Requirements: {log.additional_requirements}</div>}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Solar Lead Detail Drawer ──────────────────────────────────────
 function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
   const [data, setData] = useState(lead);
@@ -1426,28 +1542,31 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
           {stageIdx>=1&&(
             <div style={{background:"white",borderRadius:10,border:`1.5px solid ${data.stage==="followup"?"#0891B2":data.stage==="lead"?T.b1:T.grnM}`,marginBottom:10,overflow:"hidden",opacity:data.stage==="lead"?0.5:1}}>
               <div style={{padding:"10px 13px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.b1}`,background:data.stage==="followup"?"#E0F2FE":data.stage==="lead"?"#F8FAFC":"#ECFDF5"}}>
-                <span style={{fontSize:12,fontWeight:700,color:data.stage==="followup"?"#0891B2":data.stage==="lead"?T.t3:T.grn}}>Stage 2 — Follow Up Details</span>
+                <span style={{fontSize:12,fontWeight:700,color:data.stage==="followup"?"#0891B2":data.stage==="lead"?T.t3:T.grn}}>Stage 2 — Follow Up</span>
                 <span style={{fontSize:10,fontWeight:700,color:data.stage==="followup"?"#0891B2":data.stage==="lead"?T.t4:T.grn,background:data.stage==="followup"?"#BAE6FD":data.stage==="lead"?T.b1:"#D1FAE5",padding:"2px 8px",borderRadius:10}}>
                   {data.stage==="followup"?"Current":data.stage==="lead"?"Pending":"✓ Done"}
                 </span>
               </div>
-              {data.stage==="followup"&&(
-                <div style={{padding:"12px 13px"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+
+              {/* ── CUSTOMER DETAILS — editable anytime in followup ── */}
+              {(data.stage==="followup"||stageIdx>1)&&(
+                <div style={{padding:"12px 13px",borderBottom:`1px solid ${T.b1}`}}>
+                  <div style={{fontSize:11,fontWeight:700,color:"#0891B2",marginBottom:8}}>📋 Customer & Site Details</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                     <div style={{gridColumn:"1/3"}}>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Exact Site Address *</label>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Exact Site Address</label>
                       <textarea value={followupForm.exact_address} onChange={e=>setFollowupForm(p=>({...p,exact_address:e.target.value}))} placeholder="House no., Street, Area, District, Pin code" rows={2}
                         style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
                     </div>
                     <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Confirmed kW *</label>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Confirmed kW</label>
                       <select value={followupForm.requirement_kw} onChange={e=>setFollowupForm(p=>({...p,requirement_kw:e.target.value}))}
                         style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                         {KW_OPTIONS.map(k=><option key={k} value={k}>{k} kW</option>)}
                       </select>
                     </div>
                     <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Type *</label>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Type</label>
                       <select value={followupForm.requirement_type} onChange={e=>setFollowupForm(p=>({...p,requirement_type:e.target.value}))}
                         style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                         <option value="residential">Residential</option>
@@ -1455,54 +1574,42 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                       </select>
                     </div>
                     <div style={{gridColumn:"1/3"}}>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Follow-up Notes / Site Info</label>
-                      <textarea value={followupForm.followup_notes} onChange={e=>setFollowupForm(p=>({...p,followup_notes:e.target.value}))} placeholder="Customer requirements, site notes..." rows={2}
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Site Notes</label>
+                      <textarea value={followupForm.followup_notes} onChange={e=>setFollowupForm(p=>({...p,followup_notes:e.target.value}))} placeholder="Roof type, shadow area, special requirements..." rows={2}
                         style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
-                    </div>
-
-                    {/* Divider */}
-                    <div style={{gridColumn:"1/3",borderTop:`1px solid ${T.b1}`,paddingTop:10,marginTop:2}}>
-                      <div style={{fontSize:11,fontWeight:700,color:"#0891B2",marginBottom:8}}>📞 Call Log</div>
-                    </div>
-                    <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Last Call Date</label>
-                      <input type="date" value={followupForm.last_call_date} onChange={e=>setFollowupForm(p=>({...p,last_call_date:e.target.value}))}
-                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                    </div>
-                    <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Next Follow-up Date</label>
-                      <input type="date" value={followupForm.next_followup_date} onChange={e=>setFollowupForm(p=>({...p,next_followup_date:e.target.value}))}
-                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${followupForm.next_followup_date?T.grn:T.b1}`,fontSize:12.5,color:T.t1,background:followupForm.next_followup_date?T.grnL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                    </div>
-                    <div style={{gridColumn:"1/3"}}>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Conversation Summary</label>
-                      <textarea value={followupForm.call_summary} onChange={e=>setFollowupForm(p=>({...p,call_summary:e.target.value}))} placeholder="Is call mein kya baat hua, customer reaction..." rows={2}
-                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
-                    </div>
-                    <div style={{gridColumn:"1/3"}}>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Additional Requirements</label>
-                      <textarea value={followupForm.additional_requirements} onChange={e=>setFollowupForm(p=>({...p,additional_requirements:e.target.value}))} placeholder="Battery backup, special structure, shade issue..." rows={2}
-                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
-                    </div>
-                    <div style={{gridColumn:"1/3",display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#FFF8E1",borderRadius:7,border:"1px solid #FFD54F",cursor:"pointer"}}
-                      onClick={()=>setFollowupForm(p=>({...p,senior_consultant_needed:!p.senior_consultant_needed}))}>
-                      <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${followupForm.senior_consultant_needed?"#E65100":T.b2}`,background:followupForm.senior_consultant_needed?"#E65100":"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        {followupForm.senior_consultant_needed&&<span style={{color:"white",fontSize:13,fontWeight:800}}>✓</span>}
-                      </div>
-                      <span style={{fontSize:12.5,fontWeight:600,color:"#E65100"}}>Senior Consultant Required</span>
-                      <span style={{fontSize:11,color:T.t3,marginLeft:"auto"}}>Flag karo agar complex case hai</span>
                     </div>
                   </div>
-                  <button onClick={()=>{ if(!followupForm.exact_address.trim()) return setErr("Exact address required"); advanceStage("proposal",{...followupForm,followup_date:followupForm.next_followup_date||null}); }} disabled={saving}
-                    style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#0891B2",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                    Save & Move to Proposal →
+                  <button onClick={()=>save({...followupForm})} disabled={saving}
+                    style={{width:"100%",padding:"8px",borderRadius:7,background:saving?T.b1:T.blu,color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",marginTop:8}}>
+                    {saving?"Saving...":"💾 Save Details"}
                   </button>
                 </div>
               )}
+
+              {/* ── FOLLOW-UP LOG — multiple entries ── */}
+              {(data.stage==="followup"||stageIdx>1)&&(
+                <FollowupLogSection leadId={data.id} isActive={data.stage==="followup"}/>
+              )}
+
+              {/* ── MOVE TO PROPOSAL ── */}
+              {data.stage==="followup"&&(
+                <div style={{padding:"10px 13px",background:"#F0F9FF",borderTop:`1px solid ${T.b1}`}}>
+                  <button onClick={()=>{
+                    if(!followupForm.exact_address.trim()) return setErr("Address required before moving to Proposal");
+                    advanceStage("proposal",{...followupForm,followup_date:followupForm.next_followup_date||null});
+                  }} disabled={saving}
+                    style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#0891B2",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                    Move to Proposal → (Site Visit Ready)
+                  </button>
+                  <div style={{fontSize:10.5,color:T.t4,textAlign:"center",marginTop:5}}>Address + site details bharne ke baad move karo</div>
+                </div>
+              )}
+
+              {/* Done summary */}
               {stageIdx>1&&data.exact_address&&(
-                <div style={{padding:"10px 13px"}}>
+                <div style={{padding:"8px 13px"}}>
                   <div style={{fontSize:12,color:T.t2}}><b>Address:</b> {data.exact_address}</div>
-                  <div style={{fontSize:12,color:T.t3,marginTop:3}}>{data.requirement_kw}kW · {data.requirement_type}</div>
+                  <div style={{fontSize:11,color:T.t3,marginTop:2}}>{data.requirement_kw}kW · {data.requirement_type}</div>
                 </div>
               )}
             </div>
