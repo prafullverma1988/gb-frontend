@@ -1809,6 +1809,34 @@ Total: ${amt} (incl. GST + 5yr maintenance)
           </div>
         )}
       </div>
+
+      {/* ── STICKY MOVE STAGE FOOTER ── */}
+      {data.stage!=="converted"&&data.stage!=="lost"&&(()=>{
+        const idx2=SOLAR_STAGES.findIndex(s=>s.id===data.stage);
+        const nextStage=SOLAR_STAGES[idx2+1];
+        if(!nextStage||nextStage.id==="lost") return null;
+        return (
+          <div style={{padding:"10px 14px",borderTop:`1.5px solid ${T.b1}`,background:"white",flexShrink:0,display:"flex",gap:8,alignItems:"center"}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Current Stage</div>
+              <div style={{fontSize:12,fontWeight:700,color:stage.color}}>{stage.label}</div>
+            </div>
+            <button onClick={async()=>{
+              setErr("");
+              if(nextStage.id==="proposal"&&!data.exact_address) return setErr("Address fill karo — Follow Ups tab mein");
+              if(nextStage.id==="converted"){
+                const hasQuot=brands.some(b=>b.brand&&b.amount);
+                if(!geoPhoto) return setErr("Geo photo required — Documents tab mein upload karo");
+                if(!hasQuot) return setErr("Brand quotation required — Documents tab mein bharo");
+              }
+              await patchLead({stage:nextStage.id});
+            }} disabled={saving}
+              style={{display:"flex",alignItems:"center",gap:6,padding:"9px 18px",borderRadius:8,background:saving?T.b1:nextStage.color,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:saving?"not-allowed":"pointer",whiteSpace:"nowrap",flexShrink:0}}>
+              {saving?"Moving...":"Move to "+nextStage.label+" →"}
+            </button>
+          </div>
+        );
+      })()}
     </div>
   </>);
 }
