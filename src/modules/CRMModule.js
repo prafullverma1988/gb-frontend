@@ -1579,38 +1579,83 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
         {/* ── QUOTATIONS ── */}
         {tab==="quotations"&&(
           <div>
-            {/* Geo-tagged roof photo */}
-            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>📍 Geo-tagged Roof Photo</div>
-              {geoPhoto
-                ? <div style={{position:"relative"}}>
-                    <img src={geoPhoto} alt="roof" style={{width:"100%",maxHeight:180,objectFit:"cover",borderRadius:8,border:`2px solid ${T.grnM}`}}/>
-                    <div style={{position:"absolute",top:6,right:6,display:"flex",gap:5}}>
-                      <a href={geoPhoto} target="_blank" rel="noreferrer" style={{background:"white",color:T.blu,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,textDecoration:"none",border:`1px solid ${T.bluM}`}}>View ↗</a>
-                      <span style={{background:T.grn,color:"white",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>✓ Uploaded</span>
+            {/* ── ALL DOCUMENTS — accessible at any stage ── */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"14px",marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>📄 Documents</div>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}>Kisi bhi stage mein upload karo — jo available ho woh abhi daal do</div>
+              {[
+                {key:"doc_ele_bill", label:"Electricity Bill",   icon:"⚡", required:true},
+                {key:"doc_aadhaar",  label:"Aadhaar Card",       icon:"🪪", required:true},
+                {key:"doc_pan",      label:"PAN Card",           icon:"💳", required:true},
+                {key:"geo_photo_url",label:"Geo-tag Site Photo", icon:"📍", required:true, isPhoto:true},
+                {key:"doc_itr",      label:"ITR / Form 16",      icon:"📋", required:false},
+              ].map(doc=>{
+                const val = doc.isPhoto ? geoPhoto : docs[doc.key];
+                const setVal = doc.isPhoto
+                  ? (url)=>{setGeoPhoto(url);api.patch("/solar/leads/"+data.id,{geo_photo_url:url}).catch(()=>{});}
+                  : (url)=>{setDocs(p=>({...p,[doc.key]:url}));api.patch("/solar/leads/"+data.id,{[doc.key]:url}).catch(()=>{});};
+                return (
+                  <div key={doc.key} style={{marginBottom:10,padding:"10px 12px",background:val?T.grnL:T.surfaceB,borderRadius:8,border:`1.5px solid ${val?T.grnM:T.b1}`,transition:"all .2s"}}>
+                    <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:val?6:8}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:18}}>{doc.icon}</span>
+                        <div>
+                          <span style={{fontSize:12.5,fontWeight:700,color:val?T.grn:T.t1}}>{val?"✓ ":""}{doc.label}</span>
+                          {doc.required&&!val&&<span style={{fontSize:10,color:T.red,marginLeft:5}}>Required</span>}
+                          {!doc.required&&!val&&<span style={{fontSize:10,color:T.t4,marginLeft:5}}>Optional</span>}
+                        </div>
+                      </div>
+                      {val&&<a href={val} target="_blank" rel="noreferrer"
+                        style={{fontSize:11,color:T.blu,fontWeight:600,padding:"2px 8px",background:T.bluL,borderRadius:5,textDecoration:"none",border:`1px solid ${T.bluM}`}}>
+                        View ↗
+                      </a>}
                     </div>
-                    <label style={{display:"block",marginTop:6,textAlign:"center",fontSize:11,color:T.blu,cursor:"pointer"}}>
-                      <input type="file" accept="image/*" capture="environment" onChange={e=>uploadPhoto(e,"geo_photo_url",setGeoPhoto)} style={{display:"none"}}/>
-                      Replace photo
-                    </label>
+                    {!val&&(
+                      <div style={{display:"flex",gap:6}}>
+                        <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:T.t3}}>
+                          <input type="file" accept={doc.isPhoto?"image/*":"image/*,application/pdf"} capture="environment"
+                            onChange={async e=>{
+                              const file=e.target.files?.[0]; if(!file) return;
+                              setUploading(p=>({...p,[doc.key]:true})); setErr("");
+                              try{ const url=await uploadToCloudinary(file,doc.isPhoto?"image":"doc"); setVal(url); }
+                              catch(ex){ setErr(ex.message||"Upload failed"); }
+                              setUploading(p=>({...p,[doc.key]:false}));
+                            }} style={{display:"none"}} disabled={uploading[doc.key]}/>
+                          {uploading[doc.key]?"Uploading...":"📷 Camera"}
+                        </label>
+                        <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:T.t3}}>
+                          <input type="file" accept={doc.isPhoto?"image/*":"image/*,application/pdf"}
+                            onChange={async e=>{
+                              const file=e.target.files?.[0]; if(!file) return;
+                              setUploading(p=>({...p,[doc.key]:true})); setErr("");
+                              try{ const url=await uploadToCloudinary(file,doc.isPhoto?"image":"doc"); setVal(url); }
+                              catch(ex){ setErr(ex.message||"Upload failed"); }
+                              setUploading(p=>({...p,[doc.key]:false}));
+                            }} style={{display:"none"}} disabled={uploading[doc.key]}/>
+                          {uploading[doc.key]?"...":"📁 File"}
+                        </label>
+                      </div>
+                    )}
+                    {val&&(
+                      <label style={{display:"block",textAlign:"center",fontSize:11,color:T.blu,cursor:"pointer",marginTop:2}}>
+                        <input type="file" accept={doc.isPhoto?"image/*":"image/*,application/pdf"}
+                          onChange={async e=>{
+                            const file=e.target.files?.[0]; if(!file) return;
+                            setUploading(p=>({...p,[doc.key]:true})); setErr("");
+                            try{ const url=await uploadToCloudinary(file,doc.isPhoto?"image":"doc"); setVal(url); }
+                            catch(ex){ setErr(ex.message||"Upload failed"); }
+                            setUploading(p=>({...p,[doc.key]:false}));
+                          }} style={{display:"none"}} disabled={uploading[doc.key]}/>
+                        {uploading[doc.key]?"Uploading...":"Replace"}
+                      </label>
+                    )}
                   </div>
-                : <div style={{display:"flex",gap:8}}>
-                    <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
-                      <input type="file" accept="image/*" capture="environment" onChange={e=>uploadPhoto(e,"geo_photo_url",setGeoPhoto)} style={{display:"none"}}/>
-                      <div style={{fontSize:22}}>📷</div>
-                      <div style={{fontSize:12,fontWeight:600,color:uploading.geo_photo_url?"#999":"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"Camera"}</div>
-                    </label>
-                    <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
-                      <input type="file" accept="image/*" onChange={e=>uploadPhoto(e,"geo_photo_url",setGeoPhoto)} style={{display:"none"}}/>
-                      <div style={{fontSize:22}}>📁</div>
-                      <div style={{fontSize:12,fontWeight:600,color:uploading.geo_photo_url?"#999":"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"File Upload"}</div>
-                    </label>
-                  </div>
-              }
+                );
+              })}
             </div>
 
-            {/* 3 Brand Quotations */}
-            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px"}}>
+            {/* ── Brand Quotations ── */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
               <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>💰 Brand Quotations</div>
               {brands.map((b,i)=>(
                 <div key={i} style={{marginBottom:10,padding:"10px 12px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`}}>
@@ -1628,22 +1673,27 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                         style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     </div>
                   </div>
-                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    {b.amount&&b.brand&&(
+                  {b.amount&&b.brand&&(
+                    <div style={{display:"flex",gap:8,alignItems:"center"}}>
                       <button onClick={async()=>{
-                        const amt = `₹${Number(b.amount).toLocaleString("en-IN")}`;
-                        const kw = data.requirement_kw||"3";
-                        const text = `Dear ${data.name},\n\nSolar Quotation — PM Surya Ghar\n\nBrand: ${b.brand}\nSystem: ${kw}kW (${data.requirement_type||"Residential"})\nTotal Amount: ${amt} (incl. GST + 5yr maintenance)\n\nCall/WhatsApp for details.\n\n— ${data.assignedTo||"Team"}`;
+                        const amt=`₹${Number(b.amount).toLocaleString("en-IN")}`;
+                        const kw=data.requirement_kw||"3";
+                        const text=`Dear ${data.name},
+
+Solar Quotation — PM Surya Ghar
+
+Brand: ${b.brand}
+System: ${kw}kW (${data.requirement_type||"Residential"})
+Total: ${amt} (incl. GST + 5yr maintenance)
+
+— ${data.assignedTo||"Team"}`;
                         window.open("https://api.whatsapp.com/send?phone=91"+data.phone+"&text="+encodeURIComponent(text),"_blank");
-                      }}
-                        style={{flex:1,padding:"6px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                      }} style={{flex:1,padding:"6px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
                         WhatsApp ↗
                       </button>
-                    )}
-                    {b.amount&&b.brand&&(
                       <span style={{fontSize:12,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
               ))}
               <button onClick={saveQuotations}
@@ -1652,79 +1702,37 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
               </button>
             </div>
 
-            {/* Converted — Select final + docs */}
+            {/* Final selection + convert — only at proposal/converted stage */}
             {(data.stage==="converted"||data.stage==="proposal")&&(
-              <div style={{background:"white",borderRadius:9,border:`1.5px solid ${T.grnM}`,padding:"12px 14px",marginTop:12}}>
-                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:10}}>✅ Final Quotation & Documents</div>
-
-                {/* Select final brand */}
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11.5,fontWeight:600,color:T.t2,marginBottom:7}}>Select final quotation:</div>
-                  {brands.filter(b=>b.brand&&b.amount).map((b,i)=>(
-                    <button key={i} onClick={()=>{setSelectedBrand(b.brand);api.patch("/solar/leads/"+data.id,{selected_brand:b.brand}).catch(()=>{});}}
-                      style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderRadius:8,border:`2px solid ${selectedBrand===b.brand?T.grn:T.b1}`,background:selectedBrand===b.brand?T.grnL:"white",marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
-                      <span style={{fontSize:12.5,fontWeight:600,color:selectedBrand===b.brand?T.grn:T.t1}}>{b.brand}</span>
-                      <div style={{display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
-                        {selectedBrand===b.brand&&<span style={{fontSize:16}}>✓</span>}
-                      </div>
-                    </button>
-                  ))}
-                </div>
-
-                {/* Loan */}
-                <div style={{padding:"10px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #FFD54F",marginBottom:12}}>
-                  <div style={{fontSize:11.5,fontWeight:700,color:"#E65100",marginBottom:8}}>💰 Loan Details</div>
-                  {!docs.loan_not_required
-                    ? <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                        <input type="number" value={docs.loan_amount} onChange={e=>setDocs(p=>({...p,loan_amount:e.target.value}))}
-                          placeholder="Loan Amount (₹)" style={{flex:1,padding:"8px 10px",borderRadius:7,border:`1.5px solid #FFD54F`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}
-                          onBlur={()=>api.patch("/solar/leads/"+data.id,{loan_amount:docs.loan_amount}).catch(()=>{})}/>
-                        <button onClick={()=>{setDocs(p=>({...p,loan_not_required:true,loan_amount:""}));api.patch("/solar/leads/"+data.id,{loan_not_required:true,loan_amount:null}).catch(()=>{});}}
-                          style={{padding:"8px 12px",borderRadius:7,border:"1px solid #FFD54F",background:"white",color:"#E65100",fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-                          No Loan
-                        </button>
-                      </div>
-                    : <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                        <span style={{fontSize:12.5,fontWeight:600,color:T.grn}}>✓ No Loan Required</span>
-                        <button onClick={()=>{setDocs(p=>({...p,loan_not_required:false}));api.patch("/solar/leads/"+data.id,{loan_not_required:false}).catch(()=>{});}}
-                          style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer"}}>Undo</button>
-                      </div>
-                  }
-                  {Number(docs.loan_amount)>200000&&<div style={{fontSize:10.5,color:"#BF360C",marginTop:5}}>⚠ Loan &gt;₹2L — ITR/Form 16 required</div>}
-                </div>
-
-                {/* Documents */}
-                <div style={{fontSize:11.5,fontWeight:700,color:T.t1,marginBottom:8}}>📄 Documents</div>
-                {[
-                  {key:"doc_ele_bill",label:"Electricity Bill *"},
-                  {key:"doc_aadhaar", label:"Aadhaar Card *"},
-                  {key:"doc_pan",     label:"PAN Card *"},
-                  {key:"doc_bank",    label:"Bank Details *"},
-                  {key:"doc_itr",     label:"ITR / Form 16"+(Number(docs.loan_amount)>200000?" *":"")},
-                ].map(d=>(
-                  <DocUploadBtn key={d.key} label={d.label} key={d.key} value={docs[d.key]}/>
+              <div style={{background:"white",borderRadius:9,border:`1.5px solid ${T.grnM}`,padding:"12px 14px"}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:10}}>✅ Final Quotation Selection</div>
+                {brands.filter(b=>b.brand&&b.amount).map((b,i)=>(
+                  <button key={i} onClick={()=>{setSelectedBrand(b.brand);api.patch("/solar/leads/"+data.id,{selected_brand:b.brand}).catch(()=>{});}}
+                    style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderRadius:8,border:`2px solid ${selectedBrand===b.brand?T.grn:T.b1}`,background:selectedBrand===b.brand?T.grnL:"white",marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
+                    <span style={{fontSize:12.5,fontWeight:600,color:selectedBrand===b.brand?T.grn:T.t1}}>{b.brand}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
+                      {selectedBrand===b.brand&&<span style={{fontSize:16}}>✓</span>}
+                    </div>
+                  </button>
                 ))}
-
-                {/* Convert to project */}
                 {data.stage==="converted"&&(
                   <button onClick={async()=>{
                     const missing=[];
                     if(!docs.doc_ele_bill) missing.push("Electricity Bill");
                     if(!docs.doc_aadhaar) missing.push("Aadhaar");
                     if(!docs.doc_pan) missing.push("PAN");
-                    if(!docs.doc_bank) missing.push("Bank Details");
                     if(!selectedBrand) missing.push("Final Quotation");
                     if(missing.length>0) return setErr("Required: "+missing.join(", "));
                     setSaving(true);
-                    try {
-                      const res = await api.post("/solar/leads/"+data.id+"/convert",{});
-                      if(res.success) { onConvertToProject(res.data); onClose(); }
+                    try{
+                      const res=await api.post("/solar/leads/"+data.id+"/convert",{});
+                      if(res.success){onConvertToProject(res.data);onClose();}
                       else setErr(res.message||"Conversion failed");
-                    } catch(e){ setErr("Server error"); }
+                    }catch(e){setErr("Server error");}
                     setSaving(false);
                   }} disabled={saving}
-                    style={{width:"100%",padding:"12px",borderRadius:8,background:saving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",marginTop:8,boxShadow:"0 4px 12px rgba(5,150,105,0.3)"}}>
+                    style={{width:"100%",padding:"12px",borderRadius:8,background:saving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",marginTop:8}}>
                     {saving?"Creating Project...":"🚀 Convert to Solar Project"}
                   </button>
                 )}
