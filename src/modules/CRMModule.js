@@ -1241,10 +1241,10 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
 }
 
 // ── Follow-up Log Section — timeline of multiple calls ───────────
-function FollowupLogSection({leadId, isActive}) {
+function FollowupLogSection({leadId, isActive, autoOpen=false}) {
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [showAdd, setShowAdd] = useState(false);
+  const [showAdd, setShowAdd] = useState(autoOpen); // auto-open if prop passed
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
     call_date: new Date().toISOString().split("T")[0],
@@ -1306,7 +1306,8 @@ function FollowupLogSection({leadId, isActive}) {
             <div style={{gridColumn:"1/3"}}>
               <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Conversation Summary *</label>
               <textarea value={form.summary} onChange={e=>setForm(p=>({...p,summary:e.target.value}))}
-                placeholder="Customer ne kya kaha, interest level, concerns..." rows={2}
+                autoFocus
+                placeholder="Customer ne kya kaha, interest level, concerns..." rows={3}
                 style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
             </div>
             <div style={{gridColumn:"1/3"}}>
@@ -1490,14 +1491,16 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
           ))}
         </div>
         {/* Action buttons */}
-        <div style={{display:"flex",gap:8}}>
-          <a href={"tel:+91"+data.phone} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:"rgba(255,255,255,0.15)",color:"white",fontSize:12,fontWeight:600,textDecoration:"none",border:"1px solid rgba(255,255,255,0.2)"}}>
-            📞 {data.phone}
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <a href={"tel:+91"+data.phone}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:7,background:"rgba(255,255,255,0.15)",color:"white",fontSize:12,fontWeight:700,textDecoration:"none",border:"1px solid rgba(255,255,255,0.3)"}}>
+            📞 Call
           </a>
           <a href={"https://api.whatsapp.com/send?phone=91"+data.phone} target="_blank" rel="noreferrer"
-            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:"#25D366",color:"white",fontSize:12,fontWeight:600,textDecoration:"none"}}>
+            style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:7,background:"#25D366",color:"white",fontSize:12,fontWeight:700,textDecoration:"none"}}>
             WhatsApp
           </a>
+          <span style={{fontSize:12,color:"rgba(255,255,255,0.75)",marginLeft:2}}>{data.phone}</span>
         </div>
       </div>
 
@@ -1563,7 +1566,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
 
         {/* ── FOLLOW UPS ── */}
         {tab==="followups"&&(
-          <FollowupLogSection leadId={data.id} isActive={true}/>
+          <FollowupLogSection leadId={data.id} isActive={true} autoOpen={true}/>
         )}
 
         {/* ── QUOTATIONS ── */}
