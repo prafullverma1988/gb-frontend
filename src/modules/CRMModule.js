@@ -1089,12 +1089,17 @@ const SOLAR_STAGES = [
 const KW_OPTIONS = ["1","2","3","4","5","6","7","8","9","10"];
 
 // Upload photo to Cloudinary
-const uploadToCloudinary = async (file) => {
+const uploadToCloudinary = async (file, type="image") => {
   const fd = new FormData();
   fd.append("file", file);
   fd.append("upload_preset", "gb_buildcon_uploads");
-  const res = await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload", {method:"POST",body:fd});
+  // PDF/docs → auto endpoint, images → image endpoint
+  const endpoint = (type==="doc" || file.type==="application/pdf")
+    ? "https://api.cloudinary.com/v1_1/dd632nqfm/auto/upload"
+    : "https://api.cloudinary.com/v1_1/dd632nqfm/image/upload";
+  const res = await fetch(endpoint, {method:"POST",body:fd});
   const data = await res.json();
+  if (!res.ok || !data.secure_url) throw new Error(data.error?.message || "Upload failed");
   return data.secure_url;
 };
 
@@ -1249,6 +1254,11 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
     requirement_kw: lead.requirement_kw||"3",
     requirement_type: lead.requirement_type||"residential",
     followup_notes: lead.followup_notes||"",
+    last_call_date: lead.last_call_date?lead.last_call_date.split("T")[0]:"",
+    call_summary: lead.call_summary||"",
+    next_followup_date: lead.next_followup_date?lead.next_followup_date.split("T")[0]:"",
+    additional_requirements: lead.additional_requirements||"",
+    senior_consultant_needed: lead.senior_consultant_needed||false,
   });
   const [proposalForm, setProposalForm] = useState({
     geo_photo_url: lead.geo_photo_url||"",
@@ -1287,11 +1297,13 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(p=>({...p,[field]:true}));
+    setErr("");
     try {
-      const url = await uploadToCloudinary(file);
+      const url = await uploadToCloudinary(file, "image");
       setFn(p=>({...p,[field]:url}));
-      await save({[field]:url});
-    } catch(ex) { setErr("Upload failed"); }
+      // Save to backend silently — don't block on failure
+      api.patch("/solar/leads/"+data.id, {[field]:url}).catch(()=>{});
+    } catch(ex) { setErr("Photo upload failed: "+ex.message); }
     setUploading(p=>({...p,[field]:false}));
   };
 
@@ -1300,10 +1312,10 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
     if (!file) return;
     setUploading(p=>({...p,[docKey]:true}));
     try {
-      const url = await uploadToCloudinary(file);
+      const url = await uploadToCloudinary(file, "doc");
       setConvertForm(p=>({...p,[docKey]:url}));
       await save({[docKey]:url});
-    } catch(ex) { setErr("Upload failed"); }
+    } catch(ex) { setErr("Upload failed: "+ex.message); }
     setUploading(p=>({...p,[docKey]:false}));
   };
 
@@ -1443,12 +1455,45 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                       </select>
                     </div>
                     <div style={{gridColumn:"1/3"}}>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Follow-up Notes</label>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Follow-up Notes / Site Info</label>
                       <textarea value={followupForm.followup_notes} onChange={e=>setFollowupForm(p=>({...p,followup_notes:e.target.value}))} placeholder="Customer requirements, site notes..." rows={2}
                         style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
                     </div>
+
+                    {/* Divider */}
+                    <div style={{gridColumn:"1/3",borderTop:`1px solid ${T.b1}`,paddingTop:10,marginTop:2}}>
+                      <div style={{fontSize:11,fontWeight:700,color:"#0891B2",marginBottom:8}}>📞 Call Log</div>
+                    </div>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Last Call Date</label>
+                      <input type="date" value={followupForm.last_call_date} onChange={e=>setFollowupForm(p=>({...p,last_call_date:e.target.value}))}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                    </div>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Next Follow-up Date</label>
+                      <input type="date" value={followupForm.next_followup_date} onChange={e=>setFollowupForm(p=>({...p,next_followup_date:e.target.value}))}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${followupForm.next_followup_date?T.grn:T.b1}`,fontSize:12.5,color:T.t1,background:followupForm.next_followup_date?T.grnL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                    </div>
+                    <div style={{gridColumn:"1/3"}}>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Conversation Summary</label>
+                      <textarea value={followupForm.call_summary} onChange={e=>setFollowupForm(p=>({...p,call_summary:e.target.value}))} placeholder="Is call mein kya baat hua, customer reaction..." rows={2}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+                    </div>
+                    <div style={{gridColumn:"1/3"}}>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Additional Requirements</label>
+                      <textarea value={followupForm.additional_requirements} onChange={e=>setFollowupForm(p=>({...p,additional_requirements:e.target.value}))} placeholder="Battery backup, special structure, shade issue..." rows={2}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+                    </div>
+                    <div style={{gridColumn:"1/3",display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#FFF8E1",borderRadius:7,border:"1px solid #FFD54F",cursor:"pointer"}}
+                      onClick={()=>setFollowupForm(p=>({...p,senior_consultant_needed:!p.senior_consultant_needed}))}>
+                      <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${followupForm.senior_consultant_needed?"#E65100":T.b2}`,background:followupForm.senior_consultant_needed?"#E65100":"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {followupForm.senior_consultant_needed&&<span style={{color:"white",fontSize:13,fontWeight:800}}>✓</span>}
+                      </div>
+                      <span style={{fontSize:12.5,fontWeight:600,color:"#E65100"}}>Senior Consultant Required</span>
+                      <span style={{fontSize:11,color:T.t3,marginLeft:"auto"}}>Flag karo agar complex case hai</span>
+                    </div>
                   </div>
-                  <button onClick={()=>{ if(!followupForm.exact_address.trim()) return setErr("Exact address required"); advanceStage("proposal",{...followupForm}); }} disabled={saving}
+                  <button onClick={()=>{ if(!followupForm.exact_address.trim()) return setErr("Exact address required"); advanceStage("proposal",{...followupForm,followup_date:followupForm.next_followup_date||null}); }} disabled={saving}
                     style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#0891B2",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
                     Save & Move to Proposal →
                   </button>
@@ -1479,8 +1524,12 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                     <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:6}}>📍 Geo-tagged Roof Photo *</div>
                     {proposalForm.geo_photo_url
                       ? <div style={{position:"relative"}}>
-                          <img src={proposalForm.geo_photo_url} alt="roof" style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:8,border:`2px solid ${T.grnM}`}}/>
-                          <span style={{position:"absolute",top:6,right:6,background:T.grn,color:"white",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>✓ Uploaded</span>
+                          <img src={proposalForm.geo_photo_url} alt="roof" style={{width:"100%",maxHeight:180,objectFit:"cover",borderRadius:8,border:`2px solid ${T.grnM}`}}/>
+                          <div style={{position:"absolute",top:6,right:6,display:"flex",gap:5}}>
+                            <a href={proposalForm.geo_photo_url} target="_blank" rel="noreferrer"
+                              style={{background:"white",color:T.blu,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,textDecoration:"none",border:`1px solid ${T.bluM}`}}>View ↗</a>
+                            <span style={{background:T.grn,color:"white",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>✓ Uploaded</span>
+                          </div>
                           <label style={{display:"block",marginTop:6,textAlign:"center",fontSize:11,color:T.blu,cursor:"pointer"}}>
                             <input type="file" accept="image/*" capture="environment" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
                             Replace photo
@@ -1490,12 +1539,12 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                           <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
                             <input type="file" accept="image/*" capture="environment" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
                             <div style={{fontSize:22}}>📷</div>
-                            <div style={{fontSize:11.5,fontWeight:600,color:"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"Camera"}</div>
+                            <div style={{fontSize:11.5,fontWeight:600,color:uploading.geo_photo_url?"#999":"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"Camera"}</div>
                           </label>
                           <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
                             <input type="file" accept="image/*" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
                             <div style={{fontSize:22}}>📁</div>
-                            <div style={{fontSize:11.5,fontWeight:600,color:"#E65100",marginTop:4}}>File Upload</div>
+                            <div style={{fontSize:11.5,fontWeight:600,color:uploading.geo_photo_url?"#999":"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"File Upload"}</div>
                           </label>
                         </div>
                     }
