@@ -1089,19 +1089,26 @@ const SOLAR_STAGES = [
 const KW_OPTIONS = ["1","2","3","4","5","6","7","8","9","10"];
 
 // Upload photo to Cloudinary
-const uploadToCloudinary = async (file, type="image") => {
+const uploadToCloudinary = (file, type="image") => new Promise((resolve, reject) => {
   const fd = new FormData();
   fd.append("file", file);
-  fd.append("upload_preset", "gb_buildcon_uploads");
-  // PDF/docs → auto endpoint, images → image endpoint
-  const endpoint = (type==="doc" || file.type==="application/pdf")
-    ? "https://api.cloudinary.com/v1_1/dd632nqfm/auto/upload"
+  fd.append("upload_preset", "gb_buildcon_drawings");
+  fd.append("folder", "gb_buildcon/solar");
+  const endpoint = type === "doc"
+    ? "https://api.cloudinary.com/v1_1/dd632nqfm/raw/upload"
     : "https://api.cloudinary.com/v1_1/dd632nqfm/image/upload";
-  const res = await fetch(endpoint, {method:"POST",body:fd});
-  const data = await res.json();
-  if (!res.ok || !data.secure_url) throw new Error(data.error?.message || "Upload failed");
-  return data.secure_url;
-};
+  const xhr = new XMLHttpRequest();
+  xhr.onload = () => {
+    try {
+      const d = JSON.parse(xhr.responseText);
+      if (xhr.status === 200 && d.secure_url) resolve(d.secure_url);
+      else reject(new Error(d.error?.message || "Upload failed"));
+    } catch(e) { reject(new Error("Parse error")); }
+  };
+  xhr.onerror = () => reject(new Error("Network error"));
+  xhr.open("POST", endpoint);
+  xhr.send(fd);
+});
 
 // ── Lead Type Selector ────────────────────────────────────────────
 function LeadTypeSelector({onSelect, onClose}) {
@@ -1445,7 +1452,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
   const TABS = [
     {id:"overview",  l:"Overview"},
     {id:"followups", l:`Follow Ups`},
-    {id:"quotations",l:"Quotations"},
+    {id:"quotations",l:"Documents"},
     {id:"contact",   l:"Contact Date"},
     {id:"move",      l:"Move Stage"},
   ];
