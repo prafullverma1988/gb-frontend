@@ -279,7 +279,10 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,stages}){
       {/* Top row */}
       <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lead.name}</div>
+          <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
+            {lead._type==="solar"&&<span style={{fontSize:9,fontWeight:800,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 5px",flexShrink:0}}>☀ Solar</span>}
+            <div style={{fontSize:13,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lead.name}</div>
+          </div>
           <div style={{fontSize:11,color:T.t4,display:"flex",alignItems:"center",gap:4}}>
             <IcLoc size={10} color={T.t4}/>{lead.city}
           </div>
@@ -1071,13 +1074,605 @@ function TemplateBuilderModal({onClose}){
   </>);
 }
 
+// ═══════════════════════════════════════════════════════════════════
+// SOLAR EPC CRM — Lead Type Selector + Solar Lead Modal + Drawer
+// ═══════════════════════════════════════════════════════════════════
+
+const SOLAR_STAGES = [
+  {id:"lead",      label:"Lead",      color:"#6366F1", bg:"#EEF2FF", desc:"New solar enquiry"},
+  {id:"followup",  label:"Follow Up", color:"#0891B2", bg:"#E0F2FE", desc:"Site details collected"},
+  {id:"proposal",  label:"Proposal",  color:"#D97706", bg:"#FFFBEB", desc:"Geo photo + quotation"},
+  {id:"converted", label:"Converted", color:"#059669", bg:"#ECFDF5", desc:"Docs uploaded → Project"},
+  {id:"lost",      label:"Lost",      color:"#6B7280", bg:"#F1F5F9", desc:"Not interested"},
+];
+
+const KW_OPTIONS = ["1","2","3","4","5","6","7","8","9","10"];
+
+// Upload photo to Cloudinary
+const uploadToCloudinary = async (file) => {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", "gb_buildcon_uploads");
+  const res = await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload", {method:"POST",body:fd});
+  const data = await res.json();
+  return data.secure_url;
+};
+
+// ── Lead Type Selector ────────────────────────────────────────────
+function LeadTypeSelector({onSelect, onClose}) {
+  return (<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:16,width:"min(420px,92vw)",boxShadow:"0 24px 64px rgba(0,0,0,0.28)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{background:"#0D1B2A",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>New Lead</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.45)",marginTop:2}}>Kaun sa lead hai?</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}><IcX size={15}/></button>
+      </div>
+      <div style={{padding:"20px",display:"flex",flexDirection:"column",gap:12}}>
+        <button onClick={()=>onSelect("construction")}
+          style={{display:"flex",alignItems:"center",gap:16,padding:"16px 18px",borderRadius:12,border:`2px solid ${T.b1}`,background:"white",cursor:"pointer",textAlign:"left",transition:"all .15s"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.background=T.bluL;}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background="white";}}>
+          <div style={{width:44,height:44,borderRadius:10,background:T.bluL,display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>🏗️</div>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Construction / Other</div>
+            <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>Residential, commercial, industrial project</div>
+          </div>
+        </button>
+        <button onClick={()=>onSelect("solar")}
+          style={{display:"flex",alignItems:"center",gap:16,padding:"16px 18px",borderRadius:12,border:"2px solid #FFD54F",background:"#FFFDE7",cursor:"pointer",textAlign:"left",transition:"all .15s"}}
+          onMouseEnter={e=>{e.currentTarget.style.background="#FFF8E1";e.currentTarget.style.borderColor="#FFC107";}}
+          onMouseLeave={e=>{e.currentTarget.style.background="#FFFDE7";e.currentTarget.style.borderColor="#FFD54F";}}>
+          <div style={{width:44,height:44,borderRadius:10,background:"#FFF3E0",display:"flex",alignItems:"center",justifyContent:"center",fontSize:24,flexShrink:0}}>☀️</div>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"#E65100"}}>Solar EPC — PM Surya Ghar</div>
+            <div style={{fontSize:11.5,color:"#BF360C",marginTop:2}}>Rooftop solar installation lead</div>
+          </div>
+        </button>
+      </div>
+    </div>
+  </>);
+}
+
+// ── Add Solar Lead Modal ──────────────────────────────────────────
+function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
+  const ASSIGNED_TO = assignedToList || ["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka"];
+  const [form, setForm] = useState({
+    name:"", phone:"", city:"Raipur", location:"",
+    requirement_kw:"3", source:"Direct Call",
+    assignedTo:ASSIGNED_TO[0]||"Prafull",
+    priority:"Medium", contactDate:"", notes:"",
+    stage: defaultStage||"lead",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const upd = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  const save = async () => {
+    if (!form.name.trim() || !form.phone.trim()) return setErr("Name aur Phone required");
+    setSaving(true); setErr("");
+    try { await onSave(form); onClose(); }
+    catch(e) { setErr("Error saving lead"); }
+    setSaving(false);
+  };
+
+  const inp = (label, key, ph, type="text") => (
+    <div>
+      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{label}</label>
+      <input type={type} value={form[key]} onChange={e=>upd(key,e.target.value)} placeholder={ph}
+        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+        onFocus={e=>e.target.style.borderColor="#E65100"} onBlur={e=>e.target.style.borderColor=T.b1}/>
+    </div>
+  );
+
+  return (<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:402}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(540px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.28)",zIndex:403,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{background:"linear-gradient(135deg,#E65100,#FF8F00)",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+        <div>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>☀️ New Solar Lead</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.7)",marginTop:2}}>PM Surya Ghar — Rooftop Solar</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"white",opacity:0.7}}><IcX size={15}/></button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+        {err && <div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:10,border:`1px solid ${T.redM}`}}>{err}</div>}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          <div style={{gridColumn:"1/3"}}>{inp("Customer Name *","name","Full name")}</div>
+          {inp("Mobile *","phone","10-digit number","tel")}
+          {inp("City","city","Raipur, Durg...")}
+          <div>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>System Size (kW)</label>
+            <select value={form.requirement_kw} onChange={e=>upd("requirement_kw",e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+              {KW_OPTIONS.map(k=><option key={k} value={k}>{k} kW</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Lead Source</label>
+            <select value={form.source} onChange={e=>upd("source",e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+              {SOURCES.map(s=><option key={s}>{s}</option>)}
+            </select>
+          </div>
+          <div style={{gridColumn:"1/3"}}>{inp("Location / Area","location","Approx location or landmark")}</div>
+          <div>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Assigned To</label>
+            <select value={form.assignedTo} onChange={e=>upd("assignedTo",e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+              {ASSIGNED_TO.map(a=><option key={a}>{a}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Priority</label>
+            <select value={form.priority} onChange={e=>upd("priority",e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+              {["High","Medium","Low"].map(p=><option key={p}>{p}</option>)}
+            </select>
+          </div>
+          <div style={{gridColumn:"1/3"}}>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Next Contact Date</label>
+            <input type="date" value={form.contactDate} onChange={e=>upd("contactDate",e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${form.contactDate?T.grn:T.b1}`,fontSize:12.5,color:T.t1,background:form.contactDate?T.grnL:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+          </div>
+          <div style={{gridColumn:"1/3"}}>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Notes</label>
+            <textarea value={form.notes} onChange={e=>upd("notes",e.target.value)} placeholder="Site details, roof info, customer preferences..." rows={2}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+          </div>
+        </div>
+      </div>
+      <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,flexShrink:0}}>
+        <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+        <button onClick={save} disabled={saving||!form.name.trim()||!form.phone.trim()}
+          style={{flex:2,padding:"10px",borderRadius:7,background:saving||!form.name.trim()?"#FFA726":"linear-gradient(135deg,#E65100,#FF8F00)",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          ☀️ {saving?"Saving...":"Add Solar Lead"}
+        </button>
+      </div>
+    </div>
+  </>);
+}
+
+// ── Solar Lead Detail Drawer ──────────────────────────────────────
+function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
+  const [data, setData] = useState(lead);
+  const [activeTab, setActiveTab] = useState("stage");
+  const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState({});
+  const [err, setErr] = useState("");
+
+  // Stage-specific form states
+  const [followupForm, setFollowupForm] = useState({
+    exact_address: lead.exact_address||"",
+    requirement_kw: lead.requirement_kw||"3",
+    requirement_type: lead.requirement_type||"residential",
+    followup_notes: lead.followup_notes||"",
+  });
+  const [proposalForm, setProposalForm] = useState({
+    geo_photo_url: lead.geo_photo_url||"",
+    brands: lead.quotation_brands || [{brand:"Brand 1",amount:""},{brand:"Brand 2",amount:""},{brand:"Brand 3",amount:""}],
+  });
+  const [convertForm, setConvertForm] = useState({
+    selected_brand: lead.selected_brand||"",
+    loan_amount: lead.loan_amount||"",
+    loan_not_required: lead.loan_not_required||false,
+    doc_ele_bill: lead.doc_ele_bill||"",
+    doc_aadhaar: lead.doc_aadhaar||"",
+    doc_pan: lead.doc_pan||"",
+    doc_bank: lead.doc_bank||"",
+    doc_itr: lead.doc_itr||"",
+  });
+
+  const stage = SOLAR_STAGES.find(s=>s.id===data.stage)||SOLAR_STAGES[0];
+  const stageIdx = SOLAR_STAGES.findIndex(s=>s.id===data.stage);
+
+  const save = async (updates) => {
+    setSaving(true); setErr("");
+    try {
+      const res = await api.patch("/solar/leads/"+data.id, updates);
+      if (res.success) { setData(p=>({...p,...updates,...res.data})); onUpdate(data.id,{...updates,...res.data}); }
+      else setErr(res.message||"Save failed");
+    } catch(e) { setErr(e.message); }
+    setSaving(false);
+  };
+
+  const advanceStage = async (nextStage, extraData={}) => {
+    await save({stage:nextStage,...extraData});
+  };
+
+  // Upload photo — camera or file
+  const handlePhotoUpload = async (e, field, setFn) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(p=>({...p,[field]:true}));
+    try {
+      const url = await uploadToCloudinary(file);
+      setFn(p=>({...p,[field]:url}));
+      await save({[field]:url});
+    } catch(ex) { setErr("Upload failed"); }
+    setUploading(p=>({...p,[field]:false}));
+  };
+
+  const handleDocUpload = async (e, docKey) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(p=>({...p,[docKey]:true}));
+    try {
+      const url = await uploadToCloudinary(file);
+      setConvertForm(p=>({...p,[docKey]:url}));
+      await save({[docKey]:url});
+    } catch(ex) { setErr("Upload failed"); }
+    setUploading(p=>({...p,[docKey]:false}));
+  };
+
+  // Convert to project — validate docs first
+  const convertToProject = async () => {
+    const missing = [];
+    if (!convertForm.doc_ele_bill) missing.push("Electricity Bill");
+    if (!convertForm.doc_aadhaar)  missing.push("Aadhaar");
+    if (!convertForm.doc_pan)      missing.push("PAN");
+    if (!convertForm.doc_bank)     missing.push("Bank Details");
+    if (!convertForm.selected_brand) missing.push("Final Quotation (select one brand)");
+    if (missing.length > 0) return setErr("Required: "+missing.join(", "));
+    setSaving(true); setErr("");
+    try {
+      const res = await api.post("/solar/leads/"+data.id+"/convert", {});
+      if (res.success) { onConvertToProject(res.data); onClose(); }
+      else setErr(res.message||"Conversion failed");
+    } catch(e) { setErr(e.message||"Server error"); }
+    setSaving(false);
+  };
+
+  const UploadBtn = ({label, field, value, loading:l, onPick}) => (
+    <div style={{marginBottom:8}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+        <span style={{fontSize:11,fontWeight:600,color:T.t3}}>{label}</span>
+        {value && <a href={value} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu}}>View ↗</a>}
+      </div>
+      <div style={{display:"flex",gap:6}}>
+        <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:7,border:`1.5px dashed ${value?T.grn:T.b1}`,background:value?T.grnL:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:value?T.grn:T.t3}}>
+          <input type="file" accept="image/*,application/pdf" capture="environment" onChange={onPick} style={{display:"none"}} disabled={l}/>
+          {l?"Uploading...":value?"✓ "+label:"📷 Camera"}
+        </label>
+        <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:7,border:`1.5px dashed ${value?T.grn:T.b1}`,background:value?T.grnL:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:value?T.grn:T.t3}}>
+          <input type="file" accept="image/*,application/pdf" onChange={onPick} style={{display:"none"}} disabled={l}/>
+          {l?"...":"📁 File"}
+        </label>
+      </div>
+    </div>
+  );
+
+  const TABS = [{id:"stage",l:"Stage Flow"},{id:"followup",l:"Follow Ups"},{id:"info",l:"Details"}];
+
+  return (<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-4px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+
+      {/* Header */}
+      <div style={{background:stage.color,padding:"14px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:11,fontWeight:800,color:"white",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>☀ Solar EPC</span>
+            <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.9)",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>{stage.label}</span>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"white",opacity:0.7}}><IcX size={15}/></button>
+        </div>
+        <div style={{fontSize:16,fontWeight:700,color:"white"}}>{data.name}</div>
+        <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginTop:2}}>{data.phone} · {data.city} · {data.requirement_kw||"?"}kW</div>
+
+        {/* Stage progress bar */}
+        <div style={{display:"flex",gap:4,marginTop:10}}>
+          {SOLAR_STAGES.filter(s=>s.id!=="lost").map((s,i)=>(
+            <div key={s.id} style={{flex:1,height:3,borderRadius:3,background:stageIdx>=i?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.3)"}}/>
+          ))}
+        </div>
+      </div>
+
+      {/* Tab bar */}
+      <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:"white",flexShrink:0}}>
+        {TABS.map(t=>(
+          <button key={t.id} onClick={()=>setActiveTab(t.id)}
+            style={{flex:1,padding:"10px 6px",border:"none",background:"none",fontSize:12,fontWeight:activeTab===t.id?700:400,color:activeTab===t.id?stage.color:T.t3,borderBottom:activeTab===t.id?`2.5px solid ${stage.color}`:"2.5px solid transparent",cursor:"pointer"}}>
+            {t.l}
+          </button>
+        ))}
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+        {err&&<div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:10,border:`1px solid ${T.redM}`}}>{err}</div>}
+
+        {/* ── STAGE FLOW TAB ── */}
+        {activeTab==="stage"&&(<>
+
+          {/* STAGE 1 — Lead Info */}
+          <div style={{background:"white",borderRadius:10,border:`1.5px solid ${data.stage==="lead"?stage.color:T.grnM}`,marginBottom:10,overflow:"hidden"}}>
+            <div style={{padding:"10px 13px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.b1}`,background:data.stage==="lead"?"#EEF2FF":"#ECFDF5"}}>
+              <span style={{fontSize:12,fontWeight:700,color:data.stage==="lead"?"#6366F1":T.grn}}>Stage 1 — Lead Capture</span>
+              <span style={{fontSize:10,fontWeight:700,color:data.stage==="lead"?"#6366F1":T.grn,background:data.stage==="lead"?"#E0E7FF":"#D1FAE5",padding:"2px 8px",borderRadius:10}}>
+                {data.stage==="lead"?"Current":"✓ Done"}
+              </span>
+            </div>
+            <div style={{padding:"10px 13px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {[["Name",data.name],["Phone",data.phone],["City",data.city],["System",`${data.requirement_kw||"?"}kW`],["Source",data.source||"—"],["Assigned",data.assignedTo||"—"]].map(([l,v])=>(
+                <div key={l}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{l}</div><div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{v}</div></div>
+              ))}
+              {data.location&&<div style={{gridColumn:"1/3"}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>Location</div><div style={{fontSize:12.5,color:T.t1}}>{data.location}</div></div>}
+            </div>
+            {data.stage==="lead"&&(
+              <div style={{padding:"10px 13px",borderTop:`1px solid ${T.b1}`,background:"#F8F9FF"}}>
+                <button onClick={()=>advanceStage("followup")} disabled={saving}
+                  style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#6366F1",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                  Move to Follow-up →
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* STAGE 2 — Follow-up */}
+          {stageIdx>=1&&(
+            <div style={{background:"white",borderRadius:10,border:`1.5px solid ${data.stage==="followup"?"#0891B2":data.stage==="lead"?T.b1:T.grnM}`,marginBottom:10,overflow:"hidden",opacity:data.stage==="lead"?0.5:1}}>
+              <div style={{padding:"10px 13px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.b1}`,background:data.stage==="followup"?"#E0F2FE":data.stage==="lead"?"#F8FAFC":"#ECFDF5"}}>
+                <span style={{fontSize:12,fontWeight:700,color:data.stage==="followup"?"#0891B2":data.stage==="lead"?T.t3:T.grn}}>Stage 2 — Follow Up Details</span>
+                <span style={{fontSize:10,fontWeight:700,color:data.stage==="followup"?"#0891B2":data.stage==="lead"?T.t4:T.grn,background:data.stage==="followup"?"#BAE6FD":data.stage==="lead"?T.b1:"#D1FAE5",padding:"2px 8px",borderRadius:10}}>
+                  {data.stage==="followup"?"Current":data.stage==="lead"?"Pending":"✓ Done"}
+                </span>
+              </div>
+              {data.stage==="followup"&&(
+                <div style={{padding:"12px 13px"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                    <div style={{gridColumn:"1/3"}}>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Exact Site Address *</label>
+                      <textarea value={followupForm.exact_address} onChange={e=>setFollowupForm(p=>({...p,exact_address:e.target.value}))} placeholder="House no., Street, Area, District, Pin code" rows={2}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+                    </div>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Confirmed kW *</label>
+                      <select value={followupForm.requirement_kw} onChange={e=>setFollowupForm(p=>({...p,requirement_kw:e.target.value}))}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+                        {KW_OPTIONS.map(k=><option key={k} value={k}>{k} kW</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Type *</label>
+                      <select value={followupForm.requirement_type} onChange={e=>setFollowupForm(p=>({...p,requirement_type:e.target.value}))}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+                        <option value="residential">Residential</option>
+                        <option value="commercial">Commercial</option>
+                      </select>
+                    </div>
+                    <div style={{gridColumn:"1/3"}}>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Follow-up Notes</label>
+                      <textarea value={followupForm.followup_notes} onChange={e=>setFollowupForm(p=>({...p,followup_notes:e.target.value}))} placeholder="Customer requirements, site notes..." rows={2}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+                    </div>
+                  </div>
+                  <button onClick={()=>{ if(!followupForm.exact_address.trim()) return setErr("Exact address required"); advanceStage("proposal",{...followupForm}); }} disabled={saving}
+                    style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#0891B2",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                    Save & Move to Proposal →
+                  </button>
+                </div>
+              )}
+              {stageIdx>1&&data.exact_address&&(
+                <div style={{padding:"10px 13px"}}>
+                  <div style={{fontSize:12,color:T.t2}}><b>Address:</b> {data.exact_address}</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:3}}>{data.requirement_kw}kW · {data.requirement_type}</div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STAGE 3 — Proposal */}
+          {stageIdx>=2&&(
+            <div style={{background:"white",borderRadius:10,border:`1.5px solid ${data.stage==="proposal"?"#D97706":data.stage==="lead"||data.stage==="followup"?T.b1:T.grnM}`,marginBottom:10,overflow:"hidden",opacity:stageIdx<2?0.5:1}}>
+              <div style={{padding:"10px 13px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.b1}`,background:data.stage==="proposal"?"#FFFBEB":stageIdx<2?"#F8FAFC":"#ECFDF5"}}>
+                <span style={{fontSize:12,fontWeight:700,color:data.stage==="proposal"?"#D97706":stageIdx<2?T.t3:T.grn}}>Stage 3 — Site Visit & Quotation</span>
+                <span style={{fontSize:10,fontWeight:700,color:data.stage==="proposal"?"#D97706":stageIdx<2?T.t4:T.grn,background:data.stage==="proposal"?"#FDE68A":stageIdx<2?T.b1:"#D1FAE5",padding:"2px 8px",borderRadius:10}}>
+                  {data.stage==="proposal"?"Current":stageIdx<2?"Pending":"✓ Done"}
+                </span>
+              </div>
+              {data.stage==="proposal"&&(
+                <div style={{padding:"12px 13px"}}>
+                  {/* Geo-tagged roof photo */}
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:6}}>📍 Geo-tagged Roof Photo *</div>
+                    {proposalForm.geo_photo_url
+                      ? <div style={{position:"relative"}}>
+                          <img src={proposalForm.geo_photo_url} alt="roof" style={{width:"100%",maxHeight:160,objectFit:"cover",borderRadius:8,border:`2px solid ${T.grnM}`}}/>
+                          <span style={{position:"absolute",top:6,right:6,background:T.grn,color:"white",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>✓ Uploaded</span>
+                          <label style={{display:"block",marginTop:6,textAlign:"center",fontSize:11,color:T.blu,cursor:"pointer"}}>
+                            <input type="file" accept="image/*" capture="environment" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
+                            Replace photo
+                          </label>
+                        </div>
+                      : <div style={{display:"flex",gap:8}}>
+                          <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
+                            <input type="file" accept="image/*" capture="environment" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
+                            <div style={{fontSize:22}}>📷</div>
+                            <div style={{fontSize:11.5,fontWeight:600,color:"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"Camera"}</div>
+                          </label>
+                          <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
+                            <input type="file" accept="image/*" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
+                            <div style={{fontSize:22}}>📁</div>
+                            <div style={{fontSize:11.5,fontWeight:600,color:"#E65100",marginTop:4}}>File Upload</div>
+                          </label>
+                        </div>
+                    }
+                  </div>
+
+                  {/* 3 Brand Quotations */}
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>💰 Quotations (min 1 required)</div>
+                    {proposalForm.brands.map((b,i)=>(
+                      <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,marginBottom:8,alignItems:"center"}}>
+                        <input value={b.brand} onChange={e=>setProposalForm(p=>({...p,brands:p.brands.map((x,j)=>j===i?{...x,brand:e.target.value}:x)}))}
+                          placeholder={`Brand ${i+1} name`}
+                          style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                        <input type="number" value={b.amount} onChange={e=>setProposalForm(p=>({...p,brands:p.brands.map((x,j)=>j===i?{...x,amount:e.target.value}:x)}))}
+                          placeholder="Amount (₹)"
+                          style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                        <button onClick={async()=>{
+                            const brand=b.brand||`Brand ${i+1}`;
+                            const kw=data.requirement_kw||"3";
+                            const amt=b.amount?`₹${Number(b.amount).toLocaleString("en-IN")}`:"TBD";
+                            const text=`Dear ${data.name},\n\nThank you for your interest in PM Surya Ghar rooftop solar.\n\nQuotation Details:\nBrand: ${brand}\nSystem Size: ${kw} kW\nTotal Amount: ${amt} (incl. GST)\n\nThis includes supply, installation, commissioning, 5-year maintenance, net meter, and subsidy assistance.\n\nFor details contact: [Your Phone]\n\n*Sunshine Solaar Systems*`;
+                            const url=`https://api.whatsapp.com/send?phone=91${data.phone}&text=${encodeURIComponent(text)}`;
+                            window.open(url,"_blank");
+                          }}
+                          style={{padding:"7px 10px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                          WhatsApp
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+
+                  <button onClick={()=>{
+                    if(!proposalForm.geo_photo_url) return setErr("Geo-tagged roof photo required");
+                    const hasQuot = proposalForm.brands.some(b=>b.brand&&b.amount);
+                    if(!hasQuot) return setErr("Minimum 1 quotation with brand + amount required");
+                    setErr("");
+                    advanceStage("converted",{
+                      geo_photo_url:proposalForm.geo_photo_url,
+                      quotation_brands:proposalForm.brands,
+                    });
+                  }} disabled={saving}
+                    style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#D97706",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                    Move to Converted →
+                  </button>
+                </div>
+              )}
+              {stageIdx>2&&(
+                <div style={{padding:"10px 13px",display:"flex",gap:8,alignItems:"center"}}>
+                  {data.geo_photo_url&&<img src={data.geo_photo_url} alt="roof" style={{width:48,height:48,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,flexShrink:0}}/>}
+                  <div>
+                    <div style={{fontSize:12,color:T.t2,fontWeight:600}}>Geo photo uploaded</div>
+                    <div style={{fontSize:11,color:T.t3}}>3 brand quotations prepared</div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* STAGE 4 — Converted: Documents + Loan */}
+          {stageIdx>=3&&data.stage==="converted"&&(
+            <div style={{background:"white",borderRadius:10,border:`2px solid #059669`,marginBottom:10,overflow:"hidden"}}>
+              <div style={{padding:"10px 13px",borderBottom:`1px solid ${T.b1}`,background:"#ECFDF5",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:12,fontWeight:700,color:T.grn}}>Stage 4 — Converted: Upload Docs</span>
+                <span style={{fontSize:10,fontWeight:700,color:T.grn,background:"#D1FAE5",padding:"2px 8px",borderRadius:10}}>Current</span>
+              </div>
+              <div style={{padding:"12px 13px"}}>
+
+                {/* Final quotation selection */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:T.t1,marginBottom:7}}>✅ Select Final Quotation *</div>
+                  {(data.quotation_brands||proposalForm.brands).filter(b=>b.brand&&b.amount).map((b,i)=>(
+                    <button key={i} onClick={()=>{setConvertForm(p=>({...p,selected_brand:b.brand}));save({selected_brand:b.brand});}}
+                      style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderRadius:8,border:`2px solid ${convertForm.selected_brand===b.brand?T.grn:T.b1}`,background:convertForm.selected_brand===b.brand?T.grnL:"white",marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:convertForm.selected_brand===b.brand?T.grn:T.t1}}>{b.brand}</span>
+                      <span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
+                      {convertForm.selected_brand===b.brand&&<span style={{fontSize:18}}>✓</span>}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Loan details */}
+                <div style={{marginBottom:12,padding:"10px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #FFD54F"}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:"#E65100",marginBottom:8}}>💰 Loan Details</div>
+                  {!convertForm.loan_not_required
+                    ? <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                        <input type="number" value={convertForm.loan_amount} onChange={e=>setConvertForm(p=>({...p,loan_amount:e.target.value}))}
+                          placeholder="Loan Amount (₹)" style={{flex:1,padding:"8px 10px",borderRadius:7,border:`1.5px solid #FFD54F`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}
+                          onBlur={()=>save({loan_amount:convertForm.loan_amount})}/>
+                        <button onClick={()=>{setConvertForm(p=>({...p,loan_not_required:true,loan_amount:""}));save({loan_not_required:true,loan_amount:null});}}
+                          style={{padding:"8px 12px",borderRadius:7,border:"1px solid #FFD54F",background:"white",color:"#E65100",fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+                          No Loan
+                        </button>
+                      </div>
+                    : <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                        <span style={{fontSize:12.5,fontWeight:600,color:T.grn}}>✓ No Loan Required</span>
+                        <button onClick={()=>{setConvertForm(p=>({...p,loan_not_required:false}));save({loan_not_required:false});}}
+                          style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Undo</button>
+                      </div>
+                  }
+                  {Number(convertForm.loan_amount)>200000&&<div style={{fontSize:10.5,color:"#BF360C",marginTop:5}}>⚠ Loan &gt;₹2L — ITR / Form 16 required</div>}
+                </div>
+
+                {/* Compulsory documents */}
+                <div style={{marginBottom:12}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:T.t1,marginBottom:8}}>📄 Compulsory Documents</div>
+                  {[
+                    {key:"doc_ele_bill",label:"Electricity Bill *",req:true},
+                    {key:"doc_aadhaar", label:"Aadhaar Card *",   req:true},
+                    {key:"doc_pan",     label:"PAN Card *",        req:true},
+                    {key:"doc_bank",    label:"Bank Details *",    req:true},
+                    {key:"doc_itr",     label:`ITR / Form 16${Number(convertForm.loan_amount)>200000?" *":""}`, req:Number(convertForm.loan_amount)>200000},
+                  ].map(doc=>(
+                    <UploadBtn key={doc.key} label={doc.label} field={doc.key} value={convertForm[doc.key]} loading={uploading[doc.key]}
+                      onPick={e=>handleDocUpload(e,doc.key)}/>
+                  ))}
+                </div>
+
+                {/* Convert to project button */}
+                <button onClick={convertToProject} disabled={saving}
+                  style={{width:"100%",padding:"12px",borderRadius:8,background:saving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 12px rgba(5,150,105,0.35)"}}>
+                  {saving?"Creating Project...":"🚀 Convert to Solar Project"}
+                </button>
+                <div style={{fontSize:10.5,color:T.t4,textAlign:"center",marginTop:6}}>All compulsory docs must be uploaded before conversion</div>
+              </div>
+            </div>
+          )}
+        </>)}
+
+        {/* ── FOLLOW UPS TAB ── */}
+        {activeTab==="followup"&&(
+          <div style={{textAlign:"center",padding:"40px 20px",color:T.t4}}>
+            <div style={{fontSize:32,marginBottom:8}}>📞</div>
+            <div style={{fontSize:13,fontWeight:600,color:T.t2}}>Follow-up history</div>
+            <div style={{fontSize:12,color:T.t4,marginTop:4}}>Contact logs yahaan dikhenge</div>
+          </div>
+        )}
+
+        {/* ── DETAILS TAB ── */}
+        {activeTab==="info"&&(
+          <div style={{background:"white",borderRadius:10,border:`1px solid ${T.b1}`,padding:"14px"}}>
+            {[["Name",data.name],["Phone",data.phone],["City",data.city||"—"],["Location",data.location||"—"],["System Size",`${data.requirement_kw||"?"}kW`],["Type",data.requirement_type||"—"],["Source",data.source||"—"],["Assigned To",data.assignedTo||"—"],["Priority",data.priority||"—"]].map(([l,v])=>(
+              <div key={l} style={{display:"flex",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
+                <span style={{width:130,fontSize:11.5,color:T.t3,flexShrink:0}}>{l}</span>
+                <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{v}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  </>);
+}
+
 // ── MAIN CRM MODULE ──────────────────────────────────────────────
 function CRMModule(){
   const [leads,setLeads]=useState([]);
+  const [solarLeads,setSolarLeads]=useState([]);
   const [selLead,setSelLead]=useState(null);
+  const [selSolarLead,setSelSolarLead]=useState(null);
   const [waLead,setWaLead]=useState(null);
+  const [showTypeSelector,setShowTypeSelector]=useState(false);
   const [showAdd,setShowAdd]=useState(false);
+  const [showAddSolar,setShowAddSolar]=useState(false);
   const [addStage,setAddStage]=useState("lead");
+
+  // Company module type — controls which lead types are available
+  const companyModule = localStorage.getItem("gb_company_module") || "construction";
+  const canConstruction = companyModule === "construction" || companyModule === "both";
+  const canSolar = companyModule === "solar_epc" || companyModule === "both";
+
+  // Smart lead opener — bypasses type selector for single-module companies
+  const openNewLead = (stageId) => {
+    setAddStage(stageId || "lead");
+    if (canSolar && !canConstruction) { setShowAddSolar(true); }        // Solar only
+    else if (canConstruction && !canSolar) { setShowAdd(true); }         // Construction only
+    else { setShowTypeSelector(true); }                                   // Both → show selector
+  };
   const [reminderLead,setReminderLead]=useState(null);
   const [dismissedReminders,setDismissedReminders]=useState([]);
   const [quotPromptLead,setQuotPromptLead]=useState(null);
@@ -1130,7 +1725,13 @@ function CRMModule(){
     }catch(e){}
   },[]);
 
-  useEffect(()=>{loadLeads();loadTeam();},[loadLeads,loadTeam]);
+  useEffect(()=>{
+    loadLeads();loadTeam();
+    // Load solar leads
+    api.get("/solar/leads").then(r=>{
+      if(r.success) setSolarLeads(r.data.map(l=>({...l,_type:"solar",stage:l.stage||"lead",priority:l.priority||"Medium",source:l.source||"Direct Call",assignedTo:l.assigned_to_name||l.assignedTo||"—",budget:0,projType:`${l.requirement_kw||"?"}kW Solar`,city:l.city||"",contactDate:l.followup_date?new Date(l.followup_date).toISOString().split("T")[0]:null,tags:[],followupHistory:[]})));
+    }).catch(()=>{});
+  },[loadLeads,loadTeam]);
 
   // Auto-trigger reminder for today's contacts
   useEffect(()=>{
@@ -1183,12 +1784,29 @@ function CRMModule(){
     }catch(e){console.error("Add lead error:",e);}
   };
 
-  // KPI data
-  const allFlat=leads;
-  const todayDueCount=leads.filter(l=>l.contactDate&&daysDiff(l.contactDate)<=0&&!dismissedReminders.includes(l.id)&&l.stage!=="converted"&&l.stage!=="lost").length;
+  const addSolarLead = async (form) => {
+    try {
+      const res = await api.post("/solar/leads", {
+        name:form.name, phone:form.phone, city:form.city,
+        location:form.location, requirement_kw:form.requirement_kw,
+        source:form.source, priority:form.priority,
+        assigned_to: teamMembers.find(m=>m.name===form.assignedTo)?.id||null,
+        followup_date:form.contactDate||null, notes:form.notes||null,
+        stage:"lead",
+      });
+      if(res.success && res.data){
+        const mapped = {...res.data,_type:"solar",stage:"lead",priority:form.priority||"Medium",source:form.source,assignedTo:form.assignedTo,budget:0,projType:`${form.requirement_kw||"3"}kW Solar`,city:form.city,contactDate:form.contactDate||null,tags:[],followupHistory:[]};
+        setSolarLeads(p=>[mapped,...p]);
+      }
+    } catch(e){ console.error("Add solar lead error:",e); }
+  };
+
+  // Merge all leads for KPI counts
+  const allLeads = [...(canConstruction?leads:[]),...(canSolar?solarLeads:[])];
+  const todayDueCount=allLeads.filter(l=>l.contactDate&&daysDiff(l.contactDate)<=0&&!dismissedReminders.includes(l.id)&&l.stage!=="converted"&&l.stage!=="lost").length;
   const pipelineValue=leads.filter(l=>l.stage!=="lost").reduce((s,l)=>s+l.budget,0);
   const convertedValue=leads.filter(l=>l.stage==="converted").reduce((s,l)=>s+(l.convertedValue||l.budget),0);
-  const conversionRate=Math.round((leads.filter(l=>l.stage==="converted").length/leads.length)*100);
+  const conversionRate=allLeads.length?Math.round((allLeads.filter(l=>l.stage==="converted").length/allLeads.length)*100):0;
 
   const TILES=[
     {l:"Total Leads",v:leads.length,sub:`${leads.filter(l=>l.stage==="lead").length} new · ${leads.filter(l=>l.stage==="followup").length} followup`,c:T.blu,I:IcCRM},
@@ -1247,9 +1865,9 @@ function CRMModule(){
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             📋 Templates
           </button>
-          <button onClick={()=>{setAddStage("lead");setShowAdd(true);}}
-            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-            <IcAdd size={13} color="white"/> New Lead
+          <button onClick={()=>openNewLead("lead")}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:canSolar&&!canConstruction?"linear-gradient(135deg,#E65100,#FF8F00)":T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+            <IcAdd size={13} color="white"/> {canSolar&&!canConstruction?"☀ New Solar Lead":"New Lead"}
           </button>
         </div>
 
@@ -1280,12 +1898,12 @@ function CRMModule(){
       {/* Kanban Board */}
       <div style={{flex:1,overflowY:"auto",padding:"0 18px 16px"}}>
         <KanbanBoard
-          leads={leads}
+          leads={[...(canConstruction?leads:[]),...(canSolar?solarLeads:[])]}
           filters={filters}
-          onOpenLead={(lead)=>setSelLead(lead)}
+          onOpenLead={(lead)=>lead._type==="solar"?setSelSolarLead(lead):setSelLead(lead)}
           onMoveLead={moveLead}
           onWhatsApp={(lead)=>setWaLead(lead)}
-          onAddLead={(stageId)=>{setAddStage(stageId);setShowAdd(true);}}
+          onAddLead={(stageId)=>openNewLead(stageId)}
         />
       </div>
 
@@ -1308,8 +1926,27 @@ function CRMModule(){
           initialTab={selLead._openTab||"overview"}
         />
       )}
-      {waLead&&<WhatsAppModal lead={waLead} onClose={()=>setWaLead(null)}/>}
+      {selSolarLead&&(
+        <SolarLeadDetailDrawer
+          lead={selSolarLead}
+          onClose={()=>setSelSolarLead(null)}
+          onUpdate={(id,updates)=>setSolarLeads(p=>p.map(l=>l.id===id?{...l,...updates}:l))}
+          onConvertToProject={(project)=>{ setSolarLeads(p=>p.map(l=>l.id===selSolarLead.id?{...l,stage:"converted"}:l)); setSelSolarLead(null); }}
+        />
+      )}
+      {showTypeSelector&&(
+        <LeadTypeSelector
+          onClose={()=>setShowTypeSelector(false)}
+          onSelect={(type)=>{
+            setShowTypeSelector(false);
+            if(type==="solar"){ setShowAddSolar(true); }
+            else { setShowAdd(true); }
+          }}
+        />
+      )}
       {showAdd&&<AddLeadModal onClose={()=>setShowAdd(false)} onSave={addLead} assignedToList={ASSIGNED_TO} defaultStage={addStage}/>}
+      {showAddSolar&&<AddSolarLeadModal onClose={()=>setShowAddSolar(false)} onSave={addSolarLead} assignedToList={ASSIGNED_TO} defaultStage={addStage}/>}
+      {waLead&&<WhatsAppModal lead={waLead} onClose={()=>setWaLead(null)}/>}
 
       {/* Proposal stage prompt */}
       {quotPromptLead&&(<>
