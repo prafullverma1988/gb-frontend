@@ -7668,14 +7668,38 @@ function TabSuryaGhar({ projectId }) {
 
   const load = async () => {
     setLoading(true);
+    setErr("");
+    // Each call independent so 404 on one doesn't block others
+    let solarData = null;
+    let stageList = [];
     try {
-      const [sRes, stRes] = await Promise.all([
-        api.get("/solar/projects/" + projectId),
-        api.get("/solar/projects/" + projectId + "/stages"),
-      ]);
-      if (sRes.success)  setSolar(sRes.data);
-      if (stRes.success) setStages(stRes.data);
-    } catch(e) { setErr("Load failed"); }
+      const sRes = await api.get("/solar/projects/" + projectId);
+      if (sRes && sRes.success) solarData = sRes.data;
+    } catch(e) { /* 404 expected for un-initialized project */ }
+    try {
+      const stRes = await api.get("/solar/projects/" + projectId + "/stages");
+      if (stRes && stRes.success) stageList = stRes.data || [];
+    } catch(e) { /* ignore */ }
+
+    // Auto-init if no stages OR no solar_projects row yet
+    if (!stageList.length || !solarData) {
+      try {
+        const initRes = await api.post("/solar/projects/" + projectId + "/init", {});
+        if (initRes && initRes.success) {
+          stageList = initRes.data || stageList;
+          // Re-fetch solar summary (init creates the row if missing)
+          try {
+            const s2 = await api.get("/solar/projects/" + projectId);
+            if (s2 && s2.success) solarData = s2.data;
+          } catch(e) {}
+        }
+      } catch(e) {
+        setErr("Init failed: " + (e.message || "unknown"));
+      }
+    }
+
+    setSolar(solarData);
+    setStages(stageList);
     setLoading(false);
   };
 
