@@ -1451,9 +1451,8 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
 
   const TABS = [
     {id:"overview",  l:"Overview"},
-    {id:"followups", l:`Follow Ups`},
+    {id:"followups", l:"Follow Ups"},
     {id:"quotations",l:"Documents"},
-    {id:"contact",   l:"Contact Date"},
     {id:"move",      l:"Move Stage"},
   ];
 
@@ -1525,51 +1524,107 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
         {err&&<div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:10,border:`1px solid ${T.redM}`}}>{err}</div>}
 
         {/* ── OVERVIEW ── */}
-        {tab==="overview"&&(
-          <div>
-            {/* Stage progress */}
-            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
-              <div style={{fontSize:11,fontWeight:600,color:T.t3,marginBottom:8,textTransform:"uppercase",letterSpacing:".4px"}}>Stage Progress</div>
-              <div style={{display:"flex",gap:0}}>
-                {SOLAR_STAGES.filter(s=>s.id!=="lost").map((s,i)=>{
-                  const done = stageIdx > i;
-                  const current = stageIdx === i;
-                  return (
-                    <div key={s.id} style={{flex:1,textAlign:"center"}}>
-                      <div style={{height:4,background:done?s.color:current?s.color+"88":T.b1,borderRadius:i===0?"4px 0 0 4px":i===3?"0 4px 4px 0":"0"}}/>
-                      <div style={{fontSize:9.5,color:done||current?s.color:T.t4,fontWeight:done||current?700:400,marginTop:4}}>{s.label}</div>
+        {tab==="overview"&&(()=>{
+          const [ovForm, setOvForm] = React.useState({
+            name: data.name||"",
+            phone: data.phone||"",
+            city: data.city||"",
+            location: data.location||"",
+            requirement_kw: data.requirement_kw||"3",
+            requirement_type: data.requirement_type||"residential",
+            source: data.source||"Direct Call",
+            exact_address: data.exact_address||"",
+            followup_notes: data.followup_notes||"",
+            senior_consultant_needed: data.senior_consultant_needed||false,
+          });
+          const upd = (k,v) => setOvForm(p=>({...p,[k]:v}));
+          const inp = (label, key, ph, type="text") => (
+            <div>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>{label}</label>
+              <input type={type} value={ovForm[key]} onChange={e=>upd(key,e.target.value)} placeholder={ph}
+                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                onFocus={e=>e.target.style.borderColor=stage.color} onBlur={e=>e.target.style.borderColor=T.b1}/>
+            </div>
+          );
+          return (
+            <div>
+              {/* Stage progress */}
+              <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"10px 14px",marginBottom:10}}>
+                <div style={{display:"flex",gap:0}}>
+                  {SOLAR_STAGES.filter(s=>s.id!=="lost").map((s,i)=>{
+                    const done=stageIdx>i; const cur=stageIdx===i;
+                    return (
+                      <div key={s.id} style={{flex:1,textAlign:"center"}}>
+                        <div style={{height:4,background:done?s.color:cur?s.color+"88":T.b1,borderRadius:i===0?"4px 0 0 4px":i===3?"0 4px 4px 0":"0"}}/>
+                        <div style={{fontSize:9.5,color:done||cur?s.color:T.t4,fontWeight:done||cur?700:400,marginTop:4}}>{s.label}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+              {/* Editable details */}
+              <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px"}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>👤 Customer Details</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+                  <div style={{gridColumn:"1/3"}}>{inp("Customer Name","name","Full name")}</div>
+                  {inp("Mobile","phone","10-digit","tel")}
+                  {inp("City","city","Raipur...")}
+                  {inp("Location / Area","location","Landmark")}
+                  <div>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>System Size</label>
+                    <select value={ovForm.requirement_kw} onChange={e=>upd("requirement_kw",e.target.value)}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit"}}>
+                      {KW_OPTIONS.map(k=><option key={k} value={k}>{k} kW</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Type</label>
+                    <select value={ovForm.requirement_type} onChange={e=>upd("requirement_type",e.target.value)}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit"}}>
+                      <option value="residential">Residential</option>
+                      <option value="commercial">Commercial</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Lead Source</label>
+                    <select value={ovForm.source} onChange={e=>upd("source",e.target.value)}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit"}}>
+                      {SOURCES.map(s=><option key={s}>{s}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div style={{borderTop:`1px solid ${T.b1}`,paddingTop:10,marginBottom:10}}>
+                  <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>📍 Site Details</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Exact Site Address</label>
+                      <textarea value={ovForm.exact_address} onChange={e=>upd("exact_address",e.target.value)} placeholder="House no., Street, Area, District, Pin..." rows={2}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}
+                        onFocus={e=>e.target.style.borderColor=stage.color} onBlur={e=>e.target.style.borderColor=T.b1}/>
                     </div>
-                  );
-                })}
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Site Notes</label>
+                      <textarea value={ovForm.followup_notes} onChange={e=>upd("followup_notes",e.target.value)} placeholder="Roof type, shade, structure..." rows={2}
+                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}
+                        onFocus={e=>e.target.style.borderColor=stage.color} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",background:"#FFF8E1",borderRadius:7,border:"1px solid #FFD54F",cursor:"pointer"}}
+                      onClick={()=>upd("senior_consultant_needed",!ovForm.senior_consultant_needed)}>
+                      <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${ovForm.senior_consultant_needed?"#E65100":T.b2}`,background:ovForm.senior_consultant_needed?"#E65100":"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {ovForm.senior_consultant_needed&&<span style={{color:"white",fontSize:13,fontWeight:800}}>✓</span>}
+                      </div>
+                      <span style={{fontSize:12.5,fontWeight:600,color:"#E65100"}}>Senior Consultant Required</span>
+                    </div>
+                  </div>
+                </div>
+                <button onClick={()=>patchLead({...ovForm})} disabled={saving}
+                  style={{width:"100%",padding:"10px",borderRadius:7,background:saving?T.b1:stage.color,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+                  {saving?"Saving...":"💾 Save Details"}
+                </button>
               </div>
             </div>
-            {/* Lead details */}
-            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px"}}>
-              {[
-                ["Customer Name", data.name],
-                ["Phone", data.phone],
-                ["City", data.city],
-                ["Location", data.location||"—"],
-                ["System Size", `${data.requirement_kw||"?"}kW`],
-                ["Installation Type", data.requirement_type||"—"],
-                ["Source", data.source||"—"],
-                ["Assigned To", data.assignedTo||"—"],
-                ["Site Address", data.exact_address||"—"],
-                ["Site Notes", data.followup_notes||"—"],
-              ].map(([l,v])=>(
-                <div key={l} style={{display:"flex",padding:"6px 0",borderBottom:`1px solid ${T.b1}`}}>
-                  <span style={{width:140,fontSize:11.5,color:T.t3,flexShrink:0}}>{l}</span>
-                  <span style={{fontSize:12,fontWeight:v==="—"?400:600,color:v==="—"?T.t4:T.t1}}>{v}</span>
-                </div>
-              ))}
-              {data.senior_consultant_needed&&(
-                <div style={{marginTop:8,padding:"6px 10px",background:"#FFF3E0",borderRadius:6,border:"1px solid #FFD54F",fontSize:11.5,fontWeight:700,color:"#E65100"}}>
-                  ⚠️ Senior Consultant Required
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* ── FOLLOW UPS ── */}
         {tab==="followups"&&(
@@ -1738,38 +1793,6 @@ Total: ${amt} (incl. GST + 5yr maintenance)
                 )}
               </div>
             )}
-          </div>
-        )}
-
-        {/* ── CONTACT DATE ── */}
-        {tab==="contact"&&(
-          <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"14px"}}>
-            <div style={{background:T.bluL,borderRadius:7,padding:"10px 12px",marginBottom:14,border:`1px solid ${T.bluM}`}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.blu,marginBottom:4}}>Automated Reminder System</div>
-              <div style={{fontSize:11.5,color:T.t2,lineHeight:1.6}}>Contact date set karo → app popup aata hai on that date · WhatsApp message template ready milta hai · Phone shortcut available</div>
-            </div>
-            <div style={{marginBottom:12}}>
-              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:6}}>Next Contact Date</label>
-              <input type="date" value={contactDate} onChange={e=>setContactDate(e.target.value)}
-                style={{width:"100%",padding:"10px 12px",borderRadius:7,border:`1.5px solid ${contactDate?T.grn:T.b1}`,fontSize:13,color:T.t1,background:contactDate?T.grnL:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              {contactDate&&<div style={{fontSize:11.5,color:T.grn,marginTop:5,fontWeight:600}}>
-                {daysDiff(contactDate)===0?"Today!":daysDiff(contactDate)===1?"Tomorrow":`In ${daysDiff(contactDate)} days`}
-              </div>}
-            </div>
-            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-              {[["Today",0],["Tomorrow",1],["In 3 days",3],["In 1 week",7],["In 2 weeks",14]].map(([l,d])=>{
-                const dt = new Date(); dt.setDate(dt.getDate()+d);
-                const val = dt.toISOString().split("T")[0];
-                return <button key={l} onClick={()=>setContactDate(val)}
-                  style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${contactDate===val?T.grn:T.b1}`,background:contactDate===val?T.grnL:"white",fontSize:11.5,fontWeight:600,color:contactDate===val?T.grn:T.t2,cursor:"pointer"}}>{l}</button>;
-              })}
-            </div>
-            <button onClick={()=>{
-              patchLead({followup_date:contactDate||null});
-            }} disabled={saving}
-              style={{width:"100%",padding:"10px",borderRadius:7,background:saving?T.b1:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-              💾 Save Contact Date & Enable Reminder
-            </button>
           </div>
         )}
 
