@@ -1356,153 +1356,156 @@ function FollowupLogSection({leadId, isActive}) {
   );
 }
 
-// ── Solar Lead Detail Drawer ──────────────────────────────────────
+// ── Solar Lead Detail Drawer — Construction CRM style ─────────────
 function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
   const [data, setData] = useState(lead);
-  const [activeTab, setActiveTab] = useState("stage");
+  const [tab, setTab] = useState(lead._openTab||"overview");
   const [saving, setSaving] = useState(false);
-  const [uploading, setUploading] = useState({});
   const [err, setErr] = useState("");
+  const [uploading, setUploading] = useState({});
 
-  // Stage-specific form states
-  const [followupForm, setFollowupForm] = useState({
-    exact_address: lead.exact_address||"",
-    requirement_kw: lead.requirement_kw||"3",
-    requirement_type: lead.requirement_type||"residential",
-    followup_notes: lead.followup_notes||"",
-    last_call_date: lead.last_call_date?lead.last_call_date.split("T")[0]:"",
-    call_summary: lead.call_summary||"",
-    next_followup_date: lead.next_followup_date?lead.next_followup_date.split("T")[0]:"",
-    additional_requirements: lead.additional_requirements||"",
-    senior_consultant_needed: lead.senior_consultant_needed||false,
-  });
-  const [proposalForm, setProposalForm] = useState({
-    geo_photo_url: lead.geo_photo_url||"",
-    brands: lead.quotation_brands || [{brand:"Brand 1",amount:""},{brand:"Brand 2",amount:""},{brand:"Brand 3",amount:""}],
-  });
-  const [convertForm, setConvertForm] = useState({
-    selected_brand: lead.selected_brand||"",
-    loan_amount: lead.loan_amount||"",
-    loan_not_required: lead.loan_not_required||false,
+  // Quotations state
+  const [brands, setBrands] = useState(
+    lead.quotation_brands && lead.quotation_brands.length
+      ? lead.quotation_brands
+      : [{brand:"Brand 1",amount:""},{brand:"Brand 2",amount:""},{brand:"Brand 3",amount:""}]
+  );
+  const [geoPhoto, setGeoPhoto] = useState(lead.geo_photo_url||"");
+  const [selectedBrand, setSelectedBrand] = useState(lead.selected_brand||"");
+
+  // Converted docs state
+  const [docs, setDocs] = useState({
     doc_ele_bill: lead.doc_ele_bill||"",
-    doc_aadhaar: lead.doc_aadhaar||"",
-    doc_pan: lead.doc_pan||"",
-    doc_bank: lead.doc_bank||"",
-    doc_itr: lead.doc_itr||"",
+    doc_aadhaar:  lead.doc_aadhaar||"",
+    doc_pan:      lead.doc_pan||"",
+    doc_bank:     lead.doc_bank||"",
+    doc_itr:      lead.doc_itr||"",
+    loan_amount:  lead.loan_amount||"",
+    loan_not_required: lead.loan_not_required||false,
   });
+
+  // Contact date state
+  const [contactDate, setContactDate] = useState(
+    lead.contactDate || (lead.followup_date ? lead.followup_date.split("T")[0] : "")
+  );
 
   const stage = SOLAR_STAGES.find(s=>s.id===data.stage)||SOLAR_STAGES[0];
   const stageIdx = SOLAR_STAGES.findIndex(s=>s.id===data.stage);
 
-  const save = async (updates) => {
+  const patchLead = async (updates) => {
     setSaving(true); setErr("");
     try {
       const res = await api.patch("/solar/leads/"+data.id, updates);
-      if (res.success) { setData(p=>({...p,...updates,...res.data})); onUpdate(data.id,{...updates,...res.data}); }
-      else setErr(res.message||"Save failed");
+      if (res.success) {
+        setData(p=>({...p,...updates,...(res.data||{})}));
+        onUpdate(data.id, {...updates,...(res.data||{})});
+      } else setErr(res.message||"Save failed");
     } catch(e) { setErr(e.message); }
     setSaving(false);
   };
 
-  const advanceStage = async (nextStage, extraData={}) => {
-    await save({stage:nextStage,...extraData});
+  const moveStage = async (newStage) => {
+    await patchLead({stage: newStage});
   };
 
-  // Upload photo — camera or file
-  const handlePhotoUpload = async (e, field, setFn) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(p=>({...p,[field]:true}));
-    setErr("");
+  // Photo upload
+  const uploadPhoto = async (e, field, setFn) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setUploading(p=>({...p,[field]:true})); setErr("");
     try {
       const url = await uploadToCloudinary(file, "image");
-      setFn(p=>({...p,[field]:url}));
-      // Save to backend silently — don't block on failure
+      setFn(url);
       api.patch("/solar/leads/"+data.id, {[field]:url}).catch(()=>{});
-    } catch(ex) { setErr("Photo upload failed: "+ex.message); }
+    } catch(ex) { setErr("Upload failed: "+ex.message); }
     setUploading(p=>({...p,[field]:false}));
   };
 
-  const handleDocUpload = async (e, docKey) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setUploading(p=>({...p,[docKey]:true}));
+  // Doc upload
+  const uploadDoc = async (e, docKey) => {
+    const file = e.target.files?.[0]; if (!file) return;
+    setUploading(p=>({...p,[docKey]:true})); setErr("");
     try {
       const url = await uploadToCloudinary(file, "doc");
-      setConvertForm(p=>({...p,[docKey]:url}));
-      await save({[docKey]:url});
-    } catch(ex) { setErr("Upload failed: "+ex.message); }
+      setDocs(p=>({...p,[docKey]:url}));
+      api.patch("/solar/leads/"+data.id, {[docKey]:url}).catch(()=>{});
+    } catch(ex) { setErr("Upload failed"); }
     setUploading(p=>({...p,[docKey]:false}));
   };
 
-  // Convert to project — validate docs first
-  const convertToProject = async () => {
-    const missing = [];
-    if (!convertForm.doc_ele_bill) missing.push("Electricity Bill");
-    if (!convertForm.doc_aadhaar)  missing.push("Aadhaar");
-    if (!convertForm.doc_pan)      missing.push("PAN");
-    if (!convertForm.doc_bank)     missing.push("Bank Details");
-    if (!convertForm.selected_brand) missing.push("Final Quotation (select one brand)");
-    if (missing.length > 0) return setErr("Required: "+missing.join(", "));
-    setSaving(true); setErr("");
-    try {
-      const res = await api.post("/solar/leads/"+data.id+"/convert", {});
-      if (res.success) { onConvertToProject(res.data); onClose(); }
-      else setErr(res.message||"Conversion failed");
-    } catch(e) { setErr(e.message||"Server error"); }
-    setSaving(false);
+  const saveQuotations = () => {
+    api.patch("/solar/leads/"+data.id, {
+      geo_photo_url: geoPhoto,
+      quotation_brands: brands,
+    }).catch(()=>{});
   };
 
-  const UploadBtn = ({label, field, value, loading:l, onPick}) => (
+  const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "";
+
+  const TABS = [
+    {id:"overview",  l:"Overview"},
+    {id:"followups", l:`Follow Ups`},
+    {id:"quotations",l:"Quotations"},
+    {id:"contact",   l:"Contact Date"},
+    {id:"move",      l:"Move Stage"},
+  ];
+
+  // Doc upload button
+  const DocUploadBtn = ({label, key, value}) => (
     <div style={{marginBottom:8}}>
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-        <span style={{fontSize:11,fontWeight:600,color:T.t3}}>{label}</span>
-        {value && <a href={value} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu}}>View ↗</a>}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
+        <span style={{fontSize:11.5,fontWeight:600,color:value?T.grn:T.t2}}>{value?"✓ ":""}{label}</span>
+        {value&&<a href={value} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu}}>View ↗</a>}
       </div>
       <div style={{display:"flex",gap:6}}>
-        <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:7,border:`1.5px dashed ${value?T.grn:T.b1}`,background:value?T.grnL:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:value?T.grn:T.t3}}>
-          <input type="file" accept="image/*,application/pdf" capture="environment" onChange={onPick} style={{display:"none"}} disabled={l}/>
-          {l?"Uploading...":value?"✓ "+label:"📷 Camera"}
+        <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:7,border:`1.5px dashed ${value?T.grnM:T.b1}`,background:value?T.grnL:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:value?T.grn:T.t3}}>
+          <input type="file" accept="image/*,application/pdf" capture="environment" onChange={e=>uploadDoc(e,key)} style={{display:"none"}} disabled={uploading[key]}/>
+          {uploading[key]?"Uploading...":"📷 Camera"}
         </label>
-        <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:7,border:`1.5px dashed ${value?T.grn:T.b1}`,background:value?T.grnL:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:value?T.grn:T.t3}}>
-          <input type="file" accept="image/*,application/pdf" onChange={onPick} style={{display:"none"}} disabled={l}/>
-          {l?"...":"📁 File"}
+        <label style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:7,border:`1.5px dashed ${value?T.grnM:T.b1}`,background:value?T.grnL:"white",cursor:"pointer",fontSize:11.5,fontWeight:600,color:value?T.grn:T.t3}}>
+          <input type="file" accept="image/*,application/pdf" onChange={e=>uploadDoc(e,key)} style={{display:"none"}} disabled={uploading[key]}/>
+          {uploading[key]?"...":"📁 File"}
         </label>
       </div>
     </div>
   );
 
-  const TABS = [{id:"stage",l:"Stage Flow"},{id:"followup",l:"Follow Ups"},{id:"info",l:"Details"}];
-
   return (<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300}}/>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-4px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
 
       {/* Header */}
       <div style={{background:stage.color,padding:"14px 18px",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:11,fontWeight:800,color:"white",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>☀ Solar EPC</span>
-            <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.9)",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>{stage.label}</span>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <span style={{fontSize:10.5,fontWeight:800,color:"white",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>☀ Solar EPC</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.9)",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>{stage.label}</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.9)",background:"rgba(255,255,255,0.2)",padding:"2px 8px",borderRadius:20}}>{data.priority||"Medium"}</span>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"white",opacity:0.7}}><IcX size={15}/></button>
         </div>
-        <div style={{fontSize:16,fontWeight:700,color:"white"}}>{data.name}</div>
-        <div style={{fontSize:12,color:"rgba(255,255,255,0.8)",marginTop:2}}>{data.phone} · {data.city} · {data.requirement_kw||"?"}kW</div>
-
-        {/* Stage progress bar */}
-        <div style={{display:"flex",gap:4,marginTop:10}}>
-          {SOLAR_STAGES.filter(s=>s.id!=="lost").map((s,i)=>(
-            <div key={s.id} style={{flex:1,height:3,borderRadius:3,background:stageIdx>=i?"rgba(255,255,255,0.9)":"rgba(255,255,255,0.3)"}}/>
+        <div style={{fontSize:18,fontWeight:700,color:"white",marginBottom:4}}>{data.name}</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:8}}>
+          {[data.city, data.requirement_type, `${data.requirement_kw||"?"}kW`, data.assignedTo].filter(Boolean).map((v,i)=>(
+            <span key={i} style={{fontSize:11,color:"rgba(255,255,255,0.85)"}}>{i>0?"· ":""}{v}</span>
           ))}
+        </div>
+        {/* Action buttons */}
+        <div style={{display:"flex",gap:8}}>
+          <a href={"tel:+91"+data.phone} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:"rgba(255,255,255,0.15)",color:"white",fontSize:12,fontWeight:600,textDecoration:"none",border:"1px solid rgba(255,255,255,0.2)"}}>
+            📞 {data.phone}
+          </a>
+          <a href={"https://api.whatsapp.com/send?phone=91"+data.phone} target="_blank" rel="noreferrer"
+            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:"#25D366",color:"white",fontSize:12,fontWeight:600,textDecoration:"none"}}>
+            WhatsApp
+          </a>
         </div>
       </div>
 
-      {/* Tab bar */}
-      <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:"white",flexShrink:0}}>
+      {/* Tabs */}
+      <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:"white",flexShrink:0,overflowX:"auto"}}>
         {TABS.map(t=>(
-          <button key={t.id} onClick={()=>setActiveTab(t.id)}
-            style={{flex:1,padding:"10px 6px",border:"none",background:"none",fontSize:12,fontWeight:activeTab===t.id?700:400,color:activeTab===t.id?stage.color:T.t3,borderBottom:activeTab===t.id?`2.5px solid ${stage.color}`:"2.5px solid transparent",cursor:"pointer"}}>
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{flex:1,padding:"10px 8px",border:"none",background:"none",fontSize:12,fontWeight:tab===t.id?700:400,color:tab===t.id?stage.color:T.t3,borderBottom:tab===t.id?`2.5px solid ${stage.color}`:"2.5px solid transparent",cursor:"pointer",whiteSpace:"nowrap"}}>
             {t.l}
           </button>
         ))}
@@ -1511,299 +1514,287 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
       <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
         {err&&<div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:10,border:`1px solid ${T.redM}`}}>{err}</div>}
 
-        {/* ── STAGE FLOW TAB ── */}
-        {activeTab==="stage"&&(<>
-
-          {/* STAGE 1 — Lead Info */}
-          <div style={{background:"white",borderRadius:10,border:`1.5px solid ${data.stage==="lead"?stage.color:T.grnM}`,marginBottom:10,overflow:"hidden"}}>
-            <div style={{padding:"10px 13px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.b1}`,background:data.stage==="lead"?"#EEF2FF":"#ECFDF5"}}>
-              <span style={{fontSize:12,fontWeight:700,color:data.stage==="lead"?"#6366F1":T.grn}}>Stage 1 — Lead Capture</span>
-              <span style={{fontSize:10,fontWeight:700,color:data.stage==="lead"?"#6366F1":T.grn,background:data.stage==="lead"?"#E0E7FF":"#D1FAE5",padding:"2px 8px",borderRadius:10}}>
-                {data.stage==="lead"?"Current":"✓ Done"}
-              </span>
+        {/* ── OVERVIEW ── */}
+        {tab==="overview"&&(
+          <div>
+            {/* Stage progress */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
+              <div style={{fontSize:11,fontWeight:600,color:T.t3,marginBottom:8,textTransform:"uppercase",letterSpacing:".4px"}}>Stage Progress</div>
+              <div style={{display:"flex",gap:0}}>
+                {SOLAR_STAGES.filter(s=>s.id!=="lost").map((s,i)=>{
+                  const done = stageIdx > i;
+                  const current = stageIdx === i;
+                  return (
+                    <div key={s.id} style={{flex:1,textAlign:"center"}}>
+                      <div style={{height:4,background:done?s.color:current?s.color+"88":T.b1,borderRadius:i===0?"4px 0 0 4px":i===3?"0 4px 4px 0":"0"}}/>
+                      <div style={{fontSize:9.5,color:done||current?s.color:T.t4,fontWeight:done||current?700:400,marginTop:4}}>{s.label}</div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <div style={{padding:"10px 13px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {[["Name",data.name],["Phone",data.phone],["City",data.city],["System",`${data.requirement_kw||"?"}kW`],["Source",data.source||"—"],["Assigned",data.assignedTo||"—"]].map(([l,v])=>(
-                <div key={l}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{l}</div><div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{v}</div></div>
+            {/* Lead details */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px"}}>
+              {[
+                ["Customer Name", data.name],
+                ["Phone", data.phone],
+                ["City", data.city],
+                ["Location", data.location||"—"],
+                ["System Size", `${data.requirement_kw||"?"}kW`],
+                ["Installation Type", data.requirement_type||"—"],
+                ["Source", data.source||"—"],
+                ["Assigned To", data.assignedTo||"—"],
+                ["Site Address", data.exact_address||"—"],
+                ["Site Notes", data.followup_notes||"—"],
+              ].map(([l,v])=>(
+                <div key={l} style={{display:"flex",padding:"6px 0",borderBottom:`1px solid ${T.b1}`}}>
+                  <span style={{width:140,fontSize:11.5,color:T.t3,flexShrink:0}}>{l}</span>
+                  <span style={{fontSize:12,fontWeight:v==="—"?400:600,color:v==="—"?T.t4:T.t1}}>{v}</span>
+                </div>
               ))}
-              {data.location&&<div style={{gridColumn:"1/3"}}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>Location</div><div style={{fontSize:12.5,color:T.t1}}>{data.location}</div></div>}
+              {data.senior_consultant_needed&&(
+                <div style={{marginTop:8,padding:"6px 10px",background:"#FFF3E0",borderRadius:6,border:"1px solid #FFD54F",fontSize:11.5,fontWeight:700,color:"#E65100"}}>
+                  ⚠️ Senior Consultant Required
+                </div>
+              )}
             </div>
-            {data.stage==="lead"&&(
-              <div style={{padding:"10px 13px",borderTop:`1px solid ${T.b1}`,background:"#F8F9FF"}}>
-                <button onClick={()=>advanceStage("followup")} disabled={saving}
-                  style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#6366F1",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                  Move to Follow-up →
-                </button>
-              </div>
-            )}
           </div>
+        )}
 
-          {/* STAGE 2 — Follow-up */}
-          {stageIdx>=1&&(
-            <div style={{background:"white",borderRadius:10,border:`1.5px solid ${data.stage==="followup"?"#0891B2":data.stage==="lead"?T.b1:T.grnM}`,marginBottom:10,overflow:"hidden",opacity:data.stage==="lead"?0.5:1}}>
-              <div style={{padding:"10px 13px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.b1}`,background:data.stage==="followup"?"#E0F2FE":data.stage==="lead"?"#F8FAFC":"#ECFDF5"}}>
-                <span style={{fontSize:12,fontWeight:700,color:data.stage==="followup"?"#0891B2":data.stage==="lead"?T.t3:T.grn}}>Stage 2 — Follow Up</span>
-                <span style={{fontSize:10,fontWeight:700,color:data.stage==="followup"?"#0891B2":data.stage==="lead"?T.t4:T.grn,background:data.stage==="followup"?"#BAE6FD":data.stage==="lead"?T.b1:"#D1FAE5",padding:"2px 8px",borderRadius:10}}>
-                  {data.stage==="followup"?"Current":data.stage==="lead"?"Pending":"✓ Done"}
-                </span>
-              </div>
+        {/* ── FOLLOW UPS ── */}
+        {tab==="followups"&&(
+          <FollowupLogSection leadId={data.id} isActive={true}/>
+        )}
 
-              {/* ── CUSTOMER DETAILS — editable anytime in followup ── */}
-              {(data.stage==="followup"||stageIdx>1)&&(
-                <div style={{padding:"12px 13px",borderBottom:`1px solid ${T.b1}`}}>
-                  <div style={{fontSize:11,fontWeight:700,color:"#0891B2",marginBottom:8}}>📋 Customer & Site Details</div>
-                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                    <div style={{gridColumn:"1/3"}}>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Exact Site Address</label>
-                      <textarea value={followupForm.exact_address} onChange={e=>setFollowupForm(p=>({...p,exact_address:e.target.value}))} placeholder="House no., Street, Area, District, Pin code" rows={2}
-                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+        {/* ── QUOTATIONS ── */}
+        {tab==="quotations"&&(
+          <div>
+            {/* Geo-tagged roof photo */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>📍 Geo-tagged Roof Photo</div>
+              {geoPhoto
+                ? <div style={{position:"relative"}}>
+                    <img src={geoPhoto} alt="roof" style={{width:"100%",maxHeight:180,objectFit:"cover",borderRadius:8,border:`2px solid ${T.grnM}`}}/>
+                    <div style={{position:"absolute",top:6,right:6,display:"flex",gap:5}}>
+                      <a href={geoPhoto} target="_blank" rel="noreferrer" style={{background:"white",color:T.blu,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,textDecoration:"none",border:`1px solid ${T.bluM}`}}>View ↗</a>
+                      <span style={{background:T.grn,color:"white",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>✓ Uploaded</span>
+                    </div>
+                    <label style={{display:"block",marginTop:6,textAlign:"center",fontSize:11,color:T.blu,cursor:"pointer"}}>
+                      <input type="file" accept="image/*" capture="environment" onChange={e=>uploadPhoto(e,"geo_photo_url",setGeoPhoto)} style={{display:"none"}}/>
+                      Replace photo
+                    </label>
+                  </div>
+                : <div style={{display:"flex",gap:8}}>
+                    <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
+                      <input type="file" accept="image/*" capture="environment" onChange={e=>uploadPhoto(e,"geo_photo_url",setGeoPhoto)} style={{display:"none"}}/>
+                      <div style={{fontSize:22}}>📷</div>
+                      <div style={{fontSize:12,fontWeight:600,color:uploading.geo_photo_url?"#999":"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"Camera"}</div>
+                    </label>
+                    <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
+                      <input type="file" accept="image/*" onChange={e=>uploadPhoto(e,"geo_photo_url",setGeoPhoto)} style={{display:"none"}}/>
+                      <div style={{fontSize:22}}>📁</div>
+                      <div style={{fontSize:12,fontWeight:600,color:uploading.geo_photo_url?"#999":"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"File Upload"}</div>
+                    </label>
+                  </div>
+              }
+            </div>
+
+            {/* 3 Brand Quotations */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px"}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>💰 Brand Quotations</div>
+              {brands.map((b,i)=>(
+                <div key={i} style={{marginBottom:10,padding:"10px 12px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                    <div>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Brand Name</label>
+                      <input value={b.brand} onChange={e=>setBrands(p=>p.map((x,j)=>j===i?{...x,brand:e.target.value}:x))}
+                        placeholder={`Brand ${i+1}`}
+                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     </div>
                     <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Confirmed kW</label>
-                      <select value={followupForm.requirement_kw} onChange={e=>setFollowupForm(p=>({...p,requirement_kw:e.target.value}))}
-                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                        {KW_OPTIONS.map(k=><option key={k} value={k}>{k} kW</option>)}
-                      </select>
-                    </div>
-                    <div>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Type</label>
-                      <select value={followupForm.requirement_type} onChange={e=>setFollowupForm(p=>({...p,requirement_type:e.target.value}))}
-                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                        <option value="residential">Residential</option>
-                        <option value="commercial">Commercial</option>
-                      </select>
-                    </div>
-                    <div style={{gridColumn:"1/3"}}>
-                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Site Notes</label>
-                      <textarea value={followupForm.followup_notes} onChange={e=>setFollowupForm(p=>({...p,followup_notes:e.target.value}))} placeholder="Roof type, shadow area, special requirements..." rows={2}
-                        style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+                      <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Amount (₹)</label>
+                      <input type="number" value={b.amount} onChange={e=>setBrands(p=>p.map((x,j)=>j===i?{...x,amount:e.target.value}:x))}
+                        placeholder="e.g. 250000"
+                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     </div>
                   </div>
-                  <button onClick={()=>save({...followupForm})} disabled={saving}
-                    style={{width:"100%",padding:"8px",borderRadius:7,background:saving?T.b1:T.blu,color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",marginTop:8}}>
-                    {saving?"Saving...":"💾 Save Details"}
-                  </button>
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    {b.amount&&b.brand&&(
+                      <button onClick={async()=>{
+                        const amt = `₹${Number(b.amount).toLocaleString("en-IN")}`;
+                        const kw = data.requirement_kw||"3";
+                        const text = `Dear ${data.name},\n\nSolar Quotation — PM Surya Ghar\n\nBrand: ${b.brand}\nSystem: ${kw}kW (${data.requirement_type||"Residential"})\nTotal Amount: ${amt} (incl. GST + 5yr maintenance)\n\nCall/WhatsApp for details.\n\n— ${data.assignedTo||"Team"}`;
+                        window.open("https://api.whatsapp.com/send?phone=91"+data.phone+"&text="+encodeURIComponent(text),"_blank");
+                      }}
+                        style={{flex:1,padding:"6px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                        WhatsApp ↗
+                      </button>
+                    )}
+                    {b.amount&&b.brand&&(
+                      <span style={{fontSize:12,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
+                    )}
+                  </div>
                 </div>
-              )}
-
-              {/* ── FOLLOW-UP LOG — multiple entries ── */}
-              {(data.stage==="followup"||stageIdx>1)&&(
-                <FollowupLogSection leadId={data.id} isActive={data.stage==="followup"}/>
-              )}
-
-              {/* ── MOVE TO PROPOSAL ── */}
-              {data.stage==="followup"&&(
-                <div style={{padding:"10px 13px",background:"#F0F9FF",borderTop:`1px solid ${T.b1}`}}>
-                  <button onClick={()=>{
-                    if(!followupForm.exact_address.trim()) return setErr("Address required before moving to Proposal");
-                    advanceStage("proposal",{...followupForm,followup_date:followupForm.next_followup_date||null});
-                  }} disabled={saving}
-                    style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#0891B2",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                    Move to Proposal → (Site Visit Ready)
-                  </button>
-                  <div style={{fontSize:10.5,color:T.t4,textAlign:"center",marginTop:5}}>Address + site details bharne ke baad move karo</div>
-                </div>
-              )}
-
-              {/* Done summary */}
-              {stageIdx>1&&data.exact_address&&(
-                <div style={{padding:"8px 13px"}}>
-                  <div style={{fontSize:12,color:T.t2}}><b>Address:</b> {data.exact_address}</div>
-                  <div style={{fontSize:11,color:T.t3,marginTop:2}}>{data.requirement_kw}kW · {data.requirement_type}</div>
-                </div>
-              )}
+              ))}
+              <button onClick={saveQuotations}
+                style={{width:"100%",padding:"8px",borderRadius:7,background:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                💾 Save Quotations
+              </button>
             </div>
-          )}
 
-          {/* STAGE 3 — Proposal */}
-          {stageIdx>=2&&(
-            <div style={{background:"white",borderRadius:10,border:`1.5px solid ${data.stage==="proposal"?"#D97706":data.stage==="lead"||data.stage==="followup"?T.b1:T.grnM}`,marginBottom:10,overflow:"hidden",opacity:stageIdx<2?0.5:1}}>
-              <div style={{padding:"10px 13px",display:"flex",justifyContent:"space-between",alignItems:"center",borderBottom:`1px solid ${T.b1}`,background:data.stage==="proposal"?"#FFFBEB":stageIdx<2?"#F8FAFC":"#ECFDF5"}}>
-                <span style={{fontSize:12,fontWeight:700,color:data.stage==="proposal"?"#D97706":stageIdx<2?T.t3:T.grn}}>Stage 3 — Site Visit & Quotation</span>
-                <span style={{fontSize:10,fontWeight:700,color:data.stage==="proposal"?"#D97706":stageIdx<2?T.t4:T.grn,background:data.stage==="proposal"?"#FDE68A":stageIdx<2?T.b1:"#D1FAE5",padding:"2px 8px",borderRadius:10}}>
-                  {data.stage==="proposal"?"Current":stageIdx<2?"Pending":"✓ Done"}
-                </span>
-              </div>
-              {data.stage==="proposal"&&(
-                <div style={{padding:"12px 13px"}}>
-                  {/* Geo-tagged roof photo */}
-                  <div style={{marginBottom:14}}>
-                    <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:6}}>📍 Geo-tagged Roof Photo *</div>
-                    {proposalForm.geo_photo_url
-                      ? <div style={{position:"relative"}}>
-                          <img src={proposalForm.geo_photo_url} alt="roof" style={{width:"100%",maxHeight:180,objectFit:"cover",borderRadius:8,border:`2px solid ${T.grnM}`}}/>
-                          <div style={{position:"absolute",top:6,right:6,display:"flex",gap:5}}>
-                            <a href={proposalForm.geo_photo_url} target="_blank" rel="noreferrer"
-                              style={{background:"white",color:T.blu,fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10,textDecoration:"none",border:`1px solid ${T.bluM}`}}>View ↗</a>
-                            <span style={{background:T.grn,color:"white",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:10}}>✓ Uploaded</span>
-                          </div>
-                          <label style={{display:"block",marginTop:6,textAlign:"center",fontSize:11,color:T.blu,cursor:"pointer"}}>
-                            <input type="file" accept="image/*" capture="environment" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
-                            Replace photo
-                          </label>
-                        </div>
-                      : <div style={{display:"flex",gap:8}}>
-                          <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
-                            <input type="file" accept="image/*" capture="environment" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
-                            <div style={{fontSize:22}}>📷</div>
-                            <div style={{fontSize:11.5,fontWeight:600,color:uploading.geo_photo_url?"#999":"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"Camera"}</div>
-                          </label>
-                          <label style={{flex:1,padding:"16px",border:"2px dashed #FFC107",borderRadius:8,background:"#FFFDE7",cursor:"pointer",textAlign:"center"}}>
-                            <input type="file" accept="image/*" onChange={e=>handlePhotoUpload(e,"geo_photo_url",setProposalForm)} style={{display:"none"}}/>
-                            <div style={{fontSize:22}}>📁</div>
-                            <div style={{fontSize:11.5,fontWeight:600,color:uploading.geo_photo_url?"#999":"#E65100",marginTop:4}}>{uploading.geo_photo_url?"Uploading...":"File Upload"}</div>
-                          </label>
-                        </div>
-                    }
-                  </div>
+            {/* Converted — Select final + docs */}
+            {(data.stage==="converted"||data.stage==="proposal")&&(
+              <div style={{background:"white",borderRadius:9,border:`1.5px solid ${T.grnM}`,padding:"12px 14px",marginTop:12}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:10}}>✅ Final Quotation & Documents</div>
 
-                  {/* 3 Brand Quotations */}
-                  <div style={{marginBottom:14}}>
-                    <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>💰 Quotations (min 1 required)</div>
-                    {proposalForm.brands.map((b,i)=>(
-                      <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,marginBottom:8,alignItems:"center"}}>
-                        <input value={b.brand} onChange={e=>setProposalForm(p=>({...p,brands:p.brands.map((x,j)=>j===i?{...x,brand:e.target.value}:x)}))}
-                          placeholder={`Brand ${i+1} name`}
-                          style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
-                        <input type="number" value={b.amount} onChange={e=>setProposalForm(p=>({...p,brands:p.brands.map((x,j)=>j===i?{...x,amount:e.target.value}:x)}))}
-                          placeholder="Amount (₹)"
-                          style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
-                        <button onClick={async()=>{
-                            const brand=b.brand||`Brand ${i+1}`;
-                            const kw=data.requirement_kw||"3";
-                            const amt=b.amount?`₹${Number(b.amount).toLocaleString("en-IN")}`:"TBD";
-                            const text=`Dear ${data.name},\n\nThank you for your interest in PM Surya Ghar rooftop solar.\n\nQuotation Details:\nBrand: ${brand}\nSystem Size: ${kw} kW\nTotal Amount: ${amt} (incl. GST)\n\nThis includes supply, installation, commissioning, 5-year maintenance, net meter, and subsidy assistance.\n\nFor details contact: [Your Phone]\n\n*Sunshine Solaar Systems*`;
-                            const url=`https://api.whatsapp.com/send?phone=91${data.phone}&text=${encodeURIComponent(text)}`;
-                            window.open(url,"_blank");
-                          }}
-                          style={{padding:"7px 10px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-                          WhatsApp
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-
-                  <button onClick={()=>{
-                    if(!proposalForm.geo_photo_url) return setErr("Geo-tagged roof photo required");
-                    const hasQuot = proposalForm.brands.some(b=>b.brand&&b.amount);
-                    if(!hasQuot) return setErr("Minimum 1 quotation with brand + amount required");
-                    setErr("");
-                    advanceStage("converted",{
-                      geo_photo_url:proposalForm.geo_photo_url,
-                      quotation_brands:proposalForm.brands,
-                    });
-                  }} disabled={saving}
-                    style={{width:"100%",padding:"9px",borderRadius:7,background:saving?T.b1:"#D97706",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                    Move to Converted →
-                  </button>
-                </div>
-              )}
-              {stageIdx>2&&(
-                <div style={{padding:"10px 13px",display:"flex",gap:8,alignItems:"center"}}>
-                  {data.geo_photo_url&&<img src={data.geo_photo_url} alt="roof" style={{width:48,height:48,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`,flexShrink:0}}/>}
-                  <div>
-                    <div style={{fontSize:12,color:T.t2,fontWeight:600}}>Geo photo uploaded</div>
-                    <div style={{fontSize:11,color:T.t3}}>3 brand quotations prepared</div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* STAGE 4 — Converted: Documents + Loan */}
-          {stageIdx>=3&&data.stage==="converted"&&(
-            <div style={{background:"white",borderRadius:10,border:`2px solid #059669`,marginBottom:10,overflow:"hidden"}}>
-              <div style={{padding:"10px 13px",borderBottom:`1px solid ${T.b1}`,background:"#ECFDF5",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:12,fontWeight:700,color:T.grn}}>Stage 4 — Converted: Upload Docs</span>
-                <span style={{fontSize:10,fontWeight:700,color:T.grn,background:"#D1FAE5",padding:"2px 8px",borderRadius:10}}>Current</span>
-              </div>
-              <div style={{padding:"12px 13px"}}>
-
-                {/* Final quotation selection */}
+                {/* Select final brand */}
                 <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11.5,fontWeight:700,color:T.t1,marginBottom:7}}>✅ Select Final Quotation *</div>
-                  {(data.quotation_brands||proposalForm.brands).filter(b=>b.brand&&b.amount).map((b,i)=>(
-                    <button key={i} onClick={()=>{setConvertForm(p=>({...p,selected_brand:b.brand}));save({selected_brand:b.brand});}}
-                      style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderRadius:8,border:`2px solid ${convertForm.selected_brand===b.brand?T.grn:T.b1}`,background:convertForm.selected_brand===b.brand?T.grnL:"white",marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
-                      <span style={{fontSize:12.5,fontWeight:600,color:convertForm.selected_brand===b.brand?T.grn:T.t1}}>{b.brand}</span>
-                      <span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
-                      {convertForm.selected_brand===b.brand&&<span style={{fontSize:18}}>✓</span>}
+                  <div style={{fontSize:11.5,fontWeight:600,color:T.t2,marginBottom:7}}>Select final quotation:</div>
+                  {brands.filter(b=>b.brand&&b.amount).map((b,i)=>(
+                    <button key={i} onClick={()=>{setSelectedBrand(b.brand);api.patch("/solar/leads/"+data.id,{selected_brand:b.brand}).catch(()=>{});}}
+                      style={{width:"100%",display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 12px",borderRadius:8,border:`2px solid ${selectedBrand===b.brand?T.grn:T.b1}`,background:selectedBrand===b.brand?T.grnL:"white",marginBottom:6,cursor:"pointer",transition:"all .15s"}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:selectedBrand===b.brand?T.grn:T.t1}}>{b.brand}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
+                        {selectedBrand===b.brand&&<span style={{fontSize:16}}>✓</span>}
+                      </div>
                     </button>
                   ))}
                 </div>
 
-                {/* Loan details */}
-                <div style={{marginBottom:12,padding:"10px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #FFD54F"}}>
+                {/* Loan */}
+                <div style={{padding:"10px 12px",background:"#FFF8E1",borderRadius:8,border:"1px solid #FFD54F",marginBottom:12}}>
                   <div style={{fontSize:11.5,fontWeight:700,color:"#E65100",marginBottom:8}}>💰 Loan Details</div>
-                  {!convertForm.loan_not_required
+                  {!docs.loan_not_required
                     ? <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                        <input type="number" value={convertForm.loan_amount} onChange={e=>setConvertForm(p=>({...p,loan_amount:e.target.value}))}
+                        <input type="number" value={docs.loan_amount} onChange={e=>setDocs(p=>({...p,loan_amount:e.target.value}))}
                           placeholder="Loan Amount (₹)" style={{flex:1,padding:"8px 10px",borderRadius:7,border:`1.5px solid #FFD54F`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}
-                          onBlur={()=>save({loan_amount:convertForm.loan_amount})}/>
-                        <button onClick={()=>{setConvertForm(p=>({...p,loan_not_required:true,loan_amount:""}));save({loan_not_required:true,loan_amount:null});}}
+                          onBlur={()=>api.patch("/solar/leads/"+data.id,{loan_amount:docs.loan_amount}).catch(()=>{})}/>
+                        <button onClick={()=>{setDocs(p=>({...p,loan_not_required:true,loan_amount:""}));api.patch("/solar/leads/"+data.id,{loan_not_required:true,loan_amount:null}).catch(()=>{});}}
                           style={{padding:"8px 12px",borderRadius:7,border:"1px solid #FFD54F",background:"white",color:"#E65100",fontSize:11.5,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
                           No Loan
                         </button>
                       </div>
                     : <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                         <span style={{fontSize:12.5,fontWeight:600,color:T.grn}}>✓ No Loan Required</span>
-                        <button onClick={()=>{setConvertForm(p=>({...p,loan_not_required:false}));save({loan_not_required:false});}}
-                          style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",textDecoration:"underline"}}>Undo</button>
+                        <button onClick={()=>{setDocs(p=>({...p,loan_not_required:false}));api.patch("/solar/leads/"+data.id,{loan_not_required:false}).catch(()=>{});}}
+                          style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer"}}>Undo</button>
                       </div>
                   }
-                  {Number(convertForm.loan_amount)>200000&&<div style={{fontSize:10.5,color:"#BF360C",marginTop:5}}>⚠ Loan &gt;₹2L — ITR / Form 16 required</div>}
+                  {Number(docs.loan_amount)>200000&&<div style={{fontSize:10.5,color:"#BF360C",marginTop:5}}>⚠ Loan &gt;₹2L — ITR/Form 16 required</div>}
                 </div>
 
-                {/* Compulsory documents */}
-                <div style={{marginBottom:12}}>
-                  <div style={{fontSize:11.5,fontWeight:700,color:T.t1,marginBottom:8}}>📄 Compulsory Documents</div>
-                  {[
-                    {key:"doc_ele_bill",label:"Electricity Bill *",req:true},
-                    {key:"doc_aadhaar", label:"Aadhaar Card *",   req:true},
-                    {key:"doc_pan",     label:"PAN Card *",        req:true},
-                    {key:"doc_bank",    label:"Bank Details *",    req:true},
-                    {key:"doc_itr",     label:`ITR / Form 16${Number(convertForm.loan_amount)>200000?" *":""}`, req:Number(convertForm.loan_amount)>200000},
-                  ].map(doc=>(
-                    <UploadBtn key={doc.key} label={doc.label} field={doc.key} value={convertForm[doc.key]} loading={uploading[doc.key]}
-                      onPick={e=>handleDocUpload(e,doc.key)}/>
-                  ))}
-                </div>
+                {/* Documents */}
+                <div style={{fontSize:11.5,fontWeight:700,color:T.t1,marginBottom:8}}>📄 Documents</div>
+                {[
+                  {key:"doc_ele_bill",label:"Electricity Bill *"},
+                  {key:"doc_aadhaar", label:"Aadhaar Card *"},
+                  {key:"doc_pan",     label:"PAN Card *"},
+                  {key:"doc_bank",    label:"Bank Details *"},
+                  {key:"doc_itr",     label:"ITR / Form 16"+(Number(docs.loan_amount)>200000?" *":"")},
+                ].map(d=>(
+                  <DocUploadBtn key={d.key} label={d.label} key={d.key} value={docs[d.key]}/>
+                ))}
 
-                {/* Convert to project button */}
-                <button onClick={convertToProject} disabled={saving}
-                  style={{width:"100%",padding:"12px",borderRadius:8,background:saving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",boxShadow:"0 4px 12px rgba(5,150,105,0.35)"}}>
-                  {saving?"Creating Project...":"🚀 Convert to Solar Project"}
-                </button>
-                <div style={{fontSize:10.5,color:T.t4,textAlign:"center",marginTop:6}}>All compulsory docs must be uploaded before conversion</div>
+                {/* Convert to project */}
+                {data.stage==="converted"&&(
+                  <button onClick={async()=>{
+                    const missing=[];
+                    if(!docs.doc_ele_bill) missing.push("Electricity Bill");
+                    if(!docs.doc_aadhaar) missing.push("Aadhaar");
+                    if(!docs.doc_pan) missing.push("PAN");
+                    if(!docs.doc_bank) missing.push("Bank Details");
+                    if(!selectedBrand) missing.push("Final Quotation");
+                    if(missing.length>0) return setErr("Required: "+missing.join(", "));
+                    setSaving(true);
+                    try {
+                      const res = await api.post("/solar/leads/"+data.id+"/convert",{});
+                      if(res.success) { onConvertToProject(res.data); onClose(); }
+                      else setErr(res.message||"Conversion failed");
+                    } catch(e){ setErr("Server error"); }
+                    setSaving(false);
+                  }} disabled={saving}
+                    style={{width:"100%",padding:"12px",borderRadius:8,background:saving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",marginTop:8,boxShadow:"0 4px 12px rgba(5,150,105,0.3)"}}>
+                    {saving?"Creating Project...":"🚀 Convert to Solar Project"}
+                  </button>
+                )}
               </div>
-            </div>
-          )}
-        </>)}
-
-        {/* ── FOLLOW UPS TAB ── */}
-        {activeTab==="followup"&&(
-          <div style={{textAlign:"center",padding:"40px 20px",color:T.t4}}>
-            <div style={{fontSize:32,marginBottom:8}}>📞</div>
-            <div style={{fontSize:13,fontWeight:600,color:T.t2}}>Follow-up history</div>
-            <div style={{fontSize:12,color:T.t4,marginTop:4}}>Contact logs yahaan dikhenge</div>
+            )}
           </div>
         )}
 
-        {/* ── DETAILS TAB ── */}
-        {activeTab==="info"&&(
-          <div style={{background:"white",borderRadius:10,border:`1px solid ${T.b1}`,padding:"14px"}}>
-            {[["Name",data.name],["Phone",data.phone],["City",data.city||"—"],["Location",data.location||"—"],["System Size",`${data.requirement_kw||"?"}kW`],["Type",data.requirement_type||"—"],["Source",data.source||"—"],["Assigned To",data.assignedTo||"—"],["Priority",data.priority||"—"]].map(([l,v])=>(
-              <div key={l} style={{display:"flex",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
-                <span style={{width:130,fontSize:11.5,color:T.t3,flexShrink:0}}>{l}</span>
-                <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{v}</span>
-              </div>
-            ))}
+        {/* ── CONTACT DATE ── */}
+        {tab==="contact"&&(
+          <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"14px"}}>
+            <div style={{background:T.bluL,borderRadius:7,padding:"10px 12px",marginBottom:14,border:`1px solid ${T.bluM}`}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.blu,marginBottom:4}}>Automated Reminder System</div>
+              <div style={{fontSize:11.5,color:T.t2,lineHeight:1.6}}>Contact date set karo → app popup aata hai on that date · WhatsApp message template ready milta hai · Phone shortcut available</div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:6}}>Next Contact Date</label>
+              <input type="date" value={contactDate} onChange={e=>setContactDate(e.target.value)}
+                style={{width:"100%",padding:"10px 12px",borderRadius:7,border:`1.5px solid ${contactDate?T.grn:T.b1}`,fontSize:13,color:T.t1,background:contactDate?T.grnL:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              {contactDate&&<div style={{fontSize:11.5,color:T.grn,marginTop:5,fontWeight:600}}>
+                {daysDiff(contactDate)===0?"Today!":daysDiff(contactDate)===1?"Tomorrow":`In ${daysDiff(contactDate)} days`}
+              </div>}
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+              {[["Today",0],["Tomorrow",1],["In 3 days",3],["In 1 week",7],["In 2 weeks",14]].map(([l,d])=>{
+                const dt = new Date(); dt.setDate(dt.getDate()+d);
+                const val = dt.toISOString().split("T")[0];
+                return <button key={l} onClick={()=>setContactDate(val)}
+                  style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${contactDate===val?T.grn:T.b1}`,background:contactDate===val?T.grnL:"white",fontSize:11.5,fontWeight:600,color:contactDate===val?T.grn:T.t2,cursor:"pointer"}}>{l}</button>;
+              })}
+            </div>
+            <button onClick={()=>{
+              patchLead({followup_date:contactDate||null});
+            }} disabled={saving}
+              style={{width:"100%",padding:"10px",borderRadius:7,background:saving?T.b1:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>
+              💾 Save Contact Date & Enable Reminder
+            </button>
+          </div>
+        )}
+
+        {/* ── MOVE STAGE ── */}
+        {tab==="move"&&(
+          <div>
+            <div style={{fontSize:12.5,color:T.t2,marginBottom:12}}>
+              Move <strong>{data.name}</strong> to a different stage:
+            </div>
+            {SOLAR_STAGES.map(s=>{
+              const isCurrent = s.id===data.stage;
+              return (
+                <button key={s.id} onClick={async()=>{
+                  if(isCurrent) return;
+                  // Solar-specific validation
+                  if(s.id==="proposal"&&!data.exact_address) return setErr("Site address required before moving to Proposal. Fill in Follow-up tab first.");
+                  if(s.id==="converted"){
+                    const hasQuot = brands.some(b=>b.brand&&b.amount);
+                    if(!geoPhoto) return setErr("Geo-tagged roof photo required (upload in Quotations tab)");
+                    if(!hasQuot) return setErr("Minimum 1 brand quotation required (fill in Quotations tab)");
+                  }
+                  setErr("");
+                  await moveStage(s.id);
+                }}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:9,border:`2px solid ${isCurrent?s.color:T.b1}`,background:isCurrent?s.bg:T.surface,marginBottom:8,cursor:isCurrent?"default":"pointer",transition:"all .15s"}}
+                  onMouseEnter={e=>{if(!isCurrent){e.currentTarget.style.borderColor=s.color;e.currentTarget.style.background=s.bg;}}}
+                  onMouseLeave={e=>{if(!isCurrent){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background=T.surface;}}}>
+                  <div style={{width:12,height:12,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+                  <div style={{flex:1,textAlign:"left"}}>
+                    <div style={{fontSize:13,fontWeight:600,color:isCurrent?s.color:T.t1}}>{s.label} {isCurrent&&"← Current"}</div>
+                    <div style={{fontSize:11,color:T.t4}}>{s.desc}</div>
+                  </div>
+                  {!isCurrent&&<IcMove size={14} color={T.t4}/>}
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
     </div>
   </>);
 }
+
 
 // ── MAIN CRM MODULE ──────────────────────────────────────────────
 function CRMModule(){
@@ -2086,7 +2077,12 @@ function CRMModule(){
         <SolarLeadDetailDrawer
           lead={selSolarLead}
           onClose={()=>setSelSolarLead(null)}
-          onUpdate={(id,updates)=>setSolarLeads(p=>p.map(l=>l.id===id?{...l,...updates}:l))}
+          onUpdate={(id,updates)=>{
+            setSolarLeads(p=>p.map(l=>l.id===id?{...l,...updates}:l));
+            setSelSolarLead(p=>p?{...p,...updates}:p);
+            // Show quotation prompt when moved to proposal
+            if(updates.stage==="proposal") setQuotPromptLead({...selSolarLead,...updates,_isSolar:true});
+          }}
           onConvertToProject={(project)=>{ setSolarLeads(p=>p.map(l=>l.id===selSolarLead.id?{...l,stage:"converted"}:l)); setSelSolarLead(null); }}
         />
       )}
@@ -2120,7 +2116,11 @@ function CRMModule(){
                 style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
                 Baad mein
               </button>
-              <button onClick={()=>{setSelLead({...quotPromptLead,_openTab:"quotations"});setQuotPromptLead(null);}}
+              <button onClick={()=>{
+                if(quotPromptLead._isSolar){ setSelSolarLead({...quotPromptLead,_openTab:"quotations"}); }
+                else { setSelLead({...quotPromptLead,_openTab:"quotations"}); }
+                setQuotPromptLead(null);
+              }}
                 style={{flex:2,padding:"10px",borderRadius:7,background:"#D97706",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}>
                 Upload Now
               </button>
