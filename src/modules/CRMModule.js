@@ -1402,6 +1402,20 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
     lead.contactDate || (lead.followup_date ? lead.followup_date.split("T")[0] : "")
   );
 
+  // Overview form state (must be at top level — rules of hooks)
+  const [ovForm, setOvForm] = useState({
+    name: lead.name||"",
+    phone: lead.phone||"",
+    city: lead.city||"",
+    location: lead.location||"",
+    requirement_kw: lead.requirement_kw||"3",
+    requirement_type: lead.requirement_type||"residential",
+    source: lead.source||"Direct Call",
+    exact_address: lead.exact_address||"",
+    followup_notes: lead.followup_notes||"",
+    senior_consultant_needed: lead.senior_consultant_needed||false,
+  });
+
   const stage = SOLAR_STAGES.find(s=>s.id===data.stage)||SOLAR_STAGES[0];
   const stageIdx = SOLAR_STAGES.findIndex(s=>s.id===data.stage);
 
@@ -1530,18 +1544,6 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
 
         {/* ── OVERVIEW ── */}
         {tab==="overview"&&(()=>{
-          const [ovForm, setOvForm] = React.useState({
-            name: data.name||"",
-            phone: data.phone||"",
-            city: data.city||"",
-            location: data.location||"",
-            requirement_kw: data.requirement_kw||"3",
-            requirement_type: data.requirement_type||"residential",
-            source: data.source||"Direct Call",
-            exact_address: data.exact_address||"",
-            followup_notes: data.followup_notes||"",
-            senior_consultant_needed: data.senior_consultant_needed||false,
-          });
           const upd = (k,v) => setOvForm(p=>({...p,[k]:v}));
           const inp = (label, key, ph, type="text") => (
             <div>
