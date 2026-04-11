@@ -351,7 +351,12 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onAddLead})
     if(filters.source!=="All"&&l.source!==filters.source) return false;
     if(filters.projType!=="All"&&l.projType!==filters.projType) return false;
     if(filters.priority!=="All"&&l.priority!==filters.priority) return false;
-    if(filters.search&&!l.name.toLowerCase().includes(filters.search.toLowerCase())&&!l.phone.includes(filters.search)) return false;
+    if(filters.search){
+      const q=filters.search.toLowerCase();
+      const nameHit=(l.name||"").toLowerCase().includes(q);
+      const phoneHit=(l.phone||"").includes(filters.search);
+      if(!nameHit&&!phoneHit) return false;
+    }
     return true;
   });
 
@@ -359,7 +364,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onAddLead})
     <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:12,height:"100%",alignItems:"flex-start"}}>
       {STAGES.map(stage=>{
         const stageLeads=filterLeads(stage.id);
-        const stageValue=stageLeads.reduce((s,l)=>s+l.budget,0);
+        const stageValue=stageLeads.reduce((s,l)=>s+(Number(l.budget)||0),0);
         const overdueInStage=stageLeads.filter(l=>daysDiff(l.contactDate)<0&&l.contactDate).length;
         return(
           <div key={stage.id}
@@ -1920,11 +1925,12 @@ function CRMModule(){
           ...l,
           projType:l.proj_type||l.projType||"Residential",
           assignedTo:l.assigned_to_name||l.assignedTo||"—",
+          budget:Number(l.budget)||0,
           contactDate:l.contact_date?new Date(l.contact_date).toISOString().split("T")[0]:null,
           createdAt:l.created_at?new Date(l.created_at).toISOString().split("T")[0]:null,
           followupHistory:l.followupHistory||[],
           tags:Array.isArray(l.tags)?l.tags:(typeof l.tags==="string"?JSON.parse(l.tags||"[]"):[]),
-          convertedValue:l.converted_value||l.convertedValue||null,
+          convertedValue:l.converted_value!=null?Number(l.converted_value):(l.convertedValue!=null?Number(l.convertedValue):null),
           convertedDate:l.converted_date?new Date(l.converted_date).toISOString().split("T")[0]:null,
         }));
         setLeads(mapped);
@@ -2020,8 +2026,8 @@ function CRMModule(){
   // Merge all leads for KPI counts
   const allLeads = [...(canConstruction?leads:[]),...(canSolar?solarLeads:[])];
   const todayDueCount=allLeads.filter(l=>l.contactDate&&daysDiff(l.contactDate)<=0&&!dismissedReminders.includes(l.id)&&l.stage!=="converted"&&l.stage!=="lost").length;
-  const pipelineValue=leads.filter(l=>l.stage!=="lost").reduce((s,l)=>s+l.budget,0);
-  const convertedValue=leads.filter(l=>l.stage==="converted").reduce((s,l)=>s+(l.convertedValue||l.budget),0);
+  const pipelineValue=leads.filter(l=>l.stage!=="lost").reduce((s,l)=>s+(Number(l.budget)||0),0);
+  const convertedValue=leads.filter(l=>l.stage==="converted").reduce((s,l)=>s+(Number(l.convertedValue)||Number(l.budget)||0),0);
   const conversionRate=allLeads.length?Math.round((allLeads.filter(l=>l.stage==="converted").length/allLeads.length)*100):0;
 
   const TILES=[
