@@ -837,7 +837,7 @@ export default function App(){
   },[showSearch,showCheatsheet]);
   const handleLogout=()=>{apiCache.clear();clearAuth();setUser(null);setEnabledModules(null);};
 
-  if(!loggedIn) return <LoginScreen onLogin={handleLogin}/>;
+  if(!loggedIn) return <LoginScreen onLogin={(u)=>setUser(u)}/>;
 
   const PAGES={
     dashboard:{title:"Dashboard",sub:"Company Overview"},
