@@ -8080,7 +8080,7 @@ function TabSuryaGhar({ projectId }) {
                               if(mr.mat_status==="PartialReceived") return {t:"Partial",bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
                               return {t:"Pending GRN",bg:"#EFF6FF",c:"#2563EB",bdr:"#93C5FD"};
                             })();
-                            const canReceive=stage.stage_number===13&&mr.mat_status!=="Received"&&mr.mat_status!=="Used";
+                            const canReceive=stage.stage_number===13&&(mr.mat_status==="Ordered"||mr.mat_status==="Dispatched");
                             const isReceived=mr.mat_status==="Received";
                             return(
                               <div key={mr.id} style={{marginBottom:5,borderRadius:7,border:`1px solid ${isReceived?T.grnM:T.b1}`,overflow:"hidden",background:isReceived?"#F0FDF4":"white"}}>
@@ -8110,8 +8110,8 @@ function TabSuryaGhar({ projectId }) {
                                     <span style={{fontSize:9,color:T.t4}}>{mr.mr_number}</span>
                                   </div>
                                 )}
-                                {/* GRN Form */}
-                                {grnFor===mr.id&&(
+                                {/* GRN Form — only in Stage 13 for ordered materials */}
+                                {grnFor===mr.id&&stage.stage_number===13&&(
                                   <div style={{padding:"8px 10px 10px",borderTop:`1px solid ${T.b1}`,background:"linear-gradient(180deg,#F0FDF4,#ECFDF5)"}}>
                                     <div style={{fontSize:11,fontWeight:700,color:T.grn,marginBottom:6}}>📥 Receive Material — GRN</div>
                                     <div style={{display:"grid",gridTemplateColumns:"1fr 80px",gap:6,marginBottom:8}}>
