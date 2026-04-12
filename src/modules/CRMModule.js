@@ -1471,11 +1471,12 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
 
   const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}) : "";
 
+  const isProject = data.stage === "project";
   const TABS = [
     {id:"overview",  l:"Overview"},
     {id:"followups", l:"Follow Ups"},
     {id:"quotations",l:"Documents"},
-    {id:"move",      l:"Move Stage"},
+    ...(!isProject ? [{id:"move", l:"Move Stage"}] : []),
   ];
 
   // Doc upload button
@@ -1546,7 +1547,38 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
         {err&&<div style={{background:T.redL,color:T.red,padding:"8px 12px",borderRadius:7,fontSize:12,marginBottom:10,border:`1px solid ${T.redM}`}}>{err}</div>}
 
         {/* ── OVERVIEW ── */}
-        {tab==="overview"&&(()=>{
+        {tab==="overview"&&isProject&&(
+          <div>
+            {/* Project badge */}
+            <div style={{background:"#E3F2FD",borderRadius:9,border:"1.5px solid #90CAF9",padding:"12px 14px",marginBottom:10,textAlign:"center"}}>
+              <div style={{fontSize:13,fontWeight:700,color:"#1565C0"}}>✅ Converted to Project</div>
+              <div style={{fontSize:11,color:"#42A5F5",marginTop:3}}>This lead is now an active solar project. Data is read-only.</div>
+              {data.converted_project_id&&<div style={{fontSize:11,color:"#1565C0",marginTop:4,fontWeight:600}}>Project ID: #{data.converted_project_id}</div>}
+            </div>
+            {/* Read-only details */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px"}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>👤 Customer Details</div>
+              {[
+                ["Customer Name", data.name],
+                ["Mobile", data.phone],
+                ["City", data.city],
+                ["Location", data.location||data.exact_address],
+                ["System Size", `${data.requirement_kw||"?"}kW`],
+                ["Type", data.requirement_type||"residential"],
+                ["Lead Source", data.source||"—"],
+                ["Assigned To", data.assignedTo||"—"],
+                ["Address", data.exact_address||"—"],
+                ["Site Notes", data.followup_notes||"—"],
+              ].map(([l,v])=>(
+                <div key={l} style={{display:"flex",justifyContent:"space-between",padding:"6px 0",borderBottom:`1px solid ${T.b1}`}}>
+                  <span style={{fontSize:11,color:T.t4,fontWeight:600}}>{l}</span>
+                  <span style={{fontSize:12,color:T.t1,fontWeight:500,textAlign:"right",maxWidth:"60%"}}>{v||"—"}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        {tab==="overview"&&!isProject&&(()=>{
           const upd = (k,v) => setOvForm(p=>({...p,[k]:v}));
           const inp = (label, key, ph, type="text") => (
             <div>
@@ -1561,7 +1593,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
               {/* Stage progress */}
               <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"10px 14px",marginBottom:10}}>
                 <div style={{display:"flex",gap:0}}>
-                  {SOLAR_STAGES.filter(s=>s.id!=="lost").map((s,i)=>{
+                  {SOLAR_STAGES.filter(s=>s.id!=="lost"&&s.id!=="project").map((s,i)=>{
                     const done=stageIdx>i; const cur=stageIdx===i;
                     return (
                       <div key={s.id} style={{flex:1,textAlign:"center"}}>
@@ -1642,7 +1674,50 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
         )}
 
         {/* ── QUOTATIONS ── */}
-        {tab==="quotations"&&(
+        {tab==="quotations"&&isProject&&(
+          <div>
+            {/* ── READ-ONLY DOCUMENTS for project stage ── */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"14px",marginBottom:12}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>📄 Documents</div>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}>Read-only — edit from Project module</div>
+              {[
+                {key:"doc_ele_bill", label:"Electricity Bill",   icon:"⚡"},
+                {key:"doc_aadhaar",  label:"Aadhaar Card",       icon:"🪪"},
+                {key:"doc_pan",      label:"PAN Card",           icon:"💳"},
+                {key:"doc_bank",     label:"Bank Details",       icon:"🏦"},
+                {key:"geo_photo_url",label:"Geo-tag Site Photo", icon:"📍", isPhoto:true},
+                {key:"doc_itr",      label:"ITR / Form 16",      icon:"📋"},
+              ].map(doc=>{
+                const val = doc.isPhoto ? geoPhoto : docs[doc.key];
+                return (
+                  <div key={doc.key} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",marginBottom:4,borderRadius:7,background:val?T.grnL:T.surfaceB,border:`1px solid ${val?T.grnM:T.b1}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:16}}>{doc.icon}</span>
+                      <span style={{fontSize:12,fontWeight:600,color:val?T.grn:T.t4}}>{val?"✓ ":""}{doc.label}</span>
+                    </div>
+                    {val?<a href={val} target="_blank" rel="noreferrer" style={{fontSize:11,color:T.blu,fontWeight:600,padding:"2px 8px",background:T.bluL,borderRadius:5,textDecoration:"none",border:`1px solid ${T.bluM}`}}>View ↗</a>
+                      :<span style={{fontSize:10,color:T.t4}}>Not uploaded</span>}
+                  </div>
+                );
+              })}
+            </div>
+            {/* ── Read-only Brand Quotations ── */}
+            <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:10}}>💰 Brand Quotations</div>
+              {brands.filter(b=>b.brand&&b.amount).map((b,i)=>(
+                <div key={i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 12px",marginBottom:6,borderRadius:8,background:selectedBrand===b.brand?T.grnL:T.surfaceB,border:`1.5px solid ${selectedBrand===b.brand?T.grnM:T.b1}`}}>
+                  <div>
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{b.brand} {selectedBrand===b.brand&&<span style={{color:T.grn}}>✓ Selected</span>}</div>
+                    {b.file&&<a href={b.file} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu}}>📄 Quotation PDF</a>}
+                  </div>
+                  <span style={{fontSize:13,fontWeight:700,color:T.grn}}>₹{Number(b.amount).toLocaleString("en-IN")}</span>
+                </div>
+              ))}
+              {brands.filter(b=>b.brand&&b.amount).length===0&&<div style={{fontSize:12,color:T.t4}}>No quotations added</div>}
+            </div>
+          </div>
+        )}
+        {tab==="quotations"&&!isProject&&(
           <div>
             {/* ── ALL DOCUMENTS — accessible at any stage ── */}
             <div style={{background:"white",borderRadius:9,border:`1px solid ${T.b1}`,padding:"14px",marginBottom:12}}>
