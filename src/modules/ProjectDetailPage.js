@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
-import api from "../config/api";
+import api, { API_BASE } from "../config/api";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
@@ -7952,6 +7952,27 @@ function TabSuryaGhar({ projectId }) {
                       <input value={bpNumber} onChange={e=>setBpNumber(e.target.value)} placeholder="BP Number"
                         style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:130}}/>
                     </>
+                  )}
+                  {stage.stage_number===5&&(
+                    <button onClick={async()=>{
+                      try{
+                        const token=localStorage.getItem("gb_token");
+                        const resp=await fetch(`${API_BASE}/solar/projects/${projectId}/agreement-docx`,{
+                          headers:{Authorization:`Bearer ${token}`}
+                        });
+                        if(!resp.ok){const e=await resp.json();alert(e.message||"Download failed");return;}
+                        const blob=await resp.blob();
+                        const url=window.URL.createObjectURL(blob);
+                        const a=document.createElement("a");
+                        a.href=url;
+                        a.download=`Vendor_Agreement_${solar?.consumer_name||"Consumer"}.docx`;
+                        document.body.appendChild(a);a.click();a.remove();
+                        window.URL.revokeObjectURL(url);
+                      }catch(e){alert("Download failed: "+e.message);}
+                    }}
+                      style={{padding:"5px 14px",borderRadius:6,background:"linear-gradient(135deg,#7C3AED,#9333EA)",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                      📄 Download Agreement
+                    </button>
                   )}
                   <button onClick={()=>markStage(stage.stage_number,"completed")} disabled={isActing}
                     style={{padding:"5px 14px",borderRadius:6,background:isActing?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:isActing?"not-allowed":"pointer"}}>
