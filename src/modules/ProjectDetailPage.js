@@ -8741,22 +8741,24 @@ function TabSolarDocs({ projectId }) {
 
 // ── Tab: Solar Installation Photos ───────────────────────────────
 function TabSolarInstall({ projectId }) {
+  const [solar, setSolar] = useState(null);
   const [steps, setSteps] = useState([]);
   const [serials, setSerials] = useState([]);
   const [loading, setLoading] = useState(true);
   const [uploadFor, setUploadFor] = useState(null);
-  const [photoUrl, setPhotoUrl] = useState("");
-  const [ocrText, setOcrText] = useState("");
   const [saving, setSaving] = useState(false);
   const [editSerials, setEditSerials] = useState([]);
   const [showSerialEdit, setShowSerialEdit] = useState(false);
+  const [videoUploading, setVideoUploading] = useState(false);
 
   const load = async () => {
     setLoading(true);
-    const [pRes, sRes] = await Promise.all([
+    const [sRes2, pRes, sRes] = await Promise.all([
+      api.get("/solar/projects/" + projectId),
       api.get("/solar/projects/" + projectId + "/install-photos"),
       api.get("/solar/projects/" + projectId + "/serial-numbers"),
     ]);
+    if (sRes2.success) setSolar(sRes2.data);
     if (pRes.success) setSteps(pRes.data);
     if (sRes.success) setSerials(sRes.data);
     setLoading(false);
@@ -8764,27 +8766,42 @@ function TabSolarInstall({ projectId }) {
 
   useEffect(() => { load(); }, [projectId]);
 
-  const uploadPhoto = async (stepNum) => {
-    if (!photoUrl.trim()) return;
-    setSaving(true);
+  // Upload photo via Cloudinary file picker
+  const uploadPhotoFile = async (stepNum, file) => {
+    setSaving(true); setUploadFor(stepNum);
     try {
-      const res = await api.put(`/solar/projects/${projectId}/install-photos/${stepNum}`, {
-        photo_url: photoUrl,
-        ocr_raw_text: ocrText || undefined,
-      });
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", "gb_buildcon_drawings");
+      fd.append("folder", "gb_buildcon/install_photos");
+      const cld = await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload", { method: "POST", body: fd });
+      const cldData = await cld.json();
+      if (!cldData.secure_url) { setSaving(false); setUploadFor(null); return; }
+      const res = await api.put(`/solar/projects/${projectId}/install-photos/${stepNum}`, { photo_url: cldData.secure_url });
       if (res.success) {
         setSteps(p => p.map(s => s.step_number === stepNum ? res.data : s));
-        setUploadFor(null); setPhotoUrl(""); setOcrText("");
-        if (ocrText && (stepNum === 8 || stepNum === 9)) {
-          // Parse serial numbers from OCR text — split by newline/comma
-          const lines = ocrText.split(/[\n,]+/).map(l => l.trim()).filter(l => l.length > 5);
-          const newSerials = lines.map(l => ({ component_type: "panel", brand: "", serial_number: l }));
-          setEditSerials(newSerials);
-          setShowSerialEdit(true);
-        }
       }
     } catch(e) {}
-    setSaving(false);
+    setSaving(false); setUploadFor(null);
+  };
+
+  // Upload feedback video
+  const uploadFeedbackVideo = async (file) => {
+    setVideoUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", "gb_buildcon_drawings");
+      fd.append("folder", "gb_buildcon/feedback_videos");
+      fd.append("resource_type", "video");
+      const cld = await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/video/upload", { method: "POST", body: fd });
+      const cldData = await cld.json();
+      if (cldData.secure_url) {
+        const res = await api.put("/solar/projects/" + projectId, { feedback_video_url: cldData.secure_url });
+        if (res.success) setSolar(res.data);
+      }
+    } catch(e) {}
+    setVideoUploading(false);
   };
 
   const saveSerials = async () => {
@@ -8797,12 +8814,74 @@ function TabSolarInstall({ projectId }) {
   };
 
   const completed = steps.filter(s => s.photo_url).length;
+  // Find first uploaded photo date as installation date reference
+  const firstPhotoDate = steps.filter(s=>s.uploaded_at).map(s=>s.uploaded_at).sort()[0];
 
   if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading...</div>;
 
   return (
     <div style={{padding:"16px 0"}}>
-      {/* Progress */}
+      {/* ══ Installation Team Details ══ */}
+      {solar && (solar.installer_name || solar.installation_date) && (
+        <div style={{background:T.surface,borderRadius:9,border:`1.5px solid #C084FC`,overflow:"hidden",marginBottom:14}}>
+          <div style={{padding:"10px 14px",background:"#F3E8FF",display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:16}}>🔧</span>
+            <span style={{fontSize:13,fontWeight:700,color:"#7C3AED"}}>Installation Team Details</span>
+          </div>
+          <div style={{padding:"12px 14px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              {solar.installer_name&&(
+                <div>
+                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>Team / Subcontractor</div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.t1,marginTop:2}}>{solar.installer_name}</div>
+                </div>
+              )}
+              {solar.installer_phone&&(
+                <div>
+                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>Contact Number</div>
+                  <div style={{fontSize:13,fontWeight:600,color:T.t1,marginTop:2}}>
+                    <a href={`tel:${solar.installer_phone}`} style={{color:T.blu,textDecoration:"none"}}>{solar.installer_phone}</a>
+                  </div>
+                </div>
+              )}
+              <div>
+                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>Installation Date</div>
+                <div style={{fontSize:13,fontWeight:700,color:T.blu,marginTop:2}}>
+                  {solar.installation_date?new Date(solar.installation_date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"—"}
+                </div>
+                {firstPhotoDate&&(
+                  <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>
+                    📷 First photo: {new Date(firstPhotoDate).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}
+                  </div>
+                )}
+              </div>
+              {solar.installation_notes&&(
+                <div>
+                  <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>Notes</div>
+                  <div style={{fontSize:12,color:T.t2,marginTop:2}}>{solar.installation_notes}</div>
+                </div>
+              )}
+            </div>
+            {/* Consumer info row */}
+            <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${T.b1}`,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+              <div>
+                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Consumer</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1,marginTop:1}}>{solar.consumer_name||"—"}</div>
+              </div>
+              <div>
+                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>System</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1,marginTop:1}}>{solar.system_kw||3} kW {solar.system_type||"Residential"}</div>
+              </div>
+              <div>
+                <div style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Site</div>
+                <div style={{fontSize:11,color:T.t2,marginTop:1}}>{solar.consumer_address?solar.consumer_address.substring(0,60):"—"}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ══ Progress bar ══ */}
       <div style={{background:T.surface,borderRadius:9,padding:"12px 14px",border:`1px solid ${T.b1}`,marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
           <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Installation Photos</span>
@@ -8813,7 +8892,7 @@ function TabSolarInstall({ projectId }) {
         </div>
       </div>
 
-      {/* Serial numbers section */}
+      {/* ══ Serial numbers section ══ */}
       {serials.length > 0 && (
         <div style={{background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:9,padding:"12px 14px",marginBottom:14}}>
           <div style={{fontSize:12,fontWeight:700,color:"#D97706",marginBottom:8}}>☀ Serial Numbers Extracted ({serials.length})</div>
@@ -8827,7 +8906,7 @@ function TabSolarInstall({ projectId }) {
         </div>
       )}
 
-      {/* Serial edit modal */}
+      {/* ══ Serial edit modal ══ */}
       {showSerialEdit && (
         <div style={{background:T.surface,border:`1.5px solid ${T.blu}`,borderRadius:10,padding:"14px",marginBottom:14}}>
           <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>Review OCR Extracted Serial Numbers</div>
@@ -8859,7 +8938,7 @@ function TabSolarInstall({ projectId }) {
         </div>
       )}
 
-      {/* Photo steps */}
+      {/* ══ Photo steps — with file upload ══ */}
       <div style={{display:"flex",flexDirection:"column",gap:7}}>
         {steps.map(step=>(
           <div key={step.id} style={{background:T.surface,borderRadius:9,border:`1.5px solid ${step.photo_url?T.grnM:T.b1}`,overflow:"hidden"}}>
@@ -8870,39 +8949,49 @@ function TabSolarInstall({ projectId }) {
               <div style={{flex:1}}>
                 <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{step.step_name}</div>
                 {step.is_ocr_step===1&&<div style={{fontSize:10,color:"#D97706",marginTop:1}}>⚡ OCR Serial Number Extraction</div>}
+                {step.uploaded_at&&<div style={{fontSize:9.5,color:T.t4,marginTop:1}}>📷 {new Date(step.uploaded_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</div>}
               </div>
               {step.photo_url && (
                 <a href={step.photo_url} target="_blank" rel="noreferrer">
                   <img src={step.photo_url} alt="step" style={{width:48,height:48,objectFit:"cover",borderRadius:6,border:`1px solid ${T.b1}`}} onError={e=>e.target.style.display="none"}/>
                 </a>
               )}
-              <button onClick={()=>setUploadFor(uploadFor===step.step_number?null:step.step_number)}
-                style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${step.photo_url?T.grnM:T.b1}`,background:step.photo_url?T.grnL:"none",color:step.photo_url?T.grn:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                {step.photo_url?"Replace":"Upload"}
-              </button>
+              {/* Upload / Replace button — file picker */}
+              <label style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${step.photo_url?T.grnM:T.b1}`,background:step.photo_url?T.grnL:"none",color:step.photo_url?T.grn:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                {uploadFor===step.step_number&&saving?"Uploading...":(step.photo_url?"Replace":"Upload")}
+                <input type="file" accept="image/*" style={{display:"none"}}
+                  onChange={e=>{if(e.target.files[0])uploadPhotoFile(step.step_number,e.target.files[0]);}}/>
+              </label>
             </div>
-
-            {uploadFor===step.step_number&&(
-              <div style={{padding:"8px 51px 12px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB}}>
-                <input value={photoUrl} onChange={e=>setPhotoUrl(e.target.value)} placeholder="Cloudinary photo URL"
-                  style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:6}}/>
-                {step.is_ocr_step===1&&(
-                  <textarea value={ocrText} onChange={e=>setOcrText(e.target.value)} rows={3}
-                    placeholder={"Paste OCR text here (serial numbers, one per line)\nOR leave blank and enter manually after upload"}
-                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid #FDE68A`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:6,resize:"vertical"}}/>
-                )}
-                <div style={{display:"flex",gap:6}}>
-                  <button onClick={()=>{setUploadFor(null);setPhotoUrl("");setOcrText("");}}
-                    style={{flex:1,padding:"6px",borderRadius:6,background:"none",border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t3,cursor:"pointer"}}>Cancel</button>
-                  <button onClick={()=>uploadPhoto(step.step_number)} disabled={saving||!photoUrl}
-                    style={{flex:2,padding:"6px",borderRadius:6,background:saving||!photoUrl?T.b1:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:saving||!photoUrl?"not-allowed":"pointer"}}>
-                    {saving?"Saving...":"Save Photo"}
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         ))}
+      </div>
+
+      {/* ══ Consumer Feedback Video (optional) ══ */}
+      <div style={{background:T.surface,borderRadius:9,border:`1.5px solid ${solar?.feedback_video_url?"#A78BFA":T.b1}`,overflow:"hidden",marginTop:14}}>
+        <div style={{padding:"10px 14px",background:solar?.feedback_video_url?"#F5F3FF":T.surfaceB,display:"flex",alignItems:"center",gap:8}}>
+          <span style={{fontSize:16}}>🎥</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12.5,fontWeight:700,color:solar?.feedback_video_url?"#7C3AED":T.t2}}>Consumer Feedback Video</div>
+            <div style={{fontSize:10,color:T.t4}}>{solar?.feedback_video_url?"Video uploaded":"Optional — record consumer testimonial"}</div>
+          </div>
+          {solar?.feedback_video_url&&(
+            <a href={solar.feedback_video_url} target="_blank" rel="noreferrer"
+              style={{padding:"4px 12px",borderRadius:6,background:"#7C3AED",color:"white",fontSize:11,fontWeight:600,textDecoration:"none"}}>
+              ▶ Play
+            </a>
+          )}
+          <label style={{padding:"5px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:videoUploading?"not-allowed":"pointer"}}>
+            {videoUploading?"Uploading...":(solar?.feedback_video_url?"Replace Video":"Upload Video")}
+            <input type="file" accept="video/*" style={{display:"none"}} disabled={videoUploading}
+              onChange={e=>{if(e.target.files[0])uploadFeedbackVideo(e.target.files[0]);}}/>
+          </label>
+        </div>
+        {solar?.feedback_video_url&&(
+          <div style={{padding:"8px 14px"}}>
+            <video src={solar.feedback_video_url} controls style={{width:"100%",maxHeight:300,borderRadius:8,background:"black"}}/>
+          </div>
+        )}
       </div>
     </div>
   );
