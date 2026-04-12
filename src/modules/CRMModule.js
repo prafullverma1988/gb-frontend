@@ -1459,10 +1459,11 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
     setUploading(p=>({...p,[docKey]:false}));
   };
 
-  const saveQuotations = () => {
+  const saveQuotations = (overrideBrands) => {
+    const b = overrideBrands || brands;
     api.patch("/solar/leads/"+data.id, {
       geo_photo_url: geoPhoto,
-      quotation_brands: brands,
+      quotation_brands: b,
     }).catch(()=>{});
   };
 
@@ -1726,12 +1727,14 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                     <div>
                       <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Brand Name</label>
                       <input value={b.brand} onChange={e=>setBrands(p=>p.map((x,j)=>j===i?{...x,brand:e.target.value}:x))}
+                        onBlur={()=>saveQuotations()}
                         placeholder={`Brand ${i+1}`}
                         style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     </div>
                     <div>
                       <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Amount (₹)</label>
                       <input type="number" value={b.amount} onChange={e=>setBrands(p=>p.map((x,j)=>j===i?{...x,amount:e.target.value}:x))}
+                        onBlur={()=>saveQuotations()}
                         placeholder="e.g. 250000"
                         style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     </div>
@@ -1745,7 +1748,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                           style={{flex:1,display:"flex",alignItems:"center",gap:5,padding:"6px 9px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,fontSize:11.5,color:T.grn,textDecoration:"none",fontWeight:600}}>
                           📄 PDF Uploaded ✓
                         </a>
-                        <button onClick={()=>setBrands(p=>p.map((x,j)=>j===i?{...x,file:""}:x))}
+                        <button onClick={()=>{const updated=brands.map((x,j)=>j===i?{...x,file:""}:x);setBrands(updated);saveQuotations(updated);}}
                           style={{padding:"6px 8px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10,cursor:"pointer",fontWeight:600}}>✕</button>
                       </div>
                     ):(
@@ -1756,7 +1759,9 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                             setUploading(p=>({...p,[`brand_${i}`]:true}));
                             try{
                               const url=await uploadToCloudinary(file,"doc");
-                              setBrands(p=>p.map((x,j)=>j===i?{...x,file:url}:x));
+                              const updated=brands.map((x,j)=>j===i?{...x,file:url}:x);
+                              setBrands(updated);
+                              saveQuotations(updated);
                             }catch(er){alert("Upload failed");}
                             setUploading(p=>({...p,[`brand_${i}`]:false}));
                             e.target.value="";
@@ -1817,12 +1822,12 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
                     if(!docs.doc_bank) missing.push("Bank Details");
                     if(!selectedBrand) missing.push("Final Quotation");
                     if(missing.length>0) return setErr("Required: "+missing.join(", "));
-                    setSaving(true);
+                    setSaving(true); setErr("");
                     try{
                       const res=await api.post("/solar/leads/"+data.id+"/convert",{});
-                      if(res.success){onConvertToProject(res.data);onClose();}
-                      else setErr(res.message||"Conversion failed");
-                    }catch(e){setErr("Server error");}
+                      if(res.success){alert("✅ Project created successfully!");onConvertToProject(res.data);onClose();}
+                      else {setErr(res.message||"Conversion failed");alert("❌ "+(res.message||"Conversion failed"));}
+                    }catch(e){setErr("Server error: "+e.message);alert("❌ Server error: "+e.message);}
                     setSaving(false);
                   }} disabled={saving}
                     style={{width:"100%",padding:"12px",borderRadius:8,background:saving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",marginTop:8}}>
