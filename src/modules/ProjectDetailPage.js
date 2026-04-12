@@ -7704,6 +7704,11 @@ function TabSuryaGhar({ projectId }) {
   const [installerPhone, setInstallerPhone] = useState("");
   const [installDate, setInstallDate] = useState("");
   const [installNotes, setInstallNotes] = useState("");
+  // Stage 15 — Installation Photos
+  const [installPhotos, setInstallPhotos] = useState([]);
+  const [photoUploading, setPhotoUploading] = useState(null); // step_number being uploaded
+  const [addStepName, setAddStepName] = useState("");
+  const [addingStep, setAddingStep] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -7753,6 +7758,8 @@ function TabSuryaGhar({ projectId }) {
     try{const mr=await api.get("/procurement/mrs?project_id="+projectId);if(mr.success)setMrs(mr.data||[]);}catch(e){}
     // Fetch subcontractors for Stage 14 installer selection
     try{const sc=await api.get("/library/subcontractors");if(sc.success)setSubcons(sc.data||[]);}catch(e){}
+    // Fetch installation photos for Stage 15
+    try{const ip=await api.get("/solar/projects/"+projectId+"/install-photos");if(ip.success)setInstallPhotos(ip.data||[]);}catch(e){}
     setLoading(false);
   };
 
@@ -7828,6 +7835,37 @@ function TabSuryaGhar({ projectId }) {
       load();
     } catch(e) { setErr(e.message || "Replace failed"); }
     setUploading(false);
+  };
+
+  // Stage 15 — upload install photo via Cloudinary file picker
+  const uploadInstallPhoto = async (stepNum, file) => {
+    setPhotoUploading(stepNum);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", "gb_buildcon_drawings");
+      fd.append("folder", "gb_buildcon/install_photos");
+      const cld = await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload", { method: "POST", body: fd });
+      const cldData = await cld.json();
+      if (!cldData.secure_url) { setErr("Upload failed"); setPhotoUploading(null); return; }
+      const res = await api.put(`/solar/projects/${projectId}/install-photos/${stepNum}`, { photo_url: cldData.secure_url });
+      if (res.success) {
+        setInstallPhotos(p => p.map(s => s.step_number === stepNum ? res.data : s));
+      } else { setErr(res.message || "Save failed"); }
+    } catch (e) { setErr(e.message); }
+    setPhotoUploading(null);
+  };
+
+  // Add custom step to project
+  const addCustomStep = async () => {
+    if (!addStepName.trim()) return;
+    setAddingStep(true);
+    try {
+      const res = await api.post(`/solar/projects/${projectId}/install-photos/add-step`, { step_name: addStepName.trim() });
+      if (res.success) { setInstallPhotos(res.data); setAddStepName(""); }
+      else { setErr(res.message || "Failed"); }
+    } catch (e) { setErr(e.message); }
+    setAddingStep(false);
   };
 
   const receiveGrn = async (mrId) => {
@@ -8024,6 +8062,84 @@ function TabSuryaGhar({ projectId }) {
                       </div>
                     </div>
                   )}
+                  {/* ══ Stage 15 — Installation Photos Grid ══ */}
+                  {stage.stage_number===15&&installPhotos.length>0&&(()=>{
+                    const uploaded=installPhotos.filter(p=>p.photo_url).length;
+                    const total=installPhotos.length;
+                    const pct=total?Math.round(uploaded/total*100):0;
+                    const isDone=stage.status==="completed";
+                    return(
+                      <div style={{marginTop:8,borderRadius:9,border:"1.5px solid #93C5FD",overflow:"hidden",background:"white"}}>
+                        {/* Header */}
+                        <div style={{padding:"8px 12px",background:"#EFF6FF",display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:16}}>📸</span>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:11.5,fontWeight:700,color:"#2563EB"}}>Installation Photos</div>
+                            <div style={{fontSize:10,color:"#2563EB99"}}>{uploaded}/{total} uploaded · {pct}%</div>
+                          </div>
+                          <div style={{width:60,height:6,borderRadius:3,background:"#93C5FD44"}}>
+                            <div style={{width:`${pct}%`,height:"100%",borderRadius:3,background:pct===100?"#059669":"#2563EB",transition:"width .3s"}}/>
+                          </div>
+                        </div>
+                        {/* Photo grid */}
+                        <div style={{padding:"8px 10px",display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:6}}>
+                          {installPhotos.map(step=>(
+                            <div key={step.step_number} style={{borderRadius:7,border:`1.5px solid ${step.photo_url?T.grnM:T.b1}`,overflow:"hidden",background:step.photo_url?"#F0FDF4":"white",position:"relative"}}>
+                              {/* Photo preview or upload placeholder */}
+                              {step.photo_url?(
+                                <a href={step.photo_url} target="_blank" rel="noreferrer" style={{display:"block"}}>
+                                  <img src={step.photo_url} alt={step.step_name}
+                                    style={{width:"100%",height:80,objectFit:"cover",display:"block"}}
+                                    onError={e=>{e.target.style.display="none";}}/>
+                                </a>
+                              ):(
+                                <label style={{display:"flex",alignItems:"center",justifyContent:"center",height:80,background:T.sltL,cursor:isDone?"default":"pointer",flexDirection:"column",gap:2}}>
+                                  {photoUploading===step.step_number?(
+                                    <span style={{fontSize:10,color:T.blu,fontWeight:600}}>Uploading...</span>
+                                  ):(
+                                    <>
+                                      <span style={{fontSize:20,color:T.t4}}>📷</span>
+                                      <span style={{fontSize:9,color:T.t4}}>Click to upload</span>
+                                    </>
+                                  )}
+                                  {!isDone&&<input type="file" accept="image/*" style={{display:"none"}}
+                                    onChange={e=>{if(e.target.files[0])uploadInstallPhoto(step.step_number,e.target.files[0]);}}/>}
+                                </label>
+                              )}
+                              {/* Replace button */}
+                              {step.photo_url&&!isDone&&(
+                                <label style={{position:"absolute",top:4,right:4,width:22,height:22,borderRadius:"50%",background:"rgba(0,0,0,0.5)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:11,color:"white"}}>
+                                  🔄
+                                  <input type="file" accept="image/*" style={{display:"none"}}
+                                    onChange={e=>{if(e.target.files[0])uploadInstallPhoto(step.step_number,e.target.files[0]);}}/>
+                                </label>
+                              )}
+                              {/* Step name + status */}
+                              <div style={{padding:"5px 7px",borderTop:`1px solid ${step.photo_url?T.grnM:T.b1}`}}>
+                                <div style={{fontSize:9.5,fontWeight:700,color:T.t1,lineHeight:1.2}}>{step.step_number}. {step.step_name}</div>
+                                <div style={{fontSize:8.5,color:step.photo_url?T.grn:T.t4,fontWeight:600,marginTop:1}}>
+                                  {step.photo_url?"✓ Uploaded":"⏳ Required"}
+                                </div>
+                                {step.is_ocr_step===1&&<div style={{fontSize:8,color:"#D97706",marginTop:1}}>⚡ OCR</div>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Add custom step */}
+                        {!isDone&&(
+                          <div style={{padding:"6px 10px 8px",borderTop:"1px solid #93C5FD44",background:"#F8FAFF",display:"flex",gap:6,alignItems:"center"}}>
+                            <input value={addStepName} onChange={e=>setAddStepName(e.target.value)}
+                              placeholder="Add custom photo step..."
+                              style={{flex:1,padding:"5px 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+                            <button onClick={addCustomStep} disabled={addingStep||!addStepName.trim()}
+                              style={{padding:"5px 12px",borderRadius:6,background:addingStep||!addStepName.trim()?T.b1:T.blu,border:"none",color:"white",fontSize:10.5,fontWeight:700,cursor:addingStep?"not-allowed":"pointer"}}>
+                              {addingStep?"Adding...":"+ Add Step"}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {[11,12,13].includes(stage.stage_number)&&(()=>{
                     const stageColors={11:{bg:"#F3E8FF",bdr:"#C084FC",c:"#7C3AED",icon:"📋"},12:{bg:"#FEF3C7",bdr:"#FCD34D",c:"#D97706",icon:"🚚"},13:{bg:"#ECFDF5",bdr:"#6EE7B7",c:"#059669",icon:"📥"}};
                     const sc=stageColors[stage.stage_number];
