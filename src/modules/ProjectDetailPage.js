@@ -7653,6 +7653,30 @@ const SOLAR_STAGE_S = {
   skipped:     {c:"#3B82F6",bg:"#EFF6FF",bdr:"#BFDBFE"},
 };
 
+// Stage hints — what each step needs
+const STAGE_HINTS = {
+  1: "Mobile number + Name for PM Surya Ghar portal login",
+  2: "Electricity bill + Residential/Commercial proof upload",
+  3: "DISCOM auto-generates feasibility → upload here",
+  4: "Bank details (from lead docs) + Subsidy slab entry",
+  5: "Agreement template auto-fill → download → sign",
+  6: "PM Surya Ghar portal generates → upload here",
+  7: "Site photo, PAN, Aadhaar, Ele bill needed. Skip if no loan",
+  8: "Create print-ready folder with all loan docs for bank",
+  9: "Enter 70% of sanctioned loan amount",
+  10: "Confirm receiving 70% payment from customer",
+  11: "3 procurement requests: Kit + Structure + Electrical",
+  12: "Track: Requested → Ordered/Transferred → Delivered",
+  13: "Cross-check against PO. Confirm receipt item-wise",
+  14: "Set installation date and assign team",
+  15: "Upload 9 step-by-step photos (leg → panel → serial nos)",
+  16: "11 documents needed for grid sync application to DISCOM",
+  17: "Upload: meter photo in running condition",
+  18: "Verify DCR certificate + Panel/Inverter serial numbers",
+  19: "Remaining ~30% loan disbursement entry",
+  20: "Final payment confirmation → Project Complete ✅",
+};
+
 // ── Tab: Surya Ghar Stage Tracker ────────────────────────────────
 function TabSuryaGhar({ projectId }) {
   const [stages, setStages] = useState([]);
@@ -7664,6 +7688,7 @@ function TabSuryaGhar({ projectId }) {
   const [docFor, setDocFor] = useState(null);
   const [docUrl, setDocUrl] = useState("");
   const [docName, setDocName] = useState("");
+  const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState("");
 
   const load = async () => {
@@ -7720,17 +7745,49 @@ function TabSuryaGhar({ projectId }) {
     setActing(null);
   };
 
-  const addDoc = async (stageNum) => {
-    if (!docUrl.trim()) return;
+  const addDoc = async (stageNum, url) => {
+    const finalUrl = url || docUrl;
+    if (!finalUrl.trim()) return;
     setErr("");
     try {
       await api.post(`/solar/projects/${projectId}/stages/${stageNum}/documents`, {
         document_type: "upload",
         document_name: docName || "Document",
-        file_url: docUrl,
+        file_url: finalUrl,
       });
       setDocFor(null); setDocUrl(""); setDocName("");
       load();
+    } catch(e) { setErr(e.message); }
+  };
+
+  const uploadFile = async (file, stageNum) => {
+    setUploading(true); setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", "gb_buildcon_drawings");
+      fd.append("folder", "gb_buildcon/solar_docs");
+      const cld = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => { const d = JSON.parse(xhr.responseText); xhr.status===200 ? resolve(d) : reject(new Error(d.error?.message||"Upload failed")); };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.open("POST", "https://api.cloudinary.com/v1_1/dd632nqfm/auto/upload");
+        xhr.send(fd);
+      });
+      await addDoc(stageNum, cld.secure_url);
+    } catch(e) { setErr(e.message || "Upload failed"); }
+    setUploading(false);
+  };
+
+  const toggleLoan = async () => {
+    if (!solar) return;
+    const newVal = !solar.loan_required;
+    try {
+      const res = await api.post(`/solar/projects/${projectId}/toggle-loan`, { loan_required: newVal });
+      if (res.success) {
+        setSolar(p => ({ ...p, loan_required: newVal ? 1 : 0 }));
+        load();
+      }
     } catch(e) { setErr(e.message); }
   };
 
@@ -7756,7 +7813,7 @@ function TabSuryaGhar({ projectId }) {
         </div>
         <div style={{fontSize:11,color:T.t4,marginTop:6}}>{completed} of {stages.length} stages completed</div>
         {solar && (
-          <div style={{display:"flex",gap:16,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.b1}`,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:16,marginTop:10,paddingTop:10,borderTop:`1px solid ${T.b1}`,flexWrap:"wrap",alignItems:"center"}}>
             {[
               ["System",solar.system_kw ? solar.system_kw+"kW" : "—"],
               ["Type",solar.system_type||"—"],
@@ -7768,6 +7825,21 @@ function TabSuryaGhar({ projectId }) {
                 <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{v}</div>
               </div>
             ))}
+            {/* Loan Toggle */}
+            <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8}}>
+              <span style={{fontSize:10,fontWeight:600,color:T.t3}}>Bank Loan</span>
+              <button onClick={toggleLoan}
+                style={{width:44,height:22,borderRadius:11,padding:2,border:"none",cursor:"pointer",
+                  background:solar.loan_required?"#059669":"#D1D5DB",transition:"background .2s",
+                  display:"flex",alignItems:"center"}}>
+                <div style={{width:18,height:18,borderRadius:"50%",background:"white",
+                  transform:solar.loan_required?"translateX(22px)":"translateX(0)",
+                  transition:"transform .2s",boxShadow:"0 1px 3px rgba(0,0,0,0.2)"}}/>
+              </button>
+              <span style={{fontSize:10,fontWeight:700,color:solar.loan_required?T.grn:T.t4}}>
+                {solar.loan_required?"Required":"Not Required"}
+              </span>
+            </div>
           </div>
         )}
       </div>
@@ -7808,6 +7880,9 @@ function TabSuryaGhar({ projectId }) {
                     {stage.is_skippable===1&&<span style={{fontSize:9,color:T.blu,background:T.bluL,padding:"1px 6px",borderRadius:10,border:`1px solid ${T.bluM}`}}>Optional</span>}
                     <span style={{fontSize:9.5,fontWeight:700,background:ss.bg,color:ss.c,padding:"1px 8px",borderRadius:10,border:`1px solid ${ss.bdr}`,marginLeft:"auto"}}>{stage.status.replace("_"," ")}</span>
                   </div>
+                  {isActive && STAGE_HINTS[stage.stage_number] && (
+                    <div style={{fontSize:10.5,color:T.blu,marginTop:2}}>💡 {STAGE_HINTS[stage.stage_number]}</div>
+                  )}
                   {stage.completed_date&&<div style={{fontSize:10.5,color:T.t4}}>Completed: {new Date(stage.completed_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</div>}
                   {stage.notes&&<div style={{fontSize:11,color:T.t3,marginTop:2,fontStyle:"italic"}}>"{stage.notes}"</div>}
                   {/* Documents */}
@@ -7867,11 +7942,23 @@ function TabSuryaGhar({ projectId }) {
                     <input value={docName} onChange={e=>setDocName(e.target.value)} placeholder="Document name (e.g. DISCOM Feasibility)"
                       style={{flex:1,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
                   </div>
-                  <div style={{display:"flex",gap:6}}>
-                    <input value={docUrl} onChange={e=>setDocUrl(e.target.value)} placeholder="Cloudinary URL (paste after upload)"
+                  <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <label style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,background:uploading?T.b1:T.blu,color:"white",fontSize:11.5,fontWeight:700,cursor:uploading?"not-allowed":"pointer",border:"none",flexShrink:0}}>
+                      <input type="file" accept="image/*,application/pdf" style={{display:"none"}} disabled={uploading}
+                        onChange={e=>{
+                          const f=e.target.files?.[0];
+                          if(f){
+                            if(!docName) setDocName(f.name.replace(/\.[^.]+$/,""));
+                            uploadFile(f,stage.stage_number);
+                          }
+                        }}/>
+                      {uploading?"Uploading...":"📎 Upload File"}
+                    </label>
+                    <span style={{fontSize:10,color:T.t4}}>or paste URL:</span>
+                    <input value={docUrl} onChange={e=>setDocUrl(e.target.value)} placeholder="https://..."
                       style={{flex:1,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
-                    <button onClick={()=>addDoc(stage.stage_number)}
-                      style={{padding:"6px 12px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                    <button onClick={()=>addDoc(stage.stage_number)} disabled={!docUrl.trim()}
+                      style={{padding:"6px 12px",borderRadius:6,background:docUrl.trim()?T.grn:T.b1,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:docUrl.trim()?"pointer":"not-allowed"}}>
                       Save
                     </button>
                   </div>
