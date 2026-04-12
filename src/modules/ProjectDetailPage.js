@@ -7693,6 +7693,10 @@ function TabSuryaGhar({ projectId }) {
   const [bpNumber, setBpNumber] = useState("");
   const [err, setErr] = useState("");
   const [mrs, setMrs] = useState([]);
+  const [grnFor, setGrnFor] = useState(null);
+  const [grnChallan, setGrnChallan] = useState("");
+  const [grnQty, setGrnQty] = useState("");
+  const [grnSaving, setGrnSaving] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -7798,6 +7802,20 @@ function TabSuryaGhar({ projectId }) {
       load();
     } catch(e) { setErr(e.message || "Replace failed"); }
     setUploading(false);
+  };
+
+  const receiveGrn = async (mrId) => {
+    setGrnSaving(true);
+    try {
+      const body = { challan_no: grnChallan || undefined };
+      if (grnQty) body.received_qty = parseFloat(grnQty);
+      const res = await api.patch(`/procurement/mrs/${mrId}/mark-received`, body);
+      if (res.success) {
+        setMrs(p => p.map(m => m.id === mrId ? { ...m, mat_status: res.mat_status || "Received", challan_no: grnChallan } : m));
+        setGrnFor(null); setGrnChallan(""); setGrnQty("");
+      } else { setErr(res.message || "GRN failed"); }
+    } catch (e) { setErr(e.message || "GRN failed"); }
+    setGrnSaving(false);
   };
 
   const uploadFile = async (file, stageNum) => {
@@ -7953,16 +7971,40 @@ function TabSuryaGhar({ projectId }) {
                         const statusMap={
                           11:{show:true,chip:mr.mr_status==="Approved"?"🟢 Approved":mr.mr_status==="Rejected"?"🔴 Rejected":"🟡 Requested"},
                           12:{show:mr.mr_status==="Approved",chip:mr.mat_status==="Ordered"?"🔵 Ordered":mr.mat_status==="Dispatched"?"🚚 Dispatched":"⏳ Awaiting Order"},
-                          13:{show:mr.mat_status==="Ordered"||mr.mat_status==="Received"||mr.mat_status==="PartialReceived",chip:mr.mat_status==="Received"?"✅ Received":mr.mat_status==="PartialReceived"?"🟡 Partial":"⏳ In Transit"},
+                          13:{show:mr.mat_status==="Ordered"||mr.mat_status==="Received"||mr.mat_status==="PartialReceived"||mr.mr_status==="Approved",chip:mr.mat_status==="Received"?"✅ Received":mr.mat_status==="PartialReceived"?"🟡 Partial":mr.mat_status==="Ordered"?"⏳ In Transit":"📦 Ready"},
                         };
                         const sm=statusMap[stage.stage_number];
                         if(!sm||!sm.show) return null;
+                        const canReceive=stage.stage_number===13&&mr.mat_status!=="Received"&&mr.mat_status!=="Used";
                         return(
-                          <div key={mr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 9px",marginBottom:4,borderRadius:6,background:"white",border:`1px solid ${T.b1}`,fontSize:11}}>
-                            <span style={{fontWeight:700,color:T.t1,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mr.item_name}</span>
-                            <span style={{fontSize:10,color:T.t4}}>{mr.quantity} {mr.unit}</span>
-                            <span style={{fontSize:10,fontWeight:600,whiteSpace:"nowrap"}}>{sm.chip}</span>
-                            <span style={{fontSize:9,color:T.t4}}>{mr.mr_number}</span>
+                          <div key={mr.id} style={{marginBottom:6,borderRadius:7,background:"white",border:`1px solid ${mr.mat_status==="Received"?T.grnM:T.b1}`,overflow:"hidden"}}>
+                            <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 9px",fontSize:11}}>
+                              <span style={{fontWeight:700,color:T.t1,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mr.item_name}</span>
+                              <span style={{fontSize:10,color:T.t4}}>{mr.quantity} {mr.unit}</span>
+                              <span style={{fontSize:10,fontWeight:600,whiteSpace:"nowrap"}}>{sm.chip}</span>
+                              {canReceive&&(
+                                <button onClick={()=>{setGrnFor(grnFor===mr.id?null:mr.id);setGrnChallan("");setGrnQty(String(mr.quantity||""));}}
+                                  style={{padding:"3px 8px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                                  📥 Receive
+                                </button>
+                              )}
+                              {mr.mat_status==="Received"&&mr.challan_no&&<span style={{fontSize:9,color:T.t4}}>DC: {mr.challan_no}</span>}
+                            </div>
+                            {grnFor===mr.id&&(
+                              <div style={{padding:"6px 9px 8px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                                <input value={grnChallan} onChange={e=>setGrnChallan(e.target.value)} placeholder="Challan/DC No."
+                                  style={{padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit",width:110}}/>
+                                <input type="number" value={grnQty} onChange={e=>setGrnQty(e.target.value)} placeholder="Qty"
+                                  style={{padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit",width:60}}/>
+                                <span style={{fontSize:10,color:T.t4}}>of {mr.quantity} {mr.unit}</span>
+                                <button onClick={()=>receiveGrn(mr.id)} disabled={grnSaving}
+                                  style={{padding:"5px 12px",borderRadius:5,background:grnSaving?T.b1:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer"}}>
+                                  {grnSaving?"...":"✓ Confirm GRN"}
+                                </button>
+                                <button onClick={()=>setGrnFor(null)}
+                                  style={{padding:"5px 8px",borderRadius:5,background:"none",border:`1px solid ${T.b1}`,color:T.t3,fontSize:10,cursor:"pointer"}}>Cancel</button>
+                              </div>
+                            )}
                           </div>
                         );
                       })}
