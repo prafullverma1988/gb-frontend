@@ -7692,6 +7692,7 @@ function TabSuryaGhar({ projectId }) {
   const [portalMobile, setPortalMobile] = useState("");
   const [bpNumber, setBpNumber] = useState("");
   const [err, setErr] = useState("");
+  const [mrs, setMrs] = useState([]);
 
   const load = async () => {
     setLoading(true);
@@ -7728,6 +7729,8 @@ function TabSuryaGhar({ projectId }) {
     setSolar(solarData);
     if(solarData){setPortalMobile(solarData.portal_mobile||"");setBpNumber(solarData.bp_number||"");}
     setStages(stageList);
+    // Fetch material requests for this project
+    try{const mr=await api.get("/procurement/mrs?project_id="+projectId);if(mr.success)setMrs(mr.data||[]);}catch(e){}
     setLoading(false);
   };
 
@@ -7752,6 +7755,10 @@ function TabSuryaGhar({ projectId }) {
         // Refresh solar data after Stage 1 (portal_mobile/bp saved)
         if (stageNum === 1) {
           try { const s2 = await api.get("/solar/projects/"+projectId); if(s2.success) setSolar(s2.data); } catch(e){}
+        }
+        // Refresh MRs after Stage 10 (auto-generated) or stages 11-13
+        if ([10,11,12,13].includes(stageNum)) {
+          try{const mr=await api.get("/procurement/mrs?project_id="+projectId);if(mr.success)setMrs(mr.data||[]);}catch(e){}
         }
       } else { setErr(res.message || "Failed"); }
     } catch(e) { setErr(e.message); }
@@ -7937,6 +7944,45 @@ function TabSuryaGhar({ projectId }) {
                           )}
                         </div>
                       ))}
+                    </div>
+                  )}
+                  {/* Material Request cards for stages 11-13 */}
+                  {[11,12,13].includes(stage.stage_number)&&mrs.length>0&&(
+                    <div style={{marginTop:8}}>
+                      {mrs.map(mr=>{
+                        const statusMap={
+                          11:{show:true,chip:mr.mr_status==="Approved"?"🟢 Approved":mr.mr_status==="Rejected"?"🔴 Rejected":"🟡 Requested"},
+                          12:{show:mr.mr_status==="Approved",chip:mr.mat_status==="Ordered"?"🔵 Ordered":mr.mat_status==="Dispatched"?"🚚 Dispatched":"⏳ Awaiting Order"},
+                          13:{show:mr.mat_status==="Ordered"||mr.mat_status==="Received"||mr.mat_status==="PartialReceived",chip:mr.mat_status==="Received"?"✅ Received":mr.mat_status==="PartialReceived"?"🟡 Partial":"⏳ In Transit"},
+                        };
+                        const sm=statusMap[stage.stage_number];
+                        if(!sm||!sm.show) return null;
+                        return(
+                          <div key={mr.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 9px",marginBottom:4,borderRadius:6,background:"white",border:`1px solid ${T.b1}`,fontSize:11}}>
+                            <span style={{fontWeight:700,color:T.t1,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mr.item_name}</span>
+                            <span style={{fontSize:10,color:T.t4}}>{mr.quantity} {mr.unit}</span>
+                            <span style={{fontSize:10,fontWeight:600,whiteSpace:"nowrap"}}>{sm.chip}</span>
+                            <span style={{fontSize:9,color:T.t4}}>{mr.mr_number}</span>
+                          </div>
+                        );
+                      })}
+                      {stage.stage_number===11&&(()=>{
+                        const allApproved=mrs.every(m=>m.mr_status==="Approved"||m.mr_status==="Rejected");
+                        return allApproved?<div style={{fontSize:10,color:T.grn,fontWeight:600,marginTop:4}}>✅ All material requests processed</div>
+                          :<div style={{fontSize:10,color:T.amb,fontWeight:600,marginTop:4}}>⏳ {mrs.filter(m=>m.mr_status==="Pending").length} request(s) pending approval in Procurement</div>;
+                      })()}
+                      {stage.stage_number===12&&(()=>{
+                        const approvedMrs=mrs.filter(m=>m.mr_status==="Approved");
+                        const allOrdered=approvedMrs.length>0&&approvedMrs.every(m=>m.mat_status==="Ordered"||m.mat_status==="Dispatched"||m.mat_status==="Received");
+                        return allOrdered?<div style={{fontSize:10,color:T.grn,fontWeight:600,marginTop:4}}>✅ All materials ordered/dispatched</div>
+                          :<div style={{fontSize:10,color:T.amb,fontWeight:600,marginTop:4}}>⏳ {approvedMrs.filter(m=>m.mat_status==="Pending").length} approved item(s) awaiting order</div>;
+                      })()}
+                      {stage.stage_number===13&&(()=>{
+                        const orderedMrs=mrs.filter(m=>m.mat_status==="Ordered"||m.mat_status==="Received"||m.mat_status==="PartialReceived");
+                        const allReceived=orderedMrs.length>0&&orderedMrs.every(m=>m.mat_status==="Received");
+                        return allReceived?<div style={{fontSize:10,color:T.grn,fontWeight:600,marginTop:4}}>✅ All materials received at site</div>
+                          :<div style={{fontSize:10,color:T.amb,fontWeight:600,marginTop:4}}>⏳ {orderedMrs.filter(m=>m.mat_status!=="Received").length} item(s) pending delivery</div>;
+                      })()}
                     </div>
                   )}
                 </div>
