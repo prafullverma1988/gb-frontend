@@ -7964,69 +7964,138 @@ function TabSuryaGhar({ projectId }) {
                       ))}
                     </div>
                   )}
-                  {/* Material Request cards for stages 11-13 */}
-                  {[11,12,13].includes(stage.stage_number)&&mrs.length>0&&(
-                    <div style={{marginTop:8}}>
-                      {mrs.map(mr=>{
-                        const statusMap={
-                          11:{show:true,chip:mr.mr_status==="Approved"?"🟢 Approved":mr.mr_status==="Rejected"?"🔴 Rejected":"🟡 Requested"},
-                          12:{show:mr.mr_status==="Approved",chip:mr.mat_status==="Ordered"?"🔵 Ordered":mr.mat_status==="Dispatched"?"🚚 Dispatched":"⏳ Awaiting Order"},
-                          13:{show:mr.mat_status==="Ordered"||mr.mat_status==="Received"||mr.mat_status==="PartialReceived"||mr.mr_status==="Approved",chip:mr.mat_status==="Received"?"✅ Received":mr.mat_status==="PartialReceived"?"🟡 Partial":mr.mat_status==="Ordered"?"⏳ In Transit":"📦 Ready"},
-                        };
-                        const sm=statusMap[stage.stage_number];
-                        if(!sm||!sm.show) return null;
-                        const canReceive=stage.stage_number===13&&mr.mat_status!=="Received"&&mr.mat_status!=="Used";
-                        return(
-                          <div key={mr.id} style={{marginBottom:6,borderRadius:7,background:"white",border:`1px solid ${mr.mat_status==="Received"?T.grnM:T.b1}`,overflow:"hidden"}}>
-                            <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 9px",fontSize:11}}>
-                              <span style={{fontWeight:700,color:T.t1,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mr.item_name}</span>
-                              <span style={{fontSize:10,color:T.t4}}>{mr.quantity} {mr.unit}</span>
-                              <span style={{fontSize:10,fontWeight:600,whiteSpace:"nowrap"}}>{sm.chip}</span>
-                              {canReceive&&(
-                                <button onClick={()=>{setGrnFor(grnFor===mr.id?null:mr.id);setGrnChallan("");setGrnQty(String(mr.quantity||""));}}
-                                  style={{padding:"3px 8px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-                                  📥 Receive
-                                </button>
-                              )}
-                              {mr.mat_status==="Received"&&mr.challan_no&&<span style={{fontSize:9,color:T.t4}}>DC: {mr.challan_no}</span>}
+                  {/* ══ Material Flow Panel — Stages 11-13 ══ */}
+                  {[11,12,13].includes(stage.stage_number)&&(()=>{
+                    const stageColors={11:{bg:"#F3E8FF",bdr:"#C084FC",c:"#7C3AED",icon:"📋"},12:{bg:"#FEF3C7",bdr:"#FCD34D",c:"#D97706",icon:"🚚"},13:{bg:"#ECFDF5",bdr:"#6EE7B7",c:"#059669",icon:"📥"}};
+                    const sc=stageColors[stage.stage_number];
+                    // Filter MRs for each stage
+                    const stageMrs={
+                      11:mrs,
+                      12:mrs.filter(m=>m.mr_status==="Approved"||m.mat_status==="Ordered"||m.mat_status==="Dispatched"||m.mat_status==="Received"),
+                      13:mrs.filter(m=>m.mr_status==="Approved"||m.mat_status==="Ordered"||m.mat_status==="Received"||m.mat_status==="PartialReceived"),
+                    }[stage.stage_number]||[];
+                    if(!stageMrs.length&&!mrs.length) return(
+                      <div style={{marginTop:8,padding:"10px 12px",borderRadius:8,background:"#FFF7ED",border:"1px dashed #FDBA74",textAlign:"center"}}>
+                        <div style={{fontSize:11,color:"#EA580C",fontWeight:600}}>📦 No material requests yet</div>
+                        <div style={{fontSize:10,color:"#FB923C",marginTop:2}}>Complete Stage 10 to auto-generate 3 kits</div>
+                      </div>
+                    );
+                    // Progress calc
+                    const progress={
+                      11:{done:mrs.filter(m=>m.mr_status==="Approved").length,total:mrs.length,label:"approved"},
+                      12:{done:mrs.filter(m=>["Ordered","Dispatched","Received","PartialReceived"].includes(m.mat_status)).length,total:mrs.filter(m=>m.mr_status==="Approved").length||mrs.length,label:"ordered"},
+                      13:{done:mrs.filter(m=>m.mat_status==="Received").length,total:mrs.filter(m=>["Ordered","Received","PartialReceived"].includes(m.mat_status)||m.mr_status==="Approved").length||mrs.length,label:"received"},
+                    }[stage.stage_number];
+                    const pct=progress.total?Math.round((progress.done/progress.total)*100):0;
+                    return(
+                      <div style={{marginTop:10,borderRadius:9,border:`1.5px solid ${sc.bdr}`,overflow:"hidden",background:"white"}}>
+                        {/* Header bar */}
+                        <div style={{padding:"8px 12px",background:sc.bg,display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:16}}>{sc.icon}</span>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:11.5,fontWeight:700,color:sc.c}}>
+                              {stage.stage_number===11?"Material Requests":stage.stage_number===12?"Order & Dispatch":"GRN — Goods Received"}
                             </div>
-                            {grnFor===mr.id&&(
-                              <div style={{padding:"6px 9px 8px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
-                                <input value={grnChallan} onChange={e=>setGrnChallan(e.target.value)} placeholder="Challan/DC No."
-                                  style={{padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit",width:110}}/>
-                                <input type="number" value={grnQty} onChange={e=>setGrnQty(e.target.value)} placeholder="Qty"
-                                  style={{padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",fontFamily:"inherit",width:60}}/>
-                                <span style={{fontSize:10,color:T.t4}}>of {mr.quantity} {mr.unit}</span>
-                                <button onClick={()=>receiveGrn(mr.id)} disabled={grnSaving}
-                                  style={{padding:"5px 12px",borderRadius:5,background:grnSaving?T.b1:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer"}}>
-                                  {grnSaving?"...":"✓ Confirm GRN"}
-                                </button>
-                                <button onClick={()=>setGrnFor(null)}
-                                  style={{padding:"5px 8px",borderRadius:5,background:"none",border:`1px solid ${T.b1}`,color:T.t3,fontSize:10,cursor:"pointer"}}>Cancel</button>
-                              </div>
-                            )}
+                            <div style={{fontSize:10,color:sc.c+"BB"}}>{progress.done}/{progress.total} {progress.label} · {pct}%</div>
                           </div>
-                        );
-                      })}
-                      {stage.stage_number===11&&(()=>{
-                        const allApproved=mrs.every(m=>m.mr_status==="Approved"||m.mr_status==="Rejected");
-                        return allApproved?<div style={{fontSize:10,color:T.grn,fontWeight:600,marginTop:4}}>✅ All material requests processed</div>
-                          :<div style={{fontSize:10,color:T.amb,fontWeight:600,marginTop:4}}>⏳ {mrs.filter(m=>m.mr_status==="Pending").length} request(s) pending approval in Procurement</div>;
-                      })()}
-                      {stage.stage_number===12&&(()=>{
-                        const approvedMrs=mrs.filter(m=>m.mr_status==="Approved");
-                        const allOrdered=approvedMrs.length>0&&approvedMrs.every(m=>m.mat_status==="Ordered"||m.mat_status==="Dispatched"||m.mat_status==="Received");
-                        return allOrdered?<div style={{fontSize:10,color:T.grn,fontWeight:600,marginTop:4}}>✅ All materials ordered/dispatched</div>
-                          :<div style={{fontSize:10,color:T.amb,fontWeight:600,marginTop:4}}>⏳ {approvedMrs.filter(m=>m.mat_status==="Pending").length} approved item(s) awaiting order</div>;
-                      })()}
-                      {stage.stage_number===13&&(()=>{
-                        const orderedMrs=mrs.filter(m=>m.mat_status==="Ordered"||m.mat_status==="Received"||m.mat_status==="PartialReceived");
-                        const allReceived=orderedMrs.length>0&&orderedMrs.every(m=>m.mat_status==="Received");
-                        return allReceived?<div style={{fontSize:10,color:T.grn,fontWeight:600,marginTop:4}}>✅ All materials received at site</div>
-                          :<div style={{fontSize:10,color:T.amb,fontWeight:600,marginTop:4}}>⏳ {orderedMrs.filter(m=>m.mat_status!=="Received").length} item(s) pending delivery</div>;
-                      })()}
-                    </div>
-                  )}
+                          {/* Mini progress bar */}
+                          <div style={{width:60,height:6,borderRadius:3,background:sc.bdr+"44"}}>
+                            <div style={{width:`${pct}%`,height:"100%",borderRadius:3,background:sc.c,transition:"width .3s"}}/>
+                          </div>
+                        </div>
+                        {/* MR list */}
+                        <div style={{padding:"6px 8px"}}>
+                          {stageMrs.map(mr=>{
+                            // Status chip per stage
+                            const chip=(()=>{
+                              if(stage.stage_number===11){
+                                if(mr.mr_status==="Approved") return {t:"Approved",bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
+                                if(mr.mr_status==="Rejected") return {t:"Rejected",bg:"#FEE2E2",c:"#DC2626",bdr:"#FCA5A5"};
+                                return {t:"Pending",bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
+                              }
+                              if(stage.stage_number===12){
+                                if(mr.mat_status==="Received") return {t:"Delivered",bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
+                                if(mr.mat_status==="Ordered"||mr.mat_status==="Dispatched") return {t:mr.mat_status,bg:"#DBEAFE",c:"#2563EB",bdr:"#93C5FD"};
+                                return {t:"Awaiting PO",bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
+                              }
+                              // stage 13
+                              if(mr.mat_status==="Received") return {t:"✓ Received",bg:"#DCFCE7",c:"#16A34A",bdr:"#86EFAC"};
+                              if(mr.mat_status==="PartialReceived") return {t:"Partial",bg:"#FEF9C3",c:"#CA8A04",bdr:"#FDE047"};
+                              return {t:"Pending GRN",bg:"#EFF6FF",c:"#2563EB",bdr:"#93C5FD"};
+                            })();
+                            const canReceive=stage.stage_number===13&&mr.mat_status!=="Received"&&mr.mat_status!=="Used";
+                            const isReceived=mr.mat_status==="Received";
+                            return(
+                              <div key={mr.id} style={{marginBottom:5,borderRadius:7,border:`1px solid ${isReceived?T.grnM:T.b1}`,overflow:"hidden",background:isReceived?"#F0FDF4":"white"}}>
+                                {/* Main row */}
+                                <div style={{display:"flex",alignItems:"center",gap:6,padding:"8px 10px"}}>
+                                  <div style={{width:6,height:6,borderRadius:"50%",background:chip.c,flexShrink:0}}/>
+                                  <div style={{flex:1,minWidth:0}}>
+                                    <div style={{fontSize:11.5,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mr.item_name}</div>
+                                    {mr.notes&&<div style={{fontSize:9.5,color:T.t4,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{mr.notes.substring(0,60)}...</div>}
+                                  </div>
+                                  <div style={{textAlign:"right",flexShrink:0}}>
+                                    <div style={{fontSize:10.5,fontWeight:600,color:T.t2}}>{mr.quantity} {mr.unit}</div>
+                                    <span style={{fontSize:9,fontWeight:700,color:chip.c,background:chip.bg,padding:"1px 6px",borderRadius:10,border:`1px solid ${chip.bdr}`,whiteSpace:"nowrap"}}>{chip.t}</span>
+                                  </div>
+                                  {canReceive&&(
+                                    <button onClick={()=>{setGrnFor(grnFor===mr.id?null:mr.id);setGrnChallan("");setGrnQty(String(mr.quantity||""));}}
+                                      style={{padding:"4px 10px",borderRadius:6,background:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap",boxShadow:"0 1px 3px rgba(5,150,105,0.3)"}}>
+                                      📥 Receive GRN
+                                    </button>
+                                  )}
+                                </div>
+                                {/* Received info */}
+                                {isReceived&&(
+                                  <div style={{padding:"0 10px 6px",display:"flex",gap:10,fontSize:9.5,color:T.t4}}>
+                                    {mr.challan_no&&<span>📄 DC: {mr.challan_no}</span>}
+                                    <span>✅ Received</span>
+                                    <span style={{fontSize:9,color:T.t4}}>{mr.mr_number}</span>
+                                  </div>
+                                )}
+                                {/* GRN Form */}
+                                {grnFor===mr.id&&(
+                                  <div style={{padding:"8px 10px 10px",borderTop:`1px solid ${T.b1}`,background:"linear-gradient(180deg,#F0FDF4,#ECFDF5)"}}>
+                                    <div style={{fontSize:11,fontWeight:700,color:T.grn,marginBottom:6}}>📥 Receive Material — GRN</div>
+                                    <div style={{display:"grid",gridTemplateColumns:"1fr 80px",gap:6,marginBottom:8}}>
+                                      <div>
+                                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Challan / DC Number</label>
+                                        <input value={grnChallan} onChange={e=>setGrnChallan(e.target.value)} placeholder="e.g. DC-2024-001"
+                                          style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
+                                      </div>
+                                      <div>
+                                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Qty ({mr.unit})</label>
+                                        <input type="number" value={grnQty} onChange={e=>setGrnQty(e.target.value)} placeholder={String(mr.quantity)}
+                                          style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}/>
+                                      </div>
+                                    </div>
+                                    <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                                      <span style={{fontSize:10,color:T.t4}}>Ordered: {mr.quantity} {mr.unit}</span>
+                                      {grnQty&&parseFloat(grnQty)<parseFloat(mr.quantity)&&<span style={{fontSize:10,color:"#D97706",fontWeight:600}}>⚠ Partial receipt</span>}
+                                      <div style={{flex:1}}/>
+                                      <button onClick={()=>setGrnFor(null)}
+                                        style={{padding:"6px 12px",borderRadius:6,background:"white",border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                                      <button onClick={()=>receiveGrn(mr.id)} disabled={grnSaving}
+                                        style={{padding:"6px 16px",borderRadius:6,background:grnSaving?T.b1:"linear-gradient(135deg,#059669,#10B981)",color:"white",border:"none",fontSize:11.5,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer",boxShadow:"0 2px 6px rgba(5,150,105,0.3)"}}>
+                                        {grnSaving?"Processing...":"✓ Confirm GRN"}
+                                      </button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Footer summary */}
+                        <div style={{padding:"6px 12px 8px",borderTop:`1px solid ${sc.bdr}44`,background:sc.bg+"88",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                          <span style={{fontSize:10,fontWeight:600,color:sc.c}}>
+                            {pct===100?`✅ All ${progress.label}`:`⏳ ${progress.total-progress.done} pending`}
+                          </span>
+                          <span style={{fontSize:9,color:sc.c+"99"}}>{mrs.length} total items · {mrs.map(m=>m.mr_number).filter(Boolean).join(", ")}</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
 
