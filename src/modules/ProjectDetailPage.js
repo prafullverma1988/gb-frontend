@@ -7697,6 +7697,13 @@ function TabSuryaGhar({ projectId }) {
   const [grnChallan, setGrnChallan] = useState("");
   const [grnQty, setGrnQty] = useState("");
   const [grnSaving, setGrnSaving] = useState(false);
+  // Stage 14 — Installation Team
+  const [subcons, setSubcons] = useState([]);
+  const [installerSubconId, setInstallerSubconId] = useState("");
+  const [installerName, setInstallerName] = useState("");
+  const [installerPhone, setInstallerPhone] = useState("");
+  const [installDate, setInstallDate] = useState("");
+  const [installNotes, setInstallNotes] = useState("");
 
   const load = async () => {
     setLoading(true);
@@ -7731,10 +7738,21 @@ function TabSuryaGhar({ projectId }) {
     }
 
     setSolar(solarData);
-    if(solarData){setPortalMobile(solarData.portal_mobile||"");setBpNumber(solarData.bp_number||"");}
+    if(solarData){
+      setPortalMobile(solarData.portal_mobile||"");
+      setBpNumber(solarData.bp_number||"");
+      // Pre-fill Stage 14 installer data if exists
+      setInstallerName(solarData.installer_name||"");
+      setInstallerPhone(solarData.installer_phone||"");
+      setInstallerSubconId(solarData.installer_subcon_id||"");
+      setInstallDate(solarData.installation_date?solarData.installation_date.split("T")[0]:"");
+      setInstallNotes(solarData.installation_notes||"");
+    }
     setStages(stageList);
     // Fetch material requests for this project
     try{const mr=await api.get("/procurement/mrs?project_id="+projectId);if(mr.success)setMrs(mr.data||[]);}catch(e){}
+    // Fetch subcontractors for Stage 14 installer selection
+    try{const sc=await api.get("/library/subcontractors");if(sc.success)setSubcons(sc.data||[]);}catch(e){}
     setLoading(false);
   };
 
@@ -7749,6 +7767,14 @@ function TabSuryaGhar({ projectId }) {
         body.portal_mobile = portalMobile || solar?.portal_mobile || "";
         body.bp_number = bpNumber || solar?.bp_number || "";
       }
+      // Stage 14: send installer data
+      if (stageNum === 14 && status === "completed") {
+        body.installer_name = installerName;
+        body.installer_phone = installerPhone;
+        body.installer_subcon_id = installerSubconId || null;
+        body.installation_date = installDate;
+        body.installation_notes = installNotes || (noteFor===stageNum?noteText:"");
+      }
       const res = await api.patch(
         `/solar/projects/${projectId}/stages/${stageNum}`,
         body
@@ -7756,8 +7782,8 @@ function TabSuryaGhar({ projectId }) {
       if (res.success) {
         setStages(p => p.map(s => s.stage_number === stageNum ? res.data : s));
         if (noteFor === stageNum) { setNoteFor(null); setNoteText(""); }
-        // Refresh solar data after Stage 1 (portal_mobile/bp saved)
-        if (stageNum === 1) {
+        // Refresh solar data after Stage 1 (portal_mobile/bp saved) or Stage 14 (installer saved)
+        if (stageNum === 1 || stageNum === 14) {
           try { const s2 = await api.get("/solar/projects/"+projectId); if(s2.success) setSolar(s2.data); } catch(e){}
         }
         // Refresh MRs after Stage 10 (auto-generated) or stages 11-13
@@ -7965,6 +7991,37 @@ function TabSuryaGhar({ projectId }) {
                     </div>
                   )}
                   {/* ══ Material Flow Panel — Stages 11-13 ══ */}
+                  {/* ══ Stage 14 — Installation Info Display ══ */}
+                  {stage.stage_number===14&&solar?.installer_name&&(
+                    <div style={{marginTop:8,borderRadius:9,border:"1.5px solid #C084FC",overflow:"hidden",background:"white"}}>
+                      <div style={{padding:"8px 12px",background:"#F3E8FF",display:"flex",alignItems:"center",gap:8}}>
+                        <span style={{fontSize:16}}>🔧</span>
+                        <div style={{flex:1}}>
+                          <div style={{fontSize:11.5,fontWeight:700,color:"#7C3AED"}}>Installation Team Details</div>
+                        </div>
+                      </div>
+                      <div style={{padding:"10px 12px"}}>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                          <div>
+                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>Team / Subcontractor</div>
+                            <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{solar.installer_name}</div>
+                          </div>
+                          <div>
+                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>Contact</div>
+                            <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{solar.installer_phone||"—"}</div>
+                          </div>
+                          <div>
+                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>Installation Date</div>
+                            <div style={{fontSize:12,fontWeight:600,color:T.blu}}>{solar.installation_date?new Date(solar.installation_date).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}):"—"}</div>
+                          </div>
+                          <div>
+                            <div style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",marginBottom:2}}>Notes</div>
+                            <div style={{fontSize:11,color:T.t2}}>{solar.installation_notes||"—"}</div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {[11,12,13].includes(stage.stage_number)&&(()=>{
                     const stageColors={11:{bg:"#F3E8FF",bdr:"#C084FC",c:"#7C3AED",icon:"📋"},12:{bg:"#FEF3C7",bdr:"#FCD34D",c:"#D97706",icon:"🚚"},13:{bg:"#ECFDF5",bdr:"#6EE7B7",c:"#059669",icon:"📥"}};
                     const sc=stageColors[stage.stage_number];
@@ -8109,6 +8166,62 @@ function TabSuryaGhar({ projectId }) {
                       <input value={bpNumber} onChange={e=>setBpNumber(e.target.value)} placeholder="BP Number"
                         style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:130}}/>
                     </>
+                  )}
+                  {/* ══ Stage 14 — Installation Team Selection ══ */}
+                  {stage.stage_number===14&&(
+                    <div style={{width:"100%",marginBottom:6}}>
+                      <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:6}}>🔧 Installation Team Setup</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+                        <div>
+                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Installation Team / Subcontractor *</label>
+                          <select value={installerSubconId} onChange={e=>{
+                            const id=e.target.value;
+                            setInstallerSubconId(id);
+                            if(id){
+                              const sc=subcons.find(s=>String(s.id)===String(id));
+                              if(sc){setInstallerName(sc.name||sc.owner||"");setInstallerPhone(sc.phone||"");}
+                            } else { setInstallerName("");setInstallerPhone(""); }
+                          }}
+                            style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.purL?T.b1:T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:"white"}}>
+                            <option value="">— Select from Library —</option>
+                            {subcons.map(sc=>(
+                              <option key={sc.id} value={sc.id}>{sc.name}{sc.trade?` (${sc.trade})`:""}{sc.city?` — ${sc.city}`:""}</option>
+                            ))}
+                            <option value="__manual__">✏️ Enter Manually</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Team Name *</label>
+                          <input value={installerName} onChange={e=>setInstallerName(e.target.value)}
+                            placeholder="Installer / Team name"
+                            readOnly={installerSubconId && installerSubconId!=="__manual__"}
+                            style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",
+                              background:installerSubconId&&installerSubconId!=="__manual__"?T.sltL:"white"}}/>
+                        </div>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+                        <div>
+                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Contact Number {installerSubconId&&installerSubconId!=="__manual__"?"(auto-fetched)":"*"}</label>
+                          <input value={installerPhone} onChange={e=>setInstallerPhone(e.target.value)}
+                            placeholder="Phone number"
+                            readOnly={installerSubconId && installerSubconId!=="__manual__" && !!installerPhone}
+                            style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",
+                              background:installerSubconId&&installerSubconId!=="__manual__"&&installerPhone?T.sltL:"white"}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Installation Date *</label>
+                          <input type="date" value={installDate} onChange={e=>setInstallDate(e.target.value)}
+                            style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                        </div>
+                      </div>
+                      <div>
+                        <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:2}}>Installation Notes *</label>
+                        <textarea value={installNotes} onChange={e=>setInstallNotes(e.target.value)}
+                          placeholder="Roof type, access details, special instructions..."
+                          rows={2}
+                          style={{width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",resize:"vertical"}}/>
+                      </div>
+                    </div>
                   )}
                   {stage.stage_number===5&&(
                     <button onClick={async()=>{
