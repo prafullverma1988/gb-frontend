@@ -7709,6 +7709,9 @@ function TabSuryaGhar({ projectId }) {
   const [photoUploading, setPhotoUploading] = useState(null); // step_number being uploaded
   const [addStepName, setAddStepName] = useState("");
   const [addingStep, setAddingStep] = useState(false);
+  // Stage 16 — Net Metering Doc Checklist
+  const [netMeterDocs, setNetMeterDocs] = useState([]);
+  const [nmDocUploading, setNmDocUploading] = useState(null);
 
   const load = async () => {
     setLoading(true);
@@ -7760,6 +7763,8 @@ function TabSuryaGhar({ projectId }) {
     try{const sc=await api.get("/library/subcontractors");if(sc.success)setSubcons(sc.data||[]);}catch(e){}
     // Fetch installation photos for Stage 15
     try{const ip=await api.get("/solar/projects/"+projectId+"/install-photos");if(ip.success)setInstallPhotos(ip.data||[]);}catch(e){}
+    // Fetch net metering doc checklist for Stage 16
+    try{const nm=await api.get("/solar/projects/"+projectId+"/net-meter-docs");if(nm.success)setNetMeterDocs(nm.data||[]);}catch(e){}
     setLoading(false);
   };
 
@@ -7854,6 +7859,30 @@ function TabSuryaGhar({ projectId }) {
       } else { setErr(res.message || "Save failed"); }
     } catch (e) { setErr(e.message); }
     setPhotoUploading(null);
+  };
+
+  // Stage 16 — upload net metering doc
+  const uploadNetMeterDoc = async (docName, file) => {
+    setNmDocUploading(docName);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", "gb_buildcon_drawings");
+      fd.append("folder", "gb_buildcon/net_meter_docs");
+      const cld = await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/auto/upload", { method: "POST", body: fd });
+      const cldData = await cld.json();
+      if (!cldData.secure_url) { setErr("Upload failed"); setNmDocUploading(null); return; }
+      // Save as stage 16 document
+      const res = await api.post(`/solar/projects/${projectId}/stages/16/documents`, {
+        document_name: docName, document_type: "net_meter_doc", file_url: cldData.secure_url
+      });
+      if (res.success) {
+        // Refresh checklist
+        const nm = await api.get("/solar/projects/"+projectId+"/net-meter-docs");
+        if (nm.success) setNetMeterDocs(nm.data||[]);
+      } else { setErr(res.message || "Save failed"); }
+    } catch (e) { setErr(e.message); }
+    setNmDocUploading(null);
   };
 
   // Add custom step to project
@@ -8031,6 +8060,76 @@ function TabSuryaGhar({ projectId }) {
                     </div>
                   )}
                   {/* ══ Material Flow Panel — Stages 11-13 ══ */}
+                  {/* ══ Stage 16 — Net Metering Document Checklist ══ */}
+                  {stage.stage_number===16&&netMeterDocs.length>0&&(()=>{
+                    const available=netMeterDocs.filter(d=>d.file_url).length;
+                    const total=netMeterDocs.length;
+                    const pct=total?Math.round(available/total*100):0;
+                    const isDone16=stage.status==="completed";
+                    return(
+                      <div style={{marginTop:8,borderRadius:9,border:"1.5px solid #F59E0B",overflow:"hidden",background:"white"}}>
+                        {/* Header */}
+                        <div style={{padding:"8px 12px",background:"#FFFBEB",display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{fontSize:16}}>📋</span>
+                          <div style={{flex:1}}>
+                            <div style={{fontSize:11.5,fontWeight:700,color:"#D97706"}}>Net Metering — Document Checklist</div>
+                            <div style={{fontSize:10,color:"#D9770699"}}>{available}/{total} ready · {pct}%</div>
+                          </div>
+                          <div style={{width:60,height:6,borderRadius:3,background:"#FDE68A44"}}>
+                            <div style={{width:`${pct}%`,height:"100%",borderRadius:3,background:pct===100?"#059669":"#D97706",transition:"width .3s"}}/>
+                          </div>
+                        </div>
+                        {/* Document rows */}
+                        <div style={{padding:"4px 0"}}>
+                          {netMeterDocs.map((doc,i)=>{
+                            const hasFile=!!doc.file_url;
+                            const fromPrev=!!doc.source;
+                            return(
+                              <div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",borderBottom:i<netMeterDocs.length-1?`1px solid ${T.b1}`:"none",
+                                background:hasFile?"#F0FDF4":"white"}}>
+                                {/* Status icon */}
+                                <div style={{width:20,height:20,borderRadius:"50%",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,
+                                  background:hasFile?T.grnL:T.redL,color:hasFile?T.grn:T.red,border:`1.5px solid ${hasFile?T.grnM:T.redM}`,fontWeight:700}}>
+                                  {hasFile?"✓":"!"}
+                                </div>
+                                {/* Doc info */}
+                                <div style={{flex:1,minWidth:0}}>
+                                  <div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{i+1}. {doc.name}</div>
+                                  <div style={{fontSize:9.5,color:hasFile?(fromPrev?"#059669":"#2563EB"):"#DC2626",fontWeight:500,marginTop:1}}>
+                                    {hasFile?(fromPrev?`✅ ${doc.source_label}`:"✅ Uploaded"):`❌ ${doc.source_label}`}
+                                  </div>
+                                </div>
+                                {/* View / Upload actions */}
+                                <div style={{display:"flex",gap:4,flexShrink:0}}>
+                                  {hasFile&&(
+                                    <a href={doc.file_url} target="_blank" rel="noreferrer"
+                                      style={{padding:"3px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10,fontWeight:600,textDecoration:"none"}}>
+                                      View
+                                    </a>
+                                  )}
+                                  {!isDone16&&(
+                                    <label style={{padding:"3px 10px",borderRadius:5,background:hasFile?"#FEF3C7":"#FEE2E2",border:`1px solid ${hasFile?"#FDE68A":"#FECACA"}`,
+                                      color:hasFile?"#D97706":"#DC2626",fontSize:10,fontWeight:600,cursor:"pointer"}}>
+                                      {nmDocUploading===doc.name?"...":(hasFile?"Replace":"Upload")}
+                                      <input type="file" accept="image/*,.pdf" style={{display:"none"}}
+                                        onChange={e=>{if(e.target.files[0])uploadNetMeterDoc(doc.name,e.target.files[0]);}}/>
+                                    </label>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        {/* Footer summary */}
+                        <div style={{padding:"6px 12px 8px",borderTop:"1px solid #FDE68A44",background:"#FFFBEB88",display:"flex",justifyContent:"space-between"}}>
+                          <span style={{fontSize:10,fontWeight:600,color:pct===100?"#059669":"#DC2626"}}>
+                            {pct===100?"✅ All documents ready":`⚠ ${total-available} document${total-available>1?"s":""} missing`}
+                          </span>
+                          <span style={{fontSize:9,color:"#D9770088"}}>Upload missing docs to proceed</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
                   {/* ══ Stage 14 — Installation Info Display ══ */}
                   {stage.stage_number===14&&solar?.installer_name&&(
                     <div style={{marginTop:8,borderRadius:9,border:"1.5px solid #C084FC",overflow:"hidden",background:"white"}}>
