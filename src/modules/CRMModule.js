@@ -1381,7 +1381,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
   const [brands, setBrands] = useState(
     lead.quotation_brands && lead.quotation_brands.length
       ? lead.quotation_brands
-      : [{brand:"Brand 1",amount:""},{brand:"Brand 2",amount:""},{brand:"Brand 3",amount:""}]
+      : [{brand:"Brand 1",amount:"",file:""},{brand:"Brand 2",amount:"",file:""},{brand:"Brand 3",amount:"",file:""}]
   );
   const [geoPhoto, setGeoPhoto] = useState(lead.geo_photo_url||"");
   const [selectedBrand, setSelectedBrand] = useState(lead.selected_brand||"");
@@ -1736,20 +1736,49 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                         style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     </div>
                   </div>
+                  {/* PDF Quotation Upload */}
+                  <div style={{marginBottom:8}}>
+                    <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>📎 Quotation PDF</label>
+                    {b.file?(
+                      <div style={{display:"flex",alignItems:"center",gap:6}}>
+                        <a href={b.file} target="_blank" rel="noreferrer"
+                          style={{flex:1,display:"flex",alignItems:"center",gap:5,padding:"6px 9px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,fontSize:11.5,color:T.grn,textDecoration:"none",fontWeight:600}}>
+                          📄 PDF Uploaded ✓
+                        </a>
+                        <button onClick={()=>setBrands(p=>p.map((x,j)=>j===i?{...x,file:""}:x))}
+                          style={{padding:"6px 8px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10,cursor:"pointer",fontWeight:600}}>✕</button>
+                      </div>
+                    ):(
+                      <label style={{display:"flex",alignItems:"center",justifyContent:"center",gap:5,padding:"7px",borderRadius:6,border:`1.5px dashed ${T.b1}`,fontSize:11.5,color:T.t3,cursor:uploading[`brand_${i}`]?"not-allowed":"pointer",background:"white"}}>
+                        <input type="file" accept="application/pdf,image/*" style={{display:"none"}} disabled={uploading[`brand_${i}`]}
+                          onChange={async e=>{
+                            const file=e.target.files[0]; if(!file)return;
+                            setUploading(p=>({...p,[`brand_${i}`]:true}));
+                            try{
+                              const url=await uploadToCloudinary(file,"doc");
+                              setBrands(p=>p.map((x,j)=>j===i?{...x,file:url}:x));
+                            }catch(er){alert("Upload failed");}
+                            setUploading(p=>({...p,[`brand_${i}`]:false}));
+                            e.target.value="";
+                          }}/>
+                        {uploading[`brand_${i}`]?"Uploading...":"📤 Upload PDF / Image"}
+                      </label>
+                    )}
+                  </div>
                   {b.amount&&b.brand&&(
                     <div style={{display:"flex",gap:8,alignItems:"center"}}>
                       <button onClick={async()=>{
                         const amt=`₹${Number(b.amount).toLocaleString("en-IN")}`;
                         const kw=data.requirement_kw||"3";
-                        const text=`Dear ${data.name},
+                        let text=`Dear ${data.name},
 
 Solar Quotation — PM Surya Ghar
 
 Brand: ${b.brand}
 System: ${kw}kW (${data.requirement_type||"Residential"})
-Total: ${amt} (incl. GST + 5yr maintenance)
-
-— ${data.assignedTo||"Team"}`;
+Total: ${amt} (incl. GST + 5yr maintenance)`;
+                        if(b.file) text+=`\n\nQuotation PDF: ${b.file}`;
+                        text+=`\n\n— ${data.assignedTo||"Team"}`;
                         window.open("https://api.whatsapp.com/send?phone=91"+data.phone+"&text="+encodeURIComponent(text),"_blank");
                       }} style={{flex:1,padding:"6px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
                         WhatsApp ↗
