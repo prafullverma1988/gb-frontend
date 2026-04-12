@@ -7839,6 +7839,8 @@ function TabSuryaGhar({ projectId }) {
       if (res.success) {
         setMrs(p => p.map(m => m.id === mrId ? { ...m, mat_status: res.mat_status || "Received", challan_no: grnChallan } : m));
         setGrnFor(null); setGrnChallan(""); setGrnQty("");
+        // Refresh stages — stage 13 may have been auto-completed by backend
+        try{const st=await api.get("/solar/projects/"+projectId+"/stages");if(st.success)setStages(st.data||[]);}catch(e){}
       } else { setErr(res.message || "GRN failed"); }
     } catch (e) { setErr(e.message || "GRN failed"); }
     setGrnSaving(false);
