@@ -7689,6 +7689,8 @@ function TabSuryaGhar({ projectId }) {
   const [docUrl, setDocUrl] = useState("");
   const [docName, setDocName] = useState("");
   const [uploading, setUploading] = useState(false);
+  const [portalMobile, setPortalMobile] = useState("");
+  const [bpNumber, setBpNumber] = useState("");
   const [err, setErr] = useState("");
 
   const load = async () => {
@@ -7724,6 +7726,7 @@ function TabSuryaGhar({ projectId }) {
     }
 
     setSolar(solarData);
+    if(solarData){setPortalMobile(solarData.portal_mobile||"");setBpNumber(solarData.bp_number||"");}
     setStages(stageList);
     setLoading(false);
   };
@@ -7733,13 +7736,23 @@ function TabSuryaGhar({ projectId }) {
   const markStage = async (stageNum, status) => {
     setActing(stageNum); setErr("");
     try {
+      const body = { status, notes: noteFor === stageNum ? noteText : undefined };
+      // Stage 1: send portal_mobile + bp_number
+      if (stageNum === 1 && status === "completed") {
+        body.portal_mobile = portalMobile || solar?.portal_mobile || "";
+        body.bp_number = bpNumber || solar?.bp_number || "";
+      }
       const res = await api.patch(
         `/solar/projects/${projectId}/stages/${stageNum}`,
-        { status, notes: noteFor === stageNum ? noteText : undefined }
+        body
       );
       if (res.success) {
         setStages(p => p.map(s => s.stage_number === stageNum ? res.data : s));
         if (noteFor === stageNum) { setNoteFor(null); setNoteText(""); }
+        // Refresh solar data after Stage 1 (portal_mobile/bp saved)
+        if (stageNum === 1) {
+          try { const s2 = await api.get("/solar/projects/"+projectId); if(s2.success) setSolar(s2.data); } catch(e){}
+        }
       } else { setErr(res.message || "Failed"); }
     } catch(e) { setErr(e.message); }
     setActing(null);
@@ -7902,6 +7915,14 @@ function TabSuryaGhar({ projectId }) {
               {/* Action bar — only for active/pending stages */}
               {!isDone && !isSkipped && (
                 <div style={{padding:"8px 13px 10px 51px",display:"flex",gap:7,flexWrap:"wrap",alignItems:"center",borderTop:`1px solid ${T.b1}`,background:T.surfaceB}}>
+                  {stage.stage_number===1&&(
+                    <>
+                      <input value={portalMobile} onChange={e=>setPortalMobile(e.target.value)} placeholder="Portal Mobile No."
+                        style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:140}}/>
+                      <input value={bpNumber} onChange={e=>setBpNumber(e.target.value)} placeholder="BP Number"
+                        style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:130}}/>
+                    </>
+                  )}
                   <button onClick={()=>markStage(stage.stage_number,"completed")} disabled={isActing}
                     style={{padding:"5px 14px",borderRadius:6,background:isActing?T.b1:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:isActing?"not-allowed":"pointer"}}>
                     {isActing?"...":"✓ Mark Complete"}

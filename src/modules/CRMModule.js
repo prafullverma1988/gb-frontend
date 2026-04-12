@@ -1649,6 +1649,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                 {key:"doc_ele_bill", label:"Electricity Bill",   icon:"⚡", required:true},
                 {key:"doc_aadhaar",  label:"Aadhaar Card",       icon:"🪪", required:true},
                 {key:"doc_pan",      label:"PAN Card",           icon:"💳", required:true},
+                {key:"doc_bank",     label:"Bank Details",       icon:"🏦", required:true},
                 {key:"geo_photo_url",label:"Geo-tag Site Photo", icon:"📍", required:true, isPhoto:true},
                 {key:"doc_itr",      label:"ITR / Form 16",      icon:"📋", required:false},
               ].map(doc=>{
@@ -1784,6 +1785,7 @@ Total: ${amt} (incl. GST + 5yr maintenance)
                     if(!docs.doc_ele_bill) missing.push("Electricity Bill");
                     if(!docs.doc_aadhaar) missing.push("Aadhaar");
                     if(!docs.doc_pan) missing.push("PAN");
+                    if(!docs.doc_bank) missing.push("Bank Details");
                     if(!selectedBrand) missing.push("Final Quotation");
                     if(missing.length>0) return setErr("Required: "+missing.join(", "));
                     setSaving(true);
