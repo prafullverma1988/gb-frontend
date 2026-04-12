@@ -7773,6 +7773,26 @@ function TabSuryaGhar({ projectId }) {
     } catch(e) { setErr(e.message); }
   };
 
+  const replaceDoc = async (file, docId) => {
+    setUploading(true); setErr("");
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", "gb_buildcon_drawings");
+      fd.append("folder", "gb_buildcon/solar_docs");
+      const cld = await new Promise((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        xhr.onload = () => { const d = JSON.parse(xhr.responseText); xhr.status===200 ? resolve(d) : reject(new Error(d.error?.message||"Upload failed")); };
+        xhr.onerror = () => reject(new Error("Network error"));
+        xhr.open("POST", "https://api.cloudinary.com/v1_1/dd632nqfm/auto/upload");
+        xhr.send(fd);
+      });
+      await api.put(`/solar/projects/${projectId}/stage-docs/${docId}`, { file_url: cld.secure_url });
+      load();
+    } catch(e) { setErr(e.message || "Replace failed"); }
+    setUploading(false);
+  };
+
   const uploadFile = async (file, stageNum) => {
     setUploading(true); setErr("");
     try {
@@ -7867,6 +7887,7 @@ function TabSuryaGhar({ projectId }) {
           const isActive = !isDone && !isSkipped && idx === stages.findIndex(s => s.status !== "completed" && s.status !== "skipped");
           const docList = stage.doc_names ? stage.doc_names.split("||").filter(Boolean) : [];
           const urlList = stage.doc_urls  ? stage.doc_urls.split("||").filter(Boolean)  : [];
+          const idList  = stage.doc_ids   ? String(stage.doc_ids).split("||").filter(Boolean) : [];
 
           return (
             <div key={stage.id} style={{
@@ -7902,10 +7923,19 @@ function TabSuryaGhar({ projectId }) {
                   {docList.length>0&&(
                     <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:6}}>
                       {docList.map((name,i)=>(
-                        <a key={i} href={urlList[i]||"#"} target="_blank" rel="noreferrer"
-                          style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:4,border:`1px solid ${T.bluM}`,textDecoration:"none"}}>
-                          📎 {name}
-                        </a>
+                        <div key={i} style={{display:"inline-flex",alignItems:"center",gap:0,borderRadius:4,overflow:"hidden",border:`1px solid ${T.bluM}`}}>
+                          <a href={urlList[i]||"#"} target="_blank" rel="noreferrer"
+                            style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:10,color:T.blu,background:T.bluL,padding:"2px 7px",textDecoration:"none"}}>
+                            📎 {name}
+                          </a>
+                          {!isDone&&!isSkipped&&idList[i]&&(
+                            <label title="Replace this document" style={{display:"inline-flex",alignItems:"center",padding:"2px 6px",background:"#FEF3C7",borderLeft:`1px solid ${T.bluM}`,cursor:uploading?"not-allowed":"pointer",fontSize:10,color:"#92400E"}}>
+                              <input type="file" accept="image/*,application/pdf" style={{display:"none"}} disabled={uploading}
+                                onChange={e=>{const f=e.target.files[0];if(f)replaceDoc(f,idList[i]);e.target.value="";}}/>
+                              🔄
+                            </label>
+                          )}
+                        </div>
                       ))}
                     </div>
                   )}
