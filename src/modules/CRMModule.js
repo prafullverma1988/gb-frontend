@@ -63,6 +63,7 @@ const STAGES=[
   {id:"proposal", label:"Proposal",   color:"#D97706", bg:"#FFFBEB", desc:"Quotation sent"},
   {id:"converted",label:"Converted",  color:"#059669", bg:"#ECFDF5", desc:"Deal closed!"},
   {id:"lost",     label:"Lost",       color:"#6B7280", bg:"#F1F5F9", desc:"Not interested"},
+  {id:"project",  label:"Converted to Project", color:"#1565C0", bg:"#E3F2FD", desc:"Active project"},
 ];
 
 const SOURCES=["Direct Call","Reference","Site Visit","Facebook Ad","Instagram","Google","Newspaper","Banner","Just Dial","Builder Fair","Other"];
@@ -343,7 +344,7 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,stages}){
 
 // ── KANBAN BOARD ─────────────────────────────────────────────────
 function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onAddLead}){
-  const stagesShow=STAGES.filter(s=>s.id!=="lost"||leads.some(l=>l.stage==="lost"));
+  const stagesShow=STAGES.filter(s=>(s.id!=="lost"&&s.id!=="project")||leads.some(l=>l.stage===s.id));
 
   const filterLeads=(stageId)=>leads.filter(l=>{
     if(l.stage!==stageId) return false;
@@ -362,7 +363,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onAddLead})
 
   return(
     <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:12,height:"100%",alignItems:"flex-start"}}>
-      {STAGES.map(stage=>{
+      {stagesShow.map(stage=>{
         const stageLeads=filterLeads(stage.id);
         const stageValue=stageLeads.reduce((s,l)=>s+(Number(l.budget)||0),0);
         const overdueInStage=stageLeads.filter(l=>daysDiff(l.contactDate)<0&&l.contactDate).length;
@@ -405,7 +406,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onAddLead})
               ))}
 
               {/* Add lead shortcut */}
-              {stage.id!=="lost"&&(
+              {stage.id!=="lost"&&stage.id!=="project"&&(
                 <button onClick={()=>onAddLead(stage.id)} style={{width:"100%",padding:"7px",borderRadius:7,border:`1.5px dashed ${stage.color}66`,background:"transparent",color:`${stage.color}BB`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginTop:4}}
                   onMouseEnter={e=>{e.currentTarget.style.background=`${stage.color}11`;}}
                   onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
@@ -1087,8 +1088,9 @@ const SOLAR_STAGES = [
   {id:"lead",      label:"Lead",      color:"#6366F1", bg:"#EEF2FF", desc:"New solar enquiry"},
   {id:"followup",  label:"Follow Up", color:"#0891B2", bg:"#E0F2FE", desc:"Site details collected"},
   {id:"proposal",  label:"Proposal",  color:"#D97706", bg:"#FFFBEB", desc:"Geo photo + quotation"},
-  {id:"converted", label:"Converted", color:"#059669", bg:"#ECFDF5", desc:"Docs uploaded → Project"},
+  {id:"converted", label:"Converted", color:"#059669", bg:"#ECFDF5", desc:"Docs uploaded → ready"},
   {id:"lost",      label:"Lost",      color:"#6B7280", bg:"#F1F5F9", desc:"Not interested"},
+  {id:"project",   label:"Converted to Project", color:"#1565C0", bg:"#E3F2FD", desc:"Active solar project"},
 ];
 
 const KW_OPTIONS = ["1","2","3","4","5","6","7","8","9","10"];
@@ -1845,7 +1847,7 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
             <div style={{fontSize:12.5,color:T.t2,marginBottom:12}}>
               Move <strong>{data.name}</strong> to a different stage:
             </div>
-            {SOLAR_STAGES.map(s=>{
+            {SOLAR_STAGES.filter(s=>s.id!=="project").map(s=>{
               const isCurrent = s.id===data.stage;
               return (
                 <button key={s.id} onClick={async()=>{
@@ -1877,7 +1879,7 @@ Total: ${amt} (incl. GST + 5yr maintenance)`;
       </div>
 
       {/* ── STICKY MOVE STAGE FOOTER ── */}
-      {data.stage!=="converted"&&data.stage!=="lost"&&(()=>{
+      {data.stage!=="converted"&&data.stage!=="lost"&&data.stage!=="project"&&(()=>{
         const idx2=SOLAR_STAGES.findIndex(s=>s.id===data.stage);
         const nextStage=SOLAR_STAGES[idx2+1];
         if(!nextStage||nextStage.id==="lost") return null;
@@ -2063,10 +2065,10 @@ function CRMModule(){
 
   // Merge all leads for KPI counts
   const allLeads = [...(canConstruction?leads:[]),...(canSolar?solarLeads:[])];
-  const todayDueCount=allLeads.filter(l=>l.contactDate&&daysDiff(l.contactDate)<=0&&!dismissedReminders.includes(l.id)&&l.stage!=="converted"&&l.stage!=="lost").length;
-  const pipelineValue=leads.filter(l=>l.stage!=="lost").reduce((s,l)=>s+(Number(l.budget)||0),0);
-  const convertedValue=leads.filter(l=>l.stage==="converted").reduce((s,l)=>s+(Number(l.convertedValue)||Number(l.budget)||0),0);
-  const conversionRate=allLeads.length?Math.round((allLeads.filter(l=>l.stage==="converted").length/allLeads.length)*100):0;
+  const todayDueCount=allLeads.filter(l=>l.contactDate&&daysDiff(l.contactDate)<=0&&!dismissedReminders.includes(l.id)&&l.stage!=="converted"&&l.stage!=="project"&&l.stage!=="lost").length;
+  const pipelineValue=leads.filter(l=>l.stage!=="lost"&&l.stage!=="project").reduce((s,l)=>s+(Number(l.budget)||0),0);
+  const convertedValue=leads.filter(l=>l.stage==="converted"||l.stage==="project").reduce((s,l)=>s+(Number(l.convertedValue)||Number(l.budget)||0),0);
+  const conversionRate=allLeads.length?Math.round((allLeads.filter(l=>l.stage==="converted"||l.stage==="project").length/allLeads.length)*100):0;
 
   const TILES=[
     {l:"Total Leads",v:leads.length,sub:`${leads.filter(l=>l.stage==="lead").length} new · ${leads.filter(l=>l.stage==="followup").length} followup`,c:T.blu,I:IcCRM},
@@ -2196,7 +2198,7 @@ function CRMModule(){
             // Show quotation prompt when moved to proposal
             if(updates.stage==="proposal") setQuotPromptLead({...selSolarLead,...updates,_isSolar:true});
           }}
-          onConvertToProject={(project)=>{ setSolarLeads(p=>p.map(l=>l.id===selSolarLead.id?{...l,stage:"converted"}:l)); setSelSolarLead(null); }}
+          onConvertToProject={(project)=>{ setSolarLeads(p=>p.map(l=>l.id===selSolarLead.id?{...l,stage:"project",converted_project_id:project.id||project.project_id}:l)); setSelSolarLead(null); }}
         />
       )}
       {showTypeSelector&&(
