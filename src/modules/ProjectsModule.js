@@ -1321,6 +1321,9 @@ function ProjectsPage({onSelectProject}){
   const [mrPendingCount,setMrPendingCount]=useState(0);
   const [prPendingCount,setPrPendingCount]=useState(0);
   const [todoCount,setTodoCount]=useState(0);
+  const [showTodoDrawer,setShowTodoDrawer]=useState(false);
+  const [allTodos,setAllTodos]=useState([]);
+  const [todosLoading,setTodosLoading]=useState(false);
 
   // Load real approval counts from centralized engine
   const loadApprovalCounts=async()=>{
@@ -1458,7 +1461,13 @@ function ProjectsPage({onSelectProject}){
   const ACTION_TILES=[
     {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalMode("approvals");setShowApprovals(true);}},
     {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalMode("materials");setShowApprovals(true);}},
-    {label:"My To-Do",          val:todoCount,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
+    {label:"My To-Do",          val:todoCount,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM,onClick:()=>{
+      setShowTodoDrawer(true);
+      setTodosLoading(true);
+      api.get("/projects/all-todos").then(r=>{
+        if(r.success) setAllTodos(r.data||[]);
+      }).catch(()=>{}).finally(()=>setTodosLoading(false));
+    }},
     {label:"Open Issues", val:allIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length, Icon:IcWarn, color:T.red,bg:T.redL,bdr:T.redM,
       onClick:()=>{
       setIssueFilter("Open");
@@ -1776,6 +1785,7 @@ function ProjectsPage({onSelectProject}){
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
       {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} mode={approvalMode}/>}
       {showIssuesDrawer&&<IssuesDrawer issues={allIssues} loading={issuesLoading} filter={issueFilter} setFilter={setIssueFilter} onClose={()=>setShowIssuesDrawer(false)} onIssueClose={(id)=>setAllIssues(p=>p.map(x=>x.id===id?{...x,status:"Closed"}:x))}/>}
+      {showTodoDrawer&&<TodoDrawer todos={allTodos} loading={todosLoading} onClose={()=>{setShowTodoDrawer(false);api.get("/projects/my-todo-count").then(r=>{if(r.success&&r.data)setTodoCount(r.data.count||0);}).catch(()=>{});}} onSelectProject={onSelectProject}/>}
       {settingsOf&&<ProjectSettingsModal
         project={settingsOf}
         onClose={()=>setSettingsOf(null)}
@@ -2020,6 +2030,79 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
                   </div>
                 </div>
               )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  </>);
+}
+
+// ── TODO DRAWER ─────────────────────────────────────────────────
+function TodoDrawer({todos,loading,onClose,onSelectProject}){
+  const [filter,setFilter]=useState("Pending"); // Pending | Done | All
+  const priC={"High":{c:"#DC2626",bg:"#FEE2E2"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"Low":{c:"#64748B",bg:"#F1F5F9"}};
+  const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+
+  const parsed=todos.map(t=>{
+    let cl=[];
+    try{ cl=typeof t.checklist==="string"?JSON.parse(t.checklist):(t.checklist||[]); }catch(e){}
+    return {...t,done:t.status==="done"||t.status==="Completed",checklist:cl};
+  });
+  const filtered=filter==="All"?parsed:filter==="Pending"?parsed.filter(t=>!t.done):parsed.filter(t=>t.done);
+  const pendingCount=parsed.filter(t=>!t.done).length;
+  const doneCount=parsed.filter(t=>t.done).length;
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+      {/* Header */}
+      <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>My To-Do</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.4)",marginTop:1}}>{pendingCount} pending · {doneCount} done · All projects</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div style={{display:"flex",gap:4}}>
+          {["Pending","Done","All"].map(f=>(
+            <button key={f} onClick={()=>setFilter(f)}
+              style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
+              {f} {f==="Pending"?`(${pendingCount})`:f==="Done"?`(${doneCount})`:`(${parsed.length})`}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Content */}
+      <div style={{flex:1,overflow:"auto",padding:"10px 14px"}}>
+        {loading?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>
+        :filtered.length===0?<div style={{textAlign:"center",padding:"40px 0",color:"#94A3B8",fontSize:13}}>No todos found</div>
+        :filtered.map(t=>{
+          const pr=priC[t.priority]||priC["Medium"];
+          const clDone=(t.checklist||[]).filter(c=>c.done).length;
+          return(
+            <div key={t.id} style={{background:"white",borderRadius:8,border:"1px solid #E2E8F0",marginBottom:8,padding:"10px 13px",borderLeft:`3px solid ${pr.c}44`}}>
+              <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                <div style={{width:16,height:16,borderRadius:4,border:t.done?`none`:`1.5px solid #CBD5E1`,background:t.done?"#22C55E":"transparent",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                  {t.done&&<svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>}
+                </div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:500,color:t.done?"#94A3B8":"#1E293B",textDecoration:t.done?"line-through":"none",marginBottom:4,lineHeight:1.4}}>{t.title}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                    <span onClick={()=>{onClose();onSelectProject&&onSelectProject({id:t.project_id});}}
+                      style={{fontSize:10,fontWeight:600,color:"#3B82F6",background:"#EFF6FF",padding:"1px 7px",borderRadius:10,cursor:"pointer",border:"1px solid #BFDBFE"}}>{t.project_name||"Project"}</span>
+                    {t.category&&t.category!=="Other"&&<span style={{fontSize:10,color:"#64748B",background:"#F1F5F9",padding:"1px 6px",borderRadius:10}}>{t.category}</span>}
+                    <span style={{fontSize:10,fontWeight:600,color:pr.c,background:pr.bg,padding:"1px 6px",borderRadius:10}}>{t.priority}</span>
+                    {t.assigned_name&&<span style={{fontSize:10,color:"#64748B"}}>@{t.assigned_name.split(" ")[0]}</span>}
+                    {t.due_date&&<span style={{fontSize:10,color:"#64748B"}}>Due {fmtDate(t.due_date)}</span>}
+                    {t.checklist&&t.checklist.length>0&&<span style={{fontSize:10,fontWeight:600,color:clDone===t.checklist.length?"#22C55E":"#94A3B8"}}>☑ {clDone}/{t.checklist.length}</span>}
+                  </div>
+                </div>
+              </div>
             </div>
           );
         })}
