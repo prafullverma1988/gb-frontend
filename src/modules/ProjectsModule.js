@@ -208,58 +208,157 @@ const PEND_PMTS_DATA=[
 ];
 
 function SitePulseDrawer({onClose}){
-  const [site,setSite]=useState("All");const [type,setType]=useState("All");const [liked,setLiked]=useState({});
-  const tagMeta={"progress":{c:C.g,b:C.gl},"material":{c:C.p,b:C.bl},"issue":{c:C.r,b:C.rl},"approval":{c:C.teal,b:C.tealL}};
-  const filtered=PULSE_FEED.filter(f=>(site==="All"||f.site.includes(site))&&(type==="All"||f.type===type));
+  const [site,setSite]=useState("All");
+  const [type,setType]=useState("All");
+  const [feed,setFeed]=useState([]);
+  const [projects,setProjects]=useState([]);
+  const [loading,setLoading]=useState(true);
+
+  const tagMeta={
+    "progress":{c:C.g,b:C.gl,icon:"🏗️",label:"Progress"},
+    "material":{c:C.p,b:C.bl,icon:"📦",label:"Material Received"},
+    "material_request":{c:"#0891B2",b:"#ECFEFF",icon:"📋",label:"Material Request"},
+    "approval":{c:C.teal,b:C.tealL,icon:"✅",label:"Approved"},
+    "payment":{c:C.o,b:C.ol,icon:"💰",label:"Payment"},
+    "photo":{c:"#7C3AED",b:"#EDE9FE",icon:"📸",label:"Photo"},
+    "document":{c:C.p,b:C.bl,icon:"📄",label:"Document"},
+  };
+  const avatarColors=["#1565C0","#2E7D32","#6A1B9A","#AD1457","#E65100","#00838F","#4527A0","#C62828"];
+  const getAC=(name)=>avatarColors[Math.abs([...name].reduce((a,c)=>a+c.charCodeAt(0),0))%avatarColors.length];
+
+  useEffect(()=>{
+    setLoading(true);
+    api.get("/projects/site-pulse?limit=60").then(r=>{
+      if(r.success&&r.data){
+        setFeed(r.data.feed||[]);
+        setProjects(r.data.projects||[]);
+      }
+    }).catch(()=>{}).finally(()=>setLoading(false));
+  },[]);
+
+  const timeAgo=(d)=>{
+    if(!d) return "";
+    const diff=Date.now()-new Date(d).getTime();
+    const mins=Math.floor(diff/60000);
+    if(mins<1) return "just now";
+    if(mins<60) return mins+"m ago";
+    const hrs=Math.floor(mins/60);
+    if(hrs<24) return hrs+"h ago";
+    const days=Math.floor(hrs/24);
+    if(days<7) return days+"d ago";
+    return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
+  };
+
+  const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&(type==="All"||f.feed_type===type));
+
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:200,backdropFilter:"blur(2px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:390,background:C.bg,zIndex:201,boxShadow:"-8px 0 40px rgba(0,0,0,0.24)",display:"flex",flexDirection:"column",animation:"slideIn 0.22s ease",fontFamily:"'Segoe UI',sans-serif"}}>
-      <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0}}>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(420px,96vw)",background:C.bg,zIndex:201,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",fontFamily:"'Segoe UI',sans-serif",borderRadius:"16px 0 0 16px"}}>
+      <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0,borderRadius:"16px 0 0 0"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
           <div style={{display:"flex",alignItems:"center",gap:7}}>
             <div style={{width:9,height:9,borderRadius:"50%",background:C.g,boxShadow:`0 0 0 3px ${C.gl}`,animation:"livePulse 1.5s infinite"}}/>
             <span style={{fontSize:14,fontWeight:800,color:C.t}}>Site Pulse</span>
             <span style={{background:C.r,color:"white",fontSize:8,fontWeight:800,padding:"2px 5px",borderRadius:4,letterSpacing:"0.6px"}}>LIVE</span>
+            {!loading&&<span style={{fontSize:10,color:C.tl}}>{filtered.length} activities</span>}
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}><IcX size={15}/></button>
         </div>
         <div style={{display:"flex",gap:6}}>
           <select value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
-            <option>All</option>{["Shubham 623","Esther Risali","Amarendra Villa","Tikendra Residence","Neha Sagar Office","Bablu Farmhouse"].map(s=><option key={s}>{s}</option>)}
+            <option value="All">All Projects</option>
+            {projects.map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={type} onChange={e=>setType(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
-            {["All","photo","material","issue","approval"].map(t=><option key={t} value={t}>{t==="All"?"All Types":t[0].toUpperCase()+t.slice(1)}</option>)}
+            <option value="All">All Types</option>
+            {Object.entries(tagMeta).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
           </select>
         </div>
       </div>
+
       <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
-        {filtered.map(f=>{
-          const tm=tagMeta[f.tag]||{c:C.tm,b:C.b};const isL=liked[f.id];
+        {loading?(
+          <div style={{textAlign:"center",padding:"50px 0",color:C.tl}}>
+            <div style={{width:24,height:24,border:"3px solid "+C.b,borderTopColor:C.p,borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 12px"}}/>
+            Loading feed...
+          </div>
+        ):filtered.length===0?(
+          <div style={{textAlign:"center",padding:"50px 0",color:C.tl,fontSize:13}}>
+            <div style={{fontSize:36,marginBottom:10}}>📡</div>
+            No activities yet
+            <div style={{fontSize:11,marginTop:4,color:C.tl+"99"}}>Activities from your projects will appear here</div>
+          </div>
+        ):filtered.map((f,idx)=>{
+          const tm=tagMeta[f.feed_type]||{c:C.tl,b:C.b,icon:"📌",label:f.feed_type};
+          const ac=getAC(f.user_name||"U");
+          const initials=(f.user_name||"U").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
+          const time=timeAgo(f.activity_date||f.created_at);
+          const amt=f.amount?`₹${Number(f.amount).toLocaleString("en-IN")}`:"";
+
           return(
-            <div key={f.id} style={{background:C.w,borderRadius:12,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.08)"}}>
+            <div key={`${f.feed_type}-${f.id}-${idx}`} style={{background:C.w,borderRadius:12,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:`1px solid ${C.b}`}}>
+              {/* User header */}
               <div style={{display:"flex",alignItems:"center",gap:9,padding:"10px 12px 7px"}}>
-                <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${f.ac},${f.ac}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"white",flexShrink:0,boxShadow:`0 0 0 2px ${f.ac}44`}}>{f.user.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
-                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.t}}>{f.user} <span style={{fontSize:10,fontWeight:400,color:C.tl}}>· {f.role}</span></div><div style={{fontSize:10,color:C.tl}}>📍 {f.site} · {f.time}</div></div>
-                <span style={{background:tm.b,color:tm.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:20,textTransform:"capitalize"}}>{f.tag}</span>
+                <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${ac},${ac}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"white",flexShrink:0,boxShadow:`0 0 0 2px ${ac}33`}}>{initials}</div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.t}}>{f.user_name}</div>
+                  <div style={{fontSize:10,color:C.tl,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>📍 {f.project_name} · {time}</div>
+                </div>
+                <span style={{background:tm.b,color:tm.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:20,textTransform:"capitalize",whiteSpace:"nowrap",flexShrink:0}}>{tm.label}</span>
               </div>
-              {f.img&&<img src={f.img} alt="site" style={{width:"100%",height:180,objectFit:"cover",display:"block"}} onError={e=>{e.target.parentElement.innerHTML='<div style="height:180px;background:linear-gradient(135deg,#E3F2FD,#BBDEFB);display:flex;align-items:center;justify-content:center;font-size:40px">🏗️</div>';}}/>}
-              {!f.img&&f.type==="issue"&&<div style={{margin:"0 12px 6px",background:C.rl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.r}`,display:"flex",gap:7,alignItems:"center"}}><IcWarn size={13} color={C.r}/><span style={{fontSize:11.5,color:C.r,fontWeight:500}}>Issue Flagged</span></div>}
-              {!f.img&&f.type==="approval"&&<div style={{margin:"0 12px 6px",background:C.tealL,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.teal}`,display:"flex",gap:7,alignItems:"center"}}><IcChk size={13} color={C.teal}/><span style={{fontSize:11.5,color:C.teal,fontWeight:500}}>Payment Approved</span></div>}
-              {!f.img&&f.type==="material"&&<div style={{margin:"0 12px 6px",background:C.bl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.p}`,display:"flex",gap:7,alignItems:"center"}}><span style={{fontSize:16}}>📦</span><span style={{fontSize:11.5,color:C.p,fontWeight:500}}>Material Received</span></div>}
-              <div style={{padding:"7px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user}</strong> {f.caption}</span></div>
-              <div style={{padding:"5px 12px 10px",display:"flex",gap:14,alignItems:"center"}}>
-                <button onClick={()=>setLiked(p=>({...p,[f.id]:!p[f.id]}))} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:isL?C.r:C.tl,padding:0,transition:"transform 0.15s"}} onMouseEnter={e=>e.currentTarget.style.transform="scale(1.18)"} onMouseLeave={e=>e.currentTarget.style.transform="scale(1)"}>
-                  <IcHeart size={16} color={isL?C.r:C.tl} fill={isL?C.r:"none"}/><span style={{fontSize:11,fontWeight:600}}>{f.likes+(isL?1:0)}</span>
-                </button>
-                <button style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:C.tl,padding:0}}><IcMsg size={15} color={C.tl}/><span style={{fontSize:11,fontWeight:600}}>{f.comments}</span></button>
-                <div style={{flex:1}}/><span style={{fontSize:9.5,color:C.tl}}>{f.time}</span>
+
+              {/* Photo if available */}
+              {f.photo_url&&(
+                <img src={f.photo_url} alt="site" style={{width:"100%",height:180,objectFit:"cover",display:"block"}}
+                  onError={e=>{e.target.style.display="none";}}/>
+              )}
+
+              {/* Type-specific banner */}
+              {!f.photo_url&&f.feed_type==="approval"&&(
+                <div style={{margin:"0 12px 6px",background:C.tealL,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.teal}`,display:"flex",gap:7,alignItems:"center"}}>
+                  <IcChk size={13} color={C.teal}/><span style={{fontSize:11.5,color:C.teal,fontWeight:500}}>{f.feed_status==="Rejected"?"Rejected":"Approved"}{amt?` — ${amt}`:""}</span>
+                </div>
+              )}
+              {!f.photo_url&&f.feed_type==="material"&&(
+                <div style={{margin:"0 12px 6px",background:C.bl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.p}`,display:"flex",gap:7,alignItems:"center"}}>
+                  <span style={{fontSize:16}}>📦</span><span style={{fontSize:11.5,color:C.p,fontWeight:500}}>Material Received{amt?` — ${amt}`:""}</span>
+                </div>
+              )}
+              {!f.photo_url&&f.feed_type==="payment"&&(
+                <div style={{margin:"0 12px 6px",background:C.ol,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.o}`,display:"flex",gap:7,alignItems:"center"}}>
+                  <span style={{fontSize:16}}>💰</span><span style={{fontSize:11.5,color:C.o,fontWeight:500}}>{f.feed_status}{amt?` — ${amt}`:""}</span>
+                </div>
+              )}
+              {!f.photo_url&&f.feed_type==="progress"&&(
+                <div style={{margin:"0 12px 6px",background:C.gl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.g}`,display:"flex",gap:7,alignItems:"center"}}>
+                  <span style={{fontSize:16}}>🏗️</span><span style={{fontSize:11.5,color:C.g,fontWeight:500}}>Stage Completed</span>
+                </div>
+              )}
+              {!f.photo_url&&f.feed_type==="material_request"&&(
+                <div style={{margin:"0 12px 6px",background:"#ECFEFF",borderRadius:8,padding:"8px 11px",borderLeft:"3px solid #0891B2",display:"flex",gap:7,alignItems:"center"}}>
+                  <span style={{fontSize:16}}>📋</span><span style={{fontSize:11.5,color:"#0891B2",fontWeight:500}}>{f.feed_status}{amt?` — ${amt}`:""}</span>
+                </div>
+              )}
+
+              {/* Caption */}
+              <div style={{padding:"5px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user_name}</strong> {f.text}</span></div>
+
+              {/* Footer */}
+              <div style={{padding:"5px 12px 10px",display:"flex",alignItems:"center"}}>
+                <span style={{fontSize:10,color:C.tl,fontStyle:"italic"}}>{f.module}</span>
+                <div style={{flex:1}}/>
+                <span style={{fontSize:9.5,color:C.tl}}>{time}</span>
               </div>
             </div>
           );
         })}
       </div>
-      <div style={{padding:"10px 12px",background:C.w,borderTop:`1px solid ${C.b}`}}>
-        <button style={{width:"100%",padding:"9px",borderRadius:8,background:`linear-gradient(135deg,${C.pur},#8E24AA)`,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>View Full Site Pulse →</button>
+
+      <div style={{padding:"10px 12px",background:C.w,borderTop:`1px solid ${C.b}`,borderRadius:"0 0 0 16px"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",justifyContent:"center"}}>
+          <div style={{width:6,height:6,borderRadius:"50%",background:C.g,animation:"livePulse 1.5s infinite"}}/>
+          <span style={{fontSize:11,color:C.tl,fontWeight:500}}>Real-time feed from all projects</span>
+        </div>
       </div>
     </div>
   </>);
