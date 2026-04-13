@@ -1292,8 +1292,12 @@ function ProjectsPage({onSelectProject}){
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
 
-  // Inject spin keyframes once
-  if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
+  // Inject keyframes once
+  if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent=`
+    @keyframes spin{to{transform:rotate(360deg)}}
+    @keyframes slideIn{from{transform:translateX(100%);opacity:.7}to{transform:translateX(0);opacity:1}}
+    @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+  `;document.head.appendChild(s);}
 
   const [allProjects,setAllProjects]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -1920,7 +1924,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
   };
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     {fullPhoto&&(
       <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
         <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
@@ -1929,7 +1933,7 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
         </button>
       </div>
     )}
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",borderRadius:"16px 0 0 16px"}}>
       {/* Header */}
       <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
@@ -2054,8 +2058,8 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
   const doneCount=parsed.filter(t=>t.done).length;
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
+    <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",borderRadius:"16px 0 0 16px"}}>
       {/* Header */}
       <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
