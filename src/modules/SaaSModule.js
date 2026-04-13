@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 
 const API = "https://gb-backend-production-7bd2.up.railway.app/api";
 const tok = () => localStorage.getItem("token");
@@ -24,6 +24,19 @@ const IcEye       = p => <Ic {...p} d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11
 const IcEyeX      = p => <Ic {...p} d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19m-6.72-1.07a3 3 0 11-4.24-4.24M1 1l22 22" />;
 const IcRefresh   = p => <Ic {...p} d="M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />;
 const IcLock      = p => <Ic {...p} d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4" />;
+const IcClip      = p => <Ic {...p} d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />;
+const IcDownload  = p => <Ic {...p} d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3" />;
+const IcShield    = p => <Ic {...p} d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />;
+const IcSearch    = p => <Ic {...p} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />;
+const IcActivity  = p => <Ic {...p} d="M22 12h-4l-3 9L9 3l-3 9H2" />;
+const IcDollar    = p => <Ic {...p} d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />;
+const IcFolder    = p => <Ic {...p} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />;
+const IcCog       = p => <Ic {...p} d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />;
+const IcChevD     = p => <Ic {...p} d="M6 9l6 6 6-6" />;
+const IcChevR     = p => <Ic {...p} d="M9 18l6-6-6-6" />;
+const IcChevL     = p => <Ic {...p} d="M15 18l-6-6 6-6" />;
+const IcFilter    = p => <Ic {...p} d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z" />;
+const IcLogin     = p => <Ic {...p} d="M15 3h4a2 2 0 012 2v14a2 2 0 01-2 2h-4M10 17l5-5-5-5M15 12H3" />;
 
 // ── THEME ──────────────────────────────────────────────────────────────
 const T = {
@@ -36,11 +49,24 @@ const T = {
   red:"#DC2626", redL:"#FEF2F2", redM:"#FECACA",
   pur:"#7C3AED", purL:"#F5F3FF", purM:"#DDD6FE",
   slt:"#64748B", sltL:"#F1F5F9",
+  cyn:"#0891B2", cynL:"#ECFEFF", cynM:"#A5F3FC",
 };
 
-const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" }) : "—";
+const fmtDate = d => d ? new Date(d).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" }) : "--";
+const fmtDateTime = d => d ? new Date(d).toLocaleString("en-IN", { day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit" }) : "--";
+const fmtNum = n => (n||0).toLocaleString("en-IN");
+const fmtMoney = n => { const v = parseFloat(n)||0; return v >= 10000000 ? (v/10000000).toFixed(2)+" Cr" : v >= 100000 ? (v/100000).toFixed(2)+" L" : v >= 1000 ? (v/1000).toFixed(1)+"K" : v.toFixed(0); };
 
-// ── SHARED ─────────────────────────────────────────────────────────────
+const DOMAIN_LABELS = {
+  construction_individual: "Construction (Individual)",
+  construction_company:    "Construction (Company)",
+  surya_ghar:              "Surya Ghar (Solar)",
+  surya_ghar_plus:         "Surya Ghar Plus",
+  interior_design:         "Interior Design",
+  real_estate:             "Real Estate",
+};
+
+// ── SHARED COMPONENTS ──────────────────────────────────────────────────
 function Toast({ msg, type, onClose }) {
   useEffect(() => { const t = setTimeout(onClose, 3000); return () => clearTimeout(t); }, []);
   return (
@@ -82,7 +108,88 @@ function StatCard({ label, value, sub, color, Icon }) {
   );
 }
 
-// ── TAB: STATS ─────────────────────────────────────────────────────────
+function Badge({ text, color }) {
+  return (
+    <span style={{ fontSize:9.5, fontWeight:700, padding:"2px 9px", borderRadius:20, background:color+"18", color, border:`1px solid ${color}30`, whiteSpace:"nowrap" }}>
+      {text}
+    </span>
+  );
+}
+
+function Btn({ children, onClick, color = T.blu, variant = "primary", disabled, style: sx, ...rest }) {
+  const bg = variant === "primary" ? color : "transparent";
+  const fg = variant === "primary" ? "#fff" : color;
+  const bdr = variant === "primary" ? "none" : `1px solid ${T.b1}`;
+  return (
+    <button onClick={onClick} disabled={disabled} {...rest}
+      style={{ display:"flex", alignItems:"center", gap:7, padding:"8px 14px", borderRadius:8, background: disabled ? T.t4 : bg,
+        color: disabled ? "#fff" : fg, fontSize:12.5, fontWeight:600, border:bdr, cursor: disabled ? "not-allowed" : "pointer",
+        fontFamily:"inherit", transition:"all 0.15s", ...sx }}>
+      {children}
+    </button>
+  );
+}
+
+function InputField({ label, value, onChange, placeholder, type = "text", required, endIcon, style: sx }) {
+  return (
+    <div style={sx}>
+      {label && <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>{label}{required && " *"}</label>}
+      <div style={{ position:"relative" }}>
+        <input type={type} value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+          style={{ width:"100%", padding:"9px 12px", paddingRight: endIcon ? 36 : 12, borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }}
+          onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+        {endIcon && <div style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", display:"flex" }}>{endIcon}</div>}
+      </div>
+    </div>
+  );
+}
+
+function SelectField({ label, value, onChange, options, placeholder }) {
+  return (
+    <div>
+      {label && <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>{label}</label>}
+      <select value={value} onChange={e => onChange(e.target.value)}
+        style={{ width:"100%", padding:"9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit", cursor:"pointer" }}>
+        {placeholder && <option value="">{placeholder}</option>}
+        {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
+function EmptyState({ Icon, text }) {
+  return (
+    <div style={{ textAlign:"center", padding:"60px 0", color:T.t3, fontSize:13 }}>
+      <Icon size={40} color={T.b2}/><div style={{ marginTop:12 }}>{text}</div>
+    </div>
+  );
+}
+
+function TableHeader({ columns, gridCols }) {
+  return (
+    <div style={{ display:"grid", gridTemplateColumns:gridCols, padding:"9px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}` }}>
+      {columns.map((h,i) => (
+        <div key={i} style={{ fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"0.5px" }}>{h}</div>
+      ))}
+    </div>
+  );
+}
+
+function PageHeader({ title, sub, right }) {
+  return (
+    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:18 }}>
+      <div>
+        <div style={{ fontSize:16, fontWeight:700, color:T.t1 }}>{title}</div>
+        {sub && <div style={{ fontSize:12, color:T.t3, marginTop:2 }}>{sub}</div>}
+      </div>
+      {right && <div style={{ display:"flex", gap:8, alignItems:"center" }}>{right}</div>}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// TAB 1: DASHBOARD / STATS
+// ════════════════════════════════════════════════════════════════════════
 function TabStats() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -91,43 +198,118 @@ function TabStats() {
     setLoading(true);
     apiFetch("/saas-admin/stats").then(res => {
       if (res.success) setData(res.data);
+      else setData(null);
       setLoading(false);
     }).catch(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
 
-  if (loading) return <div style={{ textAlign:"center", padding:60, color:T.t3, fontSize:13 }}>Loading stats...</div>;
-  if (!data) return <div style={{ textAlign:"center", padding:60, color:T.red, fontSize:13 }}>Failed to load</div>;
+  if (loading) return <div style={{ textAlign:"center", padding:60, color:T.t3, fontSize:13 }}>Loading platform data...</div>;
+  if (!data) return (
+    <div style={{ textAlign:"center", padding:60 }}>
+      <div style={{ color:T.red, fontSize:14, fontWeight:600, marginBottom:8 }}>Failed to load stats</div>
+      <Btn onClick={load} variant="outline" style={{ margin:"0 auto" }}><IcRefresh size={13}/> Retry</Btn>
+    </div>
+  );
+
+  const actionIcon = a => {
+    const map = { LOGIN: IcLogin, CREATE: IcPlus, UPDATE: IcCog, DELETE: IcX, EXPORT: IcDownload, DEACTIVATE: IcX, REACTIVATE: IcChk };
+    const C = map[a] || IcActivity;
+    return <C size={13}/>;
+  };
+  const actionColor = a => ({ LOGIN:T.blu, CREATE:T.grn, UPDATE:T.amb, DELETE:T.red, EXPORT:T.pur, DEACTIVATE:T.red, REACTIVATE:T.grn }[a] || T.slt);
 
   return (
     <div style={{ padding:"20px 24px" }}>
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:20 }}>
-        <div style={{ fontSize:16, fontWeight:700, color:T.t1 }}>Platform Overview</div>
-        <button onClick={load} style={{ display:"flex", alignItems:"center", gap:6, padding:"6px 12px", borderRadius:7, border:`1px solid ${T.b1}`, background:T.surface, fontSize:12, color:T.t3, cursor:"pointer", fontWeight:500 }}>
-          <IcRefresh size={13}/> Refresh
-        </button>
+      <PageHeader title="Platform Overview" right={
+        <Btn onClick={load} variant="outline"><IcRefresh size={13}/> Refresh</Btn>
+      }/>
+
+      {/* KPI cards — 6 cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10, marginBottom:24 }}>
+        <StatCard label="Companies"     value={fmtNum(data.companies.total)}     sub={`${data.companies.active} active, ${data.companies.inactive||0} inactive`} color={T.blu} Icon={IcBuilding}/>
+        <StatCard label="Total Users"   value={fmtNum(data.users.total)}         sub={`${data.users.active||0} active`}           color={T.pur}  Icon={IcUsers}/>
+        <StatCard label="Projects"      value={fmtNum(data.projects?.total||0)}  sub="Active projects"                             color={T.grn}  Icon={IcFolder}/>
+        <StatCard label="Transactions"  value={fmtNum(data.transactions?.total)} sub={`Total: ${fmtMoney(data.transactions?.revenue)}`} color={T.amb} Icon={IcDollar}/>
+        <StatCard label="Modules"       value={fmtNum(data.modules.enabled)}     sub="Module-company pairs"                        color={T.cyn}  Icon={IcPuzzle}/>
+        <StatCard label="New Today"     value={fmtNum(data.new_today)}            sub="Registered today"                            color={T.slt}  Icon={IcTrend}/>
       </div>
 
-      {/* KPI cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12, marginBottom:24 }}>
-        <StatCard label="Total Companies"  value={data.companies.total}  sub={`${data.companies.active} active`}   color={T.blu} Icon={IcBuilding}/>
-        <StatCard label="Total Users"      value={data.users.total}      sub="Across all companies"                 color={T.pur} Icon={IcUsers}/>
-        <StatCard label="Modules Enabled"  value={data.modules.enabled}  sub="Module-company pairs"                 color={T.grn} Icon={IcPuzzle}/>
-        <StatCard label="New Today"        value={data.new_today}         sub="Companies registered today"           color={T.amb} Icon={IcTrend}/>
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
+        {/* Company breakdown */}
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Company Overview</span>
+            <span style={{ fontSize:11, color:T.t4 }}>{data.company_stats?.length || 0} total</span>
+          </div>
+          <div style={{ maxHeight:280, overflowY:"auto" }}>
+            {(data.company_stats||[]).map((c, i) => (
+              <div key={i} style={{ display:"grid", gridTemplateColumns:"1.5fr 60px 60px 90px", padding:"9px 16px", borderBottom:`1px solid ${T.b1}`, alignItems:"center" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:9 }}>
+                  <div style={{ width:30, height:30, borderRadius:7, background: c.is_active ? T.bluL : T.redL, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <span style={{ fontSize:12, fontWeight:700, color: c.is_active ? T.blu : T.red }}>{c.name[0]}</span>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:150 }}>{c.name}</div>
+                    <Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/>
+                  </div>
+                </div>
+                <div style={{ fontSize:12, color:T.t2, textAlign:"center" }}>{c.users} <span style={{fontSize:9,color:T.t4}}>users</span></div>
+                <div style={{ fontSize:12, color:T.t2, textAlign:"center" }}>{c.projects} <span style={{fontSize:9,color:T.t4}}>proj</span></div>
+                <div style={{ fontSize:12, fontWeight:600, color:T.grn, textAlign:"right" }}>{fmtMoney(c.revenue)}</div>
+              </div>
+            ))}
+            {(!data.company_stats || data.company_stats.length === 0) && (
+              <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No companies yet</div>
+            )}
+          </div>
+        </div>
+
+        {/* Recent audit activity */}
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Recent Activity</span>
+            <IcActivity size={14} color={T.t4}/>
+          </div>
+          <div style={{ maxHeight:280, overflowY:"auto" }}>
+            {(data.recent_audit||[]).length === 0 && (
+              <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No activity yet. Audit logging is active!</div>
+            )}
+            {(data.recent_audit||[]).map((a, i) => (
+              <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"9px 16px", borderBottom:`1px solid ${T.b1}` }}>
+                <div style={{ width:28, height:28, borderRadius:7, background:actionColor(a.action)+"18", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1, color:actionColor(a.action) }}>
+                  {actionIcon(a.action)}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:12, color:T.t1 }}>
+                    <strong>{a.user_name || "System"}</strong>{" "}
+                    <span style={{ color:actionColor(a.action), fontWeight:600, fontSize:11 }}>{a.action}</span>{" "}
+                    <span style={{ color:T.t3 }}>{a.entity_type}</span>
+                    {a.entity_id && <span style={{ color:T.t4 }}> #{a.entity_id}</span>}
+                  </div>
+                  <div style={{ fontSize:10, color:T.t4, marginTop:1 }}>
+                    {a.company_name || "Platform"} · {fmtDateTime(a.created_at)}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
+      {/* Module usage + growth */}
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
         {/* Module usage */}
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
           <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB }}>
-            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Module Usage</span>
+            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Module Adoption</span>
           </div>
           <div style={{ padding:"12px 16px" }}>
-            {data.module_usage.length === 0 && <div style={{ fontSize:12, color:T.t4, textAlign:"center", padding:"20px 0" }}>No data yet</div>}
-            {data.module_usage.map((m, i) => (
+            {(data.module_usage||[]).length === 0 && <div style={{ fontSize:12, color:T.t4, textAlign:"center", padding:"20px 0" }}>No modules assigned yet</div>}
+            {(data.module_usage||[]).map((m, i) => (
               <div key={i} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                <div style={{ width:90, fontSize:12, color:T.t2, fontWeight:500 }}>{m.module_key}</div>
+                <div style={{ width:90, fontSize:12, color:T.t2, fontWeight:500, textTransform:"capitalize" }}>{m.module_key}</div>
                 <div style={{ flex:1, height:6, background:T.b1, borderRadius:3, overflow:"hidden" }}>
                   <div style={{ height:"100%", width:`${Math.min((m.company_count / Math.max(data.companies.total,1))*100, 100)}%`, background:T.blu, borderRadius:3 }}/>
                 </div>
@@ -137,29 +319,29 @@ function TabStats() {
           </div>
         </div>
 
-        {/* Recent companies */}
+        {/* Company growth */}
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
           <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB }}>
-            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Recent Companies</span>
+            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Company Growth (6 months)</span>
           </div>
-          <div>
-            {data.recent_companies.map((c, i) => (
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 16px", borderBottom: i < data.recent_companies.length-1 ? `1px solid ${T.b1}` : "none" }}>
-                <div style={{ width:32, height:32, borderRadius:8, background:T.bluL, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                  <span style={{ fontSize:13, fontWeight:700, color:T.blu }}>{c.name[0].toUpperCase()}</span>
-                </div>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{c.name}</div>
-                  <div style={{ fontSize:10.5, color:T.t4 }}>{c.user_count} users · {fmtDate(c.created_at)}</div>
-                </div>
-                <span style={{ fontSize:9.5, fontWeight:700, padding:"2px 8px", borderRadius:20,
-                  background: c.is_active ? T.grnL : T.redL,
-                  color: c.is_active ? T.grn : T.red,
-                  border:`1px solid ${c.is_active ? T.grnM : T.redM}` }}>
-                  {c.is_active ? "Active" : "Inactive"}
-                </span>
+          <div style={{ padding:"16px" }}>
+            {(data.growth||[]).length === 0 ? (
+              <div style={{ fontSize:12, color:T.t4, textAlign:"center", padding:"20px 0" }}>Not enough data yet</div>
+            ) : (
+              <div style={{ display:"flex", alignItems:"flex-end", gap:8, height:120 }}>
+                {data.growth.map((g, i) => {
+                  const max = Math.max(...data.growth.map(x => x.count), 1);
+                  const h = (g.count / max) * 100;
+                  return (
+                    <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                      <div style={{ fontSize:11, fontWeight:700, color:T.blu }}>{g.count}</div>
+                      <div style={{ width:"100%", height:`${Math.max(h, 8)}%`, background:`linear-gradient(180deg, ${T.blu}, ${T.bluM})`, borderRadius:4 }}/>
+                      <div style={{ fontSize:9, color:T.t4, whiteSpace:"nowrap" }}>{g.month.split("-")[1]}/{g.month.split("-")[0].slice(2)}</div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+            )}
           </div>
         </div>
       </div>
@@ -167,28 +349,29 @@ function TabStats() {
   );
 }
 
-// ── TAB: COMPANIES ─────────────────────────────────────────────────────
-function TabCompanies({ onSelectCompany }) {
-  const [companies, setCompanies] = useState([]);
-  const [loading, setLoading]     = useState(true);
+// ════════════════════════════════════════════════════════════════════════
+// TAB 2: COMPANIES (Enhanced)
+// ════════════════════════════════════════════════════════════════════════
+function TabCompanies({ companies, reload, onSelectCompany }) {
   const [showModal, setShowModal] = useState(false);
   const [toast, setToast]         = useState(null);
-  const [form, setForm]           = useState({ name:"", admin_name:"", admin_email:"", admin_password:"", phone:"", city:"", state:"" });
+  const [form, setForm]           = useState({ name:"", admin_name:"", admin_email:"", admin_password:"", phone:"", city:"", state:"", module_type:"construction_individual" });
   const [showPass, setShowPass]   = useState(false);
   const [saving, setSaving]       = useState(false);
   const [toggling, setToggling]   = useState(null);
+  const [filter, setFilter]       = useState("all"); // all, active, inactive
+  const [search, setSearch]       = useState("");
+  const [detail, setDetail]       = useState(null);
 
-  const load = () => {
-    setLoading(true);
-    apiFetch("/saas-admin/companies").then(res => {
-      if (res.success) setCompanies(res.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  };
-
-  useEffect(() => { load(); }, []);
-
-  const upd = k => e => setForm(p => ({ ...p, [k]: e.target.value }));
+  const filtered = companies.filter(c => {
+    if (filter === "active" && !c.is_active) return false;
+    if (filter === "inactive" && c.is_active) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return c.name.toLowerCase().includes(s) || (c.city||"").toLowerCase().includes(s) || (c.slug||"").toLowerCase().includes(s);
+    }
+    return true;
+  });
 
   const createCompany = async () => {
     if (!form.name || !form.admin_name || !form.admin_email || !form.admin_password) {
@@ -198,10 +381,10 @@ function TabCompanies({ onSelectCompany }) {
     const res = await apiFetch("/saas-admin/companies", { method:"POST", body: form });
     setSaving(false);
     if (res.success) {
-      setToast({ msg: res.message, type:"success" });
+      setToast({ msg: res.message || "Company created!", type:"success" });
       setShowModal(false);
-      setForm({ name:"", admin_name:"", admin_email:"", admin_password:"", phone:"", city:"", state:"" });
-      load();
+      setForm({ name:"", admin_name:"", admin_email:"", admin_password:"", phone:"", city:"", state:"", module_type:"construction_individual" });
+      reload();
     } else {
       setToast({ msg: res.message, type:"error" });
     }
@@ -211,8 +394,8 @@ function TabCompanies({ onSelectCompany }) {
     setToggling(id);
     const res = await apiFetch("/saas-admin/companies/" + id + "/toggle", { method:"PUT" });
     if (res.success) {
-      setCompanies(prev => prev.map(c => c.id === id ? { ...c, is_active: res.is_active } : c));
       setToast({ msg: res.message, type:"success" });
+      reload();
     }
     setToggling(null);
   };
@@ -221,58 +404,91 @@ function TabCompanies({ onSelectCompany }) {
     <div style={{ padding:"20px 24px" }}>
       {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
 
-      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:16 }}>
-        <div>
-          <div style={{ fontSize:16, fontWeight:700, color:T.t1 }}>Companies</div>
-          <div style={{ fontSize:12, color:T.t3, marginTop:2 }}>{companies.length} companies registered</div>
+      <PageHeader title="Companies" sub={`${companies.length} companies registered`} right={
+        <Btn onClick={() => setShowModal(true)}><IcPlus size={14} color="white"/> New Company</Btn>
+      }/>
+
+      {/* Filters */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+        {["all","active","inactive"].map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            style={{ padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight: filter===f ? 700 : 500, border:`1px solid ${filter===f ? T.blu : T.b1}`,
+              background: filter===f ? T.bluL : T.surface, color: filter===f ? T.blu : T.t3, cursor:"pointer", textTransform:"capitalize", fontFamily:"inherit" }}>
+            {f} {f === "all" ? `(${companies.length})` : f === "active" ? `(${companies.filter(c=>c.is_active).length})` : `(${companies.filter(c=>!c.is_active).length})`}
+          </button>
+        ))}
+        <div style={{ flex:1 }}/>
+        <div style={{ position:"relative" }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies..."
+            style={{ width:220, padding:"7px 12px 7px 30px", borderRadius:8, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit" }}
+            onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+          <IcSearch size={12} color={T.t4} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }}/>
         </div>
-        <button onClick={() => setShowModal(true)}
-          style={{ display:"flex", alignItems:"center", gap:7, padding:"9px 16px", borderRadius:8, background:T.blu, color:"white", fontSize:13, fontWeight:600, border:"none", cursor:"pointer" }}>
-          <IcPlus size={15} color="white"/> New Company
-        </button>
       </div>
 
-      {loading ? <div style={{ textAlign:"center", padding:60, color:T.t3, fontSize:13 }}>Loading...</div> : (
-        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          {/* Header */}
-          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 80px 80px 100px 110px 48px", padding:"9px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}` }}>
-            {["Company","City","Users","Projects","Created","Status",""].map((h,i) => (
-              <div key={i} style={{ fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"0.5px" }}>{h}</div>
-            ))}
+      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+        <TableHeader columns={["Company","Domain","City","Users","Projects","Created","Status",""]}
+          gridCols="2fr 1.3fr 0.8fr 70px 70px 100px 90px 80px"/>
+        {filtered.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No companies match filters</div>}
+        {filtered.map((c, i) => (
+          <div key={c.id} onClick={() => setDetail(detail?.id === c.id ? null : c)}
+            style={{ display:"grid", gridTemplateColumns:"2fr 1.3fr 0.8fr 70px 70px 100px 90px 80px", padding:"11px 16px",
+              borderBottom: i < filtered.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center",
+              cursor:"pointer", background: detail?.id === c.id ? T.bluL : "transparent", transition:"background 0.15s" }}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{c.name}</div>
+              <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug}</div>
+            </div>
+            <div><Badge text={DOMAIN_LABELS[c.module_type] || c.module_type || "Standard"} color={T.pur}/></div>
+            <div style={{ fontSize:12, color:T.t2 }}>{c.city || "--"}</div>
+            <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, textAlign:"center" }}>{c.user_count}</div>
+            <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, textAlign:"center" }}>{c.project_count}</div>
+            <div style={{ fontSize:11.5, color:T.t3 }}>{fmtDate(c.created_at)}</div>
+            <div><Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/></div>
+            <div style={{ display:"flex", gap:5, justifyContent:"flex-end" }} onClick={e => e.stopPropagation()}>
+              <button onClick={() => onSelectCompany(c)} title="Module access"
+                style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <IcPuzzle size={12} color={T.t3}/>
+              </button>
+              <button onClick={() => toggleCompany(c.id)} disabled={toggling === c.id} title={c.is_active ? "Deactivate" : "Activate"}
+                style={{ width:28, height:28, borderRadius:6, border:`1px solid ${c.is_active ? T.redM : T.grnM}`, background: c.is_active ? T.redL : T.grnL,
+                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                {c.is_active ? <IcX size={11} color={T.red}/> : <IcChk size={11} color={T.grn}/>}
+              </button>
+            </div>
           </div>
-          {companies.length === 0 && (
-            <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No companies yet. Create one!</div>
-          )}
-          {companies.map((c, i) => (
-            <div key={c.id} style={{ display:"grid", gridTemplateColumns:"2fr 1fr 80px 80px 100px 110px 48px", padding:"11px 16px", borderBottom: i < companies.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
-              <div>
-                <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{c.name}</div>
-                <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug}</div>
+        ))}
+      </div>
+
+      {/* Detail drawer */}
+      {detail && (
+        <div style={{ marginTop:12, background:T.surface, border:`1px solid ${T.bluM}`, borderRadius:10, padding:"16px 20px" }}>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
+            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+              <div style={{ width:38, height:38, borderRadius:9, background:T.bluL, display:"flex", alignItems:"center", justifyContent:"center" }}>
+                <span style={{ fontSize:16, fontWeight:800, color:T.blu }}>{detail.name[0]}</span>
               </div>
-              <div style={{ fontSize:12.5, color:T.t2 }}>{c.city || "—"}</div>
-              <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{c.user_count}</div>
-              <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{c.project_count}</div>
-              <div style={{ fontSize:11.5, color:T.t3 }}>{fmtDate(c.created_at)}</div>
               <div>
-                <span style={{ fontSize:10, fontWeight:700, padding:"3px 10px", borderRadius:20,
-                  background: c.is_active ? T.grnL : T.redL,
-                  color: c.is_active ? T.grn : T.red,
-                  border:`1px solid ${c.is_active ? T.grnM : T.redM}` }}>
-                  {c.is_active ? "Active" : "Inactive"}
-                </span>
-              </div>
-              <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
-                <button onClick={() => onSelectCompany(c)} title="Manage modules"
-                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <IcPuzzle size={13} color={T.t3}/>
-                </button>
-                <button onClick={() => toggleCompany(c.id)} disabled={toggling === c.id} title={c.is_active ? "Deactivate" : "Activate"}
-                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${c.is_active ? T.redM : T.grnM}`, background: c.is_active ? T.redL : T.grnL, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  {c.is_active ? <IcX size={12} color={T.red}/> : <IcChk size={12} color={T.grn}/>}
-                </button>
+                <div style={{ fontSize:15, fontWeight:700, color:T.t1 }}>{detail.name}</div>
+                <div style={{ fontSize:11, color:T.t4 }}>/{detail.slug} · {DOMAIN_LABELS[detail.module_type] || detail.module_type || "--"}</div>
               </div>
             </div>
-          ))}
+            <button onClick={() => setDetail(null)} style={{ background:"none", border:"none", cursor:"pointer", color:T.t4, display:"flex" }}><IcX size={16}/></button>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10 }}>
+            {[
+              { l:"Email", v: detail.email || "--" },
+              { l:"Phone", v: detail.phone || "--" },
+              { l:"City / State", v: `${detail.city || "--"} / ${detail.state || "--"}` },
+              { l:"Status", v: detail.is_active ? "Active" : `Deactivated on ${fmtDate(detail.deleted_at)}` },
+              { l:"Created", v: fmtDate(detail.created_at) },
+            ].map((x,i) => (
+              <div key={i}>
+                <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:3 }}>{x.l}</div>
+                <div style={{ fontSize:12.5, fontWeight:500, color:T.t1 }}>{x.v}</div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -280,68 +496,33 @@ function TabCompanies({ onSelectCompany }) {
       {showModal && (
         <>
           <div onClick={() => setShowModal(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
-          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:480, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:520, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
             <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
-              <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Create New Company</div>
+              <div><div style={{ fontSize:15, fontWeight:700, color:"white" }}>Create New Company</div><div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>This will create a company + admin account</div></div>
               <button onClick={() => setShowModal(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
             </div>
             <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
-              {/* Company Name */}
-              <div>
-                <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>Company Name *</label>
-                <input value={form.name} onChange={upd("name")} placeholder="e.g. Blackbox Constructions"
-                  style={{ width:"100%", padding:"9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }}
-                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-              </div>
-              {/* Admin details */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <div>
-                  <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>Admin Name *</label>
-                  <input value={form.admin_name} onChange={upd("admin_name")} placeholder="Full name"
-                    style={{ width:"100%", padding:"9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }}
-                    onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                </div>
-                <div>
-                  <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>Admin Email *</label>
-                  <input value={form.admin_email} onChange={upd("admin_email")} placeholder="admin@company.com"
-                    style={{ width:"100%", padding:"9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }}
-                    onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                </div>
+                <InputField label="Company Name" required value={form.name} onChange={v => setForm(p=>({...p,name:v}))} placeholder="e.g. Blackbox Constructions"/>
+                <SelectField label="Business Type" value={form.module_type} onChange={v => setForm(p=>({...p,module_type:v}))}
+                  options={Object.entries(DOMAIN_LABELS).map(([k,v]) => ({value:k, label:v}))}/>
               </div>
-              {/* Password */}
-              <div>
-                <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>Admin Password *</label>
-                <div style={{ position:"relative" }}>
-                  <input type={showPass ? "text" : "password"} value={form.admin_password} onChange={upd("admin_password")} placeholder="Min 8 characters"
-                    style={{ width:"100%", padding:"9px 38px 9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }}
-                    onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                  <button onClick={() => setShowPass(s=>!s)} style={{ position:"absolute", right:10, top:"50%", transform:"translateY(-50%)", background:"none", border:"none", cursor:"pointer", color:T.t4, display:"flex" }}>
-                    {showPass ? <IcEyeX size={15}/> : <IcEye size={15}/>}
-                  </button>
-                </div>
-              </div>
-              {/* City + State */}
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <div>
-                  <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>City</label>
-                  <input value={form.city} onChange={upd("city")} placeholder="e.g. Raipur"
-                    style={{ width:"100%", padding:"9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }}
-                    onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                </div>
-                <div>
-                  <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>State</label>
-                  <input value={form.state} onChange={upd("state")} placeholder="e.g. Chhattisgarh"
-                    style={{ width:"100%", padding:"9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }}
-                    onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                </div>
+                <InputField label="Admin Name" required value={form.admin_name} onChange={v => setForm(p=>({...p,admin_name:v}))} placeholder="Full name"/>
+                <InputField label="Admin Email" required value={form.admin_email} onChange={v => setForm(p=>({...p,admin_email:v}))} placeholder="admin@company.com"/>
+              </div>
+              <InputField label="Admin Password" required type={showPass ? "text" : "password"} value={form.admin_password}
+                onChange={v => setForm(p=>({...p,admin_password:v}))} placeholder="Min 8 characters"
+                endIcon={<button onClick={() => setShowPass(s=>!s)} style={{ background:"none", border:"none", cursor:"pointer", color:T.t4, display:"flex" }}>{showPass ? <IcEyeX size={15}/> : <IcEye size={15}/>}</button>}/>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+                <InputField label="Phone" value={form.phone} onChange={v => setForm(p=>({...p,phone:v}))} placeholder="9876543210"/>
+                <InputField label="City" value={form.city} onChange={v => setForm(p=>({...p,city:v}))} placeholder="Raipur"/>
+                <InputField label="State" value={form.state} onChange={v => setForm(p=>({...p,state:v}))} placeholder="Chhattisgarh"/>
               </div>
             </div>
             <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
-              <button onClick={() => setShowModal(false)} style={{ flex:1, padding:"10px", borderRadius:7, background:T.surface, border:`1px solid ${T.b1}`, fontSize:13, fontWeight:600, color:T.t3, cursor:"pointer" }}>Cancel</button>
-              <button onClick={createCompany} disabled={saving}
-                style={{ flex:2, padding:"10px", borderRadius:7, background: saving ? T.t4 : T.blu, color:"white", fontSize:13, fontWeight:700, border:"none", cursor: saving ? "not-allowed" : "pointer" }}>
-                {saving ? "Creating..." : "Create Company"}
-              </button>
+              <Btn onClick={() => setShowModal(false)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+              <Btn onClick={createCompany} disabled={saving} style={{ flex:2 }}>{saving ? "Creating..." : "Create Company"}</Btn>
             </div>
           </div>
         </>
@@ -350,8 +531,10 @@ function TabCompanies({ onSelectCompany }) {
   );
 }
 
-// ── TAB: MODULE ACCESS (per company) ───────────────────────────────────
-function TabModuleAccess({ selectedCompany, onBack, companies }) {
+// ════════════════════════════════════════════════════════════════════════
+// TAB 3: MODULE ACCESS
+// ════════════════════════════════════════════════════════════════════════
+function TabModuleAccess({ selectedCompany, companies }) {
   const [company, setCompany]   = useState(selectedCompany || null);
   const [modules, setModules]   = useState([]);
   const [loading, setLoading]   = useState(false);
@@ -389,7 +572,6 @@ function TabModuleAccess({ selectedCompany, onBack, companies }) {
       <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
         <div style={{ flex:1 }}>
           <div style={{ fontSize:16, fontWeight:700, color:T.t1, marginBottom:6 }}>Module Access</div>
-          {/* Company selector */}
           <div style={{ display:"flex", alignItems:"center", gap:10 }}>
             <span style={{ fontSize:12, color:T.t3 }}>Company:</span>
             <select value={company?.id || ""} onChange={e => {
@@ -401,41 +583,28 @@ function TabModuleAccess({ selectedCompany, onBack, companies }) {
             </select>
           </div>
         </div>
-        {company && (
+        {company && modules.length > 0 && (
           <div style={{ padding:"8px 14px", background:T.bluL, border:`1px solid ${T.bluM}`, borderRadius:8, fontSize:12, color:T.blu, fontWeight:600 }}>
             {modules.filter(m => m.is_enabled).length} / {modules.length} modules enabled
           </div>
         )}
       </div>
 
-      {!company && (
-        <div style={{ textAlign:"center", padding:"60px 0", color:T.t3, fontSize:13 }}>
-          <IcBuilding size={40} color={T.b2}/>
-          <div style={{ marginTop:12 }}>Select a company to manage its module access</div>
-        </div>
-      )}
-
+      {!company && <EmptyState Icon={IcBuilding} text="Select a company to manage its module access"/>}
       {company && loading && <div style={{ textAlign:"center", padding:40, color:T.t3, fontSize:13 }}>Loading modules...</div>}
 
       {company && !loading && modules.length > 0 && (
         <div>
-          {/* Core */}
           <div style={{ marginBottom:6, fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"1px", display:"flex", alignItems:"center", gap:8 }}>
-            Core Modules
-            <div style={{ flex:1, height:1, background:T.b1 }}/>
-            <span style={{ fontSize:10, color:T.grn, fontWeight:600, background:T.grnL, padding:"1px 8px", borderRadius:20 }}>Always included</span>
+            Core Modules <div style={{ flex:1, height:1, background:T.b1 }}/> <Badge text="Always included" color={T.grn}/>
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:7, marginBottom:20 }}>
             {modules.filter(m => !m.canDisable).map(m => (
               <ModAccessRow key={m.key} m={m} saving={saving} onToggle={toggle}/>
             ))}
           </div>
-
-          {/* Standard */}
           <div style={{ marginBottom:6, fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"1px", display:"flex", alignItems:"center", gap:8 }}>
-            Standard Modules
-            <div style={{ flex:1, height:1, background:T.b1 }}/>
-            <span style={{ fontSize:10, color:T.amb, fontWeight:600, background:T.ambL, padding:"1px 8px", borderRadius:20 }}>Toggleable</span>
+            Standard Modules <div style={{ flex:1, height:1, background:T.b1 }}/> <Badge text="Toggleable" color={T.amb}/>
           </div>
           <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
             {modules.filter(m => m.canDisable).map(m => (
@@ -455,82 +624,68 @@ function ModAccessRow({ m, saving, onToggle }) {
       <div style={{ flex:1 }}>
         <div style={{ display:"flex", alignItems:"center", gap:7 }}>
           <span style={{ fontSize:13, fontWeight:600, color: m.is_enabled ? T.t1 : T.t3 }}>{m.label}</span>
-          <span style={{ fontSize:9, fontWeight:700, padding:"1px 7px", borderRadius:20, textTransform:"uppercase",
-            background: isCore ? T.grnL : T.ambL, color: isCore ? T.grn : T.amb,
-            border:`1px solid ${isCore ? T.grnM : T.ambM}` }}>{m.tier}</span>
-          {isCore && <span style={{ fontSize:10, color:T.t4 }}>— locked</span>}
+          <Badge text={m.tier} color={isCore ? T.grn : T.amb}/>
+          {isCore && <span style={{ fontSize:10, color:T.t4 }}>-- locked</span>}
         </div>
       </div>
-      <span style={{ fontSize:11, fontWeight:600, padding:"2px 10px", borderRadius:20,
-        background: m.is_enabled ? T.grnL : T.sltL,
-        color: m.is_enabled ? T.grn : T.slt }}>
-        {m.is_enabled ? "ON" : "OFF"}
-      </span>
+      <Badge text={m.is_enabled ? "ON" : "OFF"} color={m.is_enabled ? T.grn : T.slt}/>
       <Toggle value={m.is_enabled} disabled={isCore} onChange={v => onToggle(m.key, v)}/>
     </div>
   );
 }
 
-// ── TAB: ALL USERS ─────────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════
+// TAB 4: ALL USERS (Enhanced)
+// ════════════════════════════════════════════════════════════════════════
 function TabUsers() {
   const [users, setUsers]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
+  const [toast, setToast]   = useState(null);
 
-  useEffect(() => {
+  const load = () => {
+    setLoading(true);
     apiFetch("/saas-admin/users").then(res => {
       if (res.success) setUsers(res.data);
       setLoading(false);
     }).catch(() => setLoading(false));
-  }, []);
+  };
+
+  useEffect(() => { load(); }, []);
 
   const filtered = users.filter(u =>
     u.name.toLowerCase().includes(search.toLowerCase()) ||
     u.email.toLowerCase().includes(search.toLowerCase()) ||
-    u.company_name.toLowerCase().includes(search.toLowerCase())
+    (u.company_name||"").toLowerCase().includes(search.toLowerCase())
   );
 
   const roleColor = r => ({ super_admin:T.pur, admin:T.blu, project_manager:T.grn, supervisor:T.amb, viewer:T.slt }[r] || T.slt);
 
   return (
     <div style={{ padding:"20px 24px" }}>
-      <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:16 }}>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:16, fontWeight:700, color:T.t1 }}>All Users</div>
-          <div style={{ fontSize:12, color:T.t3, marginTop:2 }}>{users.length} users across all companies</div>
-        </div>
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+      <PageHeader title="All Users" sub={`${users.length} users across all companies`} right={
         <div style={{ position:"relative" }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search name, email, company..."
-            style={{ width:260, padding:"8px 12px 8px 32px", borderRadius:8, border:`1px solid ${T.b1}`, fontSize:12.5, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit" }}
+            style={{ width:280, padding:"8px 12px 8px 32px", borderRadius:8, border:`1px solid ${T.b1}`, fontSize:12.5, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit" }}
             onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+          <IcSearch size={13} color={T.t4} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }}/>
         </div>
-      </div>
+      }/>
 
       {loading ? <div style={{ textAlign:"center", padding:60, color:T.t3, fontSize:13 }}>Loading users...</div> : (
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          <div style={{ display:"grid", gridTemplateColumns:"2fr 2fr 1.5fr 110px 100px 100px", padding:"9px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}` }}>
-            {["Name","Email","Company","Role","Status","Last Login"].map((h,i) => (
-              <div key={i} style={{ fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"0.5px" }}>{h}</div>
-            ))}
-          </div>
+          <TableHeader columns={["Name","Email","Company","Role","Status","Last Login"]}
+            gridCols="1.5fr 2fr 1.5fr 110px 90px 100px"/>
           {filtered.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No users found</div>}
           {filtered.map((u, i) => (
-            <div key={u.id} style={{ display:"grid", gridTemplateColumns:"2fr 2fr 1.5fr 110px 100px 100px", padding:"10px 16px", borderBottom: i < filtered.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
+            <div key={u.id} style={{ display:"grid", gridTemplateColumns:"1.5fr 2fr 1.5fr 110px 90px 100px", padding:"10px 16px",
+              borderBottom: i < filtered.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
               <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{u.name}</div>
               <div style={{ fontSize:12, color:T.t3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.email}</div>
               <div style={{ fontSize:12, color:T.t2 }}>{u.company_name}</div>
-              <div>
-                <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20, background:roleColor(u.role)+"18", color:roleColor(u.role), textTransform:"capitalize" }}>
-                  {u.role.replace("_"," ")}
-                </span>
-              </div>
-              <div>
-                <span style={{ fontSize:10, fontWeight:700, padding:"2px 8px", borderRadius:20,
-                  background: u.is_active ? T.grnL : T.redL, color: u.is_active ? T.grn : T.red }}>
-                  {u.is_active ? "Active" : "Inactive"}
-                </span>
-              </div>
+              <div><Badge text={u.role.replace("_"," ")} color={roleColor(u.role)}/></div>
+              <div><Badge text={u.is_active ? "Active" : "Inactive"} color={u.is_active ? T.grn : T.red}/></div>
               <div style={{ fontSize:11, color:T.t4 }}>{u.last_login ? fmtDate(u.last_login) : "Never"}</div>
             </div>
           ))}
@@ -540,25 +695,293 @@ function TabUsers() {
   );
 }
 
-// ── MAIN SAAS MODULE ───────────────────────────────────────────────────
+// ════════════════════════════════════════════════════════════════════════
+// TAB 5: AUDIT LOGS (NEW)
+// ════════════════════════════════════════════════════════════════════════
+function TabAuditLogs({ companies }) {
+  const [logs, setLogs]         = useState([]);
+  const [total, setTotal]       = useState(0);
+  const [page, setPage]         = useState(1);
+  const [loading, setLoading]   = useState(true);
+  const [filters, setFilters]   = useState({ company_id:"", entity_type:"", action:"" });
+
+  const load = useCallback((p = 1) => {
+    setLoading(true);
+    const q = new URLSearchParams({ page: p, limit: 30 });
+    if (filters.company_id) q.set("company_id", filters.company_id);
+    if (filters.entity_type) q.set("entity_type", filters.entity_type);
+    if (filters.action) q.set("action", filters.action);
+
+    apiFetch("/saas-admin/audit-logs?" + q.toString()).then(res => {
+      if (res.success) { setLogs(res.data); setTotal(res.total); setPage(p); }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [filters]);
+
+  useEffect(() => { load(1); }, [load]);
+
+  const totalPages = Math.ceil(total / 30);
+
+  const actionColor = a => ({ LOGIN:T.blu, CREATE:T.grn, UPDATE:T.amb, DELETE:T.red, EXPORT:T.pur, DEACTIVATE:T.red, REACTIVATE:T.grn }[a] || T.slt);
+
+  const ACTIONS = ["LOGIN","CREATE","UPDATE","DELETE","EXPORT","DEACTIVATE","REACTIVATE"];
+  const ENTITIES = ["user","project","transaction","vendor","material_request","purchase_order","grn","company"];
+
+  return (
+    <div style={{ padding:"20px 24px" }}>
+      <PageHeader title="Audit Logs" sub={`${fmtNum(total)} total events`} right={
+        <Btn onClick={() => load(1)} variant="outline"><IcRefresh size={13}/> Refresh</Btn>
+      }/>
+
+      {/* Filters */}
+      <div style={{ display:"flex", gap:10, marginBottom:14, alignItems:"center" }}>
+        <IcFilter size={14} color={T.t4}/>
+        <select value={filters.company_id} onChange={e => setFilters(p=>({...p,company_id:e.target.value}))}
+          style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, fontFamily:"inherit", cursor:"pointer" }}>
+          <option value="">All Companies</option>
+          {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={filters.action} onChange={e => setFilters(p=>({...p,action:e.target.value}))}
+          style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, fontFamily:"inherit", cursor:"pointer" }}>
+          <option value="">All Actions</option>
+          {ACTIONS.map(a => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select value={filters.entity_type} onChange={e => setFilters(p=>({...p,entity_type:e.target.value}))}
+          style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, fontFamily:"inherit", cursor:"pointer" }}>
+          <option value="">All Entity Types</option>
+          {ENTITIES.map(e => <option key={e} value={e}>{e.replace("_"," ")}</option>)}
+        </select>
+        {(filters.company_id || filters.action || filters.entity_type) && (
+          <button onClick={() => setFilters({ company_id:"", entity_type:"", action:"" })}
+            style={{ fontSize:11, color:T.red, background:"none", border:"none", cursor:"pointer", fontWeight:600, fontFamily:"inherit" }}>
+            Clear filters
+          </button>
+        )}
+      </div>
+
+      {loading ? <div style={{ textAlign:"center", padding:60, color:T.t3, fontSize:13 }}>Loading audit logs...</div> : (
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <TableHeader columns={["Time","User","Action","Entity","Details","Company","IP"]}
+            gridCols="130px 1.2fr 90px 1fr 1.5fr 1fr 100px"/>
+          {logs.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No audit logs found</div>}
+          {logs.map((l, i) => {
+            let details = "";
+            try { const d = typeof l.details === "string" ? JSON.parse(l.details) : l.details; details = d ? Object.entries(d).map(([k,v])=>`${k}: ${v}`).join(", ") : ""; } catch(_) {}
+            return (
+              <div key={l.id} style={{ display:"grid", gridTemplateColumns:"130px 1.2fr 90px 1fr 1.5fr 1fr 100px", padding:"9px 16px",
+                borderBottom: i < logs.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
+                <div style={{ fontSize:11, color:T.t3 }}>{fmtDateTime(l.created_at)}</div>
+                <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>{l.user_name || "--"}</div>
+                <div><Badge text={l.action} color={actionColor(l.action)}/></div>
+                <div style={{ fontSize:12, color:T.t2 }}>
+                  {l.entity_type.replace("_"," ")}{l.entity_id ? ` #${l.entity_id}` : ""}
+                </div>
+                <div style={{ fontSize:11, color:T.t3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }} title={details}>
+                  {details || "--"}
+                </div>
+                <div style={{ fontSize:11.5, color:T.t2 }}>{l.company_name || "--"}</div>
+                <div style={{ fontSize:10.5, color:T.t4, fontFamily:"monospace" }}>{l.ip_address || "--"}</div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Pagination */}
+      {totalPages > 1 && (
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"center", gap:8, marginTop:16 }}>
+          <button onClick={() => load(page-1)} disabled={page <= 1}
+            style={{ width:30, height:30, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, cursor: page<=1?"not-allowed":"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <IcChevL size={14} color={page<=1?T.t4:T.t2}/>
+          </button>
+          <span style={{ fontSize:12, color:T.t3 }}>Page {page} of {totalPages}</span>
+          <button onClick={() => load(page+1)} disabled={page >= totalPages}
+            style={{ width:30, height:30, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, cursor: page>=totalPages?"not-allowed":"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+            <IcChevR size={14} color={page>=totalPages?T.t4:T.t2}/>
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// TAB 6: DATA EXPORT (NEW)
+// ════════════════════════════════════════════════════════════════════════
+function TabExport({ companies }) {
+  const [selCompany, setSelCompany] = useState("");
+  const [exporting, setExporting]   = useState(false);
+  const [toast, setToast]           = useState(null);
+  const [lastExport, setLastExport] = useState(null);
+  const [history, setHistory]       = useState([]);
+
+  // Load export history from audit logs
+  useEffect(() => {
+    apiFetch("/saas-admin/audit-logs?action=EXPORT&limit=10").then(res => {
+      if (res.success) setHistory(res.data);
+    }).catch(() => {});
+  }, []);
+
+  const doExport = async () => {
+    if (!selCompany) { setToast({ msg:"Select a company first", type:"error" }); return; }
+    setExporting(true);
+    try {
+      const res = await fetch(API + "/saas-admin/export-company/" + selCompany, {
+        headers: { Authorization: "Bearer " + tok() }
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Download as JSON file
+        const blob = new Blob([JSON.stringify(data.data, null, 2)], { type:"application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        const company = companies.find(c => c.id === Number(selCompany));
+        a.href = url;
+        a.download = `export_${company?.slug || selCompany}_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setLastExport(data.data);
+        setToast({ msg:"Export downloaded successfully!", type:"success" });
+        // Refresh history
+        apiFetch("/saas-admin/audit-logs?action=EXPORT&limit=10").then(r => { if (r.success) setHistory(r.data); });
+      } else {
+        setToast({ msg: data.message || "Export failed", type:"error" });
+      }
+    } catch(e) {
+      setToast({ msg:"Export failed: " + e.message, type:"error" });
+    }
+    setExporting(false);
+  };
+
+  const company = companies.find(c => c.id === Number(selCompany));
+
+  return (
+    <div style={{ padding:"20px 24px" }}>
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+      <PageHeader title="Data Export" sub="Export complete company data as JSON"/>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
+        {/* Export panel */}
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB }}>
+            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Export Company Data</span>
+          </div>
+          <div style={{ padding:"20px 18px" }}>
+            <div style={{ marginBottom:16 }}>
+              <label style={{ fontSize:11, fontWeight:600, color:T.t3, display:"block", marginBottom:6 }}>SELECT COMPANY</label>
+              <select value={selCompany} onChange={e => { setSelCompany(e.target.value); setLastExport(null); }}
+                style={{ width:"100%", padding:"10px 12px", borderRadius:8, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, fontFamily:"inherit", cursor:"pointer" }}>
+                <option value="">-- Choose company --</option>
+                {companies.map(c => <option key={c.id} value={c.id}>{c.name} ({c.user_count} users, {c.project_count} projects)</option>)}
+              </select>
+            </div>
+
+            {company && (
+              <div style={{ padding:"12px 14px", background:T.bluL, border:`1px solid ${T.bluM}`, borderRadius:8, marginBottom:16 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:T.blu, marginBottom:4 }}>{company.name}</div>
+                <div style={{ fontSize:11, color:T.t3 }}>
+                  {company.user_count} users · {company.project_count} projects · {DOMAIN_LABELS[company.module_type] || company.module_type || "Standard"}
+                </div>
+              </div>
+            )}
+
+            <Btn onClick={doExport} disabled={exporting || !selCompany} style={{ width:"100%", justifyContent:"center", padding:"12px" }}>
+              <IcDownload size={15} color="white"/> {exporting ? "Exporting..." : "Export & Download JSON"}
+            </Btn>
+
+            {/* Last export summary */}
+            {lastExport && lastExport._summary && (
+              <div style={{ marginTop:16 }}>
+                <div style={{ fontSize:11, fontWeight:700, color:T.t3, marginBottom:8, textTransform:"uppercase" }}>Export Summary</div>
+                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
+                  {Object.entries(lastExport._summary).map(([table, count]) => (
+                    <div key={table} style={{ padding:"3px 10px", borderRadius:6, background:T.grnL, border:`1px solid ${T.grnM}`, fontSize:11, color:T.grn }}>
+                      {table.replace("_"," ")}: <strong>{count}</strong>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Export history */}
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB }}>
+            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Export History</span>
+          </div>
+          <div style={{ maxHeight:400, overflowY:"auto" }}>
+            {history.length === 0 && (
+              <div style={{ padding:40, textAlign:"center", color:T.t4, fontSize:12 }}>No exports yet</div>
+            )}
+            {history.map((h, i) => {
+              let d = {};
+              try { d = typeof h.details === "string" ? JSON.parse(h.details) : (h.details || {}); } catch(_) {}
+              return (
+                <div key={i} style={{ padding:"11px 18px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", gap:10 }}>
+                  <div style={{ width:32, height:32, borderRadius:7, background:T.purL, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                    <IcDownload size={14} color={T.pur}/>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>{d.company_name || h.company_name || "Company"}</div>
+                    <div style={{ fontSize:10.5, color:T.t4 }}>
+                      by {h.user_name} · {fmtDateTime(h.created_at)}
+                      {d.tables_exported && ` · ${d.tables_exported} tables`}
+                    </div>
+                  </div>
+                  {d.self_export && <Badge text="Self" color={T.amb}/>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* What's exported info */}
+      <div style={{ marginTop:20, padding:"14px 18px", background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:10 }}>What's included in the export?</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+          {["Projects & Tasks","Transactions & Accounts","Material Requests","Purchase Orders & GRN",
+            "Vendors & Parties","Users & Roles","Solar Leads & Stages","CRM Data",
+            "Subcontractor Data","Warehouse Items","Approval Workflows","Audit Logs"
+          ].map((item, i) => (
+            <div key={i} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, color:T.t2 }}>
+              <IcChk size={12} color={T.grn}/> {item}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// MAIN SAAS MODULE
+// ════════════════════════════════════════════════════════════════════════
 const TABS = [
-  { id:"stats",    label:"Platform Stats", Icon:IcTrend   },
-  { id:"companies",label:"Companies",      Icon:IcBuilding },
-  { id:"modules",  label:"Module Access",  Icon:IcPuzzle  },
-  { id:"users",    label:"All Users",      Icon:IcUsers   },
+  { id:"stats",     label:"Dashboard",     Icon:IcTrend    },
+  { id:"companies", label:"Companies",     Icon:IcBuilding },
+  { id:"modules",   label:"Module Access", Icon:IcPuzzle   },
+  { id:"users",     label:"All Users",     Icon:IcUsers    },
+  { id:"audit",     label:"Audit Logs",    Icon:IcShield   },
+  { id:"export",    label:"Data Export",   Icon:IcDownload },
 ];
 
 export default function SaaSModule() {
   const [tab, setTab]               = useState("stats");
   const [companies, setCompanies]   = useState([]);
   const [selCompany, setSelCompany] = useState(null);
+  const [loadingCo, setLoadingCo]   = useState(true);
 
-  // Load companies for module access tab
-  useEffect(() => {
+  const loadCompanies = useCallback(() => {
+    setLoadingCo(true);
     apiFetch("/saas-admin/companies").then(res => {
       if (res.success) setCompanies(res.data);
-    }).catch(() => {});
+      setLoadingCo(false);
+    }).catch(() => setLoadingCo(false));
   }, []);
+
+  useEffect(() => { loadCompanies(); }, [loadCompanies]);
 
   const handleSelectCompany = (c) => {
     setSelCompany(c);
@@ -566,30 +989,33 @@ export default function SaaSModule() {
   };
 
   return (
-    <div style={{ display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden", fontFamily:"'Segoe UI',system-ui,sans-serif", background:"#F4F6F9" }}>
+    <div style={{ display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden", fontFamily:"'Segoe UI',system-ui,sans-serif", background:T.bg }}>
       {/* Header */}
-      <div style={{ background:"#0D1B2A", padding:"14px 24px", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+      <div style={{ background:"linear-gradient(135deg, #0D1B2A 0%, #1B2D45 100%)", padding:"14px 24px", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div>
           <div style={{ fontSize:16, fontWeight:800, color:"white", letterSpacing:"-0.3px" }}>SaaS Admin Panel</div>
-          <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Platform management — super admin only</div>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Platform management -- super admin only</div>
         </div>
-        <div style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 12px", background:"rgba(124,58,237,0.2)", border:"1px solid rgba(124,58,237,0.4)", borderRadius:20 }}>
-          <IcLock size={12} color="#A78BFA"/>
-          <span style={{ fontSize:11, fontWeight:600, color:"#A78BFA" }}>SUPER ADMIN</span>
+        <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,0.3)" }}>{companies.length} companies · {companies.reduce((s,c)=>s+c.user_count,0)} users</div>
+          <div style={{ display:"flex", alignItems:"center", gap:8, padding:"5px 12px", background:"rgba(124,58,237,0.2)", border:"1px solid rgba(124,58,237,0.4)", borderRadius:20 }}>
+            <IcLock size={12} color="#A78BFA"/>
+            <span style={{ fontSize:11, fontWeight:600, color:"#A78BFA" }}>SUPER ADMIN</span>
+          </div>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div style={{ background:"#FFFFFF", borderBottom:`1px solid ${T.b1}`, display:"flex", padding:"0 20px", flexShrink:0 }}>
+      <div style={{ background:"#FFFFFF", borderBottom:`1px solid ${T.b1}`, display:"flex", padding:"0 20px", flexShrink:0, overflowX:"auto" }}>
         {TABS.map(t => {
           const isA = tab === t.id;
           return (
             <button key={t.id} onClick={() => setTab(t.id)}
-              style={{ display:"flex", alignItems:"center", gap:7, padding:"12px 16px", border:"none", background:"none", cursor:"pointer",
-                color: isA ? T.blu : T.t3, fontWeight: isA ? 700 : 400, fontSize:13,
+              style={{ display:"flex", alignItems:"center", gap:7, padding:"12px 14px", border:"none", background:"none", cursor:"pointer",
+                color: isA ? T.blu : T.t3, fontWeight: isA ? 700 : 400, fontSize:12.5,
                 borderBottom: isA ? `2.5px solid ${T.blu}` : "2.5px solid transparent",
-                transition:"all 0.15s", fontFamily:"inherit" }}>
-              <t.Icon size={15} color={isA ? T.blu : T.t3}/>
+                transition:"all 0.15s", fontFamily:"inherit", whiteSpace:"nowrap" }}>
+              <t.Icon size={14} color={isA ? T.blu : T.t3}/>
               {t.label}
             </button>
           );
@@ -599,9 +1025,11 @@ export default function SaaSModule() {
       {/* Content */}
       <div style={{ flex:1, overflowY:"auto" }}>
         {tab === "stats"     && <TabStats/>}
-        {tab === "companies" && <TabCompanies onSelectCompany={handleSelectCompany}/>}
+        {tab === "companies" && <TabCompanies companies={companies} reload={loadCompanies} onSelectCompany={handleSelectCompany}/>}
         {tab === "modules"   && <TabModuleAccess selectedCompany={selCompany} companies={companies}/>}
         {tab === "users"     && <TabUsers/>}
+        {tab === "audit"     && <TabAuditLogs companies={companies}/>}
+        {tab === "export"    && <TabExport companies={companies}/>}
       </div>
     </div>
   );
