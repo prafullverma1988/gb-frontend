@@ -2056,52 +2056,133 @@ function TabTransaction() {
 
 // TAB 6 — TO-DO
 // ═══════════════════════════════════════════════════════════════════
-function TabTodo() {
-  const TEAM=["Vijay Sahu","Niranjan","Harsh Sahu","Priyanka","Sunny"];
+function TabTodo({projectId}) {
   const CATS=["Civil","Electrical","Plumbing","Finishing","Documentation","Admin","Other"];
   const PRIS=["High","Medium","Low"];
   const priS={"High":{c:T.red,bg:T.redL,brd:T.redM},"Medium":{c:T.amb,bg:T.ambL,brd:T.ambM},"Low":{c:T.slt,bg:T.sltL,brd:T.b2}};
   const catC={"Civil":T.blu,"Electrical":T.amb,"Plumbing":"#0891B2","Finishing":T.pur,"Documentation":T.slt,"Admin":T.grn,"Other":T.slt};
 
-  const [todos,setTodos]=useState([
-    {id:1,text:"Order TMT Steel for 2F columns",priority:"High",assignee:"Vijay Sahu",due:"12 Mar",cat:"Civil",done:false,attachments:[],checklist:[{t:"Check current stock",done:true},{t:"Get 3 vendor quotes",done:false},{t:"Place order",done:false}]},
-    {id:2,text:"Get electrical wiring drawings approved",priority:"High",assignee:"Harsh Sahu",due:"14 Mar",cat:"Electrical",done:false,attachments:[],checklist:[]},
-    {id:3,text:"Arrange water tanker for curing",priority:"Medium",assignee:"Niranjan",due:"10 Mar",cat:"Civil",done:false,attachments:[],checklist:[]},
-    {id:4,text:"Client meeting for tile selection",priority:"Medium",assignee:"Vijay Sahu",due:"15 Mar",cat:"Admin",done:false,attachments:[],checklist:[]},
-    {id:5,text:"Submit INV-005 to client",priority:"High",assignee:"Vijay Sahu",due:"11 Mar",cat:"Documentation",done:true,attachments:[],checklist:[]},
-    {id:6,text:"Fix water pipe crack — GF bathroom",priority:"Low",assignee:"Niranjan",due:"",cat:"Plumbing",done:true,attachments:[],checklist:[{t:"Identify crack location",done:true},{t:"Buy repair material",done:true},{t:"Fix & test",done:true}]},
-  ]);
-
+  const [todos,setTodos]=useState([]);
+  const [team,setTeam]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [saving,setSaving]=useState(false);
   const [showAdd,setShowAdd]=useState(false);
   const [expandId,setExpandId]=useState(null);
   const [fCat,setFCat]=useState("All");
   const [fPri,setFPri]=useState("All");
-  const [newForm,setNewForm]=useState({text:"",priority:"Medium",assignee:TEAM[0],due:"",cat:"Civil",checklist:[]});
+  const [newForm,setNewForm]=useState({text:"",priority:"Medium",assigneeId:"",due:"",cat:"Civil",checklist:[]});
   const [newCheckText,setNewCheckText]=useState("");
 
-  const toggle=(id)=>setTodos(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));
-  const toggleCheck=(todoId,ci)=>setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:t.checklist.map((c,i)=>i===ci?{...c,done:!c.done}:c)}:t));
-  const addTodo=()=>{
-    if(!newForm.text.trim()) return;
-    setTodos(p=>[{id:Date.now(),...newForm,done:false,attachments:[]},  ...p]);
-    setNewForm({text:"",priority:"Medium",assignee:TEAM[0],due:"",cat:"Civil",checklist:[]});
-    setShowAdd(false);
+  // Parse a task row from API into local todo shape
+  const parseTask=(t)=>{
+    let cl=[];
+    try{ cl=typeof t.checklist==="string"?JSON.parse(t.checklist):(t.checklist||[]); }catch(e){ cl=[]; }
+    return {
+      id:t.id,
+      text:t.title||t.name||"",
+      priority:t.priority||"Medium",
+      assignee:t.assigned_name||"Unassigned",
+      assigneeId:t.assigned_to||null,
+      due:t.due_date||"",
+      cat:t.category||"Other",
+      done:t.status==="done"||t.status==="Completed",
+      checklist:cl
+    };
   };
+
+  // Fetch todos + team on mount
+  useEffect(()=>{
+    if(!projectId) return;
+    const load=async()=>{
+      setLoading(true);
+      try{
+        const [taskRes,teamRes]=await Promise.all([
+          api.get(`/projects/${projectId}/tasks`),
+          api.get("/projects/team-members")
+        ]);
+        if(taskRes.success) setTodos((taskRes.data||[]).map(parseTask));
+        if(teamRes.success) setTeam(teamRes.data||[]);
+      }catch(e){ console.error("Todo load error:",e); }
+      setLoading(false);
+    };
+    load();
+  },[projectId]);
+
+  // Toggle done/undone
+  const toggle=async(id)=>{
+    const todo=todos.find(t=>t.id===id);
+    if(!todo) return;
+    const newStatus=todo.done?"todo":"done";
+    setTodos(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));
+    try{
+      await api.put(`/projects/${projectId}/tasks/${id}`,{status:newStatus});
+    }catch(e){
+      setTodos(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t)); // revert
+    }
+  };
+
+  // Toggle checklist item
+  const toggleCheck=async(todoId,ci)=>{
+    const todo=todos.find(t=>t.id===todoId);
+    if(!todo) return;
+    const updated=todo.checklist.map((c,i)=>i===ci?{...c,done:!c.done}:c);
+    setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:updated}:t));
+    try{
+      await api.put(`/projects/${projectId}/tasks/${todoId}`,{checklist:updated});
+    }catch(e){
+      setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:todo.checklist}:t));
+    }
+  };
+
+  // Add new todo
+  const addTodo=async()=>{
+    if(!newForm.text.trim()||saving) return;
+    setSaving(true);
+    try{
+      const res=await api.post(`/projects/${projectId}/tasks`,{
+        title:newForm.text,
+        priority:newForm.priority,
+        assigned_to:newForm.assigneeId||null,
+        due_date:newForm.due||null,
+        category:newForm.cat,
+        checklist:newForm.checklist.length>0?newForm.checklist:null
+      });
+      if(res.success&&res.data){
+        setTodos(p=>[parseTask(res.data),...p]);
+        setNewForm({text:"",priority:"Medium",assigneeId:team[0]?.id||"",due:"",cat:"Civil",checklist:[]});
+        setShowAdd(false);
+      }
+    }catch(e){ console.error("Add todo error:",e); }
+    setSaving(false);
+  };
+
   const addCheck=()=>{
     if(!newCheckText.trim()) return;
     setNewForm(p=>({...p,checklist:[...p.checklist,{t:newCheckText,done:false}]}));
     setNewCheckText("");
   };
 
+  // Delete todo
+  const deleteTodo=async(id)=>{
+    setTodos(p=>p.filter(t=>t.id!==id));
+    try{ await api.del(`/projects/${projectId}/tasks/${id}`); }catch(e){}
+  };
+
   const display=todos.filter(t=>(fCat==="All"||t.cat===fCat)&&(fPri==="All"||t.priority===fPri));
   const pending=display.filter(t=>!t.done), done=display.filter(t=>t.done);
+
+  if(loading) return(
+    <div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>
+      <div style={{width:22,height:22,border:"2.5px solid "+T.b1,borderTopColor:T.blu,borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 10px"}}/>
+      Loading todos...
+    </div>
+  );
 
   return(
     <div style={{padding:"14px 18px",maxWidth:720}}>
       {/* Header row */}
       <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:8,alignItems:"center",flex:1}}>
-          {/* Summary pills */}
           {[{l:"Pending",v:todos.filter(t=>!t.done).length,c:T.amb},{l:"Done",v:todos.filter(t=>t.done).length,c:T.grn},{l:"Total",v:todos.length,c:T.slt}].map(x=>(
             <div key={x.l} style={{display:"flex",alignItems:"center",gap:5,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:20,padding:"4px 11px"}}>
               <div style={{width:7,height:7,borderRadius:"50%",background:x.c}}/>
@@ -2110,7 +2191,6 @@ function TabTodo() {
             </div>
           ))}
         </div>
-        {/* Category filter */}
         <select value={fCat} onChange={e=>setFCat(e.target.value)}
           style={{height:30,padding:"0 10px",borderRadius:6,border:`1.5px solid ${fCat!=="All"?T.blu:T.b1}`,background:fCat!=="All"?T.bluL:T.surface,fontSize:11.5,color:fCat!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
           <option value="All">All Categories</option>
@@ -2134,9 +2214,9 @@ function TabTodo() {
                 style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
             </div>
             {[
-              {l:"Category",key:"cat",opts:CATS,type:"select"},
-              {l:"Priority",key:"priority",opts:PRIS,type:"select"},
-              {l:"Assigned To",key:"assignee",opts:TEAM,type:"select"},
+              {l:"Category",key:"cat",opts:CATS.map(c=>({v:c,l:c})),type:"select"},
+              {l:"Priority",key:"priority",opts:PRIS.map(p=>({v:p,l:p})),type:"select"},
+              {l:"Assigned To",key:"assigneeId",opts:team.map(m=>({v:String(m.id),l:m.name})),type:"select"},
               {l:"Due Date",key:"due",type:"date"},
             ].map(f=>(
               <div key={f.key}>
@@ -2146,7 +2226,8 @@ function TabTodo() {
                       style={{width:"100%",height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}/>
                   :<select value={newForm[f.key]} onChange={e=>setNewForm(p=>({...p,[f.key]:e.target.value}))}
                       style={{width:"100%",height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}>
-                      {f.opts.map(o=><option key={o}>{o}</option>)}
+                      <option value="">Select...</option>
+                      {f.opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
                     </select>
                 }
               </div>
@@ -2168,24 +2249,16 @@ function TabTodo() {
               <button onClick={addCheck} style={{padding:"0 10px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600}}>Add</button>
             </div>
           </div>
-          {/* Upload note */}
-          <div style={{display:"flex",gap:7,marginBottom:10}}>
-            {[{l:"Photo",icon:"📷"},{l:"Camera",icon:"📸"},{l:"Document",icon:"📎"}].map(btn=>(
-              <button key={btn.l} style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11.5,fontWeight:500,cursor:"pointer"}}>
-                <span>{btn.icon}</span>{btn.l}
-              </button>
-            ))}
-          </div>
           <div style={{display:"flex",gap:8}}>
             <button onClick={()=>setShowAdd(false)} style={{flex:1,padding:"7px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-            <button onClick={addTodo} style={{flex:2,padding:"7px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>Add Todo</button>
+            <button onClick={addTodo} disabled={saving} style={{flex:2,padding:"7px",borderRadius:6,background:saving?"#93C5FD":T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"wait":"pointer"}}>{saving?"Saving...":"Add Todo"}</button>
           </div>
         </div>
       )}
 
       {/* Pending todos */}
       <Panel style={{marginBottom:8}}>
-        {pending.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>No pending items{fCat!=="All"||fPri!=="All"?" matching filters":""}</div>}
+        {pending.length===0&&<div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>{todos.length===0?"No todos yet — add your first one!":"No pending items"+(fCat!=="All"||fPri!=="All"?" matching filters":"")}</div>}
         {pending.map(todo=>{
           const ps=priS[todo.priority]||priS["Medium"];
           const cc=catC[todo.cat]||T.slt;
@@ -2196,7 +2269,6 @@ function TabTodo() {
               <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",transition:"background .1s"}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                {/* Checkbox */}
                 <div onClick={()=>toggle(todo.id)} style={{width:17,height:17,borderRadius:5,border:`1.5px solid ${T.b2}`,cursor:"pointer",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}
                   onMouseEnter={e=>e.currentTarget.style.borderColor=T.grn}
                   onMouseLeave={e=>e.currentTarget.style.borderColor=T.b2}/>
@@ -2205,15 +2277,14 @@ function TabTodo() {
                   <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
                     <Pill label={todo.cat} c={cc} bg={cc+"18"}/>
                     <Pill label={todo.priority} c={ps.c} bg={ps.bg}/>
-                    <span style={{fontSize:11,color:T.t4}}>@{todo.assignee.split(" ")[0]}</span>
-                    {todo.due&&<span style={{fontSize:11,color:T.t4}}>Due {todo.due}</span>}
+                    <span style={{fontSize:11,color:T.t4}}>@{(todo.assignee||"").split(" ")[0]||"--"}</span>
+                    {todo.due&&<span style={{fontSize:11,color:T.t4}}>Due {new Date(todo.due).toLocaleDateString("en-IN",{day:"numeric",month:"short"})}</span>}
                     {todo.checklist.length>0&&(
                       <span style={{fontSize:10.5,color:checkDone===todo.checklist.length?T.grn:T.t4,fontWeight:600}}>
                         ☑ {checkDone}/{todo.checklist.length}
                       </span>
                     )}
                   </div>
-                  {/* Checklist preview */}
                   {isExp&&todo.checklist.length>0&&(
                     <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${T.b1}`}}>
                       {todo.checklist.map((c,ci)=>(
@@ -2227,12 +2298,20 @@ function TabTodo() {
                     </div>
                   )}
                 </div>
-                <button onClick={()=>setExpandId(isExp?null:todo.id)}
-                  style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3,marginTop:1,flexShrink:0}}>
-                  <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}>
-                    <path d={isExp?"M2 5l5 5 5-5":"M2 9l5-5 5 5"}/>
-                  </svg>
-                </button>
+                <div style={{display:"flex",gap:2,flexShrink:0,marginTop:1}}>
+                  <button onClick={()=>deleteTodo(todo.id)} title="Delete"
+                    style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3,opacity:.5,transition:"opacity .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.opacity=1}
+                    onMouseLeave={e=>e.currentTarget.style.opacity=.5}>
+                    <svg width={13} height={13} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M3 4h8M5 4V3a1 1 0 011-1h2a1 1 0 011 1v1M6 7v3M8 7v3M4 4l.5 7a1 1 0 001 1h3a1 1 0 001-1L10 4"/></svg>
+                  </button>
+                  <button onClick={()=>setExpandId(isExp?null:todo.id)}
+                    style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3}}>
+                    <svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}>
+                      <path d={isExp?"M2 5l5 5 5-5":"M2 9l5-5 5 5"}/>
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -2252,8 +2331,14 @@ function TabTodo() {
                   <svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>
                 </div>
                 <span style={{flex:1,fontSize:12.5,color:T.t3,textDecoration:"line-through"}}>{todo.text}</span>
-                <span style={{fontSize:10.5,color:T.t4}}>@{todo.assignee.split(" ")[0]}</span>
+                <span style={{fontSize:10.5,color:T.t4}}>@{(todo.assignee||"").split(" ")[0]||"--"}</span>
                 {todo.checklist.length>0&&<span style={{fontSize:10,color:T.grn}}>✓ {todo.checklist.length}/{todo.checklist.length}</span>}
+                <button onClick={()=>deleteTodo(todo.id)} title="Delete"
+                  style={{background:"none",border:"none",cursor:"pointer",color:T.t4,padding:3,opacity:.4,flexShrink:0}}
+                  onMouseEnter={e=>e.currentTarget.style.opacity=1}
+                  onMouseLeave={e=>e.currentTarget.style.opacity=.4}>
+                  <svg width={12} height={12} viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth={1.5}><path d="M3 4h8M5 4V3a1 1 0 011-1h2a1 1 0 011 1v1M6 7v3M8 7v3M4 4l.5 7a1 1 0 001 1h3a1 1 0 001-1L10 4"/></svg>
+                </button>
               </div>
             ))}
           </Panel>
@@ -9238,7 +9323,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     estimate:    <TabEstimate/>,
     party:       <TabParty/>,
     transaction: <TabTransaction/>,
-    todo:        <TabTodo/>,
+    todo:        <TabTodo projectId={project.id}/>,
     task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
     attendance:  <TabAttendance/>,
     material:    <TabMaterial project={project}/>,

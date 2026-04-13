@@ -1320,6 +1320,7 @@ function ProjectsPage({onSelectProject}){
   const [approvalCount,setApprovalCount]=useState(0);
   const [mrPendingCount,setMrPendingCount]=useState(0);
   const [prPendingCount,setPrPendingCount]=useState(0);
+  const [todoCount,setTodoCount]=useState(0);
 
   // Load real approval counts from centralized engine
   const loadApprovalCounts=async()=>{
@@ -1404,6 +1405,10 @@ function ProjectsPage({onSelectProject}){
   };
   useEffect(()=>{
     fetchProjects().then(()=>{ loadApprovalCounts(); });
+    // Load todo count
+    api.get("/projects/my-todo-count").then(r=>{
+      if(r.success&&r.data) setTodoCount(r.data.count||0);
+    }).catch(()=>{});
     // Load issues independently — check cache first
     const cachedIssues = apiCache.get("all-issues");
     if(cachedIssues){
@@ -1453,7 +1458,7 @@ function ProjectsPage({onSelectProject}){
   const ACTION_TILES=[
     {label:"Pending Approvals",val:approvalCount,Icon:IcWarn,color:T.amb,bg:T.ambL,bdr:T.ambM,onClick:()=>{setApprovalMode("approvals");setShowApprovals(true);}},
     {label:"Material Requests", val:mrPendingCount,Icon:IcProc,color:T.blu,bg:T.bluL,bdr:T.bluM,onClick:()=>{setApprovalMode("materials");setShowApprovals(true);}},
-    {label:"My To-Do",          val:5,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
+    {label:"My To-Do",          val:todoCount,   Icon:IcClip,  color:T.grn,bg:T.grnL,bdr:T.grnM},
     {label:"Open Issues", val:allIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length, Icon:IcWarn, color:T.red,bg:T.redL,bdr:T.redM,
       onClick:()=>{
       setIssueFilter("Open");
