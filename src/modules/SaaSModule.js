@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 
 const API = "https://gb-backend-production-7bd2.up.railway.app/api";
-const tok = () => localStorage.getItem("token");
+const tok = () => localStorage.getItem("gb_token");
 const apiFetch = (path, opts = {}) =>
   fetch(API + path, {
     ...opts,
