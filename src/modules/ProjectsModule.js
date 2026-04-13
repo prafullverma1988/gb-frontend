@@ -650,11 +650,10 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     finally { setSaving(false); }
   };
 
-  const normalizeStr = s => (s||"").toLowerCase().replace(/[—–-]/g,"-").replace(/\s+/g," ").trim();
-  const deleteMatch = normalizeStr(deleteText) === normalizeStr(project.name);
+  const deleteMatch = deleteText.trim().toUpperCase() === "DELETE";
 
   const handleDelete = async () => {
-    if(!deleteMatch) return setError("Project naam match nahi kiya");
+    if(!deleteMatch) return setError("Type DELETE to confirm");
     setSaving(true);
     try {
       const res = await api.del("/projects/"+project.id);
@@ -845,8 +844,8 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
                 {!confirmDelete
                   ?<button onClick={()=>setConfirmDelete(true)} style={{padding:"7px 14px",borderRadius:7,background:T.surface,border:"1.5px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>Delete Project</button>
                   :<div>
-                    <div style={{fontSize:12,color:T.red,marginBottom:8}}>Confirm karne ke liye project ka naam type karo: <strong>{project.name}</strong></div>
-                    <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder={project.name}
+                    <div style={{fontSize:12,color:T.red,marginBottom:8}}>Confirm karne ke liye <strong>DELETE</strong> type karo:</div>
+                    <input value={deleteText} onChange={e=>setDeleteText(e.target.value)} placeholder="Type DELETE to confirm"
                       style={{width:"100%",padding:"8px 11px",borderRadius:7,border:"1.5px solid "+T.redM,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:10}}/>
                     <div style={{display:"flex",gap:6}}>
                       <button onClick={()=>{setConfirmDelete(false);setDeleteText("");}} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
