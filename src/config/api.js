@@ -3,8 +3,9 @@ const API_BASE = "https://gb-backend-production-7bd2.up.railway.app/api";
 
 const getToken  = () => localStorage.getItem("gb_token");
 const getUser   = () => { try { const u=localStorage.getItem("gb_user"); return u?JSON.parse(u):null; } catch{return null;} };
-const saveAuth  = (token,user) => { localStorage.setItem("gb_token",token); localStorage.setItem("gb_user",JSON.stringify(user)); };
-const clearAuth = () => { localStorage.removeItem("gb_token"); localStorage.removeItem("gb_user"); };
+const getCompanies = () => { try { const c=localStorage.getItem("gb_companies"); return c?JSON.parse(c):[]; } catch{return [];} };
+const saveAuth  = (token,user,companies) => { localStorage.setItem("gb_token",token); localStorage.setItem("gb_user",JSON.stringify(user)); if(companies) localStorage.setItem("gb_companies",JSON.stringify(companies)); };
+const clearAuth = () => { localStorage.removeItem("gb_token"); localStorage.removeItem("gb_user"); localStorage.removeItem("gb_companies"); };
 
 const api = async (endpoint, options={}) => {
   const token = getToken();
@@ -31,10 +32,15 @@ api.del   = (endpoint)        => api(endpoint, { method:"DELETE" });
 api.login = async (email, password) => {
   const res  = await fetch(`${API_BASE}/auth/login`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({email,password}) });
   const data = await res.json();
-  if (data.success) saveAuth(data.token, data.user);
+  if (data.success) saveAuth(data.token, data.user, data.companies);
+  return data;
+};
+api.switchCompany = async (companyId) => {
+  const data = await api.post("/auth/switch-company", { company_id: companyId });
+  if (data.success) saveAuth(data.token, data.user, data.companies);
   return data;
 };
 api.logout = () => { clearAuth(); window.location.reload(); };
 
 export default api;
-export { getToken, getUser, saveAuth, clearAuth, API_BASE };
+export { getToken, getUser, getCompanies, saveAuth, clearAuth, API_BASE };

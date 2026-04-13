@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense } from "react";
-import api, { getUser, getToken, clearAuth } from "./config/api";
+import api, { getUser, getToken, getCompanies, clearAuth, saveAuth } from "./config/api";
 import apiCache from "./utils/apiCache";
 import UploadToast from "./components/UploadToast";
 
@@ -297,7 +297,7 @@ function LoginScreen({onLogin}){
     setLoading(true);setError("");
     try{
       const res=await api.login(email,pass);
-      if(res.success){onLogin(res.user);}
+      if(res.success){onLogin(res.user,res.companies);}
       else{setError(res.message||"Login failed");}
     }catch(err){setError("Server not reachable. Please try again.");}
     setLoading(false);
@@ -472,19 +472,60 @@ function ShortcutCheatsheet({onClose}){
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────
-function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile}){
+function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile,companies,onSwitchCompany}){
+  const [showSwitcher,setShowSwitcher]=useState(false);
+  const [showCreateCo,setShowCreateCo]=useState(false);
+  const [newCo,setNewCo]=useState({name:"",domain:"surya_ghar",city:""});
+  const [creating,setCreating]=useState(false);
+  const switcherRef=useRef(null);
+
+  // Close switcher on outside click
+  useEffect(()=>{
+    if(!showSwitcher) return;
+    const handler=(e)=>{if(switcherRef.current&&!switcherRef.current.contains(e.target)) setShowSwitcher(false);};
+    document.addEventListener("mousedown",handler);
+    return()=>document.removeEventListener("mousedown",handler);
+  },[showSwitcher]);
+
+  const domainIcons={"surya_ghar":"☀️","surya_ghar_plus":"☀️","solar_commercial":"⚡","construction_individual":"🏗️","housing_projects":"🏠"};
+  const domainColors={"surya_ghar":"#E65100","surya_ghar_plus":"#FF8F00","solar_commercial":"#1565C0","construction_individual":"#2E7D32","housing_projects":"#6A1B9A"};
+  const DOMAINS=[
+    {id:"surya_ghar",label:"Surya Ghar Yojana"},
+    {id:"surya_ghar_plus",label:"Surya Ghar + Other Solar"},
+    {id:"solar_commercial",label:"Commercial Solar"},
+    {id:"construction_individual",label:"Individual Contractor"},
+    {id:"housing_projects",label:"Housing Projects"},
+  ];
+  const activeDomain = user?.company_domain || "construction_individual";
+  const activeIcon = domainIcons[activeDomain] || "🏗️";
+  const activeColor = domainColors[activeDomain] || C.p;
+
+  const handleCreate=async()=>{
+    if(!newCo.name.trim()||creating) return;
+    setCreating(true);
+    try{
+      const res=await api.post("/auth/create-company",newCo);
+      if(res.success){
+        setShowCreateCo(false);
+        setNewCo({name:"",domain:"surya_ghar",city:""});
+        // Switch to new company
+        if(res.data?.company_id) onSwitchCompany(res.data.company_id);
+      }
+    }catch(e){}
+    setCreating(false);
+  };
+
   // Filter nav items — disabled modules hidden from sidebar
   const isVisible=(id)=>{
     if(id==="saas") return user?.role==="super_admin";
     if(ALWAYS_ON.includes(id)) return true;
-    if(!enabledModules) return true; // still loading
+    if(!enabledModules) return true;
     return enabledModules[id]!==false;
   };
-  // Mobile: sidebar = overlay drawer. Hidden when collapsed.
   const mobileHidden = isMobile && collapsed;
   const handleNav=(id)=>{setActive(id); if(isMobile) setCollapsed(true);};
+  const showLabel=isMobile||!collapsed;
   return(<>
-    {/* Mobile backdrop */}
     {isMobile&&!collapsed&&<div onClick={()=>setCollapsed(true)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:199,transition:"opacity 0.2s"}}/>}
     <div style={{
       width:mobileHidden?0:(collapsed&&!isMobile)?62:232,
@@ -493,9 +534,70 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
       boxShadow:"2px 0 16px rgba(0,0,0,0.28)",zIndex:200,
       ...(isMobile?{position:"fixed",left:mobileHidden?-240:0,top:0,bottom:0,width:mobileHidden?0:250}:{}),
     }}>
-      <div style={{padding:(!isMobile&&collapsed)?"18px 0":"18px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.07)",minHeight:66,justifyContent:(!isMobile&&collapsed)?"center":"flex-start"}}>
-        <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(135deg,${C.p},${C.a})`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg></div>
-        {(isMobile||!collapsed)&&<div><div style={{color:"white",fontWeight:800,fontSize:14}}>GB Buildcon</div><div style={{color:"rgba(255,255,255,0.32)",fontSize:9,letterSpacing:"0.8px",textTransform:"uppercase"}}>Construction</div></div>}
+      {/* Company header with switcher */}
+      <div ref={switcherRef} style={{position:"relative"}}>
+        <div onClick={()=>{if(showLabel) setShowSwitcher(!showSwitcher);}}
+          style={{padding:(!isMobile&&collapsed)?"18px 0":"18px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.07)",minHeight:66,justifyContent:(!isMobile&&collapsed)?"center":"flex-start",cursor:showLabel?"pointer":"default",transition:"background .15s"}}
+          onMouseEnter={e=>{if(showLabel) e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
+          onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
+          <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(135deg,${activeColor},${activeColor}99)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>{activeIcon}</div>
+          {showLabel&&<div style={{flex:1,minWidth:0}}>
+            <div style={{color:"white",fontWeight:800,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.company_name||"Company"}</div>
+            <div style={{color:"rgba(255,255,255,0.32)",fontSize:9,letterSpacing:"0.8px",textTransform:"uppercase"}}>{(DOMAINS.find(d=>d.id===activeDomain)||{}).label||"Construction"}</div>
+          </div>}
+          {showLabel&&<svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={1.5}><path d={showSwitcher?"M2 8l4-4 4 4":"M2 4l4 4 4-4"}/></svg>}
+        </div>
+
+        {/* Company switcher dropdown */}
+        {showSwitcher&&showLabel&&(
+          <div style={{position:"absolute",top:"100%",left:8,right:8,background:"#1E293B",borderRadius:10,boxShadow:"0 12px 40px rgba(0,0,0,0.5)",zIndex:250,border:"1px solid rgba(255,255,255,0.1)",overflow:"hidden",animation:"fadeIn .15s ease"}}>
+            <div style={{padding:"8px 10px 4px",fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.3)",letterSpacing:"1px",textTransform:"uppercase"}}>Your Companies</div>
+            {(companies||[]).map(co=>{
+              const isActive=co.id===user?.company_id;
+              const icon=domainIcons[co.domain]||"🏗️";
+              const clr=domainColors[co.domain]||C.p;
+              return(
+                <div key={co.id} onClick={()=>{if(!isActive){onSwitchCompany(co.id);setShowSwitcher(false);}}}
+                  style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",cursor:isActive?"default":"pointer",background:isActive?"rgba(255,255,255,0.08)":"transparent",transition:"background .12s",borderLeft:isActive?`3px solid ${clr}`:"3px solid transparent"}}
+                  onMouseEnter={e=>{if(!isActive) e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
+                  onMouseLeave={e=>{if(!isActive) e.currentTarget.style.background="transparent";}}>
+                  <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${clr},${clr}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>{icon}</div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12,fontWeight:isActive?700:500,color:"white",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{co.name}</div>
+                    <div style={{fontSize:9,color:"rgba(255,255,255,0.35)"}}>{co.domain_label||co.domain} · {co.role}</div>
+                  </div>
+                  {isActive&&<div style={{width:7,height:7,borderRadius:"50%",background:"#22C55E",boxShadow:"0 0 0 2px rgba(34,197,94,0.3)",flexShrink:0}}/>}
+                </div>
+              );
+            })}
+            <div style={{borderTop:"1px solid rgba(255,255,255,0.08)",padding:"4px 6px"}}>
+              {!showCreateCo?(
+                <button onClick={()=>setShowCreateCo(true)}
+                  style={{width:"100%",display:"flex",alignItems:"center",gap:8,padding:"8px 8px",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:12,fontWeight:500,borderRadius:6,transition:"all .12s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="white";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.5)";}}>
+                  <div style={{width:28,height:28,borderRadius:7,border:"1.5px dashed rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14}}>+</div>
+                  Create New Company
+                </button>
+              ):(
+                <div style={{padding:"8px 6px"}}>
+                  <input value={newCo.name} onChange={e=>setNewCo(p=>({...p,name:e.target.value}))} placeholder="Company name"
+                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
+                  <select value={newCo.domain} onChange={e=>setNewCo(p=>({...p,domain:e.target.value}))}
+                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}>
+                    {DOMAINS.map(d=><option key={d.id} value={d.id}>{domainIcons[d.id]} {d.label}</option>)}
+                  </select>
+                  <input value={newCo.city} onChange={e=>setNewCo(p=>({...p,city:e.target.value}))} placeholder="City (optional)"
+                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.06)",color:"white",fontSize:12,outline:"none",boxSizing:"border-box",marginBottom:6,fontFamily:"inherit"}}/>
+                  <div style={{display:"flex",gap:6}}>
+                    <button onClick={()=>setShowCreateCo(false)} style={{flex:1,padding:"6px",borderRadius:6,background:"rgba(255,255,255,0.08)",border:"none",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer"}}>Cancel</button>
+                    <button onClick={handleCreate} disabled={creating} style={{flex:2,padding:"6px",borderRadius:6,background:"#3B82F6",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:creating?"wait":"pointer"}}>{creating?"Creating...":"Create"}</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
       <nav style={{flex:1,padding:"10px 0",overflowY:"auto"}}>
         {NAV_GROUPS.map((grp,gi)=>{
@@ -752,6 +854,8 @@ export default function App(){
   }
 
   const [user,setUser]=useState(()=>getUser());
+  const [companies,setCompanies]=useState(()=>getCompanies());
+  const [switching,setSwitching]=useState(false);
   const [nav,setNav]=useState("dashboard");
   const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
@@ -835,9 +939,32 @@ export default function App(){
     window.addEventListener("keydown",handler);
     return()=>window.removeEventListener("keydown",handler);
   },[showSearch,showCheatsheet]);
-  const handleLogout=()=>{apiCache.clear();clearAuth();setUser(null);setEnabledModules(null);};
+  const handleLogout=()=>{apiCache.clear();clearAuth();setUser(null);setCompanies([]);setEnabledModules(null);};
 
-  if(!loggedIn) return <LoginScreen onLogin={(u)=>setUser(u)}/>;
+  const handleSwitchCompany=async(companyId)=>{
+    if(switching||companyId===user?.company_id) return;
+    setSwitching(true);
+    try{
+      const res=await api.switchCompany(companyId);
+      if(res.success){
+        apiCache.clear();
+        setUser(res.user);
+        setCompanies(res.companies||[]);
+        setEnabledModules(null); // re-fetch
+        setNav("dashboard");
+        // Re-fetch modules for new company
+        const modRes=await api.get("/settings/modules");
+        if(modRes.success){
+          const map={};
+          modRes.data.forEach(m=>{map[m.key]=m.is_enabled;});
+          setEnabledModules(map);
+        } else setEnabledModules({});
+      }
+    }catch(e){console.error("Switch company error:",e);}
+    setSwitching(false);
+  };
+
+  if(!loggedIn) return <LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());}}/>;
 
   const PAGES={
     dashboard:{title:"Dashboard",sub:"Company Overview"},
@@ -900,7 +1027,11 @@ export default function App(){
           td,th{padding:6px 8px!important}
         }
       `}</style>
-      <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile}/>
+      {switching&&<div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.85)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",gap:12}}>
+        <div style={{width:32,height:32,border:"3px solid rgba(255,255,255,0.15)",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
+        <div style={{color:"white",fontSize:14,fontWeight:600}}>Switching company...</div>
+      </div>}
+      <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany}/>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={ALERTS.length} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>
         <div style={{flex:1,overflowY:"auto"}}>
