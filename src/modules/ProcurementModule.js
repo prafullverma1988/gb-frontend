@@ -1122,7 +1122,6 @@ function ProcurementModule(){
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif",overflow:"hidden"}}>
-      {loading&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",padding:"60px",color:T.t4,fontSize:13}}>Loading...</div>}
       {apiError&&<div style={{margin:"12px 18px",padding:"10px 14px",background:T.redL,border:"1px solid "+T.redM,borderRadius:7,fontSize:12,color:T.red}}>{apiError}</div>}
 
       {/* Stat tiles */}
@@ -1159,8 +1158,10 @@ function ProcurementModule(){
       {/* Tab content */}
       <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",padding:"10px 18px 14px"}}>
 
+        {loading&&<div style={{display:"flex",alignItems:"center",justifyContent:"center",flex:1,color:T.t4,fontSize:13}}>Loading...</div>}
+
         {/* ═══════════ MR TAB ═══════════ */}
-        {tab==="mr"&&(
+        {!loading&&tab==="mr"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
 
             {/* 5-tab status bar */}
@@ -1208,7 +1209,7 @@ function ProcurementModule(){
             </div>
 
             {/* MR List — clean like screenshot */}
-            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+            <div style={{flex:1,overflowY:"auto",overflowX:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
 
               {/* Pending tab: simple list with approve/reject */}
               {mrTab==="Pending"&&(
@@ -1429,7 +1430,7 @@ function ProcurementModule(){
         )}
 
         {/* ═══════════ PO TAB ═══════════ */}
-        {tab==="po"&&(
+        {!loading&&tab==="po"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
             {/* Filter bar */}
             <div style={{background:T.surface,borderRadius:8,padding:"7px 10px",marginBottom:8,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
@@ -1449,7 +1450,7 @@ function ProcurementModule(){
               <span style={{fontSize:11,color:T.t4}}>{filteredPOs.length} POs</span>
             </div>
             {/* PO list */}
-            <div style={{flex:1,overflowY:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+            <div style={{flex:1,overflowY:"auto",overflowX:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
               <div style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 80px",padding:"7px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0,zIndex:10}}>
                 {["PO#","Vendor","Project","Site","Status","Approval","Amount","Actions"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
               </div>
@@ -1476,7 +1477,7 @@ function ProcurementModule(){
         )}
 
         {/* ═══════════ RFQ TAB ═══════════ */}
-        {tab==="rfq"&&(
+        {!loading&&tab==="rfq"&&(
           <div style={{flex:1,overflowY:"auto"}}>
             {rfqs.map(rfq=>{
               const rs=RFQ_STATUS[rfq.status]||RFQ_STATUS.Draft;
