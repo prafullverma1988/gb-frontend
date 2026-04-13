@@ -7105,40 +7105,141 @@ function TabEquipment() {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 12 — FILES
 // ═══════════════════════════════════════════════════════════════════
-function TabFiles() {
-  const [selFolder, setSelFolder] = useState(D.folders[0]);
-  const typeS = {"PDF":{c:T.red,bg:T.redL},"DWG":{c:T.blu,bg:T.bluL},"3D":{c:T.pur,bg:T.purL},"JPG":{c:T.grn,bg:T.grnL},"XLS":{c:"#065F46",bg:"#ECFDF5"}};
+function TabFiles({ projectId }) {
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selCat, setSelCat] = useState("all");
+
+  useEffect(() => {
+    setLoading(true);
+    api.get("/solar/projects/" + projectId + "/all-files").then(r => {
+      if (r.success) setFiles(r.data || []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [projectId]);
+
+  const typeS = { PDF:{c:T.red,bg:T.redL,icon:"📄"}, IMG:{c:T.grn,bg:T.grnL,icon:"🖼"}, VID:{c:T.pur,bg:T.purL,icon:"🎥"} };
+
+  // Group by category
+  const categories = useMemo(() => {
+    const cats = {};
+    files.forEach(f => {
+      if (!cats[f.category]) cats[f.category] = { name: f.category, files: [], uploaded: 0, total: 0 };
+      cats[f.category].files.push(f);
+      cats[f.category].total++;
+      if (f.uploaded) cats[f.category].uploaded++;
+    });
+    return Object.values(cats);
+  }, [files]);
+
+  const uploadedCount = files.filter(f => f.uploaded).length;
+  const pendingCount = files.filter(f => !f.uploaded).length;
+  const filtered = selCat === "all" ? files : selCat === "uploaded" ? files.filter(f => f.uploaded) : selCat === "pending" ? files.filter(f => !f.uploaded) : files.filter(f => f.category === selCat);
+
+  // Category colors
+  const catColors = {
+    "Lead Documents": { c: "#7C3AED", bg: "#F5F3FF", bdr: "#C084FC" },
+    "Quotations": { c: "#D97706", bg: "#FFFBEB", bdr: "#FDE68A" },
+    "Installation Photos": { c: "#2563EB", bg: "#EFF6FF", bdr: "#93C5FD" },
+    "Installation": { c: "#7C3AED", bg: "#F5F3FF", bdr: "#C084FC" },
+  };
+  const getStageCatColor = (cat) => {
+    if (cat.startsWith("Stage")) return { c: "#059669", bg: "#ECFDF5", bdr: "#6EE7B7" };
+    return catColors[cat] || { c: T.slt, bg: T.sltL, bdr: T.b1 };
+  };
+
+  if (loading) return <div style={{textAlign:"center",padding:"60px",color:T.t4}}>Loading files...</div>;
 
   return (
-    <div style={{padding:"16px 18px"}}>
-      <div style={{display:"flex", justifyContent:"flex-end", marginBottom:12}}><AddBtn label="Upload File"/></div>
-      <div style={{display:"grid", gridTemplateColumns:"210px 1fr", gap:14}}>
-        <div style={{display:"flex", flexDirection:"column", gap:8}}>
-          {D.folders.map(f=>(
-            <button key={f.id} onClick={()=>setSelFolder(f)} style={{padding:"10px 13px", border:`1.5px solid ${selFolder?.id===f.id?f.color:T.b1}`, borderRadius:7, background:selFolder?.id===f.id?`${f.color}0D`:T.surface, cursor:"pointer", display:"flex", justifyContent:"space-between", alignItems:"center", transition:"all .14s", textAlign:"left", borderLeft:`4px solid ${selFolder?.id===f.id?f.color:T.b1}`}}>
-              <span style={{fontSize:12.5, fontWeight:600, color:selFolder?.id===f.id?f.color:T.t1}}>{f.name}</span>
-              <span style={{fontSize:11, color:T.t4, background:T.surfaceB, padding:"1px 7px", borderRadius:20, border:`1px solid ${T.b1}`}}>{f.count}</span>
-            </button>
-          ))}
+    <div style={{padding:"16px 0"}}>
+      {/* Summary cards */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+        <div onClick={()=>setSelCat("all")} style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${selCat==="all"?T.blu:T.b1}`,background:selCat==="all"?T.bluL:T.surface,cursor:"pointer"}}>
+          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Total Files</div>
+          <div style={{fontSize:22,fontWeight:700,color:T.t1}}>{files.length}</div>
         </div>
-        {selFolder&&(
-          <Panel style={{overflow:"hidden"}}>
-            <PHead title={selFolder.name} action={<AddBtn label="Upload"/>}/>
-            <THead cols="1fr 60px 70px 110px 70px" headers={["File Name","Type","Size","Uploaded By","Date"]}/>
-            {selFolder.files.map((f,i)=>{
-              const ft = typeS[f.type]||{c:T.slt,bg:T.sltL};
-              return (
-                <div key={i} style={{display:"grid", gridTemplateColumns:"1fr 60px 70px 110px 70px", padding:"10px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", cursor:"pointer", transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <span style={{fontSize:12.5, fontWeight:500, color:T.blu}}>{f.name}</span>
-                  <Pill label={f.type} c={ft.c} bg={ft.bg}/>
-                  <span style={{fontSize:11.5, color:T.t4}}>{f.size}</span>
-                  <span style={{fontSize:12, color:T.t2}}>{f.by}</span>
-                  <span style={{fontSize:11.5, color:T.t4}}>{f.date}</span>
-                </div>
-              );
-            })}
-          </Panel>
+        <div onClick={()=>setSelCat("uploaded")} style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${selCat==="uploaded"?T.grn:T.b1}`,background:selCat==="uploaded"?T.grnL:T.surface,cursor:"pointer"}}>
+          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Uploaded</div>
+          <div style={{fontSize:22,fontWeight:700,color:T.grn}}>{uploadedCount}</div>
+        </div>
+        <div onClick={()=>setSelCat("pending")} style={{padding:"12px 14px",borderRadius:9,border:`1.5px solid ${selCat==="pending"?T.red:T.b1}`,background:selCat==="pending"?T.redL:T.surface,cursor:"pointer"}}>
+          <div style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase"}}>Pending</div>
+          <div style={{fontSize:22,fontWeight:700,color:T.red}}>{pendingCount}</div>
+        </div>
+      </div>
+
+      {/* Category filter chips */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:14}}>
+        <button onClick={()=>setSelCat("all")}
+          style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${selCat==="all"?T.blu:T.b1}`,background:selCat==="all"?T.blu:"white",color:selCat==="all"?"white":T.t2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+          All ({files.length})
+        </button>
+        {categories.map(cat=>{
+          const cc=getStageCatColor(cat.name);
+          const active=selCat===cat.name;
+          return(
+            <button key={cat.name} onClick={()=>setSelCat(active?"all":cat.name)}
+              style={{padding:"5px 12px",borderRadius:20,border:`1px solid ${active?cc.c:T.b1}`,background:active?cc.bg:"white",color:active?cc.c:T.t2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+              {cat.name} ({cat.uploaded}/{cat.total})
+            </button>
+          );
+        })}
+      </div>
+
+      {/* File list */}
+      <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{display:"grid",gridTemplateColumns:"30px 1fr 140px 60px 100px",padding:"8px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px"}}>
+          <span>#</span><span>File Name</span><span>Category</span><span>Type</span><span>Actions</span>
+        </div>
+        {filtered.length === 0 && (
+          <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12}}>No files in this category</div>
         )}
+        {filtered.map((f, i) => {
+          const ft = typeS[f.type] || { c: T.slt, bg: T.sltL, icon: "📎" };
+          const cc = getStageCatColor(f.category);
+          return (
+            <div key={i} style={{display:"grid",gridTemplateColumns:"30px 1fr 140px 60px 100px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",
+              background:f.uploaded?"white":"#FEF2F2",transition:"background .1s"}}
+              onMouseEnter={e=>e.currentTarget.style.background=f.uploaded?T.surfaceB:"#FEE2E2"}
+              onMouseLeave={e=>e.currentTarget.style.background=f.uploaded?"white":"#FEF2F2"}>
+              {/* Number */}
+              <span style={{fontSize:11,color:T.t4,fontWeight:600}}>{i + 1}</span>
+              {/* Name + status */}
+              <div style={{minWidth:0}}>
+                <div style={{fontSize:12,fontWeight:600,color:f.uploaded?T.t1:T.red,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                  {f.uploaded?"":"⚠ "}{f.name}
+                </div>
+                {f.uploaded_at&&<div style={{fontSize:9.5,color:T.t4,marginTop:1}}>{new Date(f.uploaded_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"})}</div>}
+              </div>
+              {/* Category */}
+              <span style={{fontSize:10,fontWeight:600,color:cc.c,background:cc.bg,padding:"2px 8px",borderRadius:10,border:`1px solid ${cc.bdr}`,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:130,display:"inline-block"}}>
+                {f.category}
+              </span>
+              {/* Type */}
+              <span style={{fontSize:10,fontWeight:700,color:ft.c,background:ft.bg,padding:"2px 8px",borderRadius:10,textAlign:"center"}}>
+                {ft.icon} {f.type||"—"}
+              </span>
+              {/* Actions */}
+              <div style={{display:"flex",gap:4}}>
+                {f.uploaded && f.file_url ? (
+                  <>
+                    <a href={f.file_url} target="_blank" rel="noreferrer"
+                      style={{padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10,fontWeight:600,textDecoration:"none",cursor:"pointer"}}>
+                      View
+                    </a>
+                    <a href={f.file_url} download target="_blank" rel="noreferrer"
+                      style={{padding:"4px 10px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10,fontWeight:600,textDecoration:"none",cursor:"pointer"}}>
+                      ⬇
+                    </a>
+                  </>
+                ) : (
+                  <span style={{fontSize:10,color:T.red,fontWeight:600}}>Not uploaded</span>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
@@ -9157,7 +9258,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     material:    <TabMaterial project={project}/>,
     subcon:      <TabSubcon projectId={project.id}/>,
     equipment:   <TabEquipment/>,
-    files:       <TabFiles/>,
+    files:       <TabFiles projectId={project.id}/>,
     site:        <TabSite/>,
     mom:         <TabMOM/>,
     // ── Solar EPC tabs ──
