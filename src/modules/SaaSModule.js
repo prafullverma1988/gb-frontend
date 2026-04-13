@@ -355,13 +355,13 @@ function TabStats() {
 function TabCompanies({ companies, reload, onSelectCompany }) {
   const [showModal, setShowModal] = useState(false);
   const [toast, setToast]         = useState(null);
-  const [form, setForm]           = useState({ name:"", admin_name:"", admin_email:"", admin_password:"", phone:"", city:"", state:"", module_type:"construction_individual" });
-  const [showPass, setShowPass]   = useState(false);
+  const [form, setForm]           = useState({ name:"", admin_name:"", admin_email:"", phone:"", city:"", state:"", module_type:"construction_individual" });
   const [saving, setSaving]       = useState(false);
   const [toggling, setToggling]   = useState(null);
-  const [filter, setFilter]       = useState("all"); // all, active, inactive
+  const [filter, setFilter]       = useState("all");
   const [search, setSearch]       = useState("");
   const [detail, setDetail]       = useState(null);
+  const [credentials, setCredentials] = useState(null); // shows after create
 
   const filtered = companies.filter(c => {
     if (filter === "active" && !c.is_active) return false;
@@ -374,16 +374,16 @@ function TabCompanies({ companies, reload, onSelectCompany }) {
   });
 
   const createCompany = async () => {
-    if (!form.name || !form.admin_name || !form.admin_email || !form.admin_password) {
-      setToast({ msg:"All required fields must be filled", type:"error" }); return;
+    if (!form.name || !form.admin_name || !form.admin_email) {
+      setToast({ msg:"Company name, admin name and email are required", type:"error" }); return;
     }
     setSaving(true);
     const res = await apiFetch("/saas-admin/companies", { method:"POST", body: form });
     setSaving(false);
     if (res.success) {
-      setToast({ msg: res.message || "Company created!", type:"success" });
       setShowModal(false);
-      setForm({ name:"", admin_name:"", admin_email:"", admin_password:"", phone:"", city:"", state:"", module_type:"construction_individual" });
+      setCredentials(res.data?.credentials || null);
+      setForm({ name:"", admin_name:"", admin_email:"", phone:"", city:"", state:"", module_type:"construction_individual" });
       reload();
     } else {
       setToast({ msg: res.message, type:"error" });
@@ -427,37 +427,40 @@ function TabCompanies({ companies, reload, onSelectCompany }) {
       </div>
 
       <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-        <TableHeader columns={["Company","Domain","City","Users","Projects","Created","Status",""]}
-          gridCols="2fr 1.3fr 0.8fr 70px 70px 100px 90px 80px"/>
+        <TableHeader columns={["Company","Plan","Domain","Users","Projects","Created","Status",""]}
+          gridCols="1.8fr 1fr 1.2fr 65px 65px 95px 85px 75px"/>
         {filtered.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No companies match filters</div>}
-        {filtered.map((c, i) => (
-          <div key={c.id} onClick={() => setDetail(detail?.id === c.id ? null : c)}
-            style={{ display:"grid", gridTemplateColumns:"2fr 1.3fr 0.8fr 70px 70px 100px 90px 80px", padding:"11px 16px",
-              borderBottom: i < filtered.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center",
-              cursor:"pointer", background: detail?.id === c.id ? T.bluL : "transparent", transition:"background 0.15s" }}>
-            <div>
-              <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{c.name}</div>
-              <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug}</div>
+        {filtered.map((c, i) => {
+          const planColor = { free:T.slt, starter:T.blu, pro:T.pur, enterprise:T.amb }[c.plan_slug] || T.t4;
+          return (
+            <div key={c.id} onClick={() => setDetail(detail?.id === c.id ? null : c)}
+              style={{ display:"grid", gridTemplateColumns:"1.8fr 1fr 1.2fr 65px 65px 95px 85px 75px", padding:"11px 16px",
+                borderBottom: i < filtered.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center",
+                cursor:"pointer", background: detail?.id === c.id ? T.bluL : "transparent", transition:"background 0.15s" }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{c.name}</div>
+                <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug}</div>
+              </div>
+              <div><Badge text={c.plan_name || "No Plan"} color={planColor}/></div>
+              <div><Badge text={DOMAIN_LABELS[c.module_type] || c.module_type || "Standard"} color={T.pur}/></div>
+              <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, textAlign:"center" }}>{c.user_count}</div>
+              <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, textAlign:"center" }}>{c.project_count}</div>
+              <div style={{ fontSize:11.5, color:T.t3 }}>{fmtDate(c.created_at)}</div>
+              <div><Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/></div>
+              <div style={{ display:"flex", gap:5, justifyContent:"flex-end" }} onClick={e => e.stopPropagation()}>
+                <button onClick={() => onSelectCompany(c)} title="Module access"
+                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <IcPuzzle size={12} color={T.t3}/>
+                </button>
+                <button onClick={() => toggleCompany(c.id)} disabled={toggling === c.id} title={c.is_active ? "Deactivate" : "Activate"}
+                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${c.is_active ? T.redM : T.grnM}`, background: c.is_active ? T.redL : T.grnL,
+                    cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  {c.is_active ? <IcX size={11} color={T.red}/> : <IcChk size={11} color={T.grn}/>}
+                </button>
+              </div>
             </div>
-            <div><Badge text={DOMAIN_LABELS[c.module_type] || c.module_type || "Standard"} color={T.pur}/></div>
-            <div style={{ fontSize:12, color:T.t2 }}>{c.city || "--"}</div>
-            <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, textAlign:"center" }}>{c.user_count}</div>
-            <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, textAlign:"center" }}>{c.project_count}</div>
-            <div style={{ fontSize:11.5, color:T.t3 }}>{fmtDate(c.created_at)}</div>
-            <div><Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/></div>
-            <div style={{ display:"flex", gap:5, justifyContent:"flex-end" }} onClick={e => e.stopPropagation()}>
-              <button onClick={() => onSelectCompany(c)} title="Module access"
-                style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <IcPuzzle size={12} color={T.t3}/>
-              </button>
-              <button onClick={() => toggleCompany(c.id)} disabled={toggling === c.id} title={c.is_active ? "Deactivate" : "Activate"}
-                style={{ width:28, height:28, borderRadius:6, border:`1px solid ${c.is_active ? T.redM : T.grnM}`, background: c.is_active ? T.redL : T.grnL,
-                  cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                {c.is_active ? <IcX size={11} color={T.red}/> : <IcChk size={11} color={T.grn}/>}
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Detail drawer */}
@@ -498,7 +501,7 @@ function TabCompanies({ companies, reload, onSelectCompany }) {
           <div onClick={() => setShowModal(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
           <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:520, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
             <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
-              <div><div style={{ fontSize:15, fontWeight:700, color:"white" }}>Create New Company</div><div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>This will create a company + admin account</div></div>
+              <div><div style={{ fontSize:15, fontWeight:700, color:"white" }}>Register New Company</div><div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Password will be auto-generated and shown after creation</div></div>
               <button onClick={() => setShowModal(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
             </div>
             <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
@@ -511,18 +514,56 @@ function TabCompanies({ companies, reload, onSelectCompany }) {
                 <InputField label="Admin Name" required value={form.admin_name} onChange={v => setForm(p=>({...p,admin_name:v}))} placeholder="Full name"/>
                 <InputField label="Admin Email" required value={form.admin_email} onChange={v => setForm(p=>({...p,admin_email:v}))} placeholder="admin@company.com"/>
               </div>
-              <InputField label="Admin Password" required type={showPass ? "text" : "password"} value={form.admin_password}
-                onChange={v => setForm(p=>({...p,admin_password:v}))} placeholder="Min 8 characters"
-                endIcon={<button onClick={() => setShowPass(s=>!s)} style={{ background:"none", border:"none", cursor:"pointer", color:T.t4, display:"flex" }}>{showPass ? <IcEyeX size={15}/> : <IcEye size={15}/>}</button>}/>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
                 <InputField label="Phone" value={form.phone} onChange={v => setForm(p=>({...p,phone:v}))} placeholder="9876543210"/>
                 <InputField label="City" value={form.city} onChange={v => setForm(p=>({...p,city:v}))} placeholder="Raipur"/>
                 <InputField label="State" value={form.state} onChange={v => setForm(p=>({...p,state:v}))} placeholder="Chhattisgarh"/>
               </div>
+              <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb }}>
+                <strong>Note:</strong> A secure password will be auto-generated. You'll see the login credentials after creation - share them with the company admin. They should change it on first login.
+              </div>
             </div>
             <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
               <Btn onClick={() => setShowModal(false)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
-              <Btn onClick={createCompany} disabled={saving} style={{ flex:2 }}>{saving ? "Creating..." : "Create Company"}</Btn>
+              <Btn onClick={createCompany} disabled={saving} style={{ flex:2 }}>{saving ? "Registering..." : "Register Company"}</Btn>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Credentials Modal (shown after company creation) */}
+      {credentials && (
+        <>
+          <div onClick={() => setCredentials(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:500, backdropFilter:"blur(3px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:440, background:T.surface, borderRadius:16, zIndex:501, boxShadow:"0 24px 64px rgba(0,0,0,0.3)", overflow:"hidden" }}>
+            <div style={{ padding:"20px 22px", background:"linear-gradient(135deg, #059669, #10B981)", textAlign:"center" }}>
+              <div style={{ width:48, height:48, borderRadius:"50%", background:"rgba(255,255,255,0.2)", display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:10 }}>
+                <IcChk size={24} color="white"/>
+              </div>
+              <div style={{ fontSize:17, fontWeight:800, color:"white" }}>Company Registered!</div>
+              <div style={{ fontSize:12, color:"rgba(255,255,255,0.7)", marginTop:4 }}>Share these credentials with the company admin</div>
+            </div>
+            <div style={{ padding:"24px 22px" }}>
+              <div style={{ background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 18px", marginBottom:16 }}>
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Login Email</div>
+                  <div style={{ fontSize:15, fontWeight:700, color:T.blu, fontFamily:"monospace", letterSpacing:"0.3px" }}>{credentials.email}</div>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Auto-Generated Password</div>
+                  <div style={{ fontSize:18, fontWeight:800, color:T.t1, fontFamily:"monospace", letterSpacing:"1px", background:T.ambL, padding:"8px 12px", borderRadius:6, border:`1px solid ${T.ambM}` }}>{credentials.password}</div>
+                </div>
+              </div>
+              <div style={{ padding:"10px 14px", background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, fontSize:11, color:T.red, marginBottom:16 }}>
+                <strong>Important:</strong> This password is shown only once! Copy it now and share with the company admin. They must change it after first login.
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <Btn variant="outline" style={{ flex:1 }} onClick={() => {
+                  navigator.clipboard.writeText(`Email: ${credentials.email}\nPassword: ${credentials.password}`);
+                  setToast({ msg:"Credentials copied to clipboard!", type:"success" });
+                }}><IcClip size={13}/> Copy Credentials</Btn>
+                <Btn style={{ flex:1 }} onClick={() => setCredentials(null)}>Done</Btn>
+              </div>
             </div>
           </div>
         </>
@@ -956,15 +997,195 @@ function TabExport({ companies }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// TAB 7: SUBSCRIPTIONS (NEW)
+// ════════════════════════════════════════════════════════════════════════
+const IcCrown = p => <Ic {...p} d="M2 4l3 12h14l3-12-5 4-5-4-5 4-5-4zM3 20h18" />;
+
+function TabSubscriptions({ companies }) {
+  const [plans, setPlans]           = useState([]);
+  const [subs, setSubs]             = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [toast, setToast]           = useState(null);
+  const [showAssign, setShowAssign] = useState(false);
+  const [assignForm, setAssignForm] = useState({ company_id:"", plan_id:"", billing_cycle:"monthly", amount_paid:"", payment_ref:"", notes:"" });
+  const [saving, setSaving]         = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      apiFetch("/saas-admin/plans"),
+      apiFetch("/saas-admin/subscriptions"),
+    ]).then(([pRes, sRes]) => {
+      if (pRes.success) setPlans(pRes.data);
+      if (sRes.success) setSubs(sRes.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const planColor = slug => ({ free:T.slt, starter:T.blu, pro:T.pur, enterprise:T.amb }[slug] || T.t4);
+  const statusColor = s => ({ active:T.grn, trial:T.amb, expired:T.red, cancelled:T.slt }[s] || T.t4);
+
+  const assignSub = async () => {
+    if (!assignForm.company_id || !assignForm.plan_id) {
+      setToast({ msg:"Select company and plan", type:"error" }); return;
+    }
+    setSaving(true);
+    const res = await apiFetch("/saas-admin/subscriptions", { method:"POST", body: assignForm });
+    setSaving(false);
+    if (res.success) {
+      setToast({ msg:"Subscription assigned!", type:"success" });
+      setShowAssign(false);
+      setAssignForm({ company_id:"", plan_id:"", billing_cycle:"monthly", amount_paid:"", payment_ref:"", notes:"" });
+      load();
+    } else {
+      setToast({ msg: res.message, type:"error" });
+    }
+  };
+
+  const cancelSub = async (id) => {
+    if (!window.confirm("Cancel this subscription?")) return;
+    const res = await apiFetch("/saas-admin/subscriptions/" + id + "/cancel", { method:"PUT" });
+    if (res.success) { setToast({ msg:"Subscription cancelled", type:"success" }); load(); }
+  };
+
+  if (loading) return <div style={{ textAlign:"center", padding:60, color:T.t3, fontSize:13 }}>Loading subscriptions...</div>;
+
+  return (
+    <div style={{ padding:"20px 24px" }}>
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+
+      <PageHeader title="Subscriptions" sub={`${subs.filter(s=>s.status==="active"||s.status==="trial").length} active subscriptions`} right={
+        <Btn onClick={() => setShowAssign(true)}><IcPlus size={14} color="white"/> Assign Plan</Btn>
+      }/>
+
+      {/* Plans overview */}
+      <div style={{ display:"grid", gridTemplateColumns:`repeat(${plans.length},1fr)`, gap:12, marginBottom:24 }}>
+        {plans.map(p => (
+          <div key={p.id} style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, borderTop:`3px solid ${planColor(p.slug)}`, padding:"18px 16px", position:"relative" }}>
+            {p.slug === "pro" && (
+              <div style={{ position:"absolute", top:8, right:10, fontSize:9, fontWeight:700, padding:"2px 8px", borderRadius:20, background:T.purL, color:T.pur, border:`1px solid ${T.purM}` }}>POPULAR</div>
+            )}
+            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
+              <IcCrown size={16} color={planColor(p.slug)}/>
+              <span style={{ fontSize:14, fontWeight:700, color:T.t1 }}>{p.name}</span>
+            </div>
+            <div style={{ marginBottom:10 }}>
+              <span style={{ fontSize:24, fontWeight:800, color:T.t1 }}>{p.price_monthly > 0 ? `₹${fmtNum(p.price_monthly)}` : "Free"}</span>
+              {p.price_monthly > 0 && <span style={{ fontSize:11, color:T.t4 }}>/month</span>}
+            </div>
+            <div style={{ fontSize:11, color:T.t3, marginBottom:10 }}>
+              {p.price_yearly > 0 && <div>₹{fmtNum(p.price_yearly)}/year (save {Math.round((1 - p.price_yearly/(p.price_monthly*12))*100)}%)</div>}
+            </div>
+            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+              <Badge text={`${p.max_users} users`} color={planColor(p.slug)}/>
+              <Badge text={`${p.max_projects} projects`} color={planColor(p.slug)}/>
+              <Badge text={`${p.max_storage_gb}GB`} color={planColor(p.slug)}/>
+            </div>
+            <div style={{ borderTop:`1px solid ${T.b1}`, paddingTop:10 }}>
+              {(() => { try { const f = typeof p.features === "string" ? JSON.parse(p.features) : (p.features||[]); return f.map((feat,i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.t2, marginBottom:4 }}>
+                  <IcChk size={11} color={T.grn}/> {feat}
+                </div>
+              )); } catch(_) { return null; } })()}
+            </div>
+            <div style={{ marginTop:10, padding:"5px 10px", background:planColor(p.slug)+"12", borderRadius:6, textAlign:"center", fontSize:11, fontWeight:600, color:planColor(p.slug) }}>
+              {p.subscriber_count} active subscriber{p.subscriber_count !== 1 ? "s" : ""}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Active subscriptions table */}
+      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+        <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>All Subscriptions</span>
+          <span style={{ fontSize:11, color:T.t4 }}>{subs.length} total</span>
+        </div>
+        <TableHeader columns={["Company","Plan","Billing","Status","Usage","Start","Expires","Payment",""]}
+          gridCols="1.5fr 1fr 80px 80px 1.2fr 90px 90px 90px 50px"/>
+        {subs.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No subscriptions yet</div>}
+        {subs.map((s, i) => {
+          const isExpiring = s.status === "active" && s.end_date && new Date(s.end_date) < new Date(Date.now() + 7*24*60*60*1000);
+          return (
+            <div key={s.id} style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr 80px 80px 1.2fr 90px 90px 90px 50px", padding:"10px 16px",
+              borderBottom: i < subs.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center",
+              background: isExpiring ? T.ambL : "transparent" }}>
+              <div>
+                <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{s.company_name}</div>
+                <div style={{ fontSize:10, color:T.t4 }}>/{s.company_slug}</div>
+              </div>
+              <div><Badge text={s.plan_name} color={planColor(s.plan_slug)}/></div>
+              <div style={{ fontSize:11.5, color:T.t2, textTransform:"capitalize" }}>{s.billing_cycle}</div>
+              <div><Badge text={s.status} color={statusColor(s.status)}/></div>
+              <div style={{ fontSize:11, color:T.t2 }}>
+                {s.current_users}/{s.max_users} users · {s.current_projects}/{s.max_projects} proj
+              </div>
+              <div style={{ fontSize:11, color:T.t3 }}>{fmtDate(s.start_date)}</div>
+              <div style={{ fontSize:11, color: isExpiring ? T.red : T.t3, fontWeight: isExpiring ? 600 : 400 }}>{fmtDate(s.end_date)}</div>
+              <div style={{ fontSize:11.5, fontWeight:600, color:T.grn }}>{s.amount_paid > 0 ? `₹${fmtNum(s.amount_paid)}` : "Free"}</div>
+              <div style={{ display:"flex", justifyContent:"flex-end" }}>
+                {(s.status === "active" || s.status === "trial") && (
+                  <button onClick={() => cancelSub(s.id)} title="Cancel"
+                    style={{ width:26, height:26, borderRadius:6, border:`1px solid ${T.redM}`, background:T.redL, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <IcX size={11} color={T.red}/>
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Assign Plan Modal */}
+      {showAssign && (
+        <>
+          <div onClick={() => setShowAssign(false)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:480, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
+            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, background:"#0D1B2A", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div><div style={{ fontSize:15, fontWeight:700, color:"white" }}>Assign Subscription Plan</div></div>
+              <button onClick={() => setShowAssign(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+            </div>
+            <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+              <SelectField label="Company" value={assignForm.company_id} onChange={v => setAssignForm(p=>({...p,company_id:v}))}
+                placeholder="-- Select company --"
+                options={companies.map(c => ({value:String(c.id), label:c.name}))}/>
+              <SelectField label="Plan" value={assignForm.plan_id} onChange={v => setAssignForm(p=>({...p,plan_id:v}))}
+                placeholder="-- Select plan --"
+                options={plans.map(p => ({value:String(p.id), label:`${p.name} - ₹${fmtNum(p.price_monthly)}/mo`}))}/>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <SelectField label="Billing Cycle" value={assignForm.billing_cycle} onChange={v => setAssignForm(p=>({...p,billing_cycle:v}))}
+                  options={[{value:"monthly",label:"Monthly"},{value:"yearly",label:"Yearly"},{value:"lifetime",label:"Lifetime"}]}/>
+                <InputField label="Amount Paid (₹)" value={assignForm.amount_paid} onChange={v => setAssignForm(p=>({...p,amount_paid:v}))} placeholder="0"/>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+                <InputField label="Payment Reference" value={assignForm.payment_ref} onChange={v => setAssignForm(p=>({...p,payment_ref:v}))} placeholder="UPI/Txn ID"/>
+                <InputField label="Notes" value={assignForm.notes} onChange={v => setAssignForm(p=>({...p,notes:v}))} placeholder="Optional notes"/>
+              </div>
+            </div>
+            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+              <Btn onClick={() => setShowAssign(false)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+              <Btn onClick={assignSub} disabled={saving} style={{ flex:2 }}>{saving ? "Assigning..." : "Assign Plan"}</Btn>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // MAIN SAAS MODULE
 // ════════════════════════════════════════════════════════════════════════
 const TABS = [
-  { id:"stats",     label:"Dashboard",     Icon:IcTrend    },
-  { id:"companies", label:"Companies",     Icon:IcBuilding },
-  { id:"modules",   label:"Module Access", Icon:IcPuzzle   },
-  { id:"users",     label:"All Users",     Icon:IcUsers    },
-  { id:"audit",     label:"Audit Logs",    Icon:IcShield   },
-  { id:"export",    label:"Data Export",   Icon:IcDownload },
+  { id:"stats",     label:"Dashboard",      Icon:IcTrend    },
+  { id:"companies", label:"Companies",      Icon:IcBuilding },
+  { id:"subs",      label:"Subscriptions",  Icon:IcCrown    },
+  { id:"modules",   label:"Module Access",  Icon:IcPuzzle   },
+  { id:"users",     label:"All Users",      Icon:IcUsers    },
+  { id:"audit",     label:"Audit Logs",     Icon:IcShield   },
+  { id:"export",    label:"Data Export",    Icon:IcDownload },
 ];
 
 export default function SaaSModule() {
@@ -1026,6 +1247,7 @@ export default function SaaSModule() {
       <div style={{ flex:1, overflowY:"auto" }}>
         {tab === "stats"     && <TabStats/>}
         {tab === "companies" && <TabCompanies companies={companies} reload={loadCompanies} onSelectCompany={handleSelectCompany}/>}
+        {tab === "subs"      && <TabSubscriptions companies={companies}/>}
         {tab === "modules"   && <TabModuleAccess selectedCompany={selCompany} companies={companies}/>}
         {tab === "users"     && <TabUsers/>}
         {tab === "audit"     && <TabAuditLogs companies={companies}/>}
