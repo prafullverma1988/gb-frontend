@@ -112,11 +112,11 @@ const FilterTabs = ({options, active, onChange}) => (
 
 // ── DATA ──────────────────────────────────────────────────────────────
 const PROJ = {
-  id:1, name:"Shubham & Nand Kishor 623", client:"Nand Kishor Agrawal",
-  city:"Raipur", type:"Residential", progress:68, status:"Ongoing",
-  boq:4250000, expense:2890000, pm:"Vijay Sahu", sup:"Niranjan",
-  start:"Jan 2025", end:"Aug 2025", address:"Plot 623, Tatibandh, Raipur",
-  area:"2,400 sqft", floors:"G+2",
+  id:0, name:"", client:"",
+  city:"", type:"", progress:0, status:"",
+  boq:0, expense:0, pm:"", sup:"",
+  start:"", end:"", address:"",
+  area:"", floors:"",
 };
 const STATUS_S = {
   "Ongoing":     {c:T.grn, bg:T.grnL},
@@ -125,193 +125,23 @@ const STATUS_S = {
   "Not Started": {c:T.slt, bg:T.sltL},
 };
 const D = {
-  milestones:[
-    {label:"Foundation & PCC",      pct:100,done:true, date:"Feb 2025"},
-    {label:"Ground Floor Slab",     pct:100,done:true, date:"Mar 2025"},
-    {label:"1st Floor Structure",   pct:100,done:true, date:"Apr 2025"},
-    {label:"2nd Floor Slab",        pct:100,done:true, date:"May 2025"},
-    {label:"Brickwork All Floors",  pct:80, done:false,date:"Jun 2025"},
-    {label:"Plaster & Finishing",   pct:30, done:false,date:"Jul 2025"},
-    {label:"Flooring & Tiling",     pct:0,  done:false,date:"Aug 2025"},
-    {label:"Handover",              pct:0,  done:false,date:"Aug 2025"},
-  ],
-  expBreakdown:[
-    {label:"Material Purchase", amt:1340000, color:T.blu,  sub:"TMT, Cement, Bricks, Sand…"},
-    {label:"Sub-Contractor",    amt:870000,  color:T.pur,  sub:"Ramesh Labour, Rajesh Elec."},
-    {label:"Direct Labour",     amt:420000,  color:T.grn,  sub:"Daily wage workers"},
-    {label:"Site Expenses",     amt:180000,  color:T.amb,  sub:"Tools, transport, misc"},
-    {label:"Equipment Hire",    amt:80000,   color:"#0891B2", sub:"Scaffolding, Transit Mixer"},
-  ],
-  drawings:[
-    {id:1,title:"Ground Floor Plan",     type:"2D",cat:"Architectural",ver:"v3",status:"Approved",by:"Harsh Sahu",  date:"15 Jan",size:"2.4 MB",pins:3},
-    {id:2,title:"1st Floor Plan",        type:"2D",cat:"Architectural",ver:"v2",status:"Approved",by:"Harsh Sahu",  date:"15 Jan",size:"2.1 MB",pins:1},
-    {id:3,title:"3D Elevation Front",    type:"3D",cat:"Architectural",ver:"v1",status:"Approved",by:"Harsh Sahu",  date:"10 Jan",size:"8.7 MB",pins:0},
-    {id:4,title:"Structural Drawing GF", type:"2D",cat:"Structural",   ver:"v2",status:"Revision",by:"External",    date:"20 Jan",size:"3.2 MB",pins:2},
-    {id:5,title:"Electrical Layout",     type:"2D",cat:"Electrical",   ver:"v1",status:"Pending", by:"Rajesh Elec.",date:"01 Feb",size:"1.8 MB",pins:0},
-    {id:6,title:"Plumbing Schematic",    type:"2D",cat:"Plumbing",     ver:"v1",status:"Pending", by:"External",    date:"01 Feb",size:"1.2 MB",pins:0},
-  ],
-  boqSections:[
-    {id:1,name:"Civil Structure",items:[
-      {no:"1.1",desc:"Excavation & PCC",      unit:"CuM", qty:120,rate:850, amount:102000, done:100},
-      {no:"1.2",desc:"RCC Foundation",         unit:"CuM", qty:45, rate:6500,amount:292500, done:100},
-      {no:"1.3",desc:"RCC Column & Beam",      unit:"CuM", qty:38, rate:7200,amount:273600, done:85},
-      {no:"1.4",desc:"RCC Slab G+1+2",         unit:"CuM", qty:96, rate:6800,amount:652800, done:75},
-    ]},
-    {id:2,name:"Brickwork & Plaster",items:[
-      {no:"2.1",desc:'Brick Masonry 4.5"',     unit:"CuM", qty:280,rate:2800,amount:784000, done:60},
-      {no:"2.2",desc:"External Plaster 20mm",  unit:"SqM", qty:520,rate:180, amount:93600,  done:40},
-      {no:"2.3",desc:"Internal Plaster 12mm",  unit:"SqM", qty:1400,rate:120,amount:168000, done:30},
-    ]},
-    {id:3,name:"Flooring",items:[
-      {no:"3.1",desc:"Vitrified Tile 800x800", unit:"SqFt",qty:2400,rate:95, amount:228000, done:0},
-      {no:"3.2",desc:"Anti-Skid Kitchen Tile", unit:"SqFt",qty:300, rate:85, amount:25500,  done:0},
-    ]},
-    {id:4,name:"Electrical",items:[
-      {no:"4.1",desc:"Concealed Wiring",       unit:"Point",qty:180,rate:850, amount:153000, done:45},
-      {no:"4.2",desc:"DB Box & MCBs",          unit:"Nos",  qty:4,  rate:8500,amount:34000,  done:20},
-    ]},
-  ],
-  invoices:[
-    {no:"INV-001",desc:"Mobilization Advance", pct:10,amount:425000, date:"Jan 2025",status:"Paid"},
-    {no:"INV-002",desc:"Foundation Complete",   pct:20,amount:850000, date:"Feb 2025",status:"Paid"},
-    {no:"INV-003",desc:"Ground Floor Slab",     pct:20,amount:850000, date:"Mar 2025",status:"Paid"},
-    {no:"INV-004",desc:"1st Floor Complete",    pct:20,amount:850000, date:"Apr 2025",status:"Paid"},
-    {no:"INV-005",desc:"2nd Floor Slab",        pct:15,amount:637500, date:"May 2025",status:"Pending"},
-    {no:"INV-006",desc:"Finishing Stage",       pct:10,amount:425000, date:"Jul 2025",status:"Upcoming"},
-    {no:"INV-007",desc:"Handover",              pct:5, amount:212500, date:"Aug 2025",status:"Upcoming"},
-  ],
-  parties:[
-    {id:1,name:"Nand Kishor Agrawal", type:"Client",           balance:2896400,balLabel:"Advance Received",balPositive:true},
-    {id:2,name:"Abhay Traders",       type:"Material Supplier",balance:114328, balLabel:"To Pay",         balPositive:false},
-    {id:3,name:"Ramesh Labour Cont.", type:"Sub-Contractor",   balance:38000,  balLabel:"To Pay",         balPositive:false},
-    {id:4,name:"Vaibhav Traders",     type:"Material Supplier",balance:22500,  balLabel:"To Pay",         balPositive:false},
-    {id:5,name:"AAA Traders",         type:"Material Supplier",balance:40000,  balLabel:"To Pay",         balPositive:false},
-  ],
-  partyTxns:{
-    1:[{date:"02 Feb",note:"Client advance payment",   type:"Payment In",  amount:250000,cr:true},
-       {date:"15 Jan",note:"Client advance — 2nd",     type:"Payment In",  amount:850000,cr:true},
-       {date:"28 Dec",note:"Mobilization advance",     type:"Payment In",  amount:425000,cr:true}],
-    2:[{date:"28 Jan",note:"TMT Steel 2 MT",           type:"Material Bill",amount:126775,cr:false},
-       {date:"10 Jan",note:"Binding Wire 20 kg",       type:"Material Bill",amount:1600,  cr:false},
-       {date:"05 Jan",note:"Payment made",             type:"Payment Out",  amount:50000, cr:true}],
-    3:[{date:"20 Jan",note:"Brickwork GF labour",      type:"Sub-Con Bill", amount:38000, cr:false}],
-    4:[{date:"15 Jan",note:"Cement 50 bags",           type:"Material Bill",amount:17500, cr:false},
-       {date:"15 Jan",note:"Payment made",             type:"Payment Out",  amount:17500, cr:true}],
-    5:[{date:"01 Mar",note:"Bricks 5000 Nos",          type:"Material Bill",amount:40000, cr:false}],
-  },
-  transactions:[
-    {id:1,date:"09 Mar",party:"Vijay Sahu",     note:"Labour payment slab",   type:"Site Expense",     amount:50000, dr:true},
-    {id:2,date:"08 Mar",party:"Vijay Sahu",     note:"Murga jali for plaster",type:"Site Expense",     amount:500,   dr:true},
-    {id:3,date:"08 Mar",party:"Abhay Traders",  note:"TMT Steel 2 MT",        type:"Material Purchase",amount:126775,dr:true},
-    {id:4,date:"02 Feb",party:"Nand Kishor",    note:"Client advance",        type:"Payment In",       amount:250000,dr:false},
-    {id:5,date:"20 Jan",party:"Ramesh Labour",  note:"Brickwork GF",          type:"Sub-Con",          amount:38000, dr:true},
-    {id:6,date:"15 Jan",party:"Nand Kishor",    note:"Client advance 2",      type:"Payment In",       amount:850000,dr:false},
-    {id:7,date:"10 Jan",party:"Vaibhav Traders",note:"Cement 50 bags",        type:"Material Purchase",amount:17500, dr:true},
-  ],
-  todos:[
-    {id:1,text:"Confirm tile design with client",     priority:"High",  assignee:"Vijay Sahu",done:false,due:"10 Mar"},
-    {id:2,text:"Get revised structural drawing",      priority:"High",  assignee:"Harsh Sahu",done:false,due:"08 Mar"},
-    {id:3,text:"Order TMT Steel for 2nd floor",       priority:"High",  assignee:"Vijay Sahu",done:true, due:"01 Mar"},
-    {id:4,text:"Submit client invoice INV-005",       priority:"Medium",assignee:"Prafull",   done:false,due:"15 Mar"},
-    {id:5,text:"Schedule electrical inspection",      priority:"Medium",assignee:"Niranjan",  done:false,due:"20 Mar"},
-    {id:6,text:"Get plumber quote for 1st floor",     priority:"Low",   assignee:"Niranjan",  done:false,due:"25 Mar"},
-    {id:7,text:"Photo shoot 2nd floor slab",          priority:"Low",   assignee:"Vijay Sahu",done:true, due:"28 Feb"},
-  ],
-  tasks:[
-    {id:1,name:"Foundation & PCC",        progress:100,status:"Done",       assignee:"Niranjan",  open:false,subtasks:[
-      {id:11,name:"Excavation",            progress:100,status:"Done",       assignee:"Ramesh",  start:"Jan 1", end:"Jan 10"},
-      {id:12,name:"PCC Laying",            progress:100,status:"Done",       assignee:"Ramesh",  start:"Jan 11",end:"Jan 20"},
-      {id:13,name:"Footing RCC",           progress:100,status:"Done",       assignee:"Niranjan",start:"Jan 21",end:"Feb 5"},
-    ]},
-    {id:2,name:"Ground Floor Structure",  progress:100,status:"Done",       assignee:"Vijay Sahu",open:false,subtasks:[
-      {id:21,name:"Column Casting GF",     progress:100,status:"Done",       assignee:"Niranjan",start:"Feb 6", end:"Feb 20"},
-      {id:22,name:"Beam & Slab GF",        progress:100,status:"Done",       assignee:"Niranjan",start:"Feb 21",end:"Mar 10"},
-    ]},
-    {id:3,name:"1F & 2F Structure",        progress:100,status:"Done",       assignee:"Vijay Sahu",open:false,subtasks:[
-      {id:31,name:"Column Casting 1F",     progress:100,status:"Done",       assignee:"Niranjan",start:"Mar 11",end:"Mar 30"},
-      {id:32,name:"Slab 1st Floor",        progress:100,status:"Done",       assignee:"Niranjan",start:"Apr 1", end:"Apr 20"},
-      {id:33,name:"Slab 2nd Floor",        progress:100,status:"Done",       assignee:"Niranjan",start:"May 11",end:"May 30"},
-    ]},
-    {id:4,name:"Brickwork",                progress:65, status:"In Progress",assignee:"Vijay Sahu",open:true, subtasks:[
-      {id:41,name:"Brickwork GF",          progress:100,status:"Done",       assignee:"Ramesh",  start:"Jun 1", end:"Jun 15"},
-      {id:42,name:"Brickwork 1F",          progress:80, status:"In Progress",assignee:"Ramesh",  start:"Jun 16",end:"Jun 30"},
-      {id:43,name:"Brickwork 2F",          progress:20, status:"In Progress",assignee:"Ramesh",  start:"Jul 1", end:"Jul 20"},
-    ]},
-    {id:5,name:"Plaster & Finishing",      progress:20, status:"In Progress",assignee:"Vijay Sahu",open:true, subtasks:[
-      {id:51,name:"External Plaster",      progress:30, status:"In Progress",assignee:"Niranjan",start:"Jul 1", end:"Jul 20"},
-      {id:52,name:"Internal Plaster",      progress:15, status:"In Progress",assignee:"Niranjan",start:"Jul 10",end:"Aug 5"},
-      {id:53,name:"Flooring",              progress:0,  status:"Not Started", assignee:"Niranjan",start:"Aug 1", end:"Aug 20"},
-    ]},
-  ],
-  attendance:[
-    {date:"08 Mar",day:"Sat",note:"Brickwork 1F continued",workers:[
-      {name:"Ramesh (Head Mason)",role:"Mason", present:true, hours:8},
-      {name:"Suresh",             role:"Mason", present:true, hours:8},
-      {name:"Mahesh",             role:"Labour",present:true, hours:8},
-      {name:"Raju",               role:"Labour",present:true, hours:8},
-      {name:"Pintu",              role:"Helper",present:false,hours:0},
-    ]},
-    {date:"07 Mar",day:"Fri",note:"Good progress",workers:[
-      {name:"Ramesh (Head Mason)",role:"Mason", present:true, hours:9},
-      {name:"Suresh",             role:"Mason", present:true, hours:9},
-      {name:"Mahesh",             role:"Labour",present:true, hours:9},
-      {name:"Raju",               role:"Labour",present:true, hours:9},
-      {name:"Pintu",              role:"Helper",present:true, hours:9},
-    ]},
-    {date:"06 Mar",day:"Thu",note:"Raju absent",workers:[
-      {name:"Ramesh (Head Mason)",role:"Mason", present:true, hours:8},
-      {name:"Suresh",             role:"Mason", present:true, hours:8},
-      {name:"Mahesh",             role:"Labour",present:true, hours:8},
-      {name:"Raju",               role:"Labour",present:false,hours:0},
-      {name:"Pintu",              role:"Helper",present:true, hours:8},
-    ]},
-  ],
-  materials:[
-    {id:1,name:"TMT Steel Fe500",        qty:"4 MT",       stage:"Used",     by:"Vijay Sahu",date:"15 Jan",vendor:"Abhay Traders", amt:253550},
-    {id:2,name:"Binding Wire",           qty:"20 KG",      stage:"Used",     by:"Niranjan",  date:"10 Jan",vendor:"Abhay Traders", amt:1600},
-    {id:3,name:"Cement OPC 53",          qty:"200 Bags",   stage:"Received", by:"Vijay Sahu",date:"01 Mar",vendor:"Shyam Traders", amt:77000},
-    {id:4,name:"River Sand",             qty:"10 Loads",   stage:"Received", by:"Niranjan",  date:"28 Feb",vendor:"Bajrang Traders",amt:32000},
-    {id:5,name:"Bricks",                 qty:"10,000 Nos", stage:"Ordered",  by:"Vijay Sahu",date:"01 Mar",vendor:"AAA Traders",   amt:90000},
-    {id:6,name:"Aggregate 20mm",         qty:"5 Brass",    stage:"Approved", by:"Niranjan",  date:"05 Mar",vendor:null,            amt:24000},
-    {id:7,name:"Vitrified Tiles 800x800",qty:"2400 SqFt",  stage:"Requested",by:"Vijay Sahu",date:"08 Mar",vendor:null,            amt:228000},
-    {id:8,name:"Plaster Sand",           qty:"5 Loads",    stage:"Requested",by:"Vijay Sahu",date:"09 Mar",vendor:null,            amt:16000},
-  ],
-  subcons:[
-    {id:1,no:"SC-001",contractor:"Ramesh Labour Cont.",work:"RCC & Masonry — All Floors",
-     totalValue:580000,paid:420000,status:"Active",start:"Jan 2025",
-     bills:[{desc:"Foundation RCC",     unit:"CuM", qty:45,rate:1200,amt:54000, status:"Paid"},
-            {desc:"GF Slab Casting",    unit:"CuM", qty:32,rate:1400,amt:44800, status:"Paid"},
-            {desc:"1F Brickwork",       unit:"CuM", qty:80,rate:1800,amt:144000,status:"Paid"},
-            {desc:"2F Brickwork",       unit:"CuM", qty:60,rate:1800,amt:108000,status:"Pending"}]},
-    {id:2,no:"SC-002",contractor:"Rajesh Electrical",work:"Complete Electrical Work",
-     totalValue:153000,paid:45000,status:"Active",start:"Mar 2025",
-     bills:[{desc:"Concealed Wiring Ph.1",unit:"Lump",qty:1,rate:45000,amt:45000,status:"Paid"},
-            {desc:"Concealed Wiring Ph.2",unit:"Lump",qty:1,rate:60000,amt:60000,status:"Pending"},
-            {desc:"DB & Fittings",        unit:"Lump",qty:1,rate:48000,amt:48000,status:"Pending"}]},
-  ],
-  equipment:[
-    {id:1,name:"Concrete Mixer 10/7",owner:"Own",  rate:800, days:[{date:"08 Mar",hours:6,note:"1F columns"},{date:"07 Mar",hours:8,note:"Full day"},{date:"06 Mar",hours:5,note:"Half day"}]},
-    {id:2,name:"Scaffolding Set",    owner:"Hired",rate:1200,days:[{date:"08 Mar",hours:8,note:"Full day"},{date:"07 Mar",hours:8,note:"Full day"},{date:"06 Mar",hours:8,note:"Full day"}]},
-    {id:3,name:"Bar Bending Machine",owner:"Own",  rate:500, days:[{date:"08 Mar",hours:4,note:"TMT cutting"},{date:"07 Mar",hours:0,note:"—"},{date:"06 Mar",hours:3,note:"Lintel bars"}]},
-    {id:4,name:"Transit Mixer",      owner:"Hired",rate:4500,days:[{date:"08 Mar",hours:3,note:"2 trips"},{date:"06 Mar",hours:2,note:"1 trip"}]},
-  ],
-  folders:[
-    {id:1,name:"Drawings",   count:6, color:T.blu, files:[{name:"GF_Plan_v3.dwg",      type:"DWG",size:"2.4 MB",date:"15 Jan",by:"Harsh Sahu"},{name:"3D_Elevation.skp",type:"3D",size:"8.7 MB",date:"10 Jan",by:"Harsh Sahu"}]},
-    {id:2,name:"Site Photos",count:24,color:T.grn, files:[{name:"Slab_2F_casting.jpg", type:"JPG",size:"3.1 MB",date:"01 Jun",by:"Vijay Sahu"},{name:"Foundation_done.jpg",type:"JPG",size:"2.8 MB",date:"05 Feb",by:"Vijay Sahu"}]},
-    {id:3,name:"Documents",  count:8, color:T.amb, files:[{name:"Client_Agreement.pdf",type:"PDF",size:"1.2 MB",date:"15 Dec",by:"Prafull"},{name:"BOQ_Approved.xlsx",   type:"XLS",size:"0.8 MB",date:"20 Dec",by:"Prafull"}]},
-    {id:4,name:"Invoices",   count:4, color:T.pur, files:[{name:"INV-001.pdf",          type:"PDF",size:"0.3 MB",date:"25 Jan",by:"Prafull"},{name:"INV-002.pdf",         type:"PDF",size:"0.3 MB",date:"10 Feb",by:"Prafull"}]},
-  ],
-  dpr:[
-    {date:"08 Mar 2025",weather:"Sunny 34°C",labourCount:14,machinery:3,workDone:["Brickwork 1F — North & East wall completed","TMT cutting for lintel","Column shuttering 2F started"],materials:["Cement 10 bags","Sand 1 load","Bricks 500 nos"],issues:["Water supply pipe cracked — fixed","Bricks delivery late by 2 hrs"],photos:2,by:"Vijay Sahu"},
-    {date:"07 Mar 2025",weather:"Partly Cloudy 31°C",labourCount:16,machinery:3,workDone:["Brickwork 1F — West wall started","Shuttering removed from slab","Curing continues"],materials:["Cement 8 bags","Sand 1 load"],issues:[],photos:3,by:"Vijay Sahu"},
-    {date:"06 Mar 2025",weather:"Sunny 35°C",labourCount:14,machinery:2,workDone:["Internal plastering GF started","RCC lintel 1F cast"],materials:["Cement 12 bags","TMT 100 kg"],issues:["One labour absent"],photos:1,by:"Niranjan"},
-  ],
-  moms:[
-    {id:1,no:"MOM-004",date:"05 Mar 2025",type:"Site Visit",    status:"Closed",attendees:["Nand Kishor Agrawal","Vijay Sahu","Prafull"],venue:"Site",agenda:["Review tile selection","Discuss 2nd floor layout change","Timeline review"],decisions:["Client approved white Somany tiles 800x800","No layout change — reconfirm in 2 weeks","Target handover remains Aug 2025"],next:"20 Mar 2025"},
-    {id:2,no:"MOM-003",date:"15 Feb 2025",type:"Progress Meeting",status:"Closed",attendees:["Vijay Sahu","Niranjan","Harsh Sahu"],venue:"Office",agenda:["1F slab completion review","Material planning","Labour issues"],decisions:["1F slab completed on schedule","Order 2 MT TMT for 2F","Increase labour by 5"],next:"05 Mar 2025"},
-    {id:3,no:"MOM-002",date:"20 Jan 2025",type:"Design Review",  status:"Closed",attendees:["Nand Kishor Agrawal","Harsh Sahu","Prafull"],venue:"Office",agenda:["Electrical layout review","Confirm door-window schedule","Change requests"],decisions:["Electrical layout approved","Door schedule finalized","Extra window on west — approved"],next:"15 Feb 2025"},
-    {id:4,no:"MOM-005",date:"20 Mar 2025",type:"Site Visit",    status:"Planned",attendees:[],venue:"Site",agenda:["Tile selection confirmation","2nd floor progress review"],decisions:[],next:null},
-  ],
+  milestones:[],
+  expBreakdown:[],
+  drawings:[],
+  boqSections:[],
+  invoices:[],
+  parties:[],
+  partyTxns:{},
+  transactions:[],
+  todos:[],
+  tasks:[],
+  attendance:[],
+  materials:[],
+  subcons:[],
+  equipment:[],
+  folders:[],
+  dpr:[],
+  moms:[],
 };
 
 // ═══════════════════════════════════════════════════════════════════
@@ -326,7 +156,7 @@ function TabOverview({proj}) {
 
   // Live data derived from other tabs
   const ongoingTasks = D.tasks.filter(t=>t.status==="In Progress");
-  const todayAtt = D.attendance[0];
+  const todayAtt = D.attendance[0] || {workers:[]};
   const presentToday = todayAtt.workers.filter(w=>w.present).length;
   const matByStage = STAGES.reduce((a,s)=>({...a,[s]:0}),{});
   const pendingMat = [];
@@ -338,8 +168,8 @@ function TabOverview({proj}) {
       <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
         <Stat label="Progress"    value={`${proj.progress}%`}         note="Physical completion"                         color={T.blu}/>
         <Stat label="BOQ Value"   value={`₹${fmt(proj.boq)}`}         note="Total contract"                              color={T.slt}/>
-        <Stat label="Spent"       value={`₹${fmt(proj.expense)}`}     note={`${Math.round(proj.expense/proj.boq*100)}% utilised`} color={T.amb}/>
-        <Stat label="Margin"      value={`₹${fmt(margin)}`}           note={`${Math.round(margin/proj.boq*100)}% buffer`} color={T.grn}/>
+        <Stat label="Spent"       value={`₹${fmt(proj.expense)}`}     note={`${proj.boq?Math.round(proj.expense/proj.boq*100):0}% utilised`} color={T.amb}/>
+        <Stat label="Margin"      value={`₹${fmt(margin)}`}           note={`${proj.boq?Math.round(margin/proj.boq*100):0}% buffer`} color={T.grn}/>
         <Stat label="Days Left"   value="54"                          note="Till Aug 2025"                               color={T.pur}/>
         <Stat label="Open Issues" value="3"                           note="Require action"                              color={T.red}/>
       </div>
@@ -493,7 +323,7 @@ function TabOverview({proj}) {
             </div>
             <div style={{display:"flex", gap:14, marginTop:8}}>
               <div><span style={{fontSize:11, color:T.t4}}>Total hrs: </span><span style={{fontSize:12, fontWeight:700, color:T.t1}}>{todayAtt.workers.reduce((s,w)=>s+w.hours,0)}h</span></div>
-              <div><span style={{fontSize:11, color:T.t4}}>Weather: </span><span style={{fontSize:12, color:T.t2}}>{D.dpr[0].weather}</span></div>
+              <div><span style={{fontSize:11, color:T.t4}}>Weather: </span><span style={{fontSize:12, color:T.t2}}>{(D.dpr[0] || {}).weather || "—"}</span></div>
             </div>
           </div>
           {/* Worker list */}
@@ -625,7 +455,7 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
           <div style={{marginBottom:12}}>
             <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Assign To (optional)</label>
             <input value={reqForm.assigned_to||""} onChange={e=>setReqForm(p=>({...p,assigned_to:e.target.value}))}
-              placeholder="Designer ka naam, e.g. Harsh Sahu"
+              placeholder="Designer name"
               style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
           <div style={{marginBottom:12}}>
@@ -2351,64 +2181,7 @@ function TabTodo({projectId}) {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 7 — TASKS  (3-level hierarchy, dependencies, DHYAN RAKHEN, filters)
 // ═══════════════════════════════════════════════════════════════════
-const PROJECT_TASKS=[
-  {id:"1",no:"1",level:1,name:"Civil Structure",category:"Civil",tag:"critical",
-   status:"Ongoing",progress:72,assignee:"Vijay Sahu",
-   baseStart:"2025-01-15",baseEnd:"2025-06-30",actualStart:"2025-01-15",actualEnd:null,
-   duration:165,dependencies:[],dhyanRakhen:"Foundation mein M20 grade concrete mandatory hai. Client ne site engineer approval required hai har pour ke pehle.",lastUpdate:"2026-03-10",
-   children:[
-    {id:"1.1",no:"1.1",level:2,name:"Foundation & PCC",category:"Civil",tag:"critical",
-     status:"Completed",progress:100,assignee:"Niranjan",
-     baseStart:"2025-01-15",baseEnd:"2025-03-05",actualStart:"2025-01-15",actualEnd:"2025-03-05",
-     duration:49,dependencies:[],dhyanRakhen:null,lastUpdate:"2025-03-05",
-     children:[
-      {id:"1.1.1",no:"1.1.1",level:3,name:"Excavation & Earth Work",category:"Civil",tag:"",status:"Completed",progress:100,assignee:"Niranjan",baseStart:"2025-01-15",baseEnd:"2025-01-28",actualStart:"2025-01-15",actualEnd:"2025-01-28",duration:13,dependencies:[],dhyanRakhen:null,lastUpdate:"2025-01-28",children:[]},
-      {id:"1.1.2",no:"1.1.2",level:3,name:"PCC M10 Lean Concrete",category:"Civil",tag:"critical",status:"Completed",progress:100,assignee:"Niranjan",baseStart:"2025-01-29",baseEnd:"2025-02-05",actualStart:"2025-01-29",actualEnd:"2025-02-05",duration:7,dependencies:["1.1.1"],dhyanRakhen:null,lastUpdate:"2025-02-05",children:[]},
-      {id:"1.1.3",no:"1.1.3",level:3,name:"RCC Foundation M20",category:"Civil",tag:"critical",status:"Completed",progress:100,assignee:"Niranjan",baseStart:"2025-02-06",baseEnd:"2025-03-05",actualStart:"2025-02-06",actualEnd:"2025-03-05",duration:27,dependencies:["1.1.2"],dhyanRakhen:"M20 grade mix design approval mandatory. Cube test report submit karo.",lastUpdate:"2025-03-05",children:[]},
-     ]},
-    {id:"1.2",no:"1.2",level:2,name:"RCC Columns & Beams",category:"Civil",tag:"critical",
-     status:"Ongoing",progress:85,assignee:"Niranjan",
-     baseStart:"2025-03-06",baseEnd:"2025-05-10",actualStart:"2025-03-08",actualEnd:null,
-     duration:65,dependencies:["1.1"],dhyanRakhen:null,lastUpdate:"2026-03-10",
-     children:[
-      {id:"1.2.1",no:"1.2.1",level:3,name:"GF Columns Casting",category:"Civil",tag:"",status:"Completed",progress:100,assignee:"Niranjan",baseStart:"2025-03-06",baseEnd:"2025-03-25",actualStart:"2025-03-08",actualEnd:"2025-03-26",duration:19,dependencies:["1.1.3"],dhyanRakhen:null,lastUpdate:"2025-03-26",children:[]},
-      {id:"1.2.2",no:"1.2.2",level:3,name:"GF Slab & Beam",category:"Civil",tag:"critical",status:"Completed",progress:100,assignee:"Niranjan",baseStart:"2025-03-26",baseEnd:"2025-04-15",actualStart:"2025-03-27",actualEnd:"2025-04-16",duration:20,dependencies:["1.2.1"],dhyanRakhen:"Slab pour ek din mein complete karna hai — interrupted pour allowed nahi.",lastUpdate:"2025-04-16",children:[]},
-      {id:"1.2.3",no:"1.2.3",level:3,name:"1F & 2F Structure",category:"Civil",tag:"",status:"Ongoing",progress:65,assignee:"Vijay Sahu",baseStart:"2025-04-16",baseEnd:"2025-05-10",actualStart:"2025-04-18",actualEnd:null,duration:24,dependencies:["1.2.2"],dhyanRakhen:null,lastUpdate:"2026-03-10",children:[]},
-     ]},
-    {id:"1.3",no:"1.3",level:2,name:"Brick Masonry",category:"Civil",tag:"",
-     status:"Ongoing",progress:55,assignee:"Vijay Sahu",
-     baseStart:"2025-04-20",baseEnd:"2025-06-30",actualStart:"2025-04-22",actualEnd:null,
-     duration:71,dependencies:["1.2.2"],dhyanRakhen:null,lastUpdate:"2026-03-08",
-     children:[
-      {id:"1.3.1",no:"1.3.1",level:3,name:"GF Brickwork",category:"Civil",tag:"",status:"Completed",progress:100,assignee:"Vijay Sahu",baseStart:"2025-04-20",baseEnd:"2025-05-10",actualStart:"2025-04-22",actualEnd:"2025-05-12",duration:20,dependencies:[],dhyanRakhen:null,lastUpdate:"2025-05-12",children:[]},
-      {id:"1.3.2",no:"1.3.2",level:3,name:"1F Brickwork",category:"Civil",tag:"",status:"Ongoing",progress:75,assignee:"Vijay Sahu",baseStart:"2025-05-11",baseEnd:"2025-06-05",actualStart:"2025-05-13",actualEnd:null,duration:25,dependencies:["1.3.1"],dhyanRakhen:null,lastUpdate:"2026-03-10",children:[]},
-      {id:"1.3.3",no:"1.3.3",level:3,name:"2F Brickwork",category:"Civil",tag:"",status:"Not Started",progress:0,assignee:"Vijay Sahu",baseStart:"2025-06-06",baseEnd:"2025-06-30",actualStart:null,actualEnd:null,duration:24,dependencies:["1.3.2"],dhyanRakhen:null,lastUpdate:null,children:[]},
-     ]},
-  ]},
-  {id:"2",no:"2",level:1,name:"Electrical Work",category:"Electrical",tag:"priority",
-   status:"Ongoing",progress:35,assignee:"Priyanka",
-   baseStart:"2025-04-01",baseEnd:"2025-08-15",actualStart:"2025-04-05",actualEnd:null,
-   duration:136,dependencies:["1.2"],dhyanRakhen:"ISI mark wire mandatory. Client ne Havells wire specifically approve kiya hai.",lastUpdate:"2026-03-08",
-   children:[
-    {id:"2.1",no:"2.1",level:2,name:"Conduit & Wiring",category:"Electrical",tag:"",status:"Ongoing",progress:60,assignee:"Priyanka",baseStart:"2025-04-01",baseEnd:"2025-06-30",actualStart:"2025-04-05",actualEnd:null,duration:90,dependencies:[],dhyanRakhen:null,lastUpdate:"2026-03-08",
-     children:[
-      {id:"2.1.1",no:"2.1.1",level:3,name:"GF Concealed Conduit",category:"Electrical",tag:"",status:"Completed",progress:100,assignee:"Priyanka",baseStart:"2025-04-01",baseEnd:"2025-04-20",actualStart:"2025-04-05",actualEnd:"2025-04-22",duration:19,dependencies:["1.2.1"],dhyanRakhen:null,lastUpdate:"2025-04-22",children:[]},
-      {id:"2.1.2",no:"2.1.2",level:3,name:"1F & 2F Conduit",category:"Electrical",tag:"",status:"Ongoing",progress:40,assignee:"Priyanka",baseStart:"2025-04-21",baseEnd:"2025-05-25",actualStart:"2025-04-23",actualEnd:null,duration:34,dependencies:["2.1.1"],dhyanRakhen:null,lastUpdate:"2026-03-10",children:[]},
-      {id:"2.1.3",no:"2.1.3",level:3,name:"Wire Pulling All Floors",category:"Electrical",tag:"",status:"Not Started",progress:0,assignee:"Priyanka",baseStart:"2025-05-26",baseEnd:"2025-06-30",actualStart:null,actualEnd:null,duration:35,dependencies:["2.1.2"],dhyanRakhen:"ISI mark wire mandatory. DO NOT substitute.",lastUpdate:null,children:[]},
-     ]},
-   ]},
-  {id:"3",no:"3",level:1,name:"Plaster & Finishing",category:"Finishing",tag:"",
-   status:"Not Started",progress:0,assignee:"Harsh Sahu",
-   baseStart:"2025-07-01",baseEnd:"2025-09-30",actualStart:null,actualEnd:null,
-   duration:91,dependencies:["1.3"],dhyanRakhen:null,lastUpdate:null,
-   children:[
-    {id:"3.1",no:"3.1",level:2,name:"Internal & External Plaster",category:"Finishing",tag:"",status:"Not Started",progress:0,assignee:"Harsh Sahu",baseStart:"2025-07-01",baseEnd:"2025-08-15",actualStart:null,actualEnd:null,duration:45,dependencies:["1.3.3"],dhyanRakhen:"Plaster thickness 12mm internal, 20mm external. Chicken mesh use karo junctions pe.",lastUpdate:null,
-     children:[
-      {id:"3.1.1",no:"3.1.1",level:3,name:"External Plaster",category:"Finishing",tag:"",status:"Not Started",progress:0,assignee:"Harsh Sahu",baseStart:"2025-07-01",baseEnd:"2025-07-20",actualStart:null,actualEnd:null,duration:19,dependencies:[],dhyanRakhen:null,lastUpdate:null,children:[]},
-      {id:"3.1.2",no:"3.1.2",level:3,name:"Internal Plaster All Floors",category:"Finishing",tag:"",status:"Not Started",progress:0,assignee:"Harsh Sahu",baseStart:"2025-07-05",baseEnd:"2025-08-15",actualStart:null,actualEnd:null,duration:41,dependencies:["3.1.1"],dhyanRakhen:null,lastUpdate:null,children:[]},
-     ]},
-   ]},
-];
+const PROJECT_TASKS=[];
 
 function ptFlatten(tasks,out=[]){tasks.forEach(t=>{out.push(t);if(t.children?.length)ptFlatten(t.children,out)});return out;}
 function fmtDate(d){
@@ -2466,7 +2239,7 @@ function TabTasks({ projectId, isAdmin }) {
   const [showFilters,setShowFilters] = useState(false);
   const [savedFilters,setSavedFilters] = useState([
     {name:"Civil Ongoing",  f:{fCat:"Civil",fStatus:"Ongoing",fAssignee:"All",fDelayed:false,fAsSchedule:""}},
-    {name:"My Delayed",     f:{fCat:"All",fStatus:"All",fAssignee:"Vijay Sahu",fDelayed:true,fAsSchedule:""}},
+    {name:"My Delayed",     f:{fCat:"All",fStatus:"All",fAssignee:"",fDelayed:true,fAsSchedule:""}},
     {name:"Today Schedule", f:{fCat:"All",fStatus:"All",fAssignee:"All",fDelayed:false,fAsSchedule:new Date().toISOString().split("T")[0]}},
   ]);
   const [filterSaveName,setFilterSaveName] = useState("");
@@ -4459,7 +4232,7 @@ function PTEditTask({task,allTasks,onClose,onSave}){
   const upd=(k)=>(e)=>setForm(p=>({...p,[k]:e.target.type==="range"?Number(e.target.value):e.target.value}));
   const toggleDep=(id)=>setForm(p=>({...p,dependencies:p.dependencies.includes(id)?p.dependencies.filter(x=>x!==id):[...p.dependencies,id]}));
   const filteredForDep=allTasks.filter(t=>t.id!==task.id&&(!depSrch||t.name.toLowerCase().includes(depSrch.toLowerCase())||t.no.includes(depSrch)));
-  const TEAM_PT=["Vijay Sahu","Niranjan","Harsh Sahu","Priyanka","Ramesh"];
+  const TEAM_PT=[];
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:350,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,95vw)",background:T.bg,zIndex:351,boxShadow:"-6px 0 32px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
@@ -4562,13 +4335,13 @@ function PTEditTask({task,allTasks,onClose,onSave}){
 
 // ── PT Add Task ───────────────────────────────────────────────────
 function PTAddTask({parent,allTasks,onClose,onSave}){
-  const [form,setForm]=useState({name:"",category:"Civil",tag:"",assignee:"Vijay Sahu",baseStart:"",baseEnd:"",dependencies:[],dhyanRakhen:""});
+  const [form,setForm]=useState({name:"",category:"Civil",tag:"",assignee:"",baseStart:"",baseEnd:"",dependencies:[],dhyanRakhen:""});
   const [showDhyan,setShowDhyan]=useState(false);
   const [depSrch,setDepSrch]=useState("");
   const upd=(k)=>(e)=>setForm(p=>({...p,[k]:e.target.value}));
   const toggleDep=(id)=>setForm(p=>({...p,dependencies:p.dependencies.includes(id)?p.dependencies.filter(x=>x!==id):[...p.dependencies,id]}));
   const filteredForDep=allTasks.filter(t=>!depSrch||t.name.toLowerCase().includes(depSrch.toLowerCase())||t.no.includes(depSrch));
-  const TEAM_PT=["Vijay Sahu","Niranjan","Harsh Sahu","Priyanka","Ramesh"];
+  const TEAM_PT=[];
   const dur=form.baseStart&&form.baseEnd?Math.round((new Date(form.baseEnd)-new Date(form.baseStart))/(1000*86400)):0;
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(1px)"}}/>
@@ -4637,23 +4410,23 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
 // TAB 8 — ATTENDANCE
 // ═══════════════════════════════════════════════════════════════════
 function TabAttendance() {
-  const SUBCONS_LIST=["Ramesh Labour Cont.","Rajesh Electrical","New Subcontractor..."];
-  const [selDate,  setSelDate]  = useState(D.attendance[0].date);
+  const SUBCONS_LIST=[];
+  const [selDate,  setSelDate]  = useState((D.attendance[0] || {}).date || "");
   const [editMode, setEditMode] = useState(false);
   const [attMode,  setAttMode]  = useState("named"); // named | count
   const [attendance,setAttendance]=useState(D.attendance);
   // Count mode state
-  const [countForm,setCountForm]=useState({subcon:"Ramesh Labour Cont.",present:0,total:0,dailyRate:600,note:""});
+  const [countForm,setCountForm]=useState({subcon:"",present:0,total:0,dailyRate:600,note:""});
   const [newSubcon,setNewSubcon]=useState("");
   const [showSubconField,setShowSubconField]=useState(false);
   // Add labour modal
   const [showAddLabour,setShowAddLabour]=useState(false);
-  const [newLabour,setNewLabour]=useState({name:"",role:"Labour",subcon:"Ramesh Labour Cont.",dailyRate:600});
+  const [newLabour,setNewLabour]=useState({name:"",role:"Labour",subcon:"",dailyRate:600});
 
-  const entry=attendance.find(a=>a.date===selDate)||attendance[0];
-  const present=entry.workers.filter(w=>w.present).length;
-  const totalHrs=entry.workers.reduce((s,w)=>s+w.hours,0);
-  const totalWages=entry.workers.filter(w=>w.present).reduce((s,w)=>s+(w.dailyRate||600),0);
+  const entry=attendance.find(a=>a.date===selDate)||attendance[0]||{workers:[]};
+  const present=(entry.workers||[]).filter(w=>w.present).length;
+  const totalHrs=(entry.workers||[]).reduce((s,w)=>s+w.hours,0);
+  const totalWages=(entry.workers||[]).filter(w=>w.present).reduce((s,w)=>s+(w.dailyRate||600),0);
 
   const toggleWorker=(name)=>{
     setAttendance(prev=>prev.map(a=>a.date===selDate?{...a,workers:a.workers.map(w=>w.name===name?{...w,present:!w.present,hours:!w.present?8:0}:w)}:a));
@@ -4664,7 +4437,7 @@ function TabAttendance() {
   const addLabour=()=>{
     if(!newLabour.name.trim()) return;
     setAttendance(prev=>prev.map(a=>({...a,workers:[...a.workers,{name:newLabour.name,role:newLabour.role,present:true,hours:8,subcon:newLabour.subcon,dailyRate:Number(newLabour.dailyRate)}]})));
-    setNewLabour({name:"",role:"Labour",subcon:"Ramesh Labour Cont.",dailyRate:600});
+    setNewLabour({name:"",role:"Labour",subcon:"",dailyRate:600});
     setShowAddLabour(false);
   };
 
@@ -7146,7 +6919,7 @@ function PaymentsTab({ woId, fmtC }) {
 
 
 function TabEquipment() {
-  const [selEq, setSelEq] = useState(D.equipment[0]);
+  const [selEq, setSelEq] = useState(D.equipment[0] || null);
 
   return (
     <div style={{padding:"16px 18px"}}>
@@ -7320,7 +7093,7 @@ function TabFiles({ projectId }) {
 // TAB 13 — SITE / DPR
 // ═══════════════════════════════════════════════════════════════════
 function TabSite() {
-  const [selDPR, setSelDPR] = useState(D.dpr[0]);
+  const [selDPR, setSelDPR] = useState(D.dpr[0] || null);
   const [view, setView]     = useState("overview");
 
   const VIEWS = [
@@ -7333,13 +7106,7 @@ function TabSite() {
   ];
 
   // dummy photos for site
-  const PHOTOS = [
-    {id:1,caption:"Brickwork 1F — North wall",date:"08 Mar",by:"Vijay Sahu",color:T.blu},
-    {id:2,caption:"2F column shuttering ready",date:"08 Mar",by:"Niranjan",color:T.grn},
-    {id:3,caption:"Slab curing in progress",date:"07 Mar",by:"Vijay Sahu",color:T.amb},
-    {id:4,caption:"Brickwork 1F — West wall",date:"07 Mar",by:"Vijay Sahu",color:T.pur},
-    {id:5,caption:"Lintel casting done",date:"06 Mar",by:"Niranjan",color:T.slt},
-  ];
+  const PHOTOS = [];
 
   // tasks snapshot — from D.tasks
   const allTasks = D.tasks.flatMap(t=>t.subtasks);
@@ -7677,7 +7444,7 @@ function TabSite() {
 // TAB 14 — MOM
 // ═══════════════════════════════════════════════════════════════════
 function TabMOM() {
-  const [sel, setSel] = useState(D.moms[0]);
+  const [sel, setSel] = useState(D.moms[0] || null);
   const momS = {"Closed":{c:T.grn,bg:T.grnL},"Planned":{c:T.amb,bg:T.ambL},"Draft":{c:T.slt,bg:T.sltL}};
 
   return (

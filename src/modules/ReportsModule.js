@@ -1,4 +1,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import api from "../config/api";
+
+const COMPANY_NAME = "Company";
 
 // ── ICONS ─────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -107,136 +110,24 @@ const fmtShort=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:
 const TODAY=new Date().toISOString().split("T")[0];
 
 // ── MASTER DATA ───────────────────────────────────────────────
-const SITES=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office"];
+const SITES=[];
 const HEADS=["Material","Labour","Contractor","Site Expense","Subcontractor","Office","Equipment","Loan","PA Bill","Other"];
 const MOPS=["Cash","Cheque","Bank Transfer","UPI","NEFT"];
-const ACCOUNTS=["gb pnb","gb param","bb pnb","central cash","gb Sunny","gb neeraj"];
-const PARTIES=["Nand Kishor Agrawal","Tikendra Banchhor","Esther Group","Amarendra Shrivastava","Neha Sagar Ltd",
-  "Abhay Traders","Tata Steel","Ambuja Cement","National Bricks","Laxmi Electrical","Rupesh Sahu","Naresh",
-  "Laxmikant","Sandeep C.","Vijay Sahu","Niranjan","Plumber Arun","Dr. Fixit Suppliers","Other"];
+const ACCOUNTS=[];
+const PARTIES=[];
 
-// ── CASH DATA (24 entries with party) ────────────────────────
-const INIT_CASH=[
-  {id:"C001",date:"2026-03-01",recAmt:150000,payAmt:0,   party:"Nand Kishor Agrawal",  desc:"2nd instalment payment",           account:"gb pnb",      head:"PA Bill",      mop:"Bank Transfer",site:"Shubham & NK 623"},
-  {id:"C002",date:"2026-03-01",recAmt:0,    payAmt:38000,party:"Tata Steel",            desc:"TMT Steel 12mm",                   account:"gb pnb",      head:"Material",     mop:"Cheque",        site:"Shubham & NK 623"},
-  {id:"C003",date:"2026-03-02",recAmt:0,    payAmt:4500, party:"Other",                 desc:"Labour nasta + water",             account:"central cash",head:"Site Expense",  mop:"Cash",          site:"Shubham & NK 623"},
-  {id:"C004",date:"2026-03-03",recAmt:80000,payAmt:0,    party:"Tikendra Banchhor",     desc:"Advance receipt",                  account:"gb param",    head:"PA Bill",      mop:"UPI",           site:"Tikendra Residence"},
-  {id:"C005",date:"2026-03-04",recAmt:0,    payAmt:19000,party:"Ambuja Cement",         desc:"OPC 53 Cement 50 bags",            account:"gb pnb",      head:"Material",     mop:"Cheque",        site:"Shubham & NK 623"},
-  {id:"C006",date:"2026-03-05",recAmt:0,    payAmt:5000, party:"Niranjan",              desc:"Advance to site supervisor",       account:"gb param",    head:"Labour",       mop:"Cash",          site:"Shubham & NK 623"},
-  {id:"C007",date:"2026-03-06",recAmt:200000,payAmt:0,   party:"Esther Group",          desc:"Milestone 4 receipt",              account:"bb pnb",      head:"PA Bill",      mop:"NEFT",          site:"Esther Risali"},
-  {id:"C008",date:"2026-03-07",recAmt:0,    payAmt:45000,party:"Rupesh Sahu",           desc:"Civil contractor March payment",   account:"gb pnb",      head:"Contractor",   mop:"Cheque",        site:"Shubham & NK 623"},
-  {id:"C009",date:"2026-03-08",recAmt:0,    payAmt:12500,party:"Abhay Traders",         desc:"River sand 5 CuM + 20mm aggregate",account:"central cash",head:"Material",     mop:"Cash",          site:"Shubham & NK 623"},
-  {id:"C010",date:"2026-03-08",recAmt:0,    payAmt:8750, party:"Plumber Arun",          desc:"Plumbing work payment",            account:"gb param",    head:"Subcontractor",mop:"UPI",           site:"Amarendra Villa"},
-  {id:"C011",date:"2026-03-10",recAmt:120000,payAmt:0,   party:"Amarendra Shrivastava", desc:"Advance receipt",                  account:"gb pnb",      head:"PA Bill",      mop:"Cheque",        site:"Amarendra Villa"},
-  {id:"C012",date:"2026-03-10",recAmt:0,    payAmt:28000,party:"National Bricks",       desc:"Red bricks 5000 nos",             account:"gb pnb",      head:"Material",     mop:"Cheque",        site:"Tikendra Residence"},
-  {id:"C013",date:"2026-03-11",recAmt:0,    payAmt:3200, party:"Other",                 desc:"Diesel + petrol site vehicle",     account:"central cash",head:"Site Expense",  mop:"Cash",          site:"Shubham & NK 623"},
-  {id:"C014",date:"2026-03-12",recAmt:0,    payAmt:65000,party:"Laxmi Electrical",      desc:"Electrical bill no 4",             account:"gb pnb",      head:"Subcontractor",mop:"NEFT",          site:"Neha Sagar Office"},
-  {id:"C015",date:"2026-03-13",recAmt:50000,payAmt:0,    party:"Neha Sagar Ltd",        desc:"Monthly instalment receipt",       account:"bb pnb",      head:"PA Bill",      mop:"Bank Transfer", site:"Neha Sagar Office"},
-  {id:"C016",date:"2026-03-13",recAmt:0,    payAmt:9500, party:"Other",                 desc:"Safety helmets + PPE",             account:"central cash",head:"Site Expense",  mop:"Cash",          site:"Shubham & NK 623"},
-  {id:"C017",date:"2026-03-14",recAmt:0,    payAmt:14000,party:"Other",                 desc:"Daily workers wages - 15 workers", account:"gb param",    head:"Labour",       mop:"Cash",          site:"Shubham & NK 623"},
-  {id:"C018",date:"2026-03-14",recAmt:0,    payAmt:22000,party:"Dr. Fixit Suppliers",   desc:"Waterproofing material 200 sqm",   account:"gb pnb",      head:"Material",     mop:"Cheque",        site:"Shubham & NK 623"},
-  {id:"C019",date:"2026-03-15",recAmt:0,    payAmt:5500, party:"Other",                 desc:"Office stationery + printing",     account:"central cash",head:"Office",        mop:"Cash",          site:"Shubham & NK 623"},
-  {id:"C020",date:"2026-03-15",recAmt:0,    payAmt:7800, party:"Abhay Traders",         desc:"PVC conduit + wiring material",    account:"gb pnb",      head:"Material",     mop:"Cheque",        site:"Neha Sagar Office"},
-  {id:"C021",date:"2026-03-15",recAmt:40000,payAmt:0,    party:"Tikendra Banchhor",     desc:"2nd instalment receipt",           account:"gb param",    head:"PA Bill",      mop:"UPI",           site:"Tikendra Residence"},
-  {id:"C022",date:"2026-03-16",recAmt:0,    payAmt:35000,party:"Naresh",                desc:"March challan payment",            account:"gb pnb",      head:"Contractor",   mop:"Cheque",        site:"Tikendra Residence"},
-  {id:"C023",date:"2026-03-16",recAmt:0,    payAmt:18500,party:"Vijay Sahu",            desc:"March salary payment",             account:"gb pnb",      head:"Labour",       mop:"Bank Transfer", site:"Shubham & NK 623"},
-  {id:"C024",date:"2026-03-16",recAmt:0,    payAmt:4200, party:"Other",                 desc:"Miscellaneous site expenses",      account:"central cash",head:"Site Expense",  mop:"Cash",          site:"Esther Risali"},
-];
+// ── CASH DATA ────────────────────────────────────────────────
+const INIT_CASH=[];
 
 // ── MATERIAL CHALLAN / PURCHASE REGISTER ─────────────────────
 const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
 const MAT_UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box"];
-const SUPPLIERS=["Abhay Traders","Tata Steel","Ambuja Cement","National Bricks","Laxmi Electrical",
-  "Dr. Fixit Suppliers","Somany Tiles","Asian Paints","Shree Cement","Rajesh Electricals","Other"];
+const SUPPLIERS=[];
 
-const INIT_MATERIAL=[
-  {id:"M001",billDate:"2026-03-01",delivDate:"2026-03-01",
-   materialName:"TMT Steel 12mm",matHead:"Structural",
-   desc:"12mm Fe500 TMT bars for slab reinforcement",
-   party:"Tata Steel",site:"Shubham & NK 623",
-   qty:2000,unit:"Kg",price:58,total:116000,
-   account:"gb pnb",mop:"Cheque",status:"Paid",remark:""},
-  {id:"M002",billDate:"2026-03-04",delivDate:"2026-03-05",
-   materialName:"OPC 53 Cement",matHead:"Civil",
-   desc:"Ambuja OPC 53 grade for slab casting",
-   party:"Ambuja Cement",site:"Shubham & NK 623",
-   qty:50,unit:"Bag",price:380,total:19000,
-   account:"gb pnb",mop:"Cheque",status:"Paid",remark:"50 bags delivered site godown"},
-  {id:"M003",billDate:"2026-03-06",delivDate:"2026-03-07",
-   materialName:"River Sand",matHead:"Civil",
-   desc:"River sand for plastering and brickwork",
-   party:"Abhay Traders",site:"Shubham & NK 623",
-   qty:5,unit:"CuM",price:1800,total:9000,
-   account:"central cash",mop:"Cash",status:"Paid",remark:""},
-  {id:"M004",billDate:"2026-03-06",delivDate:"2026-03-07",
-   materialName:"20mm Aggregate",matHead:"Civil",
-   desc:"Coarse aggregate for concrete mix",
-   party:"Abhay Traders",site:"Shubham & NK 623",
-   qty:3,unit:"CuM",price:1100,total:3300,
-   account:"central cash",mop:"Cash",status:"Paid",remark:""},
-  {id:"M005",billDate:"2026-03-08",delivDate:"2026-03-09",
-   materialName:"Red Clay Bricks",matHead:"Civil",
-   desc:"Class A red bricks 9×4×3 inch",
-   party:"National Bricks",site:"Tikendra Residence",
-   qty:5000,unit:"Nos",price:5.6,total:28000,
-   account:"gb pnb",mop:"Cheque",status:"Paid",remark:""},
-  {id:"M006",billDate:"2026-03-10",delivDate:"2026-03-11",
-   materialName:"Dr. Fixit Torchshield 4mm",matHead:"Civil",
-   desc:"Waterproofing membrane for GF slab",
-   party:"Dr. Fixit Suppliers",site:"Shubham & NK 623",
-   qty:200,unit:"Sqft",price:110,total:22000,
-   account:"gb pnb",mop:"Cheque",status:"Paid",remark:"GF slab waterproofing"},
-  {id:"M007",billDate:"2026-03-12",delivDate:"2026-03-13",
-   materialName:"PVC Conduit 25mm",matHead:"Electrical",
-   desc:"ISI marked PVC conduit pipes for wiring",
-   party:"Rajesh Electricals",site:"Neha Sagar Office",
-   qty:120,unit:"RFt",price:45,total:5400,
-   account:"gb pnb",mop:"Cheque",status:"Paid",remark:""},
-  {id:"M008",billDate:"2026-03-12",delivDate:"2026-03-13",
-   materialName:"FR Wiring 2.5mm",matHead:"Electrical",
-   desc:"Polycab FR wiring for lighting circuit",
-   party:"Rajesh Electricals",site:"Neha Sagar Office",
-   qty:200,unit:"RFt",price:12,total:2400,
-   account:"gb pnb",mop:"Cheque",status:"Paid",remark:""},
-  {id:"M009",billDate:"2026-03-14",delivDate:"2026-03-14",
-   materialName:"OPC 53 Cement",matHead:"Civil",
-   desc:"Foundation concrete for Amarendra Villa",
-   party:"Ambuja Cement",site:"Amarendra Villa",
-   qty:80,unit:"Bag",price:380,total:30400,
-   account:"gb pnb",mop:"Cheque",status:"Paid",remark:"Foundation casting"},
-  {id:"M010",billDate:"2026-03-15",delivDate:"2026-03-16",
-   materialName:"Somany 800×800 Tile",matHead:"Finishing",
-   desc:"Ivory Matt GF living + kitchen",
-   party:"Somany Tiles",site:"Esther Risali",
-   qty:320,unit:"Sqft",price:68,total:21760,
-   account:"bb pnb",mop:"Cheque",status:"Pending",remark:"Replacement for wrong batch"},
-  {id:"M011",billDate:"2026-03-15",delivDate:"2026-03-16",
-   materialName:"TMT Steel 8mm",matHead:"Structural",
-   desc:"8mm bars for column cage Tikendra",
-   party:"Tata Steel",site:"Tikendra Residence",
-   qty:800,unit:"Kg",price:60,total:48000,
-   account:"gb pnb",mop:"NEFT",status:"Pending",remark:""},
-  {id:"M012",billDate:"2026-03-16",delivDate:"2026-03-16",
-   materialName:"Safety Helmets ISI",matHead:"Safety",
-   desc:"ISI mark helmets for site workers",
-   party:"Other",site:"Shubham & NK 623",
-   qty:15,unit:"Nos",price:350,total:5250,
-   account:"central cash",mop:"Cash",status:"Paid",remark:"PPE compliance"},
-];
+const INIT_MATERIAL=[];
 
 // ── PROJECT PROGRESS DATA ─────────────────────────────────────
-const PROJECTS=[
-  {id:1,name:"Shubham & NK 623",  site:"Raipur",  start:"2025-01-10",target:"2026-07-31",contract:4250000,billed:2890000,received:2550000,expenses:1820000,progress:68, status:"Ongoing",
-   phases:[{name:"Foundation",pct:100,status:"Done"},{name:"Structure",pct:72,status:"In Progress"},{name:"Brickwork",pct:55,status:"In Progress"},{name:"Plaster",pct:30,status:"In Progress"},{name:"Finishing",pct:0,status:"Pending"}]},
-  {id:2,name:"Tikendra Residence",site:"Raipur",  start:"2025-06-01",target:"2026-10-31",contract:2800000,billed:1176000,received:1000000,expenses:740000, progress:42, status:"Ongoing",
-   phases:[{name:"Foundation",pct:100,status:"Done"},{name:"Structure",pct:80,status:"In Progress"},{name:"Brickwork",pct:40,status:"In Progress"},{name:"Plaster",pct:0,status:"Pending"},{name:"Finishing",pct:0,status:"Pending"}]},
-  {id:3,name:"Esther Risali",     site:"Bilaspur",start:"2024-05-15",target:"2026-04-30",contract:8750000,billed:7963000,received:7500000,expenses:5420000,progress:91, status:"Near Completion",
-   phases:[{name:"Foundation",pct:100,status:"Done"},{name:"Structure",pct:100,status:"Done"},{name:"Brickwork",pct:100,status:"Done"},{name:"Plaster",pct:95,status:"In Progress"},{name:"Finishing",pct:65,status:"In Progress"}]},
-  {id:4,name:"Amarendra Villa",   site:"Raipur",  start:"2025-12-01",target:"2027-06-30",contract:5500000,billed:1265000,received:1200000,expenses:870000, progress:23, status:"Ongoing",
-   phases:[{name:"Foundation",pct:100,status:"Done"},{name:"Structure",pct:15,status:"In Progress"},{name:"Brickwork",pct:0,status:"Pending"},{name:"Plaster",pct:0,status:"Pending"},{name:"Finishing",pct:0,status:"Pending"}]},
-  {id:5,name:"Neha Sagar Office", site:"Durg",    start:"2025-08-01",target:"2026-12-31",contract:3200000,billed:1760000,received:1600000,expenses:1100000,progress:55, status:"Ongoing",
-   phases:[{name:"Foundation",pct:100,status:"Done"},{name:"Structure",pct:100,status:"Done"},{name:"Brickwork",pct:90,status:"In Progress"},{name:"Plaster",pct:60,status:"In Progress"},{name:"Finishing",pct:10,status:"In Progress"}]},
-];
+const PROJECTS=[];
 
 // ── HELPERS ───────────────────────────────────────────────────
 const Pill=({label,c,bg})=>(
@@ -276,7 +167,7 @@ function printHTML(title, html){
     .sig-box{text-align:center;padding-top:30px;border-top:1px solid #E5E7EB;font-size:10px;color:#6B7280}
     @media print{body{padding:10px}}
   </style></head><body>${html}
-  <p class="footer">GB Buildcon Construction Management · Generated: ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</p>
+  <p class="footer">${COMPANY_NAME} · Construction Management · Generated: ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})}</p>
   </body></html>`);
   w.document.close();setTimeout(()=>w.print(),500);
 }
@@ -347,7 +238,7 @@ function CashBookModule(){
   // Excel download — Cashbook
   const dlExcelCash=()=>{
     const rows=[
-      ["GB Buildcon — Cash Book"],
+      [COMPANY_NAME+" — Cash Book"],
       [`Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],
       [],
       ["#","Date","Party","Description","Account","Head","MOP","Site","Receipt (₹)","Payment (₹)","Balance (₹)"],
@@ -361,7 +252,7 @@ function CashBookModule(){
   // Excel download — Daybook
   const dlExcelDay=()=>{
     const rows=[
-      ["GB Buildcon — Day Book"],
+      [COMPANY_NAME+" — Day Book"],
       [`Period: ${fFrom} to ${fTo}  |  Generated: ${TODAY}`],
       [],
       ["Date","Day Receipts (₹)","Day Payments (₹)","Day Balance (₹)","Running Balance (₹)","Entries"],
@@ -385,9 +276,9 @@ function CashBookModule(){
         <td class="pay">${e.payAmt>0?fmtRs(e.payAmt):""}</td>
         <td style="font-weight:700;color:${e.runBal>=0?"#2563EB":"#DC2626"}">${fmtRs(e.runBal)}</td>
       </tr>`).join("");
-    printHTML("Cash Book — GB Buildcon",`
+    printHTML("Cash Book — "+COMPANY_NAME,`
       <div class="header">
-        <div><h1>GB Buildcon — Cash Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}  &nbsp;|&nbsp;  Site: ${fSite}</div></div>
+        <div><h1>${COMPANY_NAME} — Cash Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}  &nbsp;|&nbsp;  Site: ${fSite}</div></div>
         <div style="text-align:right;font-size:11px;color:rgba(255,255,255,0.7)">Entries: ${filtered.length}<br/>Net Balance: ${fmtRs(balance)}</div>
       </div>
       <div class="summary-grid">
@@ -407,8 +298,8 @@ function CashBookModule(){
       <tr class="day-header"><td colspan="3"><strong>${fmtDate(d.date)}</strong></td><td class="rec">${fmtRs(d.rec)}</td><td class="pay">${fmtRs(d.pay)}</td><td style="font-weight:700;color:${d.runBal>=0?"#2563EB":"#DC2626"}">${fmtRs(d.runBal)}</td></tr>
       ${d.entries.map(e=>`<tr><td></td><td>${e.desc}</td><td>${e.account} · ${e.mop}</td><td class="rec" style="font-weight:400">${e.recAmt>0?fmtRs(e.recAmt):""}</td><td class="pay" style="font-weight:400">${e.payAmt>0?fmtRs(e.payAmt):""}</td><td></td></tr>`).join("")}
     `).join("");
-    printHTML("Day Book — GB Buildcon",`
-      <div class="header"><div><h1>GB Buildcon — Day Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}</div></div></div>
+    printHTML("Day Book — "+COMPANY_NAME,`
+      <div class="header"><div><h1>${COMPANY_NAME} — Day Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}</div></div></div>
       <div class="summary-grid">
         <div class="summary-box" style="border-top-color:#059669"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Total Receipt</div><div style="font-size:16px;font-weight:800;color:#059669">${fmtRs(totalRec)}</div></div>
         <div class="summary-box" style="border-top-color:#DC2626"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Total Payment</div><div style="font-size:16px;font-weight:800;color:#DC2626">${fmtRs(totalPay)}</div></div>
@@ -694,7 +585,7 @@ function ChallanModule(){
 
   const dlExcel=()=>{
     const rows=[
-      ["GB Buildcon — Material Challan / Purchase Register"],
+      [COMPANY_NAME+" — Material Challan / Purchase Register"],
       [`Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],[],
       ["#","Bill Date","Delivery Date","Material Name","Head","Description","Party / Supplier",
        "Site","Qty","Unit","Price ₹","Total ₹","Account","MOP","Status","Remark"],
@@ -723,9 +614,9 @@ function ChallanModule(){
         <td>${m.mop}</td>
         <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:${m.status==="Paid"?"#ECFDF5":"#FFFBEB"};color:${m.status==="Paid"?"#059669":"#D97706"}">${m.status}</span></td>
       </tr>`).join("");
-    printHTML("Material Purchase Register — GB Buildcon",`
+    printHTML("Material Purchase Register — "+COMPANY_NAME,`
       <div class="header">
-        <div><h1>GB Buildcon — Material Purchase Register</h1>
+        <div><h1>${COMPANY_NAME} — Material Purchase Register</h1>
           <div class="header-sub">Period: ${fFrom} to ${fTo} &nbsp;|&nbsp; Site: ${fSite} &nbsp;|&nbsp; ${filtered.length} entries</div></div>
         <div style="text-align:right;font-size:11px;color:rgba(255,255,255,0.7)">Total: ${fmtRs(totalAmt)}</div>
       </div>
@@ -1010,7 +901,7 @@ function ProgressReportModule(){
 
   const dlExcelPortfolio=()=>{
     const rows=[
-      ["GB Buildcon — Portfolio Financial Report"],
+      [COMPANY_NAME+" — Portfolio Financial Report"],
       [`Generated: ${TODAY}`],[],
       ["Project","Site","Status","Progress %","Contract Value ₹","Billed ₹","Received ₹","Expenses ₹","Net Margin ₹","Margin %","Start","Target"],
       ...PROJECTS.map(p=>[p.name,p.site,p.status,p.progress+"%",p.contract,p.billed,p.received,p.expenses,p.received-p.expenses,Math.round((p.received-p.expenses)/p.received*100)+"%",p.start,p.target]),
@@ -1053,9 +944,9 @@ function ProgressReportModule(){
         <td>${phasesHtml}</td>
       </tr>`;
     }).join("");
-    printHTML("Portfolio Report — GB Buildcon",`
+    printHTML("Portfolio Report — "+COMPANY_NAME,`
       <div class="header">
-        <div><h1>GB Buildcon — Portfolio Report</h1><div class="header-sub">As of ${TODAY} &nbsp;|&nbsp; ${PROJECTS.length} Projects</div></div>
+        <div><h1>${COMPANY_NAME} — Portfolio Report</h1><div class="header-sub">As of ${TODAY} &nbsp;|&nbsp; ${PROJECTS.length} Projects</div></div>
       </div>
       <div class="summary-grid" style="grid-template-columns:repeat(5,1fr)">
         <div class="summary-box" style="border-top-color:#2563EB"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Portfolio</div><div style="font-size:14px;font-weight:800;color:#2563EB">${fmtRs(totalContract)}</div></div>
@@ -1099,7 +990,7 @@ function ProgressReportModule(){
       <table><tr><th>Phase</th><th>Progress Bar</th><th style="text-align:center">%</th><th>Status</th></tr>${phases}</table>
       <div class="sig-row">
         <div class="sig-box">Site Engineer / PM<br/></div>
-        <div class="sig-box">Authorised By<br/>GB Buildcon</div>
+        <div class="sig-box">Authorised By<br/>${COMPANY_NAME}</div>
       </div>`);
   };
 
@@ -1216,7 +1107,7 @@ export default function ReportsModule(){
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.2" strokeLinecap="round"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg>
         </div>
         <div>
-          <div style={{fontSize:16,fontWeight:800,color:"white",letterSpacing:"-.3px"}}>GB Buildcon</div>
+          <div style={{fontSize:16,fontWeight:800,color:"white",letterSpacing:"-.3px"}}>{COMPANY_NAME}</div>
           <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",textTransform:"uppercase",letterSpacing:"1px"}}>Reports & Accounts</div>
         </div>
         <div style={{flex:1}}/>

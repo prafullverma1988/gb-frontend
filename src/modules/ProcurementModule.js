@@ -47,48 +47,15 @@ const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:`${(n/1000).toFixed(0)}K`;
 
 // ── DATA ─────────────────────────────────────────────────────────────
-const PROJECTS=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Bablu Farmhouse"];
-const VENDORS=["Abhay Traders","Vaibhav Traders","Rajesh Steel Mart","Shyam Ji Materials","Ganesh Cement House","Lucky Hardware","Sri Ram Electricals","Agarwal Plumbing"];
+const PROJECTS=[];
+const VENDORS=[];
 const UNITS=["Bags","MT","Nos","Loads","Sqft","Mtrs","Kg","Sheets","Ltrs","Cu.m","Ton","RFT"];
 
-const MR_DATA=[
-  {id:"MR-276",date:"19 Mar",project:"Amarendra Villa",site:"Amarendra Site",item:"Cement OPC 50kg",qty:200,approvedQty:200,unit:"Bags",requestedBy:"Vijay Sahu",mrStatus:"Pending",matStatus:"Pending",inStock:23},
-  {id:"MR-275",date:"19 Mar",project:"Tikendra Residence",site:"Tikendra Site",item:"TMT Steel Fe500 12mm",qty:3,approvedQty:3,unit:"MT",requestedBy:"Niranjan",mrStatus:"Pending",matStatus:"Pending",inStock:0},
-  {id:"MR-274",date:"18 Mar",project:"Amarendra Villa",site:"Amarendra Site",item:"M-Sand Fine",qty:8,approvedQty:8,unit:"Loads",requestedBy:"Vijay Sahu",mrStatus:"Pending",matStatus:"Pending",inStock:2},
-  {id:"MR-273",date:"19 Mar",project:"Amarendra Villa",site:"Amarendra Site",item:"P Sand",qty:500,approvedQty:500,unit:"Nos",requestedBy:"Vijay Sahu",mrStatus:"Pending",matStatus:"Pending",inStock:30},
-  {id:"MR-272",date:"17 Mar",project:"Esther Risali",site:"Esther Site",item:"Plywood 18mm BWR",qty:50,approvedQty:50,unit:"Sheets",requestedBy:"Harsh Sahu",mrStatus:"Pending",matStatus:"Pending",inStock:5},
-  {id:"MR-271",date:"16 Mar",project:"Neha Sagar Office",site:"Neha Site",item:"PVC Conduit 25mm",qty:500,approvedQty:500,unit:"Mtrs",requestedBy:"Priyanka",mrStatus:"Pending",matStatus:"Pending",inStock:0},
-  {id:"MR-258",date:"12 Mar",project:"Tikendra Residence",site:"Tikendra Site",item:"Brick",qty:3000,approvedQty:3000,unit:"Nos",requestedBy:"Niranjan",mrStatus:"Approved",matStatus:"Pending",inStock:1500},
-  {id:"MR-257",date:"11 Mar",project:"Shyam Ji Township",site:"Shyam Ji Site",item:"Brick",qty:1,approvedQty:1,unit:"Nos",requestedBy:"Niranjan",mrStatus:"Approved",matStatus:"Pending",inStock:600},
-  {id:"MR-256",date:"11 Mar",project:"Amarendra Villa",site:"Amarendra Site",item:"Cement OPC",qty:100,approvedQty:100,unit:"Bags",requestedBy:"Vijay Sahu",mrStatus:"Approved",matStatus:"Pending",inStock:10},
-  {id:"MR-255",date:"10 Mar",project:"Esther Risali",site:"Esther Site",item:"AAC Blocks 600x200x150",qty:5000,approvedQty:5000,unit:"Nos",requestedBy:"Harsh Sahu",mrStatus:"Approved",matStatus:"Pending",inStock:0},
-  {id:"MR-09",date:"11 Mar",project:"Shubham & NK 623",site:"Shubham Site",item:"River Sand",qty:15,approvedQty:15,unit:"Loads",requestedBy:"Vijay Sahu",mrStatus:"Approved",matStatus:"Ordered",vendor:"Shyam Ji Materials",expectedDelivery:"18 Mar",inStock:0},
-  {id:"MR-08",date:"10 Mar",project:"Esther Risali",site:"Esther Site",item:"AAC Blocks",qty:5000,approvedQty:5000,unit:"Nos",requestedBy:"Harsh Sahu",mrStatus:"Approved",matStatus:"Ordered",vendor:"Abhay Traders",expectedDelivery:"16 Mar",inStock:0},
-  {id:"MR-07",date:"09 Mar",project:"Tikendra Residence",site:"Tikendra Site",item:"Granite Flooring 2x2",qty:600,approvedQty:600,unit:"Sqft",requestedBy:"Niranjan",mrStatus:"Approved",matStatus:"Ordered",vendor:"Lucky Hardware",expectedDelivery:"17 Mar",inStock:0},
-  {id:"MR-05",date:"07 Mar",project:"Bablu Farmhouse",site:"Farmhouse",item:"Ceramic Floor Tiles 2x2",qty:800,approvedQty:800,unit:"Sqft",requestedBy:"Vijay Sahu",mrStatus:"Approved",matStatus:"Received",receivedQty:800,inStock:0},
-  {id:"MR-04",date:"05 Mar",project:"Tikendra Residence",site:"Tikendra Site",item:"Binding Wire",qty:50,approvedQty:50,unit:"Kg",requestedBy:"Niranjan",mrStatus:"Approved",matStatus:"PartialReceived",receivedQty:30,vendor:"Vaibhav Traders",inStock:0},
-  {id:"MR-03",date:"03 Mar",project:"Esther Risali",site:"Esther Site",item:"TMT Steel 10mm",qty:5,approvedQty:5,unit:"MT",requestedBy:"Harsh Sahu",mrStatus:"Approved",matStatus:"Received",receivedQty:5,inStock:0},
-  {id:"MR-00",date:"25 Feb",project:"Tikendra Residence",site:"Tikendra Site",item:"White Cement 25kg",qty:50,approvedQty:50,unit:"Bags",requestedBy:"Niranjan",mrStatus:"Rejected",matStatus:"Pending",rejectedReason:"Item not in BOQ — use OPC instead",inStock:0},
-];
+const MR_DATA=[];
 
-const PO_DATA=[
-  {id:"PO-024",date:"12 Mar",vendor:"Abhay Traders",project:"Esther Risali",deliverySite:"Esther Site",poStatus:"Open",approval:"Approved",amount:182500,items:[{desc:"AAC Blocks 600x200x150",qty:5000,unit:"Nos",rate:36.5,amount:182500,hsn:"68053"}],linkedMR:"MR-08",delivery:"16 Mar"},
-  {id:"PO-023",date:"10 Mar",vendor:"Rajesh Steel Mart",project:"Shubham & NK 623",deliverySite:"Shubham Site",poStatus:"Open",approval:"Approved",amount:315000,items:[{desc:"TMT Steel Fe500 10mm",qty:5,unit:"MT",rate:63000,amount:315000,hsn:"72142"}],linkedMR:"MR-03",delivery:"17 Mar"},
-  {id:"PO-022",date:"08 Mar",vendor:"Shyam Ji Materials",project:"Shubham & NK 623",deliverySite:"Shubham Site",poStatus:"Open",approval:"Approved",amount:52500,items:[{desc:"River Sand",qty:15,unit:"Loads",rate:3500,amount:52500,hsn:"25051"}],linkedMR:"MR-09",delivery:"18 Mar"},
-  {id:"PO-021",date:"05 Mar",vendor:"Ganesh Cement House",project:"Shubham & NK 623",deliverySite:"Shubham Site",poStatus:"Open",approval:"Draft",amount:38000,items:[{desc:"OPC Cement 50kg",qty:100,unit:"Bags",rate:380,amount:38000,hsn:"25232"}],linkedMR:"—",delivery:"20 Mar"},
-  {id:"PO-020",date:"28 Feb",vendor:"Lucky Hardware",project:"Bablu Farmhouse",deliverySite:"Farmhouse",poStatus:"Closed",approval:"Approved",amount:67200,items:[{desc:"Ceramic Tiles 2x2",qty:800,unit:"Sqft",rate:84,amount:67200,hsn:"69072"}],linkedMR:"MR-05",delivery:"07 Mar"},
-  {id:"PO-019",date:"22 Feb",vendor:"Vaibhav Traders",project:"Tikendra Residence",deliverySite:"Tikendra Site",poStatus:"Closed",approval:"Approved",amount:4000,items:[{desc:"Binding Wire",qty:50,unit:"Kg",rate:80,amount:4000,hsn:"72172"}],linkedMR:"MR-04",delivery:"05 Mar"},
-];
+const PO_DATA=[];
 
-const RFQ_DATA=[
-  {id:"RFQ-012",date:"13 Mar",project:"Amarendra Villa",status:"Published",bidStart:"13 Mar",bidEnd:"17 Mar",
-   items:[{desc:"Cement OPC 50kg",hsn:"25232",qty:200,unit:"Bags",deliveryDate:"22 Mar"},{desc:"Fine Sand",hsn:"25051",qty:10,unit:"Loads",deliveryDate:"22 Mar"}],
-   vendors:[{name:"Abhay Traders",status:"Submitted",rates:[{rate:385,remarks:"Stock ready"},{rate:3600,remarks:""}]},{name:"Ganesh Cement House",status:"Submitted",rates:[{rate:378,remarks:"Best price"},{rate:3750,remarks:"Premium quality"}]},{name:"Vaibhav Traders",status:"Pending",rates:[{rate:null,remarks:""},{rate:null,remarks:""}]}],locked:null},
-  {id:"RFQ-011",date:"10 Mar",project:"Tikendra Residence",status:"Published",bidStart:"10 Mar",bidEnd:"14 Mar",
-   items:[{desc:"TMT Steel Fe500 12mm",hsn:"72142",qty:3,unit:"MT",deliveryDate:"19 Mar"}],
-   vendors:[{name:"Rajesh Steel Mart",status:"Submitted",rates:[{rate:62500,remarks:"Ex-warehouse"}]},{name:"Abhay Traders",status:"Submitted",rates:[{rate:64000,remarks:""}]},{name:"Shyam Ji Materials",status:"Submitted",rates:[{rate:61800,remarks:"Mill rate"}]}],locked:"Shyam Ji Materials"},
-  {id:"RFQ-010",date:"05 Mar",project:"Shubham & NK 623",status:"Draft",bidStart:"",bidEnd:"",items:[{desc:"River Sand",hsn:"25051",qty:15,unit:"Loads",deliveryDate:"18 Mar"}],vendors:[],locked:null},
-];
+const RFQ_DATA=[];
 
 // ── STATUS META ───────────────────────────────────────────────────────
 const PO_STATUS={
@@ -235,7 +202,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[]}){
   // Build WA message when manual selected
   const buildWA=()=>{
     const lines=items.map(i=>`• ${i.item} — ${i.approvedQty||i.qty} ${i.unit} (${i.project})`).join("\n");
-    return `GB Buildcon Order\n${lines}\nDelivery by: ${delivery||"TBD"}\nPlease confirm. — Admin`;
+    return `Order\n${lines}\nDelivery by: ${delivery||"TBD"}\nPlease confirm. — Admin`;
   };
 
   return(

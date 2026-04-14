@@ -145,48 +145,13 @@ const NAV_GROUPS=[
 const ALWAYS_ON = ["dashboard","projects","finance","procurement","reports","library","settings"];
 
 
-// ── DASHBOARD DATA ─────────────────────────────────────────────────────
-const PROJECTS_DATA=[
-  {id:1,name:"Shubham & NK 623",client:"Nand Kishor Agrawal",city:"Raipur",type:"Residential",progress:68,status:"Ongoing",boq:4250000,expense:2890000,pm:"Vijay Sahu",start:"Jan 2025",end:"Aug 2025"},
-  {id:2,name:"Tikendra Residence",client:"Tikendra Banchhor",city:"Raipur",type:"Residential",progress:42,status:"Ongoing",boq:3100000,expense:1302000,pm:"Niranjan",start:"Mar 2025",end:"Dec 2025"},
-  {id:3,name:"Esther Risali",client:"Esther Group",city:"Bilaspur",type:"Commercial",progress:91,status:"Ongoing",boq:8750000,expense:7963000,pm:"Harsh Sahu",start:"Jun 2024",end:"Apr 2025"},
-  {id:4,name:"Amarendra Villa",client:"Amarendra Shrivastava",city:"Raipur",type:"Residential",progress:23,status:"Ongoing",boq:5600000,expense:1288000,pm:"Vijay Sahu",start:"May 2025",end:"Feb 2026"},
-  {id:5,name:"Shyam Ji Township",client:"Shyam Developers",city:"Bhilai",type:"Commercial",progress:100,status:"Completed",boq:12000000,expense:11200000,pm:"Niranjan",start:"Jan 2024",end:"Dec 2024"},
-  {id:6,name:"Simran Bungalow",client:"Simran Kaur",city:"Raipur",type:"Residential",progress:0,status:"Not Started",boq:2800000,expense:0,pm:"Priyanka",start:"Jun 2025",end:"Mar 2026"},
-  {id:7,name:"Neha Sagar Office",client:"Neha Sagar Ltd",city:"Durg",type:"Commercial",progress:55,status:"Hold",boq:6400000,expense:3520000,pm:"Harsh Sahu",start:"Feb 2025",end:"Nov 2025"},
-  {id:8,name:"Bablu Farmhouse",client:"Bablu Mehta",city:"Raipur",type:"Residential",progress:78,status:"Ongoing",boq:1900000,expense:1482000,pm:"Vijay Sahu",start:"Nov 2024",end:"May 2025"},
-];
-const CASHFLOW_DATA=[
-  {month:"Oct",in:320000,out:280000},{month:"Nov",in:540000,out:410000},
-  {month:"Dec",in:890000,out:620000},{month:"Jan",in:420000,out:510000},
-  {month:"Feb",in:760000,out:580000},{month:"Mar",in:700000,out:265775},
-];
-const ACTIVITY_FEED=[
-  {id:1,type:"payment",icon:IcCash,color:T.grn,title:"Payment Received",desc:"Shyam Ji Raipur — ₹5,00,000",project:"Shyam Township",time:"2h ago",amount:500000,dir:"in"},
-  {id:2,type:"po",icon:IcPO,color:T.blu,title:"PO Approved",desc:"PO-024 · Abhay Traders — AAC Blocks",project:"Esther Risali",time:"3h ago",amount:182500,dir:"out"},
-  {id:3,type:"expense",icon:IcTruck,color:T.amb,title:"Site Expense",desc:"Vijay Sahu — Murga jali for plaster",project:"Shubham 623",time:"5h ago",amount:500,dir:"out"},
-  {id:4,type:"payment",icon:IcCash,color:T.grn,title:"Payment Received",desc:"Akashdeep Raipur — ₹2,00,000",project:"Shyam Township",time:"8h ago",amount:200000,dir:"in"},
-  {id:5,type:"material",icon:IcTruck,color:T.slt,title:"GRN Completed",desc:"Ceramic Tiles received at site",project:"Bablu Farmhouse",time:"1d ago",amount:67200,dir:"out"},
-  {id:6,type:"approval",icon:IcApprv,color:T.pur,title:"Drawing Approved",desc:"Ground Floor Plan v3",project:"Shubham 623",time:"1d ago",amount:null,dir:null},
-  {id:7,type:"payment",icon:IcCash,color:T.red,title:"Bill Unpaid",desc:"Abhay Traders — TMT Steel",project:"Esther Risali",time:"2d ago",amount:126775,dir:"out"},
-  {id:8,type:"pr",icon:IcCalc,color:T.amb,title:"Payment Request",desc:"PR-12 · Laxmi Electrical · ₹1,750",project:"Neha Sagar",time:"2d ago",amount:1750,dir:"pending"},
-];
-const PENDING_ACTIONS=[
-  {id:1,type:"pr",label:"Payment Request",desc:"PR-12 — Laxmi Electrical · Neha Sagar",amount:1750,priority:"medium",color:T.amb,bg:T.ambL,brd:T.ambM,Icon:IcCalc},
-  {id:2,type:"pr",label:"Payment Request",desc:"PR-10 — Chandra Shekhar · Tikendra",amount:30000,priority:"high",color:T.red,bg:T.redL,brd:T.redM,Icon:IcCalc},
-  {id:3,type:"pr",label:"Payment Request",desc:"PR-8 — Vaibhav Traders · Amarendra",amount:22500,priority:"high",color:T.red,bg:T.redL,brd:T.redM,Icon:IcCalc},
-  {id:4,type:"po",label:"PO Approval",desc:"PO-021 — Ganesh Cement · Shubham 623",amount:38000,priority:"medium",color:T.amb,bg:T.ambL,brd:T.ambM,Icon:IcPO},
-  {id:5,type:"drawing",label:"Drawing Review",desc:"Amarendra Villa Floor Plan v3",amount:null,priority:"medium",color:T.blu,bg:T.bluL,brd:T.bluM,Icon:IcDes},
-  {id:6,type:"drawing",label:"Drawing Review",desc:"Esther Risali Plumbing Layout",amount:null,priority:"high",color:T.red,bg:T.redL,brd:T.redM,Icon:IcDes},
-];
-const ALERTS=[
-  {id:1,type:"overdue",msg:"Abhay Traders bill ₹1.27L overdue — Esther Risali",color:T.red,bg:T.redL,brd:T.redM,Icon:IcAlert},
-  {id:2,type:"overdue",msg:"Ramesh Labour Sub-Con bill ₹38K due today",color:T.red,bg:T.redL,brd:T.redM,Icon:IcAlert},
-  {id:3,type:"material",msg:"4 Material Requests pending order > 2 days",color:T.amb,bg:T.ambL,brd:T.ambM,Icon:IcTruck},
-  {id:4,type:"drawing",msg:"Esther Risali plumbing drawing rejected — needs rework",color:T.amb,bg:T.ambL,brd:T.ambM,Icon:IcDes},
-  {id:5,type:"progress",msg:"Esther Risali at 91% — handover due Apr 2025",color:T.blu,bg:T.bluL,brd:T.bluM,Icon:IcApprv},
-];
-const MATERIAL_STATUS={pending:4,ordered:4,received:5,total:13};
+// ── DASHBOARD DATA (loaded from API, empty defaults) ──────────────────
+const PROJECTS_DATA=[];
+const CASHFLOW_DATA=[];
+const ACTIVITY_FEED=[];
+const PENDING_ACTIONS=[];
+const ALERTS=[];
+const MATERIAL_STATUS={pending:0,ordered:0,received:0,total:0};
 const STATUS_META={"Ongoing":{c:T.grn,bg:T.grnL,brd:T.grnM},"Completed":{c:T.blu,bg:T.bluL,brd:T.bluM},"Hold":{c:T.amb,bg:T.ambL,brd:T.ambM},"Not Started":{c:T.slt,bg:T.sltL,brd:T.b2}};
 
 // ── SHARED MINI COMPONENTS ────────────────────────────────────────────
@@ -307,7 +272,7 @@ function LoginScreen({onLogin}){
       <div style={{background:"rgba(255,255,255,0.97)",borderRadius:20,padding:"44px 40px",width:400,boxShadow:"0 32px 80px rgba(0,0,0,0.35)"}}>
         <div style={{textAlign:"center",marginBottom:32}}>
           <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:62,height:62,borderRadius:16,background:`linear-gradient(135deg,${C.p},${C.a})`,marginBottom:14}}><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg></div>
-          <div style={{fontSize:21,fontWeight:800,color:C.t}}>GB Buildcon</div>
+          <div style={{fontSize:21,fontWeight:800,color:C.t}}>GB Construction Manager</div>
           <div style={{fontSize:12,color:C.tl,marginTop:3}}>Construction Management Platform</div>
         </div>
         {error&&<div style={{background:T.redL,color:T.red,padding:"10px 14px",borderRadius:8,fontSize:12.5,marginBottom:16,border:`1px solid ${T.redM}`}}>{error}</div>}
@@ -451,7 +416,7 @@ function ShortcutCheatsheet({onClose}){
       <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
           <div style={{fontSize:15,fontWeight:700,color:"white"}}>Keyboard Shortcuts</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2}}>GB Buildcon — Press ? to toggle</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2}}>GB Construction Manager — Press ? to toggle</div>
         </div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:7,padding:"5px 10px",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>ESC</button>
       </div>
@@ -739,25 +704,41 @@ function DashboardModule(){
   const [dismissedAlerts,setDismissedAlerts]=useState([]);
   const [showAllActivity,setShowAllActivity]=useState(false);
   const [showAllActions,setShowAllActions]=useState(false);
-  const activeAlerts=ALERTS.filter(a=>!dismissedAlerts.includes(a.id));
-  const projects=["All",...PROJECTS_DATA.map(p=>p.name)];
-  const filteredProjects=selProject==="All"?PROJECTS_DATA:PROJECTS_DATA.filter(p=>p.name===selProject);
-  const totalBOQ=filteredProjects.reduce((s,p)=>s+p.boq,0);
-  const totalExp=filteredProjects.reduce((s,p)=>s+p.expense,0);
+  const [dashData,setDashData]=useState(null);
+
+  useEffect(()=>{
+    api.get("/dashboard/summary").then(res=>{
+      if(res.success) setDashData(res.data);
+    }).catch(()=>{});
+  },[]);
+
+  const dd=dashData||{};
+  const projectsArr=dd.projects||PROJECTS_DATA;
+  const cashflowArr=dd.cashflow||CASHFLOW_DATA;
+  const activityArr=dd.activities||ACTIVITY_FEED;
+  const pendingArr=dd.pending_actions||PENDING_ACTIONS;
+  const alertsArr=dd.alerts||ALERTS;
+  const matStatus=dd.material_status||MATERIAL_STATUS;
+
+  const activeAlerts=alertsArr.filter(a=>!dismissedAlerts.includes(a.id));
+  const projects=["All",...projectsArr.map(p=>p.name)];
+  const filteredProjects=selProject==="All"?projectsArr:projectsArr.filter(p=>p.name===selProject);
+  const totalBOQ=filteredProjects.reduce((s,p)=>s+(p.boq||0),0);
+  const totalExp=filteredProjects.reduce((s,p)=>s+(p.expense||p.total_expense||0),0);
   const totalMargin=totalBOQ-totalExp;
   const marginPct=totalBOQ>0?((totalMargin/totalBOQ)*100).toFixed(1):0;
-  const cashBalance=2557240;
-  const activeCount=filteredProjects.filter(p=>p.status==="Ongoing").length;
-  const avgProgress=filteredProjects.length>0?Math.round(filteredProjects.reduce((s,p)=>s+p.progress,0)/filteredProjects.length):0;
-  const overdueAmt=164775;
-  const pendingCount=PENDING_ACTIONS.length;
-  const cfData=range==="week"?CASHFLOW_DATA.slice(-2):range==="month"?CASHFLOW_DATA.slice(-3):CASHFLOW_DATA;
-  const totalIn=cfData.reduce((s,d)=>s+d.in,0);
-  const totalOut=cfData.reduce((s,d)=>s+d.out,0);
-  const financeBarData=CASHFLOW_DATA.map(d=>({month:d.month,sales:Math.round(d.in*(selProject==="All"?1:0.35)),expense:Math.round(d.out*(selProject==="All"?1:0.35))}));
-  const expSlices=[{label:"Material Purchase",value:totalExp*0.46,color:T.blu},{label:"Sub-Contractor",value:totalExp*0.30,color:T.pur},{label:"Direct Labour",value:totalExp*0.15,color:T.grn},{label:"Site Expenses",value:totalExp*0.06,color:T.amb},{label:"Equipment",value:totalExp*0.03,color:T.slt}].filter(s=>s.value>0);
-  const activityToShow=showAllActivity?ACTIVITY_FEED:ACTIVITY_FEED.slice(0,4);
-  const actionsToShow=showAllActions?PENDING_ACTIONS:PENDING_ACTIONS.slice(0,4);
+  const cashBalance=dd.cash_balance||0;
+  const activeCount=filteredProjects.filter(p=>p.status==="Ongoing"||p.status==="ongoing").length;
+  const avgProgress=filteredProjects.length>0?Math.round(filteredProjects.reduce((s,p)=>s+(p.progress||0),0)/filteredProjects.length):0;
+  const overdueAmt=dd.overdue_amount||0;
+  const pendingCount=pendingArr.length;
+  const cfData=range==="week"?cashflowArr.slice(-2):range==="month"?cashflowArr.slice(-3):cashflowArr;
+  const totalIn=cfData.reduce((s,d)=>s+(d.in||0),0);
+  const totalOut=cfData.reduce((s,d)=>s+(d.out||0),0);
+  const financeBarData=cashflowArr.map(d=>({month:d.month,sales:Math.round((d.in||0)*(selProject==="All"?1:0.35)),expense:Math.round((d.out||0)*(selProject==="All"?1:0.35))}));
+  const expSlices=dd.expense_breakdown||[{label:"Material Purchase",value:totalExp*0.46,color:T.blu},{label:"Sub-Contractor",value:totalExp*0.30,color:T.pur},{label:"Direct Labour",value:totalExp*0.15,color:T.grn},{label:"Site Expenses",value:totalExp*0.06,color:T.amb},{label:"Equipment",value:totalExp*0.03,color:T.slt}].filter(s=>s.value>0);
+  const activityToShow=showAllActivity?activityArr:activityArr.slice(0,4);
+  const actionsToShow=showAllActions?pendingArr:pendingArr.slice(0,4);
 
   return(
     <div style={{padding:"16px 20px",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -786,7 +767,7 @@ function DashboardModule(){
           <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}><DonutChart slices={expSlices} size={110} cx={55} cy={55} r={38} inner={22}/><div style={{width:"100%"}}>{expSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}><div style={{width:9,height:9,borderRadius:2,background:s.color,flexShrink:0}}/><span style={{fontSize:11,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:11,fontWeight:600,color:T.t1}}>₹{fmt(s.value)}</span></div>))}</div></div>
         </Panel>
         <Panel title="Cash Flow Trend">
-          <div style={{padding:"14px 16px"}}><CashLineChart data={CASHFLOW_DATA} height={90}/><div style={{display:"flex",gap:14,marginTop:10}}>{[{l:"IN",v:CASHFLOW_DATA.reduce((s,d)=>s+d.in,0),c:T.grn},{l:"OUT",v:CASHFLOW_DATA.reduce((s,d)=>s+d.out,0),c:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div></div>
+          <div style={{padding:"14px 16px"}}><CashLineChart data={cashflowArr} height={90}/><div style={{display:"flex",gap:14,marginTop:10}}>{[{l:"IN",v:cashflowArr.reduce((s,d)=>s+(d.in||0),0),c:T.grn},{l:"OUT",v:cashflowArr.reduce((s,d)=>s+(d.out||0),0),c:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div></div>
         </Panel>
       </div>
       {/* Projects table */}
@@ -807,7 +788,7 @@ function DashboardModule(){
                   <tr key={p.id} onClick={()=>setExpandedProjId(isExp?null:p.id)} style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 110px 80px 90px 90px 90px 70px 80px 40px",padding:"10px 14px",borderBottom:`1px solid ${isExp?T.bluM:T.b1}`,alignItems:"center",cursor:"pointer",background:isExp?T.bluL:"none",borderLeft:isExp?`3px solid ${T.blu}`:"3px solid transparent",transition:"all 0.1s"}} onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.surfaceB;}} onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background="none";}}>
                     <td style={{display:"contents"}}>
                       <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:isExp?T.blu:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div><div style={{fontSize:10.5,color:T.t4}}>{p.city} · {p.type}</div></div>
-                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.client.split(" ").slice(0,2).join(" ")}</span>
+                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.client||"--").split(" ").slice(0,2).join(" ")}</span>
                       <span style={{display:"inline-block"}}><span style={{background:sm.bg,color:sm.c,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,border:`1px solid ${sm.brd}`,whiteSpace:"nowrap"}}>{p.status}</span></span>
                       <div><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:10,fontWeight:700,color:pColor}}>{p.progress}%</span></div><div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:pColor,borderRadius:3}}/></div></div>
                       <span style={{fontSize:12,fontWeight:600,color:T.t1}}>₹{fmt(p.boq)}</span>
@@ -827,7 +808,7 @@ function DashboardModule(){
       </Panel>
       {/* Actions + Activity */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:12,marginBottom:14}}>
-        <Panel title={<span>Pending Actions <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,marginLeft:5,border:`1px solid ${T.redM}`}}>{PENDING_ACTIONS.length}</span></span>} action={<button onClick={()=>setShowAllActions(!showAllActions)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActions?"Less":"All"}</button>}>
+        <Panel title={<span>Pending Actions <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,marginLeft:5,border:`1px solid ${T.redM}`}}>{pendingCount}</span></span>} action={<button onClick={()=>setShowAllActions(!showAllActions)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActions?"Less":"All"}</button>}>
           <div style={{overflowY:"auto",maxHeight:260}}>{actionsToShow.map((a,i)=>(<div key={a.id} style={{padding:"9px 14px",borderBottom:i<actionsToShow.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}><div style={{width:30,height:30,borderRadius:7,background:a.bg,border:`1px solid ${a.brd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.Icon size={13} color={a.color}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1,marginBottom:1}}>{a.label}</div><div style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.desc}</div></div><div style={{textAlign:"right",flexShrink:0}}>{a.amount&&<div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(a.amount)}</div>}<div style={{width:7,height:7,borderRadius:"50%",background:a.color,marginLeft:"auto",marginTop:a.amount?4:0}}/></div></div>))}</div>
         </Panel>
         <Panel title="Recent Activity" action={<button onClick={()=>setShowAllActivity(!showAllActivity)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActivity?"Collapse":"View all"}</button>}>
@@ -1033,7 +1014,7 @@ export default function App(){
       </div>}
       <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany}/>
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={ALERTS.length} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>
+        <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>
         <div style={{flex:1,overflowY:"auto"}}>
           <Suspense fallback={<ModuleLoader/>}>
             {MODULE_MAP[nav]||<DashboardModule/>}

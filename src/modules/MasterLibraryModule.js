@@ -909,7 +909,7 @@ function PartyMasterSection() {
     headers: ["Party Name", "Type", "Category/Trade", "Contact Person", "Phone", "Email", "GSTIN", "City"],
     sampleRows: [
       ["UltraTech Cement Ltd", "Supplier", "Cement", "Rajesh Agrawal", "+91 98765 10001", "rajesh@ultratech.com", "22AABCU1234F1Z5", "Raipur"],
-      ["Nand Kishor Agrawal", "Client", "Residential", "Nand Kishor", "+91 98765 20001", "nk@gmail.com", "", "Raipur"],
+      ["Sample Client", "Client", "Residential", "Contact Person", "+91 98765 00000", "client@email.com", "", "City"],
     ],
     filename: "gb_parties_export.csv",
     templateFilename: "gb_template_parties.csv",
@@ -2212,7 +2212,7 @@ export default function MasterLibraryModule() {
             );
           })}
         </nav>
-        <div style={{ padding: "14px 20px", borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textLight }}>GB Buildcon v2.1</div>
+        <div style={{ padding: "14px 20px", borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textLight }}>Construction Manager v2.1</div>
       </div>
 
       {/* Content */}

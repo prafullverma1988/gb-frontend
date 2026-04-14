@@ -130,116 +130,23 @@ const NAV_GROUPS=[
 ];
 
 // ── PROJECTS DATA ────────────────────────────────────────────────────
-const PROJECTS_DATA=[
-  {id:1,name:"Shubham & Nand Kishor 623",client:"Nand Kishor Agrawal",city:"Raipur",type:"Residential",progress:68,status:"Ongoing",boq:4250000,expense:2890000,pm:"Vijay Sahu",start:"Jan 2025",end:"Aug 2025"},
-  {id:2,name:"Tikendra Banchhor Residence",client:"Tikendra Banchhor",city:"Raipur",type:"Residential",progress:42,status:"Ongoing",boq:3100000,expense:1302000,pm:"Niranjan",start:"Mar 2025",end:"Dec 2025"},
-  {id:3,name:"Esther Risali Commercial",client:"Esther Group",city:"Bilaspur",type:"Commercial",progress:91,status:"Ongoing",boq:8750000,expense:7963000,pm:"Harsh Sahu",start:"Jun 2024",end:"Apr 2025"},
-  {id:4,name:"Amarendra Shrivastava Villa",client:"Amarendra Shrivastava",city:"Raipur",type:"Residential",progress:23,status:"Ongoing",boq:5600000,expense:1288000,pm:"Vijay Sahu",start:"May 2025",end:"Feb 2026"},
-  {id:5,name:"Shyam Ji Township Phase 1",client:"Shyam Developers",city:"Bhilai",type:"Commercial",progress:100,status:"Completed",boq:12000000,expense:11200000,pm:"Niranjan",start:"Jan 2024",end:"Dec 2024"},
-  {id:6,name:"Simran Kaur Bungalow",client:"Simran Kaur",city:"Raipur",type:"Residential",progress:0,status:"Not Started",boq:2800000,expense:0,pm:"Priyanka",start:"Jun 2025",end:"Mar 2026"},
-  {id:7,name:"Neha Sagar Office Complex",client:"Neha Sagar Ltd",city:"Durg",type:"Commercial",progress:55,status:"Hold",boq:6400000,expense:3520000,pm:"Harsh Sahu",start:"Feb 2025",end:"Nov 2025"},
-  {id:8,name:"Bablu Mehta Farmhouse",client:"Bablu Mehta",city:"Raipur",type:"Residential",progress:78,status:"Ongoing",boq:1900000,expense:1482000,pm:"Vijay Sahu",start:"Nov 2024",end:"May 2025"},
-];
-const TEAM=[
-  {id:1,name:"Vijay Sahu",role:"Project Manager",color:"#1565C0",initials:"VS"},
-  {id:2,name:"Harsh Sahu",role:"Project Manager",color:"#2E7D32",initials:"HS"},
-  {id:3,name:"Niranjan",role:"Site Supervisor",color:"#6A1B9A",initials:"NJ"},
-  {id:4,name:"Priyanka",role:"Project Manager",color:"#AD1457",initials:"PK"},
-  {id:5,name:"Sunny",role:"Site Engineer",color:"#00695C",initials:"SN"},
-];
-const PULSE_FEED=[
-  {id:1,type:"photo",user:"Vijay Sahu",role:"PM",site:"Shubham 623",time:"2h ago",img:"https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=260&fit=crop",caption:"Slab casting complete — 3rd floor RCC done ✅",likes:12,comments:3,tag:"progress",ac:"#1565C0"},
-  {id:2,type:"material",user:"Niranjan",role:"Supervisor",site:"Tikendra Residence",time:"3h ago",img:null,caption:"50 bags cement received from Abhay Traders 📦",likes:4,comments:1,tag:"material",ac:"#6A1B9A"},
-  {id:3,type:"photo",user:"Harsh Sahu",role:"PM",site:"Esther Risali",time:"5h ago",img:"https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=400&h=260&fit=crop",caption:"Brickwork 2nd floor 80% done, pace is great 💪",likes:18,comments:5,tag:"progress",ac:"#2E7D32"},
-  {id:4,type:"issue",user:"Priyanka",role:"PM",site:"Simran Bungalow",time:"6h ago",img:null,caption:"⚠️ Design approval pending — client revision awaited",likes:0,comments:2,tag:"issue",ac:"#AD1457"},
-  {id:5,type:"photo",user:"Vijay Sahu",role:"PM",site:"Amarendra Villa",time:"1d ago",img:"https://images.unsplash.com/photo-1590725140246-20acddc1ec6d?w=400&h=260&fit=crop",caption:"Foundation waterproofing in progress 🏗️",likes:9,comments:2,tag:"progress",ac:"#1565C0"},
-  {id:6,type:"photo",user:"Harsh Sahu",role:"PM",site:"Neha Sagar Office",time:"1d ago",img:"https://images.unsplash.com/photo-1486325212027-8081e485255e?w=400&h=260&fit=crop",caption:"False ceiling installation started — ground floor",likes:14,comments:4,tag:"progress",ac:"#2E7D32"},
-  {id:7,type:"approval",user:"Niranjan",role:"Supervisor",site:"Tikendra Residence",time:"2d ago",img:null,caption:"✅ Labour payment PR-12 approved — ₹30,000",likes:2,comments:0,tag:"approval",ac:"#6A1B9A"},
-  {id:8,type:"photo",user:"Vijay Sahu",role:"PM",site:"Bablu Farmhouse",time:"2d ago",img:"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=260&fit=crop",caption:"Exterior plastering 90% done, paint starts Monday 🎨",likes:21,comments:7,tag:"progress",ac:"#1565C0"},
-];
+const PROJECTS_DATA=[];
+const TEAM=[];
+const PULSE_FEED=[];
 const STATUS_META={"Ongoing":{bg:C.gl,text:C.g},"Completed":{bg:C.bl,text:C.p},"Hold":{bg:C.ol,text:C.o},"Not Started":{bg:C.b,text:C.tl}};
 
 // ── FINANCE DATA ─────────────────────────────────────────────────────
-const ACCOUNTS=[
-  {id:1,name:"HDFC Current",no:"••4821",balance:1823540,color:C.p},
-  {id:2,name:"SBI Current",no:"••2204",balance:945200,color:C.teal},
-  {id:3,name:"Petty Cash",no:null,balance:18500,color:C.g},
-  {id:4,name:"ICICI OD",no:"••9012",balance:-230000,color:C.o},
-];
-const WALLETS=[
-  {id:1,name:"Vijay Sahu",role:"PM",balance:12500,limit:25000,initials:"VS",color:"#1565C0"},
-  {id:2,name:"Harsh Sahu",role:"PM",balance:8200,limit:25000,initials:"HS",color:"#2E7D32"},
-  {id:3,name:"Niranjan",role:"Supervisor",balance:4500,limit:10000,initials:"NJ",color:"#6A1B9A"},
-  {id:4,name:"Priyanka",role:"PM",balance:6800,limit:15000,initials:"PK",color:"#AD1457"},
-];
-const WALLET_TXNS=[
-  {id:101,date:"16 Mar",ds:20260316,party:"Vijay Sahu",sub:"Labour payment at slab casting",project:"Amarendra Villa",type:"Wallet Payment",account:"Vijay Wallet",amount:50000,dr:true,status:"paid"},
-  {id:102,date:"16 Mar",ds:20260316,party:"Vijay Sahu",sub:"Murga jali for plaster",project:"Shubham 623",type:"Wallet Payment",account:"Vijay Wallet",amount:500,dr:true,status:"paid"},
-  {id:103,date:"14 Mar",ds:20260314,party:"Harsh Sahu",sub:"Harish tile vala – Neha Sagar",project:"Neha Sagar",type:"Wallet Payment",account:"Harsh Wallet",amount:5000,dr:true,status:"paid"},
-  {id:104,date:"13 Mar",ds:20260313,party:"Harsh Sahu",sub:"Granite vala – Bablu Farmhouse",project:"Bablu Farmhouse",type:"Wallet Payment",account:"Harsh Wallet",amount:5000,dr:true,status:"paid"},
-  {id:105,date:"10 Mar",ds:20260310,party:"Niranjan",sub:"Site petty cash – Tikendra",project:"Tikendra Residence",type:"Wallet Payment",account:"Niranjan Wallet",amount:3200,dr:true,status:"paid"},
-  {id:106,date:"08 Mar",ds:20260308,party:"Vijay Sahu",sub:"Top-up – wallet recharge",project:"Company Level",type:"Wallet Top-up",account:"HDFC Current",amount:15000,dr:false,status:"paid"},
-  {id:107,date:"07 Mar",ds:20260307,party:"Harsh Sahu",sub:"Top-up – wallet recharge",project:"Company Level",type:"Wallet Top-up",account:"HDFC Current",amount:10000,dr:false,status:"paid"},
-  {id:108,date:"05 Mar",ds:20260305,party:"Priyanka",sub:"Site material advance",project:"Simran Bungalow",type:"Wallet Payment",account:"Priyanka Wallet",amount:4800,dr:true,status:"paid"},
-  {id:109,date:"03 Mar",ds:20260303,party:"Niranjan",sub:"Top-up – wallet recharge",project:"Company Level",type:"Wallet Top-up",account:"SBI Current",amount:8000,dr:false,status:"paid"},
-  {id:110,date:"01 Mar",ds:20260301,party:"Priyanka",sub:"Top-up – wallet recharge",project:"Company Level",type:"Wallet Top-up",account:"HDFC Current",amount:12000,dr:false,status:"paid"},
-];
+const ACCOUNTS=[];
+const WALLETS=[];
+const WALLET_TXNS=[];
 
-const PARTIES=[
-  {id:1,name:"3 Eye CCTV Solution",type:"Other Vendor",balance:82166,balType:"Advance Paid"},
-  {id:2,name:"Abhay Traders",type:"Material Supplier",balance:114328,balType:"To Pay"},
-  {id:3,name:"Akashdeep Raipur",type:"Client",balance:2896400,balType:"Advance Received"},
-  {id:4,name:"Amarendra Shrivastava",type:"Client",balance:542790,balType:"To Receive"},
-  {id:5,name:"Amrit Builders",type:"Client",balance:770294,balType:"To Receive"},
-  {id:6,name:"Ramesh Labour Cont.",type:"Sub-Con",balance:38000,balType:"To Pay"},
-  {id:7,name:"Vaibhav Traders",type:"Material Supplier",balance:22500,balType:"To Pay"},
-  {id:8,name:"Shyam Ji Raipur",type:"Client",balance:180000,balType:"To Receive"},
-];
-const PARTY_TXNS={
-  3:[
-    {id:1,date:"02 Feb 2026",note:"70 param account cash + phone pay to vijay",amount:100000,dr:false},
-    {id:2,date:"12 Jan 2026",note:"by naveen sir to vijay",amount:50000,dr:false},
-    {id:3,date:"31 Dec 2025",note:"Cash received at anand fashion",amount:250000,dr:false},
-  ],
-  2:[
-    {id:1,date:"08 Mar 2026",note:"TMT Steel 2 MT — Esther Risali",amount:126775,dr:true,status:"unpaid",items:[{name:"TMT Steel Fe500",rate:"₹63,000/MT",qty:"2 MT",amt:126000},{name:"Binding Wire",rate:"₹80/kg",qty:"10 kg",amt:800}]},
-    {id:2,date:"01 Mar 2026",note:"Cement 100 bags — Esther Risali",amount:38500,dr:true,status:"paid"},
-    {id:3,date:"20 Feb 2026",note:"Sand 5 loads — Shubham 623",amount:17500,dr:true,status:"paid"},
-  ],
-};
+const PARTIES=[];
+const PARTY_TXNS={};
 const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL},"Wallet Payment":{color:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{color:C.p,bg:C.bl}};
-const TRANSACTIONS_DATA=[
-  {id:1,date:"09 Mar",ds:20260309,party:"Vijay Sahu → Hukumchand Trilok",sub:"Labour payment at slab casting",project:"Amarendra Villa",type:"Party Payment",account:"HDFC",amount:50000,dr:true,status:"paid"},
-  {id:2,date:"08 Mar",ds:20260308,party:"Vijay Sahu",sub:"Murga jali for plaster",project:"Shubham 623",type:"Site Expense",account:"Petty Cash",amount:500,dr:true,status:"paid"},
-  {id:3,date:"08 Mar",ds:20260308,party:"Abhay Traders",sub:"TMT Steel 2 MT",project:"Esther Risali",type:"Material Purchase",account:"HDFC",amount:126775,dr:true,status:"unpaid"},
-  {id:4,date:"07 Mar",ds:20260307,party:"Shyam Ji Raipur",sub:"Client advance payment",project:"Shyam Township",type:"Payment In",account:"SBI",amount:500000,dr:false,status:"paid"},
-  {id:5,date:"06 Mar",ds:20260306,party:"GBC Sunny",sub:"Harish tile vala",project:"Neha Sagar",type:"Site Expense",account:"Petty Cash",amount:5000,dr:true,status:"paid"},
-  {id:6,date:"05 Mar",ds:20260305,party:"GBC Sunny",sub:"Granite vala",project:"Bablu Farmhouse",type:"Site Expense",account:"Petty Cash",amount:5000,dr:true,status:"paid"},
-  {id:7,date:"04 Mar",ds:20260304,party:"Ramesh Labour Cont.",sub:"Brickwork 2nd floor",project:"Tikendra Residence",type:"Sub-Con Expense",account:"HDFC",amount:38000,dr:true,status:"unpaid"},
-  {id:8,date:"03 Mar",ds:20260303,party:"Rajesh Electrical",sub:"Wiring materials",project:"Amarendra Villa",type:"Material Purchase",account:"HDFC",amount:22500,dr:true,status:"paid"},
-  {id:9,date:"02 Mar",ds:20260302,party:"Abhay Traders",sub:"To be billed — unbilled",project:"Shubham 623",type:"Unbilled Material",account:"—",amount:18000,dr:true,status:"unbilled"},
-  {id:10,date:"01 Mar",ds:20260301,party:"Akashdeep Raipur",sub:"Client payment received",project:"Shyam Township",type:"Payment In",account:"SBI",amount:200000,dr:false,status:"paid"},
-];
-const UNBILLED_PARTIES=[
-  {id:1,name:"AAA Traders",items:1,project:"Shubham 623",billItems:[{name:"Bricks",qty:5000,unit:"Nos",rate:8,amt:40000}]},
-  {id:2,name:"Shyam Ji Raipur",items:1,project:"Shubham 623",billItems:[{name:"Sand",qty:10,unit:"Loads",rate:3500,amt:35000}]},
-  {id:3,name:"Shubham & NK 623",items:9,project:"Shubham 623",billItems:[{name:"Cement OPC",qty:120,unit:"Bags",rate:380,amt:45600},{name:"Sand",qty:5,unit:"Loads",rate:3200,amt:16000}]},
-  {id:4,name:"Akashdeep",items:2,project:"Esther Risali",billItems:[{name:"Tiles 2x2",qty:200,unit:"Sqft",rate:65,amt:13000}]},
-];
-const PAY_REQS_DATA=[
-  {id:12,no:"PR-12",date:"27 Feb",ds:20260227,party:"Laxmi Electrical",project:"Neha Sagar",amount:1750,status:"Pending",by:"Harsh Sahu",approvedBy:"",purpose:"Electrical wiring materials – Neha Sagar site"},
-  {id:10,no:"PR-10",date:"21 Feb",ds:20260221,party:"Chandra Shekhar",project:"Tikendra",amount:30000,status:"Pending",by:"Niranjan",approvedBy:"",purpose:"Labour payment – brickwork 2nd floor"},
-  {id:8,no:"PR-8",date:"24 Jan",ds:20260124,party:"Vaibhav Traders",project:"Amarendra Villa",amount:22500,status:"Pending",by:"Vijay Sahu",approvedBy:"",purpose:"Plumbing fittings & pipe material"},
-  {id:11,no:"PR-11",date:"21 Feb",ds:20260221,party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,status:"Approved",by:"Harsh Sahu",approvedBy:"Prafull",purpose:"Tile fixing labour – ground floor"},
-  {id:9,no:"PR-9",date:"30 Jan",ds:20260130,party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,status:"Approved",by:"Vijay Sahu",approvedBy:"Prafull",purpose:"Sand supply – 5 loads for plastering"},
-];
-const PEND_PMTS_DATA=[
-  {id:1,type:"pr",no:"PR-11",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,date:"21 Feb",overdue:false},
-  {id:2,type:"pr",no:"PR-9",party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,date:"30 Jan",overdue:false},
-  {id:3,type:"bill",no:"MP-38",party:"Abhay Traders",project:"Esther Risali",amount:126775,date:"10 Mar",overdue:true},
-  {id:4,type:"bill",no:"SUB-22",party:"Ramesh Labour",project:"Tikendra",amount:38000,date:"15 Mar",overdue:false},
-  {id:5,type:"bill",no:"MP-41",party:"Vaibhav Traders",project:"Amarendra Villa",amount:31200,date:"20 Mar",overdue:false},
-];
+const TRANSACTIONS_DATA=[];
+const UNBILLED_PARTIES=[];
+const PAY_REQS_DATA=[];
+const PEND_PMTS_DATA=[];
 
 
 // ── SITE PULSE DRAWER ─────────────────────────────────────────────────
@@ -261,7 +168,7 @@ function SitePulseDrawer({onClose}){
         </div>
         <div style={{display:"flex",gap:6}}>
           <select value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:T.sltL,outline:"none",fontFamily:"inherit",color:C.t}}>
-            <option>All</option>{["Shubham 623","Esther Risali","Amarendra Villa","Tikendra Residence","Neha Sagar Office","Bablu Farmhouse"].map(s=><option key={s}>{s}</option>)}
+            <option>All</option>{[].map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={type} onChange={e=>setType(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:T.sltL,outline:"none",fontFamily:"inherit",color:C.t}}>
             {["All","photo","material","issue","approval"].map(t=><option key={t} value={t}>{t==="All"?"All Types":t[0].toUpperCase()+t.slice(1)}</option>)}
@@ -305,7 +212,7 @@ function SitePulseDrawer({onClose}){
 function DuplicateModal({project,onClose,onConfirm}){
   const [step,setStep]=useState(1);const [done,setDone]=useState(false);
   const [form,setForm]=useState({name:`${project.name} — Copy`,city:project.city,boq:project.boq,start:"",end:""});
-  const [pm,setPM]=useState(project.pm);const [sup,setSup]=useState("Niranjan");
+  const [pm,setPM]=useState(project.pm);const [sup,setSup]=useState("");
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const handleCreate=()=>{setDone(true);setTimeout(()=>{onConfirm({...project,id:Date.now(),name:form.name,city:form.city,boq:Number(form.boq),pm,progress:0,status:"Not Started",expense:0,start:form.start||"TBD",end:form.end||"TBD"});onClose();},1400);};
   return(<>
@@ -345,7 +252,7 @@ function DuplicateModal({project,onClose,onConfirm}){
         </div>}
         {step===2&&<div>
           <p style={{fontSize:11.5,color:T.t4,margin:"0 0 14px"}}>Click to assign team for the new project.</p>
-          {[{role:"Project Manager",val:pm,setter:setPM,prev:project.pm},{role:"Site Supervisor",val:sup,setter:setSup,prev:"Niranjan"}].map(({role,val,setter,prev})=>(
+          {[{role:"Project Manager",val:pm,setter:setPM,prev:project.pm},{role:"Site Supervisor",val:sup,setter:setSup,prev:""}].map(({role,val,setter,prev})=>(
             <div key={role} style={{marginBottom:14}}>
               <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:7}}>{role}</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -532,13 +439,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
   const UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"];
   const INV_UNITS=["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"];
-  const ACCOUNTS_LIST=dbAccounts?.length?dbAccounts.map(a=>a.name):["HDFC Current","SBI Current","Petty Cash","ICICI OD"];
+  const ACCOUNTS_LIST=dbAccounts?.length?dbAccounts.map(a=>a.name):[];
   const MOPS_LIST=["Cash","Cheque","Bank Transfer","UPI","NEFT"];
   const WORK_TYPES=["Plastering","Brickwork","Concrete Casting","Tile Laying","Electrical Work","Plumbing","Bar Bending","Painting","Waterproofing","Flooring","Carpentry","False Ceiling","Other"];
-  const PROJECTS_LIST=dbProjects?.length?dbProjects:["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Company Level"];
-  const CLIENT_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Client").map(p=>p.name):["Nand Kishor Agrawal","Tikendra Banchhor","Esther Group"];
-  const SUPPLIER_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Material Supplier"||p.type==="material_supplier").map(p=>p.name):["Abhay Traders","Tata Steel","Ambuja Cement"];
-  const SUBCON_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Sub-Con"||p.type==="contractor"||p.type==="subcontractor").map(p=>p.name):["Ramesh Labour Cont.","Rupesh Sahu"];
+  const PROJECTS_LIST=dbProjects?.length?dbProjects:[];
+  const CLIENT_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Client").map(p=>p.name):[];
+  const SUPPLIER_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Material Supplier"||p.type==="material_supplier").map(p=>p.name):[];
+  const SUBCON_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Sub-Con"||p.type==="contractor"||p.type==="subcontractor").map(p=>p.name):[];
   const ALL_PARTIES=dbParties?.length?dbParties.map(p=>p.name):[...CLIENT_LIST,...SUPPLIER_LIST,...SUBCON_LIST];
 
   // Pre-defined material library (used in Material Purchase Bill)
@@ -1534,7 +1441,7 @@ function AddPartyModal({onClose,onAdd}){
       <div style={{padding:"16px",display:"flex",flexDirection:"column",gap:11}}>
         <div>
           {lbl("Party / Company Name *")}
-          <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Abhay Traders"
+          <input value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. Vendor Name"
             style={inp({fontSize:13,fontWeight:600})}
             onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}
             autoFocus/>
@@ -1591,8 +1498,8 @@ function AddPartyModal({onClose,onAdd}){
 // ══════════════════════════════════════════════════════════════
 // ─── NEW PAYMENT REQUEST MODAL ───────────────────────────────
 function NewPRModal({onClose,onSave,dbParties,dbProjects}){
-  const PROJECTS=dbProjects?.length?dbProjects:["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa"];
-  const ALL_PARTIES=dbParties?.length?dbParties.map(p=>p.name):["Abhay Traders","Laxmi Electrical","Ramesh Labour"];
+  const PROJECTS=dbProjects?.length?dbProjects:[];
+  const ALL_PARTIES=dbParties?.length?dbParties.map(p=>p.name):[];
   const PRIORITIES=["Low","Medium","High","Urgent"];
   const [party,setParty]=useState("");
   const [project,setProject]=useState(PROJECTS[0]||"");
@@ -2127,48 +2034,48 @@ function FinanceModule(){
   const downloadLedgerPDF=(party)=>{
     const rows=getLedgerRows(party);
     const rowsHTML=rows.map(t=>`<tr><td style="color:#6B7280;white-space:nowrap">${t.date}</td><td>${t.note}${t.status?` <span style="font-size:10px;padding:1px 5px;border-radius:10px;background:${t.status==="paid"?"#ECFDF5":"#FEF2F2"};color:${t.status==="paid"?"#059669":"#DC2626"}">${t.status}</span>`:""}</td><td style="text-align:right;color:#059669;font-weight:700">${!t.dr?"₹"+fmtN(t.amount):""}</td><td style="text-align:right;color:#DC2626;font-weight:700">${t.dr?"₹"+fmtN(t.amount):""}</td><td style="text-align:right;color:${t.runBal>=0?"#059669":"#DC2626"};font-weight:700">₹${fmtN(Math.abs(t.runBal))} ${t.runBal>=0?"CR":"DR"}</td></tr>`).join("");
-    printHTML(`Party Ledger — ${party.name}`,`<h2>Party Ledger — ${party.name}</h2><p>${party.type} &nbsp;|&nbsp; Balance: <strong>₹${fmtN(party.balance)}</strong> (${party.balType})</p><table><tr><th>Date</th><th>Description</th><th style="text-align:right">Received (CR)</th><th style="text-align:right">Bill/Paid Out (DR)</th><th style="text-align:right">Balance</th></tr>${rowsHTML}</table><p class="footer">Generated by GB Buildcon · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
+    printHTML(`Party Ledger — ${party.name}`,`<h2>Party Ledger — ${party.name}</h2><p>${party.type} &nbsp;|&nbsp; Balance: <strong>₹${fmtN(party.balance)}</strong> (${party.balType})</p><table><tr><th>Date</th><th>Description</th><th style="text-align:right">Received (CR)</th><th style="text-align:right">Bill/Paid Out (DR)</th><th style="text-align:right">Balance</th></tr>${rowsHTML}</table><p class="footer">Generated by Company · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
   };
 
   // ── Transaction CSV/PDF ──────────────────────────────────────
   const dlTxnCSV=()=>{
     downloadCSV("Transactions.csv",[
-      ["GB Buildcon — Transactions"],["Date","Party","Note","Project","Type","Account","Amount","DR/CR","Status"],
+      ["Company — Transactions"],["Date","Party","Note","Project","Type","Account","Amount","DR/CR","Status"],
       ...txnFiltered.map(t=>[t.date,t.party,t.sub,t.project,t.type,t.account,t.amount,t.dr?"DR":"CR",t.status]),
       [],[,"IN",tIn,,"OUT",tOut,,"NET",tIn-tOut],
     ]);
   };
   const dlTxnPDF=()=>{
     const rowsHTML=txnFiltered.map(t=>`<tr><td>${t.date}</td><td><strong>${t.party}</strong><br/><span style="font-size:10px;color:#6B7280">${t.sub}</span></td><td>${t.project}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:#F1F5F9;color:#64748B">${t.type}</span></td><td>${t.account}</td><td style="font-weight:700;color:${t.dr?"#DC2626":"#059669"}">${t.dr?"−":"+"} ₹${fmtN(t.amount)}</td><td><span style="font-size:10px;padding:1px 6px;border-radius:20px;background:${t.status==="paid"?"#ECFDF5":t.status==="unbilled"?"#F5F3FF":"#FEF2F2"};color:${t.status==="paid"?"#059669":t.status==="unbilled"?"#7C3AED":"#DC2626"}">${t.status}</span></td></tr>`).join("");
-    printHTML("Transactions — GB Buildcon",`<h2>Transactions — GB Buildcon</h2><p>${txnFiltered.length} entries &nbsp;|&nbsp; IN: ₹${fmtN(tIn)} &nbsp;|&nbsp; OUT: ₹${fmtN(tOut)} &nbsp;|&nbsp; NET: ₹${fmtN(tIn-tOut)}</p><table><tr><th>Date</th><th>Party / Note</th><th>Project</th><th>Type</th><th>Account</th><th>Amount</th><th>Status</th></tr>${rowsHTML}</table><p class="footer">Generated by GB Buildcon</p>`);
+    printHTML("Transactions — Company",`<h2>Transactions — Company</h2><p>${txnFiltered.length} entries &nbsp;|&nbsp; IN: ₹${fmtN(tIn)} &nbsp;|&nbsp; OUT: ₹${fmtN(tOut)} &nbsp;|&nbsp; NET: ₹${fmtN(tIn-tOut)}</p><table><tr><th>Date</th><th>Party / Note</th><th>Project</th><th>Type</th><th>Account</th><th>Amount</th><th>Status</th></tr>${rowsHTML}</table><p class="footer">Generated by Company</p>`);
   };
 
   // ── Payment Requests CSV/PDF ──────────────────────────────────
   const dlPRcsv=()=>{
     downloadCSV("Payment_Requests.csv",[
-      ["GB Buildcon — Payment Requests"],["PR No.","Date","Party","Project","Amount","Status","Requested By"],
+      ["Company — Payment Requests"],["PR No.","Date","Party","Project","Amount","Status","Requested By"],
       ...payReqs.map(r=>[r.no,r.date,r.party,r.project,r.amount,r.status,r.by]),
     ]);
   };
   const dlPRpdf=()=>{
     const rowsHTML=payReqs.map(r=>`<tr><td><strong>${r.no}</strong></td><td>${r.date}</td><td>${r.party}</td><td>${r.project}</td><td style="font-weight:700">₹${fmtN(r.amount)}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${r.status==="Approved"?"#ECFDF5":r.status==="Rejected"?"#FEF2F2":"#FFFBEB"};color:${r.status==="Approved"?"#059669":r.status==="Rejected"?"#DC2626":"#D97706"}">${r.status}</span></td><td>${r.by}</td></tr>`).join("");
-    printHTML("Payment Requests — GB Buildcon",`<h2>Payment Requests — GB Buildcon</h2><p>Total ${payReqs.length} requests</p><table><tr><th>PR No.</th><th>Date</th><th>Party</th><th>Project</th><th>Amount</th><th>Status</th><th>Requested By</th></tr>${rowsHTML}</table><p class="footer">Generated by GB Buildcon</p>`);
+    printHTML("Payment Requests — Company",`<h2>Payment Requests — Company</h2><p>Total ${payReqs.length} requests</p><table><tr><th>PR No.</th><th>Date</th><th>Party</th><th>Project</th><th>Amount</th><th>Status</th><th>Requested By</th></tr>${rowsHTML}</table><p class="footer">Generated by Company</p>`);
   };
 
   // ── Pending Payments CSV/PDF ──────────────────────────────────
   const dlPendCSV=()=>{
     downloadCSV("Pending_Payments.csv",[
-      ["GB Buildcon — Pending Payments"],["Ref No.","Type","Party","Project","Amount","Due Date","Overdue"],
+      ["Company — Pending Payments"],["Ref No.","Type","Party","Project","Amount","Due Date","Overdue"],
       ...pendPmts.map(p=>[p.no,p.type==="pr"?"Approved PR":"Bill Due",p.party,p.project,p.amount,p.date,p.overdue?"YES":"NO"]),
       [],[,"","","TOTAL",pendTotal,"",""],
     ]);
   };
   const dlPendPDF=()=>{
     const rowsHTML=pendPmts.map(p=>`<tr style="${p.overdue?"background:#FEF2F2":""}"><td>${p.no}</td><td><span style="font-size:10px;padding:2px 7px;border-radius:20px;background:${p.type==="pr"?"#ECFDF5":"#FFFBEB"};color:${p.type==="pr"?"#059669":"#D97706"}">${p.type==="pr"?"Approved PR":"Bill Due"}</span></td><td><strong>${p.party}</strong></td><td>${p.project}</td><td style="font-weight:700;color:${p.overdue?"#DC2626":"#111827"}">₹${fmtN(p.amount)}</td><td style="color:${p.overdue?"#DC2626":"#374151"}">${p.date}${p.overdue?" <strong style='color:#DC2626'>OVERDUE</strong>":""}</td></tr>`).join("");
-    printHTML("Pending Payments — GB Buildcon",`<h2>Pending Payments — GB Buildcon</h2><p>${pendPmts.length} items &nbsp;|&nbsp; Total: ₹${fmtN(pendTotal)} &nbsp;|&nbsp; Overdue: ₹${fmtN(pendOverdue)}</p><table><tr><th>Ref No.</th><th>Type</th><th>Party</th><th>Project</th><th>Amount</th><th>Due Date</th></tr>${rowsHTML}<tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td style="font-weight:800;color:#2563EB">₹${fmtN(pendTotal)}</td><td></td></tr></table><p class="footer">Generated by GB Buildcon</p>`);
+    printHTML("Pending Payments — Company",`<h2>Pending Payments — Company</h2><p>${pendPmts.length} items &nbsp;|&nbsp; Total: ₹${fmtN(pendTotal)} &nbsp;|&nbsp; Overdue: ₹${fmtN(pendOverdue)}</p><table><tr><th>Ref No.</th><th>Type</th><th>Party</th><th>Project</th><th>Amount</th><th>Due Date</th></tr>${rowsHTML}<tr><td colspan="4" style="text-align:right;font-weight:700">TOTAL</td><td style="font-weight:800;color:#2563EB">₹${fmtN(pendTotal)}</td><td></td></tr></table><p class="footer">Generated by Company</p>`);
   };
 
-  const APPROVER_NAME="Prafull"; // logged-in admin
+  const APPROVER_NAME=localStorage.getItem("gb_user_name")||"Admin"; // logged-in admin
   const approveReq=async(id)=>{
     const req=payReqs.find(r=>r.id===id);
     // Optimistic update
@@ -2557,7 +2464,7 @@ function FinanceModule(){
                                 <div style={{display:"flex",gap:6}}>
                                   <button onClick={()=>{
                                     const lines=hasItems?txn.items.map(it=>`<tr><td>${it.name||it.item||""}</td><td style="text-align:center">${it.qty||""} ${it.unit||""}</td><td style="text-align:right">₹${fmtN(it.rate||it.amt/it.qty||0)}</td><td style="text-align:right;font-weight:700">₹${fmtN(it.amt||it.amount||0)}</td></tr>`).join(""):`<tr><td colspan="4" style="text-align:center;color:#6B7280">No line items recorded</td></tr>`;
-                                    printHTML(`Bill — ${selParty.name}`,`<h2>Purchase Bill</h2><p><strong>Supplier:</strong> ${selParty.name} &nbsp;|&nbsp; <strong>Date:</strong> ${txn.date} &nbsp;|&nbsp; <strong>Status:</strong> ${txn.status}</p><p>${txn.note}</p><table><tr><th>Item</th><th style="text-align:center">Qty / Unit</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th></tr>${lines}<tr><td colspan="3" style="text-align:right;font-weight:700;border-top:2px solid #E5E7EB">TOTAL</td><td style="text-align:right;font-weight:800;color:#2563EB">₹${fmtN(txn.amount)}</td></tr></table><p class="footer">Generated by GB Buildcon · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
+                                    printHTML(`Bill — ${selParty.name}`,`<h2>Purchase Bill</h2><p><strong>Supplier:</strong> ${selParty.name} &nbsp;|&nbsp; <strong>Date:</strong> ${txn.date} &nbsp;|&nbsp; <strong>Status:</strong> ${txn.status}</p><p>${txn.note}</p><table><tr><th>Item</th><th style="text-align:center">Qty / Unit</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th></tr>${lines}<tr><td colspan="3" style="text-align:right;font-weight:700;border-top:2px solid #E5E7EB">TOTAL</td><td style="text-align:right;font-weight:800;color:#2563EB">₹${fmtN(txn.amount)}</td></tr></table><p class="footer">Generated by Company · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
                                   }} style={{padding:"4px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
                                     Print Bill
                                   </button>

@@ -80,7 +80,7 @@ export default function ClientPreview3D() {
       <div style={{ textAlign: "center", maxWidth: 400, padding: 32 }}>
         <div style={{ fontSize: 48, marginBottom: 16 }}>🔗</div>
         <div style={{ fontSize: 18, fontWeight: 700, color: "#EF4444", marginBottom: 8 }}>Link Invalid or Expired</div>
-        <div style={{ fontSize: 14, color: T.t3, lineHeight: 1.6 }}>{error}<br />Please contact GB Buildcon for a new link.</div>
+        <div style={{ fontSize: 14, color: T.t3, lineHeight: 1.6 }}>{error}<br />Please contact the team for a new link.</div>
       </div>
     </div>
   );
@@ -97,7 +97,7 @@ export default function ClientPreview3D() {
         </div>
         <div style={{ fontSize: 14, color: T.t2, lineHeight: 1.7, marginBottom: 24 }}>{submitMsg}</div>
         <div style={{ padding: "14px 20px", background: T.surface, borderRadius: 10, border: `1px solid ${T.b1}`, fontSize: 13, color: T.t3 }}>
-          GB Buildcon team has been notified. We'll get back to you shortly.
+          The team has been notified. We'll get back to you shortly.
         </div>
       </div>
     </div>
@@ -114,7 +114,7 @@ export default function ClientPreview3D() {
             <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6" /></svg>
           </div>
           <div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>GB Buildcon</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>Construction Manager</div>
             <div style={{ fontSize: 11, color: T.t4 }}>3D Design Preview</div>
           </div>
         </div>
@@ -237,7 +237,7 @@ export default function ClientPreview3D() {
           {action === "approve" && (
             <div style={{ padding: "12px 14px", background: "#064E3B", borderRadius: 8, border: `1px solid ${T.grnM}30`, marginBottom: 16 }}>
               <div style={{ fontSize: 13, color: T.grn, lineHeight: 1.6 }}>
-                ✓ You are approving this 3D render. GB Buildcon team will proceed with finalisation.
+                ✓ You are approving this 3D render. The team will proceed with finalisation.
               </div>
             </div>
           )}
@@ -253,7 +253,7 @@ export default function ClientPreview3D() {
 
         {/* Footer */}
         <div style={{ textAlign: "center", padding: "24px 0", color: T.t4, fontSize: 12 }}>
-          Powered by <strong style={{ color: T.t3 }}>GB Buildcon</strong> · Construction Management Platform
+          Powered by <strong style={{ color: T.t3 }}>Construction Manager</strong> · Construction Management Platform
         </div>
       </div>
     </div>

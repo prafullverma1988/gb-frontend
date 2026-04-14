@@ -49,8 +49,8 @@ const fmtShort=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:
 const TODAY=new Date().toISOString().split("T")[0];
 
 // ── CONSTANTS ──────────────────────────────────────────────────
-const TEAM=["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka","Ramesh","Client"];
-const SITES=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office","Central Office","All Sites"];
+const TEAM=[];
+const SITES=[];
 const MEETING_TYPES=["Site Review","Client Meeting","Internal Team","Progress Review","Design Review","Safety Audit","Financial Review","Other"];
 
 const NAV=[
@@ -75,107 +75,7 @@ const NAV=[
 ];
 
 // ── MOM DATA ───────────────────────────────────────────────────
-const INIT_MOMS=[
-  {
-    id:"MOM-001",
-    title:"GF Slab Progress & Waterproofing Decision",
-    date:"2026-03-15",time:"10:30 AM",
-    type:"Site Review",site:"Shubham & NK 623",
-    venue:"Site Office, Tatibandh",
-    conductedBy:"Vijay Sahu",
-    attendees:["Prafull","Vijay Sahu","Niranjan","Client"],
-    agenda:"1. GF slab progress review\n2. Waterproofing treatment decision\n3. Next pour schedule",
-    discussion:[
-      {point:"GF slab 72% complete. Remaining shuttering to be done by 18th March. Vijay confirmed no major issues with alignment."},
-      {point:"Client Nand Kishor Agrawal raised concern about waterproofing specification. Agreed to use Dr. Fixit Torchshield 4mm as per drawing D-WP-01."},
-      {point:"Concrete pour scheduled for 20th March, subject to weather. Niranjan to arrange pump and curing compound."},
-      {point:"Safety helmet compliance was 90%. Vijay to ensure 100% PPE from next visit."},
-    ],
-    actionItems:[
-      {id:"A1",task:"Arrange waterproofing material Dr. Fixit Torchshield 4mm (200 sqm)",assignee:"Vijay Sahu",dueDate:"2026-03-19",status:"Pending",priority:"High"},
-      {id:"A2",task:"Complete remaining shuttering alignment check",assignee:"Niranjan",dueDate:"2026-03-18",status:"Pending",priority:"High"},
-      {id:"A3",task:"Book concrete pump for 20 March pour",assignee:"Vijay Sahu",dueDate:"2026-03-18",status:"Done",priority:"Medium"},
-      {id:"A4",task:"Send updated site photos to client WhatsApp",assignee:"Prafull",dueDate:"2026-03-16",status:"Done",priority:"Low"},
-    ],
-    nextMeeting:{date:"2026-03-22",time:"11:00 AM",agenda:"Post-slab pour review"},
-    notes:"Client is satisfied with overall progress. Next payment milestone (₹8.5L) expected after slab completion.",
-    createdAt:"2026-03-15",sharedWith:["Client"],status:"Finalized"
-  },
-  {
-    id:"MOM-002",
-    title:"Monthly Progress Review — All Projects",
-    date:"2026-03-10",time:"3:00 PM",
-    type:"Progress Review",site:"Central Office",
-    venue:"GB Buildcon Head Office, Raipur",
-    conductedBy:"Prafull",
-    attendees:["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka","Ramesh"],
-    agenda:"1. Monthly progress update all 5 sites\n2. Procurement pending items\n3. Team workload discussion",
-    discussion:[
-      {point:"Shubham site 68% — on track. GF slab pour pending. No major delays."},
-      {point:"Tikendra site 42% — slightly behind. Brickwork contractor issue resolved. Niranjan to expedite."},
-      {point:"Esther Risali 91% — near completion. Final billing preparation to start. Harsh to prepare final BOQ."},
-      {point:"Amarendra Villa 23% — foundation complete. Brickwork starting 15 March."},
-      {point:"Neha Sagar Office 55% — electrical short circuit issue resolved. Priyanka confirmed safe to proceed."},
-      {point:"Tile procurement for Esther delayed. Ramesh to follow up with Somany."},
-    ],
-    actionItems:[
-      {id:"A1",task:"Prepare final BOQ for Esther Risali",assignee:"Harsh Sahu",dueDate:"2026-03-20",status:"In Progress",priority:"High"},
-      {id:"A2",task:"Expedite Tikendra brickwork — target 1200 bricks/day",assignee:"Niranjan",dueDate:"2026-03-31",status:"Pending",priority:"Medium"},
-      {id:"A3",task:"Follow up Somany for tile delivery — replacement of wrong batch",assignee:"Ramesh",dueDate:"2026-03-17",status:"Pending",priority:"High"},
-      {id:"A4",task:"Resume electrical work Neha Sagar after safety check",assignee:"Priyanka",dueDate:"2026-03-14",status:"Done",priority:"High"},
-      {id:"A5",task:"Prepare March salary for all daily workers",assignee:"Prafull",dueDate:"2026-03-30",status:"Pending",priority:"Medium"},
-    ],
-    nextMeeting:{date:"2026-04-10",time:"3:00 PM",agenda:"April monthly progress review"},
-    notes:"Overall portfolio health is good. Esther project completion will free up Harsh Sahu for new design work.",
-    createdAt:"2026-03-10",sharedWith:[],status:"Finalized"
-  },
-  {
-    id:"MOM-003",
-    title:"Amarendra Villa — Design Finalization",
-    date:"2026-03-08",time:"4:30 PM",
-    type:"Design Review",site:"Amarendra Villa",
-    venue:"Client Residence, Shankar Nagar",
-    conductedBy:"Prafull",
-    attendees:["Prafull","Harsh Sahu","Client"],
-    agenda:"1. Floor plan approval\n2. Elevation design review\n3. Material specifications finalization",
-    discussion:[
-      {point:"Client Amarendra Shrivastava approved revised floor plan with 3 bedrooms + study. Area: 2800 sqft."},
-      {point:"Elevation design Option B selected — contemporary style with ACP cladding on front."},
-      {point:"Flooring: Italian marble in living, vitrified tiles in bedrooms. Client to confirm brand by 15 March."},
-      {point:"Kitchen platform to be granite (Black Galaxy). Harsh to include in BOQ revision."},
-    ],
-    actionItems:[
-      {id:"A1",task:"Revise BOQ with approved specs",assignee:"Harsh Sahu",dueDate:"2026-03-15",status:"Done",priority:"High"},
-      {id:"A2",task:"Send revised elevation drawing for client approval",assignee:"Harsh Sahu",dueDate:"2026-03-12",status:"Done",priority:"High"},
-      {id:"A3",task:"Client to confirm flooring brand",assignee:"Client",dueDate:"2026-03-15",status:"Pending",priority:"Medium"},
-    ],
-    nextMeeting:{date:"2026-03-25",time:"4:00 PM",agenda:"Foundation progress review + structure start"},
-    notes:"Client very satisfied with design direction. Advance payment of ₹5.6L expected after BOQ approval.",
-    createdAt:"2026-03-08",sharedWith:["Client"],status:"Finalized"
-  },
-  {
-    id:"MOM-004",
-    title:"Neha Sagar Office — Electrical Safety Review",
-    date:"2026-03-14",time:"2:00 PM",
-    type:"Safety Audit",site:"Neha Sagar Office",
-    venue:"Site — Neha Sagar Office, Durg",
-    conductedBy:"Priyanka",
-    attendees:["Prafull","Priyanka","Ramesh"],
-    agenda:"1. Electrical short circuit incident review\n2. Corrective action plan\n3. Safety protocol update",
-    discussion:[
-      {point:"Short circuit found near water pipe in GF. Priyanka identified faulty conduit routing as root cause."},
-      {point:"Immediate work stoppage was correct decision. Re-routing plan approved."},
-      {point:"Rajesh Electrician to assist in re-routing. New conduit path via false ceiling confirmed."},
-    ],
-    actionItems:[
-      {id:"A1",task:"Complete electrical re-routing GF",assignee:"Priyanka",dueDate:"2026-03-16",status:"Done",priority:"High"},
-      {id:"A2",task:"Safety inspector visit and clearance",assignee:"Prafull",dueDate:"2026-03-17",status:"Pending",priority:"High"},
-    ],
-    nextMeeting:{date:"2026-03-20",time:"2:00 PM",agenda:"Electrical work resumption review"},
-    notes:"Work has resumed after re-routing. All wiring now ISI certified. Client Neha Sagar Ltd informed.",
-    createdAt:"2026-03-14",sharedWith:[],status:"Finalized"
-  },
-];
+const INIT_MOMS=[];
 
 // ── SHARED ─────────────────────────────────────────────────────
 const Pill=({label,c,bg,brd})=>(
@@ -185,7 +85,7 @@ function Avatar({name,size=28,color=T.blu}){
   const ini=name.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase();
   return<div style={{width:size,height:size,borderRadius:"50%",background:`linear-gradient(135deg,${color},${color}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:size*0.35,fontWeight:700,color:"white",flexShrink:0}}>{ini}</div>;
 }
-const AVATAR_COLORS={"Prafull":"#FF6F00","Vijay Sahu":"#2563EB","Niranjan":"#7C3AED","Harsh Sahu":"#059669","Priyanka":"#D97706","Ramesh":"#0891B2","Client":"#64748B"};
+const AVATAR_COLORS={};
 
 
 // ── MOM CARD ───────────────────────────────────────────────────
@@ -315,7 +215,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
     <table><tr><th>Task</th><th>Assigned To</th><th>Due Date</th><th>Status</th><th>Priority</th></tr>${actionsHTML}</table>
     ${mom.nextMeeting?`<h3>Next Meeting</h3><p><b>Date:</b> ${fmtDate(mom.nextMeeting.date)} · ${mom.nextMeeting.time}<br/><b>Agenda:</b> ${mom.nextMeeting.agenda}</p>`:""}
     ${mom.notes?`<h3>Notes</h3><p>${mom.notes}</p>`:""}
-    <p style="font-size:10px;color:#9CA3AF;margin-top:24px;border-top:1px solid #E5E7EB;padding-top:8px">Generated by GB Buildcon MOM System · ${new Date().toLocaleDateString("en-IN")}</p>
+    <p style="font-size:10px;color:#9CA3AF;margin-top:24px;border-top:1px solid #E5E7EB;padding-top:8px">Generated by MOM System · ${new Date().toLocaleDateString("en-IN")}</p>
     </body></html>`);
     w.document.close();
     setTimeout(()=>w.print(),400);
@@ -506,7 +406,7 @@ function CreateMOMModal({onClose,onSave}){
   const [step,setStep]=useState(1); // 1=details, 2=discussion, 3=actions
   const [form,setForm]=useState({
     title:"",type:"Site Review",site:SITES[0],venue:"",
-    date:TODAY,time:"10:00 AM",conductedBy:"Prafull",
+    date:TODAY,time:"10:00 AM",conductedBy:localStorage.getItem("gb_user_name")||"",
     attendees:[],agenda:"",notes:"",
     nextMeetingDate:"",nextMeetingTime:"",nextMeetingAgenda:"",
   });

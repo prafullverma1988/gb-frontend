@@ -185,19 +185,33 @@ function Modal({ open, onClose, title, desc, width = 560, children }) {
 // ═══════════════════════════════════════════════════════════════════════
 function CompanySettings() {
   const [company, setCompany] = useState({
-    name: "GB Buildcon Pvt. Ltd.", legalName: "Greenbox Buildcon Private Limited",
-    gstin: "22AABCG1234F1Z5", pan: "AABCG1234F",
-    address: "123, Civil Lines, Shankar Nagar", city: "Raipur", state: "Chhattisgarh", pincode: "492001",
-    phone: "+91 98765 43210", email: "info@gbbuildcon.com", website: "www.gbbuildcon.com",
+    name: "", legalName: "", gstin: "", pan: "",
+    address: "", city: "", state: "", pincode: "",
+    phone: "", email: "", website: "",
   });
+  const [loading, setLoading] = useState(true);
   const upd = (k, v) => setCompany(p => ({ ...p, [k]: v }));
+
+  useEffect(() => {
+    api.get("/settings/company").then(res => {
+      if (res.success && res.data) {
+        const d = res.data;
+        setCompany({
+          name: d.name || "", legalName: d.legal_name || "", gstin: d.gstin || "", pan: d.pan || "",
+          address: d.address || "", city: d.city || "", state: d.state || "", pincode: d.pincode || "",
+          phone: d.phone || "", email: d.email || "", website: d.website || "", logo_url: d.logo_url || "",
+        });
+      }
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
 
   return (
     <div>
       <SectionCard title="Company Profile" desc="Basic company information visible on invoices and reports" action={<SaveBtn />}>
         <div style={{ display: "flex", gap: 20, alignItems: "center", padding: "14px 0 20px", borderBottom: `1px solid ${T.borderLight}`, marginBottom: 16 }}>
           <div style={{ width: 80, height: 80, borderRadius: 14, background: "linear-gradient(135deg, #1565C0, #FF6F00)", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 4px 14px rgba(21,101,192,0.3)" }}>
-            <span style={{ color: "white", fontSize: 28, fontWeight: 800 }}>GB</span>
+            <span style={{ color: "white", fontSize: 28, fontWeight: 800 }}>{(company.name || "CO").split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase()}</span>
           </div>
           <div>
             <div style={{ fontSize: 14, fontWeight: 600, color: T.text }}>Company Logo</div>
@@ -1044,15 +1058,11 @@ function BackDateControl() {
 // BANK DETAILS — With edit modal
 // ═══════════════════════════════════════════════════════════════════════
 function BankDetails() {
-  const [banks, setBanks] = useState([
-    { id: 1, bankName: "HDFC Bank", label: "HDFC Bank - Current Account", accNo: "50100XXXXXX789", accHolder: "Greenbox Buildcon Pvt Ltd", ifsc: "HDFC0001234", branch: "Shankar Nagar, Raipur", type: "Current", isPrimary: true, upi: "gbbuildcon@hdfcbank", swiftCode: "" },
-    { id: 2, bankName: "SBI", label: "SBI - Savings Account", accNo: "3876XXXXXXX456", accHolder: "Greenbox Buildcon Pvt Ltd", ifsc: "SBIN0005678", branch: "Civil Lines, Raipur", type: "Savings", isPrimary: false, upi: "", swiftCode: "" },
-    { id: 3, bankName: "ICICI", label: "ICICI - Project Escrow", accNo: "1234XXXXXXX012", accHolder: "Greenbox Buildcon Pvt Ltd", ifsc: "ICIC0009012", branch: "Telibandha, Raipur", type: "Escrow", isPrimary: false, upi: "", swiftCode: "" },
-  ]);
+  const [banks, setBanks] = useState([]);
 
   const [showModal, setShowModal] = useState(false);
   const [editBank, setEditBank] = useState(null);
-  const emptyBank = { bankName: "", label: "", accNo: "", accHolder: "Greenbox Buildcon Pvt Ltd", ifsc: "", branch: "", type: "Current", isPrimary: false, upi: "", swiftCode: "" };
+  const emptyBank = { bankName: "", label: "", accNo: "", accHolder: "", ifsc: "", branch: "", type: "Current", isPrimary: false, upi: "", swiftCode: "" };
   const [bankForm, setBankForm] = useState(emptyBank);
 
   const openCreate = () => { setEditBank(null); setBankForm(emptyBank); setShowModal(true); };
@@ -1341,7 +1351,7 @@ function NotificationSettings() {
             <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>DPR Message Preview</span>
           </div>
           <div style={{ background: "white", borderRadius: 10, padding: "14px 16px", fontSize: 12.5, color: T.textMid, lineHeight: 1.7, border: `1px solid ${T.border}` }}>
-            <div style={{ fontWeight: 700, color: T.text, marginBottom: 4 }}>GB Buildcon — Daily Progress Report</div>
+            <div style={{ fontWeight: 700, color: T.text, marginBottom: 4 }}>Daily Progress Report</div>
             <div>Date: {"{{date}}"}</div>
             <div>Project: {"{{project_name}}"}</div>
             <div style={{ marginTop: 6, fontWeight: 600, color: T.text }}>Today's Progress:</div>
@@ -1351,7 +1361,7 @@ function NotificationSettings() {
             <div>- Site expense: Rs.{"{{expense_total}}"}</div>
             <div style={{ marginTop: 6, fontWeight: 600, color: T.text }}>Issues / Remarks:</div>
             <div>{"{{remarks}}"}</div>
-            <div style={{ marginTop: 8, fontSize: 11, color: T.textLight }}>Sent from GB Buildcon App</div>
+            <div style={{ marginTop: 8, fontSize: 11, color: T.textLight }}>Sent from Construction Manager App</div>
           </div>
           <div style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
             <FormSelect label="Send DPR At" value="18:00" onChange={() => {}} options={[{value:"17:00",label:"5:00 PM"},{value:"18:00",label:"6:00 PM"},{value:"19:00",label:"7:00 PM"},{value:"20:00",label:"8:00 PM"}]} half />
@@ -1475,7 +1485,7 @@ export default function SettingsModule() {
             );
           })}
         </nav>
-        <div style={{ padding: "14px 20px", borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textLight }}>GB Buildcon v2.1</div>
+        <div style={{ padding: "14px 20px", borderTop: `1px solid ${T.border}`, fontSize: 11, color: T.textLight }}>Construction Manager v2.1</div>
       </div>
 
       {/* Content */}

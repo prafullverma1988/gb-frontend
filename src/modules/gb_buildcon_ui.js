@@ -55,16 +55,7 @@ const C = {
 };
 
 // ─── PROJECT DATA ─────────────────────────────────────────────────────
-const projects = [
-  { id: 1, name: "Shubham & Nand Kishor 623", client: "Nand Kishor Agrawal", city: "Raipur", type: "Residential", progress: 68, status: "Ongoing", boq: 4250000, expense: 2890000, pm: "Vijay Sahu", start: "Jan 2025", end: "Aug 2025" },
-  { id: 2, name: "Tikendra Banchhor Residence", client: "Tikendra Banchhor", city: "Raipur", type: "Residential", progress: 42, status: "Ongoing", boq: 3100000, expense: 1302000, pm: "Niranjan", start: "Mar 2025", end: "Dec 2025" },
-  { id: 3, name: "Esther Risali Commercial", client: "Esther Group", city: "Bilaspur", type: "Commercial", progress: 91, status: "Ongoing", boq: 8750000, expense: 7963000, pm: "Harsh Sahu", start: "Jun 2024", end: "Apr 2025" },
-  { id: 4, name: "Amarendra Shrivastava Villa", client: "Amarendra Shrivastava", city: "Raipur", type: "Residential", progress: 23, status: "Ongoing", boq: 5600000, expense: 1288000, pm: "Vijay Sahu", start: "May 2025", end: "Feb 2026" },
-  { id: 5, name: "Shyam Ji Township Phase 1", client: "Shyam Developers", city: "Bhilai", type: "Commercial", progress: 100, status: "Completed", boq: 12000000, expense: 11200000, pm: "Niranjan", start: "Jan 2024", end: "Dec 2024" },
-  { id: 6, name: "Simran Kaur Bungalow", client: "Simran Kaur", city: "Raipur", type: "Residential", progress: 0, status: "Not Started", boq: 2800000, expense: 0, pm: "Priyanka", start: "Jun 2025", end: "Mar 2026" },
-  { id: 7, name: "Neha Sagar Office Complex", client: "Neha Sagar Ltd", city: "Durg", type: "Commercial", progress: 55, status: "Hold", boq: 6400000, expense: 3520000, pm: "Harsh Sahu", start: "Feb 2025", end: "Nov 2025" },
-  { id: 8, name: "Bablu Mehta Farmhouse", client: "Bablu Mehta", city: "Raipur", type: "Residential", progress: 78, status: "Ongoing", boq: 1900000, expense: 1482000, pm: "Vijay Sahu", start: "Nov 2024", end: "May 2025" },
-];
+const projects = [];
 
 const statusMeta = {
   "Ongoing":     { bg: C.greenL,  text: C.green,  dot: C.green  },
@@ -104,7 +95,7 @@ function LoginScreen({ onLogin }) {
               <path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6M12 3v18" />
             </svg>
           </div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: "-0.5px" }}>GB Buildcon</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: C.text, letterSpacing: "-0.5px" }}>Construction Manager</div>
           <div style={{ fontSize: 13, color: C.textLight, marginTop: 4, fontWeight: 500 }}>Construction Management Platform</div>
         </div>
 
@@ -168,7 +159,7 @@ function Sidebar({ active, setActive, collapsed, setCollapsed }) {
         </div>
         {!collapsed && (
           <div>
-            <div style={{ color: "white", fontWeight: 800, fontSize: 15, letterSpacing: "-0.3px" }}>GB Buildcon</div>
+            <div style={{ color: "white", fontWeight: 800, fontSize: 15, letterSpacing: "-0.3px" }}>Construction Manager</div>
             <div style={{ color: "rgba(255,255,255,0.4)", fontSize: 10, fontWeight: 500, letterSpacing: "0.8px", textTransform: "uppercase" }}>Construction</div>
           </div>
         )}
@@ -202,11 +193,11 @@ function Sidebar({ active, setActive, collapsed, setCollapsed }) {
 
       {/* User area */}
       <div style={{ padding: collapsed ? "12px 0" : "12px 16px", borderTop: "1px solid rgba(255,255,255,0.07)", display: "flex", alignItems: "center", gap: 10, justifyContent: collapsed ? "center" : "flex-start" }}>
-        <div style={{ width: 32, height: 32, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, #FF8F00)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "white" }}>P</div>
+        <div style={{ width: 32, height: 32, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, #FF8F00)`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 13, fontWeight: 700, color: "white" }}>{(localStorage.getItem("gb_user_name")||"U")[0]}</div>
         {!collapsed && (
           <div style={{ overflow: "hidden" }}>
-            <div style={{ color: "white", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Prafull</div>
-            <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>Admin</div>
+            <div style={{ color: "white", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{localStorage.getItem("gb_user_name")||"User"}</div>
+            <div style={{ color: "rgba(255,255,255,0.35)", fontSize: 11 }}>{localStorage.getItem("gb_user_role")||"Admin"}</div>
           </div>
         )}
       </div>
@@ -460,7 +451,7 @@ export default function App() {
               onMouseEnter={e => e.currentTarget.style.background = C.bg}
               onMouseLeave={e => e.currentTarget.style.background = "none"}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-              GB Buildcon
+              Construction Manager
             </button>
             <span style={{ color: C.textLight, fontSize: 14 }}>›</span>
             <button onClick={() => { setOpenedProject(null); setActiveNav("projects"); }}
@@ -477,7 +468,7 @@ export default function App() {
               <IcBell size={18} />
               <div style={{ position: "absolute", top: 6, right: 6, width: 7, height: 7, borderRadius: "50%", background: C.accent, border: "2px solid white" }} />
             </button>
-            <div style={{ width: 32, height: 32, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, #FF8F00)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "white" }}>P</div>
+            <div style={{ width: 32, height: 32, borderRadius: "50%", background: `linear-gradient(135deg, ${C.accent}, #FF8F00)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13, fontWeight: 700, color: "white" }}>{(localStorage.getItem("gb_user_name")||"U")[0]}</div>
           </div>
         ) : (
           <TopBar title={page.title} subtitle={page.sub} collapsed={sidebarCollapsed} setCollapsed={setSidebarCollapsed} />

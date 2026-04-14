@@ -99,70 +99,16 @@ const NAV_GROUPS=[
 
 // ── PROJECTS DATA ────────────────────────────────────────────────────
 
-const PROJECTS_DATA=[
-  {id:1,name:"Shubham & Nand Kishor 623",client:"Nand Kishor Agrawal",city:"Raipur",type:"Residential",progress:68,status:"Ongoing",boq:4250000,expense:2890000,pm:"Vijay Sahu",start:"Jan 2025",end:"Aug 2025"},
-  {id:2,name:"Tikendra Banchhor Residence",client:"Tikendra Banchhor",city:"Raipur",type:"Residential",progress:42,status:"Ongoing",boq:3100000,expense:1302000,pm:"Niranjan",start:"Mar 2025",end:"Dec 2025"},
-  {id:3,name:"Esther Risali Commercial",client:"Esther Group",city:"Bilaspur",type:"Commercial",progress:91,status:"Ongoing",boq:8750000,expense:7963000,pm:"Harsh Sahu",start:"Jun 2024",end:"Apr 2025"},
-  {id:4,name:"Amarendra Shrivastava Villa",client:"Amarendra Shrivastava",city:"Raipur",type:"Residential",progress:23,status:"Ongoing",boq:5600000,expense:1288000,pm:"Vijay Sahu",start:"May 2025",end:"Feb 2026"},
-  {id:5,name:"Shyam Ji Township Phase 1",client:"Shyam Developers",city:"Bhilai",type:"Commercial",progress:100,status:"Completed",boq:12000000,expense:11200000,pm:"Niranjan",start:"Jan 2024",end:"Dec 2024"},
-  {id:6,name:"Simran Kaur Bungalow",client:"Simran Kaur",city:"Raipur",type:"Residential",progress:0,status:"Not Started",boq:2800000,expense:0,pm:"Priyanka",start:"Jun 2025",end:"Mar 2026"},
-  {id:7,name:"Neha Sagar Office Complex",client:"Neha Sagar Ltd",city:"Durg",type:"Commercial",progress:55,status:"Hold",boq:6400000,expense:3520000,pm:"Harsh Sahu",start:"Feb 2025",end:"Nov 2025"},
-  {id:8,name:"Bablu Mehta Farmhouse",client:"Bablu Mehta",city:"Raipur",type:"Residential",progress:78,status:"Ongoing",boq:1900000,expense:1482000,pm:"Vijay Sahu",start:"Nov 2024",end:"May 2025"},
-];
-const TEAM=[
-  {id:1,name:"Vijay Sahu",role:"Project Manager",color:"#1565C0",initials:"VS"},
-  {id:2,name:"Harsh Sahu",role:"Project Manager",color:"#2E7D32",initials:"HS"},
-  {id:3,name:"Niranjan",role:"Site Supervisor",color:"#6A1B9A",initials:"NJ"},
-  {id:4,name:"Priyanka",role:"Project Manager",color:"#AD1457",initials:"PK"},
-  {id:5,name:"Sunny",role:"Site Engineer",color:"#00695C",initials:"SN"},
-];
-const PULSE_FEED=[
-  {id:1,type:"photo",user:"Vijay Sahu",role:"PM",site:"Shubham 623",time:"2h ago",img:"https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=400&h=260&fit=crop",caption:"Slab casting complete — 3rd floor RCC done ✅",likes:12,comments:3,tag:"progress",ac:"#1565C0"},
-  {id:2,type:"material",user:"Niranjan",role:"Supervisor",site:"Tikendra Residence",time:"3h ago",img:null,caption:"50 bags cement received from Abhay Traders 📦",likes:4,comments:1,tag:"material",ac:"#6A1B9A"},
-  {id:3,type:"photo",user:"Harsh Sahu",role:"PM",site:"Esther Risali",time:"5h ago",img:"https://images.unsplash.com/photo-1541888946425-d81bb19240f5?w=400&h=260&fit=crop",caption:"Brickwork 2nd floor 80% done, pace is great 💪",likes:18,comments:5,tag:"progress",ac:"#2E7D32"},
-  {id:4,type:"issue",user:"Priyanka",role:"PM",site:"Simran Bungalow",time:"6h ago",img:null,caption:"⚠️ Design approval pending — client revision awaited",likes:0,comments:2,tag:"issue",ac:"#AD1457"},
-  {id:5,type:"photo",user:"Vijay Sahu",role:"PM",site:"Amarendra Villa",time:"1d ago",img:"https://images.unsplash.com/photo-1590725140246-20acddc1ec6d?w=400&h=260&fit=crop",caption:"Foundation waterproofing in progress 🏗️",likes:9,comments:2,tag:"progress",ac:"#1565C0"},
-  {id:6,type:"photo",user:"Harsh Sahu",role:"PM",site:"Neha Sagar Office",time:"1d ago",img:"https://images.unsplash.com/photo-1486325212027-8081e485255e?w=400&h=260&fit=crop",caption:"False ceiling installation started — ground floor",likes:14,comments:4,tag:"progress",ac:"#2E7D32"},
-  {id:7,type:"approval",user:"Niranjan",role:"Supervisor",site:"Tikendra Residence",time:"2d ago",img:null,caption:"✅ Labour payment PR-12 approved — ₹30,000",likes:2,comments:0,tag:"approval",ac:"#6A1B9A"},
-  {id:8,type:"photo",user:"Vijay Sahu",role:"PM",site:"Bablu Farmhouse",time:"2d ago",img:"https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&h=260&fit=crop",caption:"Exterior plastering 90% done, paint starts Monday 🎨",likes:21,comments:7,tag:"progress",ac:"#1565C0"},
-];
+const PROJECTS_DATA=[];
+const TEAM=[];
+const PULSE_FEED=[];
 const STATUS_META={"Ongoing":{bg:C.gl,text:C.g},"Completed":{bg:C.bl,text:C.p},"Hold":{bg:C.ol,text:C.o},"Not Started":{bg:C.b,text:C.tl}};
 
 // ── FINANCE DATA ─────────────────────────────────────────────────────
-const ACCOUNTS=[
-  {id:1,name:"HDFC Current",no:"••4821",balance:1823540,color:C.p,icon:"🏦"},
-  {id:2,name:"SBI Current",no:"••2204",balance:945200,color:C.teal,icon:"🏦"},
-  {id:3,name:"Petty Cash",no:null,balance:18500,color:C.g,icon:"💵"},
-  {id:4,name:"ICICI OD",no:"••9012",balance:-230000,color:C.o,icon:"🏦"},
-];
-const WALLETS=[
-  {id:1,name:"Vijay Sahu",role:"PM",balance:12500,limit:25000,initials:"VS",color:"#1565C0"},
-  {id:2,name:"Harsh Sahu",role:"PM",balance:8200,limit:25000,initials:"HS",color:"#2E7D32"},
-  {id:3,name:"Niranjan",role:"Supervisor",balance:4500,limit:10000,initials:"NJ",color:"#6A1B9A"},
-  {id:4,name:"Priyanka",role:"PM",balance:6800,limit:15000,initials:"PK",color:"#AD1457"},
-];
-const PARTIES=[
-  {id:1,name:"3 Eye CCTV Solution",type:"Other Vendor",balance:82166,balType:"Advance Paid"},
-  {id:2,name:"Abhay Traders",type:"Material Supplier",balance:114328,balType:"To Pay"},
-  {id:3,name:"Akashdeep Raipur",type:"Client",balance:2896400,balType:"Advance Received"},
-  {id:4,name:"Amarendra Shrivastava",type:"Client",balance:542790,balType:"To Receive"},
-  {id:5,name:"Amrit Builders",type:"Client",balance:770294,balType:"To Receive"},
-  {id:6,name:"Ramesh Labour Cont.",type:"Sub-Con",balance:38000,balType:"To Pay"},
-  {id:7,name:"Vaibhav Traders",type:"Material Supplier",balance:22500,balType:"To Pay"},
-  {id:8,name:"Shyam Ji Raipur",type:"Client",balance:180000,balType:"To Receive"},
-];
-const PARTY_TXNS={
-  3:[
-    {id:1,date:"02 Feb 2026",note:"70 param account cash + phone pay to vijay",amount:100000,dr:false},
-    {id:2,date:"12 Jan 2026",note:"by naveen sir to vijay",amount:50000,dr:false},
-    {id:3,date:"31 Dec 2025",note:"Cash received at anand fashion",amount:250000,dr:false},
-  ],
-  2:[
-    {id:1,date:"08 Mar 2026",note:"TMT Steel 2 MT — Esther Risali",amount:126775,dr:true,status:"unpaid",items:[{name:"TMT Steel Fe500",rate:"₹63,000/MT",qty:"2 MT",amt:126000},{name:"Binding Wire",rate:"₹80/kg",qty:"10 kg",amt:800}]},
-    {id:2,date:"01 Mar 2026",note:"Cement 100 bags — Esther Risali",amount:38500,dr:true,status:"paid"},
-    {id:3,date:"20 Feb 2026",note:"Sand 5 loads — Shubham 623",amount:17500,dr:true,status:"paid"},
-  ],
-};
+const ACCOUNTS=[];
+const WALLETS=[];
+const PARTIES=[];
+const PARTY_TXNS={};
 const TXN_TYPE_META={
   "Payment In":{color:C.g,bg:C.gl},
   "Payment Out":{color:C.r,bg:C.rl},
@@ -174,38 +120,10 @@ const TXN_TYPE_META={
   "Sales Invoice":{color:C.g,bg:C.gl},
   "Unbilled Material":{color:C.pink,bg:C.pinkL},
 };
-const TRANSACTIONS_DATA=[
-  {id:1,date:"09 Mar",ds:20260309,party:"Vijay Sahu → Hukumchand Trilok",sub:"Labour payment at slab casting",project:"Amarendra Villa",type:"Party Payment",account:"HDFC",amount:50000,dr:true,status:"paid"},
-  {id:2,date:"08 Mar",ds:20260308,party:"Vijay Sahu",sub:"Murga jali for plaster",project:"Shubham 623",type:"Site Expense",account:"Petty Cash",amount:500,dr:true,status:"paid"},
-  {id:3,date:"08 Mar",ds:20260308,party:"Abhay Traders",sub:"TMT Steel 2 MT",project:"Esther Risali",type:"Material Purchase",account:"HDFC",amount:126775,dr:true,status:"unpaid"},
-  {id:4,date:"07 Mar",ds:20260307,party:"Shyam Ji Raipur",sub:"Client advance payment",project:"Shyam Township",type:"Payment In",account:"SBI",amount:500000,dr:false,status:"paid"},
-  {id:5,date:"06 Mar",ds:20260306,party:"GBC Sunny",sub:"Harish tile vala",project:"Neha Sagar",type:"Site Expense",account:"Petty Cash",amount:5000,dr:true,status:"paid"},
-  {id:6,date:"05 Mar",ds:20260305,party:"GBC Sunny",sub:"Granite vala",project:"Bablu Farmhouse",type:"Site Expense",account:"Petty Cash",amount:5000,dr:true,status:"paid"},
-  {id:7,date:"04 Mar",ds:20260304,party:"Ramesh Labour Cont.",sub:"Brickwork 2nd floor",project:"Tikendra Residence",type:"Sub-Con Expense",account:"HDFC",amount:38000,dr:true,status:"unpaid"},
-  {id:8,date:"03 Mar",ds:20260303,party:"Rajesh Electrical",sub:"Wiring materials",project:"Amarendra Villa",type:"Material Purchase",account:"HDFC",amount:22500,dr:true,status:"paid"},
-  {id:9,date:"02 Mar",ds:20260302,party:"Abhay Traders",sub:"To be billed — unbilled",project:"Shubham 623",type:"Unbilled Material",account:"—",amount:18000,dr:true,status:"unbilled"},
-  {id:10,date:"01 Mar",ds:20260301,party:"Akashdeep Raipur",sub:"Client payment received",project:"Shyam Township",type:"Payment In",account:"SBI",amount:200000,dr:false,status:"paid"},
-];
-const UNBILLED_PARTIES=[
-  {id:1,name:"AAA Traders",items:1,project:"Shubham 623",billItems:[{name:"Bricks",qty:5000,unit:"Nos",rate:8,amt:40000}]},
-  {id:2,name:"Shyam Ji Raipur",items:1,project:"Shubham 623",billItems:[{name:"Sand",qty:10,unit:"Loads",rate:3500,amt:35000}]},
-  {id:3,name:"Shubham & NK 623",items:9,project:"Shubham 623",billItems:[{name:"Cement OPC",qty:120,unit:"Bags",rate:380,amt:45600},{name:"Sand",qty:5,unit:"Loads",rate:3200,amt:16000}]},
-  {id:4,name:"Akashdeep",items:2,project:"Esther Risali",billItems:[{name:"Tiles 2x2",qty:200,unit:"Sqft",rate:65,amt:13000}]},
-];
-const PAY_REQS_DATA=[
-  {id:12,no:"PR-12",date:"27 Feb",party:"Laxmi Electrical",project:"Neha Sagar",amount:1750,status:"Pending",by:"Harsh Sahu"},
-  {id:10,no:"PR-10",date:"21 Feb",party:"Chandra Shekhar",project:"Tikendra",amount:30000,status:"Pending",by:"Niranjan"},
-  {id:8,no:"PR-8",date:"24 Jan",party:"Vaibhav Traders",project:"Amarendra Villa",amount:22500,status:"Pending",by:"Vijay Sahu"},
-  {id:11,no:"PR-11",date:"21 Feb",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,status:"Approved",by:"Harsh Sahu"},
-  {id:9,no:"PR-9",date:"30 Jan",party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,status:"Approved",by:"Vijay Sahu"},
-];
-const PEND_PMTS_DATA=[
-  {id:1,type:"pr",no:"PR-11",party:"Kuleshwar Patel Tile",project:"Esther Risali",amount:2500,date:"21 Feb",overdue:false},
-  {id:2,type:"pr",no:"PR-9",party:"Shubham Ji Raipur",project:"Shubham 623",amount:20000,date:"30 Jan",overdue:false},
-  {id:3,type:"bill",no:"MP-38",party:"Abhay Traders",project:"Esther Risali",amount:126775,date:"10 Mar",overdue:true},
-  {id:4,type:"bill",no:"SUB-22",party:"Ramesh Labour",project:"Tikendra",amount:38000,date:"15 Mar",overdue:false},
-  {id:5,type:"bill",no:"MP-41",party:"Vaibhav Traders",project:"Amarendra Villa",amount:31200,date:"20 Mar",overdue:false},
-];
+const TRANSACTIONS_DATA=[];
+const UNBILLED_PARTIES=[];
+const PAY_REQS_DATA=[];
+const PEND_PMTS_DATA=[];
 
 function SitePulseDrawer({onClose}){
   const [site,setSite]=useState("All");
@@ -585,7 +503,7 @@ function NewProjectModal({onClose,onCreated}){
 function DuplicateModal({project,onClose,onConfirm}){
   const [step,setStep]=useState(1);const [done,setDone]=useState(false);
   const [form,setForm]=useState({name:`${project.name} — Copy`,city:project.city,boq:project.boq,start:"",end:""});
-  const [pm,setPM]=useState(project.pm);const [sup,setSup]=useState("Niranjan");
+  const [pm,setPM]=useState(project.pm);const [sup,setSup]=useState("");
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const handleCreate=()=>{setDone(true);setTimeout(()=>{onConfirm({...project,id:Date.now(),name:form.name,city:form.city,boq:Number(form.boq),pm,progress:0,status:"Not Started",expense:0,start:form.start||"TBD",end:form.end||"TBD"});onClose();},1400);};
   return(<>
@@ -626,7 +544,7 @@ function DuplicateModal({project,onClose,onConfirm}){
         </div>}
         {step===2&&<div>
           <p style={{fontSize:11.5,color:C.tl,margin:"0 0 14px"}}>Click to assign team for the new project.</p>
-          {[{role:"Project Manager",val:pm,setter:setPM,prev:project.pm},{role:"Site Supervisor",val:sup,setter:setSup,prev:"Niranjan"}].map(({role,val,setter,prev})=>(
+          {[{role:"Project Manager",val:pm,setter:setPM,prev:project.pm},{role:"Site Supervisor",val:sup,setter:setSup,prev:""}].map(({role,val,setter,prev})=>(
             <div key={role} style={{marginBottom:14}}>
               <div style={{fontSize:10,fontWeight:700,color:C.tm,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:7}}>{role}</div>
               <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
@@ -823,11 +741,11 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
               <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Basic Information</div>
               <div>
                 {lbl("Project Name",true)}
-                {inp("name","e.g. Tikendra Banchhor Residence")}
+                {inp("name","e.g. My Residence Project")}
               </div>
               <div>
                 {lbl("Client Name",true)}
-                {inp("client_name","e.g. Tikendra Banchhor")}
+                {inp("client_name","e.g. Client Name")}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
                 <div>

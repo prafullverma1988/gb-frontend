@@ -77,7 +77,7 @@ const NAV=[
 
 // ── WAREHOUSE DATA ─────────────────────────────────────────────────
 const CATEGORIES=["All","Cement & Concrete","Steel & Iron","Bricks & Blocks","Sand & Aggregate","Tiles & Flooring","Electrical","Plumbing","Paint & Finishing","Wood & Carpentry","Safety & Tools"];
-const PROJECTS=["Shubham & NK 623","Tikendra Residence","Esther Risali","Amarendra Villa","Neha Sagar Office"];
+const PROJECTS=[];
 const UNITS=["Bags","MT","CuM","SqM","SqFt","Nos","Ltrs","Rft","KG","Box","Set"];
 
 // Data loaded from API — no hardcoded data
@@ -557,7 +557,7 @@ function IssueModal({material,onClose}){
   const [saving,setSaving]=useState(false);
   const maxQty=material?.qty||0;
   const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
-  const team=["Vijay Sahu","Niranjan","Harsh Sahu","Priyanka","Ramesh"];
+  const team=[];
 
   const handleSubmit=async()=>{
     if(!form.qty||Number(form.qty)<=0||Number(form.qty)>maxQty) return;

@@ -152,7 +152,7 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
               <span style={{fontSize:10.5,fontWeight:700,color:"#064E3B",textTransform:"uppercase",letterSpacing:".4px"}}>WhatsApp Message Preview</span>
             </div>
             <div style={{fontSize:12,color:"#065F46",lineHeight:1.6,fontStyle:"italic",background:"white",padding:"8px 10px",borderRadius:6,border:"1px solid #A7F3D0"}}>
-              "Namaskar {lead.name.split(" ")[0]} ji 🙏 Aapne hmare saath {lead.projType} project ke liye baat ki thi. Kya aaj baat kar sakte hain? — GB Buildcon (Prafull ji)"
+              "Namaskar {lead.name.split(" ")[0]} ji 🙏 Aapne hmare saath {lead.projType} project ke liye baat ki thi. Kya aaj baat kar sakte hain? "
             </div>
           </div>
 
@@ -181,9 +181,9 @@ function ContactReminderPopup({lead,onDismiss,onWhatsApp,onCall}){
 // ── WHATSAPP SEND MODAL ──────────────────────────────────────────
 function WhatsAppModal({lead,onClose}){
   const templates=[
-    {id:"followup",label:"Follow Up",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nAapne hmare saath ${lead.projType} project ke liye baat ki thi. Kya aaj kuch waqt hai baat karne ka?\n\nHum aapki requirements ke anusar best solution denge.\n\n- GB Buildcon, Prafull ji\n📞 9XX-XXXXXXX`},
-    {id:"proposal",label:"Proposal Sent",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nHumne aapka ${lead.projType} project estimate taiyar kar liya hai.\n\n💰 Estimated Budget: ₹${fmt(lead.budget)}\n\nKripya review karein aur hume apne vichar batayein.\n\n- GB Buildcon\n📞 9XX-XXXXXXX`},
-    {id:"reminder",label:"Reminder",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nYaad dila dein - aapka ${lead.projType} project ke bare mein baat karna baaki hai.\n\nKya aaj ya kal koi suitable time hai?\n\n- GB Buildcon, Raipur`},
+    {id:"followup",label:"Follow Up",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nAapne hmare saath ${lead.projType} project ke liye baat ki thi. Kya aaj kuch waqt hai baat karne ka?\n\nHum aapki requirements ke anusar best solution denge.\n\n📞 Contact us for details`},
+    {id:"proposal",label:"Proposal Sent",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nHumne aapka ${lead.projType} project estimate taiyar kar liya hai.\n\n💰 Estimated Budget: ₹${fmt(lead.budget)}\n\nKripya review karein aur hume apne vichar batayein.\n\nContact us for details`},
+    {id:"reminder",label:"Reminder",msg:`Namaskar ${lead.name.split(" ")[0]} ji 🙏\n\nYaad dila dein - aapka ${lead.projType} project ke bare mein baat karna baaki hai.\n\nKya aaj ya kal koi suitable time hai?\n\nThank you`},
     {id:"custom",label:"Custom",msg:""},
   ];
   const [selTpl,setSelTpl]=useState("followup");
@@ -788,8 +788,8 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
 
 // ── ADD LEAD MODAL ───────────────────────────────────────────────
 function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
-  const ASSIGNED_TO=assignedToList||["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka"];
-  const [form,setForm]=useState({name:"",phone:"",email:"",city:"",projType:"Residential",budget:"",source:"Direct Call",assignedTo:ASSIGNED_TO[0]||"Prafull",stage:defaultStage||"lead",priority:"Medium",contactDate:"",notes:"",tags:""});
+  const ASSIGNED_TO=assignedToList||[];
+  const [form,setForm]=useState({name:"",phone:"",email:"",city:"",projType:"Residential",budget:"",source:"Direct Call",assignedTo:ASSIGNED_TO[0]||"",stage:defaultStage||"lead",priority:"Medium",contactDate:"",notes:"",tags:""});
   const [show,setShow]=useState(false);
   const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
   const FIELDS=[
@@ -1014,7 +1014,7 @@ function TemplateBuilderModal({onClose}){
           <div style={{padding:"12px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14}}>
             <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Company Details</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {[{l:"Company Name",k:"company_name",ph:"GB Buildcon"},{l:"Phone",k:"company_phone",ph:"+91-XXXXX"},{l:"Email",k:"company_email",ph:"info@gbbuildcon.com"},{l:"Address",k:"company_address",ph:"Raipur, CG"}].map(f=>(
+              {[{l:"Company Name",k:"company_name",ph:"Your Company Name"},{l:"Phone",k:"company_phone",ph:"+91-XXXXX"},{l:"Email",k:"company_email",ph:"info@company.com"},{l:"Address",k:"company_address",ph:"Raipur, CG"}].map(f=>(
                 <div key={f.k}>
                   <label style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:2}}>{f.l}</label>
                   <input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph}
@@ -1157,11 +1157,11 @@ function LeadTypeSelector({onSelect, onClose}) {
 
 // ── Add Solar Lead Modal ──────────────────────────────────────────
 function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
-  const ASSIGNED_TO = assignedToList || ["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka"];
+  const ASSIGNED_TO = assignedToList || [];
   const [form, setForm] = useState({
     name:"", phone:"", city:"Raipur", location:"",
     requirement_kw:"3", source:"Direct Call",
-    assignedTo:ASSIGNED_TO[0]||"Prafull",
+    assignedTo:ASSIGNED_TO[0]||"",
     priority:"Medium", contactDate:"", notes:"",
     stage: defaultStage||"lead",
   });
@@ -2028,7 +2028,7 @@ function CRMModule(){
   const filters={search,assignedTo:fAssignee,source:fSource,projType:fProjType,priority:fPriority};
   const activeF=[fAssignee!=="All",fSource!=="All",fProjType!=="All",fPriority!=="All"].filter(Boolean).length;
 
-  const ASSIGNED_TO=teamMembers.length>0?teamMembers.map(m=>m.name):["Prafull","Vijay Sahu","Niranjan","Harsh Sahu","Priyanka"];
+  const ASSIGNED_TO=teamMembers.length>0?teamMembers.map(m=>m.name):[];
 
   // Load leads from API
   const loadLeads=useCallback(async()=>{
