@@ -272,8 +272,8 @@ function LoginScreen({onLogin}){
       <div style={{background:"rgba(255,255,255,0.97)",borderRadius:20,padding:"44px 40px",width:400,boxShadow:"0 32px 80px rgba(0,0,0,0.35)"}}>
         <div style={{textAlign:"center",marginBottom:32}}>
           <div style={{display:"inline-flex",alignItems:"center",justifyContent:"center",width:62,height:62,borderRadius:16,background:`linear-gradient(135deg,${C.p},${C.a})`,marginBottom:14}}><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round"><path d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/></svg></div>
-          <div style={{fontSize:21,fontWeight:800,color:C.t}}>GB Construction Manager</div>
-          <div style={{fontSize:12,color:C.tl,marginTop:3}}>Construction Management Platform</div>
+          <div style={{fontSize:21,fontWeight:800,color:C.t}}>Sanchalan</div>
+          <div style={{fontSize:12,color:C.tl,marginTop:3}}>Business Management Platform</div>
         </div>
         {error&&<div style={{background:T.redL,color:T.red,padding:"10px 14px",borderRadius:8,fontSize:12.5,marginBottom:16,border:`1px solid ${T.redM}`}}>{error}</div>}
         <div style={{marginBottom:14}}>
@@ -416,7 +416,7 @@ function ShortcutCheatsheet({onClose}){
       <div style={{padding:"16px 20px",borderBottom:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
           <div style={{fontSize:15,fontWeight:700,color:"white"}}>Keyboard Shortcuts</div>
-          <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2}}>GB Construction Manager — Press ? to toggle</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.35)",marginTop:2}}>Sanchalan — Press ? to toggle</div>
         </div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.12)",borderRadius:7,padding:"5px 10px",color:"rgba(255,255,255,0.5)",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>ESC</button>
       </div>

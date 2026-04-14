@@ -2218,6 +2218,181 @@ function TabFeatureRequests() {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// TAB: SANCHALAN — Internal / Testing companies
+// ════════════════════════════════════════════════════════════════════════
+function TabSanchalan({ onOpenDetail }) {
+  const [data, setData]       = useState({ companies: [], stats: {} });
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast]     = useState(null);
+  const [showAdd, setShowAdd] = useState(false);
+  const [allCompanies, setAllCompanies] = useState([]);
+  const [addId, setAddId]     = useState("");
+  const [addLabel, setAddLabel] = useState("Sanchalan Construction");
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiFetch("/saas-admin/sanchalan").then(res => {
+      if (res.success) setData(res.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const openAdd = async () => {
+    try {
+      const r = await apiFetch("/saas-admin/companies");
+      if (r.success) setAllCompanies(r.data);
+    } catch(_) {}
+    setShowAdd(true);
+  };
+
+  const handleMark = async (id, label) => {
+    const r = await apiFetch("/saas-admin/companies/" + id + "/toggle-internal", {
+      method: "PUT",
+      body: { is_internal: true, internal_label: label },
+    });
+    if (r.success) {
+      setToast({ msg: r.message, type: "success" });
+      setShowAdd(false);
+      setAddId("");
+      load();
+    } else {
+      setToast({ msg: r.message || "Failed", type: "error" });
+    }
+  };
+
+  const handleUnmark = async (id, name) => {
+    if (!window.confirm(`Move "${name}" back to regular customers list?`)) return;
+    const r = await apiFetch("/saas-admin/companies/" + id + "/toggle-internal", {
+      method: "PUT",
+      body: { is_internal: false },
+    });
+    if (r.success) {
+      setToast({ msg: r.message, type: "success" });
+      load();
+    } else {
+      setToast({ msg: r.message || "Failed", type: "error" });
+    }
+  };
+
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:T.t3 }}>Loading Sanchalan data…</div>;
+
+  const stats = data.stats || {};
+  const companies = data.companies || [];
+
+  // Group by internal_label
+  const grouped = {};
+  companies.forEach(c => {
+    const k = c.internal_label || "Sanchalan (Internal)";
+    if (!grouped[k]) grouped[k] = [];
+    grouped[k].push(c);
+  });
+
+  return (
+    <div style={{ padding:24 }}>
+      {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)}/>}
+
+      {/* Header banner */}
+      <div style={{ background:"linear-gradient(135deg, #7C3AED 0%, #5B21B6 100%)", borderRadius:12, padding:"20px 24px", color:"white", marginBottom:20, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div>
+          <div style={{ fontSize:18, fontWeight:800, letterSpacing:"-0.3px", marginBottom:4 }}>Sanchalan — Internal &amp; Testing</div>
+          <div style={{ fontSize:12, color:"rgba(255,255,255,0.8)" }}>Our own domains used for feature development and QA. Hidden from all main dashboards, analytics, CRM &amp; metrics.</div>
+        </div>
+        <Btn onClick={openAdd} color="#FFFFFF" variant="secondary" style={{ background:"rgba(255,255,255,0.15)", color:"white", border:"1px solid rgba(255,255,255,0.4)" }}>+ Mark company as internal</Btn>
+      </div>
+
+      {/* Stat cards */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:14, marginBottom:20 }}>
+        <StatCard label="Internal Companies" value={fmtNum(stats.total)}        sub={`${stats.active || 0} active`}   color={T.pur} Icon={IcBuilding}/>
+        <StatCard label="Internal Users"     value={fmtNum(stats.total_users)}  sub="Across all internal"             color={T.blu} Icon={IcUsers}/>
+        <StatCard label="Internal Projects"  value={fmtNum(stats.total_projects)} sub="Active only"                   color={T.grn} Icon={IcClip}/>
+        <StatCard label="Labels"             value={fmtNum(Object.keys(grouped).length)} sub="Brand groups"           color={T.cyn} Icon={IcShield}/>
+      </div>
+
+      {/* Grouped sections */}
+      {Object.keys(grouped).length === 0 && (
+        <div style={{ padding:"60px 20px", textAlign:"center", background:T.surface, border:`1px dashed ${T.b2}`, borderRadius:10 }}>
+          <IcBuilding size={32} color={T.t4}/>
+          <div style={{ marginTop:10, fontSize:13, color:T.t3 }}>No internal companies yet.</div>
+          <div style={{ fontSize:11, color:T.t4, marginTop:4 }}>Mark any existing company as internal to move it here.</div>
+        </div>
+      )}
+
+      {Object.entries(grouped).map(([label, list]) => (
+        <div key={label} style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, marginBottom:16, overflow:"hidden" }}>
+          <div style={{ padding:"12px 18px", background:T.purL, borderBottom:`1px solid ${T.purM}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.pur }}>{label}</div>
+            <div style={{ fontSize:11, color:T.t3 }}>{list.length} {list.length === 1 ? "company" : "companies"}</div>
+          </div>
+          <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+            <thead>
+              <tr style={{ background:T.surfaceB }}>
+                <th style={th}>Name</th>
+                <th style={th}>Slug</th>
+                <th style={th}>Users</th>
+                <th style={th}>Projects</th>
+                <th style={th}>Last Login</th>
+                <th style={th}>Status</th>
+                <th style={th}>Created</th>
+                <th style={{...th, textAlign:"right"}}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map(c => (
+                <tr key={c.id} style={{ borderTop:`1px solid ${T.b1}` }}>
+                  <td style={td}><div style={{ fontWeight:700, color:T.t1 }}>{c.name}</div><div style={{ fontSize:10.5, color:T.t4 }}>{c.email}</div></td>
+                  <td style={td}><code style={{ fontSize:11, color:T.t3 }}>{c.slug}</code></td>
+                  <td style={td}>{c.user_count}</td>
+                  <td style={td}>{c.project_count}</td>
+                  <td style={td}>{c.last_login ? fmtDateTime(c.last_login) : <span style={{color:T.t4}}>never</span>}</td>
+                  <td style={td}>{c.is_active ? <Badge text="ACTIVE" color={T.grn}/> : <Badge text="DISABLED" color={T.red}/>}</td>
+                  <td style={td}>{fmtDate(c.created_at)}</td>
+                  <td style={{...td, textAlign:"right"}}>
+                    <Btn onClick={() => onOpenDetail(c)} variant="secondary" style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Details</Btn>
+                    <Btn onClick={() => handleUnmark(c.id, c.name)} variant="secondary" color={T.red} style={{ padding:"5px 10px", fontSize:11 }}>Unmark</Btn>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ))}
+
+      {/* Add modal */}
+      {showAdd && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.6)", zIndex:9998, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={() => setShowAdd(false)}>
+          <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:12, padding:24, width:460, boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
+            <div style={{ fontSize:15, fontWeight:800, color:T.t1, marginBottom:4 }}>Mark company as internal</div>
+            <div style={{ fontSize:11, color:T.t3, marginBottom:16 }}>Selected company will be hidden from all customer dashboards and moved to Sanchalan.</div>
+
+            <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.5px" }}>Company</div>
+            <select value={addId} onChange={e => setAddId(e.target.value)}
+              style={{ width:"100%", padding:"10px 12px", border:`1px solid ${T.b2}`, borderRadius:8, fontSize:13, marginBottom:14 }}>
+              <option value="">— Select —</option>
+              {allCompanies.map(c => <option key={c.id} value={c.id}>{c.name} ({c.slug})</option>)}
+            </select>
+
+            <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:6, textTransform:"uppercase", letterSpacing:"0.5px" }}>Label / Brand Group</div>
+            <input value={addLabel} onChange={e => setAddLabel(e.target.value)}
+              placeholder="e.g. Sanchalan Construction"
+              style={{ width:"100%", padding:"10px 12px", border:`1px solid ${T.b2}`, borderRadius:8, fontSize:13, marginBottom:18, boxSizing:"border-box" }}/>
+
+            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
+              <Btn variant="secondary" onClick={() => setShowAdd(false)}>Cancel</Btn>
+              <Btn disabled={!addId} onClick={() => handleMark(addId, addLabel)} color={T.pur}>Mark as internal</Btn>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+const th = { padding:"10px 14px", textAlign:"left", fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px" };
+const td = { padding:"11px 14px", color:T.t2 };
+
+// ════════════════════════════════════════════════════════════════════════
 // MAIN SAAS MODULE
 // ════════════════════════════════════════════════════════════════════════
 const TABS = [
@@ -2231,6 +2406,7 @@ const TABS = [
   { id:"features",  label:"Feature Requests", Icon:IcClip     },
   { id:"audit",     label:"Audit Logs",       Icon:IcShield   },
   { id:"export",    label:"Data Export",      Icon:IcDownload },
+  { id:"sanchalan", label:"Sanchalan",        Icon:IcLock     },
 ];
 
 export default function SaaSModule() {
@@ -2262,7 +2438,7 @@ export default function SaaSModule() {
       {/* Header */}
       <div style={{ background:"linear-gradient(135deg, #0D1B2A 0%, #1B2D45 100%)", padding:"14px 24px", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
         <div>
-          <div style={{ fontSize:16, fontWeight:800, color:"white", letterSpacing:"-0.3px" }}>SaaS Admin Panel</div>
+          <div style={{ fontSize:16, fontWeight:800, color:"white", letterSpacing:"-0.3px" }}>Sanchalan · SaaS Admin Panel</div>
           <div style={{ fontSize:11, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Platform management -- super admin only</div>
         </div>
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
@@ -2307,6 +2483,7 @@ export default function SaaSModule() {
             {tab === "features"  && <TabFeatureRequests/>}
             {tab === "audit"     && <TabAuditLogs companies={companies}/>}
             {tab === "export"    && <TabExport companies={companies}/>}
+            {tab === "sanchalan" && <TabSanchalan onOpenDetail={handleOpenDetail}/>}
           </>
         )}
       </div>
