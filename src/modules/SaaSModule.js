@@ -499,7 +499,7 @@ function TabStats() {
 // ════════════════════════════════════════════════════════════════════════
 // TAB 2: COMPANIES (Enhanced)
 // ════════════════════════════════════════════════════════════════════════
-function TabCompanies({ companies, reload, onSelectCompany }) {
+function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
   const [showModal, setShowModal] = useState(false);
   const [toast, setToast]         = useState(null);
   const [form, setForm]           = useState({ name:"", admin_name:"", admin_email:"", phone:"", city:"", state:"", module_type:"construction_individual" });
@@ -575,13 +575,13 @@ function TabCompanies({ companies, reload, onSelectCompany }) {
 
       <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
         <TableHeader columns={["Company","Plan","Domain","Users","Projects","Created","Status",""]}
-          gridCols="1.8fr 1fr 1.2fr 65px 65px 95px 85px 75px"/>
+          gridCols="1.8fr 1fr 1.2fr 65px 65px 95px 85px 105px"/>
         {filtered.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No companies match filters</div>}
         {filtered.map((c, i) => {
           const planColor = { free:T.slt, starter:T.blu, pro:T.pur, enterprise:T.amb }[c.plan_slug] || T.t4;
           return (
             <div key={c.id} onClick={() => setDetail(detail?.id === c.id ? null : c)}
-              style={{ display:"grid", gridTemplateColumns:"1.8fr 1fr 1.2fr 65px 65px 95px 85px 75px", padding:"11px 16px",
+              style={{ display:"grid", gridTemplateColumns:"1.8fr 1fr 1.2fr 65px 65px 95px 85px 105px", padding:"11px 16px",
                 borderBottom: i < filtered.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center",
                 cursor:"pointer", background: detail?.id === c.id ? T.bluL : "transparent", transition:"background 0.15s" }}>
               <div>
@@ -595,6 +595,10 @@ function TabCompanies({ companies, reload, onSelectCompany }) {
               <div style={{ fontSize:11.5, color:T.t3 }}>{fmtDate(c.created_at)}</div>
               <div><Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/></div>
               <div style={{ display:"flex", gap:5, justifyContent:"flex-end" }} onClick={e => e.stopPropagation()}>
+                <button onClick={() => onOpenDetail && onOpenDetail(c)} title="Open full details"
+                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.bluM}`, background:T.bluL, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <IcEye size={12} color={T.blu}/>
+                </button>
                 <button onClick={() => onSelectCompany(c)} title="Module access"
                   style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
                   <IcPuzzle size={12} color={T.t3}/>
@@ -1323,6 +1327,316 @@ function TabSubscriptions({ companies }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// COMPANY DETAIL PAGE (Phase 2) — full-page drill-down with 7 tabs
+// ════════════════════════════════════════════════════════════════════════
+function CompanyDetailPage({ companyId, onBack }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [tab, setTab] = useState("overview");
+  const [toast, setToast] = useState(null);
+  const [noteText, setNoteText] = useState("");
+  const [noteType, setNoteType] = useState("note");
+  const [savingNote, setSavingNote] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    apiFetch("/saas-admin/companies/" + companyId + "/full-details").then(res => {
+      if (res.success) setData(res.data); else setData(null);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [companyId]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const addNote = async () => {
+    if (!noteText.trim()) return;
+    setSavingNote(true);
+    const res = await apiFetch("/saas-admin/companies/" + companyId + "/crm-notes", {
+      method:"POST", body:{ type: noteType, content: noteText }
+    });
+    setSavingNote(false);
+    if (res.success) { setNoteText(""); load(); setToast({ msg:"Note added", type:"success" }); }
+    else setToast({ msg:"Failed to add note", type:"error" });
+  };
+
+  const deleteNote = async (nid) => {
+    if (!window.confirm("Delete this note?")) return;
+    await apiFetch("/saas-admin/crm-notes/" + nid, { method:"DELETE" });
+    load();
+  };
+
+  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading company details...</div>;
+  if (!data)   return <div style={{ padding:60, textAlign:"center", color:T.red, fontSize:13 }}>Failed to load.<br/><Btn onClick={onBack} variant="outline" style={{ marginTop:12 }}>← Back</Btn></div>;
+
+  const { company, current_sub, subscriptions, users, modules, audit_logs, feature_requests, crm_notes, usage, health } = data;
+  const healthColor = health.score >= 75 ? T.grn : health.score >= 50 ? T.amb : T.red;
+
+  const TABS_DET = [
+    { id:"overview",    label:"Overview",            Icon:IcBuilding },
+    { id:"subscription",label:"Subscription",        Icon:IcDollar   },
+    { id:"users",       label:`Users (${users.length})`, Icon:IcUsers },
+    { id:"modules",     label:"Module Access",       Icon:IcPuzzle   },
+    { id:"audit",       label:"Activity",            Icon:IcActivity },
+    { id:"features",    label:`Requests (${feature_requests.length})`, Icon:IcClip },
+    { id:"crm",         label:`Notes/CRM (${crm_notes.length})`, Icon:IcShield },
+  ];
+
+  return (
+    <div style={{ padding:"18px 24px" }}>
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+
+      {/* Back + company header */}
+      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:16 }}>
+        <button onClick={onBack} style={{ padding:"7px 12px", border:`1px solid ${T.b1}`, background:T.surface, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.t2, fontFamily:"inherit" }}>
+          <IcChevL size={14}/> Back
+        </button>
+        <div style={{ width:48, height:48, borderRadius:10, background:T.bluL, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <span style={{ fontSize:20, fontWeight:800, color:T.blu }}>{(company.name||"?")[0]}</span>
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:18, fontWeight:800, color:T.t1 }}>{company.name}</div>
+          <div style={{ fontSize:11, color:T.t4 }}>/{company.slug} · {DOMAIN_LABELS[company.module_type] || company.module_type || "--"} · Registered {fmtDate(company.created_at)}</div>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", gap:10 }}>
+          <Badge text={company.is_active ? "Active" : "Inactive"} color={company.is_active ? T.grn : T.red}/>
+          <div style={{ textAlign:"right" }}>
+            <div style={{ fontSize:10, color:T.t4, textTransform:"uppercase", fontWeight:600 }}>Health Score</div>
+            <div style={{ fontSize:20, fontWeight:800, color:healthColor }}>{health.score}/100</div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sub-tabs */}
+      <div style={{ display:"flex", gap:4, background:T.surface, padding:4, border:`1px solid ${T.b1}`, borderRadius:10, marginBottom:16, overflowX:"auto" }}>
+        {TABS_DET.map(t => {
+          const isA = tab === t.id;
+          return (
+            <button key={t.id} onClick={() => setTab(t.id)}
+              style={{ display:"flex", alignItems:"center", gap:6, padding:"8px 14px", border:"none", borderRadius:7, cursor:"pointer",
+                color: isA ? "white" : T.t3, fontWeight: isA ? 700 : 500, fontSize:12,
+                background: isA ? T.blu : "transparent", whiteSpace:"nowrap", fontFamily:"inherit" }}>
+              <t.Icon size={13} color={isA ? "white" : T.t3}/>
+              {t.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* TAB 1: Overview */}
+      {tab === "overview" && (
+        <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:16 }}>
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Company Info</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:14 }}>
+              {[
+                { l:"Email", v: company.email || "--" },
+                { l:"Phone", v: company.phone || "--" },
+                { l:"City", v: company.city || "--" },
+                { l:"State", v: company.state || "--" },
+                { l:"Business Type", v: DOMAIN_LABELS[company.module_type] || company.module_type || "--" },
+                { l:"Registered", v: fmtDate(company.created_at) },
+                { l:"Users", v: company.user_count },
+                { l:"Projects", v: company.project_count },
+              ].map((x,i) => (
+                <div key={i}>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:3 }}>{x.l}</div>
+                  <div style={{ fontSize:13, fontWeight:500, color:T.t1 }}>{x.v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Health Breakdown</div>
+            {Object.entries(health.breakdown).map(([k, v]) => {
+              const max = { login:30, features:25, payment:20, support:15, growth:10 }[k] || 20;
+              const pct = (v / max) * 100;
+              return (
+                <div key={k} style={{ marginBottom:10 }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", marginBottom:4 }}>
+                    <span style={{ fontSize:11, color:T.t2, textTransform:"capitalize", fontWeight:500 }}>{k}</span>
+                    <span style={{ fontSize:11, fontWeight:700, color:T.t1 }}>{Math.round(v)}/{max}</span>
+                  </div>
+                  <div style={{ height:6, background:T.b1, borderRadius:3, overflow:"hidden" }}>
+                    <div style={{ height:"100%", width:`${pct}%`, background: pct >= 70 ? T.grn : pct >= 40 ? T.amb : T.red, borderRadius:3 }}/>
+                  </div>
+                </div>
+              );
+            })}
+            <div style={{ marginTop:14, padding:10, background:T.surfaceB, borderRadius:8, fontSize:11, color:T.t3 }}>
+              Last login: <strong style={{ color:T.t1 }}>{health.days_since_login == null ? "Never" : health.days_since_login + "d ago"}</strong>
+            </div>
+          </div>
+
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Usage Stats</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+              <StatCard label="Projects" value={fmtNum(usage.projects)} color={T.blu} Icon={IcFolder}/>
+              <StatCard label="Transactions" value={fmtNum(usage.transactions)} color={T.grn} Icon={IcActivity}/>
+              <StatCard label="Revenue" value={"₹" + fmtMoney(usage.revenue)} color={T.amb} Icon={IcDollar}/>
+            </div>
+          </div>
+
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Current Subscription</div>
+            {current_sub ? (
+              <div>
+                <div style={{ fontSize:16, fontWeight:700, color:T.blu }}>{current_sub.plan_name || "Custom"}</div>
+                <div style={{ fontSize:11, color:T.t4, marginBottom:10 }}>{current_sub.billing_cycle} · <Badge text={current_sub.status} color={current_sub.status === "active" ? T.grn : T.amb}/></div>
+                <div style={{ fontSize:11, color:T.t3 }}>Valid till <strong style={{ color:T.t1 }}>{fmtDate(current_sub.end_date)}</strong></div>
+                <div style={{ fontSize:11, color:T.t3 }}>MRR: <strong style={{ color:T.grn }}>₹{fmtMoney(current_sub.mrr_amount || 0)}</strong></div>
+              </div>
+            ) : <div style={{ fontSize:12, color:T.t4 }}>No active subscription</div>}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 2: Subscription */}
+      {tab === "subscription" && (
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, fontSize:13, fontWeight:700, color:T.t1 }}>Subscription History</div>
+          {subscriptions.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No subscriptions yet</div>}
+          {subscriptions.map((s, i) => (
+            <div key={i} style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"grid", gridTemplateColumns:"1.5fr 1fr 1fr 1fr 1fr", gap:10, alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:13, fontWeight:700, color:T.t1 }}>{s.plan_name || "--"}</div>
+                <div style={{ fontSize:10, color:T.t4 }}>{s.billing_cycle}</div>
+              </div>
+              <div><Badge text={s.status} color={s.status === "active" ? T.grn : s.status === "trial" ? T.amb : T.slt}/></div>
+              <div style={{ fontSize:11, color:T.t3 }}>{fmtDate(s.start_date)} → {fmtDate(s.end_date)}</div>
+              <div style={{ fontSize:12, fontWeight:700, color:T.grn }}>₹{fmtMoney(s.amount_paid)}</div>
+              <div style={{ fontSize:11, color:T.t4 }}>{s.payment_ref || "--"}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TAB 3: Users */}
+      {tab === "users" && (
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <TableHeader columns={["Name","Email","Role","Last Login","Status"]} gridCols="1.5fr 2fr 1fr 1fr 100px"/>
+          {users.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No users</div>}
+          {users.map((u, i) => (
+            <div key={i} style={{ display:"grid", gridTemplateColumns:"1.5fr 2fr 1fr 1fr 100px", padding:"11px 16px", borderBottom: i < users.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
+              <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{u.name}</div>
+              <div style={{ fontSize:11, color:T.t3 }}>{u.email}</div>
+              <div><Badge text={u.role} color={T.pur}/></div>
+              <div style={{ fontSize:11, color:T.t4 }}>{u.last_login ? fmtDateTime(u.last_login) : "Never"}</div>
+              <div><Badge text={u.is_active ? "Active" : "Inactive"} color={u.is_active ? T.grn : T.red}/></div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TAB 4: Module Access */}
+      {tab === "modules" && (
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Enabled Modules ({modules.filter(m=>m.is_enabled).length}/{modules.length})</div>
+          {modules.length === 0 && <div style={{ fontSize:12, color:T.t4 }}>No modules configured</div>}
+          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
+            {modules.map((m, i) => (
+              <div key={i} style={{ padding:"10px 12px", border:`1px solid ${m.is_enabled ? T.grnM : T.b1}`, background: m.is_enabled ? T.grnL : T.surfaceB, borderRadius:8, display:"flex", alignItems:"center", gap:8 }}>
+                {m.is_enabled ? <IcChk size={14} color={T.grn}/> : <IcX size={14} color={T.t4}/>}
+                <span style={{ fontSize:12, fontWeight:600, color: m.is_enabled ? T.grn : T.t4, textTransform:"capitalize" }}>{m.module_key}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TAB 5: Activity / Audit */}
+      {tab === "audit" && (
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden", maxHeight:500, overflowY:"auto" }}>
+          {audit_logs.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No activity logged</div>}
+          {audit_logs.map((a, i) => (
+            <div key={i} style={{ display:"flex", alignItems:"flex-start", gap:10, padding:"10px 16px", borderBottom:`1px solid ${T.b1}` }}>
+              <div style={{ width:26, height:26, borderRadius:6, background:T.bluL, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
+                <IcActivity size={12} color={T.blu}/>
+              </div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:12, color:T.t1 }}>
+                  <strong>{a.user_name || "System"}</strong> <span style={{ color:T.blu, fontWeight:600 }}>{a.action}</span> <span style={{ color:T.t3 }}>{a.entity_type}</span>{a.entity_id && <span style={{ color:T.t4 }}> #{a.entity_id}</span>}
+                </div>
+                <div style={{ fontSize:10, color:T.t4, marginTop:1 }}>{fmtDateTime(a.created_at)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TAB 6: Feature Requests */}
+      {tab === "features" && (
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, fontSize:13, fontWeight:700, color:T.t1 }}>Feature Requests from {company.name}</div>
+          {feature_requests.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No feature requests yet</div>}
+          {feature_requests.map((f, i) => (
+            <div key={i} style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}` }}>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
+                <div style={{ fontSize:13, fontWeight:700, color:T.t1 }}>{f.title}</div>
+                <div style={{ display:"flex", gap:6 }}>
+                  <Badge text={f.priority} color={f.priority === "critical" ? T.red : f.priority === "high" ? T.amb : T.slt}/>
+                  <Badge text={f.status} color={f.status === "shipped" ? T.grn : f.status === "in_development" ? T.blu : T.pur}/>
+                </div>
+              </div>
+              <div style={{ fontSize:11, color:T.t3, marginBottom:4 }}>{f.description}</div>
+              <div style={{ fontSize:10, color:T.t4 }}>Requested by {f.user_name} · {fmtDateTime(f.created_at)} {f.module && `· ${f.module}`}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* TAB 7: CRM / Notes */}
+      {tab === "crm" && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1.3fr", gap:16 }}>
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
+            <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:12 }}>Add Note / Log Activity</div>
+            <div style={{ display:"flex", gap:6, marginBottom:10, flexWrap:"wrap" }}>
+              {["note","call","email","whatsapp","meeting"].map(t => (
+                <button key={t} onClick={() => setNoteType(t)}
+                  style={{ padding:"5px 12px", borderRadius:18, fontSize:11, fontWeight: noteType===t ? 700 : 500,
+                    border:`1px solid ${noteType===t ? T.blu : T.b1}`,
+                    background: noteType===t ? T.bluL : T.surface, color: noteType===t ? T.blu : T.t3,
+                    cursor:"pointer", textTransform:"capitalize", fontFamily:"inherit" }}>{t}</button>
+              ))}
+            </div>
+            <textarea value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="Write your note here..."
+              style={{ width:"100%", minHeight:100, padding:"10px 12px", border:`1px solid ${T.b1}`, borderRadius:8, fontSize:12, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+            <Btn onClick={addNote} disabled={savingNote || !noteText.trim()} style={{ marginTop:10, width:"100%" }}>
+              {savingNote ? "Saving..." : "Add Note"}
+            </Btn>
+          </div>
+
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+            <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, fontSize:13, fontWeight:700, color:T.t1 }}>Activity Timeline</div>
+            <div style={{ maxHeight:450, overflowY:"auto" }}>
+              {crm_notes.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No notes yet. Start tracking customer interactions!</div>}
+              {crm_notes.map((n, i) => {
+                const typeColor = { note:T.slt, call:T.blu, email:T.pur, whatsapp:T.grn, meeting:T.amb }[n.type] || T.slt;
+                return (
+                  <div key={i} style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}` }}>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:4 }}>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <Badge text={n.type} color={typeColor}/>
+                        <span style={{ fontSize:11, fontWeight:600, color:T.t2 }}>{n.author_name}</span>
+                      </div>
+                      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
+                        <span style={{ fontSize:10, color:T.t4 }}>{fmtDateTime(n.created_at)}</span>
+                        <button onClick={() => deleteNote(n.id)} style={{ background:"none", border:"none", cursor:"pointer", color:T.t4, display:"flex", padding:2 }}><IcX size={12}/></button>
+                      </div>
+                    </div>
+                    <div style={{ fontSize:12, color:T.t1, whiteSpace:"pre-wrap" }}>{n.content}</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // MAIN SAAS MODULE
 // ════════════════════════════════════════════════════════════════════════
 const TABS = [
@@ -1339,6 +1653,7 @@ export default function SaaSModule() {
   const [tab, setTab]               = useState("stats");
   const [companies, setCompanies]   = useState([]);
   const [selCompany, setSelCompany] = useState(null);
+  const [detailCompanyId, setDetailCompanyId] = useState(null);
   const [loadingCo, setLoadingCo]   = useState(true);
 
   const loadCompanies = useCallback(() => {
@@ -1355,6 +1670,8 @@ export default function SaaSModule() {
     setSelCompany(c);
     setTab("modules");
   };
+
+  const handleOpenDetail = (c) => setDetailCompanyId(c.id);
 
   return (
     <div style={{ display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden", fontFamily:"'Segoe UI',system-ui,sans-serif", background:T.bg }}>
@@ -1392,13 +1709,19 @@ export default function SaaSModule() {
 
       {/* Content */}
       <div style={{ flex:1, overflowY:"auto" }}>
-        {tab === "stats"     && <TabStats/>}
-        {tab === "companies" && <TabCompanies companies={companies} reload={loadCompanies} onSelectCompany={handleSelectCompany}/>}
-        {tab === "subs"      && <TabSubscriptions companies={companies}/>}
-        {tab === "modules"   && <TabModuleAccess selectedCompany={selCompany} companies={companies}/>}
-        {tab === "users"     && <TabUsers/>}
-        {tab === "audit"     && <TabAuditLogs companies={companies}/>}
-        {tab === "export"    && <TabExport companies={companies}/>}
+        {detailCompanyId ? (
+          <CompanyDetailPage companyId={detailCompanyId} onBack={() => { setDetailCompanyId(null); loadCompanies(); }}/>
+        ) : (
+          <>
+            {tab === "stats"     && <TabStats/>}
+            {tab === "companies" && <TabCompanies companies={companies} reload={loadCompanies} onSelectCompany={handleSelectCompany} onOpenDetail={handleOpenDetail}/>}
+            {tab === "subs"      && <TabSubscriptions companies={companies}/>}
+            {tab === "modules"   && <TabModuleAccess selectedCompany={selCompany} companies={companies}/>}
+            {tab === "users"     && <TabUsers/>}
+            {tab === "audit"     && <TabAuditLogs companies={companies}/>}
+            {tab === "export"    && <TabExport companies={companies}/>}
+          </>
+        )}
       </div>
     </div>
   );
