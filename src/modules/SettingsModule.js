@@ -1304,6 +1304,156 @@ function AuditSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// FEATURE REQUESTS (Phase 3 — customer side)
+// ═══════════════════════════════════════════════════════════════════════
+function FeatureRequests() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title:"", description:"", module:"", priority:"medium" });
+  const [saving, setSaving] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    api("/saas-admin/my-feature-requests").then(res => {
+      if (res.success) setRows(res.data || []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const submit = async () => {
+    if (!form.title.trim()) { setToast({ msg:"Title required", ok:false }); return; }
+    setSaving(true);
+    const res = await api("/saas-admin/my-feature-requests", { method:"POST", body: form });
+    setSaving(false);
+    if (res.success) {
+      setShowForm(false);
+      setForm({ title:"", description:"", module:"", priority:"medium" });
+      load();
+      setToast({ msg:"Feature request submitted! We'll review it soon.", ok:true });
+    } else {
+      setToast({ msg: res.message || "Failed to submit", ok:false });
+    }
+  };
+
+  const statusLabel = {
+    new:"New", under_review:"Under Review", planned:"Planned",
+    in_development:"In Development", shipped:"Shipped ✓", rejected:"Rejected"
+  };
+  const statusColor = {
+    new:"#64748B", under_review:"#7C3AED", planned:"#0891B2",
+    in_development:"#2563EB", shipped:"#059669", rejected:"#DC2626"
+  };
+  const priorityColor = { critical:"#DC2626", high:"#D97706", medium:"#2563EB", low:"#64748B" };
+
+  return (
+    <div>
+      {toast && (
+        <div style={{ position:"fixed", top:20, right:20, zIndex:600, padding:"12px 18px", borderRadius:10,
+          background: toast.ok ? "#ECFDF5" : "#FEF2F2", border:`1px solid ${toast.ok ? "#A7F3D0" : "#FECACA"}`,
+          color: toast.ok ? "#059669" : "#DC2626", fontSize:12, fontWeight:600, boxShadow:"0 8px 24px rgba(0,0,0,0.08)" }}
+          onClick={() => setToast(null)}>
+          {toast.msg}
+        </div>
+      )}
+
+      <SectionCard
+        title="Request a Feature"
+        desc="Tell us what you'd like to see in Construction Manager. We review every request."
+        action={
+          <button onClick={() => setShowForm(true)}
+            style={{ padding:"8px 14px", background: T.blue, color:"white", border:"none", borderRadius:8, fontSize:12, fontWeight:600, cursor:"pointer", display:"flex", alignItems:"center", gap:6, fontFamily:"inherit" }}>
+            <IcPlus size={14} color="white"/> New Request
+          </button>
+        }
+      >
+        {loading && <div style={{ padding:30, textAlign:"center", color:T.textLight, fontSize:12 }}>Loading your requests...</div>}
+        {!loading && rows.length === 0 && (
+          <div style={{ padding:"40px 20px", textAlign:"center" }}>
+            <div style={{ fontSize:40, marginBottom:8 }}>💡</div>
+            <div style={{ fontSize:14, fontWeight:600, color:T.text, marginBottom:4 }}>No requests yet</div>
+            <div style={{ fontSize:12, color:T.textLight }}>Click "New Request" to submit your first feature idea.</div>
+          </div>
+        )}
+        {!loading && rows.map(r => (
+          <div key={r.id} style={{ padding:"14px 16px", borderBottom:`1px solid ${T.border}`, display:"flex", alignItems:"flex-start", gap:12 }}>
+            <div style={{ flex:1, minWidth:0 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:T.text, marginBottom:3 }}>{r.title}</div>
+              {r.description && <div style={{ fontSize:11.5, color:T.textMid, marginBottom:6, whiteSpace:"pre-wrap" }}>{r.description}</div>}
+              <div style={{ display:"flex", alignItems:"center", gap:8, fontSize:10, color:T.textLight, flexWrap:"wrap" }}>
+                <span>By {r.user_name}</span>
+                <span>·</span>
+                <span>{new Date(r.created_at).toLocaleDateString("en-IN", { day:"2-digit", month:"short", year:"numeric" })}</span>
+                {r.module && <><span>·</span><span style={{ textTransform:"capitalize" }}>{r.module}</span></>}
+              </div>
+              {r.admin_notes && (
+                <div style={{ marginTop:8, padding:"8px 10px", background:"#F0F9FF", border:"1px solid #BAE6FD", borderRadius:6, fontSize:11, color:"#075985" }}>
+                  <strong>Admin reply:</strong> {r.admin_notes}
+                </div>
+              )}
+            </div>
+            <div style={{ display:"flex", flexDirection:"column", gap:5, alignItems:"flex-end", flexShrink:0 }}>
+              <span style={{ fontSize:10, fontWeight:700, padding:"3px 9px", borderRadius:10, background: statusColor[r.status]+"18", color: statusColor[r.status] }}>
+                {statusLabel[r.status]}
+              </span>
+              <span style={{ fontSize:9, fontWeight:600, padding:"2px 7px", borderRadius:8, background: priorityColor[r.priority]+"15", color: priorityColor[r.priority], textTransform:"uppercase" }}>
+                {r.priority}
+              </span>
+            </div>
+          </div>
+        ))}
+      </SectionCard>
+
+      <Modal open={showForm} onClose={() => setShowForm(false)} title="New Feature Request" desc="Describe what you'd like us to build" width={560}>
+        <div style={{ display:"flex", flexDirection:"column", gap:14, padding:"4px 0" }}>
+          <FormField label="Title *" value={form.title} onChange={v => setForm(p=>({...p, title:v}))} placeholder="e.g. Bulk import materials from Excel"/>
+          <div>
+            <label style={{ display:"block", fontSize:11, fontWeight:600, color:T.textMid, marginBottom:6 }}>Description</label>
+            <textarea value={form.description} onChange={e => setForm(p=>({...p, description:e.target.value}))}
+              placeholder="Explain the use case, the problem it solves, and any ideas for how it should work..."
+              style={{ width:"100%", minHeight:110, padding:"10px 12px", border:`1px solid ${T.border}`, borderRadius:8, fontSize:12.5, color:T.text, background:T.card, outline:"none", fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <FormSelect label="Module" value={form.module} onChange={v => setForm(p=>({...p, module:v}))}
+              options={[
+                { value:"", label:"— Any / General —" },
+                { value:"projects", label:"Projects" },
+                { value:"finance", label:"Finance" },
+                { value:"procurement", label:"Procurement" },
+                { value:"warehouse", label:"Warehouse" },
+                { value:"payroll", label:"Payroll" },
+                { value:"crm", label:"CRM" },
+                { value:"reports", label:"Reports" },
+                { value:"mom", label:"Meetings/MOM" },
+                { value:"settings", label:"Settings" },
+              ]}/>
+            <FormSelect label="Priority" value={form.priority} onChange={v => setForm(p=>({...p, priority:v}))}
+              options={[
+                { value:"low", label:"Low — nice to have" },
+                { value:"medium", label:"Medium — would help" },
+                { value:"high", label:"High — important" },
+                { value:"critical", label:"Critical — blocker" },
+              ]}/>
+          </div>
+          <div style={{ display:"flex", gap:10, marginTop:6 }}>
+            <button onClick={() => setShowForm(false)}
+              style={{ flex:1, padding:"10px", background:T.card, border:`1px solid ${T.border}`, borderRadius:8, fontSize:12.5, fontWeight:600, color:T.textMid, cursor:"pointer", fontFamily:"inherit" }}>
+              Cancel
+            </button>
+            <button onClick={submit} disabled={saving}
+              style={{ flex:2, padding:"10px", background:T.blue, border:"none", borderRadius:8, fontSize:12.5, fontWeight:700, color:"white", cursor: saving ? "not-allowed" : "pointer", fontFamily:"inherit", opacity: saving ? 0.7 : 1 }}>
+              {saving ? "Submitting..." : "Submit Request"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // MAIN SETTINGS MODULE
 // ═══════════════════════════════════════════════════════════════════════
 const settingsSections = [
@@ -1317,6 +1467,7 @@ const settingsSections = [
   { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings, section: "SYSTEM" },
   { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,      section: null },
   { id: "audit",         label: "Audit Trail",          Icon: IcClipboard, Comp: AuditSettings,        section: null },
+  { id: "features",      label: "Feature Requests",     Icon: IcEdit,      Comp: FeatureRequests,      section: "FEEDBACK" },
 ];
 
 export default function SettingsModule() {
@@ -1329,6 +1480,7 @@ export default function SettingsModule() {
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
     finance: "Tax, invoicing, and financial controls", notifications: "Email, Push & WhatsApp notification settings",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
+    features: "Request new features and track their status",
   };
 
   return (

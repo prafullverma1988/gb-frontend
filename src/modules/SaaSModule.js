@@ -1637,16 +1637,209 @@ function CompanyDetailPage({ companyId, onBack }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// TAB: FEATURE REQUESTS (Phase 3) — Kanban board
+// ════════════════════════════════════════════════════════════════════════
+function TabFeatureRequests() {
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+  const [edit, setEdit] = useState(null);
+  const [search, setSearch] = useState("");
+  const [priorityFilter, setPriorityFilter] = useState("all");
+
+  const load = () => {
+    setLoading(true);
+    apiFetch("/saas-admin/feature-requests").then(res => {
+      if (res.success) setRows(res.data || []);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const COLUMNS = [
+    { id:"new",             label:"New",             color:T.slt, bg:T.sltL },
+    { id:"under_review",    label:"Under Review",    color:T.pur, bg:T.purL },
+    { id:"planned",         label:"Planned",         color:T.cyn, bg:T.cynL },
+    { id:"in_development",  label:"In Development",  color:T.blu, bg:T.bluL },
+    { id:"shipped",         label:"Shipped",         color:T.grn, bg:T.grnL },
+  ];
+
+  const filtered = rows.filter(r => {
+    if (priorityFilter !== "all" && r.priority !== priorityFilter) return false;
+    if (search) {
+      const s = search.toLowerCase();
+      return (r.title||"").toLowerCase().includes(s)
+          || (r.company_name||"").toLowerCase().includes(s)
+          || (r.user_name||"").toLowerCase().includes(s);
+    }
+    return true;
+  });
+
+  const moveStatus = async (id, newStatus) => {
+    const res = await apiFetch("/saas-admin/feature-requests/" + id, { method:"PUT", body:{ status: newStatus } });
+    if (res.success) { setToast({ msg:"Status updated", type:"success" }); load(); }
+    else setToast({ msg:"Update failed", type:"error" });
+  };
+
+  const saveEdit = async () => {
+    const res = await apiFetch("/saas-admin/feature-requests/" + edit.id, {
+      method:"PUT",
+      body: { status: edit.status, priority: edit.priority, admin_notes: edit.admin_notes }
+    });
+    if (res.success) { setEdit(null); load(); setToast({ msg:"Request updated", type:"success" }); }
+    else setToast({ msg:"Update failed", type:"error" });
+  };
+
+  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading feature requests...</div>;
+
+  const priorityColor = p => ({ critical:T.red, high:T.amb, medium:T.blu, low:T.slt }[p] || T.slt);
+  const rejectedCount = rows.filter(r => r.status === "rejected").length;
+
+  return (
+    <div style={{ padding:"20px 24px" }}>
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+
+      <PageHeader title="Feature Requests" sub={`${rows.length} requests from ${new Set(rows.map(r=>r.company_id)).size} companies`} right={
+        <Btn onClick={load} variant="outline"><IcRefresh size={13}/> Refresh</Btn>
+      }/>
+
+      {/* Filters */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
+        {["all","critical","high","medium","low"].map(p => (
+          <button key={p} onClick={() => setPriorityFilter(p)}
+            style={{ padding:"5px 14px", borderRadius:20, fontSize:11, fontWeight: priorityFilter===p ? 700 : 500, border:`1px solid ${priorityFilter===p ? T.blu : T.b1}`,
+              background: priorityFilter===p ? T.bluL : T.surface, color: priorityFilter===p ? T.blu : T.t3, cursor:"pointer", textTransform:"capitalize", fontFamily:"inherit" }}>
+            {p}
+          </button>
+        ))}
+        <div style={{ flex:1 }}/>
+        <div style={{ position:"relative" }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search requests..."
+            style={{ width:240, padding:"7px 12px 7px 30px", borderRadius:8, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit" }}/>
+          <IcSearch size={12} color={T.t4} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }}/>
+        </div>
+      </div>
+
+      {/* Kanban board */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5, 1fr)", gap:10, marginBottom:16 }}>
+        {COLUMNS.map(col => {
+          const colRows = filtered.filter(r => r.status === col.id);
+          return (
+            <div key={col.id} style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden", display:"flex", flexDirection:"column", maxHeight:"calc(100vh - 280px)" }}>
+              <div style={{ padding:"10px 14px", borderBottom:`2px solid ${col.color}`, background:col.bg, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <span style={{ fontSize:12, fontWeight:700, color:col.color }}>{col.label}</span>
+                <span style={{ fontSize:11, fontWeight:700, color:col.color, background:"white", padding:"2px 8px", borderRadius:10 }}>{colRows.length}</span>
+              </div>
+              <div style={{ padding:"8px", overflowY:"auto", flex:1 }}>
+                {colRows.length === 0 && <div style={{ fontSize:11, color:T.t4, textAlign:"center", padding:"20px 0" }}>—</div>}
+                {colRows.map(r => (
+                  <div key={r.id} onClick={() => setEdit({ ...r })}
+                    style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:8, padding:"10px 12px", marginBottom:7, cursor:"pointer", transition:"all 0.15s", borderLeft:`3px solid ${priorityColor(r.priority)}` }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.t1, marginBottom:4, lineHeight:1.3 }}>{r.title}</div>
+                    <div style={{ fontSize:10, color:T.t3, marginBottom:6, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{r.company_name}</div>
+                    <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:4 }}>
+                      <Badge text={r.priority} color={priorityColor(r.priority)}/>
+                      {r.module && <span style={{ fontSize:9, color:T.t4, textTransform:"capitalize" }}>{r.module}</span>}
+                    </div>
+                    <div style={{ fontSize:9, color:T.t4, marginTop:5 }}>by {r.user_name} · {fmtDate(r.created_at)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {rejectedCount > 0 && (
+        <div style={{ fontSize:11, color:T.t4, textAlign:"center" }}>+ {rejectedCount} rejected request{rejectedCount !== 1 ? "s" : ""} (use search to filter)</div>
+      )}
+
+      {/* Edit modal */}
+      {edit && (
+        <>
+          <div onClick={() => setEdit(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:560, maxHeight:"85vh", background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden", display:"flex", flexDirection:"column" }}>
+            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:"white" }}>{edit.title}</div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.5)", marginTop:2 }}>
+                  from {edit.company_name} · {edit.user_name} · {fmtDateTime(edit.created_at)}
+                </div>
+              </div>
+              <button onClick={() => setEdit(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.6)", display:"flex" }}><IcX size={16}/></button>
+            </div>
+
+            <div style={{ padding:"20px 22px", overflowY:"auto", flex:1 }}>
+              <div style={{ marginBottom:16 }}>
+                <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:5 }}>Description</div>
+                <div style={{ fontSize:12.5, color:T.t1, whiteSpace:"pre-wrap", padding:"10px 12px", background:T.surfaceB, borderRadius:8, border:`1px solid ${T.b1}` }}>
+                  {edit.description || <em style={{ color:T.t4 }}>No description</em>}
+                </div>
+              </div>
+
+              {edit.module && (
+                <div style={{ marginBottom:16 }}>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:5 }}>Module</div>
+                  <Badge text={edit.module} color={T.pur}/>
+                </div>
+              )}
+
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:16 }}>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:5 }}>Status</div>
+                  <select value={edit.status} onChange={e => setEdit({ ...edit, status:e.target.value })}
+                    style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.b1}`, borderRadius:8, fontSize:12, background:T.surface, color:T.t1, fontFamily:"inherit", outline:"none" }}>
+                    <option value="new">New</option>
+                    <option value="under_review">Under Review</option>
+                    <option value="planned">Planned</option>
+                    <option value="in_development">In Development</option>
+                    <option value="shipped">Shipped</option>
+                    <option value="rejected">Rejected</option>
+                  </select>
+                </div>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:5 }}>Priority</div>
+                  <select value={edit.priority} onChange={e => setEdit({ ...edit, priority:e.target.value })}
+                    style={{ width:"100%", padding:"8px 10px", border:`1px solid ${T.b1}`, borderRadius:8, fontSize:12, background:T.surface, color:T.t1, fontFamily:"inherit", outline:"none" }}>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">High</option>
+                    <option value="critical">Critical</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:5 }}>Admin Notes (internal)</div>
+                <textarea value={edit.admin_notes || ""} onChange={e => setEdit({ ...edit, admin_notes:e.target.value })}
+                  placeholder="Internal notes, ETA, assigned dev, technical considerations..."
+                  style={{ width:"100%", minHeight:90, padding:"10px 12px", border:`1px solid ${T.b1}`, borderRadius:8, fontSize:12, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+              </div>
+            </div>
+
+            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+              <Btn onClick={() => setEdit(null)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+              <Btn onClick={saveEdit} style={{ flex:2 }}>Save Changes</Btn>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // MAIN SAAS MODULE
 // ════════════════════════════════════════════════════════════════════════
 const TABS = [
-  { id:"stats",     label:"Dashboard",      Icon:IcTrend    },
-  { id:"companies", label:"Companies",      Icon:IcBuilding },
-  { id:"subs",      label:"Subscriptions",  Icon:IcCrown    },
-  { id:"modules",   label:"Module Access",  Icon:IcPuzzle   },
-  { id:"users",     label:"All Users",      Icon:IcUsers    },
-  { id:"audit",     label:"Audit Logs",     Icon:IcShield   },
-  { id:"export",    label:"Data Export",    Icon:IcDownload },
+  { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
+  { id:"companies", label:"Companies",        Icon:IcBuilding },
+  { id:"subs",      label:"Subscriptions",    Icon:IcCrown    },
+  { id:"modules",   label:"Module Access",    Icon:IcPuzzle   },
+  { id:"users",     label:"All Users",        Icon:IcUsers    },
+  { id:"features",  label:"Feature Requests", Icon:IcClip     },
+  { id:"audit",     label:"Audit Logs",       Icon:IcShield   },
+  { id:"export",    label:"Data Export",      Icon:IcDownload },
 ];
 
 export default function SaaSModule() {
@@ -1718,6 +1911,7 @@ export default function SaaSModule() {
             {tab === "subs"      && <TabSubscriptions companies={companies}/>}
             {tab === "modules"   && <TabModuleAccess selectedCompany={selCompany} companies={companies}/>}
             {tab === "users"     && <TabUsers/>}
+            {tab === "features"  && <TabFeatureRequests/>}
             {tab === "audit"     && <TabAuditLogs companies={companies}/>}
             {tab === "export"    && <TabExport companies={companies}/>}
           </>
