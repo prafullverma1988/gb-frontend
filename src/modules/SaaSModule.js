@@ -1637,6 +1637,202 @@ function CompanyDetailPage({ companyId, onBack }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// TAB: CRM & HEALTH (Phase 4) — health alerts, auto-emails, scheduler
+// ════════════════════════════════════════════════════════════════════════
+function TabCRMHealth() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [running, setRunning] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const load = () => {
+    setLoading(true);
+    apiFetch("/saas-admin/crm-dashboard").then(res => {
+      if (res.success) setData(res.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  const runScheduler = async () => {
+    setRunning(true);
+    const res = await apiFetch("/saas-admin/scheduler/run", { method:"POST" });
+    setRunning(false);
+    if (res.success) {
+      setToast({ msg:`Scheduler done: ${res.data.checked} checked · ${res.data.emails_queued} emails · ${res.data.alerts} alerts`, type:"success" });
+      load();
+    } else setToast({ msg:"Scheduler failed", type:"error" });
+  };
+
+  const flushEmails = async () => {
+    setRunning(true);
+    const res = await apiFetch("/saas-admin/email-queue/flush", { method:"POST" });
+    setRunning(false);
+    if (res.success) {
+      setToast({ msg: res.data.reason === "no_smtp" ? "SMTP not configured — emails stay queued" : `Flushed: ${res.data.sent} sent, ${res.data.failed} failed`, type: res.data.reason === "no_smtp" ? "error" : "success" });
+      load();
+    }
+  };
+
+  const toggleAutoEmails = async () => {
+    const newVal = data.settings.auto_emails_enabled === "1" ? 0 : 1;
+    await apiFetch("/saas-admin/platform-settings", { method:"PUT", body:{ auto_emails_enabled: newVal } });
+    load();
+  };
+
+  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading CRM dashboard...</div>;
+  if (!data) return <div style={{ padding:60, textAlign:"center", color:T.red, fontSize:13 }}>Failed to load</div>;
+
+  const { distribution, at_risk_companies, email_stats, recent_emails, system_alerts, last_scheduler_run, settings, smtp_configured } = data;
+  const total = distribution.healthy + distribution.medium + distribution.at_risk;
+  const pct = n => total > 0 ? Math.round((n / total) * 100) : 0;
+  const autoOn = settings.auto_emails_enabled === "1";
+
+  return (
+    <div style={{ padding:"20px 24px" }}>
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+
+      <PageHeader title="CRM & Customer Health" sub={`${total} active companies · Avg score: ${distribution.avg_score}/100`} right={
+        <div style={{ display:"flex", gap:8 }}>
+          <Btn onClick={flushEmails} variant="outline" disabled={running}>{running ? "..." : "Flush Emails"}</Btn>
+          <Btn onClick={runScheduler} disabled={running}>{running ? "Running..." : "Run Now"}</Btn>
+        </div>
+      }/>
+
+      {!smtp_configured && (
+        <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb, marginBottom:16 }}>
+          <strong>SMTP not configured.</strong> Set <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>, <code>SMTP_FROM</code> env vars on Railway to enable actual email sending. Emails are being queued safely until then.
+        </div>
+      )}
+
+      {/* KPI row */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:20 }}>
+        <StatCard label="Avg Health"  value={distribution.avg_score + "/100"} sub="Platform average" color={distribution.avg_score >= 75 ? T.grn : distribution.avg_score >= 50 ? T.amb : T.red} Icon={IcShield}/>
+        <StatCard label="Healthy"     value={fmtNum(distribution.healthy)}    sub={pct(distribution.healthy) + "%"} color={T.grn} Icon={IcChk}/>
+        <StatCard label="Medium"      value={fmtNum(distribution.medium)}     sub={pct(distribution.medium) + "%"}  color={T.amb} Icon={IcActivity}/>
+        <StatCard label="At Risk"     value={fmtNum(distribution.at_risk)}    sub={pct(distribution.at_risk) + "%"} color={T.red} Icon={IcX}/>
+        <StatCard label="Emails"      value={fmtNum(email_stats.queued + email_stats.sent)} sub={`${email_stats.sent} sent, ${email_stats.queued} queued`} color={T.blu} Icon={IcActivity}/>
+      </div>
+
+      {/* Health distribution bar */}
+      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px", marginBottom:20 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:12 }}>Health Distribution</div>
+        {total === 0 ? <div style={{ fontSize:12, color:T.t4 }}>No companies yet</div> : (
+          <>
+            <div style={{ display:"flex", height:26, borderRadius:8, overflow:"hidden", border:`1px solid ${T.b1}` }}>
+              {distribution.healthy > 0 && <div style={{ flex:distribution.healthy, background:T.grn, display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontSize:11, fontWeight:700 }}>{pct(distribution.healthy)}%</div>}
+              {distribution.medium > 0 &&  <div style={{ flex:distribution.medium,  background:T.amb, display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontSize:11, fontWeight:700 }}>{pct(distribution.medium)}%</div>}
+              {distribution.at_risk > 0 && <div style={{ flex:distribution.at_risk, background:T.red, display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontSize:11, fontWeight:700 }}>{pct(distribution.at_risk)}%</div>}
+            </div>
+            <div style={{ display:"flex", gap:16, marginTop:10, fontSize:11, color:T.t3 }}>
+              <span><span style={{ display:"inline-block", width:10, height:10, background:T.grn, borderRadius:2, marginRight:5 }}/>Healthy (75+)</span>
+              <span><span style={{ display:"inline-block", width:10, height:10, background:T.amb, borderRadius:2, marginRight:5 }}/>Medium (50-74)</span>
+              <span><span style={{ display:"inline-block", width:10, height:10, background:T.red, borderRadius:2, marginRight:5 }}/>At Risk (&lt;50)</span>
+            </div>
+          </>
+        )}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
+        {/* At-risk companies */}
+        <div style={{ background:T.surface, border:`1px solid ${T.redM}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"11px 16px", background:T.redL, borderBottom:`1px solid ${T.redM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+            <span style={{ fontSize:13, fontWeight:700, color:T.red }}>⚠️ At-Risk Customers</span>
+            <span style={{ fontSize:11, color:T.red, fontWeight:600 }}>{at_risk_companies.length} need attention</span>
+          </div>
+          <div style={{ maxHeight:320, overflowY:"auto" }}>
+            {at_risk_companies.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>All customers are healthy ✓</div>}
+            {at_risk_companies.map((c, i) => (
+              <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <div style={{ minWidth:0 }}>
+                  <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                  <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || "No plan"} · Last login: {c.last_login ? new Date(c.last_login).toLocaleDateString("en-IN") : "Never"}</div>
+                </div>
+                <div style={{ fontSize:16, fontWeight:800, color:T.red, marginLeft:10 }}>{c.health_score}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* System alerts */}
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}` }}>
+            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>🤖 Auto-Generated Alerts</span>
+          </div>
+          <div style={{ maxHeight:320, overflowY:"auto" }}>
+            {system_alerts.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No system alerts yet</div>}
+            {system_alerts.map((a, i) => (
+              <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}` }}>
+                <div style={{ fontSize:11.5, color:T.t1, marginBottom:3 }}>{a.content}</div>
+                <div style={{ fontSize:10, color:T.t4 }}>{a.company_name} · {fmtDateTime(a.created_at)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Email queue */}
+      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden", marginBottom:20 }}>
+        <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>📧 Recent Email Queue</span>
+          <div style={{ display:"flex", gap:8, fontSize:10 }}>
+            <Badge text={`Queued: ${email_stats.queued}`} color={T.amb}/>
+            <Badge text={`Sent: ${email_stats.sent}`} color={T.grn}/>
+            {email_stats.failed > 0 && <Badge text={`Failed: ${email_stats.failed}`} color={T.red}/>}
+          </div>
+        </div>
+        <div style={{ maxHeight:280, overflowY:"auto" }}>
+          {recent_emails.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No emails queued yet. Scheduler runs every 6 hours.</div>}
+          {recent_emails.map((e, i) => (
+            <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"grid", gridTemplateColumns:"2fr 2fr 1fr 100px 120px", gap:10, alignItems:"center" }}>
+              <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{e.subject}</div>
+              <div style={{ fontSize:11, color:T.t3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{e.to_email}</div>
+              <div style={{ fontSize:10, color:T.t4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{e.company_name || "—"}</div>
+              <div><Badge text={e.email_type} color={T.pur}/></div>
+              <div><Badge text={e.status} color={e.status === "sent" ? T.grn : e.status === "failed" ? T.red : T.amb}/></div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Settings + scheduler status */}
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:12 }}>Auto-Email Settings</div>
+          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${T.b1}` }}>
+            <div>
+              <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>Auto-emails enabled</div>
+              <div style={{ fontSize:10, color:T.t4 }}>Trial day 3/7/14 + renewal reminders</div>
+            </div>
+            <button onClick={toggleAutoEmails}
+              style={{ width:42, height:24, borderRadius:12, border:"none", cursor:"pointer",
+                background: autoOn ? T.grn : T.b2, position:"relative", transition:"background 0.2s" }}>
+              <div style={{ position:"absolute", width:18, height:18, borderRadius:"50%", background:"white", top:3, left: autoOn ? 21 : 3, transition:"left 0.2s" }}/>
+            </button>
+          </div>
+          <div style={{ padding:"10px 0", fontSize:11, color:T.t3 }}>
+            <strong>Health alert threshold:</strong> {settings.health_alert_threshold}/100
+          </div>
+        </div>
+
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:12 }}>Scheduler Status</div>
+          <div style={{ fontSize:11, color:T.t3, marginBottom:6 }}>
+            <strong>Last run:</strong> {last_scheduler_run ? new Date(last_scheduler_run).toLocaleString("en-IN") : "Never"}
+          </div>
+          <div style={{ fontSize:11, color:T.t3, marginBottom:6 }}>
+            <strong>Frequency:</strong> Every 6 hours (auto)
+          </div>
+          <div style={{ fontSize:11, color:T.t3 }}>
+            <strong>SMTP:</strong> <span style={{ color: smtp_configured ? T.grn : T.red, fontWeight:700 }}>{smtp_configured ? "Configured ✓" : "Not configured"}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // TAB: FEATURE REQUESTS (Phase 3) — Kanban board
 // ════════════════════════════════════════════════════════════════════════
 function TabFeatureRequests() {
@@ -1834,6 +2030,7 @@ function TabFeatureRequests() {
 const TABS = [
   { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
   { id:"companies", label:"Companies",        Icon:IcBuilding },
+  { id:"crm",       label:"CRM & Health",     Icon:IcActivity },
   { id:"subs",      label:"Subscriptions",    Icon:IcCrown    },
   { id:"modules",   label:"Module Access",    Icon:IcPuzzle   },
   { id:"users",     label:"All Users",        Icon:IcUsers    },
@@ -1908,6 +2105,7 @@ export default function SaaSModule() {
           <>
             {tab === "stats"     && <TabStats/>}
             {tab === "companies" && <TabCompanies companies={companies} reload={loadCompanies} onSelectCompany={handleSelectCompany} onOpenDetail={handleOpenDetail}/>}
+            {tab === "crm"       && <TabCRMHealth/>}
             {tab === "subs"      && <TabSubscriptions companies={companies}/>}
             {tab === "modules"   && <TabModuleAccess selectedCompany={selCompany} companies={companies}/>}
             {tab === "users"     && <TabUsers/>}
