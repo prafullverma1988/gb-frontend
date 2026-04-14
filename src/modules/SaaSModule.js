@@ -192,18 +192,33 @@ function PageHeader({ title, sub, right }) {
 // ════════════════════════════════════════════════════════════════════════
 function TabStats() {
   const [data, setData] = useState(null);
+  const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
 
   const load = () => {
     setLoading(true);
-    apiFetch("/saas-admin/stats").then(res => {
-      if (res.success) setData(res.data);
-      else setData(null);
+    Promise.all([
+      apiFetch("/saas-admin/stats"),
+      apiFetch("/saas-admin/metrics"),
+    ]).then(([r1, r2]) => {
+      setData(r1.success ? r1.data : null);
+      setMetrics(r2.success ? r2.data : null);
       setLoading(false);
     }).catch(() => setLoading(false));
   };
 
   useEffect(() => { load(); }, []);
+
+  const daysUntil = (dateStr) => {
+    if (!dateStr) return null;
+    const diff = Math.ceil((new Date(dateStr) - new Date()) / 86400000);
+    return diff;
+  };
+  const daysSince = (dateStr) => {
+    if (!dateStr) return "Never";
+    const diff = Math.floor((new Date() - new Date(dateStr)) / 86400000);
+    return diff === 0 ? "Today" : `${diff}d ago`;
+  };
 
   if (loading) return <div style={{ textAlign:"center", padding:60, color:T.t3, fontSize:13 }}>Loading platform data...</div>;
   if (!data) return (
@@ -220,21 +235,153 @@ function TabStats() {
   };
   const actionColor = a => ({ LOGIN:T.blu, CREATE:T.grn, UPDATE:T.amb, DELETE:T.red, EXPORT:T.pur, DEACTIVATE:T.red, REACTIVATE:T.grn }[a] || T.slt);
 
+  const kpi = metrics?.kpi || {};
+
   return (
     <div style={{ padding:"20px 24px" }}>
-      <PageHeader title="Platform Overview" right={
+      <PageHeader title="Platform Overview" sub="Customer intelligence & retention dashboard" right={
         <Btn onClick={load} variant="outline"><IcRefresh size={13}/> Refresh</Btn>
       }/>
 
-      {/* KPI cards — 6 cards */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10, marginBottom:24 }}>
-        <StatCard label="Companies"     value={fmtNum(data.companies.total)}     sub={`${data.companies.active} active, ${data.companies.inactive||0} inactive`} color={T.blu} Icon={IcBuilding}/>
-        <StatCard label="Total Users"   value={fmtNum(data.users.total)}         sub={`${data.users.active||0} active`}           color={T.pur}  Icon={IcUsers}/>
-        <StatCard label="Projects"      value={fmtNum(data.projects?.total||0)}  sub="Active projects"                             color={T.grn}  Icon={IcFolder}/>
-        <StatCard label="Transactions"  value={fmtNum(data.transactions?.total)} sub={`Total: ${fmtMoney(data.transactions?.revenue)}`} color={T.amb} Icon={IcDollar}/>
-        <StatCard label="Modules"       value={fmtNum(data.modules.enabled)}     sub="Module-company pairs"                        color={T.cyn}  Icon={IcPuzzle}/>
-        <StatCard label="New Today"     value={fmtNum(data.new_today)}            sub="Registered today"                            color={T.slt}  Icon={IcTrend}/>
+      {/* Revenue KPI row */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:12 }}>
+        <StatCard label="MRR"             value={"₹" + fmtMoney(kpi.mrr || 0)}       sub={`ARR: ₹${fmtMoney(kpi.arr || 0)}`} color={T.grn} Icon={IcDollar}/>
+        <StatCard label="Paid Active"     value={fmtNum(kpi.paid_active || 0)}       sub="Paying customers"                  color={T.blu} Icon={IcChk}/>
+        <StatCard label="Free Trial"      value={fmtNum(kpi.trial || 0)}             sub={`${kpi.trial_ending_count||0} ending in 3 days`} color={T.amb} Icon={IcClip}/>
+        <StatCard label="Inactive"        value={fmtNum(kpi.inactive || 0)}          sub="No active subscription"            color={T.slt} Icon={IcX}/>
       </div>
+
+      {/* Retention KPI row */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
+        <StatCard label="Total Companies" value={fmtNum(kpi.total || data.companies.total)} sub={`${data.new_today} new today`}         color={T.pur} Icon={IcBuilding}/>
+        <StatCard label="Total Users"     value={fmtNum(data.users.total)}           sub={`${data.users.active||0} active`}                color={T.cyn} Icon={IcUsers}/>
+        <StatCard label="Expiring Soon"   value={fmtNum(kpi.expiring_count || 0)}    sub="Next 7 days"                                     color={T.amb} Icon={IcActivity}/>
+        <StatCard label="Churn Risk"      value={fmtNum(kpi.churn_risk_count || 0)}  sub="No login 15+ days"                               color={T.red} Icon={IcShield}/>
+      </div>
+
+      {/* Retention alerts row */}
+      {metrics && (
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:20 }}>
+          {/* Trial ending soon */}
+          <div style={{ background:T.surface, border:`1px solid ${T.ambM}`, borderRadius:10, overflow:"hidden" }}>
+            <div style={{ padding:"10px 14px", background:T.ambL, borderBottom:`1px solid ${T.ambM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ fontSize:12, fontWeight:700, color:T.amb }}>⏳ Trial Ending Soon</span>
+              <span style={{ fontSize:10, color:T.amb, fontWeight:600 }}>{(metrics.trial_ending_soon||[]).length} companies</span>
+            </div>
+            <div style={{ maxHeight:200, overflowY:"auto" }}>
+              {(metrics.trial_ending_soon||[]).length === 0 && <div style={{ padding:20, textAlign:"center", color:T.t4, fontSize:11 }}>No trials ending soon</div>}
+              {(metrics.trial_ending_soon||[]).map((c, i) => {
+                const d = daysUntil(c.end_date);
+                return (
+                  <div key={i} style={{ padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                      <div style={{ fontSize:10, color:T.t4 }}>{c.email || c.phone || "--"}</div>
+                    </div>
+                    <Badge text={d <= 0 ? "Today" : `${d}d`} color={d <= 1 ? T.red : T.amb}/>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Expiring subscriptions */}
+          <div style={{ background:T.surface, border:`1px solid ${T.bluM}`, borderRadius:10, overflow:"hidden" }}>
+            <div style={{ padding:"10px 14px", background:T.bluL, borderBottom:`1px solid ${T.bluM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ fontSize:12, fontWeight:700, color:T.blu }}>📅 Expiring Soon (7d)</span>
+              <span style={{ fontSize:10, color:T.blu, fontWeight:600 }}>{(metrics.expiring_soon||[]).length} subs</span>
+            </div>
+            <div style={{ maxHeight:200, overflowY:"auto" }}>
+              {(metrics.expiring_soon||[]).length === 0 && <div style={{ padding:20, textAlign:"center", color:T.t4, fontSize:11 }}>None expiring</div>}
+              {(metrics.expiring_soon||[]).map((c, i) => {
+                const d = daysUntil(c.end_date);
+                return (
+                  <div key={i} style={{ padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                      <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || c.status} · ₹{fmtMoney(c.mrr_amount||0)}/mo</div>
+                    </div>
+                    <Badge text={d <= 0 ? "Today" : `${d}d`} color={d <= 2 ? T.red : T.blu}/>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Churn risk */}
+          <div style={{ background:T.surface, border:`1px solid ${T.redM}`, borderRadius:10, overflow:"hidden" }}>
+            <div style={{ padding:"10px 14px", background:T.redL, borderBottom:`1px solid ${T.redM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <span style={{ fontSize:12, fontWeight:700, color:T.red }}>⚠️ Churn Risk</span>
+              <span style={{ fontSize:10, color:T.red, fontWeight:600 }}>{(metrics.churn_risk||[]).length} at risk</span>
+            </div>
+            <div style={{ maxHeight:200, overflowY:"auto" }}>
+              {(metrics.churn_risk||[]).length === 0 && <div style={{ padding:20, textAlign:"center", color:T.t4, fontSize:11 }}>All customers active ✓</div>}
+              {(metrics.churn_risk||[]).map((c, i) => (
+                <div key={i} style={{ padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                    <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || "No plan"}</div>
+                  </div>
+                  <span style={{ fontSize:10, color:T.red, fontWeight:600 }}>{daysSince(c.last_login)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MRR trend + Top customers */}
+      {metrics && (
+        <div style={{ display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:16, marginBottom:20 }}>
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+            <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB }}>
+              <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>MRR Trend (6 months)</span>
+            </div>
+            <div style={{ padding:"16px" }}>
+              {(metrics.mrr_trend||[]).length === 0 ? (
+                <div style={{ fontSize:12, color:T.t4, textAlign:"center", padding:"30px 0" }}>No subscription revenue data yet</div>
+              ) : (
+                <div style={{ display:"flex", alignItems:"flex-end", gap:10, height:140 }}>
+                  {metrics.mrr_trend.map((g, i) => {
+                    const max = Math.max(...metrics.mrr_trend.map(x => parseFloat(x.mrr)||0), 1);
+                    const v = parseFloat(g.mrr) || 0;
+                    const h = (v / max) * 100;
+                    return (
+                      <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:4 }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:T.grn }}>₹{fmtMoney(v)}</div>
+                        <div style={{ width:"100%", height:`${Math.max(h, 6)}%`, background:`linear-gradient(180deg, ${T.grn}, ${T.grnM})`, borderRadius:4 }}/>
+                        <div style={{ fontSize:9, color:T.t4, whiteSpace:"nowrap" }}>{g.month.split("-")[1]}/{g.month.split("-")[0].slice(2)}</div>
+                        <div style={{ fontSize:9, color:T.t4 }}>+{g.new_subs}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+            <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB }}>
+              <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Top Customers by Revenue</span>
+            </div>
+            <div style={{ maxHeight:220, overflowY:"auto" }}>
+              {(metrics.top_customers||[]).length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No paid customers yet</div>}
+              {(metrics.top_customers||[]).map((c, i) => (
+                <div key={i} style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"9px 16px", borderBottom:`1px solid ${T.b1}` }}>
+                  <div style={{ display:"flex", alignItems:"center", gap:9, minWidth:0 }}>
+                    <div style={{ width:24, height:24, borderRadius:6, background:T.grnL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:T.grn, flexShrink:0 }}>#{i+1}</div>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                      <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || "No plan"} · {c.user_count} users</div>
+                    </div>
+                  </div>
+                  <div style={{ fontSize:12, fontWeight:700, color:T.grn }}>₹{fmtMoney(c.total_paid)}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
         {/* Company breakdown */}
