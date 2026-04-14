@@ -1637,6 +1637,199 @@ function CompanyDetailPage({ companyId, onBack }) {
 }
 
 // ════════════════════════════════════════════════════════════════════════
+// TAB: ANALYTICS (Phase 5) — cohort, churn, adoption, revenue
+// ════════════════════════════════════════════════════════════════════════
+function TabAnalytics() {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const load = () => {
+    setLoading(true);
+    apiFetch("/saas-admin/analytics").then(res => {
+      if (res.success) setData(res.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  };
+  useEffect(() => { load(); }, []);
+
+  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading analytics...</div>;
+  if (!data) return <div style={{ padding:60, textAlign:"center", color:T.red, fontSize:13 }}>Failed to load</div>;
+
+  const { cohorts, mrr_growth, churned_mrr, churn_metrics, churn_predictions, adoption, revenue, funnel } = data;
+
+  // Heatmap color by retention %
+  const retColor = (pct) => {
+    if (pct >= 80) return T.grn;
+    if (pct >= 60) return "#34D399";
+    if (pct >= 40) return T.amb;
+    if (pct >= 20) return "#FB923C";
+    if (pct > 0)   return T.red;
+    return T.b1;
+  };
+
+  // Funnel pct
+  const funnelPct = (n) => funnel.signups > 0 ? Math.round((n / funnel.signups) * 100) : 0;
+
+  return (
+    <div style={{ padding:"20px 24px" }}>
+      <PageHeader title="Analytics" sub="Cohort analysis, churn prediction & feature adoption" right={
+        <Btn onClick={load} variant="outline"><IcRefresh size={13}/> Refresh</Btn>
+      }/>
+
+      {/* Revenue KPIs */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:20 }}>
+        <StatCard label="Total Revenue"   value={"₹" + fmtMoney(revenue.total)} sub="All-time paid"  color={T.grn} Icon={IcDollar}/>
+        <StatCard label="MRR"             value={"₹" + fmtMoney(revenue.mrr)}   sub="Monthly recurring" color={T.blu} Icon={IcTrend}/>
+        <StatCard label="ARR"             value={"₹" + fmtMoney(revenue.arr)}   sub="Annualized"    color={T.pur} Icon={IcDollar}/>
+        <StatCard label="Avg Deal"        value={"₹" + fmtMoney(revenue.avg_deal)} sub="Per subscription" color={T.cyn} Icon={IcDollar}/>
+        <StatCard label="Monthly Churn"   value={churn_metrics.monthly_churn + "%"} sub={`${churn_metrics.churned_this_month} churned`} color={churn_metrics.monthly_churn > 5 ? T.red : T.grn} Icon={IcActivity}/>
+      </div>
+
+      {/* Conversion funnel */}
+      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px", marginBottom:20 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Conversion Funnel</div>
+        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
+          {[
+            { l:"Signups",        v: funnel.signups,       color:T.slt },
+            { l:"Activated",      v: funnel.activated,     color:T.blu, hint:"At least 1 login" },
+            { l:"Trial → Paid",   v: funnel.trial_to_paid, color:T.pur, hint:"Converted trials" },
+            { l:"Paying",         v: funnel.paying,        color:T.grn, hint:"Active paid subs" },
+          ].map((f, i) => (
+            <div key={i} style={{ padding:"14px 16px", background:f.color + "12", border:`1px solid ${f.color}30`, borderRadius:10 }}>
+              <div style={{ fontSize:10, fontWeight:700, color:f.color, textTransform:"uppercase", marginBottom:6 }}>{f.l}</div>
+              <div style={{ fontSize:24, fontWeight:800, color:T.t1 }}>{fmtNum(f.v)}</div>
+              <div style={{ fontSize:11, color:T.t4, marginTop:2 }}>{funnelPct(f.v)}% of signups{f.hint ? " · " + f.hint : ""}</div>
+              <div style={{ height:5, background:T.b1, borderRadius:3, marginTop:8, overflow:"hidden" }}>
+                <div style={{ height:"100%", width:`${funnelPct(f.v)}%`, background:f.color }}/>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Cohort retention heatmap */}
+      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden", marginBottom:20 }}>
+        <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, fontSize:13, fontWeight:700, color:T.t1 }}>
+          Cohort Retention (% of signups still active by month)
+        </div>
+        <div style={{ padding:"14px 16px", overflowX:"auto" }}>
+          {cohorts.length === 0 ? <div style={{ color:T.t4, fontSize:12, textAlign:"center", padding:20 }}>Not enough data yet</div> : (
+            <table style={{ borderCollapse:"collapse", width:"100%", minWidth:600 }}>
+              <thead>
+                <tr>
+                  <th style={{ textAlign:"left", padding:"6px 8px", fontSize:11, fontWeight:700, color:T.t3, borderBottom:`1px solid ${T.b1}` }}>Cohort</th>
+                  <th style={{ textAlign:"center", padding:"6px 8px", fontSize:11, fontWeight:700, color:T.t3, borderBottom:`1px solid ${T.b1}` }}>Size</th>
+                  {[0,1,2,3,4,5].map(m => (
+                    <th key={m} style={{ textAlign:"center", padding:"6px 8px", fontSize:11, fontWeight:700, color:T.t3, borderBottom:`1px solid ${T.b1}` }}>M{m}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {cohorts.map((c, i) => (
+                  <tr key={i}>
+                    <td style={{ padding:"7px 8px", fontSize:11, fontWeight:600, color:T.t1 }}>{c.cohort}</td>
+                    <td style={{ padding:"7px 8px", fontSize:11, color:T.t3, textAlign:"center" }}>{c.size}</td>
+                    {[0,1,2,3,4,5].map(m => {
+                      const cell = c.retention.find(r => r.month === m);
+                      const pct = cell?.pct || 0;
+                      return (
+                        <td key={m} style={{ padding:4, textAlign:"center" }}>
+                          <div style={{ padding:"6px 0", background: retColor(pct), color: pct >= 40 ? "white" : T.t3, borderRadius:5, fontSize:10, fontWeight:700 }}>
+                            {pct > 0 ? pct + "%" : "—"}
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {/* MRR growth + Feature adoption */}
+      <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:16, marginBottom:20 }}>
+        {/* MRR net growth */}
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, fontSize:13, fontWeight:700, color:T.t1 }}>
+            MRR: New vs Churned (6 months)
+          </div>
+          <div style={{ padding:"16px" }}>
+            {mrr_growth.length === 0 ? <div style={{ color:T.t4, fontSize:12, textAlign:"center", padding:20 }}>No subscription data yet</div> : (
+              <div style={{ display:"flex", alignItems:"flex-end", gap:12, height:160 }}>
+                {mrr_growth.map((g, i) => {
+                  const churned = churned_mrr.find(c => c.month === g.month);
+                  const churnedVal = parseFloat(churned?.churned_mrr || 0);
+                  const newVal = parseFloat(g.new_mrr) || 0;
+                  const max = Math.max(...mrr_growth.map(x => parseFloat(x.new_mrr)||0), ...churned_mrr.map(x => parseFloat(x.churned_mrr)||0), 1);
+                  return (
+                    <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
+                      <div style={{ fontSize:10, fontWeight:700, color:T.grn }}>+₹{fmtMoney(newVal)}</div>
+                      <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:2 }}>
+                        <div style={{ width:"100%", height:`${(newVal/max)*70}px`, minHeight:6, background:T.grn, borderRadius:"3px 3px 0 0" }}/>
+                        {churnedVal > 0 && <div style={{ width:"100%", height:`${(churnedVal/max)*70}px`, minHeight:6, background:T.red, borderRadius:"0 0 3px 3px" }}/>}
+                      </div>
+                      {churnedVal > 0 && <div style={{ fontSize:10, fontWeight:700, color:T.red }}>-₹{fmtMoney(churnedVal)}</div>}
+                      <div style={{ fontSize:9, color:T.t4, marginTop:4 }}>{g.month.split("-")[1]}/{g.month.split("-")[0].slice(2)}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Feature adoption */}
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+          <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, fontSize:13, fontWeight:700, color:T.t1 }}>
+            Feature Adoption
+          </div>
+          <div style={{ padding:"14px 16px", maxHeight:260, overflowY:"auto" }}>
+            {adoption.length === 0 && <div style={{ color:T.t4, fontSize:12, textAlign:"center", padding:20 }}>No modules configured</div>}
+            {adoption.map((m, i) => (
+              <div key={i} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                <div style={{ width:95, fontSize:11.5, color:T.t2, fontWeight:500, textTransform:"capitalize" }}>{m.module}</div>
+                <div style={{ flex:1, height:8, background:T.b1, borderRadius:4, overflow:"hidden" }}>
+                  <div style={{ height:"100%", width:`${m.pct}%`, background: m.pct >= 60 ? T.grn : m.pct >= 30 ? T.amb : T.red, borderRadius:4 }}/>
+                </div>
+                <div style={{ width:40, fontSize:11, fontWeight:700, color:T.t1, textAlign:"right" }}>{m.pct}%</div>
+                <div style={{ width:38, fontSize:10, color:T.t4, textAlign:"right" }}>{m.enabled}/{m.total}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Churn predictions */}
+      <div style={{ background:T.surface, border:`1px solid ${T.redM}`, borderRadius:10, overflow:"hidden" }}>
+        <div style={{ padding:"11px 16px", background:T.redL, borderBottom:`1px solid ${T.redM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+          <span style={{ fontSize:13, fontWeight:700, color:T.red }}>🔮 Churn Predictions (health &lt; 50)</span>
+          <span style={{ fontSize:11, color:T.red, fontWeight:600 }}>{churn_predictions.length} at risk</span>
+        </div>
+        <div style={{ maxHeight:300, overflowY:"auto" }}>
+          {churn_predictions.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No predicted churns ✓</div>}
+          {churn_predictions.map((c, i) => {
+            const daysSince = c.last_login ? Math.floor((Date.now() - new Date(c.last_login)) / 86400000) : null;
+            const risk = c.health_score < 25 ? "Very High" : c.health_score < 40 ? "High" : "Medium";
+            const riskColor = c.health_score < 25 ? T.red : c.health_score < 40 ? T.amb : T.blu;
+            return (
+              <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"grid", gridTemplateColumns:"2fr 1fr 1fr 100px 70px", gap:10, alignItems:"center" }}>
+                <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                <div style={{ fontSize:11, color:T.t3 }}>Sub ends: {c.sub_end ? fmtDate(c.sub_end) : "—"}</div>
+                <div style={{ fontSize:11, color:T.t3 }}>{daysSince != null ? daysSince + "d since login" : "Never logged in"}</div>
+                <div><Badge text={risk + " risk"} color={riskColor}/></div>
+                <div style={{ fontSize:14, fontWeight:800, color:riskColor, textAlign:"right" }}>{c.health_score}</div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // TAB: CRM & HEALTH (Phase 4) — health alerts, auto-emails, scheduler
 // ════════════════════════════════════════════════════════════════════════
 function TabCRMHealth() {
@@ -2031,6 +2224,7 @@ const TABS = [
   { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
   { id:"companies", label:"Companies",        Icon:IcBuilding },
   { id:"crm",       label:"CRM & Health",     Icon:IcActivity },
+  { id:"analytics", label:"Analytics",        Icon:IcTrend    },
   { id:"subs",      label:"Subscriptions",    Icon:IcCrown    },
   { id:"modules",   label:"Module Access",    Icon:IcPuzzle   },
   { id:"users",     label:"All Users",        Icon:IcUsers    },
@@ -2106,6 +2300,7 @@ export default function SaaSModule() {
             {tab === "stats"     && <TabStats/>}
             {tab === "companies" && <TabCompanies companies={companies} reload={loadCompanies} onSelectCompany={handleSelectCompany} onOpenDetail={handleOpenDetail}/>}
             {tab === "crm"       && <TabCRMHealth/>}
+            {tab === "analytics" && <TabAnalytics/>}
             {tab === "subs"      && <TabSubscriptions companies={companies}/>}
             {tab === "modules"   && <TabModuleAccess selectedCompany={selCompany} companies={companies}/>}
             {tab === "users"     && <TabUsers/>}
