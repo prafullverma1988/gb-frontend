@@ -2235,6 +2235,8 @@ function TabSanchalan({ onOpenDetail }) {
   });
   const [seedScale, setSeedScale] = useState("medium");
   const [seedReset, setSeedReset] = useState(true);
+  const [seedFactory, setSeedFactory] = useState(false);
+  const [seedDomain, setSeedDomain] = useState("auto");
   const [seeding, setSeeding] = useState(false);
 
   const load = useCallback(() => {
@@ -2272,24 +2274,37 @@ function TabSanchalan({ onOpenDetail }) {
 
   const runSeed = async () => {
     if (!seedTarget) return;
+    if (seedFactory && !window.confirm(`⚠️ FACTORY RESET will delete ALL data (real + demo) for "${seedTarget.name}" before seeding.\n\nThis cannot be undone. Continue?`)) return;
     setSeeding(true);
     const mods = Object.keys(seedModules).filter(k => seedModules[k]);
     const r = await apiFetch("/saas-admin/sanchalan/" + seedTarget.id + "/seed-demo", {
       method: "POST",
-      body: { modules: mods, scale: seedScale, reset: seedReset },
+      body: { modules: mods, scale: seedScale, reset: seedReset, factory: seedFactory, domain: seedDomain },
     });
     setSeeding(false);
     if (r.success) {
       const c = r.data.counts || {};
       const summary = Object.entries(c)
-        .filter(([k]) => k !== "wiped")
+        .filter(([k]) => k !== "wiped" && k !== "factory_reset")
         .map(([k, v]) => `${v} ${k}`)
         .join(", ");
       setToast({ msg: "Seeded: " + (summary || "done"), type: "success" });
       setSeedTarget(null);
+      setSeedFactory(false);
       load();
     } else {
       setToast({ msg: r.message || "Seed failed", type: "error" });
+    }
+  };
+
+  const runFactoryReset = async (c) => {
+    if (!window.confirm(`⚠️ FACTORY RESET "${c.name}"?\n\nThis will delete ALL operational data — projects, finance, CRM, procurement, warehouse, payroll, tasks — real and demo both. Company login, users, subscription stay intact.\n\nThis cannot be undone. Continue?`)) return;
+    const r = await apiFetch("/saas-admin/sanchalan/" + c.id + "/factory-reset", { method: "POST" });
+    if (r.success) {
+      setToast({ msg: r.message, type: "success" });
+      load();
+    } else {
+      setToast({ msg: r.message || "Reset failed", type: "error" });
     }
   };
 
@@ -2395,8 +2410,9 @@ function TabSanchalan({ onOpenDetail }) {
                   <td style={{...td, textAlign:"right", whiteSpace:"nowrap"}}>
                     <Btn onClick={() => onOpenDetail(c)} variant="secondary" style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Details</Btn>
                     <Btn onClick={() => setSeedTarget(c)} color={T.pur} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Seed Demo</Btn>
-                    <Btn onClick={() => runWipe(c)} variant="secondary" color={T.amb} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Wipe</Btn>
-                    <Btn onClick={() => handleUnmark(c.id, c.name)} variant="secondary" color={T.red} style={{ padding:"5px 10px", fontSize:11 }}>Unmark</Btn>
+                    <Btn onClick={() => runWipe(c)} variant="secondary" color={T.amb} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Wipe Demo</Btn>
+                    <Btn onClick={() => runFactoryReset(c)} variant="secondary" color={T.red} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Factory Reset</Btn>
+                    <Btn onClick={() => handleUnmark(c.id, c.name)} variant="secondary" color={T.slt} style={{ padding:"5px 10px", fontSize:11 }}>Unmark</Btn>
                   </td>
                 </tr>
               ))}
@@ -2411,6 +2427,22 @@ function TabSanchalan({ onOpenDetail }) {
           <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:12, padding:26, width:540, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
             <div style={{ fontSize:15, fontWeight:800, color:T.t1, marginBottom:4 }}>Seed demo data</div>
             <div style={{ fontSize:12, color:T.t3, marginBottom:18 }}>Target: <b style={{color:T.pur}}>{seedTarget.name}</b> ({seedTarget.internal_label || "internal"})</div>
+
+            {/* Domain */}
+            <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.5px" }}>Client Background / Domain</div>
+            <div style={{ display:"flex", gap:10, marginBottom:18 }}>
+              {[
+                { id:"auto",         label:"Auto detect",  sub:"From module_type" },
+                { id:"construction", label:"Construction", sub:"Villas, BOQ, civil" },
+                { id:"solar",        label:"Solar EPC",    sub:"Panels, inverters" },
+              ].map(d => (
+                <div key={d.id} onClick={() => setSeedDomain(d.id)}
+                  style={{ flex:1, padding:"11px 12px", border:`2px solid ${seedDomain===d.id?T.cyn:T.b1}`, borderRadius:9, cursor:"pointer", background:seedDomain===d.id?T.cynL:T.surface }}>
+                  <div style={{ fontSize:12.5, fontWeight:700, color:seedDomain===d.id?T.cyn:T.t1 }}>{d.label}</div>
+                  <div style={{ fontSize:10, color:T.t3, marginTop:2 }}>{d.sub}</div>
+                </div>
+              ))}
+            </div>
 
             {/* Scale */}
             <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.5px" }}>Scale</div>
@@ -2444,9 +2476,15 @@ function TabSanchalan({ onOpenDetail }) {
             </div>
 
             {/* Reset */}
-            <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, marginBottom:18, cursor:"pointer", fontSize:12 }}>
-              <input type="checkbox" checked={seedReset} onChange={e => setSeedReset(e.target.checked)}/>
+            <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", background:seedFactory?T.sltL:T.ambL, border:`1px solid ${seedFactory?T.b2:T.ambM}`, borderRadius:8, marginBottom:8, cursor: seedFactory?"not-allowed":"pointer", fontSize:12, opacity: seedFactory?0.5:1 }}>
+              <input type="checkbox" checked={seedReset} disabled={seedFactory} onChange={e => setSeedReset(e.target.checked)}/>
               <span style={{ color:T.amb, fontWeight:600 }}>Wipe existing demo rows first (recommended)</span>
+            </label>
+
+            {/* Factory reset */}
+            <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, marginBottom:18, cursor:"pointer", fontSize:12 }}>
+              <input type="checkbox" checked={seedFactory} onChange={e => setSeedFactory(e.target.checked)}/>
+              <span style={{ color:T.red, fontWeight:700 }}>⚠ Factory reset first — delete ALL data (real + demo) before seeding</span>
             </label>
 
             <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
