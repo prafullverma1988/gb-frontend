@@ -723,14 +723,15 @@ function DashboardModule(){
   const activeAlerts=alertsArr.filter(a=>!dismissedAlerts.includes(a.id));
   const projects=["All",...projectsArr.map(p=>p.name)];
   const filteredProjects=selProject==="All"?projectsArr:projectsArr.filter(p=>p.name===selProject);
-  const totalBOQ=filteredProjects.reduce((s,p)=>s+(p.boq||0),0);
-  const totalExp=filteredProjects.reduce((s,p)=>s+(p.expense||p.total_expense||0),0);
+  const num=(v)=>{const n=Number(v);return isFinite(n)?n:0;};
+  const totalBOQ=filteredProjects.reduce((s,p)=>s+num(p.boq||p.boq_value),0);
+  const totalExp=filteredProjects.reduce((s,p)=>s+num(p.expense||p.total_expense),0);
   const totalMargin=totalBOQ-totalExp;
   const marginPct=totalBOQ>0?((totalMargin/totalBOQ)*100).toFixed(1):0;
-  const cashBalance=dd.cash_balance||0;
+  const cashBalance=num(dd.cash_balance);
   const activeCount=filteredProjects.filter(p=>p.status==="Ongoing"||p.status==="ongoing").length;
-  const avgProgress=filteredProjects.length>0?Math.round(filteredProjects.reduce((s,p)=>s+(p.progress||0),0)/filteredProjects.length):0;
-  const overdueAmt=dd.overdue_amount||0;
+  const avgProgress=filteredProjects.length>0?Math.round(filteredProjects.reduce((s,p)=>s+num(p.progress),0)/filteredProjects.length):0;
+  const overdueAmt=num(dd.overdue_amount);
   const pendingCount=pendingArr.length;
   const cfData=range==="week"?cashflowArr.slice(-2):range==="month"?cashflowArr.slice(-3):cashflowArr;
   const totalIn=cfData.reduce((s,d)=>s+(d.in||0),0);
@@ -752,7 +753,7 @@ function DashboardModule(){
       {/* KPI row */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:12}}>
         <KpiTile label="Total BOQ" value={`₹${fmt(totalBOQ)}`} sub={`${filteredProjects.length} projects`} color={T.slt} Icon={IcMargin} trend="up" trendVal="+12%"/>
-        <KpiTile label="Total Spent" value={`₹${fmt(totalExp)}`} sub={`${((totalExp/totalBOQ)*100).toFixed(0)}% of BOQ`} color={T.amb} Icon={IcTruck}/>
+        <KpiTile label="Total Spent" value={`₹${fmt(totalExp)}`} sub={`${totalBOQ>0?((totalExp/totalBOQ)*100).toFixed(0):0}% of BOQ`} color={T.amb} Icon={IcTruck}/>
         <KpiTile label="Gross Margin" value={`₹${fmt(totalMargin)}`} sub={`${marginPct}% margin`} color={totalMargin>0?T.grn:T.red} Icon={IcTrend} trend={totalMargin>0?"up":"down"} trendVal={`${marginPct}%`}/>
         <KpiTile label="Cash Balance" value={`₹${fmt(cashBalance)}`} sub="All accounts" color={T.blu} Icon={IcCash}/>
         <KpiTile label="Active Projects" value={activeCount} sub={`Avg ${avgProgress}% progress`} color={T.pur} Icon={IcProj}/>
