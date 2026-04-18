@@ -40,22 +40,66 @@ api.login = async (email, password) => {
   return data;
 };
 
+// ═══════════════════════════════════════════════════════════════
+// MOCK AUTH MODE — TEMPORARY
+// Production backend doesn't have /auth/login/password or /auth/otp/*
+// routes yet. Until it does, we:
+//   • Password flow   → forward to legacy /auth/login using mobile→email map
+//   • OTP flow        → generate OTP client-side, show on screen, then
+//                        login via legacy email login on verify
+// Set MOCK_AUTH = false once gb-backend is redeployed with new routes.
+// ═══════════════════════════════════════════════════════════════
+const MOCK_AUTH = true;
+const MOBILE_TO_EMAIL = {
+  "9981641230": "admin@gbbuildcon.com",
+  // add more mobile → email mappings here as needed
+};
+const MOCK_ADMIN_PASSWORD = "Admin@123"; // used only for OTP-verified login
+let _mockOtp = null;
+let _mockOtpMobile = null;
+
 // ── Mobile + Password ────────────────────────────────────────
 api.loginPassword = async (mobile, password) => {
+  if (MOCK_AUTH) {
+    const email = MOBILE_TO_EMAIL[mobile];
+    if (!email) return { success: false, message: "Mobile number not registered" };
+    return await api.login(email, password);
+  }
   const res  = await fetch(`${API_BASE}/auth/login/password`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,password}) });
   const data = await res.json();
   if (data.success) saveAuth(data.token, data.user, data.companies);
   return data;
 };
 
-// ── Mobile + OTP: request OTP ────────────────────────────────
+// ── Mobile + OTP: request OTP (client-side in mock mode) ─────
 api.requestOtp = async (mobile) => {
+  if (MOCK_AUTH) {
+    if (!/^[6-9]\d{9}$/.test(mobile)) return { success: false, message: "Enter a valid 10-digit mobile number" };
+    if (!MOBILE_TO_EMAIL[mobile])     return { success: false, message: "Mobile number not registered" };
+    _mockOtpMobile = mobile;
+    _mockOtp = String(Math.floor(1000 + Math.random() * 9000));
+    console.log("🧪 [MOCK OTP] for", mobile, "is", _mockOtp);
+    return { success: true, message: "OTP generated", dev_otp: _mockOtp, expires_in: 600 };
+  }
   const res  = await fetch(`${API_BASE}/auth/otp/request`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile}) });
   return await res.json();
 };
 
 // ── Mobile + OTP: verify OTP & login ─────────────────────────
 api.loginOtp = async (mobile, otp) => {
+  if (MOCK_AUTH) {
+    if (mobile !== _mockOtpMobile || !_mockOtp) {
+      return { success: false, message: "Please request a new OTP" };
+    }
+    if (String(otp) !== _mockOtp) {
+      return { success: false, message: "Invalid OTP" };
+    }
+    _mockOtp = null;
+    _mockOtpMobile = null;
+    const email = MOBILE_TO_EMAIL[mobile];
+    if (!email) return { success: false, message: "Mobile number not registered" };
+    return await api.login(email, MOCK_ADMIN_PASSWORD);
+  }
   const res  = await fetch(`${API_BASE}/auth/login/otp`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,otp}) });
   const data = await res.json();
   if (data.success) saveAuth(data.token, data.user, data.companies);
