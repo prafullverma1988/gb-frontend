@@ -2197,6 +2197,46 @@ function TabTasks({ projectId, isAdmin }) {
   const [tasks,setTasks]     = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ── COLUMN RESIZE (Option A: drag-handle, per-user localStorage) ──
+  const COL_KEYS     = ["toggle","no","name","status","progress","start","end","days","assigned"];
+  const COL_LABELS   = {toggle:"", no:"No / TSK", name:"Task Name", status:"Status", progress:"Progress", start:"Start", end:"End", days:"Days", assigned:"Assigned"};
+  const COL_DEFAULTS = {toggle:26, no:52, name:320, status:85, progress:100, start:82, end:82, days:44, assigned:80};
+  const COL_RESIZABLE= {toggle:false, no:false, name:true, status:true, progress:true, start:true, end:true, days:false, assigned:true};
+  const COL_MIN = 60, COL_MAX = 600, COL_STORE = "gb_task_col_widths_v1";
+
+  const [colWidths, setColWidths] = useState(()=>{
+    try { const s=localStorage.getItem(COL_STORE); if(s) return {...COL_DEFAULTS, ...JSON.parse(s)}; } catch(e){}
+    return {...COL_DEFAULTS};
+  });
+  const GRID_TEMPLATE = COL_KEYS.map(k => (colWidths[k]||COL_DEFAULTS[k]) + "px").join(" ");
+  const isCustomWidths = COL_KEYS.some(k => colWidths[k] !== COL_DEFAULTS[k]);
+
+  const persistWidths = (w) => { try { localStorage.setItem(COL_STORE, JSON.stringify(w)); } catch(e){} };
+  const resetColWidths = () => { setColWidths({...COL_DEFAULTS}); persistWidths({...COL_DEFAULTS}); };
+
+  const startResize = (colKey) => (e) => {
+    e.preventDefault(); e.stopPropagation();
+    const startX = e.clientX;
+    const startW = colWidths[colKey] || COL_DEFAULTS[colKey];
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+    let latest = startW;
+    const onMove = (ev) => {
+      const delta = ev.clientX - startX;
+      latest = Math.max(COL_MIN, Math.min(COL_MAX, startW + delta));
+      setColWidths(prev => ({...prev, [colKey]: latest}));
+    };
+    const onUp = () => {
+      document.removeEventListener("mousemove", onMove);
+      document.removeEventListener("mouseup", onUp);
+      document.body.style.cursor = "";
+      document.body.style.userSelect = "";
+      setColWidths(prev => { const next = {...prev, [colKey]: latest}; persistWidths(next); return next; });
+    };
+    document.addEventListener("mousemove", onMove);
+    document.addEventListener("mouseup", onUp);
+  };
+
   useEffect(() => {
     if (!projectId) { setLoading(false); return; }
     api.get("/tasks?project_id=" + projectId).then(r => {
@@ -2381,7 +2421,7 @@ function TabTasks({ projectId, isAdmin }) {
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
     const lvl=lvlColors[Math.min(depth,6)];
     const indent=depth*16;
-    const GRID="26px 52px 320px 85px 100px 82px 82px 44px 80px";
+    const GRID=GRID_TEMPLATE;
     const SEP={borderRight:"1px solid #F1F5F9"};
 
     return(
@@ -2731,12 +2771,29 @@ function TabTasks({ projectId, isAdmin }) {
 
       {/* LIST VIEW */}
       {view==="list"&&!loading&&(
-        <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+        <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",position:"relative"}}>
+          {/* Reset widths (only when customised) */}
+          {isCustomWidths && (
+            <button onClick={resetColWidths} title="Reset column widths"
+              style={{position:"absolute",top:4,right:4,zIndex:3,background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"rgba(255,255,255,0.8)",fontSize:10,fontWeight:600,padding:"2px 7px",borderRadius:4,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.2)"}
+              onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.1)"}>
+              <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M3 12a9 9 0 109-9M3 12l4-4M3 12l4 4"/></svg>
+              Reset
+            </button>
+          )}
           {/* Header */}
-          <div style={{display:"grid",gridTemplateColumns:"26px 52px 320px 85px 100px 82px 82px 44px 80px",background:"#0D1B2A"}}>
-            {["","No / TSK","Task Name","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
-              <div key={i} style={{padding:"7px 5px",borderRight:i<8?"1px solid rgba(255,255,255,0.08)":"none"}}>
-                <span style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{h}</span>
+          <div style={{display:"grid",gridTemplateColumns:GRID_TEMPLATE,background:"#0D1B2A"}}>
+            {COL_KEYS.map((k,i)=>(
+              <div key={k} style={{padding:"7px 5px",borderRight:i<COL_KEYS.length-1?"1px solid rgba(255,255,255,0.08)":"none",position:"relative",overflow:"hidden"}}>
+                <span style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{COL_LABELS[k]}</span>
+                {COL_RESIZABLE[k] && (
+                  <div onMouseDown={startResize(k)} title="Drag to resize"
+                    style={{position:"absolute",right:-3,top:0,bottom:0,width:7,cursor:"col-resize",zIndex:2,transition:"background .1s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="rgba(59,130,246,0.6)"}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                  />
+                )}
               </div>
             ))}
           </div>
@@ -2791,12 +2848,12 @@ function TabTasks({ projectId, isAdmin }) {
       {/* Skeleton loader */}
       {loading && (
         <div style={{background:"white",borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden",marginTop:4}}>
-          <div style={{display:"grid",gridTemplateColumns:"26px 52px 320px 85px 100px 82px 82px 44px 80px",background:"#0D1B2A",padding:"7px 4px"}}>
-            {["","No/TSK","Task Name","Status","Progress","Start","End","Days","Assigned"].map((h,i)=>(
-              <div key={i} style={{padding:"0 5px"}}><span style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{h}</span></div>
+          <div style={{display:"grid",gridTemplateColumns:GRID_TEMPLATE,background:"#0D1B2A",padding:"7px 4px"}}>
+            {COL_KEYS.map(k=>(
+              <div key={k} style={{padding:"0 5px"}}><span style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{COL_LABELS[k]}</span></div>
             ))}
           </div>
-          <TaskSkeleton/>
+          <TaskSkeleton gridTemplate={GRID_TEMPLATE}/>
         </div>
       )}
       {!loading && tasks.length===0 && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:14}}>
@@ -7525,11 +7582,12 @@ function Sk({ w="100%", h=14, r=6, mb=0 }) {
 }
 if(typeof document!=="undefined"&&!document.getElementById("sk-style")){const s=document.createElement("style");s.id="sk-style";s.textContent="@keyframes skShimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}";document.head.appendChild(s);}
 
-function TaskSkeleton(){
+function TaskSkeleton({gridTemplate}={}){
+  const GRID = gridTemplate || "26px 52px 320px 85px 100px 82px 82px 44px 80px";
   return(
     <div style={{padding:"0 0"}}>
       {[1,2,3,4,5,6,7,8].map(i=>(
-        <div key={i} style={{display:"grid",gridTemplateColumns:"26px 52px 320px 85px 100px 82px 82px 44px 80px",alignItems:"center",height:34,borderBottom:"1px solid #F3F4F6",paddingLeft:4,opacity:Math.max(0.2,1-i*0.1)}}>
+        <div key={i} style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",height:34,borderBottom:"1px solid #F3F4F6",paddingLeft:4,opacity:Math.max(0.2,1-i*0.1)}}>
           <Sk w={14} h={14} r={3}/>
           <div style={{padding:"0 5px"}}><Sk w="80%" h={10} mb={3}/><Sk w="55%" h={8}/></div>
           <div style={{padding:"0 8px"}}><Sk w={i%3===0?"55%":i%2===0?"70%":"85%"} h={11}/></div>
