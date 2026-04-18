@@ -112,5 +112,15 @@ api.switchCompany = async (companyId) => {
 };
 api.logout = () => { clearAuth(); window.location.reload(); };
 
+// ── Baseline helpers ─────────────────────────────────────────
+api.baseline = {
+  status:    (projectId)               => api.get(`/projects/${projectId}/baseline/status`),
+  history:   (projectId)               => api.get(`/projects/${projectId}/baseline/history`),
+  version:   (projectId, v)            => api.get(`/projects/${projectId}/baseline/version/${v}`),
+  set:       (projectId, body)         => api.post(`/projects/${projectId}/baseline/set`, body),
+  rebaseline:(projectId, body)         => api.post(`/projects/${projectId}/baseline/rebaseline`, body),
+  clear:     (projectId, body)         => api.post(`/projects/${projectId}/baseline/clear`, body),
+};
+
 export default api;
 export { getToken, getUser, getCompanies, saveAuth, clearAuth, API_BASE };

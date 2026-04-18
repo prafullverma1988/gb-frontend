@@ -2197,11 +2197,34 @@ function TabTasks({ projectId, isAdmin }) {
   const [tasks,setTasks]     = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // ── BASELINE STATE ─────────────────────────────────────────────
+  const [baselineStatus, setBaselineStatus] = useState(null); // {is_set, current, task_total, ...}
+  const [showBaseline, setShowBaseline] = useState(()=>{
+    try { return localStorage.getItem("gb_show_baseline_cols")==="1"; } catch(e) { return false; }
+  });
+  const [showRebaseModal, setShowRebaseModal] = useState(false);
+  const [showBaselineHistory, setShowBaselineHistory] = useState(false);
+
+  const toggleShowBaseline = () => {
+    setShowBaseline(v => { const n=!v; try { localStorage.setItem("gb_show_baseline_cols", n?"1":"0"); } catch(e){} return n; });
+  };
+
+  const loadBaselineStatus = async () => {
+    if (!projectId) return;
+    try {
+      const r = await api.baseline.status(projectId);
+      if (r.success) setBaselineStatus(r.data);
+    } catch(e) { /* ignore — probably backend not deployed yet */ }
+  };
+  useEffect(()=>{ loadBaselineStatus(); /* eslint-disable-next-line */ }, [projectId]);
+
   // ── COLUMN RESIZE (Option A: drag-handle, per-user localStorage) ──
-  const COL_KEYS     = ["toggle","no","name","status","progress","start","end","days","assigned"];
-  const COL_LABELS   = {toggle:"", no:"No / TSK", name:"Task Name", status:"Status", progress:"Progress", start:"Start", end:"End", days:"Days", assigned:"Assigned"};
-  const COL_DEFAULTS = {toggle:26, no:52, name:320, status:85, progress:100, start:82, end:82, days:44, assigned:80};
-  const COL_RESIZABLE= {toggle:false, no:false, name:true, status:true, progress:true, start:true, end:true, days:false, assigned:true};
+  const BASE_COL_KEYS     = ["toggle","no","name","status","progress","start","end","days","assigned"];
+  const BASELINE_COL_KEYS = ["blStart","blEnd","slip"];
+  const COL_KEYS     = showBaseline ? [...BASE_COL_KEYS, ...BASELINE_COL_KEYS] : BASE_COL_KEYS;
+  const COL_LABELS   = {toggle:"", no:"No / TSK", name:"Task Name", status:"Status", progress:"Progress", start:"Start", end:"End", days:"Days", assigned:"Assigned", blStart:"BL Start", blEnd:"BL End", slip:"Slip"};
+  const COL_DEFAULTS = {toggle:26, no:52, name:320, status:85, progress:100, start:82, end:82, days:44, assigned:80, blStart:82, blEnd:82, slip:64};
+  const COL_RESIZABLE= {toggle:false, no:false, name:true, status:true, progress:true, start:true, end:true, days:false, assigned:true, blStart:true, blEnd:true, slip:false};
   const COL_MIN = 60, COL_MAX = 600, COL_STORE = "gb_task_col_widths_v1";
 
   const [colWidths, setColWidths] = useState(()=>{
@@ -2252,6 +2275,10 @@ function TabTasks({ projectId, isAdmin }) {
           t.baseEnd = t.base_end;
           t.actualStart = t.actual_start;
           t.actualEnd = t.actual_end;
+          t.originalStart         = t.original_start;
+          t.originalEnd           = t.original_end;
+          t.currentBaselineStart  = t.current_baseline_start;
+          t.currentBaselineEnd    = t.current_baseline_end;
           t.dhyanRakhen = t.dhyan_rakhen;
           t.lastUpdate = t.last_update;
           t.assignee = t.assignee_name || t.assigned_to || "";
@@ -2528,9 +2555,30 @@ function TabTasks({ projectId, isAdmin }) {
           </div>
 
           {/* Assigned */}
-          <div style={{padding:"0 6px",display:"flex",alignItems:"center",height:"100%"}}>
+          <div style={{padding:"0 6px",display:"flex",alignItems:"center",height:"100%",...(showBaseline?SEP:{})}}>
             <span style={{fontSize:10,color:"#475569",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(t.assignee||"").split(" ")[0]||"—"}</span>
           </div>
+
+          {/* Baseline columns (toggleable) */}
+          {showBaseline && (()=>{
+            const blS = t.current_baseline_start || t.currentBaselineStart;
+            const blE = t.current_baseline_end   || t.currentBaselineEnd;
+            const slip = (blE && t.baseEnd) ? Math.round((new Date(t.baseEnd) - new Date(blE)) / 86400000) : null;
+            return (
+              <>
+                <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
+                  <span style={{fontSize:10,color:"#64748B",whiteSpace:"nowrap"}}>{fmtDate(blS)||"—"}</span>
+                </div>
+                <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%"}}>
+                  <span style={{fontSize:10,color:"#64748B",whiteSpace:"nowrap"}}>{fmtDate(blE)||"—"}</span>
+                </div>
+                <div style={{padding:"0 4px",display:"flex",alignItems:"center",justifyContent:"center",height:"100%"}}>
+                  {slip===null ? <span style={{fontSize:10,color:"#CBD5E1"}}>—</span>
+                    : <span style={{fontSize:10,fontWeight:700,color:slip>0?T.red:slip<0?T.grn:T.t3}}>{slip>0?`+${slip}d`:slip<0?`${slip}d`:"0"}</span>}
+                </div>
+              </>
+            );
+          })()}
         </div>
 
         {/* Info panel */}
@@ -2556,11 +2604,48 @@ function TabTasks({ projectId, isAdmin }) {
     );
   }
 
+  // ── Baseline metrics (computed from tasks flat) ─────────────
+  const blMetrics = (()=>{
+    if (!baselineStatus?.is_set) return null;
+    let withBL=0, onTime=0, slipSum=0, origSum=0, origCnt=0;
+    allFlat.forEach(t=>{
+      if (t.currentBaselineEnd) {
+        withBL++;
+        if (t.baseEnd) {
+          const diff = Math.round((new Date(t.baseEnd) - new Date(t.currentBaselineEnd))/86400000);
+          slipSum += diff;
+          if (diff <= 0) onTime++;
+        }
+      }
+      if (t.originalEnd && t.baseEnd) {
+        const d = Math.round((new Date(t.baseEnd) - new Date(t.originalEnd))/86400000);
+        origSum += d;
+        origCnt++;
+      }
+    });
+    return {
+      onTimePct: withBL>0 ? Math.round(onTime/withBL*100) : 0,
+      avgSlip:   withBL>0 ? (slipSum/withBL).toFixed(1) : "0",
+      origDelay: origCnt>0 ? Math.round(origSum/origCnt) : 0,
+      version: baselineStatus.current?.version || 0,
+    };
+  })();
+
   return(
     <div style={{padding:"14px 18px",fontFamily:"'Segoe UI',sans-serif"}}>
 
+      {/* Baseline Strip */}
+      <BaselineStrip
+        status={baselineStatus}
+        showCols={showBaseline}
+        onToggleCols={toggleShowBaseline}
+        onSet={()=>setShowRebaseModal("set")}
+        onRebaseline={()=>setShowRebaseModal("rebaseline")}
+        onHistory={()=>setShowBaselineHistory(true)}
+      />
+
       {/* Stats row */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:9,marginBottom:12}}>
+      <div style={{display:"grid",gridTemplateColumns:blMetrics?"repeat(8,1fr)":"repeat(5,1fr)",gap:9,marginBottom:12}}>
         {[
           {l:"Total Tasks",v:allFlat.length,c:T.slt},
           {l:"Ongoing",v:ongoing,c:T.blu},
@@ -2580,6 +2665,22 @@ function TabTasks({ projectId, isAdmin }) {
           <div style={{fontSize:9,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Open Issues</div>
           <div style={{fontSize:18,fontWeight:700,color:T.red}}>{taskIssues.filter(i=>i.status==="Open"||i.status==="In Progress").length||0}</div>
         </div>
+
+        {/* Baseline metrics — only when baseline is set */}
+        {blMetrics && <>
+          <div style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid #7C3AED`}}>
+            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>On-Time % (v{blMetrics.version})</div>
+            <div style={{fontSize:18,fontWeight:700,color:blMetrics.onTimePct>=80?T.grn:blMetrics.onTimePct>=50?T.amb:T.red}}>{blMetrics.onTimePct}%</div>
+          </div>
+          <div style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid #7C3AED`}}>
+            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Avg Slip</div>
+            <div style={{fontSize:18,fontWeight:700,color:parseFloat(blMetrics.avgSlip)>0?T.red:T.grn}}>{parseFloat(blMetrics.avgSlip)>0?"+":""}{blMetrics.avgSlip}d</div>
+          </div>
+          <div style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderTop:`3px solid #EC4899`}}>
+            <div style={{fontSize:9,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>Original Delay (v1)</div>
+            <div style={{fontSize:18,fontWeight:700,color:blMetrics.origDelay>0?T.red:T.grn}}>{blMetrics.origDelay>0?"+":""}{blMetrics.origDelay}d</div>
+          </div>
+        </>}
       </div>
 
       {/* Toolbar */}
@@ -2935,6 +3036,235 @@ function TabTasks({ projectId, isAdmin }) {
         } else alert(res.message || "Save failed");
         setShowAdd(false); setAddParent(null);
       }}/>}
+
+      {/* Rebaseline / Set Baseline modal */}
+      {showRebaseModal && (
+        <RebaselineModal
+          mode={showRebaseModal}   /* "set" or "rebaseline" */
+          projectId={projectId}
+          onClose={()=>setShowRebaseModal(false)}
+          onSuccess={async()=>{
+            setShowRebaseModal(false);
+            await loadBaselineStatus();
+            // Reload tasks to get updated baseline fields
+            const r = await api.get("/tasks?project_id=" + projectId);
+            if (r.success) {
+              const flat = r.data || [];
+              const map = {};
+              flat.forEach((t, idx) => {
+                t.children = []; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
+                t.baseStart=t.base_start; t.baseEnd=t.base_end;
+                t.originalStart=t.original_start; t.originalEnd=t.original_end;
+                t.currentBaselineStart=t.current_baseline_start; t.currentBaselineEnd=t.current_baseline_end;
+                t.actualStart=t.actual_start; t.actualEnd=t.actual_end;
+                t.dhyanRakhen=t.dhyan_rakhen; t.lastUpdate=t.last_update;
+                t.assignee=t.assignee_name||t.assigned_to||""; t.serial=idx+1;
+                map[t.id]=t;
+              });
+              const roots=[];
+              flat.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
+              setTasks(roots);
+            }
+          }}
+        />
+      )}
+
+      {/* Baseline History modal */}
+      {showBaselineHistory && (
+        <BaselineHistoryModal
+          projectId={projectId}
+          onClose={()=>setShowBaselineHistory(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BASELINE STRIP — header card showing current baseline status
+// ═══════════════════════════════════════════════════════════════
+function BaselineStrip({ status, showCols, onToggleCols, onSet, onRebaseline, onHistory }) {
+  if (!status) {
+    return (
+      <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"8px 12px",marginBottom:10,fontSize:11,color:"#64748B"}}>
+        Loading baseline status…
+      </div>
+    );
+  }
+  const canBaseline = !!status.can_baseline;
+  if (!status.is_set) {
+    return (
+      <div style={{background:"linear-gradient(90deg,#FEF3C7,#FED7AA)",border:"1px solid #FBBF24",borderRadius:8,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:12}}>
+        <div style={{flex:1}}>
+          <div style={{fontSize:12,fontWeight:700,color:"#92400E",marginBottom:2}}>⚠ No baseline set for this project</div>
+          <div style={{fontSize:10.5,color:"#78350F"}}>Set a baseline to lock the original schedule and track variance over time.</div>
+        </div>
+        {canBaseline ? (
+          <button onClick={onSet} style={{padding:"7px 14px",borderRadius:6,background:"linear-gradient(135deg,#F59E0B,#D97706)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer",whiteSpace:"nowrap"}}>🔒 Set Baseline</button>
+        ) : (
+          <span style={{fontSize:10.5,color:"#78350F",fontStyle:"italic"}}>Admin / PM only</span>
+        )}
+      </div>
+    );
+  }
+  const cur = status.current;
+  const when = cur?.set_at ? new Date(cur.set_at).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}) : "—";
+  return (
+    <div style={{background:"linear-gradient(90deg,#EDE9FE,#DDD6FE)",border:"1px solid #A78BFA",borderRadius:8,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+      <div style={{flex:1,minWidth:220}}>
+        <div style={{fontSize:12,fontWeight:700,color:"#5B21B6",marginBottom:2,display:"flex",alignItems:"center",gap:8}}>
+          📌 Baseline v{cur?.version} (current)
+          <span style={{background:"#7C3AED",color:"white",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:10,letterSpacing:".4px"}}>{status.task_with_baseline}/{status.task_total} TASKS</span>
+        </div>
+        <div style={{fontSize:10.5,color:"#5B21B6"}}>Set {when} by <b>{cur?.set_by_name||"—"}</b></div>
+        {cur?.reason && <div style={{fontSize:10.5,color:"#6D28D9",marginTop:3,fontStyle:"italic"}}>"{cur.reason}"</div>}
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        <button onClick={onToggleCols} title={showCols?"Hide baseline columns":"Show baseline columns"}
+          style={{padding:"6px 11px",borderRadius:6,background:showCols?"#7C3AED":"white",color:showCols?"white":"#5B21B6",fontSize:11,fontWeight:700,border:`1px solid #7C3AED`,cursor:"pointer"}}>
+          {showCols?"✓ Columns":"👁 Columns"}
+        </button>
+        <button onClick={onHistory} style={{padding:"6px 11px",borderRadius:6,background:"white",color:"#5B21B6",fontSize:11,fontWeight:700,border:`1px solid #7C3AED`,cursor:"pointer"}}>📜 History</button>
+        {canBaseline && <button onClick={onRebaseline} style={{padding:"6px 11px",borderRadius:6,background:"linear-gradient(135deg,#7C3AED,#5B21B6)",color:"white",fontSize:11,fontWeight:700,border:"none",cursor:"pointer"}}>🔄 Rebaseline</button>}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// REBASELINE / SET BASELINE MODAL
+// ═══════════════════════════════════════════════════════════════
+function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
+  const isSet = mode === "set";
+  const [reason, setReason] = useState("");
+  const [rbMode, setRbMode] = useState("auto");
+  const [shiftDays, setShiftDays] = useState(0);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async () => {
+    setError("");
+    if (reason.trim().length < 5) { setError("Reason must be at least 5 characters"); return; }
+    setLoading(true);
+    try {
+      if (isSet) {
+        const r = await api.baseline.set(projectId, { reason });
+        if (!r.success) throw new Error(r.message);
+      } else {
+        const body = { reason, mode: rbMode };
+        if (rbMode === "auto") body.shift_days = parseInt(shiftDays,10) || 0;
+        else body.task_overrides = []; // UI for manual per-task is future work; submits empty to force validation
+        const r = await api.baseline.rebaseline(projectId, body);
+        if (!r.success) throw new Error(r.message);
+      }
+      onSuccess();
+    } catch(e) { setError(e.message || "Failed"); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
+      <div style={{background:"white",borderRadius:14,width:520,maxWidth:"92%",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+        <div style={{background:"linear-gradient(135deg,#7C3AED,#5B21B6)",padding:"16px 22px",color:"white"}}>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.8,marginBottom:3}}>{isSet?"INITIAL BASELINE":"REBASELINE"}</div>
+          <div style={{fontSize:16,fontWeight:700}}>{isSet?"🔒 Set Baseline v1":"🔄 Create New Baseline Version"}</div>
+          <div style={{fontSize:11,opacity:0.85,marginTop:3}}>{isSet?"This locks the current planned dates as the original plan.":"Completed tasks keep their previous baseline. Remaining tasks get the new schedule."}</div>
+        </div>
+        <div style={{padding:"18px 22px"}}>
+          {error && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{error}</div>}
+
+          <div style={{marginBottom:14}}>
+            <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>Reason <span style={{color:"#EF4444"}}>*</span></label>
+            <textarea value={reason} onChange={e=>setReason(e.target.value)} placeholder={isSet?"e.g. Project kickoff — locking initial schedule":"e.g. Monsoon delay, client scope change..."}
+              rows={3} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #D1D5DB",borderRadius:7,fontSize:12.5,fontFamily:"inherit",resize:"vertical",outline:"none",boxSizing:"border-box"}}/>
+            <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>Min 5 characters — audit log me save hoga</div>
+          </div>
+
+          {!isSet && (
+            <div style={{marginBottom:14}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>Mode</label>
+              <div style={{display:"flex",gap:8}}>
+                <label style={{flex:1,padding:"10px 12px",border:`2px solid ${rbMode==="auto"?"#7C3AED":"#E5E7EB"}`,borderRadius:7,cursor:"pointer",background:rbMode==="auto"?"#F5F3FF":"white"}}>
+                  <input type="radio" checked={rbMode==="auto"} onChange={()=>setRbMode("auto")} style={{marginRight:6}}/>
+                  <span style={{fontSize:12,fontWeight:600}}>Auto-shift</span>
+                  <div style={{fontSize:10,color:"#6B7280",marginLeft:20}}>Shift all remaining tasks by N days</div>
+                </label>
+                <label style={{flex:1,padding:"10px 12px",border:`2px solid ${rbMode==="manual"?"#7C3AED":"#E5E7EB"}`,borderRadius:7,cursor:"pointer",background:rbMode==="manual"?"#F5F3FF":"white",opacity:.5}}>
+                  <input type="radio" checked={rbMode==="manual"} onChange={()=>{}} disabled style={{marginRight:6}}/>
+                  <span style={{fontSize:12,fontWeight:600}}>Manual (coming soon)</span>
+                  <div style={{fontSize:10,color:"#6B7280",marginLeft:20}}>Edit each task individually</div>
+                </label>
+              </div>
+
+              {rbMode==="auto" && (
+                <div style={{marginTop:10,padding:"10px 12px",background:"#F9FAFB",borderRadius:7,border:"1px solid #E5E7EB"}}>
+                  <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:4}}>Shift remaining tasks by</label>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input type="number" value={shiftDays} onChange={e=>setShiftDays(e.target.value)} style={{width:80,padding:"6px 10px",border:"1.5px solid #D1D5DB",borderRadius:6,fontSize:13,fontFamily:"inherit",outline:"none"}}/>
+                    <span style={{fontSize:12,color:"#6B7280"}}>days</span>
+                    <span style={{fontSize:10,color:"#9CA3AF",marginLeft:8}}>(+ delays, − pulls earlier)</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div style={{display:"flex",gap:8,marginTop:20}}>
+            <button onClick={onClose} disabled={loading}
+              style={{flex:1,padding:"10px",borderRadius:7,background:"#F3F4F6",border:"1px solid #D1D5DB",fontSize:12.5,fontWeight:600,color:"#374151",cursor:loading?"not-allowed":"pointer"}}>Cancel</button>
+            <button onClick={submit} disabled={loading}
+              style={{flex:2,padding:"10px",borderRadius:7,background:loading?"#C4B5FD":"linear-gradient(135deg,#7C3AED,#5B21B6)",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:loading?"not-allowed":"pointer"}}>
+              {loading?"Saving...":isSet?"🔒 Confirm & Lock Baseline":"🔄 Confirm Rebaseline"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BASELINE HISTORY MODAL
+// ═══════════════════════════════════════════════════════════════
+function BaselineHistoryModal({ projectId, onClose }) {
+  const [history, setHistory] = useState(null);
+  const [error, setError] = useState("");
+  useEffect(() => {
+    api.baseline.history(projectId).then(r => {
+      if (r.success) setHistory(r.data || []);
+      else setError(r.message || "Failed to load");
+    }).catch(e => setError(e.message));
+  }, [projectId]);
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
+      <div style={{background:"white",borderRadius:14,width:640,maxWidth:"92%",maxHeight:"85vh",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+        <div style={{background:"linear-gradient(135deg,#7C3AED,#5B21B6)",padding:"16px 22px",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.8,marginBottom:3}}>PROJECT BASELINE</div>
+            <div style={{fontSize:16,fontWeight:700}}>📜 History</div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"white",width:30,height:30,borderRadius:6,cursor:"pointer",fontSize:14,fontWeight:700}}>✕</button>
+        </div>
+        <div style={{padding:"18px 22px",overflow:"auto"}}>
+          {error && <div style={{padding:12,background:"#FEE2E2",color:"#991B1B",borderRadius:7,fontSize:12}}>{error}</div>}
+          {!history && !error && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>Loading…</div>}
+          {history && history.length === 0 && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>No baselines yet.</div>}
+          {history && history.map(b => (
+            <div key={b.id} style={{padding:"12px 14px",marginBottom:8,background:b.is_current?"#F5F3FF":"#F9FAFB",border:`1px solid ${b.is_current?"#A78BFA":"#E5E7EB"}`,borderLeft:`4px solid ${b.is_current?"#7C3AED":"#9CA3AF"}`,borderRadius:7}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+                <span style={{fontSize:14,fontWeight:800,color:b.is_current?"#5B21B6":"#374151"}}>Baseline v{b.version}</span>
+                {b.is_current && <span style={{background:"#7C3AED",color:"white",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:10,letterSpacing:".4px"}}>CURRENT</span>}
+                <span style={{fontSize:10,color:"#6B7280",marginLeft:"auto"}}>{b.task_count} tasks</span>
+              </div>
+              <div style={{fontSize:11,color:"#6B7280",marginBottom:4}}>
+                {b.set_at ? new Date(b.set_at).toLocaleString("en-IN",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}) : "—"}
+                {" · by "}<b>{b.set_by_name || "—"}</b>
+              </div>
+              {b.reason && <div style={{fontSize:12,color:"#374151",fontStyle:"italic",background:"white",padding:"6px 10px",borderRadius:5,border:"1px solid #E5E7EB"}}>"{b.reason}"</div>}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }
