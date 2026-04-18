@@ -3094,15 +3094,21 @@ function BaselineStrip({ status, showCols, onToggleCols, onSet, onRebaseline, on
   const canBaseline = !!status.can_baseline;
   if (!status.is_set) {
     return (
-      <div style={{background:"linear-gradient(90deg,#FEF3C7,#FED7AA)",border:"1px solid #FBBF24",borderRadius:8,padding:"10px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:12}}>
+      <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"9px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:12}}>
         <div style={{flex:1}}>
-          <div style={{fontSize:12,fontWeight:700,color:"#92400E",marginBottom:2}}>⚠ No baseline set for this project</div>
-          <div style={{fontSize:10.5,color:"#78350F"}}>Set a baseline to lock the original schedule and track variance over time.</div>
+          <div style={{fontSize:11.5,fontWeight:600,color:"#475569",marginBottom:2,display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:13}}>📋</span> Planned schedule active — no baseline yet
+          </div>
+          <div style={{fontSize:10.5,color:"#64748B"}}>Create a baseline jab delay ho — current dates lock ho jayengi aur aage ki variance track hogi.</div>
         </div>
         {canBaseline ? (
-          <button onClick={onSet} style={{padding:"7px 14px",borderRadius:6,background:"linear-gradient(135deg,#F59E0B,#D97706)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer",whiteSpace:"nowrap"}}>🔒 Set Baseline</button>
+          <button onClick={onSet} style={{padding:"6px 12px",borderRadius:6,background:"white",color:"#5B21B6",fontSize:11,fontWeight:700,border:"1px solid #A78BFA",cursor:"pointer",whiteSpace:"nowrap"}}
+            onMouseEnter={e=>{e.currentTarget.style.background="#F5F3FF";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="white";}}>
+            📌 Create Baseline
+          </button>
         ) : (
-          <span style={{fontSize:10.5,color:"#78350F",fontStyle:"italic"}}>Admin / PM only</span>
+          <span style={{fontSize:10.5,color:"#94A3B8",fontStyle:"italic"}}>Admin / PM only</span>
         )}
       </div>
     );
@@ -3166,9 +3172,9 @@ function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
       <div style={{background:"white",borderRadius:14,width:520,maxWidth:"92%",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
         <div style={{background:"linear-gradient(135deg,#7C3AED,#5B21B6)",padding:"16px 22px",color:"white"}}>
-          <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.8,marginBottom:3}}>{isSet?"INITIAL BASELINE":"REBASELINE"}</div>
-          <div style={{fontSize:16,fontWeight:700}}>{isSet?"🔒 Set Baseline v1":"🔄 Create New Baseline Version"}</div>
-          <div style={{fontSize:11,opacity:0.85,marginTop:3}}>{isSet?"This locks the current planned dates as the original plan.":"Completed tasks keep their previous baseline. Remaining tasks get the new schedule."}</div>
+          <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.8,marginBottom:3}}>{isSet?"CREATE BASELINE":"REBASELINE"}</div>
+          <div style={{fontSize:16,fontWeight:700}}>{isSet?"📌 Create Baseline v1":"🔄 Create New Baseline Version"}</div>
+          <div style={{fontSize:11,opacity:0.85,marginTop:3}}>{isSet?"Typically done when delay hota hai — current planned dates snapshot ho jayengi aur aage ki variance track hogi.":"Completed tasks keep their previous baseline. Remaining tasks get the new schedule."}</div>
         </div>
         <div style={{padding:"18px 22px"}}>
           {error && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{error}</div>}
