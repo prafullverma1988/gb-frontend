@@ -2730,7 +2730,7 @@ function TabTasks({ projectId, isAdmin }) {
       )}
 
       {/* LIST VIEW */}
-      {view==="list"&&(
+      {view==="list"&&!loading&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           {/* Header */}
           <div style={{display:"grid",gridTemplateColumns:"26px 52px 320px 85px 100px 82px 82px 44px 80px",background:"#0D1B2A"}}>

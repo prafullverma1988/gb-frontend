@@ -253,20 +253,72 @@ function ProjectMiniCard({p,onClick}){
 
 // ── LOGIN ─────────────────────────────────────────────────────────────
 function LoginScreen({onLogin}){
-  const [email,setEmail]=useState("admin@gbbuildcon.com");
-  const [pass,setPass]=useState("Admin@123");
+  // stage: 'mobile' | 'choose' | 'password' | 'otp'
+  const [stage,setStage]=useState("mobile");
+  const [mobile,setMobile]=useState("");
+  const [pass,setPass]=useState("");
+  const [otp,setOtp]=useState("");
   const [show,setShow]=useState(false);
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
-  const handleLogin=async()=>{
-    setLoading(true);setError("");
+  const [info,setInfo]=useState("");
+  const [devOtp,setDevOtp]=useState("");
+
+  const resetMsgs=()=>{setError("");setInfo("");};
+  const goBack=()=>{resetMsgs();setStage(stage==="password"||stage==="otp"?"choose":"mobile");};
+
+  // Stage 1 → Stage 2: validate mobile
+  const handleMobileNext=()=>{
+    resetMsgs();
+    if(!/^[6-9]\d{9}$/.test(mobile)){setError("Enter a valid 10-digit mobile number");return;}
+    setStage("choose");
+  };
+
+  // Stage 2 → Stage 3: request OTP (if OTP path)
+  const handleRequestOtp=async()=>{
+    resetMsgs();setLoading(true);
     try{
-      const res=await api.login(email,pass);
+      const res=await api.requestOtp(mobile);
+      if(res.success){
+        setStage("otp");
+        setInfo("OTP sent to your mobile");
+        if(res.dev_otp)setDevOtp(res.dev_otp);
+      }else{setError(res.message||"Could not send OTP");}
+    }catch(err){setError("Server not reachable. Please try again.");}
+    setLoading(false);
+  };
+
+  // Stage 3a: password login
+  const handlePasswordLogin=async()=>{
+    resetMsgs();
+    if(!pass){setError("Enter password");return;}
+    setLoading(true);
+    try{
+      const res=await api.loginPassword(mobile,pass);
       if(res.success){onLogin(res.user,res.companies);}
       else{setError(res.message||"Login failed");}
     }catch(err){setError("Server not reachable. Please try again.");}
     setLoading(false);
   };
+
+  // Stage 3b: OTP login
+  const handleOtpLogin=async()=>{
+    resetMsgs();
+    if(!/^\d{4}$/.test(otp)){setError("Enter the 4-digit OTP");return;}
+    setLoading(true);
+    try{
+      const res=await api.loginOtp(mobile,otp);
+      if(res.success){onLogin(res.user,res.companies);}
+      else{setError(res.message||"Invalid OTP");}
+    }catch(err){setError("Server not reachable. Please try again.");}
+    setLoading(false);
+  };
+
+  const inputStyle={width:"100%",padding:"11px 14px",borderRadius:9,border:`1.5px solid ${C.b}`,fontSize:13,color:C.t,background:T.sltL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const labelStyle={fontSize:11,fontWeight:600,color:C.tm,letterSpacing:"0.6px",textTransform:"uppercase",display:"block",marginBottom:6};
+  const primaryBtn=(disabled)=>({width:"100%",padding:"13px",borderRadius:9,background:disabled?C.tl:`linear-gradient(135deg,${C.p},${C.p2})`,color:"white",fontSize:14,fontWeight:700,border:"none",cursor:disabled?"not-allowed":"pointer"});
+  const secondaryBtn={width:"100%",padding:"13px",borderRadius:9,background:"white",color:C.p,fontSize:14,fontWeight:700,border:`1.5px solid ${C.p}`,cursor:"pointer",marginTop:10};
+
   return(
     <div style={{minHeight:"100vh",background:`linear-gradient(135deg,${C.sb} 0%,#1B3A5C 50%,${C.p} 100%)`,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <div style={{background:"rgba(255,255,255,0.97)",borderRadius:20,padding:"44px 40px",width:400,boxShadow:"0 32px 80px rgba(0,0,0,0.35)"}}>
@@ -275,19 +327,56 @@ function LoginScreen({onLogin}){
           <div style={{fontSize:21,fontWeight:800,color:C.t}}>Sanchalan</div>
           <div style={{fontSize:12,color:C.tl,marginTop:3}}>Business Management Platform</div>
         </div>
+
         {error&&<div style={{background:T.redL,color:T.red,padding:"10px 14px",borderRadius:8,fontSize:12.5,marginBottom:16,border:`1px solid ${T.redM}`}}>{error}</div>}
-        <div style={{marginBottom:14}}>
-          <label style={{fontSize:11,fontWeight:600,color:C.tm,letterSpacing:"0.6px",textTransform:"uppercase",display:"block",marginBottom:6}}>Email</label>
-          <input type="text" value={email} onChange={e=>setEmail(e.target.value)} style={{width:"100%",padding:"11px 14px",borderRadius:9,border:`1.5px solid ${C.b}`,fontSize:13,color:C.t,background:T.sltL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
-        </div>
-        <div style={{marginBottom:26}}>
-          <label style={{fontSize:11,fontWeight:600,color:C.tm,letterSpacing:"0.6px",textTransform:"uppercase",display:"block",marginBottom:6}}>Password</label>
-          <div style={{position:"relative"}}>
-            <input type={show?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} style={{width:"100%",padding:"11px 40px 11px 14px",borderRadius:9,border:`1.5px solid ${C.b}`,fontSize:13,color:C.t,background:T.sltL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
-            <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}>{show?<IcEyeX size={17}/>:<IcEye size={17}/>}</button>
-          </div>
-        </div>
-        <button onClick={handleLogin} disabled={loading} style={{width:"100%",padding:"13px",borderRadius:9,background:loading?C.tl:`linear-gradient(135deg,${C.p},${C.p2})`,color:"white",fontSize:14,fontWeight:700,border:"none",cursor:loading?"not-allowed":"pointer"}}>{loading?"Logging in...":"Login to Dashboard"}</button>
+        {info&&<div style={{background:"#E8F5E9",color:"#2E7D32",padding:"10px 14px",borderRadius:8,fontSize:12.5,marginBottom:16,border:"1px solid #A5D6A7"}}>{info}</div>}
+        {devOtp&&stage==="otp"&&<div style={{background:"#FFF8E1",color:"#795548",padding:"10px 14px",borderRadius:8,fontSize:12,marginBottom:16,border:"1px dashed #FFB300"}}>DEV OTP: <b>{devOtp}</b></div>}
+
+        {stage==="mobile"&&(
+          <>
+            <div style={{marginBottom:26}}>
+              <label style={labelStyle}>Mobile Number</label>
+              <input type="tel" inputMode="numeric" maxLength={10} placeholder="10-digit mobile" value={mobile} onChange={e=>setMobile(e.target.value.replace(/\D/g,""))} style={inputStyle} onKeyDown={e=>e.key==="Enter"&&handleMobileNext()} autoFocus/>
+            </div>
+            <button onClick={handleMobileNext} style={primaryBtn(false)}>Next</button>
+          </>
+        )}
+
+        {stage==="choose"&&(
+          <>
+            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={()=>{setStage("mobile");resetMsgs();}} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>Change</button></div>
+            <button onClick={()=>{setStage("password");resetMsgs();}} style={primaryBtn(false)}>Login with Password</button>
+            <button onClick={handleRequestOtp} disabled={loading} style={secondaryBtn}>{loading?"Sending OTP...":"Login with OTP"}</button>
+          </>
+        )}
+
+        {stage==="password"&&(
+          <>
+            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={goBack} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>Change</button></div>
+            <div style={{marginBottom:22}}>
+              <label style={labelStyle}>Password</label>
+              <div style={{position:"relative"}}>
+                <input type={show?"text":"password"} value={pass} onChange={e=>setPass(e.target.value)} style={{...inputStyle,padding:"11px 40px 11px 14px"}} onKeyDown={e=>e.key==="Enter"&&handlePasswordLogin()} autoFocus/>
+                <button onClick={()=>setShow(s=>!s)} style={{position:"absolute",right:11,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}>{show?<IcEyeX size={17}/>:<IcEye size={17}/>}</button>
+              </div>
+            </div>
+            <button onClick={handlePasswordLogin} disabled={loading} style={primaryBtn(loading)}>{loading?"Logging in...":"Login"}</button>
+          </>
+        )}
+
+        {stage==="otp"&&(
+          <>
+            <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={goBack} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>Change</button></div>
+            <div style={{marginBottom:22}}>
+              <label style={labelStyle}>Enter OTP (4-digit)</label>
+              <input type="tel" inputMode="numeric" maxLength={4} placeholder="••••" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,""))} style={{...inputStyle,letterSpacing:"8px",textAlign:"center",fontSize:18,fontWeight:700}} onKeyDown={e=>e.key==="Enter"&&handleOtpLogin()} autoFocus/>
+            </div>
+            <button onClick={handleOtpLogin} disabled={loading} style={primaryBtn(loading)}>{loading?"Verifying...":"Verify & Login"}</button>
+            <div style={{textAlign:"center",marginTop:14}}>
+              <button onClick={handleRequestOtp} disabled={loading} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:loading?"not-allowed":"pointer"}}>Resend OTP</button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );

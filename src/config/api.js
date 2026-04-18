@@ -1,5 +1,8 @@
 // ── GB Buildcon API Configuration ──────────────────────────────
-const API_BASE = "https://gb-backend-production-7bd2.up.railway.app/api";
+// Local dev → localhost:5000, else production
+const API_BASE = (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
+  ? "http://localhost:5000/api"
+  : "https://gb-backend-production-7bd2.up.railway.app/api";
 
 const getToken  = () => localStorage.getItem("gb_token");
 const getUser   = () => { try { const u=localStorage.getItem("gb_user"); return u?JSON.parse(u):null; } catch{return null;} };
@@ -29,8 +32,31 @@ api.put   = (endpoint, body)  => api(endpoint, { method:"PUT",   body:JSON.strin
 api.patch = (endpoint, body)  => api(endpoint, { method:"PATCH", body:JSON.stringify(body) });
 api.del   = (endpoint)        => api(endpoint, { method:"DELETE" });
 
+// Legacy email+password login — kept for backwards compatibility
 api.login = async (email, password) => {
   const res  = await fetch(`${API_BASE}/auth/login`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({email,password}) });
+  const data = await res.json();
+  if (data.success) saveAuth(data.token, data.user, data.companies);
+  return data;
+};
+
+// ── Mobile + Password ────────────────────────────────────────
+api.loginPassword = async (mobile, password) => {
+  const res  = await fetch(`${API_BASE}/auth/login/password`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,password}) });
+  const data = await res.json();
+  if (data.success) saveAuth(data.token, data.user, data.companies);
+  return data;
+};
+
+// ── Mobile + OTP: request OTP ────────────────────────────────
+api.requestOtp = async (mobile) => {
+  const res  = await fetch(`${API_BASE}/auth/otp/request`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile}) });
+  return await res.json();
+};
+
+// ── Mobile + OTP: verify OTP & login ─────────────────────────
+api.loginOtp = async (mobile, otp) => {
+  const res  = await fetch(`${API_BASE}/auth/login/otp`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,otp}) });
   const data = await res.json();
   if (data.success) saveAuth(data.token, data.user, data.companies);
   return data;
