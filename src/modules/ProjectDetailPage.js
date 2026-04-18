@@ -3073,7 +3073,31 @@ function TabTasks({ projectId, isAdmin }) {
       {showBaselineHistory && (
         <BaselineHistoryModal
           projectId={projectId}
+          canBaseline={!!baselineStatus?.can_baseline}
           onClose={()=>setShowBaselineHistory(false)}
+          onDeleted={async()=>{
+            setShowBaselineHistory(false);
+            await loadBaselineStatus();
+            // reload tasks so cached baseline cols reset
+            const r = await api.get("/tasks?project_id=" + projectId);
+            if (r.success) {
+              const flat = r.data || [];
+              const map = {};
+              flat.forEach((t, idx) => {
+                t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
+                t.baseStart=t.base_start; t.baseEnd=t.base_end;
+                t.originalStart=t.original_start; t.originalEnd=t.original_end;
+                t.currentBaselineStart=t.current_baseline_start; t.currentBaselineEnd=t.current_baseline_end;
+                t.actualStart=t.actual_start; t.actualEnd=t.actual_end;
+                t.dhyanRakhen=t.dhyan_rakhen; t.lastUpdate=t.last_update;
+                t.assignee=t.assignee_name||t.assigned_to||""; t.serial=idx+1;
+                map[t.id]=t;
+              });
+              const roots=[];
+              flat.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
+              setTasks(roots);
+            }
+          }}
         />
       )}
     </div>
@@ -3232,15 +3256,32 @@ function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
 // ═══════════════════════════════════════════════════════════════
 // BASELINE HISTORY MODAL
 // ═══════════════════════════════════════════════════════════════
-function BaselineHistoryModal({ projectId, onClose }) {
+function BaselineHistoryModal({ projectId, canBaseline, onClose, onDeleted }) {
   const [history, setHistory] = useState(null);
   const [error, setError] = useState("");
+  const [showDelete, setShowDelete] = useState(false);
+  const [deleteReason, setDeleteReason] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     api.baseline.history(projectId).then(r => {
       if (r.success) setHistory(r.data || []);
       else setError(r.message || "Failed to load");
     }).catch(e => setError(e.message));
   }, [projectId]);
+
+  const handleDelete = async () => {
+    setError("");
+    if (deleteReason.trim().length < 5) { setError("Reason must be at least 5 characters"); return; }
+    setDeleting(true);
+    try {
+      const r = await api.baseline.clear(projectId, { reason: deleteReason });
+      if (!r.success) throw new Error(r.message);
+      if (onDeleted) onDeleted();
+    } catch(e) { setError(e.message || "Delete failed"); }
+    setDeleting(false);
+  };
+
   return (
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
       <div style={{background:"white",borderRadius:14,width:640,maxWidth:"92%",maxHeight:"85vh",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -3269,6 +3310,34 @@ function BaselineHistoryModal({ projectId, onClose }) {
               {b.reason && <div style={{fontSize:12,color:"#374151",fontStyle:"italic",background:"white",padding:"6px 10px",borderRadius:5,border:"1px solid #E5E7EB"}}>"{b.reason}"</div>}
             </div>
           ))}
+
+          {/* Danger zone — admin/PM only, collapsed by default */}
+          {canBaseline && history && history.length > 0 && (
+            <div style={{marginTop:18,paddingTop:14,borderTop:"1px dashed #E5E7EB"}}>
+              {!showDelete ? (
+                <button onClick={()=>setShowDelete(true)} style={{fontSize:10.5,color:"#94A3B8",background:"none",border:"none",cursor:"pointer",textDecoration:"underline",padding:"4px 0"}}>
+                  Need to delete all baselines? (admin / PM)
+                </button>
+              ) : (
+                <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:7,padding:"12px 14px"}}>
+                  <div style={{fontSize:11.5,fontWeight:700,color:"#991B1B",marginBottom:6,display:"flex",alignItems:"center",gap:6}}>⚠ Delete all baselines</div>
+                  <div style={{fontSize:10.5,color:"#7F1D1D",marginBottom:10}}>Ye action saari baseline versions ({history.length}) aur per-task snapshots ko hata dega. Planned dates unchanged rahengi. <b>Ye undo nahi ho sakta.</b></div>
+                  {error && <div style={{fontSize:11,color:"#991B1B",marginBottom:8,fontWeight:600}}>{error}</div>}
+                  <label style={{fontSize:10,fontWeight:700,color:"#7F1D1D",textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Reason <span style={{color:"#DC2626"}}>*</span></label>
+                  <input value={deleteReason} onChange={e=>setDeleteReason(e.target.value)} placeholder="Why deleting baselines?"
+                    style={{width:"100%",padding:"7px 10px",border:"1.5px solid #FCA5A5",borderRadius:6,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:10}}/>
+                  <div style={{display:"flex",gap:8}}>
+                    <button onClick={()=>{setShowDelete(false);setDeleteReason("");setError("");}} disabled={deleting}
+                      style={{flex:1,padding:"7px",borderRadius:6,background:"white",border:"1px solid #D1D5DB",fontSize:11.5,fontWeight:600,color:"#374151",cursor:deleting?"not-allowed":"pointer"}}>Cancel</button>
+                    <button onClick={handleDelete} disabled={deleting}
+                      style={{flex:1,padding:"7px",borderRadius:6,background:deleting?"#FCA5A5":"linear-gradient(135deg,#DC2626,#991B1B)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:deleting?"not-allowed":"pointer"}}>
+                      {deleting?"Deleting...":"🗑 Delete All Baselines"}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
     </div>
