@@ -2788,11 +2788,12 @@ function TabTasks({ projectId, isAdmin }) {
               <div key={k} style={{padding:"7px 5px",borderRight:i<COL_KEYS.length-1?"1px solid rgba(255,255,255,0.08)":"none",position:"relative",overflow:"hidden"}}>
                 <span style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px",whiteSpace:"nowrap"}}>{COL_LABELS[k]}</span>
                 {COL_RESIZABLE[k] && (
-                  <div onMouseDown={startResize(k)} title="Drag to resize"
-                    style={{position:"absolute",right:-3,top:0,bottom:0,width:7,cursor:"col-resize",zIndex:2,transition:"background .1s"}}
-                    onMouseEnter={e=>e.currentTarget.style.background="rgba(59,130,246,0.6)"}
-                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}
-                  />
+                  <div onMouseDown={startResize(k)} title="Drag to resize column"
+                    style={{position:"absolute",right:-4,top:4,bottom:4,width:9,cursor:"col-resize",zIndex:5,transition:"background .1s",display:"flex",alignItems:"center",justifyContent:"center"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background="rgba(59,130,246,0.7)";e.currentTarget.firstChild.style.background="white";}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.firstChild.style.background="rgba(255,255,255,0.25)";}}>
+                    <div style={{width:2,height:"60%",background:"rgba(255,255,255,0.25)",borderRadius:1,pointerEvents:"none",transition:"background .1s"}}/>
+                  </div>
                 )}
               </div>
             ))}
