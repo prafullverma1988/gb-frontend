@@ -2239,6 +2239,47 @@ function TabSanchalan({ onOpenDetail }) {
   const [seedDomain, setSeedDomain] = useState("auto");
   const [seeding, setSeeding] = useState(false);
 
+  // ── Demo templates (scenario-based seeders) ─────────────────────
+  const [tplTarget, setTplTarget] = useState(null);      // company to apply template to
+  const [templates, setTemplates] = useState([]);        // list of available templates
+  const [selectedTpl, setSelectedTpl] = useState(null);  // chosen template id
+  const [applyingTpl, setApplyingTpl] = useState(false);
+
+  const openTemplatePicker = async (c) => {
+    setTplTarget(c);
+    setSelectedTpl(null);
+    try {
+      const r = await apiFetch("/saas-admin/sanchalan/templates");
+      if (r.success) setTemplates(r.data || []);
+    } catch(_) { setTemplates([]); }
+  };
+
+  const applyTemplate = async () => {
+    if (!tplTarget || !selectedTpl) return;
+    const tpl = templates.find(t => t.id === selectedTpl);
+    if (tpl?.status === "stub") {
+      setToast({ msg: "This template is coming soon. Pick a full template.", type: "error" });
+      return;
+    }
+    if (!window.confirm(`Apply "${tpl?.name}" to ${tplTarget.name}?\n\nPrevious DEMO data (if any) will be wiped first. Real data stays.\n\nContinue?`)) return;
+    setApplyingTpl(true);
+    const r = await apiFetch("/saas-admin/sanchalan/companies/" + tplTarget.id + "/apply-template", {
+      method: "POST",
+      body: { template_id: selectedTpl, wipe: true },
+    });
+    setApplyingTpl(false);
+    if (r.success) {
+      const c = r.data?.result?.counts || {};
+      const summary = Object.entries(c).map(([k,v]) => `${v} ${k}`).join(", ");
+      setToast({ msg: `Template applied: ${summary || "done"}`, type: "success" });
+      setTplTarget(null);
+      setSelectedTpl(null);
+      load();
+    } else {
+      setToast({ msg: r.message || "Apply failed", type: "error" });
+    }
+  };
+
   const load = useCallback(() => {
     setLoading(true);
     apiFetch("/saas-admin/sanchalan").then(res => {
@@ -2410,6 +2451,7 @@ function TabSanchalan({ onOpenDetail }) {
                   <td style={{...td, textAlign:"right", whiteSpace:"nowrap"}}>
                     <Btn onClick={() => onOpenDetail(c)} variant="secondary" style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Details</Btn>
                     <Btn onClick={() => setSeedTarget(c)} color={T.pur} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Seed Demo</Btn>
+                    <Btn onClick={() => openTemplatePicker(c)} color="#EC4899" style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>🎯 Apply Template</Btn>
                     <Btn onClick={() => runWipe(c)} variant="secondary" color={T.amb} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Wipe Demo</Btn>
                     <Btn onClick={() => runFactoryReset(c)} variant="secondary" color={T.red} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Factory Reset</Btn>
                     <Btn onClick={() => handleUnmark(c.id, c.name)} variant="secondary" color={T.slt} style={{ padding:"5px 10px", fontSize:11 }}>Unmark</Btn>
@@ -2492,6 +2534,68 @@ function TabSanchalan({ onOpenDetail }) {
               <Btn color={T.pur} onClick={runSeed} disabled={seeding}>
                 {seeding ? "Seeding… (may take 10-20s)" : "Seed demo data"}
               </Btn>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Apply Template Modal ═══ */}
+      {tplTarget && (
+        <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.65)", zIndex:9998, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={() => !applyingTpl && setTplTarget(null)}>
+          <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:12, padding:0, width:640, maxHeight:"88vh", overflow:"hidden", boxShadow:"0 20px 60px rgba(0,0,0,0.35)", display:"flex", flexDirection:"column" }}>
+            {/* Header */}
+            <div style={{ background:"linear-gradient(135deg,#EC4899,#BE185D)", color:"white", padding:"18px 22px" }}>
+              <div style={{ fontSize:10, fontWeight:700, letterSpacing:"1.5px", opacity:0.85, marginBottom:3 }}>DEMO TEMPLATES</div>
+              <div style={{ fontSize:16, fontWeight:800 }}>🎯 Apply scenario template to {tplTarget.name}</div>
+              <div style={{ fontSize:11, opacity:0.9, marginTop:4 }}>Existing demo data will be wiped first. Real data is untouched.</div>
+            </div>
+            {/* Body */}
+            <div style={{ padding:"16px 22px", overflowY:"auto", flex:1 }}>
+              {templates.length === 0 && <div style={{ padding:40, textAlign:"center", color:T.t4, fontSize:12 }}>Loading templates…</div>}
+              {templates.map(t => {
+                const isStub = t.status === "stub";
+                const isSelected = selectedTpl === t.id;
+                return (
+                  <div key={t.id} onClick={() => !isStub && setSelectedTpl(t.id)}
+                    style={{
+                      padding:"12px 14px", marginBottom:8, borderRadius:8,
+                      border:`2px solid ${isSelected ? "#EC4899" : isStub ? "#E5E7EB" : "#E5E7EB"}`,
+                      background:isSelected ? "#FDF2F8" : isStub ? "#F9FAFB" : "white",
+                      cursor:isStub ? "not-allowed" : "pointer",
+                      opacity:isStub ? 0.55 : 1,
+                      transition:"all 0.15s",
+                    }}>
+                    <div style={{ display:"flex", alignItems:"flex-start", gap:10 }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:isSelected ? "#BE185D" : T.t1, marginBottom:3, display:"flex", alignItems:"center", gap:8 }}>
+                          {t.name}
+                          {isStub && <span style={{ background:"#FEF3C7", color:"#92400E", fontSize:8.5, fontWeight:700, padding:"2px 6px", borderRadius:10, letterSpacing:".4px" }}>COMING SOON</span>}
+                          {!isStub && <span style={{ background:"#D1FAE5", color:"#065F46", fontSize:8.5, fontWeight:700, padding:"2px 6px", borderRadius:10, letterSpacing:".4px" }}>READY</span>}
+                        </div>
+                        <div style={{ fontSize:11.5, color:T.t3, lineHeight:1.45, marginBottom:4 }}>{t.description}</div>
+                        <div style={{ display:"flex", gap:4, flexWrap:"wrap" }}>
+                          {(t.tags || []).map(tg => (
+                            <span key={tg} style={{ background:"#F3F4F6", color:"#6B7280", fontSize:9.5, fontWeight:600, padding:"2px 7px", borderRadius:4 }}>{tg}</span>
+                          ))}
+                        </div>
+                      </div>
+                      {isSelected && <div style={{ color:"#EC4899", fontSize:18 }}>✓</div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Footer */}
+            <div style={{ padding:"14px 22px", borderTop:"1px solid #E5E7EB", background:"#F9FAFB", display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div style={{ fontSize:11, color:T.t3 }}>
+                {selectedTpl ? <span>Selected: <b>{templates.find(t=>t.id===selectedTpl)?.name || ""}</b></span> : "Pick a template to apply"}
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <Btn variant="secondary" onClick={() => setTplTarget(null)} disabled={applyingTpl}>Cancel</Btn>
+                <Btn color="#EC4899" onClick={applyTemplate} disabled={!selectedTpl || applyingTpl}>
+                  {applyingTpl ? "Applying…" : "🚀 Apply Template"}
+                </Btn>
+              </div>
             </div>
           </div>
         </div>
