@@ -2450,9 +2450,7 @@ function TabSanchalan({ onOpenDetail }) {
                   <td style={td}>{fmtDate(c.created_at)}</td>
                   <td style={{...td, textAlign:"right", whiteSpace:"nowrap"}}>
                     <Btn onClick={() => onOpenDetail(c)} variant="secondary" style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Details</Btn>
-                    <Btn onClick={() => setSeedTarget(c)} color={T.pur} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Seed Demo</Btn>
                     <Btn onClick={() => openTemplatePicker(c)} color="#EC4899" style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>🎯 Apply Template</Btn>
-                    <Btn onClick={() => runWipe(c)} variant="secondary" color={T.amb} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Wipe Demo</Btn>
                     <Btn onClick={() => runFactoryReset(c)} variant="secondary" color={T.red} style={{ padding:"5px 10px", fontSize:11, marginRight:6 }}>Factory Reset</Btn>
                     <Btn onClick={() => handleUnmark(c.id, c.name)} variant="secondary" color={T.slt} style={{ padding:"5px 10px", fontSize:11 }}>Unmark</Btn>
                   </td>
