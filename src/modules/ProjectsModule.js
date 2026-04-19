@@ -2062,10 +2062,12 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
 // ── TODO DRAWER ─────────────────────────────────────────────────
 function TodoDrawer({todos,loading,onClose,onSelectProject}){
   const [filter,setFilter]=useState("Pending"); // Pending | Done | All
+  const [localTodos,setLocalTodos]=useState(todos);
+  useEffect(()=>{ setLocalTodos(todos); },[todos]);
   const priC={"High":{c:"#DC2626",bg:"#FEE2E2"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"Low":{c:"#64748B",bg:"#F1F5F9"}};
   const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
 
-  const parsed=todos.map(t=>{
+  const parsed=localTodos.map(t=>{
     let cl=[];
     try{ cl=typeof t.checklist==="string"?JSON.parse(t.checklist):(t.checklist||[]); }catch(e){}
     return {...t,done:t.status==="done"||t.status==="Completed",checklist:cl};
@@ -2073,6 +2075,24 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
   const filtered=filter==="All"?parsed:filter==="Pending"?parsed.filter(t=>!t.done):parsed.filter(t=>t.done);
   const pendingCount=parsed.filter(t=>!t.done).length;
   const doneCount=parsed.filter(t=>t.done).length;
+
+  const goToProject = (t) => {
+    onClose();
+    onSelectProject && onSelectProject({ id: t.project_id, name: t.project_name, initialTab: "todo" });
+  };
+
+  const toggleDone = async (t, e) => {
+    if (e) e.stopPropagation();
+    const newStatus = t.done ? "Not Started" : "Completed";
+    // Optimistic UI
+    setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, status: newStatus } : x));
+    try {
+      await api.put(`/projects/${t.project_id}/tasks/${t.id}`, { status: newStatus });
+    } catch (err) {
+      // revert on failure
+      setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, status: t.status } : x));
+    }
+  };
 
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
@@ -2106,15 +2126,20 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
           const pr=priC[t.priority]||priC["Medium"];
           const clDone=(t.checklist||[]).filter(c=>c.done).length;
           return(
-            <div key={t.id} style={{background:"white",borderRadius:8,border:"1px solid #E2E8F0",marginBottom:8,padding:"10px 13px",borderLeft:`3px solid ${pr.c}44`}}>
+            <div key={t.id}
+              onClick={()=>goToProject(t)}
+              style={{background:"white",borderRadius:8,border:"1px solid #E2E8F0",marginBottom:8,padding:"10px 13px",borderLeft:`3px solid ${pr.c}44`,cursor:"pointer",transition:"box-shadow .15s, border-color .15s"}}
+              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(15,23,42,0.08)";e.currentTarget.style.borderColor="#BFDBFE";}}
+              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor="#E2E8F0";}}>
               <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                <div style={{width:16,height:16,borderRadius:4,border:t.done?`none`:`1.5px solid #CBD5E1`,background:t.done?"#22C55E":"transparent",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                <div onClick={(e)=>toggleDone(t,e)} title={t.done?"Mark as pending":"Mark as done"}
+                  style={{width:16,height:16,borderRadius:4,border:t.done?`none`:`1.5px solid #CBD5E1`,background:t.done?"#22C55E":"transparent",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
                   {t.done&&<svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>}
                 </div>
                 <div style={{flex:1,minWidth:0}}>
                   <div style={{fontSize:12.5,fontWeight:500,color:t.done?"#94A3B8":"#1E293B",textDecoration:t.done?"line-through":"none",marginBottom:4,lineHeight:1.4}}>{t.title}</div>
                   <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                    <span onClick={()=>{onClose();onSelectProject&&onSelectProject({id:t.project_id});}}
+                    <span onClick={(e)=>{e.stopPropagation();goToProject(t);}}
                       style={{fontSize:10,fontWeight:600,color:"#3B82F6",background:"#EFF6FF",padding:"1px 7px",borderRadius:10,cursor:"pointer",border:"1px solid #BFDBFE"}}>{t.project_name||"Project"}</span>
                     {t.category&&t.category!=="Other"&&<span style={{fontSize:10,color:"#64748B",background:"#F1F5F9",padding:"1px 6px",borderRadius:10}}>{t.category}</span>}
                     <span style={{fontSize:10,fontWeight:600,color:pr.c,background:pr.bg,padding:"1px 6px",borderRadius:10}}>{t.priority}</span>

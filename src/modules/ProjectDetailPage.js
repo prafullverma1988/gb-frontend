@@ -9656,7 +9656,8 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
   if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
-  const [tab, setTab] = useState("overview");
+  // Optional initial tab from parent (e.g. todo drawer → Todo tab)
+  const [tab, setTab] = useState(project.initialTab || "overview");
 
   // ── Solar EPC detection — construction tabs untouched ──────────
   const isSolar = project._raw?.project_type === "solar_epc" || project.project_type === "solar_epc";
