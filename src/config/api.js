@@ -108,6 +108,12 @@ api.switchCompany = async (companyId) => {
 };
 api.logout = () => { clearAuth(); window.location.reload(); };
 
+// ── Project task templates ───────────────────────────────────
+api.taskTemplates = {
+  list:  ()                  => api.get("/project-task-templates"),
+  apply: (projectId, body)   => api.post(`/project-task-templates/apply/${projectId}`, body),
+};
+
 // ── Baseline helpers ─────────────────────────────────────────
 api.baseline = {
   status:    (projectId)               => api.get(`/projects/${projectId}/baseline/status`),

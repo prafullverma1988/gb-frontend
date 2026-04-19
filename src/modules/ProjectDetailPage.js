@@ -2204,6 +2204,7 @@ function TabTasks({ projectId, isAdmin }) {
   });
   const [showRebaseModal, setShowRebaseModal] = useState(false);
   const [showBaselineHistory, setShowBaselineHistory] = useState(false);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   const toggleShowBaseline = () => {
     setShowBaseline(v => { const n=!v; try { localStorage.setItem("gb_show_baseline_cols", n?"1":"0"); } catch(e){} return n; });
@@ -2794,6 +2795,10 @@ function TabTasks({ projectId, isAdmin }) {
             e.target.value="";
           }}/>
         </label>}
+        {isAdmin&&<button onClick={()=>setShowTemplatePicker(true)}
+          style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
+          📋 Load Template
+        </button>}
         {isAdmin&&<button onClick={()=>{setAddParent(null);setShowAdd(true);}}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg> Add Task
@@ -3069,6 +3074,36 @@ function TabTasks({ projectId, isAdmin }) {
         />
       )}
 
+      {/* Task Template Picker modal */}
+      {showTemplatePicker && (
+        <TaskTemplatePickerModal
+          projectId={projectId}
+          onClose={()=>setShowTemplatePicker(false)}
+          onApplied={async()=>{
+            setShowTemplatePicker(false);
+            // Reload tasks so new WBS shows
+            const r = await api.get("/tasks?project_id=" + projectId);
+            if (r.success) {
+              const flat = r.data || [];
+              const map = {};
+              flat.forEach((t, idx) => {
+                t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
+                t.baseStart=t.base_start; t.baseEnd=t.base_end;
+                t.originalStart=t.original_start; t.originalEnd=t.original_end;
+                t.currentBaselineStart=t.current_baseline_start; t.currentBaselineEnd=t.current_baseline_end;
+                t.actualStart=t.actual_start; t.actualEnd=t.actual_end;
+                t.dhyanRakhen=t.dhyan_rakhen; t.lastUpdate=t.last_update;
+                t.assignee=t.assignee_name||t.assigned_to||""; t.serial=idx+1;
+                map[t.id]=t;
+              });
+              const roots=[];
+              flat.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
+              setTasks(roots);
+            }
+          }}
+        />
+      )}
+
       {/* Baseline History modal */}
       {showBaselineHistory && (
         <BaselineHistoryModal
@@ -3256,6 +3291,126 @@ function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
 // ═══════════════════════════════════════════════════════════════
 // BASELINE HISTORY MODAL
 // ═══════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════
+// TASK TEMPLATE PICKER MODAL
+// ═══════════════════════════════════════════════════════════════
+function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
+  const [list, setList] = useState(null);
+  const [selected, setSelected] = useState(null);
+  const [startDate, setStartDate] = useState("");
+  const [wipeExisting, setWipeExisting] = useState(false);
+  const [includeBOQ, setIncludeBOQ] = useState(true);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState("");
+  const [result, setResult] = useState(null);
+
+  useEffect(() => {
+    api.taskTemplates.list().then(r => {
+      if (r.success) setList(r.data || []);
+      else setError(r.message || "Could not load templates");
+    }).catch(e => setError(e.message));
+  }, []);
+
+  const apply = async () => {
+    setError("");
+    if (!selected) { setError("Pick a template first"); return; }
+    const tpl = list.find(t => t.id === selected);
+    if (wipeExisting && !window.confirm(`⚠️ This will DELETE all existing Gantt tasks for this project before loading "${tpl?.name}".\n\nTodos (in the To-Do tab) are not affected.\n\nContinue?`)) return;
+    setApplying(true);
+    try {
+      const body = { template_id: selected, wipe_existing: wipeExisting, include_boq: includeBOQ };
+      if (startDate) body.start_date = startDate;
+      const r = await api.taskTemplates.apply(projectId, body);
+      if (!r.success) throw new Error(r.message || "Apply failed");
+      setResult(r.data);
+      setTimeout(() => onApplied(), 1500);   // show success briefly
+    } catch (e) { setError(e.message); }
+    setApplying(false);
+  };
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.6)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}}>
+      <div style={{background:"white",borderRadius:14,width:640,maxWidth:"94%",maxHeight:"88vh",overflow:"hidden",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",fontFamily:"'Segoe UI',sans-serif"}}>
+        {/* Header */}
+        <div style={{background:"linear-gradient(135deg,#EC4899,#BE185D)",padding:"16px 22px",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:10,fontWeight:700,letterSpacing:"1.5px",opacity:0.85,marginBottom:3}}>PROJECT TASK TEMPLATES</div>
+            <div style={{fontSize:16,fontWeight:800}}>📋 Load Task Template</div>
+            <div style={{fontSize:11,opacity:0.9,marginTop:3}}>Pre-built WBS with dependencies, durations, and BOQ — auto-adjusted to project start date.</div>
+          </div>
+          <button onClick={onClose} disabled={applying} style={{background:"rgba(255,255,255,0.2)",border:"none",color:"white",width:30,height:30,borderRadius:6,cursor:applying?"not-allowed":"pointer",fontSize:14,fontWeight:700}}>✕</button>
+        </div>
+
+        {/* Body */}
+        <div style={{padding:"16px 22px",overflowY:"auto",flex:1}}>
+          {error && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"9px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{error}</div>}
+          {result && <div style={{background:"#D1FAE5",color:"#065F46",padding:"11px 14px",borderRadius:7,fontSize:12.5,marginBottom:12,border:"1px solid #6EE7B7",fontWeight:600}}>
+            ✓ Template applied — {result.tasks_inserted} tasks, {result.boq_inserted || 0} BOQ items, {result.total_duration_days} days
+          </div>}
+
+          {!list && !error && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>Loading templates…</div>}
+
+          {list && list.length === 0 && <div style={{padding:24,textAlign:"center",color:"#94A3B8",fontSize:12}}>No templates available yet.</div>}
+
+          {list && list.map(t => {
+            const isSelected = selected === t.id;
+            return (
+              <div key={t.id} onClick={() => !applying && setSelected(t.id)}
+                style={{padding:"12px 14px",marginBottom:9,borderRadius:8,border:`2px solid ${isSelected?"#EC4899":"#E5E7EB"}`,background:isSelected?"#FDF2F8":"white",cursor:applying?"wait":"pointer",transition:"all .15s"}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13.5,fontWeight:700,color:isSelected?"#BE185D":"#111827",marginBottom:3}}>{t.name}</div>
+                    <div style={{fontSize:11.5,color:"#6B7280",lineHeight:1.45,marginBottom:6}}>{t.description}</div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap",fontSize:10.5}}>
+                      <span style={{background:"#FCE7F3",color:"#9D174D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.phase_count} phases</span>
+                      <span style={{background:"#E0F2FE",color:"#075985",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.package_count} packages</span>
+                      <span style={{background:"#DCFCE7",color:"#14532D",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.activity_count} activities</span>
+                      <span style={{background:"#FEF3C7",color:"#78350F",padding:"2px 8px",borderRadius:10,fontWeight:700}}>{t.boq_count} BOQ items</span>
+                    </div>
+                    <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:5}}>
+                      {(t.tags || []).map(tg => <span key={tg} style={{background:"#F3F4F6",color:"#6B7280",fontSize:9.5,fontWeight:600,padding:"2px 7px",borderRadius:4}}>{tg}</span>)}
+                    </div>
+                  </div>
+                  {isSelected && <div style={{color:"#EC4899",fontSize:20}}>✓</div>}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Options */}
+          {selected && !result && (
+            <div style={{marginTop:16,padding:"12px 14px",background:"#F9FAFB",borderRadius:8,border:"1px solid #E5E7EB"}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",marginBottom:9}}>Apply Options</div>
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:11,fontWeight:600,color:"#374151",display:"block",marginBottom:4}}>Start date (optional)</label>
+                <input type="date" value={startDate} onChange={e=>setStartDate(e.target.value)}
+                  style={{width:"100%",padding:"7px 10px",border:"1.5px solid #D1D5DB",borderRadius:6,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>Leave blank to use the project's own start date.</div>
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#374151",marginBottom:6,cursor:"pointer"}}>
+                <input type="checkbox" checked={includeBOQ} onChange={e=>setIncludeBOQ(e.target.checked)}/>
+                <span>Include BOQ items (recommended)</span>
+              </label>
+              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#B91C1C",fontWeight:600,cursor:"pointer"}}>
+                <input type="checkbox" checked={wipeExisting} onChange={e=>setWipeExisting(e.target.checked)}/>
+                <span>⚠ Delete existing Gantt tasks before loading</span>
+              </label>
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"14px 22px",borderTop:"1px solid #E5E7EB",background:"#F9FAFB",display:"flex",justifyContent:"flex-end",gap:8}}>
+          <button onClick={onClose} disabled={applying} style={{padding:"8px 14px",borderRadius:6,background:"white",border:"1px solid #D1D5DB",fontSize:12.5,fontWeight:600,color:"#374151",cursor:applying?"not-allowed":"pointer"}}>Cancel</button>
+          <button onClick={apply} disabled={!selected || applying || result} style={{padding:"8px 16px",borderRadius:6,background:(!selected||applying||result)?"#F9A8D4":"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(!selected||applying||result)?"not-allowed":"pointer"}}>
+            {applying ? "Applying…" : result ? "Done ✓" : "🚀 Apply Template"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BaselineHistoryModal({ projectId, canBaseline, onClose, onDeleted }) {
   const [history, setHistory] = useState(null);
   const [error, setError] = useState("");
