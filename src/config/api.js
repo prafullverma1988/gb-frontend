@@ -41,15 +41,11 @@ api.login = async (email, password) => {
 };
 
 // ═══════════════════════════════════════════════════════════════
-// MOCK AUTH MODE — TEMPORARY
-// Production backend doesn't have /auth/login/password or /auth/otp/*
-// routes yet. Until it does, we:
-//   • Password flow   → forward to legacy /auth/login using mobile→email map
-//   • OTP flow        → generate OTP client-side, show on screen, then
-//                        login via legacy email login on verify
-// Set MOCK_AUTH = false once gb-backend is redeployed with new routes.
+// MOCK AUTH MODE — off (backend routes are live)
+// Flip back to true only if gb-backend is rolled back to a build
+// without /auth/login/password or /auth/otp/* endpoints.
 // ═══════════════════════════════════════════════════════════════
-const MOCK_AUTH = true;
+const MOCK_AUTH = false;
 const MOBILE_TO_EMAIL = {
   "9981641230": "admin@gbbuildcon.com",
   // add more mobile → email mappings here as needed

@@ -2228,17 +2228,6 @@ function TabSanchalan({ onOpenDetail }) {
   const [allCompanies, setAllCompanies] = useState([]);
   const [addId, setAddId]     = useState("");
   const [addLabel, setAddLabel] = useState("Sanchalan Construction");
-  const [seedTarget, setSeedTarget] = useState(null);   // company object or null
-  const [seedModules, setSeedModules] = useState({
-    projects: true, boq: true, tasks: true, finance: true,
-    crm: true, procurement: true, warehouse: true, payroll: true, team: true,
-  });
-  const [seedScale, setSeedScale] = useState("medium");
-  const [seedReset, setSeedReset] = useState(true);
-  const [seedFactory, setSeedFactory] = useState(false);
-  const [seedDomain, setSeedDomain] = useState("auto");
-  const [seeding, setSeeding] = useState(false);
-
   // ── Demo templates (scenario-based seeders) ─────────────────────
   const [tplTarget, setTplTarget] = useState(null);      // company to apply template to
   const [templates, setTemplates] = useState([]);        // list of available templates
@@ -2313,31 +2302,6 @@ function TabSanchalan({ onOpenDetail }) {
     }
   };
 
-  const runSeed = async () => {
-    if (!seedTarget) return;
-    if (seedFactory && !window.confirm(`⚠️ FACTORY RESET will delete ALL data (real + demo) for "${seedTarget.name}" before seeding.\n\nThis cannot be undone. Continue?`)) return;
-    setSeeding(true);
-    const mods = Object.keys(seedModules).filter(k => seedModules[k]);
-    const r = await apiFetch("/saas-admin/sanchalan/" + seedTarget.id + "/seed-demo", {
-      method: "POST",
-      body: { modules: mods, scale: seedScale, reset: seedReset, factory: seedFactory, domain: seedDomain },
-    });
-    setSeeding(false);
-    if (r.success) {
-      const c = r.data.counts || {};
-      const summary = Object.entries(c)
-        .filter(([k]) => k !== "wiped" && k !== "factory_reset")
-        .map(([k, v]) => `${v} ${k}`)
-        .join(", ");
-      setToast({ msg: "Seeded: " + (summary || "done"), type: "success" });
-      setSeedTarget(null);
-      setSeedFactory(false);
-      load();
-    } else {
-      setToast({ msg: r.message || "Seed failed", type: "error" });
-    }
-  };
-
   const runFactoryReset = async (c) => {
     if (!window.confirm(`⚠️ FACTORY RESET "${c.name}"?\n\nThis will delete ALL operational data — projects, finance, CRM, procurement, warehouse, payroll, tasks — real and demo both. Company login, users, subscription stay intact.\n\nThis cannot be undone. Continue?`)) return;
     const r = await apiFetch("/saas-admin/sanchalan/" + c.id + "/factory-reset", { method: "POST" });
@@ -2346,19 +2310,6 @@ function TabSanchalan({ onOpenDetail }) {
       load();
     } else {
       setToast({ msg: r.message || "Reset failed", type: "error" });
-    }
-  };
-
-  const runWipe = async (c) => {
-    if (!window.confirm(`Wipe ALL demo data from "${c.name}"?\n\nOnly rows marked demo_seed=1 will be deleted. Real data stays.`)) return;
-    const r = await apiFetch("/saas-admin/sanchalan/" + c.id + "/seed-demo", { method: "DELETE" });
-    if (r.success) {
-      const counts = r.data.counts || {};
-      const total = Object.values(counts).reduce((s, v) => s + (v || 0), 0);
-      setToast({ msg: `Wiped ${total} demo rows from ${c.name}`, type: "success" });
-      load();
-    } else {
-      setToast({ msg: r.message || "Wipe failed", type: "error" });
     }
   };
 
@@ -2460,82 +2411,6 @@ function TabSanchalan({ onOpenDetail }) {
           </table>
         </div>
       ))}
-
-      {/* Seed demo modal */}
-      {seedTarget && (
-        <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.6)", zIndex:9998, display:"flex", alignItems:"center", justifyContent:"center" }} onClick={() => !seeding && setSeedTarget(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ background:T.surface, borderRadius:12, padding:26, width:540, maxHeight:"90vh", overflowY:"auto", boxShadow:"0 20px 60px rgba(0,0,0,0.3)" }}>
-            <div style={{ fontSize:15, fontWeight:800, color:T.t1, marginBottom:4 }}>Seed demo data</div>
-            <div style={{ fontSize:12, color:T.t3, marginBottom:18 }}>Target: <b style={{color:T.pur}}>{seedTarget.name}</b> ({seedTarget.internal_label || "internal"})</div>
-
-            {/* Domain */}
-            <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.5px" }}>Client Background / Domain</div>
-            <div style={{ display:"flex", gap:10, marginBottom:18 }}>
-              {[
-                { id:"auto",         label:"Auto detect",  sub:"From module_type" },
-                { id:"construction", label:"Construction", sub:"Villas, BOQ, civil" },
-                { id:"solar",        label:"Solar EPC",    sub:"Panels, inverters" },
-              ].map(d => (
-                <div key={d.id} onClick={() => setSeedDomain(d.id)}
-                  style={{ flex:1, padding:"11px 12px", border:`2px solid ${seedDomain===d.id?T.cyn:T.b1}`, borderRadius:9, cursor:"pointer", background:seedDomain===d.id?T.cynL:T.surface }}>
-                  <div style={{ fontSize:12.5, fontWeight:700, color:seedDomain===d.id?T.cyn:T.t1 }}>{d.label}</div>
-                  <div style={{ fontSize:10, color:T.t3, marginTop:2 }}>{d.sub}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Scale */}
-            <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.5px" }}>Scale</div>
-            <div style={{ display:"flex", gap:10, marginBottom:18 }}>
-              {[
-                { id:"small",  label:"Small",  sub:"3 projects" },
-                { id:"medium", label:"Medium", sub:"8 projects" },
-                { id:"large",  label:"Large",  sub:"15 projects" },
-              ].map(s => (
-                <div key={s.id} onClick={() => setSeedScale(s.id)}
-                  style={{ flex:1, padding:"12px 14px", border:`2px solid ${seedScale===s.id?T.pur:T.b1}`, borderRadius:9, cursor:"pointer", background:seedScale===s.id?T.purL:T.surface }}>
-                  <div style={{ fontSize:13, fontWeight:700, color:seedScale===s.id?T.pur:T.t1 }}>{s.label}</div>
-                  <div style={{ fontSize:10.5, color:T.t3, marginTop:2 }}>{s.sub}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Modules */}
-            <div style={{ fontSize:11, fontWeight:700, color:T.t2, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.5px" }}>Modules to seed</div>
-            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:8, marginBottom:18 }}>
-              {[
-                ["projects","Projects"], ["boq","BOQ items"], ["tasks","Tasks"],
-                ["finance","Finance txns"], ["crm","CRM leads"], ["procurement","Procurement"],
-                ["warehouse","Warehouse"], ["payroll","Payroll"], ["team","Team Schedule"],
-              ].map(([k, label]) => (
-                <label key={k} style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 10px", border:`1px solid ${T.b1}`, borderRadius:7, cursor:"pointer", fontSize:12, background:seedModules[k]?T.purL:T.surfaceB }}>
-                  <input type="checkbox" checked={!!seedModules[k]} onChange={e => setSeedModules({...seedModules, [k]:e.target.checked})}/>
-                  <span style={{ color:seedModules[k]?T.pur:T.t2, fontWeight:seedModules[k]?700:500 }}>{label}</span>
-                </label>
-              ))}
-            </div>
-
-            {/* Reset */}
-            <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", background:seedFactory?T.sltL:T.ambL, border:`1px solid ${seedFactory?T.b2:T.ambM}`, borderRadius:8, marginBottom:8, cursor: seedFactory?"not-allowed":"pointer", fontSize:12, opacity: seedFactory?0.5:1 }}>
-              <input type="checkbox" checked={seedReset} disabled={seedFactory} onChange={e => setSeedReset(e.target.checked)}/>
-              <span style={{ color:T.amb, fontWeight:600 }}>Wipe existing demo rows first (recommended)</span>
-            </label>
-
-            {/* Factory reset */}
-            <label style={{ display:"flex", alignItems:"center", gap:8, padding:"10px 12px", background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, marginBottom:18, cursor:"pointer", fontSize:12 }}>
-              <input type="checkbox" checked={seedFactory} onChange={e => setSeedFactory(e.target.checked)}/>
-              <span style={{ color:T.red, fontWeight:700 }}>⚠ Factory reset first — delete ALL data (real + demo) before seeding</span>
-            </label>
-
-            <div style={{ display:"flex", gap:10, justifyContent:"flex-end" }}>
-              <Btn variant="secondary" onClick={() => setSeedTarget(null)} disabled={seeding}>Cancel</Btn>
-              <Btn color={T.pur} onClick={runSeed} disabled={seeding}>
-                {seeding ? "Seeding… (may take 10-20s)" : "Seed demo data"}
-              </Btn>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* ═══ Apply Template Modal ═══ */}
       {tplTarget && (
