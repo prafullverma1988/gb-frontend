@@ -1997,10 +1997,11 @@ function CRMModule(){
   const [showAddSolar,setShowAddSolar]=useState(false);
   const [addStage,setAddStage]=useState("lead");
 
-  // Company module type — controls which lead types are available
-  const companyModule = localStorage.getItem("gb_company_module") || "construction";
-  const canConstruction = companyModule === "construction" || companyModule === "both";
-  const canSolar = companyModule === "solar_epc" || companyModule === "both";
+  // Company module type — derived from stored user domain (never stale)
+  const _storedUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const _domain = _storedUser.company_domain || "construction_individual";
+  const canSolar = ["surya_ghar","surya_ghar_plus","solar_commercial"].includes(_domain);
+  const canConstruction = !canSolar; // all non-solar domains are construction
 
   // Smart lead opener — bypasses type selector for single-module companies
   const openNewLead = (stageId) => {

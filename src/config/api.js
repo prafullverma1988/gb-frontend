@@ -7,8 +7,25 @@ const API_BASE = (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.
 const getToken  = () => localStorage.getItem("gb_token");
 const getUser   = () => { try { const u=localStorage.getItem("gb_user"); return u?JSON.parse(u):null; } catch{return null;} };
 const getCompanies = () => { try { const c=localStorage.getItem("gb_companies"); return c?JSON.parse(c):[]; } catch{return [];} };
-const saveAuth  = (token,user,companies) => { localStorage.setItem("gb_token",token); localStorage.setItem("gb_user",JSON.stringify(user)); if(companies) localStorage.setItem("gb_companies",JSON.stringify(companies)); };
-const clearAuth = () => { localStorage.removeItem("gb_token"); localStorage.removeItem("gb_user"); localStorage.removeItem("gb_companies"); };
+// Map company_domain → gb_company_module value used by CRM & Projects UI
+const domainToModule = (domain) => {
+  if (["surya_ghar", "solar_commercial"].includes(domain)) return "solar_epc";
+  if (domain === "surya_ghar_plus") return "solar_epc";
+  return "construction"; // construction_individual, housing_projects, default
+};
+const saveAuth  = (token,user,companies) => {
+  localStorage.setItem("gb_token", token);
+  localStorage.setItem("gb_user", JSON.stringify(user));
+  if (companies) localStorage.setItem("gb_companies", JSON.stringify(companies));
+  // Always refresh company module so stale localStorage values don't bleed through
+  localStorage.setItem("gb_company_module", domainToModule(user?.company_domain));
+};
+const clearAuth = () => {
+  localStorage.removeItem("gb_token");
+  localStorage.removeItem("gb_user");
+  localStorage.removeItem("gb_companies");
+  localStorage.removeItem("gb_company_module");
+};
 
 const api = async (endpoint, options={}) => {
   const token = getToken();

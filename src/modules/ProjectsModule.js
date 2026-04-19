@@ -285,9 +285,10 @@ function SitePulseDrawer({onClose}){
 // ── DUPLICATE MODAL ───────────────────────────────────────────────────
 
 function NewProjectModal({onClose,onCreated}){
-  const companyModule = localStorage.getItem("gb_company_module") || "construction";
-  const isSolarCompany = companyModule === "solar_epc";
-  const isBoth = companyModule === "both";
+  const _pu = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const _pd = _pu.company_domain || "construction_individual";
+  const isSolarCompany = ["surya_ghar","surya_ghar_plus","solar_commercial"].includes(_pd);
+  const isBoth = false; // reserved for future hybrid domains
 
   const [step, setStep] = useState(1); // Solar: step 1 = basic, step 2 = consumer docs
   const [projType, setProjType] = useState(isSolarCompany ? "solar_epc" : "construction");
