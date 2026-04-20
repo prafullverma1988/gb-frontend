@@ -1104,30 +1104,126 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel}){
   );
 }
 
-// ── GRN Card (Warehouse) ──────────────────────────────────────────────
+// ── GRN Card (Warehouse received from vendor) ─────────────────────────
 function GRNCard({grn}){
   const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});};
   return(
     <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden",borderLeft:"4px solid "+T.grn}}>
       <div style={{padding:"11px 13px"}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:5}}>
           <div>
-            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>GRN-{grn.id}</div>
-            <div style={{fontSize:11,color:T.t4,marginTop:1}}>{grn.project_name||"—"} · {grn.po_number||"Direct"}</div>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{grn.grn_no||`GRN-${grn.id}`}</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:1}}>{grn.project_name||"Central Warehouse"} · {grn.po_no||grn.vendor||"Direct"}</div>
           </div>
           <span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"2px 7px",borderRadius:10,border:"1px solid "+T.grnM,flexShrink:0}}>Received</span>
         </div>
-        {/* Items */}
         {grn.items?.length>0
           ?grn.items.slice(0,3).map((it,i)=>(
               <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:T.t2,marginBottom:2}}>
-                <span>{it.description||it.item_name}</span>
-                <span style={{fontWeight:600}}>{it.received_qty||it.quantity} {it.unit}</span>
+                <span>{it.name||it.material_name||it.description}</span>
+                <span style={{fontWeight:600,color:T.grn}}>{it.received_qty||it.qty||it.quantity} {it.unit}</span>
               </div>
             ))
-          :<div style={{fontSize:11.5,color:T.t3}}>Received on {fmtDate(grn.received_date||grn.created_at)}</div>
+          :<div style={{fontSize:11.5,color:T.t3}}>Materials received on {fmtDate(grn.date||grn.created_at)}</div>
         }
-        <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>By {grn.received_by||grn.created_by||"Warehouse"} · {fmtDate(grn.received_date||grn.created_at)}</div>
+        {grn.items?.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>+{grn.items.length-3} more items</div>}
+        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>
+          By {grn.received_by_name||grn.received_by||"Warehouse"} · {fmtDate(grn.date||grn.created_at)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Warehouse MR Card (site→warehouse request, needs approval) ─────────
+function WHMRCard({mr, acting, onApprove, onReject, rejectId, setRejectId, rejectNote, setRejectNote}){
+  const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short"});};
+  const PRIORITY_C={High:T.red,Medium:T.amb,Low:T.grn};
+  const pc=PRIORITY_C[mr.priority]||T.amb;
+  const act=acting["whmr"+mr.id];
+  const isRej=rejectId==="whmr"+mr.id;
+  const statusColors={Pending:{c:T.amb,bg:T.ambL},Approved:{c:T.grn,bg:T.grnL},Rejected:{c:T.red,bg:T.redL},Issued:{c:T.blu,bg:T.bluL}};
+  const sc=statusColors[mr.status]||statusColors.Pending;
+  return(
+    <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden",borderLeft:"4px solid "+sc.c}}>
+      <div style={{padding:"11px 13px 8px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:4}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{mr.mr_no||`WHMR-${mr.id}`}</div>
+            <div style={{fontSize:11.5,color:T.t3,marginTop:1,fontWeight:500}}>{mr.project_name||"—"}</div>
+          </div>
+          <div style={{textAlign:"right",flexShrink:0}}>
+            <span style={{fontSize:9.5,fontWeight:700,color:sc.c,background:sc.bg,padding:"2px 8px",borderRadius:10,display:"block",marginBottom:3}}>{mr.status||"Pending"}</span>
+            <span style={{fontSize:9.5,fontWeight:600,color:pc}}>● {mr.priority||"Medium"}</span>
+          </div>
+        </div>
+        {/* Items */}
+        {mr.items?.length>0&&(
+          <div style={{background:T.bg,borderRadius:7,padding:"7px 9px",marginBottom:5}}>
+            {mr.items.slice(0,3).map((it,i)=>(
+              <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:T.t2,marginBottom:i<mr.items.length-1?3:0}}>
+                <span>{it.material_name||it.name}</span>
+                <span style={{fontWeight:600}}>{it.qty} {it.unit}</span>
+              </div>
+            ))}
+            {mr.items.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic",marginTop:2}}>+{mr.items.length-3} more items</div>}
+          </div>
+        )}
+        <div style={{fontSize:10.5,color:T.t4}}>
+          By {mr.requested_by_name||"Site Team"} · {fmtDate(mr.date||mr.created_at)}
+        </div>
+      </div>
+      {(mr.status==="Pending"||!mr.status)&&(
+        <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>
+          {isRej
+            ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
+                <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder="Reject reason..."
+                  style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.redM,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                <div style={{display:"flex",gap:5}}>
+                  <button onClick={()=>{setRejectId(null);setRejectNote("");}} style={{flex:1,padding:"5px",borderRadius:6,background:"white",border:"1px solid "+T.b1,fontSize:11,cursor:"pointer",color:T.t3}}>Cancel</button>
+                  <button onClick={()=>onReject(mr.id)} style={{flex:2,padding:"5px",borderRadius:6,background:T.red,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{act==="rejecting"?"...":"Confirm Reject"}</button>
+                </div>
+              </div>
+            :<div style={{display:"flex",gap:7}}>
+                <button onClick={()=>setRejectId("whmr"+mr.id)} disabled={!!act}
+                  style={{flex:1,padding:"7px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>✕ Reject</button>
+                <button onClick={()=>onApprove(mr.id)} disabled={!!act}
+                  style={{flex:2,padding:"7px",borderRadius:7,background:act?"#9CA3AF":T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                  {act==="approving"?"Approving...":"✓ Approve & Dispatch"}
+                </button>
+              </div>
+          }
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Transfer Card ─────────────────────────────────────────────────────
+function TransferCard({tr}){
+  const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});};
+  return(
+    <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden",borderLeft:"4px solid "+T.blu}}>
+      <div style={{padding:"11px 13px"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:5}}>
+          <div>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{tr.transfer_no||`TRF-${tr.id}`}</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:1}}>
+              {tr.from_location||"Warehouse"} → {tr.to_location||"Site"}
+            </div>
+          </div>
+          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:10,border:"1px solid "+T.bluM,flexShrink:0}}>{tr.status||"Completed"}</span>
+        </div>
+        {tr.items?.length>0&&tr.items.slice(0,3).map((it,i)=>(
+          <div key={i} style={{display:"flex",justifyContent:"space-between",fontSize:11.5,color:T.t2,marginBottom:2}}>
+            <span>{it.material_name||it.name}</span>
+            <span style={{fontWeight:600,color:T.blu}}>{it.qty} {it.unit}</span>
+          </div>
+        ))}
+        {tr.items?.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>+{tr.items.length-3} more</div>}
+        <div style={{fontSize:10.5,color:T.t4,marginTop:5}}>
+          By {tr.transferred_by_name||"Warehouse"} · {fmtDate(tr.date||tr.created_at)}
+        </div>
       </div>
     </div>
   );
@@ -1137,9 +1233,13 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
   // mode: "approvals" → Design/Finance/Payment tabs
   //       "materials" → MR / PO / Warehouse tabs
   const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"mr");
-  const [mrStage,setMrStage]=useState("Requested"); // MR sub-tab
-  const [poView,setPoView]=useState("pending");      // PO sub-tab
-  const [data,setData]=useState({mrs:[],pos:[],grns:[],finance:[],centralized:[]});
+  const [mrStage,setMrStage]=useState("Requested");  // MR stage sub-tab
+  const [poView,setPoView]=useState("pending");       // PO sub-tab
+  const [whTab,setWhTab]=useState("mr");              // Warehouse sub-tab: mr|grn|transfer
+  // MR filters
+  const [mrSite,setMrSite]=useState("All");           // project filter
+  const [mrSearch,setMrSearch]=useState("");          // material name search
+  const [data,setData]=useState({mrs:[],pos:[],whmrs:[],grns:[],transfers:[],finance:[],centralized:[]});
   const [loading,setLoading]=useState(true);
   const [acting,setActing]=useState({});
   const [rejectId,setRejectId]=useState(null);
@@ -1150,15 +1250,19 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
     setLoading(true);
     try{
       if(mode==="materials"){
-        const [mrRes,poRes,grnRes]=await Promise.all([
+        const [mrRes,poRes,whmrRes,grnRes,trRes]=await Promise.all([
           api.get("/procurement/mrs"),
           api.get("/procurement/pos"),
-          api.get("/procurement/grns").catch(()=>({success:false})),
+          api.get("/warehouse/mr").catch(()=>({success:false})),
+          api.get("/warehouse/grn").catch(()=>({success:false})),
+          api.get("/warehouse/transfers").catch(()=>({success:false})),
         ]);
         setData({
-          mrs: mrRes.success?mrRes.data:[],
-          pos: poRes.success?poRes.data:[],
-          grns: grnRes.success?grnRes.data||[]:[],
+          mrs:    mrRes.success  ? mrRes.data   : [],
+          pos:    poRes.success  ? poRes.data   : [],
+          whmrs:  whmrRes.success? whmrRes.data : [],
+          grns:   grnRes.success ? grnRes.data  : [],
+          transfers: trRes.success ? trRes.data  : [],
           finance:[], centralized:[],
         });
       } else {
@@ -1167,7 +1271,7 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
           api.get("/approvals/pending").catch(()=>({success:false})),
         ]);
         setData({
-          mrs:[], pos:[], grns:[],
+          mrs:[], pos:[], whmrs:[], grns:[], transfers:[],
           finance:(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending"),
           centralized:apRes.success?apRes.data||[]:[],
         });
@@ -1253,16 +1357,29 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
   ];
 
-  // MR stage counts (for sub-tab badges)
-  const MR_STAGES=["Requested","Approved","Ordered","Received","Rejected"];
-  const mrByStage = s => data.mrs.filter(m => m.stage===s);
-  const pendingPOs = data.pos.filter(p=>!p.approval_status||p.approval_status==="Pending");
+  // ── MR filtered list (site + material search) ──
+  const mrSiteList = ["All",...Array.from(new Set(data.mrs.map(m=>m.project_name||"—").filter(Boolean)))];
+  const mrFiltered = s => data.mrs.filter(m=>{
+    if(m.stage!==s) return false;
+    if(mrSite!=="All"&&(m.project_name||"—")!==mrSite) return false;
+    if(mrSearch&&!m.item_name.toLowerCase().includes(mrSearch.toLowerCase())) return false;
+    return true;
+  });
+  const mrByStage  = s => data.mrs.filter(m=>m.stage===s); // unfiltered count for badge
+
+  // ── PO splits ──
+  const pendingPOs  = data.pos.filter(p=>!p.approval_status||p.approval_status==="Pending");
   const approvedPOs = data.pos.filter(p=>p.approval_status==="Approved");
-  const pendingGRNs = data.grns; // show all recent GRNs
+
+  // ── Warehouse splits ──
+  const whPendingMRs   = data.whmrs.filter(m=>!m.status||m.status==="Pending");
+  const whApprovedMRs  = data.whmrs.filter(m=>m.status==="Approved"||m.status==="Issued");
+  const recentGRNs     = data.grns.slice(0,20);
+  const recentTransfers= data.transfers.slice(0,20);
 
   const totalCount = mode==="approvals"
     ? designItems.length+financeItems.length+paymentItems.length
-    : mrByStage("Requested").length + pendingPOs.length;
+    : mrByStage("Requested").length + pendingPOs.length + whPendingMRs.length;
 
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(1)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${n}`;
 
@@ -1396,7 +1513,7 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
   const MATERIAL_TABS=[
     {id:"mr",        label:"Material Requests", color:T.blu, count:mrByStage("Requested").length},
     {id:"po",        label:"PO Approval",       color:T.amb, count:pendingPOs.length},
-    {id:"warehouse", label:"Warehouse",         color:T.grn, count:pendingGRNs.length},
+    {id:"warehouse", label:"Warehouse",         color:T.grn, count:whPendingMRs.length},
   ];
   const tabs=mode==="approvals"?APPROVAL_TABS:MATERIAL_TABS;
   const drawerTitle=mode==="approvals"?"Pending Approvals":"Material Approvals";
@@ -1484,10 +1601,19 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
 
         {/* ══ MATERIALS MODE ══════════════════════════════════════════════ */}
 
-        {/* ── MR TAB: full status flow ── */}
+        {/* ── MR TAB: full status flow with filters ── */}
         {!loading&&mode==="materials"&&activeTab==="mr"&&(<>
+          {/* Filters: site + material search */}
+          <div style={{padding:"10px 14px 6px",borderBottom:"1px solid "+T.b1,display:"flex",gap:8,flexWrap:"wrap"}}>
+            <select value={mrSite} onChange={e=>setMrSite(e.target.value)}
+              style={{flex:"1 1 130px",padding:"6px 9px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t2,background:"white",cursor:"pointer",fontFamily:"inherit"}}>
+              {mrSiteList.map(s=><option key={s}>{s}</option>)}
+            </select>
+            <input value={mrSearch} onChange={e=>setMrSearch(e.target.value)} placeholder="Search material..."
+              style={{flex:"2 1 150px",padding:"6px 9px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t2,background:"white",outline:"none",fontFamily:"inherit"}}/>
+          </div>
           {/* Status sub-tabs */}
-          <div style={{display:"flex",gap:0,padding:"10px 14px 6px",overflowX:"auto",borderBottom:"1px solid "+T.b1}}>
+          <div style={{display:"flex",gap:0,padding:"8px 14px 5px",overflowX:"auto",borderBottom:"1px solid "+T.b1}}>
             {[
               {s:"Requested", label:"Requests",  c:T.amb},
               {s:"Approved",  label:"Approved",  c:T.grn},
@@ -1499,22 +1625,21 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
               return(
                 <button key={s} onClick={()=>setMrStage(s)}
                   style={{flexShrink:0,padding:"5px 10px",border:"none",borderRadius:20,marginRight:6,cursor:"pointer",
-                    background:mrStage===s?c:T.b1,
-                    color:mrStage===s?"white":T.t3,
+                    background:mrStage===s?c:T.b1,color:mrStage===s?"white":T.t3,
                     fontSize:11,fontWeight:mrStage===s?700:500,transition:"all .15s",display:"flex",alignItems:"center",gap:4}}>
                   {label}
-                  {cnt>0&&<span style={{background:mrStage===s?"rgba(255,255,255,0.3)":c,color:mrStage===s?"white":"white",fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:10}}>{cnt}</span>}
+                  {cnt>0&&<span style={{background:mrStage===s?"rgba(255,255,255,0.3)":c,color:"white",fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:10}}>{cnt}</span>}
                 </button>
               );
             })}
           </div>
           {/* MR cards */}
           <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
-            {mrByStage(mrStage).length===0
+            {mrFiltered(mrStage).length===0
               ?<EmptyState
                   msg={mrStage==="Requested"?"Koi pending request nahi!":"Koi "+mrStage.toLowerCase()+" MR nahi!"}
-                  sub={mrStage==="Requested"?"Sab material requests processed hain":"Is stage mein koi item nahi"}/>
-              :mrByStage(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
+                  sub={(mrSite!=="All"||mrSearch)?"Filter change karke dekhein":"Is stage mein koi item nahi"}/>
+              :mrFiltered(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
                   onApprove={approveMR} onReject={rejectMR} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
                   onMarkOrdered={async(id)=>{
@@ -1574,18 +1699,94 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
           </div>
         </>)}
 
-        {/* ── WAREHOUSE TAB ── */}
+        {/* ── WAREHOUSE TAB: Site MR | GRN | Transfers ── */}
         {!loading&&mode==="materials"&&activeTab==="warehouse"&&(<>
-          <div style={{padding:"10px 14px 4px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{fontSize:11.5,fontWeight:700,color:T.t2}}>Recent GRNs — Material Received</div>
-            <span style={{fontSize:10.5,color:T.t4}}>{pendingGRNs.length} entries</span>
+          {/* Warehouse sub-tabs */}
+          <div style={{display:"flex",gap:6,padding:"10px 14px 6px",borderBottom:"1px solid "+T.b1,overflowX:"auto"}}>
+            {[
+              {v:"mr",       label:"Site Requests", c:T.amb, count:whPendingMRs.length},
+              {v:"grn",      label:"GRN Received",  c:T.grn, count:recentGRNs.length},
+              {v:"transfer", label:"Transfers",     c:T.blu, count:recentTransfers.length},
+            ].map(opt=>(
+              <button key={opt.v} onClick={()=>setWhTab(opt.v)}
+                style={{flexShrink:0,padding:"5px 11px",borderRadius:20,border:"none",cursor:"pointer",fontSize:11,fontWeight:whTab===opt.v?700:500,
+                  background:whTab===opt.v?opt.c:T.b1,color:whTab===opt.v?"white":T.t3,transition:"all .15s",display:"flex",alignItems:"center",gap:4}}>
+                {opt.label}
+                {opt.count>0&&<span style={{background:whTab===opt.v?"rgba(255,255,255,0.3)":opt.c,color:"white",fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:10}}>{opt.count}</span>}
+              </button>
+            ))}
           </div>
-          <div style={{padding:"4px 14px 10px",display:"flex",flexDirection:"column",gap:10}}>
-            {pendingGRNs.length===0
-              ?<EmptyState msg="Koi GRN nahi!" sub="Koi bhi material receive nahi hua abhi tak"/>
-              :pendingGRNs.map(grn=><GRNCard key={grn.id} grn={grn}/>)
-            }
-          </div>
+
+          {/* Site MR — warehouse material requests from site */}
+          {whTab==="mr"&&(<>
+            {/* Pending / Approved toggle */}
+            <div style={{padding:"8px 14px 4px",display:"flex",gap:6}}>
+              <button onClick={()=>setData(p=>p)} style={{display:"none"}}/>
+              {[{v:"pending",l:"Pending",items:whPendingMRs},{v:"approved",l:"Approved / Issued",items:whApprovedMRs}].map(opt=>(
+                <button key={opt.v} onClick={()=>{}}
+                  style={{padding:"3px 10px",borderRadius:14,border:"1px solid "+T.b1,fontSize:11,cursor:"default",
+                    background:T.bg,color:T.t3,display:"flex",alignItems:"center",gap:4,pointerEvents:"none"}}>
+                  {opt.l} <span style={{background:T.b2,color:T.t4,fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8}}>{opt.items.length}</span>
+                </button>
+              ))}
+            </div>
+            <div style={{padding:"6px 14px 10px",display:"flex",flexDirection:"column",gap:10}}>
+              {whPendingMRs.length===0
+                ?<EmptyState msg="Koi pending warehouse request nahi!" sub="Site se koi material request nahi aayi abhi"/>
+                :whPendingMRs.map(mr=>(
+                    <WHMRCard key={mr.id} mr={mr} acting={acting}
+                      rejectId={rejectId} setRejectId={setRejectId} rejectNote={rejectNote} setRejectNote={setRejectNote}
+                      onApprove={async(id)=>{
+                        setActing(p=>({...p,["whmr"+id]:"approving"}));
+                        const res=await api.patch("/warehouse/mr/"+id,{status:"Approved"}).catch(()=>({success:false}));
+                        if(res.success!==false) setData(p=>({...p,whmrs:p.whmrs.map(m=>m.id===id?{...m,status:"Approved"}:m)}));
+                        else setSaveErr("Approve failed");
+                        setActing(p=>({...p,["whmr"+id]:null}));
+                      }}
+                      onReject={async(id)=>{
+                        setActing(p=>({...p,["whmr"+id]:"rejecting"}));
+                        await api.patch("/warehouse/mr/"+id,{status:"Rejected"}).catch(()=>{});
+                        setData(p=>({...p,whmrs:p.whmrs.map(m=>m.id===id?{...m,status:"Rejected"}:m)}));
+                        setActing(p=>({...p,["whmr"+id]:null}));
+                        setRejectId(null); setRejectNote("");
+                      }}
+                    />
+                  ))
+              }
+              {whApprovedMRs.length>0&&(<>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.6px",marginTop:6}}>Already Approved / Issued</div>
+                {whApprovedMRs.slice(0,5).map(mr=>(
+                  <div key={mr.id} style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"9px 12px",borderLeft:"3px solid "+T.grn}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:12,fontWeight:600,color:T.t1}}>
+                      <span>{mr.mr_no||`WHMR-${mr.id}`} · {mr.project_name||"—"}</span>
+                      <span style={{fontSize:10.5,color:T.grn,fontWeight:700}}>{mr.status}</span>
+                    </div>
+                    <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.items?.length||0} items · {mr.priority||"Medium"} priority</div>
+                  </div>
+                ))}
+              </>)}
+            </div>
+          </>)}
+
+          {/* GRN — received from vendor */}
+          {whTab==="grn"&&(
+            <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
+              {recentGRNs.length===0
+                ?<EmptyState msg="Koi GRN nahi!" sub="Abhi tak koi material receive nahi hua"/>
+                :recentGRNs.map(grn=><GRNCard key={grn.id} grn={grn}/>)
+              }
+            </div>
+          )}
+
+          {/* Transfers — inter-site */}
+          {whTab==="transfer"&&(
+            <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
+              {recentTransfers.length===0
+                ?<EmptyState msg="Koi transfer nahi!" sub="Inter-site material transfers yahaan dikhenge"/>
+                :recentTransfers.map(tr=><TransferCard key={tr.id} tr={tr}/>)
+              }
+            </div>
+          )}
         </>)}
       </div>
     </div>
