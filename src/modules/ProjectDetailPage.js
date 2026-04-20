@@ -2265,8 +2265,8 @@ function TabTasks({ projectId, isAdmin }) {
     if (!projectId) { setLoading(false); return; }
     api.get("/tasks?project_id=" + projectId).then(r => {
       if (r.success) {
-        // Build tree from flat list
-        const flat = r.data || [];
+        // Build tree from flat list — exclude todo rows (task_no starts with TODO-)
+        const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
         const map = {};
         flat.forEach((t, idx) => {
           t.children = [];
@@ -2418,7 +2418,7 @@ function TabTasks({ projectId, isAdmin }) {
     // Reload
     const r = await api.get("/tasks?project_id=" + projectId);
     if (r.success) {
-      const fl = r.data || []; const map = {};
+      const fl = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-")); const map = {};
       fl.forEach((t,i) => { t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0"); t.baseStart=t.base_start; t.baseEnd=t.base_end; t.actualStart=t.actual_start; t.actualEnd=t.actual_end; t.dhyanRakhen=t.dhyan_rakhen; t.lastUpdate=t.last_update; t.assignee=t.assignee_name||t.assigned_to||""; t.serial=i+1; map[t.id]=t; });
       const roots=[]; fl.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
       setTasks(roots);
@@ -2786,7 +2786,7 @@ function TabTasks({ projectId, isAdmin }) {
             // Reload
             const r=await api.get("/tasks?project_id="+projectId);
             if(r.success){
-              const flat=r.data||[];const map={};
+              const flat=(r.data||[]).filter(t=>!String(t.task_no||"").startsWith("TODO-"));const map={};
               flat.forEach(t=>{t.children=[];t.no=t.task_no;t.baseStart=t.base_start;t.baseEnd=t.base_end;t.dhyanRakhen=t.dhyan_rakhen;t.assignee=t.assignee_name||"";map[t.id]=t;});
               const roots=[];flat.forEach(t=>{if(t.parent_id&&map[t.parent_id])map[t.parent_id].children.push(t);else roots.push(t);});
               setTasks(roots);
@@ -3031,7 +3031,7 @@ function TabTasks({ projectId, isAdmin }) {
           // Reload tasks from backend
           const r2 = await api.get("/tasks?project_id=" + projectId);
           if (r2.success) {
-            const flat = r2.data || [];
+            const flat = (r2.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
             const map = {};
             flat.forEach(t => { t.children=[]; t.no=t.task_no; t.baseStart=t.base_start; t.baseEnd=t.base_end; t.dhyanRakhen=t.dhyan_rakhen; t.assignee=t.assignee_name||""; map[t.id]=t; });
             const roots = [];
@@ -3054,7 +3054,7 @@ function TabTasks({ projectId, isAdmin }) {
             // Reload tasks to get updated baseline fields
             const r = await api.get("/tasks?project_id=" + projectId);
             if (r.success) {
-              const flat = r.data || [];
+              const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
               const map = {};
               flat.forEach((t, idx) => {
                 t.children = []; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
@@ -3084,7 +3084,7 @@ function TabTasks({ projectId, isAdmin }) {
             // Reload tasks so new WBS shows
             const r = await api.get("/tasks?project_id=" + projectId);
             if (r.success) {
-              const flat = r.data || [];
+              const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
               const map = {};
               flat.forEach((t, idx) => {
                 t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
@@ -3116,7 +3116,7 @@ function TabTasks({ projectId, isAdmin }) {
             // reload tasks so cached baseline cols reset
             const r = await api.get("/tasks?project_id=" + projectId);
             if (r.success) {
-              const flat = r.data || [];
+              const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
               const map = {};
               flat.forEach((t, idx) => {
                 t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
