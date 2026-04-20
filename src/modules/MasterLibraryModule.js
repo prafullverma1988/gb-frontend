@@ -278,18 +278,24 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
     reader.readAsText(f);
   };
 
-  const doImport = () => {
+  const doImport = async () => {
     if (!preview || !preview.rows.length) return;
     setImporting(true);
-    setTimeout(() => {
+    try {
       const validRows = preview.rows.filter(r => {
         const firstKey = Object.keys(r)[0];
-        return r[firstKey] && r[firstKey].trim();
+        return r[firstKey] && String(r[firstKey]).trim();
       });
-      onImport(validRows);
-      setResult({ success: validRows.length, skipped: preview.rows.length - validRows.length });
-      setImporting(false);
-    }, 600);
+      const importResult = await Promise.resolve(onImport(validRows));
+      // onImport may return { inserted, skipped } from API, or nothing (client-only)
+      const successCount = importResult?.inserted ?? validRows.length;
+      const skippedCount = importResult?.skipped ?? (preview.rows.length - validRows.length);
+      setResult({ success: successCount, skipped: skippedCount });
+    } catch(e) {
+      console.error("Import error:", e);
+      setResult({ success: 0, skipped: preview.rows.length, error: e.message });
+    }
+    setImporting(false);
   };
 
   const doExport = () => {
@@ -652,7 +658,7 @@ function useSection(endpoint) {
 }
 
 function MaterialCategorySection() {
-  const { items: cats, loading, save: apiSave, del: apiDel } = useSection("material-categories");
+  const { items: cats, loading, save: apiSave, del: apiDel, reload } = useSection("material-categories");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -687,15 +693,15 @@ function MaterialCategorySection() {
     mapRow: (c) => [c.name, c.code, c.desc],
   };
 
-  const handleImport = (rows) => {
-    const newCats = rows.map((r, i) => ({
-      id: Date.now() + i,
-      name: r["Category Name"] || r["name"] || "",
-      code: r["Code"] || r["code"] || "",
-      desc: r["Description"] || r["desc"] || "",
-      items: 0,
-    })).filter(c => c.name);
-    setCats(prev => [...prev, ...newCats]);
+  const handleImport = async (rows) => {
+    const mapped = rows.map(r => ({
+      name:        (r["Category Name"] || r["name"] || "").trim(),
+      code:        (r["Code"]          || r["code"] || "").trim(),
+      description: (r["Description"]   || r["desc"] || "").trim(),
+    })).filter(r => r.name);
+    const res = await api.post("/library/material-categories/bulk", { rows: mapped });
+    if (res.success) await reload();
+    return res.data; // { inserted, skipped }
   };
 
   const columns = [
@@ -726,7 +732,7 @@ function MaterialCategorySection() {
 // 2. MATERIAL MASTER
 // ═══════════════════════════════════════════════════════════════════════
 function MaterialMasterSection() {
-  const { items: materials, loading, save: apiSave, del: apiDel } = useSection("materials");
+  const { items: materials, loading, save: apiSave, del: apiDel, reload } = useSection("materials");
   const { items: matCats } = useSection("material-categories");
   const [search, setSearch] = useState("");
   const [filterCat, setFilterCat] = useState("All");
@@ -803,15 +809,21 @@ function MaterialMasterSection() {
     instructions: "Instructions: Fill Material Name (required), Category (required), Unit (required), Base Rate (required). GST Rate: 0, 5, 12, 18, or 28.",
     mapRow: (m) => [m.name, m.code, m.category, m.unit, m.hsnCode, m.gstRate, m.baseRate, m.lastRate, m.supplier, m.minStock, m.currentStock],
   };
-  const handleMatImport = (rows) => {
-    const items = rows.map((r, i) => ({
-      id: Date.now() + i, name: r["Material Name"] || "", code: r["Code"] || `MAT-${String(materials.length + i + 1).padStart(3, "0")}`,
-      category: r["Category"] || "Cement & Binding", unit: r["Unit"] || "Kg", hsnCode: r["HSN Code"] || "",
-      gstRate: parseInt(r["GST Rate %"]) || 18, baseRate: parseFloat(r["Base Rate (Rs.)"]) || 0,
-      lastRate: parseFloat(r["Last Purchase Rate"]) || 0, supplier: r["Preferred Supplier"] || "",
-      minStock: parseInt(r["Min Stock Level"]) || 0, currentStock: parseInt(r["Current Stock"]) || 0,
+  const handleMatImport = async (rows) => {
+    const mapped = rows.map(r => ({
+      name:        (r["Material Name"] || "").trim(),
+      code:        (r["Code"] || "").trim(),
+      category:    (r["Category"] || "").trim(),
+      unit:        (r["Unit"] || "Kg").trim(),
+      hsn_code:    (r["HSN Code"] || "").trim(),
+      gst_rate:    parseFloat(r["GST Rate %"]) || 18,
+      base_rate:   parseFloat(r["Base Rate (Rs.)"]) || 0,
+      last_rate:   parseFloat(r["Last Purchase Rate"]) || 0,
+      min_stock:   parseInt(r["Min Stock Level"]) || 0,
     })).filter(m => m.name);
-    setMaterials(prev => [...prev, ...items]);
+    const res = await api.post("/library/materials/bulk", { rows: mapped });
+    if (res.success) await reload();
+    return res.data;
   };
 
   const columns = [
@@ -991,7 +1003,7 @@ function PartyMasterSection() {
 // 4. WORK CATEGORY
 // ═══════════════════════════════════════════════════════════════════════
 function WorkCategorySection() {
-  const { items: cats, loading, save: apiSave, del: apiDel } = useSection("work-categories");
+  const { items: cats, loading, save: apiSave, del: apiDel, reload } = useSection("work-categories");
   const { items: uomList } = useSection("uom");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
@@ -1033,12 +1045,17 @@ function WorkCategorySection() {
     instructions: "Instructions: Name and Code required. Unit examples: CFT, Sq.Ft, Kg, Point, Unit, Running Ft, Lump Sum",
     mapRow: (c) => [c.name, c.code, c.unit, c.rate, c.desc],
   };
-  const handleWorkImport = (rows) => {
-    const items = rows.map((r, i) => ({
-      id: Date.now() + i, name: r["Work Category Name"] || "", code: r["Code"] || "",
-      unit: r["Unit"] || "Sq.Ft", rate: parseFloat(r["Base Rate (Rs.)"]) || 0, desc: r["Description"] || "",
+  const handleWorkImport = async (rows) => {
+    const mapped = rows.map(r => ({
+      name:        (r["Work Category Name"] || "").trim(),
+      code:        (r["Code"] || "").trim(),
+      unit:        (r["Unit"] || "Sq.Ft").trim(),
+      rate:        parseFloat(r["Base Rate (Rs.)"]) || 0,
+      description: (r["Description"] || "").trim(),
     })).filter(c => c.name);
-    setCats(prev => [...prev, ...items]);
+    const res = await api.post("/library/work-categories/bulk", { rows: mapped });
+    if (res.success) await reload();
+    return res.data;
   };
 
   const columns = [
