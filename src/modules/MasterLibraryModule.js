@@ -891,14 +891,25 @@ function MaterialMasterSection() {
 // ═══════════════════════════════════════════════════════════════════════
 function PartyMasterSection() {
   const [parties, setParties] = useState([]);
-  useEffect(() => {
-    api.get("/finance/parties").then(res => { if(res.success) setParties(res.data||[]); }).catch(()=>{});
+  const [partyLoading, setPartyLoading] = useState(true);
+
+  const loadParties = useCallback(async () => {
+    setPartyLoading(true);
+    try {
+      const res = await api.get("/finance/parties");
+      if (res.success) setParties(res.data || []);
+    } catch(e) {}
+    setPartyLoading(false);
   }, []);
-    const [search, setSearch] = useState("");
+
+  useEffect(() => { loadParties(); }, [loadParties]);
+
+  const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("All");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const emptyForm = { name: "", type: "Supplier", category: "", gstin: "", pan: "", contact: "", phone: "", email: "", address: "", city: "Raipur", state: "Chhattisgarh", pincode: "", bankName: "", accNo: "", ifsc: "", rating: 0 };
+  const [saving, setSaving] = useState(false);
+  const emptyForm = { name: "", type: "Supplier", gstin: "", pan: "", phone: "", email: "", address: "", city: "Raipur", opening_balance: 0 };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
@@ -906,54 +917,76 @@ function PartyMasterSection() {
   const typeColors = { Supplier: { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft } };
 
   const filtered = parties.filter(p => {
-    if (filterType !== "All" && p.type !== filterType) return false;
-    if (search && !p.name.toLowerCase().includes(search.toLowerCase()) && !p.contact.toLowerCase().includes(search.toLowerCase())) return false;
+    if (filterType !== "All" && p.type?.toLowerCase() !== filterType.toLowerCase()) return false;
+    const s = search.toLowerCase();
+    if (s && !p.name?.toLowerCase().includes(s) && !(p.phone||"").includes(s) && !(p.city||"").toLowerCase().includes(s)) return false;
     return true;
   });
 
   const openCreate = () => { setEditing(null); setForm({ ...emptyForm }); setShowModal(true); };
-  const openEdit = (p) => { setEditing(p); setForm({ ...emptyForm, ...p }); setShowModal(true); };
-  const save = () => {
+  const openEdit = (p) => { setEditing(p); setForm({ name: p.name||"", type: p.type||"Supplier", gstin: p.gstin||"", pan: p.pan||"", phone: p.phone||"", email: p.email||"", address: p.address||"", city: p.city||"", opening_balance: p.opening_balance||0 }); setShowModal(true); };
+
+  const save = async () => {
     if (!form.name.trim()) return;
-    if (editing) { setParties(prev => prev.map(p => p.id === editing.id ? { ...p, ...form } : p)); }
-    else { setParties(prev => [...prev, { ...form, id: Date.now(), balance: 0 }]); }
-    setShowModal(false);
+    setSaving(true);
+    try {
+      if (editing) {
+        const res = await api.put("/finance/parties/" + editing.id, form);
+        if (res.success) setParties(prev => prev.map(p => p.id === editing.id ? res.data : p));
+      } else {
+        const res = await api.post("/finance/parties", form);
+        if (res.success) setParties(prev => [res.data, ...prev]);
+        else { alert(res.message || "Save failed"); setSaving(false); return; }
+      }
+      setShowModal(false);
+    } catch(e) { alert("Save failed"); }
+    setSaving(false);
   };
-  const del = (id) => setParties(prev => prev.filter(p => p.id !== id));
+
+  const del = async (id) => {
+    await api.del("/finance/parties/" + id);
+    setParties(prev => prev.filter(p => p.id !== id));
+  };
 
   const partyTemplateConfig = {
-    headers: ["Party Name", "Type", "Category/Trade", "Contact Person", "Phone", "Email", "GSTIN", "City"],
+    headers: ["Party Name", "Type", "Phone", "Email", "GSTIN", "City"],
     sampleRows: [
-      ["UltraTech Cement Ltd", "Supplier", "Cement", "Rajesh Agrawal", "+91 98765 10001", "rajesh@ultratech.com", "22AABCU1234F1Z5", "Raipur"],
-      ["Sample Client", "Client", "Residential", "Contact Person", "+91 98765 00000", "client@email.com", "", "City"],
+      ["UltraTech Cement Ltd", "Supplier", "+91 98765 10001", "rajesh@ultratech.com", "22AABCU1234F1Z5", "Raipur"],
+      ["Shree Hari Developers", "Client", "+91 98765 00000", "client@email.com", "", "Nashik"],
     ],
     filename: "gb_parties_export.csv",
     templateFilename: "gb_template_parties.csv",
-    instructions: "Instructions: Type must be Supplier, Client, Subcontractor, Transporter, or Consultant. Party Name and Type are required.",
-    mapRow: (p) => [p.name, p.type, p.category, p.contact, p.phone, p.email, p.gstin, p.city],
+    instructions: "Type must be: Supplier, Client, Subcontractor, Transporter, or Consultant. Party Name and Type are required.",
+    mapRow: (p) => [p.name, p.type, p.phone, p.email, p.gstin, p.city],
   };
-  const handlePartyImport = (rows) => {
-    const items = rows.map((r, i) => ({
-      id: Date.now() + i, name: r["Party Name"] || "", type: r["Type"] || "Supplier",
-      category: r["Category/Trade"] || "", contact: r["Contact Person"] || "",
-      phone: r["Phone"] || "", email: r["Email"] || "", gstin: r["GSTIN"] || "",
-      city: r["City"] || "Raipur", rating: 0, balance: 0,
+
+  const handlePartyImport = async (rows) => {
+    const mapped = rows.map(r => ({
+      name:  (r["Party Name"] || "").trim(),
+      type:  (r["Type"] || "Supplier").trim(),
+      phone: (r["Phone"] || "").trim(),
+      email: (r["Email"] || "").trim(),
+      gstin: (r["GSTIN"] || "").trim(),
+      city:  (r["City"] || "").trim(),
+      opening_balance: 0,
     })).filter(p => p.name);
-    setParties(prev => [...prev, ...items]);
+    const res = await api.post("/finance/parties/bulk", { rows: mapped });
+    if (res.success) await loadParties();
+    return res.data;
   };
 
   const columns = [
     { key: "name", label: "Party Name", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "type", label: "Type", minW: 100, render: r => { const tc = typeColors[r.type] || { c: T.textMid, bg: T.borderLight }; return <Badge text={r.type} color={tc.c} bg={tc.bg} />; }},
-    { key: "contact", label: "Contact Person", minW: 120 },
+    { key: "type", label: "Type", minW: 100, render: r => { const tc = typeColors[r.type] || { c: T.textMid, bg: T.borderLight }; return <Badge text={r.type||"—"} color={tc.c} bg={tc.bg} />; }},
     { key: "phone", label: "Phone", minW: 130, style: { fontFamily: "monospace", fontSize: 12 } },
     { key: "city", label: "City", minW: 80 },
     { key: "gstin", label: "GSTIN", minW: 140, render: r => r.gstin ? <span style={{ fontFamily: "monospace", fontSize: 11.5 }}>{r.gstin}</span> : <span style={{ color: T.textLight }}>—</span> },
-    { key: "balance", label: "Balance", minW: 100, align: "right", render: r => (
-      <span style={{ fontWeight: 700, color: r.balance > 0 ? T.green : r.balance < 0 ? T.red : T.textMid }}>
-        {r.balance > 0 ? "+" : ""}{r.balance !== 0 ? `Rs.${Math.abs(r.balance).toLocaleString()}` : "—"}
-      </span>
-    )},
+    { key: "opening_balance", label: "Balance", minW: 100, align: "right", render: r => {
+      const bal = Number(r.opening_balance) || 0;
+      return <span style={{ fontWeight: 700, color: bal > 0 ? T.green : bal < 0 ? T.red : T.textMid }}>
+        {bal !== 0 ? `${bal > 0 ? "+" : ""}Rs.${Math.abs(bal).toLocaleString()}` : "—"}
+      </span>;
+    }},
     { key: "rating", label: "Rating", minW: 60, align: "center", render: r => r.rating > 0 ? (
       <div style={{ display: "flex", gap: 1, justifyContent: "center" }}>{[1,2,3,4,5].map(i => <IcStar key={i} size={12} color={i <= r.rating ? T.amber : T.borderLight} fill={i <= r.rating ? T.amber : "none"} strokeWidth={0} />)}</div>
     ) : <span style={{ color: T.textLight, fontSize: 11 }}>N/A</span> },
