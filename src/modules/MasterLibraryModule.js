@@ -237,14 +237,18 @@ function downloadTemplate(headers, sampleRows, filename, instructions) {
 }
 
 function parseCSV(text) {
-  const lines = text.split(/\r?\n/).filter(l => l.trim());
+  // Strip BOM character if present (Excel adds \uFEFF)
+  const clean = text.replace(/^\uFEFF/, "");
+  const lines = clean.split(/\r?\n/).filter(l => l.trim());
   // Skip instruction rows (first rows that don't look like headers)
   let headerIdx = 0;
   for (let i = 0; i < Math.min(lines.length, 5); i++) {
     const cols = lines[i].split(",");
     if (cols.length >= 2 && cols[0].trim() && cols[1].trim()) { headerIdx = i; break; }
   }
-  const headers = lines[headerIdx].split(",").map(h => h.replace(/^"|"$/g, "").replace(/""/g, '"').replace(/ \*/g, "").trim());
+  const headers = lines[headerIdx].split(",").map(h =>
+    h.replace(/^\uFEFF/, "").replace(/^"|"$/g, "").replace(/""/g, '"').replace(/ \*/g, "").trim()
+  );
   const rows = [];
   for (let i = headerIdx + 1; i < lines.length; i++) {
     const vals = lines[i].split(",").map(v => v.replace(/^"|"$/g, "").replace(/""/g, '"').trim());
@@ -1091,7 +1095,7 @@ function WorkCategorySection() {
 // 5. SUBCONTRACTOR MASTER
 // ═══════════════════════════════════════════════════════════════════════
 function SubcontractorSection() {
-  const { items: subcons, loading, save: apiSave, del: apiDel } = useSection("subcontractors");
+  const { items: subcons, loading, save: apiSave, del: apiDel, reload } = useSection("subcontractors");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -1131,15 +1135,22 @@ function SubcontractorSection() {
           mapRow: (s) => [s.name, s.owner, s.trade, s.phone, s.city, s.gstin, s.labourStrength, s.rateType, s.rate],
         }}
         currentData={subcons}
-        onImportData={(rows) => {
-          const items = rows.map((r, i) => ({
-            id: Date.now() + i, name: r["Firm Name"]||"", owner: r["Owner/Contact"]||"",
-            trade: r["Trade"]||"RCC & Civil", phone: r["Phone"]||"", city: r["City"]||"Raipur",
-            gstin: r["GSTIN"]||"", labourStrength: parseInt(r["Labour Strength"])||0,
-            rateType: r["Rate Unit"]||"Sq.Ft", rate: parseFloat(r["Rate (Rs.)"])||0,
-            activeProjects: 0, rating: 0, status: "Active",
+        onImportData={async (rows) => {
+          const mapped = rows.map(r => ({
+            name:             (r["Firm Name"] || "").trim(),
+            owner:            (r["Owner/Contact"] || "").trim(),
+            trade:            (r["Trade"] || "RCC & Civil").trim(),
+            phone:            (r["Phone"] || "").trim(),
+            city:             (r["City"] || "").trim(),
+            gstin:            (r["GSTIN"] || "").trim(),
+            labour_strength:  parseInt(r["Labour Strength"]) || 0,
+            rate_type:        (r["Rate Unit"] || "Sq.Ft").trim(),
+            rate:             parseFloat(r["Rate (Rs.)"]) || 0,
+            status:           "Active",
           })).filter(s => s.name);
-          setSubcons(prev => [...prev, ...items]);
+          const res = await api.post("/library/subcontractors/bulk", { rows: mapped });
+          if (res.success) await reload();
+          return res.data;
         }}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
