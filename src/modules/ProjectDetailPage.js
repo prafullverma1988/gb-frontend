@@ -5553,11 +5553,14 @@ function TabAttendance({ project }) {
     }).catch(()=>{});
   }, [projectId]);
 
-  // ── Prep today's entry rows whenever type/date/workforce changes ─
+  // ── Prep today's entry rows whenever type/date/workforce/subcon changes ─
   const mode = attSett[labType]?.mode || (labType==="company"?"name":"count");
   useEffect(() => {
     const workers = workforce[labType] || [];
-    const existing = attRecs.find(r=>r.date===attDate && r.type===labType);
+    // For subcon: match by date + type + subcon_id so each subcon has independent rows
+    const existing = labType==="subcon"
+      ? attRecs.find(r=>r.date===attDate && r.type===labType && String(r.subcon_id||r.subcon_name||"")===String(selSubconId))
+      : attRecs.find(r=>r.date===attDate && r.type===labType);
     if(mode==="name") {
       setTodayEntries(workers.map(w => {
         const found = existing?.entries?.find(e=>e.worker_id===w.id||e.name===w.name);
@@ -5567,7 +5570,20 @@ function TabAttendance({ project }) {
       setTodayCountRows(existing?.entries?.length ? existing.entries : [{ role:"Labour", count:0, present:0, rate:0 }]);
     }
     setEditingAtt(false);
-  }, [labType, attDate, workforce, attRecs]);
+  }, [labType, attDate, workforce, attRecs, selSubconId]);
+
+  // ── Reset attendance rows immediately when subcon selection changes ─
+  useEffect(() => {
+    if(labType!=="subcon") return;
+    // Don't reset if selSubconId cleared (that's handled by main useEffect above)
+    setEditingAtt(false);
+    // rows will be re-populated by the main useEffect (which also depends on selSubconId)
+  }, [selSubconId]);
+
+  // ── Clear selSubconId when switching away from subcon tab ────────
+  useEffect(() => {
+    if(labType!=="subcon") setSelSubconId("");
+  }, [labType]);
 
   // ── Get rate from rate card by role ─────────────────────────────
   const getRateForRole = (role) => {
