@@ -5682,15 +5682,23 @@ function TabAttendance({ project }) {
     if(!rateReqWorker||!newRateVal) return;
     setRateSaving(true);
     try {
-      await api.post("/approvals", {
-        type:"rate_change", ref_type: labType==="company"?"company_labour":"vendor_labour",
-        ref_id:rateReqWorker.id, ref_name:rateReqWorker.name, project_id:projectId,
-        current_rate:rateReqWorker.dailyRate||rateReqWorker.daily_rate,
-        requested_rate:Number(newRateVal), reason:rateReason,
+      const res = await api.post("/approvals/labour-rate", {
+        project_id: projectId,
+        worker_id: rateReqWorker.id,
+        worker_name: rateReqWorker.name,
+        worker_role: rateReqWorker.role,
+        labour_type: labType, // company | vendor
+        current_rate: rateReqWorker.dailyRate || rateReqWorker.daily_rate || 0,
+        requested_rate: Number(newRateVal),
+        reason: rateReason,
       });
-      setWorkforce(prev=>({...prev,[labType]:prev[labType].map(w=>w.id===rateReqWorker.id?{...w,rateStatus:"pending",pendingRate:Number(newRateVal)}:w)}));
-      setShowRateModal(false); setRateReqWorker(null); setNewRateVal(""); setRateReason("");
-    } catch(e) {}
+      if (res.success) {
+        setWorkforce(prev=>({...prev,[labType]:prev[labType].map(w=>w.id===rateReqWorker.id?{...w,rateStatus:"pending",pendingRate:Number(newRateVal)}:w)}));
+        setShowRateModal(false); setRateReqWorker(null); setNewRateVal(""); setRateReason("");
+      } else {
+        alert(res.message || "Failed to submit");
+      }
+    } catch(e) { alert("Error: " + e.message); }
     setRateSaving(false);
   };
 
