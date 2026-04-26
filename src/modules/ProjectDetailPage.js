@@ -5461,80 +5461,307 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
 // ═══════════════════════════════════════════════════════════════════
 // TAB 8 — ATTENDANCE
 // ═══════════════════════════════════════════════════════════════════
-function TabAttendance() {
-  const SUBCONS_LIST=[];
-  const [selDate,  setSelDate]  = useState((D.attendance[0] || {}).date || "");
-  const [editMode, setEditMode] = useState(false);
-  const [attMode,  setAttMode]  = useState("named"); // named | count
-  const [attendance,setAttendance]=useState(D.attendance);
-  // Count mode state
-  const [countForm,setCountForm]=useState({subcon:"",present:0,total:0,dailyRate:600,note:""});
-  const [newSubcon,setNewSubcon]=useState("");
-  const [showSubconField,setShowSubconField]=useState(false);
-  // Add labour modal
-  const [showAddLabour,setShowAddLabour]=useState(false);
-  const [newLabour,setNewLabour]=useState({name:"",role:"Labour",subcon:"",dailyRate:600});
+function TabAttendance({ project }) {
+  const projectId = project?.id || 1;
 
-  const entry=attendance.find(a=>a.date===selDate)||attendance[0]||{workers:[]};
-  const present=(entry.workers||[]).filter(w=>w.present).length;
-  const totalHrs=(entry.workers||[]).reduce((s,w)=>s+w.hours,0);
-  const totalWages=(entry.workers||[]).filter(w=>w.present).reduce((s,w)=>s+(w.dailyRate||600),0);
-
-  const toggleWorker=(name)=>{
-    setAttendance(prev=>prev.map(a=>a.date===selDate?{...a,workers:a.workers.map(w=>w.name===name?{...w,present:!w.present,hours:!w.present?8:0}:w)}:a));
-  };
-  const updateHours=(name,hrs)=>{
-    setAttendance(prev=>prev.map(a=>a.date===selDate?{...a,workers:a.workers.map(w=>w.name===name?{...w,hours:Number(hrs)}:w)}:a));
-  };
-  const addLabour=()=>{
-    if(!newLabour.name.trim()) return;
-    setAttendance(prev=>prev.map(a=>({...a,workers:[...a.workers,{name:newLabour.name,role:newLabour.role,present:true,hours:8,subcon:newLabour.subcon,dailyRate:Number(newLabour.dailyRate)}]})));
-    setNewLabour({name:"",role:"Labour",subcon:"",dailyRate:600});
-    setShowAddLabour(false);
-  };
-
-  // Group by subcon for named view
-  const bySubcon={};
-  entry.workers.forEach(w=>{
-    const key=w.subcon||"Direct Labour";
-    if(!bySubcon[key]) bySubcon[key]=[];
-    bySubcon[key].push(w);
+  // ── Settings from localStorage ──────────────────────────────────
+  const [attSett] = useState(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("gb_att_settings") || "{}");
+      return {
+        company: { mode: "name", paymentCycle: "monthly", ...(s.company || {}) },
+        subcon:  { mode: "count", ...(s.subcon || {}) },
+        vendor:  { mode: "count", trackPayment: true, ...(s.vendor || {}) },
+      };
+    } catch {
+      return { company: { mode:"name", paymentCycle:"monthly" }, subcon: { mode:"count" }, vendor: { mode:"count", trackPayment:true } };
+    }
   });
 
+  // ── Core state ──────────────────────────────────────────────────
+  const todayStr = new Date().toISOString().split("T")[0];
+  const [labType,    setLabType]    = useState("company"); // company | subcon | vendor
+  const [attDate,    setAttDate]    = useState(todayStr);
+  const [showWfPanel,setShowWfPanel]= useState(true);
+  const [showHistory,setShowHistory]= useState(false);
+  const [editingAtt, setEditingAtt] = useState(false);
+  const [attSaving,  setAttSaving]  = useState(false);
+
+  // ── Libraries ───────────────────────────────────────────────────
+  const [workerLib, setWorkerLib] = useState([]);
+  const [subconLib, setSubconLib] = useState([]);
+  const [vendorLib, setVendorLib] = useState([]);
+  const [rateCard,  setRateCard]  = useState([]);
+
+  // ── Project workforce ────────────────────────────────────────────
+  const [workforce, setWorkforce] = useState({ company:[], subcon:[], vendor:[] });
+  const [wfLoading, setWfLoading] = useState(false);
+
+  // ── Attendance records ───────────────────────────────────────────
+  const [attRecs,   setAttRecs]   = useState([]);
+
+  // ── Name-wise attendance rows ────────────────────────────────────
+  const [todayEntries,   setTodayEntries]   = useState([]);
+  // ── Count-wise rows ─────────────────────────────────────────────
+  const [todayCountRows, setTodayCountRows] = useState([]);
+
+  // ── Add workforce modal ──────────────────────────────────────────
+  const [showAddWf, setShowAddWf] = useState(false);
+  const [libSearch, setLibSearch] = useState("");
+  const [wfForm,    setWfForm]    = useState({ libId:"", name:"", role:"Labour", dailyRate:"", phone:"" });
+  const [wfSaving,  setWfSaving]  = useState(false);
+
+  // ── Rate change approval modal ───────────────────────────────────
+  const [showRateModal,  setShowRateModal]  = useState(false);
+  const [rateReqWorker,  setRateReqWorker]  = useState(null);
+  const [newRateVal,     setNewRateVal]     = useState("");
+  const [rateReason,     setRateReason]     = useState("");
+  const [rateSaving,     setRateSaving]     = useState(false);
+
+  const ROLES = ["Labour","Mason","Helper","Electrician","Plumber","Carpenter","Painter","Supervisor","Welder","Tile Fixer","Polisher","Bar Bender","Shuttering","Other"];
+  const TYPE_LABELS = { company:"Company Labour", subcon:"Subcontractor", vendor:"Labour Vendor" };
+  const TYPE_COLORS = { company:T.blu, subcon:T.grn, vendor:T.amb };
+  const TYPE_BG     = { company:T.bluL, subcon:T.grnL, vendor:T.ambL };
+  const TYPE_BM     = { company:T.bluM, subcon:T.grnM, vendor:T.ambM };
+
+  // ── Load libraries + rate card on mount ─────────────────────────
+  useEffect(() => {
+    api.get("/library/workers").then(r=>{ if(r.success) setWorkerLib(r.data||[]); }).catch(()=>{});
+    api.get("/finance/parties?type=Subcontractor").then(r=>{ if(r.success) setSubconLib(r.data||[]); }).catch(()=>{});
+    api.get("/procurement/vendors").then(r=>{ if(r.success) setVendorLib(r.data||[]); }).catch(()=>{});
+    api.get("/library/labour-rates").then(r=>{ if(r.success) setRateCard(r.data||[]); }).catch(()=>{});
+  }, []);
+
+  // ── Load workforce + attendance for project ──────────────────────
+  useEffect(() => {
+    if(!projectId) return;
+    setWfLoading(true);
+    api.get(`/projects/${projectId}/workforce`).then(r => {
+      if(r.success && r.data) {
+        const d = r.data;
+        setWorkforce({
+          company: Array.isArray(d) ? d.filter(w=>w.type==="company") : (d.company||[]),
+          subcon:  Array.isArray(d) ? d.filter(w=>w.type==="subcon")  : (d.subcon||[]),
+          vendor:  Array.isArray(d) ? d.filter(w=>w.type==="vendor")  : (d.vendor||[]),
+        });
+      }
+    }).catch(()=>{}).finally(()=>setWfLoading(false));
+    api.get(`/projects/${projectId}/attendance`).then(r => {
+      if(r.success) setAttRecs(r.data||[]);
+    }).catch(()=>{});
+  }, [projectId]);
+
+  // ── Prep today's entry rows whenever type/date/workforce changes ─
+  const mode = attSett[labType]?.mode || (labType==="company"?"name":"count");
+  useEffect(() => {
+    const workers = workforce[labType] || [];
+    const existing = attRecs.find(r=>r.date===attDate && r.type===labType);
+    if(mode==="name") {
+      setTodayEntries(workers.map(w => {
+        const found = existing?.entries?.find(e=>e.worker_id===w.id||e.name===w.name);
+        return { worker_id:w.id, name:w.name, role:w.role, dailyRate:w.dailyRate||w.daily_rate||0, status:found?.status||"P", hours:found?.hours??8, ot:found?.ot||0, rateStatus:w.rateStatus||"card" };
+      }));
+    } else {
+      setTodayCountRows(existing?.entries?.length ? existing.entries : [{ role:"Labour", count:0, present:0, rate:0 }]);
+    }
+    setEditingAtt(false);
+  }, [labType, attDate, workforce, attRecs]);
+
+  // ── Get rate from rate card by role ─────────────────────────────
+  const getRateForRole = (role) => {
+    if(!role||!rateCard.length) return 0;
+    const rc = rateCard.find(r=>r.role?.toLowerCase()===role?.toLowerCase());
+    return rc ? (Number(rc.daily_rate||rc.dailyRate)||0) : 0;
+  };
+
+  // ── 7-day date range ─────────────────────────────────────────────
+  const days7 = Array.from({length:7},(_,i)=>{
+    const d = new Date(); d.setDate(d.getDate()-(6-i));
+    return d.toISOString().split("T")[0];
+  });
+
+  // ── Save attendance ──────────────────────────────────────────────
+  const saveAttendance = async () => {
+    setAttSaving(true);
+    const payload = { project_id:projectId, date:attDate, type:labType, mode, entries: mode==="name"?todayEntries:todayCountRows };
+    try {
+      const r = await api.post(`/projects/${projectId}/attendance`, payload);
+      if(r.success) {
+        setAttRecs(prev=>[...prev.filter(rec=>!(rec.date===attDate&&rec.type===labType)), {...payload, id:r.data?.id}]);
+        setEditingAtt(false);
+      }
+    } catch(e) {}
+    setAttSaving(false);
+  };
+
+  // ── Add workforce ────────────────────────────────────────────────
+  const addWorkforce = async () => {
+    if(!wfForm.name.trim()) return;
+    setWfSaving(true);
+    const cardRate = getRateForRole(wfForm.role);
+    const payload = {
+      project_id: projectId, type: labType,
+      lib_id: wfForm.libId||null, name: wfForm.name, role: wfForm.role,
+      daily_rate: Number(wfForm.dailyRate)||cardRate,
+      phone: wfForm.phone,
+      rateStatus: (wfForm.dailyRate && Number(wfForm.dailyRate)!==cardRate && cardRate>0 && labType!=="subcon") ? "pending" : "card",
+    };
+    try {
+      const r = await api.post(`/projects/${projectId}/workforce`, payload);
+      if(r.success) {
+        setWorkforce(prev=>({...prev,[labType]:[...prev[labType],{...payload,id:r.data?.id||Date.now(),dailyRate:payload.daily_rate}]}));
+        setShowAddWf(false);
+        setWfForm({libId:"",name:"",role:"Labour",dailyRate:"",phone:""});
+      }
+    } catch(e) {}
+    setWfSaving(false);
+  };
+
+  // ── Submit rate change approval ──────────────────────────────────
+  const submitRateApproval = async () => {
+    if(!rateReqWorker||!newRateVal) return;
+    setRateSaving(true);
+    try {
+      await api.post("/approvals", {
+        type:"rate_change", ref_type: labType==="company"?"company_labour":"vendor_labour",
+        ref_id:rateReqWorker.id, ref_name:rateReqWorker.name, project_id:projectId,
+        current_rate:rateReqWorker.dailyRate||rateReqWorker.daily_rate,
+        requested_rate:Number(newRateVal), reason:rateReason,
+      });
+      setWorkforce(prev=>({...prev,[labType]:prev[labType].map(w=>w.id===rateReqWorker.id?{...w,rateStatus:"pending",pendingRate:Number(newRateVal)}:w)}));
+      setShowRateModal(false); setRateReqWorker(null); setNewRateVal(""); setRateReason("");
+    } catch(e) {}
+    setRateSaving(false);
+  };
+
+  // ── Derived stats ────────────────────────────────────────────────
+  const currentWF   = workforce[labType]||[];
+  const presentCount= mode==="name" ? todayEntries.filter(e=>e.status==="P").length : todayCountRows.reduce((s,r)=>s+(Number(r.present)||0),0);
+  const halfCount   = mode==="name" ? todayEntries.filter(e=>e.status==="H").length : 0;
+  const totalCount  = mode==="name" ? todayEntries.length : todayCountRows.reduce((s,r)=>s+(Number(r.count)||0),0);
+  const totalWages  = mode==="name"
+    ? todayEntries.reduce((s,e)=>s+(e.status==="P"?Number(e.dailyRate)||0:e.status==="H"?(Number(e.dailyRate)||0)/2:0),0)
+    : todayCountRows.reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||0),0);
+
+  // ── Rate badge sub-component ─────────────────────────────────────
+  const RateBadge = ({worker}) => {
+    if(worker.rateStatus==="pending") return <span style={{padding:"2px 7px",background:T.ambL,color:T.amb,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.ambM}`}}>🟡 Pending</span>;
+    if(worker.rateStatus==="approved") return <span style={{padding:"2px 7px",background:T.grnL,color:T.grn,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.grnM}`}}>✓ Approved</span>;
+    return <span style={{padding:"2px 7px",background:T.sltL,color:T.slt,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.b2}`}}>📋 Rate Card</span>;
+  };
+
+  const historyRecs = attRecs.filter(r=>r.type===labType).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,14);
+
+  // placeholder — original code references below replaced by new render
+  const [_unused] = useState(false);
+
   return(
-    <div style={{padding:"14px 18px"}}>
-      {/* Date filter + mode toggle + actions */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
-        <FilterTabs options={attendance.map(a=>({id:a.date,label:`${a.date} (${a.day})`}))} active={selDate} onChange={setSelDate}/>
-        <div style={{display:"flex",gap:7,alignItems:"center"}}>
-          {/* Mode toggle */}
-          <div style={{display:"flex",background:T.bg,borderRadius:6,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-            {[{id:"named",label:"By Name"},{id:"count",label:"By Count"}].map(m=>(
-              <button key={m.id} onClick={()=>setAttMode(m.id)}
-                style={{padding:"5px 11px",border:"none",background:attMode===m.id?T.blu:"none",color:attMode===m.id?"white":T.t3,cursor:"pointer",fontSize:11.5,fontWeight:attMode===m.id?600:400,transition:"all .15s"}}>
-                {m.label}
-              </button>
-            ))}
-          </div>
-          {attMode==="named"&&<>
-            <button onClick={()=>setEditMode(!editMode)}
-              style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${editMode?T.blu:T.b1}`,background:editMode?T.bluL:T.surface,color:editMode?T.blu:T.t3,fontSize:11.5,fontWeight:editMode?700:500,cursor:"pointer"}}>
-              {editMode?"Done":"Edit"}
+    <div style={{padding:"14px 18px",fontFamily:"'Segoe UI',sans-serif"}}>
+
+      {/* ── TYPE TABS + ACTIONS ──────────────────────────────────────── */}
+      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap"}}>
+        <div style={{display:"flex",gap:6}}>
+          {["company","subcon","vendor"].map(t=>(
+            <button key={t} onClick={()=>setLabType(t)}
+              style={{padding:"7px 15px",borderRadius:20,border:`1.5px solid ${labType===t?TYPE_COLORS[t]:T.b1}`,background:labType===t?TYPE_BG[t]:T.surface,color:labType===t?TYPE_COLORS[t]:T.t3,fontSize:12,fontWeight:labType===t?700:500,cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
+              {TYPE_LABELS[t]}
+              <span style={{padding:"1px 6px",borderRadius:20,background:labType===t?TYPE_COLORS[t]:T.b1,color:labType===t?"white":T.t3,fontSize:10,fontWeight:700}}>
+                {(workforce[t]||[]).length}
+              </span>
             </button>
-            <AddBtn label="Add Labour" onClick={()=>setShowAddLabour(true)}/>
-          </>}
-          <AddBtn label="Mark Attendance"/>
+          ))}
+        </div>
+        <div style={{display:"flex",gap:7,alignItems:"center"}}>
+          <button onClick={()=>setShowWfPanel(p=>!p)}
+            style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:showWfPanel?T.surfaceB:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+            Workforce {showWfPanel?"▲":"▼"}
+          </button>
+          <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setWfForm({libId:"",name:"",role:"Labour",dailyRate:"",phone:""}); }}
+            style={{padding:"6px 13px",borderRadius:6,background:TYPE_COLORS[labType],color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+            Add {TYPE_LABELS[labType].split(" ")[0]}
+          </button>
+          <button onClick={()=>setShowHistory(p=>!p)}
+            style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${showHistory?TYPE_COLORS[labType]:T.b1}`,background:showHistory?TYPE_BG[labType]:T.surface,color:showHistory?TYPE_COLORS[labType]:T.t3,fontSize:11.5,cursor:"pointer"}}>
+            History
+          </button>
         </div>
       </div>
 
-      {/* KPI tiles */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:14}}>
+      {/* ── WORKFORCE PANEL ──────────────────────────────────────────── */}
+      {showWfPanel&&(
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,overflow:"hidden"}}>
+          <div style={{padding:"10px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Registered Workforce — {TYPE_LABELS[labType]}</span>
+            <span style={{fontSize:11.5,color:T.t4}}>{currentWF.length} registered &nbsp;·&nbsp; Mode: <b style={{color:TYPE_COLORS[labType]}}>{mode==="name"?"Name-wise":"Count-wise"}</b></span>
+          </div>
+          {wfLoading
+            ?<div style={{padding:"18px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>Loading…</div>
+            :currentWF.length===0
+              ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                No {TYPE_LABELS[labType]} registered yet. Click "Add" above to register workforce for this project.
+               </div>
+              :<div>
+                <THead
+                  cols={labType==="subcon"?"2fr 1fr 80px 100px":"2fr 1fr 90px 100px 100px"}
+                  headers={labType==="subcon"?["Name","Role","Phone","Added"]:["Name","Role","Daily Rate","Rate Status","Action"]}/>
+                {currentWF.map((w,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:labType==="subcon"?"2fr 1fr 80px 100px":"2fr 1fr 90px 100px 100px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",fontSize:12.5}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                    <span style={{fontWeight:600,color:T.t1}}>{w.name}</span>
+                    <span style={{color:T.t2,fontSize:12}}>{w.role||"—"}</span>
+                    {labType==="subcon"
+                      ?<><span style={{color:T.t4,fontSize:11.5}}>{w.phone||"—"}</span>
+                         <span style={{color:T.t4,fontSize:11}}>{w.created_at?new Date(w.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—"}</span>
+                       </>
+                      :<>
+                        <span style={{fontWeight:600,color:T.t1}}>₹{w.dailyRate||w.daily_rate||0}</span>
+                        <RateBadge worker={w}/>
+                        <button onClick={()=>{setRateReqWorker(w);setNewRateVal("");setRateReason("");setShowRateModal(true);}}
+                          style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${T.b2}`,background:T.surface,color:T.t3,fontSize:11,cursor:"pointer",width:"max-content"}}>
+                          Change Rate
+                        </button>
+                      </>
+                    }
+                  </div>
+                ))}
+               </div>
+          }
+        </div>
+      )}
+
+      {/* ── DATE NAVIGATOR ───────────────────────────────────────────── */}
+      <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center",overflowX:"auto",paddingBottom:2}}>
+        <span style={{fontSize:11,color:T.t4,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>DATE:</span>
+        {days7.map(d=>{
+          const isToday=d===todayStr, isSel=d===attDate;
+          const hasData=attRecs.some(r=>r.date===d&&r.type===labType);
+          const dd=new Date(d);
+          return(
+            <button key={d} onClick={()=>setAttDate(d)}
+              style={{padding:"6px 11px",borderRadius:7,border:`1.5px solid ${isSel?TYPE_COLORS[labType]:T.b1}`,background:isSel?TYPE_BG[labType]:T.surface,color:isSel?TYPE_COLORS[labType]:T.t2,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1,minWidth:46,position:"relative",flexShrink:0,transition:"all .15s"}}>
+              <span style={{fontSize:9.5,fontWeight:isSel?700:500,textTransform:"uppercase",color:isSel?TYPE_COLORS[labType]:T.t4}}>
+                {dd.toLocaleDateString("en-IN",{weekday:"short"})}
+              </span>
+              <span style={{fontSize:13,fontWeight:isSel?700:600}}>{dd.getDate()}</span>
+              {hasData&&<span style={{width:5,height:5,borderRadius:"50%",background:TYPE_COLORS[labType],position:"absolute",bottom:3,right:3}}/>}
+              {isToday&&!isSel&&<span style={{width:4,height:4,borderRadius:"50%",background:T.t4,position:"absolute",bottom:3,left:"50%",transform:"translateX(-50%)"}}/>}
+            </button>
+          );
+        })}
+        <input type="date" value={attDate} onChange={e=>setAttDate(e.target.value)} max={todayStr}
+          style={{marginLeft:4,padding:"5px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit",flexShrink:0}}/>
+      </div>
+
+      {/* ── KPI STRIP ────────────────────────────────────────────────── */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
         {[
-          {l:"Present",      v:present,              c:T.grn},
-          {l:"Absent",       v:entry.workers.length-present, c:T.red},
-          {l:"Total Labour", v:entry.workers.length,  c:T.slt},
-          {l:"Total Hours",  v:`${totalHrs}h`,         c:T.blu},
-          {l:"Daily Wages",  v:`₹${fmtN(totalWages)}`, c:T.amb},
+          {l:"Present",    v:presentCount,                             c:T.grn},
+          {l:"Half Day",   v:halfCount,                                c:T.amb},
+          {l:"Absent",     v:Math.max(0,totalCount-presentCount-halfCount),c:T.red},
+          {l:"Daily Wages",v:`₹${fmtN(totalWages)}`,                   c:T.slt},
         ].map((s,i)=>(
           <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{s.l}</div>
@@ -5543,170 +5770,276 @@ function TabAttendance() {
         ))}
       </div>
 
-      {/* ── BY NAME VIEW ── */}
-      {attMode==="named"&&(
-        <>
-          {Object.entries(bySubcon).map(([subcon,workers])=>{
-            const scPresent=workers.filter(w=>w.present).length;
-            const scWages=workers.filter(w=>w.present).reduce((s,w)=>s+(w.dailyRate||600),0);
-            return(
-              <div key={subcon} style={{marginBottom:12}}>
-                {/* Subcon header */}
-                <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 13px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:"8px 8px 0 0",borderBottom:"none"}}>
-                  <div style={{width:8,height:8,borderRadius:"50%",background:T.blu,flexShrink:0}}/>
-                  <span style={{fontSize:12.5,fontWeight:700,color:T.t1,flex:1}}>{subcon}</span>
-                  <span style={{fontSize:11.5,color:T.grn,fontWeight:600}}>{scPresent}/{workers.length} present</span>
-                  <span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>₹{fmtN(scWages)}</span>
-                </div>
-                <Panel style={{borderRadius:"0 0 8px 8px"}}>
-                  <THead cols="1fr 90px 100px 100px 80px 80px" headers={["Worker","Role","Status","Hours","OT","Daily Rate"]}/>
-                  {workers.map((w,i)=>(
-                    <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px 100px 100px 80px 80px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${w.present?T.grn:T.red}44`,transition:"background .1s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{w.name}</span>
-                      <span style={{fontSize:12,color:T.t2}}>{w.role}</span>
-                      {editMode
-                        ?<button onClick={()=>toggleWorker(w.name)} style={{padding:"3px 9px",borderRadius:20,border:`1px solid ${w.present?T.grnM:T.redM}`,background:w.present?T.grnL:T.redL,color:w.present?T.grn:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>{w.present?"Present":"Absent"}</button>
-                        :<Pill label={w.present?"Present":"Absent"} c={w.present?T.grn:T.red} bg={w.present?T.grnL:T.redL}/>
-                      }
-                      {editMode
-                        ?<input type="number" value={w.hours} onChange={e=>updateHours(w.name,e.target.value)} min={0} max={14}
-                            style={{width:56,height:27,padding:"0 7px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
-                        :<span style={{fontSize:12.5,color:w.present?T.t1:T.t4}}>{w.hours>0?`${w.hours}h`:"—"}</span>
-                      }
-                      <span style={{fontSize:12,color:T.t4}}>{w.hours>8?`${w.hours-8}h`:"—"}</span>
-                      <span style={{fontSize:12,color:T.t2}}>₹{w.dailyRate||600}</span>
-                    </div>
-                  ))}
-                </Panel>
-              </div>
-            );
-          })}
-        </>
-      )}
-
-      {/* ── BY COUNT VIEW ── */}
-      {attMode==="count"&&(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14}}>
-          {/* Count form */}
-          <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:"14px 16px"}}>
-            <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:12}}>Mark by Count</div>
-            <div style={{marginBottom:10}}>
-              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>Subcontractor</div>
-              <select value={countForm.subcon} onChange={e=>{if(e.target.value==="New Subcontractor..."){setShowSubconField(true);}else{setCountForm(p=>({...p,subcon:e.target.value}));setShowSubconField(false);}}}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                {SUBCONS_LIST.map(s=><option key={s}>{s}</option>)}
-              </select>
-              {showSubconField&&(
-                <div style={{display:"flex",gap:7,marginTop:8}}>
-                  <input value={newSubcon} onChange={e=>setNewSubcon(e.target.value)} placeholder="Enter new subcontractor name..."
-                    style={{flex:1,padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.blu}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
-                  <button onClick={()=>{if(newSubcon.trim()){setCountForm(p=>({...p,subcon:newSubcon.trim()}));setShowSubconField(false);setNewSubcon("");}}}
-                    style={{padding:"7px 12px",borderRadius:7,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:12,fontWeight:600}}>Add</button>
-                </div>
-              )}
-            </div>
-            {[
-              {label:"Labour Present (count)",key:"present",type:"number",placeholder:"e.g. 8"},
-              {label:"Total Labour (count)",  key:"total",  type:"number",placeholder:"e.g. 10"},
-              {label:"Daily Rate per Labour (₹)",key:"dailyRate",type:"number",placeholder:"e.g. 600"},
-              {label:"Notes",key:"note",type:"text",placeholder:"Optional work note..."},
-            ].map(f=>(
-              <div key={f.key} style={{marginBottom:10}}>
-                <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{f.label}</div>
-                <input type={f.type} value={countForm[f.key]} onChange={e=>setCountForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.placeholder}
-                  style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-              </div>
-            ))}
-            <button style={{width:"100%",padding:"9px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",marginTop:4}}>
-              Save Attendance
-            </button>
+      {/* ── ATTENDANCE ENTRY PANEL ───────────────────────────────────── */}
+      <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,overflow:"hidden"}}>
+        <div style={{padding:"10px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>
+            Attendance — {new Date(attDate+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"short",year:"numeric"})}
+          </span>
+          <div style={{display:"flex",gap:7}}>
+            {!editingAtt
+              ?<button onClick={()=>setEditingAtt(true)}
+                  style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                  ✏️ Mark Attendance
+                </button>
+              :<>
+                <button onClick={()=>setEditingAtt(false)}
+                  style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer"}}>Cancel</button>
+                <button onClick={saveAttendance} disabled={attSaving}
+                  style={{padding:"5px 14px",borderRadius:6,border:"none",background:TYPE_COLORS[labType],color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",opacity:attSaving?.6:1}}>
+                  {attSaving?"Saving…":"Save"}
+                </button>
+              </>
+            }
           </div>
+        </div>
 
-          {/* Summary card */}
-          <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:"14px 16px"}}>
-            <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:12}}>Today's Summary</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-              {[
-                {l:"Present",v:countForm.present||0,c:T.grn},
-                {l:"Absent", v:Math.max(0,(Number(countForm.total)||0)-(Number(countForm.present)||0)),c:T.red},
-                {l:"Total",  v:countForm.total||0,  c:T.slt},
-                {l:"Wages",  v:`₹${fmtN((Number(countForm.present)||0)*(Number(countForm.dailyRate)||600))}`,c:T.amb},
-              ].map((s,i)=>(
-                <div key={i} style={{padding:"10px",background:T.surfaceB,borderRadius:7,borderLeft:`3px solid ${s.c}`,textAlign:"center"}}>
-                  <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
-                  <div style={{fontSize:10,color:T.t4,marginTop:2}}>{s.l}</div>
+        {/* NAME-WISE VIEW */}
+        {mode==="name"&&(
+          currentWF.length===0
+            ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>Register workforce first to mark name-wise attendance.</div>
+            :<div>
+              <THead cols="2fr 1fr 130px 75px 65px 95px" headers={["Name","Role","Status","Hours","OT","Daily Rate"]}/>
+              {todayEntries.map((e,idx)=>(
+                <div key={idx} style={{display:"grid",gridTemplateColumns:"2fr 1fr 130px 75px 65px 95px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${e.status==="P"?T.grn+"55":e.status==="H"?T.amb+"55":T.red+"55"}`}}
+                  onMouseEnter={el=>el.currentTarget.style.background=T.surfaceB}
+                  onMouseLeave={el=>el.currentTarget.style.background="transparent"}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{e.name}</span>
+                  <span style={{fontSize:12,color:T.t3}}>{e.role}</span>
+                  {editingAtt
+                    ?<div style={{display:"flex",gap:4}}>
+                      {["P","A","H"].map(s=>(
+                        <button key={s} onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,status:s,hours:s==="P"?8:s==="H"?4:0}:en))}
+                          style={{padding:"3px 9px",borderRadius:20,border:`1px solid ${s==="P"?T.grnM:s==="H"?T.ambM:T.redM}`,background:e.status===s?(s==="P"?T.grnL:s==="H"?T.ambL:T.redL):"transparent",color:s==="P"?T.grn:s==="H"?T.amb:T.red,fontSize:11,fontWeight:e.status===s?700:500,cursor:"pointer"}}>
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                    :<Pill label={e.status==="P"?"Present":e.status==="H"?"Half Day":"Absent"} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
+                  }
+                  {editingAtt
+                    ?<input type="number" value={e.hours} min={0} max={14}
+                        onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,hours:Number(el.target.value)}:en))}
+                        style={{width:55,padding:"4px 7px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                    :<span style={{fontSize:12.5,color:e.status!=="A"?T.t1:T.t4}}>{e.hours>0?`${e.hours}h`:"—"}</span>
+                  }
+                  {editingAtt
+                    ?<input type="number" value={e.ot||0} min={0} max={6}
+                        onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,ot:Number(el.target.value)}:en))}
+                        style={{width:52,padding:"4px 7px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                    :<span style={{fontSize:12,color:T.t4}}>{e.ot>0?`${e.ot}h`:"—"}</span>
+                  }
+                  <span style={{fontSize:12,color:T.t2}}>₹{e.dailyRate||0}</span>
                 </div>
               ))}
             </div>
-            {countForm.subcon&&(
-              <div style={{padding:"9px 12px",background:T.bluL,borderRadius:7,border:`1px solid ${T.bluM}`,marginBottom:10}}>
-                <div style={{fontSize:11,color:T.t4,marginBottom:2}}>Subcontractor</div>
-                <div style={{fontSize:13,fontWeight:600,color:T.blu}}>{countForm.subcon}</div>
-              </div>
-            )}
-            {countForm.note&&(
-              <div style={{padding:"8px 12px",background:T.ambL,borderRadius:6,border:`1px solid ${T.ambM}`,fontSize:12,color:T.amb,borderLeft:`3px solid ${T.amb}`}}>
-                {countForm.note}
-              </div>
-            )}
-            {/* Attendance % bar */}
-            {countForm.total>0&&(
-              <div style={{marginTop:10}}>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                  <span style={{fontSize:11,color:T.t3}}>Attendance Rate</span>
-                  <span style={{fontSize:12,fontWeight:700,color:T.grn}}>{Math.round((Number(countForm.present)/Number(countForm.total))*100)||0}%</span>
+        )}
+
+        {/* COUNT-WISE VIEW */}
+        {mode==="count"&&(
+          <div style={{padding:"14px 16px"}}>
+            {todayCountRows.map((row,i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr 1fr 32px",gap:8,marginBottom:8,alignItems:"end"}}>
+                <div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Role</div>
+                  <select value={row.role} disabled={!editingAtt}
+                    onChange={e=>{ const r=e.target.value; setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,role:r,rate:getRateForRole(r)||rw.rate}:rw)); }}
+                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",opacity:editingAtt?1:.65}}>
+                    {ROLES.map(r=><option key={r}>{r}</option>)}
+                  </select>
                 </div>
-                <div style={{height:6,background:T.b1,borderRadius:3,overflow:"hidden"}}>
-                  <div style={{height:"100%",width:`${Math.min(Math.round((Number(countForm.present)/Number(countForm.total))*100)||0,100)}%`,background:T.grn,borderRadius:3}}/>
-                </div>
+                {[{k:"count",l:"Total"},{k:"present",l:"Present"},{k:"rate",l:"Rate ₹/day"}].map(f=>(
+                  <div key={f.k}>
+                    <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{f.l}</div>
+                    <input type="number" value={row[f.k]||""} disabled={!editingAtt} placeholder="0"
+                      onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,[f.k]:Number(e.target.value)}:rw))}
+                      style={{width:"100%",padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:T.surface,opacity:editingAtt?1:.65,boxSizing:"border-box"}}/>
+                  </div>
+                ))}
+                {editingAtt
+                  ?<button onClick={()=>setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i))}
+                      style={{width:28,height:28,marginBottom:1,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                  :<div/>
+                }
               </div>
+            ))}
+            {editingAtt&&(
+              <button onClick={()=>setTodayCountRows(prev=>[...prev,{role:"Labour",count:0,present:0,rate:getRateForRole("Labour")||0}])}
+                style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:600,cursor:"pointer",marginTop:4}}>
+                + Add Role Row
+              </button>
+            )}
+            {!editingAtt&&todayCountRows.every(r=>!r.count)&&(
+              <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"16px 0"}}>No count recorded for this date. Click "Mark Attendance" to enter.</div>
             )}
           </div>
+        )}
+      </div>
+
+      {/* ── HISTORY ──────────────────────────────────────────────────── */}
+      {showHistory&&(
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden",marginBottom:14}}>
+          <div style={{padding:"10px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
+            <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Attendance History — {TYPE_LABELS[labType]}</span>
+          </div>
+          {historyRecs.length===0
+            ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>No history found.</div>
+            :historyRecs.map((rec,i)=>{
+              const rPresent=mode==="name"?(rec.entries||[]).filter(e=>e.status==="P").length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.present)||0),0);
+              const rHalf   =mode==="name"?(rec.entries||[]).filter(e=>e.status==="H").length:0;
+              const rTotal  =mode==="name"?(rec.entries||[]).length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.count)||0),0);
+              const rWages  =mode==="name"
+                ?(rec.entries||[]).reduce((s,e)=>s+(e.status==="P"?Number(e.dailyRate)||0:e.status==="H"?(Number(e.dailyRate)||0)/2:0),0)
+                :(rec.entries||[]).reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||0),0);
+              return(
+                <div key={i} style={{padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:14}}>
+                  <div style={{minWidth:85}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{new Date(rec.date+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>
+                    <div style={{fontSize:10.5,color:T.t4}}>{new Date(rec.date+"T00:00:00").toLocaleDateString("en-IN",{weekday:"short",year:"2-digit"})}</div>
+                  </div>
+                  <div style={{flex:1,display:"flex",gap:12,flexWrap:"wrap"}}>
+                    <span style={{fontSize:12,color:T.grn,fontWeight:600}}>✓ {rPresent} Present</span>
+                    {rHalf>0&&<span style={{fontSize:12,color:T.amb,fontWeight:600}}>½ {rHalf} Half</span>}
+                    <span style={{fontSize:12,color:T.red}}>✗ {Math.max(0,rTotal-rPresent-rHalf)} Absent</span>
+                    <span style={{fontSize:12,color:T.slt,fontWeight:600}}>₹{fmtN(rWages)}</span>
+                  </div>
+                  <Pill label={mode==="name"?"Name-wise":"Count-wise"} c={TYPE_COLORS[labType]} bg={TYPE_BG[labType]}/>
+                </div>
+              );
+            })
+          }
         </div>
       )}
 
-      {/* Add Labour Modal */}
-      {showAddLabour&&(<>
-        <div onClick={()=>setShowAddLabour(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.3)",zIndex:300}}/>
-        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.2)",zIndex:301,width:380,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
-          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add Labour to Project</div>
-            <button onClick={()=>setShowAddLabour(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+      {/* ── ADD WORKFORCE MODAL ───────────────────────────────────────── */}
+      {showAddWf&&(<>
+        <div onClick={()=>setShowAddWf(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.22)",zIndex:301,width:420,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0}}>
+            <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add {TYPE_LABELS[labType]} to Project</div>
+            <button onClick={()=>setShowAddWf(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
               <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>
           <div style={{padding:"14px 16px"}}>
+            {/* Library search */}
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>Search Library</div>
+              <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder={`Search ${TYPE_LABELS[labType]} library…`}
+                style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                onFocus={e=>e.target.style.borderColor=TYPE_COLORS[labType]} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              {libSearch.trim().length>0&&(()=>{
+                const src = labType==="company" ? workerLib : labType==="subcon" ? subconLib : vendorLib;
+                const filtered = src.filter(item=>(item.name||item.company_name||"").toLowerCase().includes(libSearch.toLowerCase())).slice(0,6);
+                return(
+                  <div style={{marginTop:4,border:`1px solid ${T.b1}`,borderRadius:7,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.08)"}}>
+                    {filtered.length===0
+                      ?<div style={{padding:"10px 13px",fontSize:12,color:T.t4}}>No match — fill the form below to add as new</div>
+                      :filtered.map((item,idx)=>{
+                        const name=item.name||item.company_name||"";
+                        const role=item.role||item.skill||"";
+                        const rate=Number(item.daily_rate||item.dailyRate||0);
+                        return(
+                          <div key={idx} onClick={()=>{setWfForm({libId:item.id,name,role:role||"Labour",dailyRate:rate||getRateForRole(role||"Labour")||"",phone:item.phone||""});setLibSearch("");}}
+                            style={{padding:"9px 13px",cursor:"pointer",borderBottom:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                            onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <div>
+                              <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{name}</div>
+                              {role&&<div style={{fontSize:11,color:T.t4}}>{role}</div>}
+                            </div>
+                            {rate>0&&<span style={{fontSize:12,color:T.grn,fontWeight:600}}>₹{rate}/day</span>}
+                          </div>
+                        );
+                      })
+                    }
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Form fields */}
             {[
-              {l:"Name",key:"name",type:"text",ph:"Labour / Worker name"},
-              {l:"Role",key:"role",type:"select",opts:["Labour","Helper","Mason","Carpenter","Electrician","Plumber","Supervisor"]},
-              {l:"Subcontractor",key:"subcon",type:"select",opts:SUBCONS_LIST.filter(s=>s!=="New Subcontractor...")},
-              {l:"Daily Rate (₹)",key:"dailyRate",type:"number",ph:"e.g. 600"},
+              {l:"Name *",     key:"name",     type:"text",   ph:TYPE_LABELS[labType]+" name"},
+              {l:"Role",       key:"role",     type:"select", opts:ROLES},
+              {l:"Daily Rate (₹)", key:"dailyRate", type:"number", ph:`Rate Card: ₹${getRateForRole(wfForm.role)||"—"}`},
+              {l:"Phone",      key:"phone",    type:"text",   ph:"Optional"},
             ].map(f=>(
-              <div key={f.key} style={{marginBottom:11}}>
+              <div key={f.key} style={{marginBottom:10}}>
                 <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{f.l}</div>
                 {f.type==="select"
-                  ?<select value={newLabour[f.key]} onChange={e=>setNewLabour(p=>({...p,[f.key]:e.target.value}))}
+                  ?<select value={wfForm[f.key]} onChange={e=>{const v=e.target.value;setWfForm(p=>({...p,role:v,dailyRate:p.dailyRate||getRateForRole(v)||""}));}}
                       style={{width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                       {f.opts.map(o=><option key={o}>{o}</option>)}
                     </select>
-                  :<input type={f.type} value={newLabour[f.key]} onChange={e=>setNewLabour(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph}
+                  :<input type={f.type} value={wfForm[f.key]} onChange={e=>setWfForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph}
                       style={{width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                      onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                      onFocus={e=>e.target.style.borderColor=TYPE_COLORS[labType]} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 }
               </div>
             ))}
-            <div style={{display:"flex",gap:8,marginTop:4}}>
-              <button onClick={()=>setShowAddLabour(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-              <button onClick={addLabour} style={{flex:2,padding:"9px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>Add to Project</button>
+            {wfForm.dailyRate && Number(wfForm.dailyRate)!==getRateForRole(wfForm.role) && getRateForRole(wfForm.role)>0 && labType!=="subcon"&&(
+              <div style={{padding:"8px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,marginBottom:10,fontSize:11.5,color:T.amb}}>
+                Rate Card for {wfForm.role}: ₹{getRateForRole(wfForm.role)}/day. Your rate differs — an approval request will be submitted.
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,marginTop:6}}>
+              <button onClick={()=>setShowAddWf(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+              <button onClick={addWorkforce} disabled={wfSaving||!wfForm.name.trim()}
+                style={{flex:2,padding:"9px",borderRadius:7,background:wfForm.name.trim()?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:wfForm.name.trim()?"pointer":"not-allowed",opacity:wfSaving?.7:1}}>
+                {wfSaving?"Adding…":"Add to Workforce"}
+              </button>
             </div>
           </div>
         </div>
       </>)}
 
-      {entry.note&&<div style={{marginTop:10,padding:"8px 13px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,fontSize:12.5,color:T.amb,borderLeft:`3px solid ${T.amb}`}}>Note: {entry.note}</div>}
+      {/* ── RATE CHANGE APPROVAL MODAL ────────────────────────────────── */}
+      {showRateModal&&rateReqWorker&&(<>
+        <div onClick={()=>setShowRateModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.22)",zIndex:301,width:380,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Request Rate Change</div>
+            <button onClick={()=>setShowRateModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div style={{padding:"14px 16px"}}>
+            <div style={{padding:"10px 13px",background:T.surfaceB,borderRadius:7,marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center",border:`1px solid ${T.b1}`}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{rateReqWorker.name}</div>
+                <div style={{fontSize:11.5,color:T.t4}}>{rateReqWorker.role} · {TYPE_LABELS[labType]}</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:10.5,color:T.t4}}>Current Rate</div>
+                <div style={{fontSize:16,fontWeight:700,color:T.t1}}>₹{rateReqWorker.dailyRate||rateReqWorker.daily_rate||0}/day</div>
+              </div>
+            </div>
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>New Rate (₹/day) *</div>
+              <input type="number" value={newRateVal} onChange={e=>setNewRateVal(e.target.value)} placeholder="Enter new daily rate…"
+                style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                onFocus={e=>e.target.style.borderColor=T.amb} onBlur={e=>e.target.style.borderColor=T.b1}/>
+            </div>
+            <div style={{marginBottom:12}}>
+              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>Reason (optional)</div>
+              <textarea value={rateReason} onChange={e=>setRateReason(e.target.value)} placeholder="Reason for rate change…" rows={2}
+                style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}
+                onFocus={e=>e.target.style.borderColor=T.amb} onBlur={e=>e.target.style.borderColor=T.b1}/>
+            </div>
+            <div style={{padding:"8px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,marginBottom:12,fontSize:11.5,color:T.amb}}>
+              This request will be sent to admin for approval. Current rate continues to apply until approved.
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>setShowRateModal(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+              <button onClick={submitRateApproval} disabled={rateSaving||!newRateVal}
+                style={{flex:2,padding:"9px",borderRadius:7,background:newRateVal?T.amb:"#ccc",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:newRateVal?"pointer":"not-allowed",opacity:rateSaving?.7:1}}>
+                {rateSaving?"Sending…":"Submit for Approval"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </>)}
     </div>
   );
 }
@@ -10146,7 +10479,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     transaction: <TabTransaction/>,
     todo:        <TabTodo projectId={project.id}/>,
     task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
-    attendance:  <TabAttendance/>,
+    attendance:  <TabAttendance project={project}/>,
     material:    <TabMaterial project={project}/>,
     subcon:      <TabSubcon projectId={project.id}/>,
     equipment:   <TabEquipment/>,
