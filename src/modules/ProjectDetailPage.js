@@ -5756,19 +5756,35 @@ function TabAttendance({ project }) {
       </div>
 
       {/* ── KPI STRIP ────────────────────────────────────────────────── */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
-        {[
-          {l:"Present",    v:presentCount,                             c:T.grn},
-          {l:"Half Day",   v:halfCount,                                c:T.amb},
-          {l:"Absent",     v:Math.max(0,totalCount-presentCount-halfCount),c:T.red},
-          {l:"Daily Wages",v:`₹${fmtN(totalWages)}`,                   c:T.slt},
-        ].map((s,i)=>(
-          <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-            <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{s.l}</div>
-            <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
-          </div>
-        ))}
-      </div>
+      {labType==="subcon"
+        /* Subcon: only present count per role, no wages tracking */
+        ?<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
+          {[
+            {l:"Total Present",v:presentCount,c:T.grn},
+            {l:"Roles Working", v:todayCountRows.filter(r=>r.present>0).length, c:T.blu},
+            {l:"Mode",         v:"Count-wise",c:T.slt},
+          ].map((s,i)=>(
+            <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
+              <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{s.l}</div>
+              <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+        /* Company / Vendor: full KPI */
+        :<div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
+          {[
+            {l:"Present",    v:presentCount,                                     c:T.grn},
+            {l:"Half Day",   v:halfCount,                                        c:T.amb},
+            {l:"Absent",     v:Math.max(0,totalCount-presentCount-halfCount),    c:T.red},
+            {l:"Daily Wages",v:`₹${fmtN(totalWages)}`,                           c:T.slt},
+          ].map((s,i)=>(
+            <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
+              <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{s.l}</div>
+              <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
+            </div>
+          ))}
+        </div>
+      }
 
       {/* ── ATTENDANCE ENTRY PANEL ───────────────────────────────────── */}
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,overflow:"hidden"}}>
@@ -5838,39 +5854,94 @@ function TabAttendance({ project }) {
         {/* COUNT-WISE VIEW */}
         {mode==="count"&&(
           <div style={{padding:"14px 16px"}}>
-            {todayCountRows.map((row,i)=>(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr 1fr 32px",gap:8,marginBottom:8,alignItems:"end"}}>
-                <div>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Role</div>
-                  <select value={row.role} disabled={!editingAtt}
-                    onChange={e=>{ const r=e.target.value; setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,role:r,rate:getRateForRole(r)||rw.rate}:rw)); }}
-                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",opacity:editingAtt?1:.65}}>
-                    {ROLES.map(r=><option key={r}>{r}</option>)}
-                  </select>
-                </div>
-                {[{k:"count",l:"Total"},{k:"present",l:"Present"},{k:"rate",l:"Rate ₹/day"}].map(f=>(
-                  <div key={f.k}>
-                    <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{f.l}</div>
-                    <input type="number" value={row[f.k]||""} disabled={!editingAtt} placeholder="0"
-                      onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,[f.k]:Number(e.target.value)}:rw))}
-                      style={{width:"100%",padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:T.surface,opacity:editingAtt?1:.65,boxSizing:"border-box"}}/>
+            {/* ── SUBCON: only Role + Present count ── */}
+            {labType==="subcon"&&(
+              <>
+                {todayCountRows.map((row,i)=>(
+                  <div key={i} style={{display:"flex",gap:10,marginBottom:8,alignItems:"end"}}>
+                    <div style={{flex:2}}>
+                      <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Role / Skill</div>
+                      <select value={row.role} disabled={!editingAtt}
+                        onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,role:e.target.value}:rw))}
+                        style={{width:"100%",padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",opacity:editingAtt?1:.65}}>
+                        {ROLES.map(r=><option key={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Present Today</div>
+                      <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
+                        onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
+                        style={{width:"100%",padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:14,fontWeight:700,color:T.grn,outline:"none",fontFamily:"inherit",background:T.grnL,opacity:editingAtt?1:.7,boxSizing:"border-box",textAlign:"center"}}/>
+                    </div>
+                    {editingAtt
+                      ?<button onClick={()=>setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i))}
+                          style={{width:28,height:28,flexShrink:0,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                      :<div style={{width:28}}/>
+                    }
                   </div>
                 ))}
-                {editingAtt
-                  ?<button onClick={()=>setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i))}
-                      style={{width:28,height:28,marginBottom:1,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                  :<div/>
-                }
-              </div>
-            ))}
-            {editingAtt&&(
-              <button onClick={()=>setTodayCountRows(prev=>[...prev,{role:"Labour",count:0,present:0,rate:getRateForRole("Labour")||0}])}
-                style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:600,cursor:"pointer",marginTop:4}}>
-                + Add Role Row
-              </button>
+                {editingAtt&&(
+                  <button onClick={()=>setTodayCountRows(prev=>[...prev,{role:"Labour",present:0,count:0,rate:0}])}
+                    style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${T.grn}`,background:T.grnL,color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer",marginTop:4}}>
+                    + Add Role
+                  </button>
+                )}
+                {!editingAtt&&todayCountRows.every(r=>!r.present)&&(
+                  <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"18px 0"}}>No attendance marked. Click "Mark Attendance" to enter.</div>
+                )}
+                {/* read-only summary chips when not editing */}
+                {!editingAtt&&todayCountRows.some(r=>r.present>0)&&(
+                  <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingTop:4}}>
+                    {todayCountRows.filter(r=>r.present>0).map((r,i)=>(
+                      <div key={i} style={{padding:"6px 12px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,display:"flex",alignItems:"center",gap:7}}>
+                        <span style={{fontSize:11.5,color:T.t2,fontWeight:600}}>{r.role}</span>
+                        <span style={{fontSize:14,fontWeight:800,color:T.grn}}>{r.present}</span>
+                        <span style={{fontSize:10,color:T.t4}}>present</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
-            {!editingAtt&&todayCountRows.every(r=>!r.count)&&(
-              <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"16px 0"}}>No count recorded for this date. Click "Mark Attendance" to enter.</div>
+
+            {/* ── VENDOR: Role + Present + Rate ── */}
+            {labType!=="subcon"&&(
+              <>
+                {todayCountRows.map((row,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr 32px",gap:8,marginBottom:8,alignItems:"end"}}>
+                    <div>
+                      <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Role</div>
+                      <select value={row.role} disabled={!editingAtt}
+                        onChange={e=>{ const r=e.target.value; setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,role:r,rate:getRateForRole(r)||rw.rate}:rw)); }}
+                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",opacity:editingAtt?1:.65}}>
+                        {ROLES.map(r=><option key={r}>{r}</option>)}
+                      </select>
+                    </div>
+                    {[{k:"present",l:"Present"},{k:"rate",l:"Rate ₹/day"}].map(f=>(
+                      <div key={f.k}>
+                        <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{f.l}</div>
+                        <input type="number" value={row[f.k]||""} disabled={!editingAtt} placeholder="0"
+                          onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,[f.k]:Number(e.target.value),count:f.k==="present"?Number(e.target.value):rw.count}:rw))}
+                          style={{width:"100%",padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:T.surface,opacity:editingAtt?1:.65,boxSizing:"border-box"}}/>
+                      </div>
+                    ))}
+                    {editingAtt
+                      ?<button onClick={()=>setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i))}
+                          style={{width:28,height:28,marginBottom:1,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                      :<div/>
+                    }
+                  </div>
+                ))}
+                {editingAtt&&(
+                  <button onClick={()=>setTodayCountRows(prev=>[...prev,{role:"Labour",present:0,count:0,rate:getRateForRole("Labour")||0}])}
+                    style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:600,cursor:"pointer",marginTop:4}}>
+                    + Add Role Row
+                  </button>
+                )}
+                {!editingAtt&&todayCountRows.every(r=>!r.present)&&(
+                  <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"16px 0"}}>No count recorded for this date. Click "Mark Attendance" to enter.</div>
+                )}
+              </>
             )}
           </div>
         )}
