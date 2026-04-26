@@ -4125,6 +4125,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [labSearchOpen,setLabSearchOpen]=useState(false);
   const [showCreateLab,setShowCreateLab]=useState(false);
   const [newLabName,setNewLabName]=useState("");
+  const [labIsNew,setLabIsNew]=useState(false); // true = typed new name, will save to library
 
   // Photos
   const [photos,setPhotos]=useState([]);
@@ -4540,7 +4541,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:6,textTransform:"uppercase"}}>Type</label>
                 <div style={{display:"flex",gap:6}}>
                   {[{val:"Direct",label:"👷 Company Labour"},{val:"Subcon",label:"🏗 Subcon"},{val:"Vendor",label:"🏢 Vendor"}].map(t=>(
-                    <button key={t.val} onClick={()=>{setLabForm(p=>({...p,labour_type:t.val,labour_name:"",vendor_name:""}));setLabSkillRows([{role:"Mason",count:1}]);setLabSearchQ("");setLabSearchOpen(false);setShowCreateLab(false);setNewLabName("");}}
+                    <button key={t.val} onClick={()=>{setLabForm(p=>({...p,labour_type:t.val,labour_name:"",vendor_name:""}));setLabSkillRows([{role:"Mason",count:1}]);setLabSearchQ("");setLabSearchOpen(false);setShowCreateLab(false);setNewLabName("");setLabIsNew(false);}}
                       style={{flex:1,padding:"9px 6px",borderRadius:8,border:"1.5px solid "+(labForm.labour_type===t.val?"#2563EB":"#E2E8F0"),background:labForm.labour_type===t.val?"#DBEAFE":"white",color:labForm.labour_type===t.val?"#2563EB":"#64748B",fontSize:11,fontWeight:labForm.labour_type===t.val?700:400,cursor:"pointer",whiteSpace:"nowrap"}}>
                       {t.label}
                     </button>
@@ -4555,7 +4556,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 {(labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name) ? (
                   <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:8,border:"1.5px solid #2563EB",background:"#DBEAFE"}}>
                     <span style={{flex:1,fontSize:13,color:"#1E40AF",fontWeight:600}}>{labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name}</span>
-                    <button onClick={()=>{setLabForm(p=>({...p,labour_name:"",vendor_name:""}));setLabSearchQ("");setShowCreateLab(false);}} style={{background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:18,lineHeight:1,padding:0}}>×</button>
+                    {labIsNew&&labForm.labour_type==="Direct"&&(
+                      <span style={{fontSize:10,fontWeight:600,color:"#16A34A",background:"#DCFCE7",padding:"2px 7px",borderRadius:8,whiteSpace:"nowrap"}}>New → Library</span>
+                    )}
+                    <button onClick={()=>{setLabForm(p=>({...p,labour_name:"",vendor_name:""}));setLabIsNew(false);setLabSearchQ("");setShowCreateLab(false);}} style={{background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:18,lineHeight:1,padding:0}}>×</button>
                   </div>
                 ) : (
                   <>
@@ -4570,7 +4574,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                           .map((item,i)=>{
                             const n=item.name||item.vendor_name||item.party_name||"";
                             return(
-                              <div key={i} onMouseDown={()=>{setLabForm(p=>labForm.labour_type==="Direct"?{...p,labour_name:n}:{...p,vendor_name:n});setLabSearchQ("");setLabSearchOpen(false);setShowCreateLab(false);}}
+                              <div key={i} onMouseDown={()=>{setLabForm(p=>labForm.labour_type==="Direct"?{...p,labour_name:n}:{...p,vendor_name:n});setLabIsNew(false);setLabSearchQ("");setLabSearchOpen(false);setShowCreateLab(false);}}
                                 style={{padding:"9px 12px",fontSize:13,color:"#1E293B",cursor:"pointer",borderBottom:"0.5px solid #F1F5F9"}}
                                 onMouseEnter={e=>e.currentTarget.style.background="#F8FAFC"}
                                 onMouseLeave={e=>e.currentTarget.style.background="white"}>
@@ -4595,6 +4599,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                           if(!newLabName.trim()) return;
                           const n=newLabName.trim();
                           setLabForm(p=>labForm.labour_type==="Direct"?{...p,labour_name:n}:{...p,vendor_name:n});
+                          setLabIsNew(true);
                           setShowCreateLab(false);setNewLabName("");
                         }} style={{padding:"9px 14px",borderRadius:8,background:"#2563EB",color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add</button>
                         <button onClick={()=>{setShowCreateLab(false);setNewLabName("");}} style={{padding:"9px 12px",borderRadius:8,background:"#F1F5F9",color:"#64748B",border:"none",fontSize:12,cursor:"pointer"}}>✕</button>
@@ -4653,6 +4658,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               <button onClick={async()=>{
                 const name=labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name;
                 if(!name.trim()) return alert(labForm.labour_type==="Direct"?"Worker name required":"Name required");
+                // ── Auto-save new Company Labour worker to Library ──
+                if(labIsNew && labForm.labour_type==="Direct"){
+                  const primaryRole=labSkillRows[0]?.role||"Labour";
+                  const libRes=await api.post("/library/workers",{name,role:primaryRole,category:{Mason:"Skilled",Electrician:"Skilled",Plumber:"Skilled",Carpenter:"Skilled",Welder:"Skilled","Tile Fixer":"Skilled","Bar Bender":"Skilled",Shuttering:"Skilled",Polisher:"Skilled",Painter:"Semi-Skilled",Supervisor:"Supervisor",Labour:"Unskilled",Helper:"Unskilled",Other:"Semi-Skilled"}[primaryRole]||"Unskilled",daily_rate:0,status:"Active"});
+                  if(libRes.success) setCompLabLib(p=>[libRes.data,...p]);
+                }
+                // ── Save labour entries (one per skill row) ──
                 const added=[];
                 for(const row of labSkillRows){
                   const payload={...labForm,labour_name:name,role:row.role,count:row.count};
@@ -4663,7 +4675,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                   setLabours(p=>[...added,...p]);
                   setLabForm({labour_type:"Direct",labour_name:"",vendor_name:"",work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});
                   setLabSkillRows([{role:"Mason",count:1}]);
-                  setLabSearchQ("");setShowCreateLab(false);setNewLabName("");setShowLabForm(false);
+                  setLabSearchQ("");setShowCreateLab(false);setNewLabName("");setLabIsNew(false);setShowLabForm(false);
                 } else alert("Failed to save");
               }} style={{width:"100%",padding:"13px",borderRadius:9,background:"#2563EB",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:"pointer"}}>
                 + Add Labour Entry
