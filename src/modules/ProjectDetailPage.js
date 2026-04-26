@@ -5490,6 +5490,11 @@ function TabAttendance({ project }) {
   const [selSubconId,  setSelSubconId]  = useState("");
   // Vendor selector (direct from library, like subcon)
   const [selVendorId,  setSelVendorId]  = useState("");
+  // Add/Edit Labour Vendor modal state
+  const [showAddVendor, setShowAddVendor] = useState(false);
+  const [vForm, setVForm] = useState({ name:"", owner:"", phone:"", email:"", city:"", gstin:"", trade:"", notes:"" });
+  const [vSkills, setVSkills] = useState([]);  // [{skill, rate, card_rate}]
+  const [vSaving, setVSaving] = useState(false);
 
   // ── Libraries ───────────────────────────────────────────────────
   const [workerLib, setWorkerLib] = useState([]);
@@ -5534,7 +5539,7 @@ function TabAttendance({ project }) {
   useEffect(() => {
     api.get("/library/workers").then(r=>{ if(r.success) setWorkerLib(r.data||[]); }).catch(()=>{});
     api.get("/finance/parties?type=Subcontractor").then(r=>{ if(r.success) setSubconLib(r.data||[]); }).catch(()=>{});
-    api.get("/procurement/vendors").then(r=>{ if(r.success) setVendorLib(r.data||[]); }).catch(()=>{});
+    api.get("/labour-vendors").then(r=>{ if(r.success) setVendorLib(r.data||[]); }).catch(()=>{});
     api.get("/library/labour-rates").then(r=>{ if(r.success) setRateCard(r.data||[]); }).catch(()=>{});
   }, []);
 
@@ -5573,21 +5578,28 @@ function TabAttendance({ project }) {
         return { worker_id:w.id, name:w.name, role:w.role, dailyRate:w.dailyRate||w.daily_rate||0, status:found?.status||"P", hours:found?.hours??8, ot:found?.ot||0, rateStatus:w.rateStatus||"card" };
       }));
     } else {
-      // For vendor: pre-fill all roles from rate card (skill-wise)
-      if(labType==="vendor" && !existing?.entries?.length && rateCard.length) {
-        const rows = rateCard.map(rc => ({
-          role: rc.role, present: 0, count: 0,
-          rate: Number(rc.daily_rate||rc.dailyRate||0)
-        }));
-        setTodayCountRows(rows.length ? rows : [{ role:"Labour", count:0, present:0, rate:0 }]);
+      // For vendor: pre-fill from selected vendor's skill list (vendor-specific rates)
+      if(labType==="vendor" && selVendorId) {
+        const vd = vendorLib.find(v => String(v.id||v.name) === selVendorId);
+        const vendorSkills = vd?.skills || [];
+        if(vendorSkills.length) {
+          const rows = vendorSkills.map(s => {
+            const found = existing?.entries?.find(e => e.role === s.skill);
+            return {
+              role: s.skill, present: found?.present || 0, count: found?.count || 0,
+              rate: Number(s.rate) || 0,
+              rate_status: s.rate_status || "card",
+              skill_id: s.id,
+            };
+          });
+          setTodayCountRows(rows);
+        } else {
+          setTodayCountRows([{ role:"Labour", count:0, present:0, rate:0, rate_status:"card" }]);
+        }
       } else if(existing?.entries?.length) {
-        // For vendor: refresh rate from rate card (in case rate card was updated)
-        const refreshed = labType==="vendor"
-          ? existing.entries.map(e => ({...e, rate: Number(getRateForRole(e.role)) || e.rate || 0}))
-          : existing.entries;
-        setTodayCountRows(refreshed);
+        setTodayCountRows(existing.entries);
       } else {
-        setTodayCountRows([{ role:"Labour", count:0, present:0, rate: labType==="vendor" ? (getRateForRole("Labour")||0) : 0 }]);
+        setTodayCountRows([{ role:"Labour", count:0, present:0, rate: 0 }]);
       }
     }
     setEditingAtt(false);
@@ -5824,24 +5836,36 @@ function TabAttendance({ project }) {
         </div>
       )}
 
-      {/* ── VENDOR SELECTOR (mirrors subcon flow) ─────────────────────── */}
+      {/* ── VENDOR SELECTOR (mirrors subcon flow + Add new vendor) ───── */}
       {labType==="vendor"&&(
         <div style={{background:T.surface,border:`1.5px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"13px 16px"}}>
-          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Select Labour Vendor</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>Select Labour Vendor</div>
+            <button onClick={()=>{
+                setVForm({name:"",owner:"",phone:"",email:"",city:"",gstin:"",trade:"",notes:""});
+                setVSkills([{skill:"Labour", rate:getRateForRole("Labour")||0, card_rate:getRateForRole("Labour")||0}]);
+                setShowAddVendor(true);
+              }}
+              style={{padding:"5px 12px",borderRadius:6,background:T.amb,color:"white",border:"none",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+              Add Labour Vendor
+            </button>
+          </div>
           {vendorLib.length===0
-            ?<div style={{fontSize:12.5,color:T.t4,padding:"8px 0"}}>
-                No labour vendors in library. Go to <b>Procurement → Vendors</b> to add them first.
+            ?<div style={{fontSize:12.5,color:T.t4,padding:"8px 0",textAlign:"center"}}>
+                No labour vendors yet. Click <b>"Add Labour Vendor"</b> above to onboard one.
              </div>
             :<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
               {vendorLib.map(v=>{
                 const vid = v.id||v.name;
                 const isSelected = selVendorId===String(vid);
+                const skillCount = (v.skills||[]).length;
                 return(
                   <button key={vid} onClick={()=>setSelVendorId(String(vid))}
                     style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${isSelected?T.amb:T.b1}`,background:isSelected?T.ambL:T.surface,color:isSelected?T.amb:T.t2,fontSize:12.5,fontWeight:isSelected?700:500,cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
                     {isSelected&&<span style={{width:7,height:7,borderRadius:"50%",background:T.amb,display:"inline-block"}}/>}
                     {v.name||v.company_name}
-                    {v.trade&&<span style={{fontSize:10.5,color:isSelected?T.amb:T.t4,fontWeight:400}}>· {v.trade}</span>}
+                    {skillCount>0&&<span style={{fontSize:9.5,padding:"1px 6px",background:isSelected?T.amb:T.b1,color:isSelected?"white":T.t3,borderRadius:10,fontWeight:700}}>{skillCount} skills</span>}
                   </button>
                 );
               })}
@@ -5850,15 +5874,28 @@ function TabAttendance({ project }) {
           {selVendorId&&(()=>{
             const vd = vendorLib.find(v=>String(v.id||v.name)===selVendorId);
             return vd?(
-              <div style={{marginTop:10,padding:"8px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.amb} strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                <div>
-                  <span style={{fontSize:13,fontWeight:700,color:T.amb}}>{vd.name||vd.company_name}</span>
-                  {vd.phone&&<span style={{fontSize:11.5,color:T.t3,marginLeft:8}}>{vd.phone}</span>}
-                  {vd.trade&&<span style={{fontSize:11.5,color:T.t4,marginLeft:8}}>· {vd.trade}</span>}
+              <div style={{marginTop:10,padding:"10px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7}}>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:vd.skills?.length?8:0}}>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.amb} strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                  <div style={{flex:1}}>
+                    <span style={{fontSize:13,fontWeight:700,color:T.amb}}>{vd.name||vd.company_name}</span>
+                    {vd.owner&&<span style={{fontSize:11.5,color:T.t3,marginLeft:8}}>· {vd.owner}</span>}
+                    {vd.phone&&<span style={{fontSize:11.5,color:T.t3,marginLeft:8}}>· {vd.phone}</span>}
+                    {vd.city&&<span style={{fontSize:11.5,color:T.t4,marginLeft:8}}>· {vd.city}</span>}
+                  </div>
+                  <button onClick={()=>setSelVendorId("")} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:16,lineHeight:1}}>×</button>
                 </div>
-                <span style={{marginLeft:"auto",fontSize:10,color:T.t4,fontWeight:600,padding:"2px 8px",background:"white",borderRadius:10,border:`1px solid ${T.b1}`}}>Rate Card-wise wages</span>
-                <button onClick={()=>setSelVendorId("")} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:16,lineHeight:1}}>×</button>
+                {vd.skills?.length>0&&(
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {vd.skills.map(s=>(
+                      <span key={s.id} style={{fontSize:10.5,padding:"3px 9px",borderRadius:14,background:"white",border:`1px solid ${s.rate_status==="pending"?T.ambM:T.b1}`,color:T.t2,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}>
+                        {s.skill} <b style={{color:T.amb}}>₹{s.rate}/day</b>
+                        {s.rate_status==="pending"&&<span style={{fontSize:9,color:T.amb}}>🟡</span>}
+                        {s.rate_status==="approved"&&<span style={{fontSize:9,color:T.grn}}>✓</span>}
+                      </span>
+                    ))}
+                  </div>
+                )}
               </div>
             ):null;
           })()}
@@ -6083,61 +6120,63 @@ function TabAttendance({ project }) {
               </>
             )}
 
-            {/* ── VENDOR: Role + Present + Rate (auto from card) + Wages ── */}
+            {/* ── VENDOR: Skill (locked) + Present + Rate (vendor's saved) + Wages ── */}
             {labType==="vendor"&&(
               <>
                 {/* Header row */}
-                <div style={{display:"grid",gridTemplateColumns:"1.5fr 90px 110px 110px 32px",gap:8,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Role / Skill</div>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Present</div>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Rate ₹/day <span style={{color:T.amb,fontSize:8.5}}>(auto)</span></div>
+                <div style={{display:"grid",gridTemplateColumns:"1.5fr 90px 100px 110px",gap:8,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Skill</div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"center"}}>Present</div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"right"}}>Rate</div>
                   <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"right"}}>Wages</div>
-                  <div/>
                 </div>
                 {todayCountRows.map((row,i)=>{
-                  const cardRate = getRateForRole(row.role);
-                  const effectiveRate = cardRate || Number(row.rate)||0;
-                  const wages = (Number(row.present)||0) * effectiveRate;
-                  const noCard = !cardRate;
+                  const rate = Number(row.rate)||0;
+                  const wages = (Number(row.present)||0) * rate;
+                  const isPending = row.rate_status === "pending";
                   return(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 90px 110px 110px 32px",gap:8,marginBottom:8,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.b1}`}}>
-                    <select value={row.role} disabled={!editingAtt}
-                      onChange={e=>{ const r=e.target.value; const newRate=getRateForRole(r)||0; setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,role:r,rate:newRate}:rw)); }}
-                      style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",opacity:editingAtt?1:.7}}>
-                      {ROLES.map(r=><option key={r}>{r}</option>)}
-                    </select>
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 90px 100px 110px",gap:8,marginBottom:8,alignItems:"center",padding:"7px 0",borderBottom:`1px dashed ${T.b1}`}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{row.role}</span>
+                      {isPending&&<span style={{fontSize:9,padding:"1px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:700,border:`1px solid ${T.ambM}`}}>🟡 Rate Pending</span>}
+                      {row.rate_status==="approved"&&<span style={{fontSize:9,padding:"1px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700}}>✓</span>}
+                    </div>
                     <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
                       onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
                       style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.ambM}`,fontSize:14,fontWeight:700,color:T.amb,outline:"none",fontFamily:"inherit",background:T.ambL,opacity:editingAtt?1:.75,boxSizing:"border-box",textAlign:"center"}}/>
-                    <div style={{display:"flex",alignItems:"center",gap:5}}>
-                      <input type="number" value={effectiveRate||""} disabled={!editingAtt||!noCard} placeholder="—"
-                        onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,rate:Number(e.target.value)}:rw))}
-                        title={noCard?"No rate card for this role — enter manually":"Auto-filled from skill rate card"}
-                        style={{flex:1,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${noCard?T.redM:T.b1}`,fontSize:12,fontWeight:600,color:noCard?T.red:T.t2,outline:"none",fontFamily:"inherit",background:noCard?T.redL:T.surfaceB,boxSizing:"border-box",textAlign:"right"}}/>
-                      {!noCard&&<span style={{fontSize:10,color:T.grn,fontWeight:700}} title="From rate card">📋</span>}
-                    </div>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.t2,textAlign:"right",paddingRight:4}}>₹{rate}/day</span>
                     <span style={{fontSize:13,fontWeight:700,color:wages>0?T.grn:T.t4,textAlign:"right",paddingRight:4}}>
                       {wages>0?`₹${wages.toLocaleString()}`:"—"}
                     </span>
-                    {editingAtt
-                      ?<button onClick={()=>setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i))}
-                          style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                      :<div/>
-                    }
                   </div>
                 );})}
-                {editingAtt&&(
-                  <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}>
-                    <button onClick={()=>setTodayCountRows(prev=>[...prev,{role:"Labour",present:0,count:0,rate:getRateForRole("Labour")||0}])}
-                      style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:600,cursor:"pointer"}}>
-                      + Add Role Row
-                    </button>
-                    <span style={{fontSize:11,color:T.t4}}>Rate auto-fills from <b>Library → Labour Rate Card</b> per skill</span>
+                {todayCountRows.length===0&&(
+                  <div style={{textAlign:"center",padding:"24px 12px",color:T.t4,fontSize:12.5}}>
+                    Vendor has no skills configured. Edit vendor to add skills.
                   </div>
                 )}
-                {!editingAtt&&todayCountRows.every(r=>!r.present)&&(
+                {editingAtt&&(
+                  <div style={{padding:"8px 0",fontSize:11,color:T.t4,fontStyle:"italic"}}>
+                    💡 Skill list comes from vendor's onboarding agreement. To add/change skills, edit the vendor.
+                  </div>
+                )}
+                {!editingAtt&&todayCountRows.every(r=>!r.present)&&todayCountRows.length>0&&(
                   <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"16px 0"}}>No count recorded for this date. Click "Mark Attendance" to enter.</div>
                 )}
+                {/* Vendor wages summary */}
+                {!editingAtt&&todayCountRows.some(r=>r.present>0)&&(()=>{
+                  const totalLab = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0),0);
+                  const totalWg  = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||0),0);
+                  return(
+                    <div style={{marginTop:10,padding:"10px 14px",background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <div style={{fontSize:11.5,color:T.amb,fontWeight:700}}>VENDOR DAILY TOTAL</div>
+                      <div style={{display:"flex",gap:18,alignItems:"center"}}>
+                        <span style={{fontSize:12,color:T.t3}}>Labour: <b style={{color:T.amb,fontSize:14}}>{totalLab}</b></span>
+                        <span style={{fontSize:12,color:T.t3}}>Wages: <b style={{color:T.grn,fontSize:14}}>₹{totalWg.toLocaleString()}</b></span>
+                      </div>
+                    </div>
+                  );
+                })()}
               </>
             )}
           </div>
@@ -6348,6 +6387,124 @@ function TabAttendance({ project }) {
                 {wfSaving?"Adding…":"Add to Workforce"}
               </button>
             </div>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── ADD LABOUR VENDOR MODAL ──────────────────────────────────── */}
+      {showAddVendor&&(<>
+        <div onClick={()=>setShowAddVendor(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:301,width:580,maxWidth:"95vw",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add Labour Vendor</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Vendor info + skills they supply with rates (auto from rate card)</div>
+            </div>
+            <button onClick={()=>setShowAddVendor(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div style={{padding:"14px 18px",overflowY:"auto",flex:1}}>
+            {/* Vendor info */}
+            <div style={{fontSize:11,fontWeight:700,color:T.amb,marginBottom:10,letterSpacing:".4px"}}>1. VENDOR DETAILS</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+              <div style={{gridColumn:"1/-1"}}>
+                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>VENDOR / FIRM NAME *</div>
+                <input value={vForm.name} onChange={e=>setVForm(p=>({...p,name:e.target.value}))} placeholder="e.g. ABC Manpower Supply"
+                  style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>OWNER / CONTACT</div>
+                <input value={vForm.owner} onChange={e=>setVForm(p=>({...p,owner:e.target.value}))} placeholder="Owner name"
+                  style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>PHONE</div>
+                <input value={vForm.phone} onChange={e=>setVForm(p=>({...p,phone:e.target.value}))} placeholder="+91 XXXXX XXXXX"
+                  style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>CITY</div>
+                <input value={vForm.city} onChange={e=>setVForm(p=>({...p,city:e.target.value}))} placeholder="City"
+                  style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,fontWeight:600,color:T.t3,marginBottom:4}}>GSTIN</div>
+                <input value={vForm.gstin} onChange={e=>setVForm(p=>({...p,gstin:e.target.value}))} placeholder="22AABC..."
+                  style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              </div>
+            </div>
+
+            {/* Skills */}
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,paddingTop:6,borderTop:`1px solid ${T.b1}`}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.amb,letterSpacing:".4px",marginTop:8}}>2. SKILLS SUPPLIED + RATES</div>
+              <span style={{fontSize:10.5,color:T.t4}}>Rate ≠ Card → admin approval needed</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1.5fr 100px 100px 28px",gap:8,marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${T.b1}`}}>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px"}}>Skill</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",textAlign:"right"}}>Card Rate</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",textAlign:"right"}}>Vendor Rate</div>
+              <div/>
+            </div>
+            {vSkills.map((s,i)=>{
+              const cardRate = getRateForRole(s.skill);
+              const differs  = cardRate>0 && Number(s.rate) !== cardRate;
+              return(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 100px 100px 28px",gap:8,marginBottom:6,alignItems:"center"}}>
+                  <select value={s.skill}
+                    onChange={e=>{ const sk=e.target.value; const cr=getRateForRole(sk)||0; setVSkills(prev=>prev.map((sx,idx)=>idx===i?{...sx,skill:sk,card_rate:cr,rate:sx.rate||cr}:sx)); }}
+                    style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",background:"white"}}>
+                    {ROLES.map(r=><option key={r}>{r}</option>)}
+                  </select>
+                  <input type="number" value={cardRate||""} disabled placeholder="—"
+                    title="From Library → Labour Rate Card"
+                    style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,outline:"none",fontFamily:"inherit",background:T.surfaceB,boxSizing:"border-box",textAlign:"right"}}/>
+                  <input type="number" value={s.rate||""} placeholder="0" min={0}
+                    onChange={e=>setVSkills(prev=>prev.map((sx,idx)=>idx===i?{...sx,rate:Number(e.target.value)}:sx))}
+                    style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${differs?T.ambM:T.b1}`,fontSize:13,fontWeight:700,color:differs?T.amb:T.t1,outline:"none",fontFamily:"inherit",background:differs?T.ambL:"white",boxSizing:"border-box",textAlign:"right"}}/>
+                  <button onClick={()=>setVSkills(prev=>prev.filter((_,idx)=>idx!==i))}
+                    style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                </div>
+              );
+            })}
+            {vSkills.some(s=>{ const cr=getRateForRole(s.skill); return cr>0 && Number(s.rate)!==cr; })&&(
+              <div style={{padding:"7px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,marginTop:8,fontSize:11.5,color:T.amb}}>
+                ⚠️ Some rates differ from rate card — these will need admin approval before getting "approved" status
+              </div>
+            )}
+            <button onClick={()=>setVSkills(prev=>[...prev,{skill:"Labour", rate:getRateForRole("Labour")||0, card_rate:getRateForRole("Labour")||0}])}
+              style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${T.amb}`,background:T.ambL,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer",marginTop:8}}>
+              + Add Skill
+            </button>
+          </div>
+          {/* Footer */}
+          <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,flexShrink:0,background:T.surface}}>
+            <button onClick={()=>setShowAddVendor(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={async()=>{
+              if(!vForm.name.trim()) return alert("Vendor name required");
+              const validSkills = vSkills.filter(s=>s.skill && Number(s.rate)>0);
+              if(!validSkills.length) return alert("Add at least one skill with rate");
+              setVSaving(true);
+              try {
+                const res = await api.post("/labour-vendors", {
+                  ...vForm, name: vForm.name.trim(),
+                  skills: validSkills.map(s=>({ skill:s.skill, rate:Number(s.rate), card_rate:getRateForRole(s.skill)||0 })),
+                });
+                if(res.success) {
+                  // refresh vendor list
+                  const r = await api.get("/labour-vendors");
+                  if(r.success) setVendorLib(r.data||[]);
+                  setSelVendorId(String(res.data.id));
+                  setShowAddVendor(false);
+                } else {
+                  alert(res.message || "Save failed");
+                }
+              } catch(e) { alert("Error: " + e.message); }
+              setVSaving(false);
+            }} disabled={vSaving||!vForm.name.trim()}
+              style={{flex:2,padding:"9px",borderRadius:7,background:vForm.name.trim()?T.amb:"#ccc",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:vForm.name.trim()?"pointer":"not-allowed",opacity:vSaving?.7:1}}>
+              {vSaving?"Saving...":"Save Vendor + Skills"}
+            </button>
           </div>
         </div>
       </>)}
