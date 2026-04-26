@@ -5622,8 +5622,13 @@ function TabAttendance({ project }) {
   // ── Get rate from rate card by role ─────────────────────────────
   const getRateForRole = (role) => {
     if(!role||!rateCard.length) return 0;
-    const rc = rateCard.find(r=>r.role?.toLowerCase()===role?.toLowerCase());
-    return rc ? (Number(rc.daily_rate||rc.dailyRate)||0) : 0;
+    const r2 = String(role).toLowerCase().trim();
+    const rc = rateCard.find(r => {
+      const rRole = String(r.role||r.name||r.skill||"").toLowerCase().trim();
+      return rRole === r2;
+    });
+    if (!rc) return 0;
+    return Number(rc.rate||rc.daily_rate||rc.dailyRate||rc.base_rate)||0;
   };
 
   // ── 7-day date range ─────────────────────────────────────────────
