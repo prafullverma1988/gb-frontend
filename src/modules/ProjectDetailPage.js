@@ -5848,7 +5848,15 @@ function TabAttendance({ project }) {
             <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>Select Labour Vendor</div>
             <button onClick={()=>{
                 setVForm({name:"",owner:"",phone:"",email:"",city:"",gstin:"",trade:"",notes:""});
-                setVSkills([{skill:"Labour", rate:getRateForRole("Labour")||0, card_rate:getRateForRole("Labour")||0}]);
+                // Pre-fill with first rate card skill if available
+                const first = rateCard[0];
+                if (first) {
+                  const skill = first.role||first.name||first.skill;
+                  const rate  = getRateForRole(skill) || 0;
+                  setVSkills([{ skill, rate, card_rate:rate }]);
+                } else {
+                  setVSkills([]);
+                }
                 setShowAddVendor(true);
               }}
               style={{padding:"5px 12px",borderRadius:6,background:T.amb,color:"white",border:"none",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
@@ -6451,19 +6459,42 @@ function TabAttendance({ project }) {
               <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",textAlign:"right"}}>Vendor Rate</div>
               <div/>
             </div>
+            {/* Available skills come from Labour Rate Card */}
+            {(()=>{
+              const usedSkills = new Set(vSkills.map(s => s.skill));
+              const availableRC = rateCard.filter(rc => {
+                const rname = rc.role || rc.name || rc.skill;
+                return rname && !usedSkills.has(rname);
+              });
+              return null; // just for closure
+            })()}
             {vSkills.map((s,i)=>{
               const cardRate = getRateForRole(s.skill);
               const differs  = cardRate>0 && Number(s.rate) !== cardRate;
+              // Skills already used in other rows (to disable in dropdown)
+              const otherUsed = new Set(vSkills.filter((_,idx)=>idx!==i).map(x=>x.skill));
               return(
                 <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 100px 100px 28px",gap:8,marginBottom:6,alignItems:"center"}}>
                   <select value={s.skill}
-                    onChange={e=>{ const sk=e.target.value; const cr=getRateForRole(sk)||0; setVSkills(prev=>prev.map((sx,idx)=>idx===i?{...sx,skill:sk,card_rate:cr,rate:sx.rate||cr}:sx)); }}
+                    onChange={e=>{ const sk=e.target.value; const cr=getRateForRole(sk)||0; setVSkills(prev=>prev.map((sx,idx)=>idx===i?{...sx,skill:sk,card_rate:cr,rate:cr||sx.rate}:sx)); }}
                     style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",background:"white"}}>
-                    {ROLES.map(r=><option key={r}>{r}</option>)}
+                    {/* If current skill not in rate card, still keep it visible */}
+                    {!rateCard.some(rc => (rc.role||rc.name||rc.skill) === s.skill) && s.skill && (
+                      <option value={s.skill}>{s.skill} (no card)</option>
+                    )}
+                    {rateCard.length === 0 && <option value="">— No rate card entries —</option>}
+                    {rateCard.map(rc => {
+                      const rname = rc.role || rc.name || rc.skill;
+                      if (!rname) return null;
+                      const disabled = otherUsed.has(rname);
+                      return <option key={rc.id} value={rname} disabled={disabled}>
+                        {rname}{disabled ? " (already added)" : ""}
+                      </option>;
+                    })}
                   </select>
                   <input type="number" value={cardRate||""} disabled placeholder="—"
                     title="From Library → Labour Rate Card"
-                    style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,outline:"none",fontFamily:"inherit",background:T.surfaceB,boxSizing:"border-box",textAlign:"right"}}/>
+                    style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,color:cardRate>0?T.grn:T.t4,outline:"none",fontFamily:"inherit",background:cardRate>0?T.grnL:T.surfaceB,boxSizing:"border-box",textAlign:"right"}}/>
                   <input type="number" value={s.rate||""} placeholder="0" min={0}
                     onChange={e=>setVSkills(prev=>prev.map((sx,idx)=>idx===i?{...sx,rate:Number(e.target.value)}:sx))}
                     style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${differs?T.ambM:T.b1}`,fontSize:13,fontWeight:700,color:differs?T.amb:T.t1,outline:"none",fontFamily:"inherit",background:differs?T.ambL:"white",boxSizing:"border-box",textAlign:"right"}}/>
@@ -6472,14 +6503,28 @@ function TabAttendance({ project }) {
                 </div>
               );
             })}
+            {rateCard.length === 0 && (
+              <div style={{padding:"10px 13px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,marginTop:8,fontSize:12,color:T.red}}>
+                ⚠️ Labour Rate Card khali hai. Pehle <b>Library → Labour Rate Card</b> mein skills + rates add karo, phir vendor add karo.
+              </div>
+            )}
             {vSkills.some(s=>{ const cr=getRateForRole(s.skill); return cr>0 && Number(s.rate)!==cr; })&&(
               <div style={{padding:"7px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,marginTop:8,fontSize:11.5,color:T.amb}}>
                 ⚠️ Some rates differ from rate card — these will need admin approval before getting "approved" status
               </div>
             )}
-            <button onClick={()=>setVSkills(prev=>[...prev,{skill:"Labour", rate:getRateForRole("Labour")||0, card_rate:getRateForRole("Labour")||0}])}
-              style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${T.amb}`,background:T.ambL,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer",marginTop:8}}>
-              + Add Skill
+            <button onClick={()=>{
+                const usedSkills = new Set(vSkills.map(s=>s.skill));
+                const firstAvailable = rateCard.find(rc => {
+                  const rname = rc.role||rc.name||rc.skill;
+                  return rname && !usedSkills.has(rname);
+                });
+                const skill = firstAvailable ? (firstAvailable.role||firstAvailable.name||firstAvailable.skill) : "";
+                const cardRate = skill ? getRateForRole(skill) : 0;
+                setVSkills(prev=>[...prev,{ skill, rate:cardRate, card_rate:cardRate }]);
+              }} disabled={rateCard.length === 0}
+              style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${T.amb}`,background:T.ambL,color:T.amb,fontSize:12,fontWeight:600,cursor:rateCard.length?"pointer":"not-allowed",marginTop:8,opacity:rateCard.length?1:.5}}>
+              + Add Skill {rateCard.length === 0 ? "(rate card empty)" : ""}
             </button>
           </div>
           {/* Footer */}
