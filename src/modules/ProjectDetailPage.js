@@ -4126,6 +4126,25 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [showCreateLab,setShowCreateLab]=useState(false);
   const [newLabName,setNewLabName]=useState("");
   const [labIsNew,setLabIsNew]=useState(false); // true = typed new name, will save to library
+  // Attendance settings from localStorage (set in Settings → Attendance)
+  const [attSett] = useState(()=>{ try{ const s=JSON.parse(localStorage.getItem("gb_att_settings")||"{}"); return {company:{mode:"name",paymentCycle:"monthly",...(s.company||{})},subcon:{mode:"count",...(s.subcon||{})},vendor:{mode:"count",trackPayment:true,...(s.vendor||{})}}; }catch{return {company:{mode:"name",paymentCycle:"monthly"},subcon:{mode:"count"},vendor:{mode:"count",trackPayment:true}};} });
+  // Active labour type tab
+  const [labType,setLabType]=useState("Direct");
+  // Selected date for attendance entry
+  const [labDate,setLabDate]=useState(new Date().toISOString().split("T")[0]);
+  // Name-wise attendance workers for today (Company Labour)
+  const [dayWorkers,setDayWorkers]=useState([]); // [{lib_id,name,role,daily_rate,status:"P"|"A"|"H",hours:8,ot_hours:0}]
+  // Selected subcon/vendor for attendance
+  const [labDaySubcon,setLabDaySubcon]=useState("");
+  const [labDayVendor,setLabDayVendor]=useState("");
+  // Count rows (for count mode subcon/vendor)
+  const [labCountRows,setLabCountRows]=useState([{role:"Mason",count:0,rate:0}]);
+  // Saving attendance
+  const [labSaving,setLabSaving]=useState(false);
+  // Show add-worker-to-day panel
+  const [showAddDayWorker,setShowAddDayWorker]=useState(false);
+  // Subcon workers (name-wise for subcon)
+  const [daySubconWorkers,setDaySubconWorkers]=useState([]);
 
   // Photos
   const [photos,setPhotos]=useState([]);
@@ -4506,12 +4525,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           )}
         </div>
 
-        {/* ════════════ LABOUR SECTION ════════════ */}
+        {/* ════════════ LABOUR ATTENDANCE SECTION ════════════ */}
         <div ref={labourRef} data-section="labour" style={{padding:"20px 14px 6px"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
+          {/* ── Header ── */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
               <div style={{width:3,height:18,borderRadius:2,background:"#2563EB"}}/>
-              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Labour</span>
+              <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Labour Attendance</span>
               {labours.length>0&&<span style={{background:"#DBEAFE",color:"#1D4ED8",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{labours.length}</span>}
             </div>
             <button onClick={()=>setShowLabForm(s=>!s)}
@@ -4519,35 +4539,350 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               {showLabForm?"Cancel":"+ Add"}
             </button>
           </div>
-          {/* Labour summary cards */}
-          {labours.length>0&&(
-            <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:12}}>
-              {[
-                {l:"Workers",v:labours.reduce((s,l)=>s+Number(l.count||1),0),c:"#2563EB"},
-                {l:"Man-Hours",v:labours.reduce((s,l)=>s+(Number(l.hours||8)*Number(l.count||1)),0),c:"#16A34A"},
-                {l:"Entries",v:labours.length,c:"#64748B"},
-              ].map(s=>(
-                <div key={s.l} style={{background:"white",borderRadius:9,padding:"10px",border:"1px solid #E2E8F0",textAlign:"center",borderTop:"3px solid "+s.c}}>
-                  <div style={{fontSize:22,fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
-                  <div style={{fontSize:10,color:"#94A3B8",marginTop:3}}>{s.l}</div>
+
+          {/* ── TYPE TABS ── */}
+          <div style={{display:"flex",gap:0,background:"#F1F5F9",borderRadius:9,padding:3,marginBottom:12}}>
+            {[{v:"Direct",ic:"👷",l:"Company"},{v:"Subcon",ic:"🏗",l:"Subcon"},{v:"Vendor",ic:"🏢",l:"Vendor"}].map(t=>(
+              <button key={t.v} onClick={()=>{setLabType(t.v);setLabCountRows([{role:"Mason",count:0,rate:0}]);}}
+                style={{flex:1,padding:"8px 6px",borderRadius:7,border:"none",background:labType===t.v?"white":"transparent",color:labType===t.v?"#2563EB":"#64748B",fontSize:12,fontWeight:labType===t.v?700:500,cursor:"pointer",transition:"all .15s",boxShadow:labType===t.v?"0 1px 4px rgba(0,0,0,.08)":"none"}}>
+                {t.ic} {t.l}
+              </button>
+            ))}
+          </div>
+
+          {/* ── DATE NAVIGATOR ── */}
+          {(()=>{
+            const today=new Date(); const days=[];
+            for(let i=-3;i<=3;i++){const d=new Date(today);d.setDate(today.getDate()+i);days.push(d.toISOString().split("T")[0]);}
+            const fmt=(ds)=>{const d=new Date(ds+"T00:00");return {day:d.toLocaleDateString("en-IN",{weekday:"short"}),date:d.getDate()};};
+            return(
+              <div style={{display:"flex",gap:4,marginBottom:14,alignItems:"center"}}>
+                <button onClick={()=>setLabDate(d=>{const n=new Date(d+"T00:00");n.setDate(n.getDate()-1);return n.toISOString().split("T")[0];})}
+                  style={{width:28,height:28,borderRadius:6,border:"1px solid #E2E8F0",background:"white",cursor:"pointer",fontSize:12,color:"#64748B",flexShrink:0}}>◀</button>
+                <div style={{flex:1,display:"flex",gap:3,overflowX:"auto"}}>
+                  {days.map(d=>{const {day,date}=fmt(d);const isToday=d===new Date().toISOString().split("T")[0];const isSel=d===labDate;const hasDat=labours.some(l=>l.work_date===d);
+                    return(<button key={d} onClick={()=>setLabDate(d)} style={{flex:1,minWidth:36,padding:"5px 2px",borderRadius:7,border:`1.5px solid ${isSel?"#2563EB":isToday?"#BFDBFE":"#E2E8F0"}`,background:isSel?"#2563EB":isToday?"#EFF6FF":"white",cursor:"pointer",position:"relative"}}>
+                      <div style={{fontSize:9,color:isSel?"rgba(255,255,255,.7)":isToday?"#2563EB":"#94A3B8",fontWeight:600}}>{day}</div>
+                      <div style={{fontSize:13,fontWeight:700,color:isSel?"white":isToday?"#2563EB":"#1E293B"}}>{date}</div>
+                      {hasDat&&<div style={{width:4,height:4,borderRadius:"50%",background:isSel?"rgba(255,255,255,.6)":"#2563EB",margin:"2px auto 0"}}/>}
+                    </button>);
+                  })}
+                </div>
+                <button onClick={()=>setLabDate(d=>{const n=new Date(d+"T00:00");n.setDate(n.getDate()+1);return n.toISOString().split("T")[0];})}
+                  style={{width:28,height:28,borderRadius:6,border:"1px solid #E2E8F0",background:"white",cursor:"pointer",fontSize:12,color:"#64748B",flexShrink:0}}>▶</button>
+              </div>
+            );
+          })()}
+
+          {/* ── COMPANY LABOUR — NAME MODE ── */}
+          {labType==="Direct"&&attSett.company.mode==="name"&&(
+            <div>
+              {/* Day workers list */}
+              {dayWorkers.length===0&&!showAddDayWorker&&(
+                <div style={{textAlign:"center",padding:"20px 0",color:"#94A3B8",fontSize:12}}>
+                  No workers added for this day
+                </div>
+              )}
+              {dayWorkers.map((w,i)=>(
+                <div key={i} style={{background:"white",borderRadius:10,padding:"10px 12px",border:"1px solid #E2E8F0",marginBottom:7}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:w.status==="P"?8:0}}>
+                    <div style={{width:30,height:30,borderRadius:"50%",background:"#DCFCE7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"#16A34A",flexShrink:0}}>
+                      {(w.name||"?")[0].toUpperCase()}
+                    </div>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:600,color:"#1E293B"}}>{w.name}</div>
+                      <div style={{fontSize:10,color:"#94A3B8"}}>{w.role}{w.daily_rate>0?` · ₹${w.daily_rate}/day`:""}</div>
+                    </div>
+                    {/* P / A / H buttons */}
+                    <div style={{display:"flex",gap:4}}>
+                      {[{s:"P",c:"#16A34A",bg:"#DCFCE7"},{s:"A",c:"#DC2626",bg:"#FEE2E2"},{s:"H",c:"#D97706",bg:"#FEF3C7"}].map(opt=>(
+                        <button key={opt.s} onClick={()=>setDayWorkers(p=>p.map((x,j)=>j===i?{...x,status:opt.s,hours:opt.s==="H"?4:8}:x))}
+                          style={{width:28,height:28,borderRadius:6,border:`1.5px solid ${w.status===opt.s?opt.c:"#E2E8F0"}`,background:w.status===opt.s?opt.bg:"white",color:w.status===opt.s?opt.c:"#94A3B8",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          {opt.s}
+                        </button>
+                      ))}
+                    </div>
+                    <button onClick={()=>setDayWorkers(p=>p.filter((_,j)=>j!==i))}
+                      style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,fontSize:14,lineHeight:1}}>×</button>
+                  </div>
+                  {/* Hours + OT row — only for Present */}
+                  {w.status==="P"&&(
+                    <div style={{display:"flex",gap:8,paddingLeft:38}}>
+                      <div style={{flex:1}}>
+                        <label style={{fontSize:9,fontWeight:600,color:"#94A3B8",display:"block",marginBottom:2}}>HOURS</label>
+                        <input type="number" min={1} max={24} value={w.hours}
+                          onChange={e=>setDayWorkers(p=>p.map((x,j)=>j===i?{...x,hours:parseFloat(e.target.value)||8}:x))}
+                          style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                      </div>
+                      <div style={{flex:1}}>
+                        <label style={{fontSize:9,fontWeight:600,color:"#94A3B8",display:"block",marginBottom:2}}>OT HRS</label>
+                        <input type="number" min={0} max={12} value={w.ot_hours}
+                          onChange={e=>setDayWorkers(p=>p.map((x,j)=>j===i?{...x,ot_hours:parseFloat(e.target.value)||0}:x))}
+                          style={{width:"100%",padding:"5px 8px",borderRadius:6,border:"1px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box"}}/>
+                      </div>
+                      <div style={{flex:1}}>
+                        <label style={{fontSize:9,fontWeight:600,color:"#94A3B8",display:"block",marginBottom:2}}>WAGE</label>
+                        <div style={{padding:"5px 8px",fontSize:12,fontWeight:600,color:"#16A34A"}}>
+                          ₹{((w.daily_rate||0)*(w.status==="H"?0.5:1)+((w.daily_rate||0)/8*1.5*(w.ot_hours||0))).toFixed(0)}
+                        </div>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
+              {/* Add worker from library */}
+              {showAddDayWorker&&(
+                <div style={{background:"#F8FAFC",borderRadius:10,padding:"10px",border:"1px solid #E2E8F0",marginBottom:8}}>
+                  <div style={{fontSize:11,fontWeight:600,color:"#64748B",marginBottom:6}}>Select from Library</div>
+                  <div style={{maxHeight:140,overflowY:"auto"}}>
+                    {compLabLib.filter(w=>!dayWorkers.some(d=>d.name===w.name)).map((w,i)=>(
+                      <div key={i} onMouseDown={()=>{setDayWorkers(p=>[...p,{lib_id:w.id,name:w.name,role:w.role||"Labour",daily_rate:w.daily_rate||0,status:"P",hours:8,ot_hours:0}]);setShowAddDayWorker(false);}}
+                        style={{padding:"7px 10px",borderRadius:7,cursor:"pointer",display:"flex",alignItems:"center",gap:8,marginBottom:3,background:"white",border:"1px solid #E2E8F0"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
+                        onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                        <span style={{fontSize:11,fontWeight:600,color:"#1E293B"}}>{w.name}</span>
+                        <span style={{fontSize:10,color:"#94A3B8"}}>{w.role}</span>
+                        {w.daily_rate>0&&<span style={{marginLeft:"auto",fontSize:10,color:"#16A34A",fontWeight:600}}>₹{w.daily_rate}/day</span>}
+                      </div>
+                    ))}
+                    {compLabLib.filter(w=>!dayWorkers.some(d=>d.name===w.name)).length===0&&(
+                      <div style={{textAlign:"center",padding:"12px",color:"#94A3B8",fontSize:11}}>All library workers already added</div>
+                    )}
+                  </div>
+                  <button onClick={()=>setShowAddDayWorker(false)} style={{marginTop:6,fontSize:11,color:"#64748B",background:"none",border:"none",cursor:"pointer"}}>✕ Close</button>
+                </div>
+              )}
+              <div style={{display:"flex",gap:7,marginBottom:10}}>
+                <button onClick={()=>setShowAddDayWorker(s=>!s)}
+                  style={{flex:1,padding:"8px",borderRadius:8,border:"1.5px solid #2563EB",background:"#EFF6FF",color:"#2563EB",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                  + Add Worker
+                </button>
+              </div>
+              {/* Day summary */}
+              {dayWorkers.length>0&&(()=>{
+                const present=dayWorkers.filter(w=>w.status==="P");
+                const half=dayWorkers.filter(w=>w.status==="H");
+                const totalWage=dayWorkers.reduce((s,w)=>{
+                  if(w.status==="A") return s;
+                  const base=(w.daily_rate||0)*(w.status==="H"?0.5:1);
+                  const ot=(w.daily_rate||0)/8*1.5*(w.ot_hours||0);
+                  return s+base+ot;
+                },0);
+                const totalOT=dayWorkers.reduce((s,w)=>s+(w.ot_hours||0),0);
+                return(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:10}}>
+                    {[{l:"Present",v:present.length,c:"#16A34A"},{l:"Absent",v:dayWorkers.filter(w=>w.status==="A").length,c:"#DC2626"},{l:"Half Day",v:half.length,c:"#D97706"},{l:"OT Hours",v:totalOT+"h",c:"#2563EB"},{l:"Day Wages",v:"₹"+Math.round(totalWage).toLocaleString(),c:"#16A34A"}].slice(0,4).map(k=>(
+                      <div key={k.l} style={{background:"white",borderRadius:8,padding:"8px",border:"1px solid #E2E8F0",textAlign:"center"}}>
+                        <div style={{fontSize:16,fontWeight:800,color:k.c}}>{k.v}</div>
+                        <div style={{fontSize:9,color:"#94A3B8",marginTop:2}}>{k.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* Save */}
+              {dayWorkers.length>0&&dayWorkers.some(w=>w.status!==undefined)&&(
+                <button onClick={async()=>{
+                  setLabSaving(true);
+                  const added=[];
+                  for(const w of dayWorkers){
+                    const payload={labour_type:"Direct",labour_name:w.name,role:w.role,count:1,status:w.status,hours:w.status==="H"?4:w.hours,ot_hours:w.ot_hours||0,daily_rate:w.daily_rate||0,work_date:labDate,remark:""};
+                    const res=await api.post("/tasks/"+task.id+"/labour",payload);
+                    if(res.success) added.push(res.data);
+                  }
+                  if(added.length>0){setLabours(p=>[...added,...p.filter(l=>l.work_date!==labDate||l.labour_type!=="Direct")]);setDayWorkers([]);}
+                  setLabSaving(false);
+                }} style={{width:"100%",padding:"11px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",marginBottom:10}}>
+                  {labSaving?"Saving...":"✓ Save Attendance — "+new Date(labDate+"T00:00").toLocaleDateString("en-IN",{day:"numeric",month:"short"})}
+                </button>
+              )}
             </div>
           )}
-          {showLabForm&&(
-            <div style={{background:"white",borderRadius:12,padding:"16px",border:"1px solid #E2E8F0",marginBottom:12}}>
-              {/* ── Type toggle ── */}
-              <div style={{marginBottom:12}}>
-                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:6,textTransform:"uppercase"}}>Type</label>
-                <div style={{display:"flex",gap:6}}>
-                  {[{val:"Direct",label:"👷 Company Labour"},{val:"Subcon",label:"🏗 Subcon"},{val:"Vendor",label:"🏢 Vendor"}].map(t=>(
-                    <button key={t.val} onClick={()=>{setLabForm(p=>({...p,labour_type:t.val,labour_name:"",vendor_name:""}));setLabSkillRows([{role:"Mason",count:1}]);setLabSearchQ("");setLabSearchOpen(false);setShowCreateLab(false);setNewLabName("");setLabIsNew(false);}}
-                      style={{flex:1,padding:"9px 6px",borderRadius:8,border:"1.5px solid "+(labForm.labour_type===t.val?"#2563EB":"#E2E8F0"),background:labForm.labour_type===t.val?"#DBEAFE":"white",color:labForm.labour_type===t.val?"#2563EB":"#64748B",fontSize:11,fontWeight:labForm.labour_type===t.val?700:400,cursor:"pointer",whiteSpace:"nowrap"}}>
-                      {t.label}
-                    </button>
-                  ))}
+
+          {/* ── COMPANY LABOUR — COUNT MODE ── */}
+          {labType==="Direct"&&attSett.company.mode==="count"&&showLabForm&&(
+            <div style={{background:"white",borderRadius:10,padding:"12px",border:"1px solid #E2E8F0",marginBottom:10}}>
+              {labCountRows.map((row,i)=>(
+                <div key={i} style={{display:"flex",gap:7,alignItems:"center",marginBottom:7}}>
+                  <select value={row.role} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,role:e.target.value}:r))}
+                    style={{flex:2,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none"}}>
+                    {ROLES.map(r=><option key={r}>{r}</option>)}
+                  </select>
+                  <input type="number" min={0} value={row.count} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||0}:r))}
+                    style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder="Count"/>
+                  {labCountRows.length>1&&<button onClick={()=>setLabCountRows(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:14}}>×</button>}
                 </div>
+              ))}
+              <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>+ Add Row</button>
+              <button onClick={async()=>{
+                setLabSaving(true);const added=[];
+                for(const row of labCountRows){if(!row.count) continue;
+                  const res=await api.post("/tasks/"+task.id+"/labour",{labour_type:"Direct",labour_name:"Company Labour",role:row.role,count:row.count,status:"P",hours:8,ot_hours:0,work_date:labDate,remark:""});
+                  if(res.success) added.push(res.data);
+                }
+                if(added.length>0){setLabours(p=>[...added,...p]);setLabCountRows([{role:"Mason",count:0,rate:0}]);setShowLabForm(false);}
+                setLabSaving(false);
+              }} style={{width:"100%",padding:"10px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
+                {labSaving?"Saving...":"Save Count"}
+              </button>
+            </div>
+          )}
+
+          {/* ── SUBCON ── */}
+          {labType==="Subcon"&&showLabForm&&(
+            <div style={{background:"white",borderRadius:10,padding:"12px",border:"1px solid #E2E8F0",marginBottom:10}}>
+              {/* Subcon selector */}
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Subcontractor</label>
+                <select value={labDaySubcon} onChange={e=>{setLabDaySubcon(e.target.value);setDaySubconWorkers([]);}}
+                  style={{width:"100%",padding:"9px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:13,outline:"none"}}>
+                  <option value="">— Select Subcontractor —</option>
+                  {subconLib.map((s,i)=><option key={i} value={s.name||s.firm_name||s.party_name||s}>{s.name||s.firm_name||s.party_name||s}</option>)}
+                </select>
               </div>
+              {/* Mode from settings */}
+              {labDaySubcon&&attSett.subcon.mode==="count"&&(
+                <>
+                  {labCountRows.map((row,i)=>(
+                    <div key={i} style={{display:"flex",gap:7,alignItems:"center",marginBottom:7}}>
+                      <select value={row.role} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,role:e.target.value}:r))} style={{flex:2,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none"}}>{ROLES.map(r=><option key={r}>{r}</option>)}</select>
+                      <input type="number" min={0} value={row.count} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder="Count"/>
+                      {labCountRows.length>1&&<button onClick={()=>setLabCountRows(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:14}}>×</button>}
+                    </div>
+                  ))}
+                  <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>+ Add Row</button>
+                </>
+              )}
+              {labDaySubcon&&attSett.subcon.mode==="name"&&(
+                <>
+                  {daySubconWorkers.map((w,i)=>(
+                    <div key={i} style={{background:"#F8FAFC",borderRadius:8,padding:"8px 10px",marginBottom:6,display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{flex:1,fontSize:12,fontWeight:600,color:"#1E293B"}}>{w.name}</span>
+                      <span style={{fontSize:10,color:"#94A3B8"}}>{w.role}</span>
+                      <div style={{display:"flex",gap:3}}>
+                        {[{s:"P",c:"#16A34A",bg:"#DCFCE7"},{s:"A",c:"#DC2626",bg:"#FEE2E2"},{s:"H",c:"#D97706",bg:"#FEF3C7"}].map(opt=>(
+                          <button key={opt.s} onClick={()=>setDaySubconWorkers(p=>p.map((x,j)=>j===i?{...x,status:opt.s}:x))}
+                            style={{width:26,height:26,borderRadius:5,border:`1.5px solid ${w.status===opt.s?opt.c:"#E2E8F0"}`,background:w.status===opt.s?opt.bg:"white",color:w.status===opt.s?opt.c:"#94A3B8",fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                            {opt.s}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                  <button onClick={()=>setDaySubconWorkers(p=>[...p,{name:"Worker "+(p.length+1),role:"Labour",status:"P"}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:8}}>+ Add Worker</button>
+                </>
+              )}
+              {labDaySubcon&&(
+                <button onClick={async()=>{
+                  setLabSaving(true);const added=[];
+                  if(attSett.subcon.mode==="count"){
+                    for(const row of labCountRows){if(!row.count) continue;
+                      const res=await api.post("/tasks/"+task.id+"/labour",{labour_type:"Subcon",labour_name:labDaySubcon,vendor_name:labDaySubcon,role:row.role,count:row.count,status:"P",hours:8,ot_hours:0,work_date:labDate,remark:""});
+                      if(res.success) added.push(res.data);}
+                  } else {
+                    for(const w of daySubconWorkers){
+                      const res=await api.post("/tasks/"+task.id+"/labour",{labour_type:"Subcon",labour_name:w.name,vendor_name:labDaySubcon,role:w.role,count:1,status:w.status||"P",hours:8,ot_hours:0,work_date:labDate,remark:""});
+                      if(res.success) added.push(res.data);}
+                  }
+                  if(added.length>0){setLabours(p=>[...added,...p]);setLabCountRows([{role:"Mason",count:0,rate:0}]);setDaySubconWorkers([]);setShowLabForm(false);}
+                  setLabSaving(false);
+                }} style={{width:"100%",padding:"10px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
+                  {labSaving?"Saving...":"Save Subcon Attendance"}
+                </button>
+              )}
+            </div>
+          )}
+
+          {/* ── VENDOR ── */}
+          {labType==="Vendor"&&showLabForm&&(
+            <div style={{background:"white",borderRadius:10,padding:"12px",border:"1px solid #E2E8F0",marginBottom:10}}>
+              {/* Vendor selector */}
+              <div style={{marginBottom:10}}>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Labour Vendor</label>
+                <select value={labDayVendor} onChange={e=>setLabDayVendor(e.target.value)}
+                  style={{width:"100%",padding:"9px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:13,outline:"none"}}>
+                  <option value="">— Select Vendor —</option>
+                  {vendorLib.map((v,i)=><option key={i} value={v.name||v.vendor_name||v.party_name||v}>{v.name||v.vendor_name||v.party_name||v}</option>)}
+                </select>
+              </div>
+              {labDayVendor&&(
+                <>
+                  {labCountRows.map((row,i)=>(
+                    <div key={i} style={{display:"flex",gap:7,alignItems:"center",marginBottom:7}}>
+                      <select value={row.role} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,role:e.target.value}:r))} style={{flex:2,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none"}}>{ROLES.map(r=><option key={r}>{r}</option>)}</select>
+                      <input type="number" min={0} value={row.count} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder="Count"/>
+                      <input type="number" min={0} value={row.rate} onChange={e=>setLabCountRows(p=>p.map((r,j)=>j===i?{...r,rate:parseInt(e.target.value)||0}:r))} style={{flex:1,padding:"8px",borderRadius:7,border:"1px solid #E2E8F0",fontSize:12,outline:"none",textAlign:"center"}} placeholder="₹/day"/>
+                      {labCountRows.length>1&&<button onClick={()=>setLabCountRows(p=>p.filter((_,j)=>j!==i))} style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:14}}>×</button>}
+                    </div>
+                  ))}
+                  <button onClick={()=>setLabCountRows(p=>[...p,{role:"Labour",count:0,rate:0}])} style={{fontSize:11,color:"#2563EB",background:"none",border:"none",cursor:"pointer",fontWeight:600,marginBottom:4}}>+ Add Row</button>
+                  {attSett.vendor.trackPayment&&(
+                    <div style={{background:"#F0FDF4",borderRadius:8,padding:"8px 10px",marginBottom:8,fontSize:12}}>
+                      <span style={{color:"#64748B"}}>Day total due: </span>
+                      <span style={{fontWeight:700,color:"#16A34A"}}>₹{labCountRows.reduce((s,r)=>s+r.count*r.rate,0).toLocaleString()}</span>
+                    </div>
+                  )}
+                  <button onClick={async()=>{
+                    setLabSaving(true);const added=[];
+                    for(const row of labCountRows){if(!row.count) continue;
+                      const res=await api.post("/tasks/"+task.id+"/labour",{labour_type:"Vendor",labour_name:labDayVendor,vendor_name:labDayVendor,role:row.role,count:row.count,rate:row.rate||0,status:"P",hours:8,ot_hours:0,work_date:labDate,remark:""});
+                      if(res.success) added.push(res.data);}
+                    if(added.length>0){setLabours(p=>[...added,...p]);setLabCountRows([{role:"Mason",count:0,rate:0}]);setShowLabForm(false);}
+                    setLabSaving(false);
+                  }} style={{width:"100%",padding:"10px",borderRadius:8,background:"#2563EB",color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer"}}>
+                    {labSaving?"Saving...":"Save Vendor Attendance"}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ── HISTORY ── */}
+          {labLoading&&<div style={{textAlign:"center",padding:"20px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
+          {!labLoading&&labours.length>0&&(()=>{
+            // Group by date
+            const byDate={};
+            labours.forEach(l=>{const d=l.work_date||"";if(!byDate[d])byDate[d]=[];byDate[d].push(l);});
+            return(
+              <div style={{marginTop:4}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Attendance History</div>
+                {Object.entries(byDate).sort((a,b)=>b[0].localeCompare(a[0])).map(([date,entries])=>(
+                  <div key={date} style={{marginBottom:10}}>
+                    <div style={{fontSize:10,fontWeight:700,color:"#64748B",marginBottom:5,display:"flex",alignItems:"center",gap:6}}>
+                      <span>{new Date(date+"T00:00").toLocaleDateString("en-IN",{weekday:"short",day:"2-digit",month:"short"})}</span>
+                      <span style={{background:"#F1F5F9",borderRadius:10,padding:"1px 7px",color:"#94A3B8"}}>{entries.reduce((s,l)=>s+Number(l.count||1),0)} workers</span>
+                    </div>
+                    {entries.map(l=>(
+                      <div key={l.id} style={{background:"white",borderRadius:9,padding:"9px 12px",border:"1px solid #E2E8F0",marginBottom:5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                          <div style={{width:28,height:28,borderRadius:"50%",background:l.labour_type==="Subcon"?"#DBEAFE":l.labour_type==="Vendor"?"#F1F5F9":"#DCFCE7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>
+                            {l.labour_type==="Subcon"?"🏗":l.labour_type==="Vendor"?"🏢":"👷"}
+                          </div>
+                          <div>
+                            <div style={{fontSize:12,fontWeight:600,color:"#1E293B"}}>{l.labour_name}</div>
+                            <div style={{fontSize:10,color:"#94A3B8"}}>{l.role} · {l.count} {l.status?`· ${l.status}`:""} {l.hours?`· ${l.hours}h`:""}{l.ot_hours>0?` +${l.ot_hours}h OT`:""}</div>
+                          </div>
+                        </div>
+                        <div style={{display:"flex",alignItems:"center",gap:6}}>
+                          {l.status&&<span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:4,background:l.status==="P"?"#DCFCE7":l.status==="A"?"#FEE2E2":"#FEF3C7",color:l.status==="P"?"#16A34A":l.status==="A"?"#DC2626":"#D97706"}}>{l.status==="P"?"Present":l.status==="A"?"Absent":"Half Day"}</span>}
+                          <span style={{fontSize:9,fontWeight:600,padding:"2px 6px",borderRadius:4,background:l.labour_type==="Direct"?"#DCFCE7":l.labour_type==="Subcon"?"#DBEAFE":"#F1F5F9",color:l.labour_type==="Direct"?"#16A34A":l.labour_type==="Subcon"?"#2563EB":"#475569"}}>{l.labour_type==="Direct"?"Company":l.labour_type}</span>
+                          <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/labour/"+l.id);if(r.success)setLabours(p=>p.filter(x=>x.id!==l.id));}}
+                            style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,display:"flex"}}>
+                            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          {!labLoading&&labours.length===0&&(
+            <div style={{textAlign:"center",padding:"28px 0",color:"#94A3B8",fontSize:12}}>No attendance entries yet</div>
+          )}
+          {false&&(
+            <div>
               {/* ── Name — library searchable ── */}
               <div style={{marginBottom:12,position:"relative"}}>
                 <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>

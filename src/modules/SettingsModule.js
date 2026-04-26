@@ -1454,20 +1454,124 @@ function FeatureRequests() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// ATTENDANCE SETTINGS
+// ═══════════════════════════════════════════════════════════════════════
+const ATT_KEY = "gb_att_settings";
+const ATT_DEFAULT = {
+  company: { mode: "name", paymentCycle: "monthly" },
+  subcon:  { mode: "count" },
+  vendor:  { mode: "count", trackPayment: true },
+};
+
+function AttendanceSettings() {
+  const [s, setS] = useState(() => {
+    try { const saved = JSON.parse(localStorage.getItem(ATT_KEY)||"{}");
+      return { company:{...ATT_DEFAULT.company,...(saved.company||{})}, subcon:{...ATT_DEFAULT.subcon,...(saved.subcon||{})}, vendor:{...ATT_DEFAULT.vendor,...(saved.vendor||{})} };
+    } catch { return { ...ATT_DEFAULT }; }
+  });
+  const [saved, setSaved] = useState(false);
+
+  const updC = (k,v) => setS(p=>({...p,company:{...p.company,[k]:v}}));
+  const updS = (k,v) => setS(p=>({...p,subcon:{...p.subcon,[k]:v}}));
+  const updV = (k,v) => setS(p=>({...p,vendor:{...p.vendor,[k]:v}}));
+
+  const saveSettings = () => {
+    localStorage.setItem(ATT_KEY, JSON.stringify(s));
+    api.post("/settings/attendance", s).catch(()=>{});
+    setSaved(true); setTimeout(()=>setSaved(false), 2000);
+  };
+
+  const ModeToggle = ({ value, onChange }) => (
+    <div style={{display:"flex",gap:6}}>
+      {[{v:"name",l:"👤 Name-wise"},{v:"count",l:"🔢 Count"}].map(opt=>(
+        <button key={opt.v} onClick={()=>onChange(opt.v)}
+          style={{padding:"9px 18px",borderRadius:8,border:`1.5px solid ${value===opt.v?T.blue:T.border}`,background:value===opt.v?T.blueSoft:"white",color:value===opt.v?T.blue:T.textMid,fontSize:13,fontWeight:value===opt.v?700:400,cursor:"pointer",fontFamily:T.font}}>
+          {opt.l}
+        </button>
+      ))}
+    </div>
+  );
+
+  return (
+    <div>
+      {/* Company Labour */}
+      <SectionCard title="Company Labour" desc="Workers directly employed and paid by the company">
+        <div style={{marginBottom:20}}>
+          <div style={{fontSize:12,fontWeight:600,color:T.textMid,marginBottom:8}}>Attendance Mode</div>
+          <ModeToggle value={s.company.mode} onChange={v=>updC("mode",v)} />
+          <div style={{fontSize:11,color:T.textLight,marginTop:6}}>
+            {s.company.mode==="name" ? "Mark P / A / H for each registered worker with hours and overtime" : "Enter total count per skill type each day"}
+          </div>
+        </div>
+        <div>
+          <div style={{fontSize:12,fontWeight:600,color:T.textMid,marginBottom:8}}>Payment Cycle</div>
+          <div style={{display:"flex",gap:6}}>
+            {[{v:"weekly",l:"Weekly"},{v:"15day",l:"15-Day"},{v:"monthly",l:"Monthly"}].map(opt=>(
+              <button key={opt.v} onClick={()=>updC("paymentCycle",opt.v)}
+                style={{padding:"9px 18px",borderRadius:8,border:`1.5px solid ${s.company.paymentCycle===opt.v?T.blue:T.border}`,background:s.company.paymentCycle===opt.v?T.blueSoft:"white",color:s.company.paymentCycle===opt.v?T.blue:T.textMid,fontSize:13,fontWeight:s.company.paymentCycle===opt.v?700:400,cursor:"pointer",fontFamily:T.font}}>
+                {opt.l}
+              </button>
+            ))}
+          </div>
+          <div style={{fontSize:11,color:T.textLight,marginTop:6}}>
+            Payment summary will group by {s.company.paymentCycle==="weekly"?"week (Mon–Sun)":s.company.paymentCycle==="15day"?"fortnight (1–15 & 16–month-end)":"calendar month"}
+          </div>
+        </div>
+      </SectionCard>
+
+      {/* Subcon Labour */}
+      <SectionCard title="Subcontractor Labour" desc="Workers deployed by subcontractors — no direct payment by company">
+        <div>
+          <div style={{fontSize:12,fontWeight:600,color:T.textMid,marginBottom:8}}>Attendance Mode</div>
+          <ModeToggle value={s.subcon.mode} onChange={v=>updS("mode",v)} />
+          <div style={{fontSize:11,color:T.textLight,marginTop:6}}>
+            {s.subcon.mode==="name" ? "Register workers under each subcontractor, mark P / A / H daily" : "Enter total headcount by skill type per subcontractor"}
+          </div>
+        </div>
+        <div style={{marginTop:14,padding:"10px 14px",borderRadius:8,background:"#FFF7ED",border:"1px solid #FED7AA",fontSize:12,color:"#92400E"}}>
+          💡 No payment tracking for subcon labour — subcontractor handles worker wages.
+        </div>
+      </SectionCard>
+
+      {/* Labour Vendor */}
+      <SectionCard title="Labour Vendor" desc="Workers supplied by a vendor — company pays vendor directly">
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:T.textMid,marginBottom:8}}>Attendance Mode</div>
+          <ModeToggle value={s.vendor.mode} onChange={v=>updV("mode",v)} />
+          <div style={{fontSize:11,color:T.textLight,marginTop:6}}>
+            {s.vendor.mode==="name" ? "Register workers under vendor, mark attendance — rate auto-calculates payment" : "Enter count per skill × agreed rate = daily payment due to vendor"}
+          </div>
+        </div>
+        <ToggleRow icon={<IcDollar size={17} color={T.blue}/>} label="Track Vendor Payment" desc="Record payment due and mark as paid after releasing amount" value={s.vendor.trackPayment} onChange={v=>updV("trackPayment",v)} />
+      </SectionCard>
+
+      <div style={{display:"flex",justifyContent:"flex-end",alignItems:"center",gap:12,marginTop:4}}>
+        {saved&&<span style={{fontSize:12,color:T.green,fontWeight:600}}>✓ Settings saved</span>}
+        <button onClick={saveSettings}
+          style={{padding:"11px 32px",borderRadius:8,background:T.blue,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",fontFamily:T.font}}>
+          Save Attendance Settings
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // MAIN SETTINGS MODULE
 // ═══════════════════════════════════════════════════════════════════════
 const settingsSections = [
-  { id: "company",       label: "Company Profile",      Icon: IcBuilding,  Comp: CompanySettings,      section: "GENERAL" },
-  { id: "roles",         label: "Roles & Access",       Icon: IcShield,    Comp: RolesAccess,          section: null },
-  { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,     section: null },
-  { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,      section: null },
-  { id: "bank",          label: "Bank Details",         Icon: IcBank,      Comp: BankDetails,          section: "FINANCE & MATERIAL" },
-  { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,     section: null },
-  { id: "finance",       label: "Finance Settings",     Icon: IcDollar,    Comp: FinanceSettings,      section: null },
-  { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings, section: "SYSTEM" },
-  { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,      section: null },
-  { id: "audit",         label: "Audit Trail",          Icon: IcClipboard, Comp: AuditSettings,        section: null },
-  { id: "features",      label: "Feature Requests",     Icon: IcEdit,      Comp: FeatureRequests,      section: "FEEDBACK" },
+  { id: "company",       label: "Company Profile",      Icon: IcBuilding,  Comp: CompanySettings,        section: "GENERAL" },
+  { id: "roles",         label: "Roles & Access",       Icon: IcShield,    Comp: RolesAccess,            section: null },
+  { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,       section: null },
+  { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
+  { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
+  { id: "bank",          label: "Bank Details",         Icon: IcBank,      Comp: BankDetails,            section: "FINANCE & MATERIAL" },
+  { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,       section: null },
+  { id: "finance",       label: "Finance Settings",     Icon: IcDollar,    Comp: FinanceSettings,        section: null },
+  { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings,   section: "SYSTEM" },
+  { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,        section: null },
+  { id: "audit",         label: "Audit Trail",          Icon: IcClipboard, Comp: AuditSettings,          section: null },
+  { id: "features",      label: "Feature Requests",     Icon: IcEdit,      Comp: FeatureRequests,        section: "FEEDBACK" },
 ];
 
 export default function SettingsModule() {
@@ -1477,6 +1581,7 @@ export default function SettingsModule() {
   const descMap = {
     company: "Manage your company profile and regional settings", roles: "Configure user roles, permissions and project access",
     approval: "Set up multi-level approval workflows", backdate: "Control back-dated entry permissions",
+    attendance: "Configure attendance mode and payment cycle for each labour type",
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
     finance: "Tax, invoicing, and financial controls", notifications: "Email, Push & WhatsApp notification settings",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
