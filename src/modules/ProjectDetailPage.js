@@ -4116,7 +4116,15 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [labours,setLabours]=useState([]);
   const [labLoading,setLabLoading]=useState(true);
   const [showLabForm,setShowLabForm]=useState(false);
-  const [labForm,setLabForm]=useState({labour_type:"Direct",labour_name:"",vendor_name:"",role:"Mason",count:1,work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});
+  const [labForm,setLabForm]=useState({labour_type:"Direct",labour_name:"",vendor_name:"",work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});
+  const [labSkillRows,setLabSkillRows]=useState([{role:"Mason",count:1}]);
+  const [compLabLib,setCompLabLib]=useState([]);
+  const [subconLib,setSubconLib]=useState([]);
+  const [vendorLib,setVendorLib]=useState([]);
+  const [labSearchQ,setLabSearchQ]=useState("");
+  const [labSearchOpen,setLabSearchOpen]=useState(false);
+  const [showCreateLab,setShowCreateLab]=useState(false);
+  const [newLabName,setNewLabName]=useState("");
 
   // Photos
   const [photos,setPhotos]=useState([]);
@@ -4161,6 +4169,9 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     api.get("/tasks/"+task.id+"/used-log").then(r=>{if(r.success)setUsedLog(r.data||[]);setUsedLogLoading(false);}).catch(()=>setUsedLogLoading(false));
     // Labour
     api.get("/tasks/"+task.id+"/labour").then(r=>{if(r.success)setLabours(r.data||[]);setLabLoading(false);}).catch(()=>setLabLoading(false));
+    api.get("/library/workers").then(r=>{if(r.success)setCompLabLib(r.data||[]);}).catch(()=>{});
+    api.get("/finance/parties?type=Subcontractor").then(r=>{if(r.success)setSubconLib(r.data||[]);}).catch(()=>{});
+    api.get("/procurement/vendors").then(r=>{if(r.success)setVendorLib(r.data||[]);}).catch(()=>{});
     // Photos
     api.get("/tasks/"+task.id+"/photos").then(r=>{if(r.success)setPhotos(r.data||[]);setPhLoading(false);}).catch(()=>setPhLoading(false));
     // Issues
@@ -4498,12 +4509,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
         <div ref={labourRef} data-section="labour" style={{padding:"20px 14px 6px"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12}}>
             <div style={{display:"flex",alignItems:"center",gap:8}}>
-              <div style={{width:3,height:18,borderRadius:2,background:"#7C3AED"}}/>
+              <div style={{width:3,height:18,borderRadius:2,background:"#2563EB"}}/>
               <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Labour</span>
-              {labours.length>0&&<span style={{background:"#EDE9FE",color:"#6D28D9",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{labours.length}</span>}
+              {labours.length>0&&<span style={{background:"#DBEAFE",color:"#1D4ED8",fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{labours.length}</span>}
             </div>
             <button onClick={()=>setShowLabForm(s=>!s)}
-              style={{padding:"9px 16px",borderRadius:8,background:showLabForm?"#F1F5F9":"#7C3AED",color:showLabForm?"#64748B":"white",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",minHeight:40}}>
+              style={{padding:"9px 16px",borderRadius:8,background:showLabForm?"#F1F5F9":"#2563EB",color:showLabForm?"#64748B":"white",border:"none",fontSize:13,fontWeight:600,cursor:"pointer",minHeight:40}}>
               {showLabForm?"Cancel":"+ Add"}
             </button>
           </div>
@@ -4524,37 +4535,104 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           )}
           {showLabForm&&(
             <div style={{background:"white",borderRadius:12,padding:"16px",border:"1px solid #E2E8F0",marginBottom:12}}>
-              <div style={{marginBottom:10}}>
+              {/* ── Type toggle ── */}
+              <div style={{marginBottom:12}}>
                 <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:6,textTransform:"uppercase"}}>Type</label>
                 <div style={{display:"flex",gap:6}}>
-                  {["Direct","Subcon","Vendor"].map(t=>(
-                    <button key={t} onClick={()=>setLabForm(p=>({...p,labour_type:t,labour_name:"",vendor_name:""}))}
-                      style={{flex:1,padding:"9px",borderRadius:8,border:"1.5px solid "+(labForm.labour_type===t?"#2563EB":"#E2E8F0"),background:labForm.labour_type===t?"#DBEAFE":"white",color:labForm.labour_type===t?"#2563EB":"#64748B",fontSize:12,fontWeight:labForm.labour_type===t?700:400,cursor:"pointer"}}>
-                      {t==="Direct"?"👷":t==="Subcon"?"🏗":"🏢"} {t}
+                  {[{val:"Direct",label:"👷 Company Labour"},{val:"Subcon",label:"🏗 Subcon"},{val:"Vendor",label:"🏢 Vendor"}].map(t=>(
+                    <button key={t.val} onClick={()=>{setLabForm(p=>({...p,labour_type:t.val,labour_name:"",vendor_name:""}));setLabSkillRows([{role:"Mason",count:1}]);setLabSearchQ("");setLabSearchOpen(false);setShowCreateLab(false);setNewLabName("");}}
+                      style={{flex:1,padding:"9px 6px",borderRadius:8,border:"1.5px solid "+(labForm.labour_type===t.val?"#2563EB":"#E2E8F0"),background:labForm.labour_type===t.val?"#DBEAFE":"white",color:labForm.labour_type===t.val?"#2563EB":"#64748B",fontSize:11,fontWeight:labForm.labour_type===t.val?700:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+                      {t.label}
                     </button>
                   ))}
                 </div>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-                <div style={{gridColumn:"1/-1"}}>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{labForm.labour_type==="Direct"?"Labour Name *":labForm.labour_type+" Name *"}</label>
-                  <input value={labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name}
-                    onChange={e=>setLabForm(p=>labForm.labour_type==="Direct"?{...p,labour_name:e.target.value}:{...p,vendor_name:e.target.value})}
-                    placeholder={labForm.labour_type==="Direct"?"e.g. Ramesh Kumar":"Company name"}
-                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              {/* ── Name — library searchable ── */}
+              <div style={{marginBottom:12,position:"relative"}}>
+                <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
+                  {labForm.labour_type==="Direct"?"Worker Name *":labForm.labour_type==="Subcon"?"Subcontractor *":"Labour Vendor *"}
+                </label>
+                {(labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name) ? (
+                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"10px 12px",borderRadius:8,border:"1.5px solid #2563EB",background:"#DBEAFE"}}>
+                    <span style={{flex:1,fontSize:13,color:"#1E40AF",fontWeight:600}}>{labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name}</span>
+                    <button onClick={()=>{setLabForm(p=>({...p,labour_name:"",vendor_name:""}));setLabSearchQ("");setShowCreateLab(false);}} style={{background:"none",border:"none",cursor:"pointer",color:"#64748B",fontSize:18,lineHeight:1,padding:0}}>×</button>
+                  </div>
+                ) : (
+                  <>
+                    <input value={labSearchQ} onChange={e=>{setLabSearchQ(e.target.value);setLabSearchOpen(true);}}
+                      onFocus={()=>setLabSearchOpen(true)}
+                      placeholder={labForm.labour_type==="Direct"?"Search or type worker name…":labForm.labour_type==="Subcon"?"Search subcontractor…":"Search vendor…"}
+                      style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                    {labSearchOpen&&(
+                      <div style={{position:"absolute",top:"100%",left:0,right:0,background:"white",border:"1px solid #E2E8F0",borderRadius:8,zIndex:50,marginTop:2,boxShadow:"0 4px 16px rgba(0,0,0,.12)",maxHeight:160,overflowY:"auto"}}>
+                        {(labForm.labour_type==="Direct"?compLabLib:labForm.labour_type==="Subcon"?subconLib:vendorLib)
+                          .filter(item=>{const n=item.name||item.vendor_name||item.party_name||"";return !labSearchQ||n.toLowerCase().includes(labSearchQ.toLowerCase());})
+                          .map((item,i)=>{
+                            const n=item.name||item.vendor_name||item.party_name||"";
+                            return(
+                              <div key={i} onMouseDown={()=>{setLabForm(p=>labForm.labour_type==="Direct"?{...p,labour_name:n}:{...p,vendor_name:n});setLabSearchQ("");setLabSearchOpen(false);setShowCreateLab(false);}}
+                                style={{padding:"9px 12px",fontSize:13,color:"#1E293B",cursor:"pointer",borderBottom:"0.5px solid #F1F5F9"}}
+                                onMouseEnter={e=>e.currentTarget.style.background="#F8FAFC"}
+                                onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                                {n}
+                              </div>
+                            );
+                          })}
+                        <div onMouseDown={()=>{setShowCreateLab(true);setLabSearchOpen(false);setNewLabName(labSearchQ);}}
+                          style={{padding:"9px 12px",fontSize:12,color:"#2563EB",fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,borderTop:"1px solid #E2E8F0"}}
+                          onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
+                          onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                          <span style={{fontSize:16,lineHeight:1}}>+</span> Create new {labForm.labour_type==="Direct"?"worker":labForm.labour_type==="Subcon"?"subcontractor":"vendor"}…
+                        </div>
+                      </div>
+                    )}
+                    {showCreateLab&&(
+                      <div style={{marginTop:6,display:"flex",gap:6}}>
+                        <input value={newLabName} onChange={e=>setNewLabName(e.target.value)} autoFocus
+                          placeholder="Enter name..."
+                          style={{flex:1,padding:"9px",borderRadius:8,border:"1.5px solid #2563EB",fontSize:13,outline:"none",fontFamily:"inherit"}}/>
+                        <button onClick={()=>{
+                          if(!newLabName.trim()) return;
+                          const n=newLabName.trim();
+                          setLabForm(p=>labForm.labour_type==="Direct"?{...p,labour_name:n}:{...p,vendor_name:n});
+                          setShowCreateLab(false);setNewLabName("");
+                        }} style={{padding:"9px 14px",borderRadius:8,background:"#2563EB",color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer"}}>Add</button>
+                        <button onClick={()=>{setShowCreateLab(false);setNewLabName("");}} style={{padding:"9px 12px",borderRadius:8,background:"#F1F5F9",color:"#64748B",border:"none",fontSize:12,cursor:"pointer"}}>✕</button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+              {/* ── Skill-wise Count rows ── */}
+              <div style={{marginBottom:12}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>Skill-wise Count</label>
+                  <button onClick={()=>setLabSkillRows(p=>[...p,{role:"Labour",count:1}])}
+                    style={{padding:"3px 10px",borderRadius:6,background:"#EFF6FF",color:"#2563EB",border:"1px solid #BFDBFE",fontSize:11,fontWeight:600,cursor:"pointer"}}>+ Add Row</button>
                 </div>
-                <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Role</label>
-                  <select value={labForm.role} onChange={e=>setLabForm(p=>({...p,role:e.target.value}))}
-                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
-                    {ROLES.map(r=><option key={r}>{r}</option>)}
-                  </select>
+                {labSkillRows.map((row,i)=>(
+                  <div key={i} style={{display:"flex",gap:7,alignItems:"center",marginBottom:6}}>
+                    <select value={row.role} onChange={e=>setLabSkillRows(p=>p.map((r,j)=>j===i?{...r,role:e.target.value}:r))}
+                      style={{flex:2,padding:"9px 8px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12,outline:"none",fontFamily:"inherit"}}>
+                      {ROLES.map(r=><option key={r}>{r}</option>)}
+                    </select>
+                    <input type="number" min={1} value={row.count} onChange={e=>setLabSkillRows(p=>p.map((r,j)=>j===i?{...r,count:parseInt(e.target.value)||1}:r))}
+                      style={{flex:1,padding:"9px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"center"}}/>
+                    <span style={{fontSize:10,color:"#94A3B8",minWidth:18,flexShrink:0}}>nos</span>
+                    {labSkillRows.length>1&&(
+                      <button onClick={()=>setLabSkillRows(p=>p.filter((_,j)=>j!==i))}
+                        style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,display:"flex",flexShrink:0}}>
+                        <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                      </button>
+                    )}
+                  </div>
+                ))}
+                <div style={{fontSize:10,color:"#94A3B8",marginTop:2}}>
+                  Total: {labSkillRows.reduce((s,r)=>s+r.count,0)} workers
                 </div>
-                <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Count</label>
-                  <input type="number" min={1} value={labForm.count} onChange={e=>setLabForm(p=>({...p,count:parseInt(e.target.value)||1}))}
-                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                </div>
+              </div>
+              {/* ── Date / Hours / Remark ── */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:14}}>
                 <div>
                   <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Date</label>
                   <input type="date" value={labForm.work_date} onChange={e=>setLabForm(p=>({...p,work_date:e.target.value}))}
@@ -4565,20 +4643,29 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                   <input type="number" min={1} max={24} value={labForm.hours} onChange={e=>setLabForm(p=>({...p,hours:parseFloat(e.target.value)||8}))}
                     style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
-                <div>
+                <div style={{gridColumn:"1/-1"}}>
                   <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Remark</label>
                   <input value={labForm.remark} onChange={e=>setLabForm(p=>({...p,remark:e.target.value}))} placeholder="Optional"
                     style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
+              {/* ── Submit ── */}
               <button onClick={async()=>{
                 const name=labForm.labour_type==="Direct"?labForm.labour_name:labForm.vendor_name;
-                if(!name.trim()) return alert("Name required");
-                const payload={...labForm,labour_name:name};
-                const res=await api.post("/tasks/"+task.id+"/labour",payload);
-                if(res.success){setLabours(p=>[res.data,...p]);setLabForm({labour_type:"Direct",labour_name:"",vendor_name:"",role:"Mason",count:1,work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});setShowLabForm(false);}
-                else alert(res.message||"Failed");
-              }} style={{width:"100%",padding:"13px",borderRadius:9,background:"#7C3AED",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:"pointer"}}>
+                if(!name.trim()) return alert(labForm.labour_type==="Direct"?"Worker name required":"Name required");
+                const added=[];
+                for(const row of labSkillRows){
+                  const payload={...labForm,labour_name:name,role:row.role,count:row.count};
+                  const res=await api.post("/tasks/"+task.id+"/labour",payload);
+                  if(res.success) added.push(res.data);
+                }
+                if(added.length>0){
+                  setLabours(p=>[...added,...p]);
+                  setLabForm({labour_type:"Direct",labour_name:"",vendor_name:"",work_date:new Date().toISOString().split("T")[0],hours:8,remark:""});
+                  setLabSkillRows([{role:"Mason",count:1}]);
+                  setLabSearchQ("");setShowCreateLab(false);setNewLabName("");setShowLabForm(false);
+                } else alert("Failed to save");
+              }} style={{width:"100%",padding:"13px",borderRadius:9,background:"#2563EB",color:"white",fontSize:14,fontWeight:700,border:"none",cursor:"pointer"}}>
                 + Add Labour Entry
               </button>
             </div>
@@ -4589,14 +4676,14 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
             <div key={l.id} style={{background:"white",borderRadius:10,padding:"12px 14px",border:"1px solid #E2E8F0",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div style={{flex:1}}>
                 <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                  <div style={{width:32,height:32,borderRadius:"50%",background:"linear-gradient(135deg,#7C3AED,#2563EB)",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:14,flexShrink:0}}>
+                  <div style={{width:32,height:32,borderRadius:"50%",background:l.labour_type==="Subcon"?"#DBEAFE":l.labour_type==="Vendor"?"#F1F5F9":"#DCFCE7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>
                     {l.labour_type==="Subcon"?"🏗":l.labour_type==="Vendor"?"🏢":"👷"}
                   </div>
                   <div>
                     <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{l.labour_name}</div>
                     <div style={{fontSize:11,color:"#64748B"}}>{l.role} · {l.count} workers · {l.hours}h/day</div>
                   </div>
-                  <span style={{marginLeft:"auto",fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:4,background:l.labour_type==="Direct"?"#DCFCE7":l.labour_type==="Subcon"?"#DBEAFE":"#EDE9FE",color:l.labour_type==="Direct"?"#16A34A":l.labour_type==="Subcon"?"#2563EB":"#7C3AED"}}>{l.labour_type||"Direct"}</span>
+                  <span style={{marginLeft:"auto",fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:4,background:l.labour_type==="Direct"?"#DCFCE7":l.labour_type==="Subcon"?"#DBEAFE":"#F1F5F9",color:l.labour_type==="Direct"?"#16A34A":l.labour_type==="Subcon"?"#2563EB":"#475569"}}>{l.labour_type==="Direct"?"Company Labour":l.labour_type||"Company Labour"}</span>
                 </div>
                 <div style={{fontSize:10.5,color:"#94A3B8",paddingLeft:40}}>{fmtDate(l.work_date)}{l.remark?" · "+l.remark:""}</div>
               </div>
