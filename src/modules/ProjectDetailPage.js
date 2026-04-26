@@ -5480,12 +5480,14 @@ function TabAttendance({ project }) {
 
   // ── Core state ──────────────────────────────────────────────────
   const todayStr = new Date().toISOString().split("T")[0];
-  const [labType,    setLabType]    = useState("company"); // company | subcon | vendor
-  const [attDate,    setAttDate]    = useState(todayStr);
-  const [showWfPanel,setShowWfPanel]= useState(true);
-  const [showHistory,setShowHistory]= useState(false);
-  const [editingAtt, setEditingAtt] = useState(false);
-  const [attSaving,  setAttSaving]  = useState(false);
+  const [labType,      setLabType]      = useState("company"); // company | subcon | vendor
+  const [attDate,      setAttDate]      = useState(todayStr);
+  const [showWfPanel,  setShowWfPanel]  = useState(true);
+  const [showHistory,  setShowHistory]  = useState(false);
+  const [editingAtt,   setEditingAtt]   = useState(false);
+  const [attSaving,    setAttSaving]    = useState(false);
+  // Subcon selector (direct from library, no registration needed)
+  const [selSubconId,  setSelSubconId]  = useState("");
 
   // ── Libraries ───────────────────────────────────────────────────
   const [workerLib, setWorkerLib] = useState([]);
@@ -5582,12 +5584,19 @@ function TabAttendance({ project }) {
 
   // ── Save attendance ──────────────────────────────────────────────
   const saveAttendance = async () => {
+    if(labType==="subcon"&&!selSubconId) return;
     setAttSaving(true);
-    const payload = { project_id:projectId, date:attDate, type:labType, mode, entries: mode==="name"?todayEntries:todayCountRows };
+    const sc = labType==="subcon" ? subconLib.find(s=>String(s.id||s.name)===selSubconId) : null;
+    const payload = {
+      project_id: projectId, date: attDate, type: labType, mode,
+      entries: mode==="name" ? todayEntries : todayCountRows,
+      subcon_id:   sc?.id   || null,
+      subcon_name: sc?.name || sc?.company_name || null,
+    };
     try {
       const r = await api.post(`/projects/${projectId}/attendance`, payload);
       if(r.success) {
-        setAttRecs(prev=>[...prev.filter(rec=>!(rec.date===attDate&&rec.type===labType)), {...payload, id:r.data?.id}]);
+        setAttRecs(prev=>[...prev.filter(rec=>!(rec.date===attDate&&rec.type===labType&&(rec.subcon_id||null)===(sc?.id||null))), {...payload, id:r.data?.id}]);
         setEditingAtt(false);
       }
     } catch(e) {}
@@ -5663,25 +5672,25 @@ function TabAttendance({ project }) {
         <div style={{display:"flex",gap:6}}>
           {["company","subcon","vendor"].map(t=>(
             <button key={t} onClick={()=>setLabType(t)}
-              style={{padding:"7px 15px",borderRadius:20,border:`1.5px solid ${labType===t?TYPE_COLORS[t]:T.b1}`,background:labType===t?TYPE_BG[t]:T.surface,color:labType===t?TYPE_COLORS[t]:T.t3,fontSize:12,fontWeight:labType===t?700:500,cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
+              style={{padding:"7px 15px",borderRadius:20,border:`1.5px solid ${labType===t?TYPE_COLORS[t]:T.b1}`,background:labType===t?TYPE_BG[t]:T.surface,color:labType===t?TYPE_COLORS[t]:T.t3,fontSize:12,fontWeight:labType===t?700:500,cursor:"pointer",transition:"all .15s"}}>
               {TYPE_LABELS[t]}
-              <span style={{padding:"1px 6px",borderRadius:20,background:labType===t?TYPE_COLORS[t]:T.b1,color:labType===t?"white":T.t3,fontSize:10,fontWeight:700}}>
-                {(workforce[t]||[]).length}
-              </span>
             </button>
           ))}
         </div>
         <div style={{display:"flex",gap:7,alignItems:"center"}}>
-          <button onClick={()=>setShowWfPanel(p=>!p)}
-            style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:showWfPanel?T.surfaceB:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-            Workforce {showWfPanel?"▲":"▼"}
-          </button>
-          <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setWfForm({libId:"",name:"",role:"Labour",dailyRate:"",phone:""}); }}
-            style={{padding:"6px 13px",borderRadius:6,background:TYPE_COLORS[labType],color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-            Add {TYPE_LABELS[labType].split(" ")[0]}
-          </button>
+          {/* Company & Vendor: Workforce panel toggle + Add button */}
+          {labType!=="subcon"&&<>
+            <button onClick={()=>setShowWfPanel(p=>!p)}
+              style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:showWfPanel?T.surfaceB:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              Workforce {showWfPanel?"▲":"▼"}
+            </button>
+            <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setWfForm({libId:"",name:"",role:"Labour",dailyRate:"",phone:""}); }}
+              style={{padding:"6px 13px",borderRadius:6,background:TYPE_COLORS[labType],color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+              Add {TYPE_LABELS[labType].split(" ")[0]}
+            </button>
+          </>}
           <button onClick={()=>setShowHistory(p=>!p)}
             style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${showHistory?TYPE_COLORS[labType]:T.b1}`,background:showHistory?TYPE_BG[labType]:T.surface,color:showHistory?TYPE_COLORS[labType]:T.t3,fontSize:11.5,cursor:"pointer"}}>
             History
@@ -5689,8 +5698,48 @@ function TabAttendance({ project }) {
         </div>
       </div>
 
-      {/* ── WORKFORCE PANEL ──────────────────────────────────────────── */}
-      {showWfPanel&&(
+      {/* ── SUBCON SELECTOR (replaces workforce panel for subcon) ─────── */}
+      {labType==="subcon"&&(
+        <div style={{background:T.surface,border:`1.5px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"13px 16px"}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Select Subcontractor</div>
+          {subconLib.length===0
+            ?<div style={{fontSize:12.5,color:T.t4,padding:"8px 0"}}>
+                No subcontractors in library. Go to <b>Master Library → Subcontractors</b> to add them first.
+             </div>
+            :<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {subconLib.map(s=>{
+                const sid = s.id||s.name;
+                const isSelected = selSubconId===String(sid);
+                return(
+                  <button key={sid} onClick={()=>setSelSubconId(String(sid))}
+                    style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${isSelected?T.grn:T.b1}`,background:isSelected?T.grnL:T.surface,color:isSelected?T.grn:T.t2,fontSize:12.5,fontWeight:isSelected?700:500,cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
+                    {isSelected&&<span style={{width:7,height:7,borderRadius:"50%",background:T.grn,display:"inline-block"}}/>}
+                    {s.name||s.company_name}
+                    {s.trade&&<span style={{fontSize:10.5,color:isSelected?T.grn:T.t4,fontWeight:400}}>· {s.trade}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          }
+          {selSubconId&&(()=>{
+            const sc = subconLib.find(s=>String(s.id||s.name)===selSubconId);
+            return sc?(
+              <div style={{marginTop:10,padding:"8px 12px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                <div>
+                  <span style={{fontSize:13,fontWeight:700,color:T.grn}}>{sc.name||sc.company_name}</span>
+                  {sc.phone&&<span style={{fontSize:11.5,color:T.t3,marginLeft:8}}>{sc.phone}</span>}
+                  {sc.trade&&<span style={{fontSize:11.5,color:T.t4,marginLeft:8}}>· {sc.trade}</span>}
+                </div>
+                <button onClick={()=>setSelSubconId("")} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:16,lineHeight:1}}>×</button>
+              </div>
+            ):null;
+          })()}
+        </div>
+      )}
+
+      {/* ── WORKFORCE PANEL (Company + Vendor only) ───────────────────── */}
+      {labType!=="subcon"&&showWfPanel&&(
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,overflow:"hidden"}}>
           <div style={{padding:"10px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Registered Workforce — {TYPE_LABELS[labType]}</span>
@@ -5703,28 +5752,19 @@ function TabAttendance({ project }) {
                 No {TYPE_LABELS[labType]} registered yet. Click "Add" above to register workforce for this project.
                </div>
               :<div>
-                <THead
-                  cols={labType==="subcon"?"2fr 1fr 80px 100px":"2fr 1fr 90px 100px 100px"}
-                  headers={labType==="subcon"?["Name","Role","Phone","Added"]:["Name","Role","Daily Rate","Rate Status","Action"]}/>
+                <THead cols="2fr 1fr 90px 100px 100px" headers={["Name","Role","Daily Rate","Rate Status","Action"]}/>
                 {currentWF.map((w,i)=>(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:labType==="subcon"?"2fr 1fr 80px 100px":"2fr 1fr 90px 100px 100px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",fontSize:12.5}}
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 90px 100px 100px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",fontSize:12.5}}
                     onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                     onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <span style={{fontWeight:600,color:T.t1}}>{w.name}</span>
                     <span style={{color:T.t2,fontSize:12}}>{w.role||"—"}</span>
-                    {labType==="subcon"
-                      ?<><span style={{color:T.t4,fontSize:11.5}}>{w.phone||"—"}</span>
-                         <span style={{color:T.t4,fontSize:11}}>{w.created_at?new Date(w.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—"}</span>
-                       </>
-                      :<>
-                        <span style={{fontWeight:600,color:T.t1}}>₹{w.dailyRate||w.daily_rate||0}</span>
-                        <RateBadge worker={w}/>
-                        <button onClick={()=>{setRateReqWorker(w);setNewRateVal("");setRateReason("");setShowRateModal(true);}}
-                          style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${T.b2}`,background:T.surface,color:T.t3,fontSize:11,cursor:"pointer",width:"max-content"}}>
-                          Change Rate
-                        </button>
-                      </>
-                    }
+                    <span style={{fontWeight:600,color:T.t1}}>₹{w.dailyRate||w.daily_rate||0}</span>
+                    <RateBadge worker={w}/>
+                    <button onClick={()=>{setRateReqWorker(w);setNewRateVal("");setRateReason("");setShowRateModal(true);}}
+                      style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${T.b2}`,background:T.surface,color:T.t3,fontSize:11,cursor:"pointer",width:"max-content"}}>
+                      Change Rate
+                    </button>
                   </div>
                 ))}
                </div>
@@ -5792,20 +5832,22 @@ function TabAttendance({ project }) {
           <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>
             Attendance — {new Date(attDate+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"short",year:"numeric"})}
           </span>
-          <div style={{display:"flex",gap:7}}>
-            {!editingAtt
-              ?<button onClick={()=>setEditingAtt(true)}
-                  style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                  ✏️ Mark Attendance
-                </button>
-              :<>
-                <button onClick={()=>setEditingAtt(false)}
-                  style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer"}}>Cancel</button>
-                <button onClick={saveAttendance} disabled={attSaving}
-                  style={{padding:"5px 14px",borderRadius:6,border:"none",background:TYPE_COLORS[labType],color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",opacity:attSaving?.6:1}}>
-                  {attSaving?"Saving…":"Save"}
-                </button>
-              </>
+          <div style={{display:"flex",gap:7,alignItems:"center"}}>
+            {labType==="subcon"&&!selSubconId
+              ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle subcontractor select karo</span>
+              :!editingAtt
+                ?<button onClick={()=>setEditingAtt(true)}
+                    style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                    ✏️ Mark Attendance
+                  </button>
+                :<>
+                  <button onClick={()=>setEditingAtt(false)}
+                    style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer"}}>Cancel</button>
+                  <button onClick={saveAttendance} disabled={attSaving}
+                    style={{padding:"5px 14px",borderRadius:6,border:"none",background:TYPE_COLORS[labType],color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",opacity:attSaving?.6:1}}>
+                    {attSaving?"Saving…":"Save"}
+                  </button>
+                </>
             }
           </div>
         </div>
