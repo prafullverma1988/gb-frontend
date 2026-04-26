@@ -5508,10 +5508,12 @@ function TabAttendance({ project }) {
   const [todayCountRows, setTodayCountRows] = useState([]);
 
   // ── Add workforce modal ──────────────────────────────────────────
-  const [showAddWf, setShowAddWf] = useState(false);
-  const [libSearch, setLibSearch] = useState("");
-  const [wfForm,    setWfForm]    = useState({ libId:"", name:"", role:"Labour", dailyRate:"", phone:"" });
-  const [wfSaving,  setWfSaving]  = useState(false);
+  const [showAddWf,      setShowAddWf]      = useState(false);
+  const [libSearch,      setLibSearch]      = useState("");
+  const [selectedLibIds, setSelectedLibIds] = useState(new Set()); // multi-select checklist
+  const [showNewWf,      setShowNewWf]      = useState(false);     // inline new worker form
+  const [wfForm,         setWfForm]         = useState({ name:"", role:"Labour", category:"Unskilled", dailyRate:"", phone:"", city:"" });
+  const [wfSaving,       setWfSaving]       = useState(false);
 
   // ── Rate change approval modal ───────────────────────────────────
   const [showRateModal,  setShowRateModal]  = useState(false);
@@ -5619,26 +5621,59 @@ function TabAttendance({ project }) {
     setAttSaving(false);
   };
 
-  // ── Add workforce ────────────────────────────────────────────────
-  const addWorkforce = async () => {
+  // ── Appoint selected library workers to project (bulk) ──────────────
+  const appointSelected = async () => {
+    if(!selectedLibIds.size) return;
+    setWfSaving(true);
+    const toAdd = workerLib.filter(w => selectedLibIds.has(w.id));
+    const alreadyIds = new Set((workforce.company||[]).map(w=>w.lib_id||w.worker_id));
+    const newOnes = toAdd.filter(w => !alreadyIds.has(w.id));
+    const added = [];
+    for(const w of newOnes) {
+      const cardRate = getRateForRole(w.role||w.trade||"Labour");
+      const rate = Number(w.daily_rate||w.rate_per_day)||cardRate;
+      try {
+        const r = await api.post(`/projects/${projectId}/workforce`, {
+          project_id: projectId, type:"company",
+          lib_id: w.id, name: w.name, role: w.role||w.trade||"Labour",
+          daily_rate: rate, phone: w.phone||"", rateStatus:"card",
+        });
+        if(r.success) added.push({...w, id:r.data?.id||Date.now(), dailyRate:rate, daily_rate:rate, rateStatus:"card"});
+      } catch(e){}
+    }
+    setWorkforce(prev=>({...prev, company:[...prev.company, ...added]}));
+    setSelectedLibIds(new Set());
+    setShowAddWf(false);
+    setWfSaving(false);
+  };
+
+  // ── Add new worker (not in library) ─────────────────────────────────
+  const addNewWorker = async () => {
     if(!wfForm.name.trim()) return;
     setWfSaving(true);
-    const cardRate = getRateForRole(wfForm.role);
-    const payload = {
-      project_id: projectId, type: labType,
-      lib_id: wfForm.libId||null, name: wfForm.name, role: wfForm.role,
-      daily_rate: Number(wfForm.dailyRate)||cardRate,
-      phone: wfForm.phone,
-      rateStatus: (wfForm.dailyRate && Number(wfForm.dailyRate)!==cardRate && cardRate>0 && labType!=="subcon") ? "pending" : "card",
-    };
     try {
-      const r = await api.post(`/projects/${projectId}/workforce`, payload);
+      // Save to library (payroll_workers) first
+      const libRes = await api.post("/library/workers", {
+        name: wfForm.name.trim(), role: wfForm.role, category: wfForm.category,
+        daily_rate: Number(wfForm.dailyRate)||0, phone: wfForm.phone, city: wfForm.city, status:"Active",
+      });
+      const libId = libRes.data?.id || null;
+      const cardRate = getRateForRole(wfForm.role);
+      const rate = Number(wfForm.dailyRate)||cardRate||0;
+      // Appoint to project
+      const r = await api.post(`/projects/${projectId}/workforce`, {
+        project_id: projectId, type:"company",
+        lib_id: libId, name: wfForm.name.trim(), role: wfForm.role,
+        daily_rate: rate, phone: wfForm.phone, rateStatus:"card",
+      });
       if(r.success) {
-        setWorkforce(prev=>({...prev,[labType]:[...prev[labType],{...payload,id:r.data?.id||Date.now(),dailyRate:payload.daily_rate}]}));
-        setShowAddWf(false);
-        setWfForm({libId:"",name:"",role:"Labour",dailyRate:"",phone:""});
+        setWorkforce(prev=>({...prev, company:[...prev.company,{...wfForm,id:r.data?.id||Date.now(),dailyRate:rate,daily_rate:rate,rateStatus:"card"}]}));
+        // Refresh library
+        api.get("/library/workers").then(res=>{ if(res.success) setWorkerLib(res.data||[]); });
+        setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""});
+        setShowNewWf(false);
       }
-    } catch(e) {}
+    } catch(e){}
     setWfSaving(false);
   };
 
@@ -5701,10 +5736,10 @@ function TabAttendance({ project }) {
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
               Workforce {showWfPanel?"▲":"▼"}
             </button>
-            <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setWfForm({libId:"",name:"",role:"Labour",dailyRate:"",phone:""}); }}
+            <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setSelectedLibIds(new Set()); setShowNewWf(false); setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""}); }}
               style={{padding:"6px 13px",borderRadius:6,background:TYPE_COLORS[labType],color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-              Add {TYPE_LABELS[labType].split(" ")[0]}
+              {labType==="company" ? "Add Labour" : `Add ${TYPE_LABELS[labType].split(" ")[0]}`}
             </button>
           </>}
           <button onClick={()=>setShowHistory(p=>!p)}
@@ -5852,10 +5887,18 @@ function TabAttendance({ project }) {
             {labType==="subcon"&&!selSubconId
               ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle subcontractor select karo</span>
               :!editingAtt
-                ?<button onClick={()=>setEditingAtt(true)}
-                    style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                    ✏️ Mark Attendance
-                  </button>
+                ?<div style={{display:"flex",gap:6}}>
+                    {labType==="company"&&currentWF.length>0&&(
+                      <button onClick={()=>{setTodayEntries(prev=>prev.map(e=>({...e,status:"P",hours:8}))); setEditingAtt(true); }}
+                        style={{padding:"5px 11px",borderRadius:6,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                        ✓ All Present
+                      </button>
+                    )}
+                    <button onClick={()=>setEditingAtt(true)}
+                      style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                      ✏️ Mark Attendance
+                    </button>
+                  </div>
                 :<>
                   <button onClick={()=>setEditingAtt(false)}
                     style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer"}}>Cancel</button>
@@ -6041,7 +6084,134 @@ function TabAttendance({ project }) {
       )}
 
       {/* ── ADD WORKFORCE MODAL ───────────────────────────────────────── */}
-      {showAddWf&&(<>
+      {showAddWf&&labType==="company"&&(<>
+        <div onClick={()=>setShowAddWf(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:301,width:480,maxWidth:"95vw",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"88vh",display:"flex",flexDirection:"column"}}>
+          {/* Header */}
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Appoint Labour to Project</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>Tick workers from library → they appear in daily attendance</div>
+            </div>
+            <button onClick={()=>setShowAddWf(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+
+          {/* Search */}
+          <div style={{padding:"12px 16px 8px",flexShrink:0,borderBottom:`1px solid ${T.b1}`}}>
+            <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="Search by name or role…" autoFocus
+              style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surfaceB,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            {selectedLibIds.size>0&&<div style={{fontSize:11.5,color:T.blu,fontWeight:600,marginTop:6}}>{selectedLibIds.size} worker{selectedLibIds.size>1?"s":""} selected</div>}
+          </div>
+
+          {/* Checklist */}
+          <div style={{overflowY:"auto",flex:1,padding:"8px 0"}}>
+            {(()=>{
+              const alreadyIds = new Set((workforce.company||[]).map(w=>w.lib_id||w.worker_id||w.id));
+              const filtered = workerLib.filter(w=>
+                !libSearch.trim() ||
+                (w.name||"").toLowerCase().includes(libSearch.toLowerCase()) ||
+                (w.role||w.trade||"").toLowerCase().includes(libSearch.toLowerCase())
+              );
+              if(!filtered.length) return(
+                <div style={{padding:"24px 16px",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                  No workers in library.
+                  <button onClick={()=>setShowNewWf(true)} style={{display:"block",margin:"10px auto 0",padding:"7px 16px",borderRadius:7,border:`1.5px dashed ${T.blu}`,background:T.bluL,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    + Add New Worker to Library
+                  </button>
+                </div>
+              );
+              return filtered.map((w,i)=>{
+                const wid = w.id;
+                const isAppointed = alreadyIds.has(wid);
+                const isSelected  = selectedLibIds.has(wid);
+                const rate = Number(w.daily_rate||w.rate_per_day)||0;
+                return(
+                  <div key={i} onClick={()=>{ if(isAppointed) return;
+                    setSelectedLibIds(prev=>{ const s=new Set(prev); s.has(wid)?s.delete(wid):s.add(wid); return s; }); }}
+                    style={{display:"flex",alignItems:"center",gap:12,padding:"9px 16px",cursor:isAppointed?"default":"pointer",
+                      background:isSelected?T.bluL:isAppointed?"#F8FAFC":"transparent",
+                      borderBottom:`1px solid ${T.b1}`,opacity:isAppointed?.55:1,transition:"background .12s"}}
+                    onMouseEnter={e=>{ if(!isAppointed&&!isSelected) e.currentTarget.style.background=T.surfaceB; }}
+                    onMouseLeave={e=>{ if(!isAppointed&&!isSelected) e.currentTarget.style.background="transparent"; }}>
+                    {/* Checkbox */}
+                    <div style={{width:18,height:18,borderRadius:4,border:`2px solid ${isAppointed?"#CBD5E1":isSelected?T.blu:T.b2}`,
+                      background:isSelected?T.blu:isAppointed?"#F1F5F9":"white",
+                      display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {(isSelected||isAppointed)&&<svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3}><path d="M20 6L9 17l-5-5"/></svg>}
+                    </div>
+                    {/* Avatar */}
+                    <div style={{width:32,height:32,borderRadius:"50%",background:isSelected?T.blu:"#334155",color:"white",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>
+                      {(w.name||"?")[0].toUpperCase()}
+                    </div>
+                    {/* Info */}
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w.name}</div>
+                      <div style={{fontSize:11,color:T.t4}}>{w.role||w.trade||"Labour"}{w.category?" · "+w.category:""}</div>
+                    </div>
+                    {/* Rate */}
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      {rate>0&&<div style={{fontSize:12.5,fontWeight:700,color:T.grn}}>₹{rate}/day</div>}
+                      {isAppointed&&<div style={{fontSize:10,color:T.t4,fontWeight:600}}>Already added</div>}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
+          </div>
+
+          {/* Add New Worker inline form */}
+          {showNewWf&&(
+            <div style={{padding:"12px 16px",borderTop:`1.5px solid ${T.blu}`,background:T.bluL,flexShrink:0}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.blu,marginBottom:8}}>NEW WORKER (saved to Library + appointed to project)</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                <input value={wfForm.name} onChange={e=>setWfForm(p=>({...p,name:e.target.value}))} placeholder="Worker name *"
+                  style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",gridColumn:"1/-1"}}/>
+                <select value={wfForm.role} onChange={e=>setWfForm(p=>({...p,role:e.target.value,dailyRate:p.dailyRate||getRateForRole(e.target.value)||""}))}
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:"white"}}>
+                  {ROLES.map(r=><option key={r}>{r}</option>)}
+                </select>
+                <select value={wfForm.category} onChange={e=>setWfForm(p=>({...p,category:e.target.value}))}
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:"white"}}>
+                  {["Unskilled","Semi-Skilled","Skilled","Highly Skilled"].map(c=><option key={c}>{c}</option>)}
+                </select>
+                <input type="number" value={wfForm.dailyRate} onChange={e=>setWfForm(p=>({...p,dailyRate:e.target.value}))}
+                  placeholder={`Daily Rate ₹ (Card: ${getRateForRole(wfForm.role)||"—"})`}
+                  style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                <input value={wfForm.phone} onChange={e=>setWfForm(p=>({...p,phone:e.target.value}))} placeholder="Phone (optional)"
+                  style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                <input value={wfForm.city} onChange={e=>setWfForm(p=>({...p,city:e.target.value}))} placeholder="City (optional)"
+                  style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              <div style={{display:"flex",gap:7}}>
+                <button onClick={()=>setShowNewWf(false)} style={{flex:1,padding:"7px",borderRadius:6,border:`1px solid ${T.b1}`,background:"white",fontSize:12,cursor:"pointer",color:T.t3}}>Cancel</button>
+                <button onClick={addNewWorker} disabled={wfSaving||!wfForm.name.trim()}
+                  style={{flex:2,padding:"7px",borderRadius:6,border:"none",background:wfForm.name.trim()?T.blu:"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",opacity:wfSaving?.7:1}}>
+                  {wfSaving?"Saving…":"Save & Appoint"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Footer */}
+          <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,alignItems:"center",flexShrink:0,background:T.surface}}>
+            <button onClick={()=>setShowNewWf(p=>!p)}
+              style={{padding:"7px 14px",borderRadius:7,border:`1.5px dashed ${T.blu}`,background:showNewWf?T.bluL:"transparent",color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+              + New Worker
+            </button>
+            <div style={{flex:1}}/>
+            <button onClick={()=>setShowAddWf(false)} style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={appointSelected} disabled={wfSaving||!selectedLibIds.size}
+              style={{padding:"7px 18px",borderRadius:7,border:"none",background:selectedLibIds.size?T.blu:"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:selectedLibIds.size?"pointer":"not-allowed",opacity:wfSaving?.7:1}}>
+              {wfSaving?"Appointing…":`Appoint${selectedLibIds.size?" ("+selectedLibIds.size+")":""}`}
+            </button>
+          </div>
+        </div>
+      </>)}
+
+      {/* Old vendor/subcon Add modal (non-company) */}
+      {showAddWf&&labType!=="company"&&(<>
         <div onClick={()=>setShowAddWf(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.22)",zIndex:301,width:420,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0}}>
@@ -6051,70 +6221,33 @@ function TabAttendance({ project }) {
             </button>
           </div>
           <div style={{padding:"14px 16px"}}>
-            {/* Library search */}
-            <div style={{marginBottom:12}}>
-              <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>Search Library</div>
-              <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder={`Search ${TYPE_LABELS[labType]} library…`}
-                style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                onFocus={e=>e.target.style.borderColor=TYPE_COLORS[labType]} onBlur={e=>e.target.style.borderColor=T.b1}/>
-              {libSearch.trim().length>0&&(()=>{
-                const src = labType==="company" ? workerLib : labType==="subcon" ? subconLib : vendorLib;
-                const filtered = src.filter(item=>(item.name||item.company_name||"").toLowerCase().includes(libSearch.toLowerCase())).slice(0,6);
-                return(
-                  <div style={{marginTop:4,border:`1px solid ${T.b1}`,borderRadius:7,overflow:"hidden",boxShadow:"0 4px 12px rgba(0,0,0,.08)"}}>
-                    {filtered.length===0
-                      ?<div style={{padding:"10px 13px",fontSize:12,color:T.t4}}>No match — fill the form below to add as new</div>
-                      :filtered.map((item,idx)=>{
-                        const name=item.name||item.company_name||"";
-                        const role=item.role||item.skill||"";
-                        const rate=Number(item.daily_rate||item.dailyRate||0);
-                        return(
-                          <div key={idx} onClick={()=>{setWfForm({libId:item.id,name,role:role||"Labour",dailyRate:rate||getRateForRole(role||"Labour")||"",phone:item.phone||""});setLibSearch("");}}
-                            style={{padding:"9px 13px",cursor:"pointer",borderBottom:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}
-                            onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                            <div>
-                              <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{name}</div>
-                              {role&&<div style={{fontSize:11,color:T.t4}}>{role}</div>}
-                            </div>
-                            {rate>0&&<span style={{fontSize:12,color:T.grn,fontWeight:600}}>₹{rate}/day</span>}
-                          </div>
-                        );
-                      })
-                    }
-                  </div>
-                );
-              })()}
-            </div>
-
-            {/* Form fields */}
             {[
-              {l:"Name *",     key:"name",     type:"text",   ph:TYPE_LABELS[labType]+" name"},
-              {l:"Role",       key:"role",     type:"select", opts:ROLES},
-              {l:"Daily Rate (₹)", key:"dailyRate", type:"number", ph:`Rate Card: ₹${getRateForRole(wfForm.role)||"—"}`},
-              {l:"Phone",      key:"phone",    type:"text",   ph:"Optional"},
+              {l:"Name *",key:"name",type:"text",ph:TYPE_LABELS[labType]+" name"},
+              {l:"Role",key:"role",type:"select",opts:ROLES},
+              {l:"Daily Rate (₹)",key:"dailyRate",type:"number",ph:`Rate Card: ₹${getRateForRole(wfForm.role)||"—"}`},
+              {l:"Phone",key:"phone",type:"text",ph:"Optional"},
             ].map(f=>(
               <div key={f.key} style={{marginBottom:10}}>
                 <div style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>{f.l}</div>
                 {f.type==="select"
-                  ?<select value={wfForm[f.key]} onChange={e=>{const v=e.target.value;setWfForm(p=>({...p,role:v,dailyRate:p.dailyRate||getRateForRole(v)||""}));}}
+                  ?<select value={wfForm[f.key]||""} onChange={e=>{const v=e.target.value;setWfForm(p=>({...p,role:v,dailyRate:p.dailyRate||getRateForRole(v)||""}));}}
                       style={{width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
                       {f.opts.map(o=><option key={o}>{o}</option>)}
                     </select>
-                  :<input type={f.type} value={wfForm[f.key]} onChange={e=>setWfForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph}
-                      style={{width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                      onFocus={e=>e.target.style.borderColor=TYPE_COLORS[labType]} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                }
+                  :<input type={f.type} value={wfForm[f.key]||""} onChange={e=>setWfForm(p=>({...p,[f.key]:e.target.value}))} placeholder={f.ph}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
               </div>
             ))}
-            {wfForm.dailyRate && Number(wfForm.dailyRate)!==getRateForRole(wfForm.role) && getRateForRole(wfForm.role)>0 && labType!=="subcon"&&(
-              <div style={{padding:"8px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,marginBottom:10,fontSize:11.5,color:T.amb}}>
-                Rate Card for {wfForm.role}: ₹{getRateForRole(wfForm.role)}/day. Your rate differs — an approval request will be submitted.
-              </div>
-            )}
             <div style={{display:"flex",gap:8,marginTop:6}}>
               <button onClick={()=>setShowAddWf(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-              <button onClick={addWorkforce} disabled={wfSaving||!wfForm.name.trim()}
+              <button onClick={async()=>{
+                if(!wfForm.name.trim()) return; setWfSaving(true);
+                const cardRate=getRateForRole(wfForm.role);
+                const payload={project_id:projectId,type:labType,name:wfForm.name,role:wfForm.role,daily_rate:Number(wfForm.dailyRate)||cardRate,phone:wfForm.phone,rateStatus:"card"};
+                const r=await api.post(`/projects/${projectId}/workforce`,payload);
+                if(r.success){setWorkforce(prev=>({...prev,[labType]:[...prev[labType],{...payload,id:r.data?.id||Date.now(),dailyRate:payload.daily_rate}]}));setShowAddWf(false);}
+                setWfSaving(false);
+              }} disabled={wfSaving||!wfForm.name.trim()}
                 style={{flex:2,padding:"9px",borderRadius:7,background:wfForm.name.trim()?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:wfForm.name.trim()?"pointer":"not-allowed",opacity:wfSaving?.7:1}}>
                 {wfSaving?"Adding…":"Add to Workforce"}
               </button>
