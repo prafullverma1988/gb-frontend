@@ -2299,17 +2299,17 @@ function PayrollModule(){
         api.get("/payroll/settings"),
         api.get("/team-schedule/sites"),
       ]);
-      const staffData=(staffRes.data?.data||[]).map(mapStaff);
-      const workerData=(workerRes.data?.data||[]).map(mapWorker);
+      const staffData=(staffRes.data?.data||staffRes.data||[]).map(mapStaff);
+      const workerData=(workerRes.data?.data||workerRes.data||[]).map(mapWorker);
       MONTHLY_STAFF=staffData;setStaff(staffData);
       DAILY_WORKERS=workerData;setWorkers(workerData);
-      ADVANCE_DATA=(advRes.data?.data||[]).map(mapAdvance);
+      ADVANCE_DATA=(advRes.data?.data||advRes.data||[]).map(mapAdvance);
       setAdvances(ADVANCE_DATA);
-      setSalaryRecords((salRes.data?.data||[]).map(mapSalaryRec));
-      const sett=settRes.data?.data||{};
+      setSalaryRecords((salRes.data?.data||salRes.data||[]).map(mapSalaryRec));
+      const sett=settRes.data?.data||settRes.data||{};
       setDefaultDueDays(sett.default_due_days||10);
       setWorkingDays(sett.working_days||26);
-      PROJECTS=(projRes.data?.data||[]).map(p=>p.name);
+      PROJECTS=(projRes.data?.data||projRes.data||[]).map(p=>p.name);
     }catch(err){console.error("Load payroll:",err);setError(err.message||"Failed to load payroll data");}
     finally{setLoading(false);}
   },[]);
