@@ -5471,10 +5471,10 @@ function TabAttendance({ project }) {
       return {
         company: { mode: "name", paymentCycle: "monthly", ...(s.company || {}) },
         subcon:  { mode: "count", ...(s.subcon || {}) },
-        vendor:  { mode: "count", trackPayment: true, ...(s.vendor || {}) },
+        vendor:  { mode: "count", trackPayment: true, useRateCard: true, ...(s.vendor || {}) },
       };
     } catch {
-      return { company: { mode:"name", paymentCycle:"monthly" }, subcon: { mode:"count" }, vendor: { mode:"count", trackPayment:true } };
+      return { company: { mode:"name", paymentCycle:"monthly" }, subcon: { mode:"count" }, vendor: { mode:"count", trackPayment:true, useRateCard:true } };
     }
   });
 
@@ -5488,6 +5488,8 @@ function TabAttendance({ project }) {
   const [attSaving,    setAttSaving]    = useState(false);
   // Subcon selector (direct from library, no registration needed)
   const [selSubconId,  setSelSubconId]  = useState("");
+  // Vendor selector (direct from library, like subcon)
+  const [selVendorId,  setSelVendorId]  = useState("");
 
   // ── Libraries ───────────────────────────────────────────────────
   const [workerLib, setWorkerLib] = useState([]);
@@ -5559,20 +5561,37 @@ function TabAttendance({ project }) {
   const mode = attSett[labType]?.mode || (labType==="company"?"name":"count");
   useEffect(() => {
     const workers = workforce[labType] || [];
-    // For subcon: match by date + type + subcon_id so each subcon has independent rows
+    // For subcon/vendor: match by date + type + selected id so each entity has independent rows
     const existing = labType==="subcon"
       ? attRecs.find(r=>r.date===attDate && r.type===labType && String(r.subcon_id||r.subcon_name||"")===String(selSubconId))
-      : attRecs.find(r=>r.date===attDate && r.type===labType);
+      : labType==="vendor"
+        ? attRecs.find(r=>r.date===attDate && r.type===labType && String(r.vendor_id||r.vendor_name||"")===String(selVendorId))
+        : attRecs.find(r=>r.date===attDate && r.type===labType);
     if(mode==="name") {
       setTodayEntries(workers.map(w => {
         const found = existing?.entries?.find(e=>e.worker_id===w.id||e.name===w.name);
         return { worker_id:w.id, name:w.name, role:w.role, dailyRate:w.dailyRate||w.daily_rate||0, status:found?.status||"P", hours:found?.hours??8, ot:found?.ot||0, rateStatus:w.rateStatus||"card" };
       }));
     } else {
-      setTodayCountRows(existing?.entries?.length ? existing.entries : [{ role:"Labour", count:0, present:0, rate:0 }]);
+      // For vendor: pre-fill all roles from rate card (skill-wise)
+      if(labType==="vendor" && !existing?.entries?.length && rateCard.length) {
+        const rows = rateCard.map(rc => ({
+          role: rc.role, present: 0, count: 0,
+          rate: Number(rc.daily_rate||rc.dailyRate||0)
+        }));
+        setTodayCountRows(rows.length ? rows : [{ role:"Labour", count:0, present:0, rate:0 }]);
+      } else if(existing?.entries?.length) {
+        // For vendor: refresh rate from rate card (in case rate card was updated)
+        const refreshed = labType==="vendor"
+          ? existing.entries.map(e => ({...e, rate: Number(getRateForRole(e.role)) || e.rate || 0}))
+          : existing.entries;
+        setTodayCountRows(refreshed);
+      } else {
+        setTodayCountRows([{ role:"Labour", count:0, present:0, rate: labType==="vendor" ? (getRateForRole("Labour")||0) : 0 }]);
+      }
     }
     setEditingAtt(false);
-  }, [labType, attDate, workforce, attRecs, selSubconId]);
+  }, [labType, attDate, workforce, attRecs, selSubconId, selVendorId, rateCard]);
 
   // ── Reset attendance rows immediately when subcon selection changes ─
   useEffect(() => {
@@ -5582,9 +5601,10 @@ function TabAttendance({ project }) {
     // rows will be re-populated by the main useEffect (which also depends on selSubconId)
   }, [selSubconId]);
 
-  // ── Clear selSubconId when switching away from subcon tab ────────
+  // ── Clear selSubconId / selVendorId when switching tabs ────────
   useEffect(() => {
     if(labType!=="subcon") setSelSubconId("");
+    if(labType!=="vendor") setSelVendorId("");
   }, [labType]);
 
   // ── Get rate from rate card by role ─────────────────────────────
@@ -5603,18 +5623,25 @@ function TabAttendance({ project }) {
   // ── Save attendance ──────────────────────────────────────────────
   const saveAttendance = async () => {
     if(labType==="subcon"&&!selSubconId) return;
+    if(labType==="vendor"&&!selVendorId) return;
     setAttSaving(true);
     const sc = labType==="subcon" ? subconLib.find(s=>String(s.id||s.name)===selSubconId) : null;
+    const vd = labType==="vendor" ? vendorLib.find(v=>String(v.id||v.name)===selVendorId) : null;
     const payload = {
       project_id: projectId, date: attDate, type: labType, mode,
       entries: mode==="name" ? todayEntries : todayCountRows,
       subcon_id:   sc?.id   || null,
       subcon_name: sc?.name || sc?.company_name || null,
+      vendor_id:   vd?.id   || null,
+      vendor_name: vd?.name || vd?.company_name || null,
     };
     try {
       const r = await api.post(`/projects/${projectId}/attendance`, payload);
       if(r.success) {
-        setAttRecs(prev=>[...prev.filter(rec=>!(rec.date===attDate&&rec.type===labType&&(rec.subcon_id||null)===(sc?.id||null))), {...payload, id:r.data?.id}]);
+        setAttRecs(prev=>[...prev.filter(rec=>!(rec.date===attDate&&rec.type===labType
+          &&(rec.subcon_id||null)===(sc?.id||null)
+          &&(rec.vendor_id||null)===(vd?.id||null)
+        )), {...payload, id:r.data?.id}]);
         setEditingAtt(false);
       }
     } catch(e) {}
@@ -5737,8 +5764,8 @@ function TabAttendance({ project }) {
           ))}
         </div>
         <div style={{display:"flex",gap:7,alignItems:"center"}}>
-          {/* Company & Vendor: Workforce panel toggle + Add button */}
-          {labType!=="subcon"&&<>
+          {/* Only Company has workforce panel + Add button (subcon/vendor use selector) */}
+          {labType==="company"&&<>
             <button onClick={()=>setShowWfPanel(p=>!p)}
               style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:showWfPanel?T.surfaceB:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
@@ -5747,7 +5774,7 @@ function TabAttendance({ project }) {
             <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setSelectedLibIds(new Set()); setShowNewWf(false); setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""}); }}
               style={{padding:"6px 13px",borderRadius:6,background:TYPE_COLORS[labType],color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-              {labType==="company" ? "Add Labour" : `Add ${TYPE_LABELS[labType].split(" ")[0]}`}
+              Add Labour
             </button>
           </>}
           <button onClick={()=>setShowHistory(p=>!p)}
@@ -5797,8 +5824,49 @@ function TabAttendance({ project }) {
         </div>
       )}
 
-      {/* ── WORKFORCE PANEL (Company + Vendor only) ───────────────────── */}
-      {labType!=="subcon"&&showWfPanel&&(
+      {/* ── VENDOR SELECTOR (mirrors subcon flow) ─────────────────────── */}
+      {labType==="vendor"&&(
+        <div style={{background:T.surface,border:`1.5px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"13px 16px"}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Select Labour Vendor</div>
+          {vendorLib.length===0
+            ?<div style={{fontSize:12.5,color:T.t4,padding:"8px 0"}}>
+                No labour vendors in library. Go to <b>Procurement → Vendors</b> to add them first.
+             </div>
+            :<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              {vendorLib.map(v=>{
+                const vid = v.id||v.name;
+                const isSelected = selVendorId===String(vid);
+                return(
+                  <button key={vid} onClick={()=>setSelVendorId(String(vid))}
+                    style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${isSelected?T.amb:T.b1}`,background:isSelected?T.ambL:T.surface,color:isSelected?T.amb:T.t2,fontSize:12.5,fontWeight:isSelected?700:500,cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
+                    {isSelected&&<span style={{width:7,height:7,borderRadius:"50%",background:T.amb,display:"inline-block"}}/>}
+                    {v.name||v.company_name}
+                    {v.trade&&<span style={{fontSize:10.5,color:isSelected?T.amb:T.t4,fontWeight:400}}>· {v.trade}</span>}
+                  </button>
+                );
+              })}
+            </div>
+          }
+          {selVendorId&&(()=>{
+            const vd = vendorLib.find(v=>String(v.id||v.name)===selVendorId);
+            return vd?(
+              <div style={{marginTop:10,padding:"8px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.amb} strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                <div>
+                  <span style={{fontSize:13,fontWeight:700,color:T.amb}}>{vd.name||vd.company_name}</span>
+                  {vd.phone&&<span style={{fontSize:11.5,color:T.t3,marginLeft:8}}>{vd.phone}</span>}
+                  {vd.trade&&<span style={{fontSize:11.5,color:T.t4,marginLeft:8}}>· {vd.trade}</span>}
+                </div>
+                <span style={{marginLeft:"auto",fontSize:10,color:T.t4,fontWeight:600,padding:"2px 8px",background:"white",borderRadius:10,border:`1px solid ${T.b1}`}}>Rate Card-wise wages</span>
+                <button onClick={()=>setSelVendorId("")} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:16,lineHeight:1}}>×</button>
+              </div>
+            ):null;
+          })()}
+        </div>
+      )}
+
+      {/* ── WORKFORCE PANEL (Company only) ───────────────────────────── */}
+      {labType==="company"&&showWfPanel&&(
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,overflow:"hidden"}}>
           <div style={{padding:"10px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Registered Workforce — {TYPE_LABELS[labType]}</span>
@@ -5894,6 +5962,8 @@ function TabAttendance({ project }) {
           <div style={{display:"flex",gap:7,alignItems:"center"}}>
             {labType==="subcon"&&!selSubconId
               ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle subcontractor select karo</span>
+              :labType==="vendor"&&!selVendorId
+              ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle labour vendor select karo</span>
               :!editingAtt
                 ?<div style={{display:"flex",gap:6}}>
                     {labType==="company"&&currentWF.length>0&&(
@@ -6013,39 +6083,57 @@ function TabAttendance({ project }) {
               </>
             )}
 
-            {/* ── VENDOR: Role + Present + Rate ── */}
-            {labType!=="subcon"&&(
+            {/* ── VENDOR: Role + Present + Rate (auto from card) + Wages ── */}
+            {labType==="vendor"&&(
               <>
-                {todayCountRows.map((row,i)=>(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr 32px",gap:8,marginBottom:8,alignItems:"end"}}>
-                    <div>
-                      <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Role</div>
-                      <select value={row.role} disabled={!editingAtt}
-                        onChange={e=>{ const r=e.target.value; setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,role:r,rate:getRateForRole(r)||rw.rate}:rw)); }}
-                        style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",opacity:editingAtt?1:.65}}>
-                        {ROLES.map(r=><option key={r}>{r}</option>)}
-                      </select>
+                {/* Header row */}
+                <div style={{display:"grid",gridTemplateColumns:"1.5fr 90px 110px 110px 32px",gap:8,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Role / Skill</div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Present</div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Rate ₹/day <span style={{color:T.amb,fontSize:8.5}}>(auto)</span></div>
+                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"right"}}>Wages</div>
+                  <div/>
+                </div>
+                {todayCountRows.map((row,i)=>{
+                  const cardRate = getRateForRole(row.role);
+                  const effectiveRate = cardRate || Number(row.rate)||0;
+                  const wages = (Number(row.present)||0) * effectiveRate;
+                  const noCard = !cardRate;
+                  return(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 90px 110px 110px 32px",gap:8,marginBottom:8,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.b1}`}}>
+                    <select value={row.role} disabled={!editingAtt}
+                      onChange={e=>{ const r=e.target.value; const newRate=getRateForRole(r)||0; setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,role:r,rate:newRate}:rw)); }}
+                      style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",opacity:editingAtt?1:.7}}>
+                      {ROLES.map(r=><option key={r}>{r}</option>)}
+                    </select>
+                    <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
+                      onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
+                      style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.ambM}`,fontSize:14,fontWeight:700,color:T.amb,outline:"none",fontFamily:"inherit",background:T.ambL,opacity:editingAtt?1:.75,boxSizing:"border-box",textAlign:"center"}}/>
+                    <div style={{display:"flex",alignItems:"center",gap:5}}>
+                      <input type="number" value={effectiveRate||""} disabled={!editingAtt||!noCard} placeholder="—"
+                        onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,rate:Number(e.target.value)}:rw))}
+                        title={noCard?"No rate card for this role — enter manually":"Auto-filled from skill rate card"}
+                        style={{flex:1,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${noCard?T.redM:T.b1}`,fontSize:12,fontWeight:600,color:noCard?T.red:T.t2,outline:"none",fontFamily:"inherit",background:noCard?T.redL:T.surfaceB,boxSizing:"border-box",textAlign:"right"}}/>
+                      {!noCard&&<span style={{fontSize:10,color:T.grn,fontWeight:700}} title="From rate card">📋</span>}
                     </div>
-                    {[{k:"present",l:"Present"},{k:"rate",l:"Rate ₹/day"}].map(f=>(
-                      <div key={f.k}>
-                        <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{f.l}</div>
-                        <input type="number" value={row[f.k]||""} disabled={!editingAtt} placeholder="0"
-                          onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,[f.k]:Number(e.target.value),count:f.k==="present"?Number(e.target.value):rw.count}:rw))}
-                          style={{width:"100%",padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:T.surface,opacity:editingAtt?1:.65,boxSizing:"border-box"}}/>
-                      </div>
-                    ))}
+                    <span style={{fontSize:13,fontWeight:700,color:wages>0?T.grn:T.t4,textAlign:"right",paddingRight:4}}>
+                      {wages>0?`₹${wages.toLocaleString()}`:"—"}
+                    </span>
                     {editingAtt
                       ?<button onClick={()=>setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i))}
-                          style={{width:28,height:28,marginBottom:1,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                          style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                       :<div/>
                     }
                   </div>
-                ))}
+                );})}
                 {editingAtt&&(
-                  <button onClick={()=>setTodayCountRows(prev=>[...prev,{role:"Labour",present:0,count:0,rate:getRateForRole("Labour")||0}])}
-                    style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:600,cursor:"pointer",marginTop:4}}>
-                    + Add Role Row
-                  </button>
+                  <div style={{display:"flex",gap:8,alignItems:"center",marginTop:8}}>
+                    <button onClick={()=>setTodayCountRows(prev=>[...prev,{role:"Labour",present:0,count:0,rate:getRateForRole("Labour")||0}])}
+                      style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      + Add Role Row
+                    </button>
+                    <span style={{fontSize:11,color:T.t4}}>Rate auto-fills from <b>Library → Labour Rate Card</b> per skill</span>
+                  </div>
                 )}
                 {!editingAtt&&todayCountRows.every(r=>!r.present)&&(
                   <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"16px 0"}}>No count recorded for this date. Click "Mark Attendance" to enter.</div>
