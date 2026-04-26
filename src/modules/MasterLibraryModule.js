@@ -2212,12 +2212,212 @@ function DesignLibrarySection() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// WORKERS / LABOUR LIBRARY
+// ═══════════════════════════════════════════════════════════════════════
+const WORKER_ROLES = ["Mason","Labour","Helper","Electrician","Plumber","Carpenter","Painter","Supervisor","Welder","Tile Fixer","Polisher","Bar Bender","Shuttering","Other"];
+const WORKER_CATS  = ["Skilled","Semi-Skilled","Unskilled","Supervisor","Staff"];
+const ROLE_CAT_MAP = { Mason:"Skilled", Electrician:"Skilled", Plumber:"Skilled", Carpenter:"Skilled", Welder:"Skilled", "Tile Fixer":"Skilled", Polisher:"Skilled", "Bar Bender":"Skilled", Shuttering:"Skilled", Labour:"Unskilled", Helper:"Unskilled", Supervisor:"Supervisor", Painter:"Semi-Skilled", Other:"Semi-Skilled" };
+const catC = { Skilled:{c:T.blue,bg:T.blueSoft}, "Semi-Skilled":{c:T.amber,bg:T.amberSoft}, Unskilled:{c:T.textMid,bg:T.borderLight}, Supervisor:{c:T.green,bg:T.greenSoft}, Staff:{c:T.purple,bg:T.purpleSoft} };
+
+function WorkersSection() {
+  const { items: workers, loading, save: apiSave, del: apiDel, reload } = useSection("workers");
+  const [search, setSearch]     = useState("");
+  const [filterRole, setFilterRole] = useState("All");
+  const [showModal, setShowModal]   = useState(false);
+  const [editing, setEditing]       = useState(null);
+  const [saving, setSaving]         = useState(false);
+  const emptyForm = { name:"", role:"Mason", category:"Skilled", daily_rate:0, phone:"", city:"", address:"", id_number:"", status:"Active" };
+  const [form, setForm] = useState(emptyForm);
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const filtered = workers.filter(w => {
+    const q = search.toLowerCase();
+    const matchQ = !q || (w.name||"").toLowerCase().includes(q) || (w.role||"").toLowerCase().includes(q) || (w.phone||"").includes(q);
+    const matchR = filterRole === "All" || w.role === filterRole;
+    return matchQ && matchR;
+  });
+
+  const openCreate = () => { setEditing(null); setForm({ ...emptyForm }); setShowModal(true); };
+  const openEdit   = (w) => { setEditing(w); setForm({ name:w.name||"", role:w.role||"Mason", category:w.category||"Skilled", daily_rate:w.daily_rate||0, phone:w.phone||"", city:w.city||"", address:w.address||"", id_number:w.id_number||"", status:w.status||"Active" }); setShowModal(true); };
+
+  const save = async () => {
+    if (!form.name.trim()) return alert("Worker name required");
+    setSaving(true);
+    const res = await apiSave({ ...form, daily_rate: parseFloat(form.daily_rate)||0 }, editing?.id);
+    setSaving(false);
+    if (res.success) setShowModal(false);
+    else alert(res.message || "Save failed");
+  };
+
+  const templateConfig = {
+    headers: ["Worker Name","Skill / Role","Category","Daily Rate (Rs.)","Phone","City","Aadhar / ID","Status"],
+    sampleRows: [
+      ["Ramesh Kumar","Mason","Skilled","700","9876543210","Raipur","1234-5678-9012","Active"],
+      ["Suresh Yadav","Helper","Unskilled","400","9812345678","Bhilai","","Active"],
+      ["Dinesh Sahu","Electrician","Skilled","800","","Raipur","","Active"],
+    ],
+    filename: "gb_workers_export.csv",
+    templateFilename: "gb_template_workers.csv",
+    instructions: "Worker Name and Skill/Role are required. Category: Skilled, Semi-Skilled, Unskilled, Supervisor, Staff.",
+    mapRow: (w) => [w.name, w.role, w.category, w.daily_rate, w.phone, w.city, w.id_number, w.status],
+  };
+
+  const handleImport = async (rows) => {
+    const mapped = rows.map(r => ({
+      name:       (r["Worker Name"] || "").trim(),
+      role:       (r["Skill / Role"] || r["role"] || "Labour").trim(),
+      category:   (r["Category"]    || "Unskilled").trim(),
+      daily_rate: parseFloat(r["Daily Rate (Rs.)"] || r["daily_rate"] || 0),
+      phone:      (r["Phone"]       || "").trim(),
+      city:       (r["City"]        || "").trim(),
+      id_number:  (r["Aadhar / ID"] || "").trim(),
+      status:     (r["Status"]      || "Active").trim(),
+    })).filter(r => r.name);
+    const res = await api.post("/library/workers/bulk", { rows: mapped });
+    if (res.success) await reload();
+    return res.data;
+  };
+
+  // Summary by role
+  const roleSummary = {};
+  workers.forEach(w => { roleSummary[w.role] = (roleSummary[w.role]||0)+1; });
+
+  const columns = [
+    { key:"name",       label:"Worker Name",   minW:180, render: w => (
+      <div style={{display:"flex",alignItems:"center",gap:9}}>
+        <div style={{width:30,height:30,borderRadius:"50%",background:T.blueSoft,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:T.blue,flexShrink:0}}>
+          {(w.name||"?")[0].toUpperCase()}
+        </div>
+        <div>
+          <div style={{fontWeight:600,color:T.text}}>{w.name}</div>
+          {w.phone&&<div style={{fontSize:11,color:T.textLight}}>{w.phone}</div>}
+        </div>
+      </div>
+    )},
+    { key:"role",       label:"Skill / Role",  minW:120, render: w => {
+      const cc = catC[w.category||"Unskilled"] || catC.Unskilled;
+      return <Badge text={w.role||"Labour"} color={cc.c} bg={cc.bg} />;
+    }},
+    { key:"category",   label:"Category",      minW:100, render: w => {
+      const cc = catC[w.category||"Unskilled"] || catC.Unskilled;
+      return <span style={{fontSize:11,color:cc.c,fontWeight:600}}>{w.category||"Unskilled"}</span>;
+    }},
+    { key:"daily_rate", label:"Daily Rate",     minW:90, align:"right", render: w => (
+      <span style={{fontWeight:700,color:T.green}}>₹{(w.daily_rate||0).toLocaleString()}</span>
+    )},
+    { key:"monthly",    label:"Monthly (26d)",  minW:100, align:"right", render: w => (
+      <span style={{fontWeight:600,color:T.textMid}}>₹{((w.daily_rate||0)*26).toLocaleString()}</span>
+    )},
+    { key:"city",       label:"City",           minW:80,  render: w => <span style={{color:T.textMid}}>{w.city||"—"}</span>},
+    { key:"status",     label:"Status",         minW:70,  render: w => (
+      <span style={{fontSize:11,fontWeight:600,padding:"2px 8px",borderRadius:10,background:w.status==="Active"?T.greenSoft:T.borderLight,color:w.status==="Active"?T.green:T.textMid}}>{w.status||"Active"}</span>
+    )},
+  ];
+
+  // Unique roles for filter pills
+  const roles = ["All", ...Array.from(new Set(workers.map(w=>w.role).filter(Boolean))).sort()];
+
+  return (
+    <div>
+      {/* Role summary strip */}
+      {workers.length > 0 && (
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:16}}>
+          {Object.entries(roleSummary).sort((a,b)=>b[1]-a[1]).map(([role,cnt])=>{
+            const cc = catC[ROLE_CAT_MAP[role]||"Unskilled"] || catC.Unskilled;
+            return (
+              <div key={role} onClick={()=>setFilterRole(r=>r===role?"All":role)}
+                style={{padding:"6px 14px",borderRadius:20,background:filterRole===role?cc.c:cc.bg,color:filterRole===role?"white":cc.c,border:`1px solid ${cc.c}33`,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all .15s"}}>
+                {role}
+                <span style={{fontSize:10,fontWeight:700,background:filterRole===role?"rgba(255,255,255,.25)":cc.c+"22",borderRadius:10,padding:"1px 6px"}}>{cnt}</span>
+              </div>
+            );
+          })}
+          {filterRole!=="All"&&<button onClick={()=>setFilterRole("All")} style={{padding:"6px 12px",borderRadius:20,border:`1px solid ${T.border}`,background:"white",color:T.textMid,fontSize:11,cursor:"pointer"}}>✕ Clear</button>}
+        </div>
+      )}
+
+      <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="workers" onAdd={openCreate} addLabel="+ Add Worker"
+        templateConfig={templateConfig} currentData={workers} onImportData={handleImport} />
+
+      {loading ? (
+        <div style={{textAlign:"center",padding:"40px 0",color:T.textLight}}>Loading...</div>
+      ) : (
+        <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={id=>apiDel(id)}
+          emptyMsg={search||filterRole!=="All" ? "No workers match your filter" : "No workers yet — add your first worker"} />
+      )}
+
+      <Modal open={showModal} onClose={()=>setShowModal(false)} title={editing?"Edit Worker":"Add Worker"} desc="Register worker with skill and daily rate" width={560}>
+        {/* Name */}
+        <FormField label="Full Name" value={form.name} onChange={v=>upd("name",v)} placeholder="e.g. Ramesh Kumar" required />
+        <div style={{height:14}}/>
+        {/* Role + Category */}
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
+          <div style={{flex:1,minWidth:180}}>
+            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Skill / Role <span style={{color:T.red}}>*</span></label>
+            <select value={form.role} onChange={e=>{upd("role",e.target.value);upd("category",ROLE_CAT_MAP[e.target.value]||"Semi-Skilled");}}
+              style={{width:"100%",padding:"10px 14px",borderRadius:T.radiusSm,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,background:"white",outline:"none",cursor:"pointer",fontFamily:T.font,boxSizing:"border-box"}}>
+              {WORKER_ROLES.map(r=><option key={r}>{r}</option>)}
+            </select>
+          </div>
+          <div style={{flex:1,minWidth:180}}>
+            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Category</label>
+            <select value={form.category} onChange={e=>upd("category",e.target.value)}
+              style={{width:"100%",padding:"10px 14px",borderRadius:T.radiusSm,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,background:"white",outline:"none",cursor:"pointer",fontFamily:T.font,boxSizing:"border-box"}}>
+              {WORKER_CATS.map(c=><option key={c}>{c}</option>)}
+            </select>
+          </div>
+        </div>
+        {/* Rate */}
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
+          <FormField label="Daily Rate (₹)" value={form.daily_rate||""} onChange={v=>upd("daily_rate",v)} type="number" placeholder="e.g. 650" half required />
+          <div style={{flex:1,minWidth:180}}>
+            <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Status</label>
+            <select value={form.status} onChange={e=>upd("status",e.target.value)}
+              style={{width:"100%",padding:"10px 14px",borderRadius:T.radiusSm,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,background:"white",outline:"none",cursor:"pointer",fontFamily:T.font,boxSizing:"border-box"}}>
+              {["Active","Inactive","Blacklisted"].map(s=><option key={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        {/* Contact */}
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
+          <FormField label="Phone" value={form.phone} onChange={v=>upd("phone",v)} placeholder="Mobile number" type="tel" half />
+          <FormField label="City / Area" value={form.city} onChange={v=>upd("city",v)} placeholder="e.g. Raipur" half />
+        </div>
+        {/* ID */}
+        <FormField label="Aadhar / ID Number" value={form.id_number} onChange={v=>upd("id_number",v)} placeholder="Optional — for identity verification" />
+        <div style={{height:14}}/>
+        <FormTextarea label="Address" value={form.address} onChange={v=>upd("address",v)} placeholder="Optional" rows={2} />
+        {/* Rate preview */}
+        {form.daily_rate>0&&(
+          <div style={{marginTop:14,padding:"10px 14px",borderRadius:8,background:T.greenSoft,border:`1px solid ${T.green}22`,display:"flex",gap:20}}>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>Daily</div>
+              <div style={{fontSize:15,fontWeight:700,color:T.green}}>₹{parseFloat(form.daily_rate||0).toLocaleString()}</div>
+            </div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>Weekly (6d)</div>
+              <div style={{fontSize:15,fontWeight:700,color:T.green}}>₹{(parseFloat(form.daily_rate||0)*6).toLocaleString()}</div>
+            </div>
+            <div style={{textAlign:"center"}}>
+              <div style={{fontSize:11,color:T.textMid,marginBottom:2}}>Monthly (26d)</div>
+              <div style={{fontSize:15,fontWeight:700,color:T.green}}>₹{(parseFloat(form.daily_rate||0)*26).toLocaleString()}</div>
+            </div>
+          </div>
+        )}
+        <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={saving?"Saving...":editing?"Update Worker":"Add Worker"} />
+      </Modal>
+    </div>
+  );
+}
+
 const masterSections = [
   { id: "material_cat",  label: "Material Category",   Icon: IcFolder,    Comp: MaterialCategorySection,  section: "INVENTORY", countKey: "material_categories", color: T.blue },
   { id: "materials",     label: "Material Master",     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
   { id: "work_cat",      label: "Work Category",       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
   { id: "party",         label: "Party / Supplier",    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
   { id: "subcon",        label: "Subcontractors",      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
+  { id: "workers",       label: "Workers / Labour",    Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
   { id: "subcon_rate",   label: "Subcon Rate Card",    Icon: IcDollar,    Comp: SubconRateCardSection,    section: null, countKey: null, color: T.teal },
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
   { id: "client_boq",    label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: null, color: T.indigo },
@@ -2288,6 +2488,7 @@ export default function MasterLibraryModule() {
               {activeSection === "work_cat" && "Types of construction work with base rates"}
               {activeSection === "subcon" && "Subcontractor firms, trade specialties, and rate cards"}
               {activeSection === "boq" && "Project-wise client BOQ with cost vs client rate comparison"}
+              {activeSection === "workers" && "Register individual workers with skill, daily rate, and contact info"}
               {activeSection === "labour" && "Daily wages and overtime rates for all skill levels"}
               {activeSection === "equipment" && "Owned and rented machinery with tracking"}
               {activeSection === "uom" && "Standard units of measurement used across the system"}
