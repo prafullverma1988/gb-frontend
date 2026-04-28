@@ -2158,39 +2158,78 @@ function DailyPaymentsTab({workers,isAdmin}){
 // ── DAILY WAGES LABOUR: Settings Tab (Phase 3) ───────────────────
 // ══════════════════════════════════════════════════════════════════
 function DailyWagesSettingsTab(){
-  // Stored client-side (localStorage) since these are company-defaults/presets
-  const [rates,setRates]=useState(()=>{
-    try{ return JSON.parse(localStorage.getItem("gb_daily_wages_rates")||"{}"); }catch{ return {}; }
-  });
+  // Sync with Library → Labour Rate Card (single source of truth)
+  const [rates,setRates]=useState([]);  // Array of {id, role, rate, ot_rate, category, description}
+  const [loading,setLoading]=useState(true);
   const [cycle,setCycle]=useState(()=>localStorage.getItem("gb_daily_wages_cycle")||"weekly");
   const [savedMsg,setSavedMsg]=useState("");
-  const SKILLS=["Mason","Helper","Electrician","Plumber","Painter","Carpenter","Steel Fixer","Welder","Supervisor"];
+  const [savingRow,setSavingRow]=useState(null);
 
-  const save=()=>{
-    localStorage.setItem("gb_daily_wages_rates",JSON.stringify(rates));
+  const loadRates=async()=>{
+    setLoading(true);
+    try{
+      const res=await api.get("/library/labour-rates");
+      if(res.success) setRates(res.data||[]);
+    }catch(e){}
+    setLoading(false);
+  };
+  useEffect(()=>{ loadRates(); },[]);
+
+  const updateRate=async(item,newRate)=>{
+    setSavingRow(item.id);
+    try{
+      const res=await api.put("/library/labour-rates/"+item.id,{
+        ...item, rate:Number(newRate)||0,
+      });
+      if(res.success){
+        setRates(prev=>prev.map(r=>r.id===item.id?{...r,rate:Number(newRate)||0}:r));
+        setSavedMsg("Updated "+item.role+" → ₹"+newRate);
+        setTimeout(()=>setSavedMsg(""),1500);
+      }
+    }catch(e){}
+    setSavingRow(null);
+  };
+
+  const saveCycle=()=>{
     localStorage.setItem("gb_daily_wages_cycle",cycle);
-    setSavedMsg("Settings saved ✓");
+    setSavedMsg("Payment cycle saved ✓");
     setTimeout(()=>setSavedMsg(""),2000);
   };
 
   return(
-    <div style={{maxWidth:680}}>
+    <div style={{maxWidth:760}}>
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:18,marginBottom:14}}>
-        <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:4}}>Default Rates by Skill</div>
-        <div style={{fontSize:11,color:T.t4,marginBottom:14}}>Set default daily wages for each skill. New workers will pre-fill these rates.</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          {SKILLS.map(s=>(
-            <div key={s} style={{display:"flex",alignItems:"center",gap:10}}>
-              <label style={{flex:1,fontSize:12,color:T.t2,fontWeight:600}}>{s}</label>
-              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span style={{fontSize:12,color:T.t4}}>₹</span>
-                <input type="number" value={rates[s]||""} onChange={e=>setRates(p=>({...p,[s]:e.target.value}))}
-                  placeholder="0" style={{width:90,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right"}}/>
-                <span style={{fontSize:10.5,color:T.t4}}>/day</span>
-              </div>
-            </div>
-          ))}
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+          <div style={{fontSize:14,fontWeight:800,color:T.t1}}>Default Rates by Skill</div>
+          <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,border:`1px solid ${T.bluM}`}}>📋 Synced with Library → Labour Rate Card</span>
         </div>
+        <div style={{fontSize:11,color:T.t4,marginBottom:14}}>Yahan rates change karoge → Library aur Project attendance dono mein turant reflect ho jayega.</div>
+        {loading
+          ? <div style={{padding:"20px 0",textAlign:"center",color:T.t4,fontSize:12}}>Loading rates from library…</div>
+          : rates.length===0
+            ? <div style={{padding:"20px 0",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                Library mein koi labour rate nahi hai. <b>Library → Labour Rate Card</b> mein jaake "Add Labour Rate" se add karo.
+              </div>
+            : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {rates.map(r=>(
+                  <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:`1px dashed ${T.b1}`}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12.5,color:T.t1,fontWeight:600}}>{r.role}</div>
+                      {r.category&&<div style={{fontSize:10,color:T.t4}}>{r.category}</div>}
+                    </div>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:12,color:T.t4}}>₹</span>
+                      <input type="number" defaultValue={r.rate||""}
+                        onBlur={e=>{ if(Number(e.target.value)!==Number(r.rate)) updateRate(r,e.target.value); }}
+                        placeholder="0" disabled={savingRow===r.id}
+                        style={{width:90,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right",opacity:savingRow===r.id?.5:1}}/>
+                      <span style={{fontSize:10.5,color:T.t4}}>/day</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+        }
+        {savedMsg&&<div style={{marginTop:10,fontSize:11.5,color:T.grn,fontWeight:600}}>✓ {savedMsg}</div>}
       </div>
 
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:18,marginBottom:14}}>
@@ -2321,8 +2360,8 @@ function PayrollModule(){
         api.get("/payroll/attendance/monthly?month="+month+"&year="+year),
         api.get("/payroll/attendance/daily?month="+month+"&year="+year),
       ]);
-      setMonthlyAtt(mRes.data?.data||{});
-      setDailyAtt(dRes.data?.data||{});
+      setMonthlyAtt(mRes.data||{});
+      setDailyAtt(dRes.data||{});
     }catch(err){console.error("Load attendance:",err);}
   },[month,year]);
 
