@@ -5490,6 +5490,10 @@ function TabAttendance({ project }) {
   const [selSubconId,  setSelSubconId]  = useState("");
   // Vendor selector (direct from library, like subcon)
   const [selVendorId,  setSelVendorId]  = useState("");
+  // Subcon skills (per-subcon skill catalog)
+  const [subconSkills, setSubconSkills] = useState([]);
+  const [newSkillInput, setNewSkillInput] = useState("");
+  const [skillSaving, setSkillSaving] = useState(false);
   // History expand state
   const [expandedHistIdx, setExpandedHistIdx] = useState(null);
   // Add/Edit Labour Vendor modal state
@@ -5583,8 +5587,20 @@ function TabAttendance({ project }) {
                  ot:found?.ot||0, remark:found?.remark||"", rateStatus:w.rateStatus||"card" };
       }));
     } else {
+      // For subcon: pre-fill from subcon's skill catalog (count-only, no rate)
+      if(labType==="subcon" && selSubconId) {
+        if(subconSkills.length) {
+          const rows = subconSkills.map(s => {
+            const found = existing?.entries?.find(e => e.role === s.skill);
+            return { role: s.skill, present: found?.present || 0, count: found?.count || 0, rate: 0 };
+          });
+          setTodayCountRows(rows);
+        } else {
+          setTodayCountRows([]);
+        }
+      }
       // For vendor: pre-fill from selected vendor's skill list (vendor-specific rates)
-      if(labType==="vendor" && selVendorId) {
+      else if(labType==="vendor" && selVendorId) {
         const vd = vendorLib.find(v => String(v.id||v.name) === selVendorId);
         const vendorSkills = vd?.skills || [];
         if(vendorSkills.length) {
@@ -5608,15 +5624,21 @@ function TabAttendance({ project }) {
       }
     }
     setEditingAtt(false);
-  }, [labType, attDate, workforce, attRecs, selSubconId, selVendorId, rateCard]);
+  }, [labType, attDate, workforce, attRecs, selSubconId, selVendorId, rateCard, subconSkills]);
 
   // ── Reset attendance rows immediately when subcon selection changes ─
   useEffect(() => {
     if(labType!=="subcon") return;
-    // Don't reset if selSubconId cleared (that's handled by main useEffect above)
     setEditingAtt(false);
-    // rows will be re-populated by the main useEffect (which also depends on selSubconId)
-  }, [selSubconId]);
+    // Fetch subcon's skills catalog
+    if(selSubconId) {
+      api.get("/labour-vendors/subcon-skills/"+selSubconId)
+        .then(r=>{ if(r.success) setSubconSkills(r.data||[]); })
+        .catch(()=>setSubconSkills([]));
+    } else {
+      setSubconSkills([]);
+    }
+  }, [selSubconId, labType]);
 
   // ── Clear selSubconId / selVendorId when switching tabs ────────
   useEffect(() => {
@@ -6193,55 +6215,137 @@ function TabAttendance({ project }) {
         {/* COUNT-WISE VIEW */}
         {mode==="count"&&(
           <div style={{padding:"14px 16px"}}>
-            {/* ── SUBCON: only Role + Present count ── */}
+            {/* ── SUBCON: skill catalog + count per skill ── */}
             {labType==="subcon"&&(
               <>
-                {todayCountRows.map((row,i)=>(
-                  <div key={i} style={{display:"flex",gap:10,marginBottom:8,alignItems:"end"}}>
-                    <div style={{flex:2}}>
-                      <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Role / Skill</div>
-                      <select value={row.role} disabled={!editingAtt}
-                        onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,role:e.target.value}:rw))}
-                        style={{width:"100%",padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",opacity:editingAtt?1:.65}}>
-                        {ROLES.map(r=><option key={r}>{r}</option>)}
+                {/* Empty state — first time setup */}
+                {subconSkills.length===0 ? (
+                  <div style={{padding:"22px 18px",border:`1.5px dashed ${T.grn}`,borderRadius:10,background:T.grnL+"33",textAlign:"center"}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:5}}>🎯 First time setup</div>
+                    <div style={{fontSize:11.5,color:T.t3,marginBottom:14}}>Is subcontractor ke saath kaunsi skills supply hoti hain? Add karo — phir har din attendance count mark kar sakoge.</div>
+                    <div style={{display:"flex",gap:7,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
+                      <select value={newSkillInput} onChange={e=>setNewSkillInput(e.target.value)}
+                        style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",background:"white",fontFamily:"inherit"}}>
+                        <option value="">— Select skill —</option>
+                        {ROLES.filter(r=>r!=="Other").map(r=><option key={r} value={r}>{r}</option>)}
                       </select>
+                      <button onClick={async()=>{
+                        if(!newSkillInput) return;
+                        setSkillSaving(true);
+                        const res=await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:newSkillInput});
+                        if(res.success){ setSubconSkills(p=>[...p,res.data]); setNewSkillInput(""); }
+                        else if(res.message) alert(res.message);
+                        setSkillSaving(false);
+                      }} disabled={!newSkillInput||skillSaving}
+                        style={{padding:"8px 16px",borderRadius:7,border:"none",background:newSkillInput?T.grn:"#ccc",color:"white",fontSize:12.5,fontWeight:700,cursor:newSkillInput?"pointer":"not-allowed"}}>
+                        {skillSaving?"Adding…":"+ Add Skill"}
+                      </button>
                     </div>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Present Today</div>
-                      <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
-                        onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
-                        style={{width:"100%",padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:14,fontWeight:700,color:T.grn,outline:"none",fontFamily:"inherit",background:T.grnL,opacity:editingAtt?1:.7,boxSizing:"border-box",textAlign:"center"}}/>
-                    </div>
-                    {editingAtt
-                      ?<button onClick={()=>setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i))}
-                          style={{width:28,height:28,flexShrink:0,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                      :<div style={{width:28}}/>
-                    }
                   </div>
-                ))}
-                {editingAtt&&(
-                  <button onClick={()=>setTodayCountRows(prev=>[...prev,{role:"Labour",present:0,count:0,rate:0}])}
-                    style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${T.grn}`,background:T.grnL,color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer",marginTop:4}}>
-                    + Add Role
-                  </button>
-                )}
-                {!editingAtt&&todayCountRows.every(r=>!r.present)&&(
-                  <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"18px 0"}}>No attendance marked. Click "Mark Attendance" to enter.</div>
-                )}
-                {/* read-only summary chips when not editing */}
-                {!editingAtt&&todayCountRows.some(r=>r.present>0)&&(
-                  <div style={{display:"flex",gap:8,flexWrap:"wrap",paddingTop:4}}>
-                    {todayCountRows.filter(r=>r.present>0).map((r,i)=>(
-                      <div key={i} style={{padding:"6px 12px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,display:"flex",alignItems:"center",gap:7}}>
-                        <span style={{fontSize:11.5,color:T.t2,fontWeight:600}}>{r.role}</span>
-                        <span style={{fontSize:14,fontWeight:800,color:T.grn}}>{r.present}</span>
-                        <span style={{fontSize:10,color:T.t4}}>present</span>
+                ) : (
+                  <>
+                    {/* Header */}
+                    <div style={{display:"grid",gridTemplateColumns:"2fr 110px 32px",gap:10,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
+                      <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>Skill</div>
+                      <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",textAlign:"center"}}>Count Today</div>
+                      <div/>
+                    </div>
+                    {todayCountRows.map((row,i)=>{
+                      const skillEntry = subconSkills.find(s=>s.skill===row.role);
+                      return(
+                        <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 110px 32px",gap:10,marginBottom:8,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.b1}`}}>
+                          <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{row.role}</span>
+                          <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
+                            onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
+                            style={{padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:14,fontWeight:700,color:T.grn,outline:"none",fontFamily:"inherit",background:T.grnL,opacity:editingAtt?1:.75,boxSizing:"border-box",textAlign:"center"}}/>
+                          {editingAtt && skillEntry
+                            ?<button onClick={async()=>{
+                                if(!window.confirm(`"${row.role}" skill remove karenge from this subcon?`)) return;
+                                await api.del("/labour-vendors/subcon-skills/"+selSubconId+"/"+skillEntry.id);
+                                setSubconSkills(prev=>prev.filter(s=>s.id!==skillEntry.id));
+                                setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i));
+                              }}
+                              title="Remove skill from this subcon"
+                              style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
+                            :<div/>
+                          }
+                        </div>
+                      );
+                    })}
+                    {/* Add new skill inline */}
+                    {editingAtt && (
+                      <div style={{display:"flex",gap:7,marginTop:10,alignItems:"center",padding:"8px 10px",background:T.surfaceB,borderRadius:7,border:`1px dashed ${T.b1}`}}>
+                        <select value={newSkillInput} onChange={e=>setNewSkillInput(e.target.value)}
+                          style={{flex:1,padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",background:"white",fontFamily:"inherit"}}>
+                          <option value="">+ Add another skill</option>
+                          {ROLES.filter(r=>r!=="Other"&&!subconSkills.some(s=>s.skill===r)).map(r=><option key={r} value={r}>{r}</option>)}
+                        </select>
+                        <button onClick={async()=>{
+                          if(!newSkillInput) return;
+                          setSkillSaving(true);
+                          const res=await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:newSkillInput});
+                          if(res.success){
+                            setSubconSkills(p=>[...p,res.data]);
+                            setTodayCountRows(prev=>[...prev,{role:newSkillInput,present:0,count:0,rate:0}]);
+                            setNewSkillInput("");
+                          } else if(res.message) alert(res.message);
+                          setSkillSaving(false);
+                        }} disabled={!newSkillInput||skillSaving}
+                          style={{padding:"7px 14px",borderRadius:6,border:"none",background:newSkillInput?T.grn:"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:newSkillInput?"pointer":"not-allowed"}}>
+                          {skillSaving?"…":"Add"}
+                        </button>
                       </div>
-                    ))}
-                  </div>
+                    )}
+                    {!editingAtt && todayCountRows.every(r=>!r.present) && (
+                      <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"18px 0"}}>No count marked yet. Click "Mark Attendance" to enter.</div>
+                    )}
+                    {/* Total summary */}
+                    {!editingAtt && todayCountRows.some(r=>r.present>0) && (()=>{
+                      const total = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0),0);
+                      return(
+                        <div style={{marginTop:10,padding:"10px 14px",background:T.grnL,border:`1.5px solid ${T.grnM}`,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                          <div style={{fontSize:11.5,color:T.grn,fontWeight:700}}>TOTAL LABOUR (TODAY)</div>
+                          <div style={{fontSize:18,fontWeight:800,color:T.grn}}>{total}</div>
+                        </div>
+                      );
+                    })()}
+                  </>
                 )}
               </>
             )}
+
+            {/* ── SUBCON HISTORY SUMMARY: Total per skill till date ── */}
+            {labType==="subcon" && selSubconId && !editingAtt && (()=>{
+              // Aggregate skill totals across all dates for this subcon
+              const totals = {};
+              attRecs
+                .filter(r=>r.type==="subcon"&&String(r.subcon_id||r.subcon_name||"")===String(selSubconId))
+                .forEach(rec=>{
+                  (rec.entries||[]).forEach(e=>{
+                    if(!e.role) return;
+                    totals[e.role] = (totals[e.role]||0) + (Number(e.present)||0);
+                  });
+                });
+              const skillTotals = Object.entries(totals).filter(([,v])=>v>0);
+              if(skillTotals.length===0) return null;
+              const grandTotal = skillTotals.reduce((s,[,v])=>s+v,0);
+              return(
+                <div style={{marginTop:12,padding:"12px 14px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                    <div style={{fontSize:11.5,color:T.blu,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>📊 Total Till Date — by Skill</div>
+                    <div style={{fontSize:13,color:T.blu,fontWeight:800}}>Grand Total: {grandTotal}</div>
+                  </div>
+                  <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                    {skillTotals.map(([skill,count])=>(
+                      <div key={skill} style={{padding:"5px 11px",background:"white",border:`1px solid ${T.bluM}`,borderRadius:14,display:"flex",alignItems:"center",gap:7}}>
+                        <span style={{fontSize:11.5,color:T.t2,fontWeight:600}}>{skill}</span>
+                        <span style={{fontSize:13,fontWeight:800,color:T.blu}}>{count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
 
             {/* ── VENDOR: Skill (locked) + Present + Rate (vendor's saved) + Wages ── */}
             {labType==="vendor"&&(
