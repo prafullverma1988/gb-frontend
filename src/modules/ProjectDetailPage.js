@@ -8044,7 +8044,7 @@ function TabMaterial({ project }) {
 }
 
 
-function TabSubcon({ projectId }) {
+function TabSubcon({ projectId, projectName }) {
   const [wos, setWos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selWo, setSelWo] = useState(null);
@@ -11489,7 +11489,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
     attendance:  <TabAttendance project={project}/>,
     material:    <TabMaterial project={project}/>,
-    subcon:      <TabSubcon projectId={project.id}/>,
+    subcon:      <TabSubcon projectId={project.id} projectName={project.name}/>,
     equipment:   <TabEquipment/>,
     files:       <TabFiles projectId={project.id}/>,
     site:        <TabSite/>,
