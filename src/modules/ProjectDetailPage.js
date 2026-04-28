@@ -6215,8 +6215,15 @@ function TabAttendance({ project }) {
         {/* COUNT-WISE VIEW */}
         {mode==="count"&&(
           <div style={{padding:"14px 16px"}}>
+            {/* ── SUBCON: prompt to select subcon ── */}
+            {labType==="subcon" && !selSubconId && (
+              <div style={{padding:"30px 18px",textAlign:"center",color:T.t4,fontSize:13}}>
+                ⬆ Pehle subcontractor select karo, phir attendance mark kar sakte ho.
+              </div>
+            )}
+
             {/* ── SUBCON: skill catalog + count per skill ── */}
-            {labType==="subcon"&&(
+            {labType==="subcon" && selSubconId && (
               <>
                 {/* Empty state — first time setup */}
                 {subconSkills.length===0 ? (
