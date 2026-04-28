@@ -913,8 +913,8 @@ function PartyMasterSection() {
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const types = ["All", "Supplier", "Client", "Subcontractor", "Transporter", "Consultant"];
-  const typeColors = { Supplier: { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft } };
+  const types = ["All", "Supplier", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant"];
+  const typeColors = { Supplier: { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft } };
 
   const filtered = parties.filter(p => {
     if (filterType !== "All" && p.type?.toLowerCase() !== filterType.toLowerCase()) return false;
