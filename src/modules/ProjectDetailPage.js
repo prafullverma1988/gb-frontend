@@ -5498,7 +5498,7 @@ function TabAttendance({ project }) {
   const [showSkillDrawer, setShowSkillDrawer] = useState(false);
   const [drawerSelected, setDrawerSelected] = useState(new Set());
   const [drawerSearch, setDrawerSearch] = useState("");
-  const [drawerNewSkill, setDrawerNewSkill] = useState("");
+  const [drawerCustomSkills, setDrawerCustomSkills] = useState([]); // user-added skills this session
   // History expand state
   const [expandedHistIdx, setExpandedHistIdx] = useState(null);
   // Add/Edit Labour Vendor modal state
@@ -6278,7 +6278,7 @@ function TabAttendance({ project }) {
                   <button onClick={()=>{
                       setDrawerSelected(new Set(subconSkills.map(s=>s.skill)));
                       setDrawerSearch("");
-                      setDrawerNewSkill("");
+                      setDrawerCustomSkills([]);
                       setShowSkillDrawer(true);
                     }}
                     style={{padding:"7px 14px",borderRadius:7,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
@@ -6694,100 +6694,137 @@ function TabAttendance({ project }) {
       </>)}
 
       {/* ── SKILLS LIBRARY DRAWER (right-side slide-in picker) ─────── */}
-      {showSkillDrawer && labType==="subcon" && selSubconId && (<>
-        <div onClick={()=>setShowSkillDrawer(false)}
-          style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
-        <div style={{position:"fixed",top:0,right:0,bottom:0,width:460,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 32px rgba(0,0,0,0.18)",zIndex:301,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .25s ease-out"}}>
-          <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+      {showSkillDrawer && labType==="subcon" && selSubconId && (()=>{
+        const allSkills = [...new Set([
+          ...ROLES.filter(r=>r!=="Other"),
+          ...subconSkills.map(s=>s.skill),
+          ...drawerCustomSkills,
+        ])];
+        const totalCount = allSkills.length;
+        const trimmedSearch = drawerSearch.trim();
+        const searchLower = trimmedSearch.toLowerCase();
+        const filtered = trimmedSearch
+          ? allSkills.filter(s => s.toLowerCase().includes(searchLower))
+          : allSkills;
+        const exactMatch = trimmedSearch
+          ? allSkills.some(s => s.toLowerCase() === searchLower)
+          : true;
+        const canCreateNew = trimmedSearch && !exactMatch;
+        const addCustomSkill = (raw) => {
+          const v = String(raw||"").trim();
+          if(!v) return;
+          if(allSkills.some(s=>s.toLowerCase()===v.toLowerCase())) {
+            // Already exists — just select it
+            setDrawerSelected(p=>new Set([...p, allSkills.find(s=>s.toLowerCase()===v.toLowerCase())]));
+          } else {
+            setDrawerCustomSkills(p=>[...p, v]);
+            setDrawerSelected(p=>new Set([...p, v]));
+          }
+          setDrawerSearch("");
+        };
+        const handleSave = async () => {
+          setSkillSaving(true);
+          const existingSkills = new Set(subconSkills.map(s=>s.skill));
+          const toAdd = [...drawerSelected].filter(s=>!existingSkills.has(s));
+          const toRemove = subconSkills.filter(s=>!drawerSelected.has(s.skill));
+          for (const sk of toAdd) {
+            try {
+              const r = await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:sk});
+              if(r.success) setSubconSkills(p=>[...p,r.data]);
+            } catch(_){}
+          }
+          for (const sk of toRemove) {
+            try {
+              await api.del("/labour-vendors/subcon-skills/"+selSubconId+"/"+sk.id);
+              setSubconSkills(p=>p.filter(x=>x.id!==sk.id));
+            } catch(_){}
+          }
+          setSkillSaving(false);
+          setShowSkillDrawer(false);
+        };
+        return(<>
+          <div onClick={()=>setShowSkillDrawer(false)}
+            style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+          <div role="dialog" aria-modal="true" aria-label="Skills Library"
+            onKeyDown={ev=>{ if(ev.key==="Escape") setShowSkillDrawer(false); }}
+            style={{position:"fixed",top:0,right:0,bottom:0,width:460,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 32px rgba(0,0,0,0.18)",zIndex:301,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .25s ease-out",outline:"none"}}>
+            <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
 
-          {/* Header */}
-          <div style={{padding:"16px 20px",borderBottom:`2px solid ${T.grn}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <button onClick={()=>setShowSkillDrawer(false)}
-              style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:6,display:"flex",borderRadius:6}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-              onMouseLeave={e=>e.currentTarget.style.background="none"}>
-              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-            </button>
-            <div style={{fontSize:14.5,fontWeight:700,color:T.t1,letterSpacing:".3px"}}>SKILLS LIBRARY</div>
-            <button onClick={async()=>{
-                setSkillSaving(true);
-                const existingSkills = new Set(subconSkills.map(s=>s.skill));
-                const toAdd = [...drawerSelected].filter(s=>!existingSkills.has(s));
-                const toRemove = subconSkills.filter(s=>!drawerSelected.has(s.skill));
-                // Add new
-                for (const sk of toAdd) {
-                  try {
-                    const r = await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:sk});
-                    if(r.success) setSubconSkills(p=>[...p,r.data]);
-                  } catch(_){}
-                }
-                // Remove unchecked
-                for (const sk of toRemove) {
-                  try {
-                    await api.del("/labour-vendors/subcon-skills/"+selSubconId+"/"+sk.id);
-                    setSubconSkills(p=>p.filter(x=>x.id!==sk.id));
-                  } catch(_){}
-                }
-                setSkillSaving(false);
-                setShowSkillDrawer(false);
-              }} disabled={skillSaving}
-              style={{padding:"7px 18px",borderRadius:7,border:"none",background:T.grn,color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:skillSaving?.6:1,boxShadow:`0 2px 8px ${T.grn}55`}}>
-              {skillSaving?"Saving…":"Save"}
-            </button>
-          </div>
-
-          {/* Search */}
-          <div style={{padding:"14px 20px",flexShrink:0}}>
-            <div style={{position:"relative"}}>
-              <input value={drawerSearch} onChange={e=>setDrawerSearch(e.target.value)} placeholder="Search Skill" autoFocus
-                style={{width:"100%",padding:"10px 38px 10px 14px",borderRadius:9,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:T.surfaceB}}
-                onFocus={e=>e.target.style.borderColor=T.grn}
-                onBlur={e=>e.target.style.borderColor=T.b1}/>
-              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2}
-                style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)"}}>
-                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
-              </svg>
+            {/* Header — title left, actions right (standard pattern) */}
+            <div style={{padding:"16px 20px",borderBottom:`2px solid ${T.grn}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10,flexShrink:0}}>
+              <div style={{display:"flex",flexDirection:"column",gap:2,minWidth:0}}>
+                <div style={{fontSize:14.5,fontWeight:700,color:T.t1,letterSpacing:".3px"}}>Skills Library</div>
+                <div style={{fontSize:11,color:T.t4}}>Pick skills this subcontractor supplies</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                <button onClick={handleSave} disabled={skillSaving}
+                  style={{padding:"7px 18px",borderRadius:7,border:"none",background:T.grn,color:"white",fontSize:12.5,fontWeight:700,cursor:skillSaving?"wait":"pointer",opacity:skillSaving?.6:1,boxShadow:`0 2px 8px ${T.grn}55`}}>
+                  {skillSaving?"Saving…":"Save"}
+                </button>
+                <button onClick={()=>!skillSaving&&setShowSkillDrawer(false)} aria-label="Close"
+                  style={{background:"none",border:"none",cursor:skillSaving?"not-allowed":"pointer",color:T.t3,padding:6,display:"flex",borderRadius:6}}
+                  onMouseEnter={e=>{if(!skillSaving)e.currentTarget.style.background=T.surfaceB;}}
+                  onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
             </div>
-          </div>
 
-          {/* Selection counter + Add new */}
-          <div style={{padding:"0 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <span style={{fontSize:12,color:T.t3,fontWeight:600}}>
-              Select <b style={{color:T.grn}}>({drawerSelected.size}/{ROLES.filter(r=>r!=="Other").length+subconSkills.filter(s=>!ROLES.includes(s.skill)).length})</b>
-            </span>
-            <button onClick={()=>{
-                const s = window.prompt("New skill name:");
-                if(s && s.trim()) {
-                  setDrawerSelected(p=>new Set([...p, s.trim()]));
-                  setDrawerNewSkill(s.trim());
-                }
-              }}
-              style={{background:"none",border:"none",color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer",padding:"4px 8px",borderRadius:5,display:"flex",alignItems:"center",gap:4}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.grnL}
-              onMouseLeave={e=>e.currentTarget.style.background="none"}>
-              <span style={{fontSize:14}}>+</span> New Skill
-            </button>
-          </div>
+            {/* Search — Enter creates a new custom skill if no exact match */}
+            <div style={{padding:"14px 20px 8px",flexShrink:0}}>
+              <div style={{position:"relative"}}>
+                <input value={drawerSearch} onChange={e=>setDrawerSearch(e.target.value)}
+                  placeholder="Search or type a new skill"
+                  autoFocus
+                  onKeyDown={e=>{ if(e.key==="Enter" && canCreateNew){ e.preventDefault(); addCustomSkill(drawerSearch); } }}
+                  style={{width:"100%",padding:"10px 38px 10px 14px",borderRadius:9,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:T.surfaceB}}
+                  onFocus={e=>e.target.style.borderColor=T.grn}
+                  onBlur={e=>e.target.style.borderColor=T.b1}/>
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2}
+                  style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)"}}>
+                  <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+                </svg>
+              </div>
+            </div>
 
-          {/* Skill list */}
-          <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px"}}>
-            {(()=>{
-              // Combine ROLES list with custom skills already added
-              const allSkills = [...new Set([
-                ...ROLES.filter(r=>r!=="Other"),
-                ...subconSkills.map(s=>s.skill),
-                ...(drawerNewSkill ? [drawerNewSkill] : []),
-              ])];
-              const filtered = allSkills.filter(s =>
-                !drawerSearch.trim() || s.toLowerCase().includes(drawerSearch.toLowerCase())
-              );
-              if(!filtered.length) return(
-                <div style={{padding:"30px 12px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                  No skills match "{drawerSearch}"
+            {/* Selection counter */}
+            <div style={{padding:"0 20px 10px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+              <span style={{fontSize:12,color:T.t3,fontWeight:600}}>
+                Selected <b style={{color:T.grn}}>{drawerSelected.size}</b> <span style={{color:T.t4,fontWeight:500}}>of {totalCount}</span>
+              </span>
+              {drawerSelected.size>0 && (
+                <button onClick={()=>setDrawerSelected(new Set())}
+                  style={{background:"none",border:"none",color:T.t4,fontSize:11.5,fontWeight:600,cursor:"pointer",padding:"4px 8px",borderRadius:5}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.surfaceB;e.currentTarget.style.color=T.red;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t4;}}>
+                  Clear all
+                </button>
+              )}
+            </div>
+
+            {/* Skill list */}
+            <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px"}}>
+              {/* Inline "create new" row appears when search has no exact match */}
+              {canCreateNew && (
+                <div onClick={()=>addCustomSkill(drawerSearch)}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"12px 14px",cursor:"pointer",borderRadius:9,marginBottom:8,background:T.purL,border:`1.5px dashed ${T.purM}`,transition:"all .12s"}}
+                  onMouseEnter={el=>{el.currentTarget.style.background="white";el.currentTarget.style.borderColor=T.pur;}}
+                  onMouseLeave={el=>{el.currentTarget.style.background=T.purL;el.currentTarget.style.borderColor=T.purM;}}>
+                  <div style={{width:20,height:20,borderRadius:5,border:`2px dashed ${T.pur}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:T.pur,fontSize:14,fontWeight:700,lineHeight:1}}>+</div>
+                  <span style={{flex:1,fontSize:13,fontWeight:600,color:T.t2}}>
+                    Create <b style={{color:T.pur}}>"{trimmedSearch}"</b>
+                  </span>
+                  <span style={{fontSize:9.5,padding:"2px 8px",borderRadius:10,background:"white",color:T.pur,fontWeight:700,letterSpacing:".3px",border:`1px solid ${T.purM}`}}>NEW</span>
                 </div>
-              );
-              return filtered.map((skill,i)=>{
+              )}
+
+              {filtered.length===0 && !canCreateNew ? (
+                <div style={{padding:"30px 12px",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                  No skills match "{trimmedSearch}"
+                </div>
+              ) : filtered.map((skill)=>{
                 const isSelected = drawerSelected.has(skill);
+                const isCustom = !ROLES.includes(skill);
                 return(
                   <div key={skill} onClick={()=>setDrawerSelected(prev=>{
                       const s = new Set(prev);
@@ -6797,21 +6834,18 @@ function TabAttendance({ project }) {
                     style={{display:"flex",alignItems:"center",gap:13,padding:"13px 14px",cursor:"pointer",borderRadius:9,marginBottom:6,background:isSelected?T.grnL:"transparent",border:`1.5px solid ${isSelected?T.grn+"55":"transparent"}`,transition:"all .12s"}}
                     onMouseEnter={el=>{ if(!isSelected) el.currentTarget.style.background=T.surfaceB; }}
                     onMouseLeave={el=>{ if(!isSelected) el.currentTarget.style.background="transparent"; }}>
-                    {/* Checkbox */}
                     <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${isSelected?T.grn:T.b2}`,background:isSelected?T.grn:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
                       {isSelected&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3.5}><path d="M20 6L9 17l-5-5"/></svg>}
                     </div>
-                    {/* Name */}
                     <span style={{flex:1,fontSize:13.5,fontWeight:600,color:isSelected?T.grn:T.t1}}>{skill}</span>
-                    {/* Custom badge */}
-                    {!ROLES.includes(skill)&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700,letterSpacing:".3px"}}>CUSTOM</span>}
+                    {isCustom&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700,letterSpacing:".3px"}}>CUSTOM</span>}
                   </div>
                 );
-              });
-            })()}
+              })}
+            </div>
           </div>
-        </div>
-      </>)}
+        </>);
+      })()}
 
       {/* ── ADD LABOUR VENDOR MODAL ──────────────────────────────────── */}
       {showAddVendor&&(<>
