@@ -6214,8 +6214,18 @@ function TabAttendance({ project }) {
               return(
                 <div key={i} style={{padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:14}}>
                   <div style={{minWidth:85}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{new Date(rec.date+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>
-                    <div style={{fontSize:10.5,color:T.t4}}>{new Date(rec.date+"T00:00:00").toLocaleDateString("en-IN",{weekday:"short",year:"2-digit"})}</div>
+                    {(()=>{
+                      // Robust date parsing — handle YYYY-MM-DD, ISO timestamps, or null
+                      const raw = rec.date || rec.att_date || rec.created_at;
+                      if (!raw) return <div style={{fontSize:12,color:T.t4}}>—</div>;
+                      const datePart = String(raw).split("T")[0]; // strip time if ISO
+                      const d = new Date(datePart + "T00:00:00");
+                      if (isNaN(d.getTime())) return <div style={{fontSize:12,color:T.t4}}>—</div>;
+                      return <>
+                        <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>
+                        <div style={{fontSize:10.5,color:T.t4}}>{d.toLocaleDateString("en-IN",{weekday:"short",year:"2-digit"})}</div>
+                      </>;
+                    })()}
                   </div>
                   <div style={{flex:1,display:"flex",gap:12,flexWrap:"wrap"}}>
                     <span style={{fontSize:12,color:T.grn,fontWeight:600}}>✓ {rPresent} Present</span>
