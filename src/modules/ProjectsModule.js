@@ -2569,6 +2569,11 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
 function TodoDrawer({todos,loading,onClose,onSelectProject}){
   const [filter,setFilter]=useState("Pending"); // Pending | Done | All
   const [localTodos,setLocalTodos]=useState(todos);
+  const [expandedId,setExpandedId]=useState(null);
+  const [savingChk,setSavingChk]=useState(null);
+  const [showAddForm,setShowAddForm]=useState(false);
+  const [newTodo,setNewTodo]=useState({title:"",priority:"Medium",category:"Admin",due_date:""});
+  const [creating,setCreating]=useState(false);
   useEffect(()=>{ setLocalTodos(todos); },[todos]);
   const priC={"High":{c:"#DC2626",bg:"#FEE2E2"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"Low":{c:"#64748B",bg:"#F1F5F9"}};
   const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
@@ -2584,20 +2589,35 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
 
   const goToProject = (t) => {
     onClose();
-    onSelectProject && onSelectProject({ id: t.project_id, name: t.project_name, initialTab: "todo" });
+    if (t.project_id) onSelectProject && onSelectProject({ id: t.project_id, name: t.project_name, initialTab: "todo" });
   };
+
+  const apiPathFor = (t) => t.project_id
+    ? `/projects/${t.project_id}/tasks/${t.id}`
+    : `/projects/company-todos/${t.id}`;
 
   const toggleDone = async (t, e) => {
     if (e) e.stopPropagation();
     const newStatus = t.done ? "Not Started" : "Completed";
-    // Optimistic UI
     setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, status: newStatus } : x));
     try {
-      await api.put(`/projects/${t.project_id}/tasks/${t.id}`, { status: newStatus });
+      await api.put(apiPathFor(t), { status: newStatus });
     } catch (err) {
-      // revert on failure
       setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, status: t.status } : x));
     }
+  };
+
+  const toggleChecklistItem = async (t, idx, e) => {
+    if (e) e.stopPropagation();
+    setSavingChk(`${t.id}-${idx}`);
+    const updatedChecklist = (t.checklist||[]).map((c,i) => i===idx ? {...c, done: !c.done} : c);
+    setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, checklist: JSON.stringify(updatedChecklist) } : x));
+    try {
+      await api.put(apiPathFor(t), { checklist: updatedChecklist });
+    } catch (err) {
+      setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, checklist: JSON.stringify(t.checklist) } : x));
+    }
+    setSavingChk(null);
   };
 
   return(<>
@@ -2614,15 +2634,57 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>
         </div>
-        <div style={{display:"flex",gap:4}}>
-          {["Pending","Done","All"].map(f=>(
-            <button key={f} onClick={()=>setFilter(f)}
-              style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
-              {f} {f==="Pending"?`(${pendingCount})`:f==="Done"?`(${doneCount})`:`(${parsed.length})`}
-            </button>
-          ))}
+        <div style={{display:"flex",gap:4,alignItems:"center",justifyContent:"space-between"}}>
+          <div style={{display:"flex",gap:4}}>
+            {["Pending","Done","All"].map(f=>(
+              <button key={f} onClick={()=>setFilter(f)}
+                style={{padding:"4px 10px",borderRadius:20,border:"none",background:filter===f?"white":"rgba(255,255,255,0.1)",color:filter===f?"#0F172A":"rgba(255,255,255,0.6)",fontSize:11,fontWeight:filter===f?700:400,cursor:"pointer"}}>
+                {f} {f==="Pending"?`(${pendingCount})`:f==="Done"?`(${doneCount})`:`(${parsed.length})`}
+              </button>
+            ))}
+          </div>
+          <button onClick={()=>setShowAddForm(p=>!p)}
+            style={{padding:"5px 11px",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)",background:showAddForm?"#7C3AED":"rgba(255,255,255,0.1)",color:"white",fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+            {showAddForm?"✕ Cancel":"+ Company Todo"}
+          </button>
         </div>
       </div>
+
+      {/* Add Company Todo form */}
+      {showAddForm && (
+        <div style={{padding:"12px 14px",background:"#F5F3FF",borderBottom:"1px solid #DDD6FE",flexShrink:0}}>
+          <div style={{fontSize:10.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:8}}>🏢 NEW COMPANY-LEVEL TODO</div>
+          <input value={newTodo.title} onChange={e=>setNewTodo(p=>({...p,title:e.target.value}))}
+            placeholder="Todo title..." autoFocus
+            style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #DDD6FE",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:8}}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
+            <select value={newTodo.priority} onChange={e=>setNewTodo(p=>({...p,priority:e.target.value}))}
+              style={{padding:"6px 8px",borderRadius:6,border:"1px solid #DDD6FE",fontSize:11,outline:"none",background:"white"}}>
+              <option>High</option><option>Medium</option><option>Low</option>
+            </select>
+            <select value={newTodo.category} onChange={e=>setNewTodo(p=>({...p,category:e.target.value}))}
+              style={{padding:"6px 8px",borderRadius:6,border:"1px solid #DDD6FE",fontSize:11,outline:"none",background:"white"}}>
+              <option>Admin</option><option>Finance</option><option>HR</option><option>Compliance</option><option>Other</option>
+            </select>
+            <input type="date" value={newTodo.due_date} onChange={e=>setNewTodo(p=>({...p,due_date:e.target.value}))}
+              style={{padding:"6px 8px",borderRadius:6,border:"1px solid #DDD6FE",fontSize:11,outline:"none"}}/>
+          </div>
+          <button onClick={async()=>{
+            if(!newTodo.title.trim()) return;
+            setCreating(true);
+            const res = await api.post("/projects/company-todos", newTodo);
+            if(res.success){
+              setLocalTodos(prev=>[{...res.data, project_id:null, project_name:null},...prev]);
+              setNewTodo({title:"",priority:"Medium",category:"Admin",due_date:""});
+              setShowAddForm(false);
+            }
+            setCreating(false);
+          }} disabled={!newTodo.title.trim()||creating}
+            style={{width:"100%",padding:"8px",borderRadius:6,border:"none",background:newTodo.title.trim()?"#7C3AED":"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:newTodo.title.trim()?"pointer":"not-allowed"}}>
+            {creating?"Adding…":"+ Add Company Todo"}
+          </button>
+        </div>
+      )}
 
       {/* Content */}
       <div style={{flex:1,overflow:"auto",padding:"10px 14px"}}>
@@ -2631,30 +2693,73 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
         :filtered.map(t=>{
           const pr=priC[t.priority]||priC["Medium"];
           const clDone=(t.checklist||[]).filter(c=>c.done).length;
+          const isExpanded = expandedId === t.id;
+          const hasChecklist = t.checklist && t.checklist.length > 0;
           return(
             <div key={t.id}
-              onClick={()=>goToProject(t)}
-              style={{background:"white",borderRadius:8,border:"1px solid #E2E8F0",marginBottom:8,padding:"10px 13px",borderLeft:`3px solid ${pr.c}44`,cursor:"pointer",transition:"box-shadow .15s, border-color .15s"}}
-              onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(15,23,42,0.08)";e.currentTarget.style.borderColor="#BFDBFE";}}
-              onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";e.currentTarget.style.borderColor="#E2E8F0";}}>
-              <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
-                <div onClick={(e)=>toggleDone(t,e)} title={t.done?"Mark as pending":"Mark as done"}
-                  style={{width:16,height:16,borderRadius:4,border:t.done?`none`:`1.5px solid #CBD5E1`,background:t.done?"#22C55E":"transparent",flexShrink:0,marginTop:2,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
-                  {t.done&&<svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>}
-                </div>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12.5,fontWeight:500,color:t.done?"#94A3B8":"#1E293B",textDecoration:t.done?"line-through":"none",marginBottom:4,lineHeight:1.4}}>{t.title}</div>
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
-                    <span onClick={(e)=>{e.stopPropagation();goToProject(t);}}
-                      style={{fontSize:10,fontWeight:600,color:"#3B82F6",background:"#EFF6FF",padding:"1px 7px",borderRadius:10,cursor:"pointer",border:"1px solid #BFDBFE"}}>{t.project_name||"Project"}</span>
-                    {t.category&&t.category!=="Other"&&<span style={{fontSize:10,color:"#64748B",background:"#F1F5F9",padding:"1px 6px",borderRadius:10}}>{t.category}</span>}
-                    <span style={{fontSize:10,fontWeight:600,color:pr.c,background:pr.bg,padding:"1px 6px",borderRadius:10}}>{t.priority}</span>
-                    {t.assigned_name&&<span style={{fontSize:10,color:"#64748B"}}>@{t.assigned_name.split(" ")[0]}</span>}
-                    {t.due_date&&<span style={{fontSize:10,color:"#64748B"}}>Due {fmtDate(t.due_date)}</span>}
-                    {t.checklist&&t.checklist.length>0&&<span style={{fontSize:10,fontWeight:600,color:clDone===t.checklist.length?"#22C55E":"#94A3B8"}}>☑ {clDone}/{t.checklist.length}</span>}
+              style={{background:"white",borderRadius:8,border:`1px solid ${isExpanded?"#3B82F6":"#E2E8F0"}`,marginBottom:8,borderLeft:`3px solid ${pr.c}`,transition:"all .15s",overflow:"hidden",boxShadow:isExpanded?"0 4px 14px rgba(59,130,246,0.15)":"none"}}>
+              <div onClick={()=>setExpandedId(isExpanded?null:t.id)}
+                style={{padding:"10px 13px",cursor:"pointer"}}
+                onMouseEnter={e=>{if(!isExpanded){e.currentTarget.parentElement.style.boxShadow="0 4px 14px rgba(15,23,42,0.08)";e.currentTarget.parentElement.style.borderColor="#BFDBFE";}}}
+                onMouseLeave={e=>{if(!isExpanded){e.currentTarget.parentElement.style.boxShadow="none";e.currentTarget.parentElement.style.borderColor="#E2E8F0";}}}>
+                <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+                  <div onClick={(e)=>toggleDone(t,e)} title={t.done?"Mark as pending":"Mark as done"}
+                    style={{width:18,height:18,borderRadius:4,border:t.done?`none`:`1.5px solid #CBD5E1`,background:t.done?"#22C55E":"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+                    {t.done&&<svg width={10} height={10} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>}
                   </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:t.done?"#94A3B8":"#1E293B",textDecoration:t.done?"line-through":"none",marginBottom:4,lineHeight:1.4}}>{t.title}</div>
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                      {t.project_name && <span onClick={(e)=>{e.stopPropagation();goToProject(t);}}
+                        style={{fontSize:10,fontWeight:600,color:"#3B82F6",background:"#EFF6FF",padding:"1px 7px",borderRadius:10,cursor:"pointer",border:"1px solid #BFDBFE"}}>{t.project_name}</span>}
+                      {!t.project_id&&<span style={{fontSize:10,fontWeight:600,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10,border:"1px solid #DDD6FE"}}>🏢 Company</span>}
+                      {t.category&&t.category!=="Other"&&<span style={{fontSize:10,color:"#64748B",background:"#F1F5F9",padding:"1px 6px",borderRadius:10}}>{t.category}</span>}
+                      <span style={{fontSize:10,fontWeight:600,color:pr.c,background:pr.bg,padding:"1px 6px",borderRadius:10}}>{t.priority}</span>
+                      {t.assigned_name&&<span style={{fontSize:10,color:"#64748B"}}>@{t.assigned_name.split(" ")[0]}</span>}
+                      {t.due_date&&<span style={{fontSize:10,color:"#64748B"}}>Due {fmtDate(t.due_date)}</span>}
+                      {hasChecklist&&<span style={{fontSize:10,fontWeight:600,color:clDone===t.checklist.length?"#22C55E":"#94A3B8"}}>☑ {clDone}/{t.checklist.length}</span>}
+                    </div>
+                  </div>
+                  <span style={{fontSize:11,color:"#94A3B8",flexShrink:0,marginTop:2,transition:"transform .2s",transform:isExpanded?"rotate(180deg)":"rotate(0)"}}>▼</span>
                 </div>
               </div>
+
+              {/* Expanded checklist */}
+              {isExpanded && (
+                <div style={{padding:"0 13px 12px",borderTop:"1px dashed #E2E8F0",background:"#F8FAFC"}}>
+                  {hasChecklist ? (
+                    <div style={{paddingTop:10}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#64748B",letterSpacing:".5px",marginBottom:8}}>CHECKLIST · {clDone}/{t.checklist.length} done</div>
+                      {t.checklist.map((c,idx)=>(
+                        <div key={idx} onClick={(e)=>toggleChecklistItem(t,idx,e)}
+                          style={{display:"flex",alignItems:"center",gap:9,padding:"7px 8px",borderRadius:6,cursor:"pointer",marginBottom:3,background:c.done?"#F0FDF4":"transparent",transition:"background .12s"}}
+                          onMouseEnter={e=>{if(!c.done)e.currentTarget.style.background="#F1F5F9";}}
+                          onMouseLeave={e=>{if(!c.done)e.currentTarget.style.background="transparent";}}>
+                          <div style={{width:16,height:16,borderRadius:4,border:c.done?"none":"1.5px solid #CBD5E1",background:c.done?"#22C55E":"white",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:savingChk===`${t.id}-${idx}`?.5:1}}>
+                            {c.done&&<svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
+                          </div>
+                          <span style={{flex:1,fontSize:12.5,color:c.done?"#94A3B8":"#1E293B",textDecoration:c.done?"line-through":"none"}}>{c.text||c.title||"Item"}</span>
+                          {savingChk===`${t.id}-${idx}`&&<span style={{fontSize:9,color:"#94A3B8"}}>saving…</span>}
+                        </div>
+                      ))}
+                    </div>
+                  ):(
+                    <div style={{padding:"12px 4px",fontSize:11.5,color:"#94A3B8",fontStyle:"italic"}}>No checklist items.</div>
+                  )}
+                  {t.description && (
+                    <div style={{marginTop:10,paddingTop:8,borderTop:"1px dashed #E2E8F0",fontSize:11.5,color:"#475569",lineHeight:1.5}}>
+                      <div style={{fontSize:9.5,fontWeight:700,color:"#64748B",letterSpacing:".5px",marginBottom:4}}>DESCRIPTION</div>
+                      {t.description}
+                    </div>
+                  )}
+                  {t.project_id && (
+                    <button onClick={(e)=>{e.stopPropagation();goToProject(t);}}
+                      style={{marginTop:10,padding:"6px 12px",borderRadius:6,border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#3B82F6",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      Open in Project →
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           );
         })}
