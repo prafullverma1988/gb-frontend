@@ -6023,10 +6023,26 @@ function TabAttendance({ project }) {
                 const markedCount = todayEntries.filter(e=>e.status).length;
                 const total = todayEntries.length;
                 const allMarked = total>0 && markedCount===total;
+                // Detect unsaved changes: compare current state to last saved attRecs
+                const savedRec = attRecs.find(r=>r.date===attDate&&r.type===labType&&!r.subcon_id&&!r.vendor_id);
+                const isDirty = (()=>{
+                  if (!savedRec) return markedCount > 0; // never saved → dirty if any marks
+                  const savedById = {};
+                  (savedRec.entries||[]).forEach(s => { savedById[s.worker_id||s.name] = s; });
+                  for (const e of todayEntries) {
+                    const s = savedById[e.worker_id||e.name];
+                    if (!s) return e.status ? true : false;
+                    if ((s.status||"")!==(e.status||"") || (Number(s.hours)||0)!==(Number(e.hours)||0) ||
+                        (Number(s.ot)||0)!==(Number(e.ot)||0) || (s.remark||"")!==(e.remark||"")) return true;
+                  }
+                  return false;
+                })();
                 return(
                   <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                    <span style={{fontSize:11.5,color:T.t4,fontWeight:600}}>
+                    <span style={{fontSize:11.5,color:isDirty?T.amb:T.t4,fontWeight:600}}>
                       {markedCount}/{total} marked
+                      {isDirty&&<span style={{marginLeft:6,padding:"1px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontSize:9.5,fontWeight:700,border:`1px solid ${T.ambM}`}}>● UNSAVED</span>}
+                      {!isDirty&&savedRec&&<span style={{marginLeft:6,padding:"1px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontSize:9.5,fontWeight:700,border:`1px solid ${T.grnM}`}}>✓ SAVED</span>}
                     </span>
                     {labType==="company"&&currentWF.length>0&&markedCount<total&&(
                       <button onClick={()=>setTodayEntries(prev=>prev.map(e=>e.status?e:({...e,status:"P",hours:8})))}
@@ -6035,10 +6051,10 @@ function TabAttendance({ project }) {
                       </button>
                     )}
                     {markedCount>0&&(
-                      <button onClick={saveAttendance} disabled={attSaving||!allMarked}
-                        title={!allMarked?"Mark all workers first":"Save attendance"}
-                        style={{padding:"7px 18px",borderRadius:7,border:"none",background:allMarked?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12.5,fontWeight:700,cursor:allMarked?"pointer":"not-allowed",opacity:attSaving?.6:1,boxShadow:allMarked?`0 2px 8px ${TYPE_COLORS[labType]}55`:"none"}}>
-                        {attSaving?"Saving…":allMarked?`💾 Save (${total})`:`Mark all first`}
+                      <button onClick={saveAttendance} disabled={attSaving||!allMarked||!isDirty}
+                        title={!allMarked?"Mark all workers first":(!isDirty?"No changes to save":"Save attendance")}
+                        style={{padding:"7px 18px",borderRadius:7,border:"none",background:(allMarked&&isDirty)?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12.5,fontWeight:700,cursor:(allMarked&&isDirty)?"pointer":"not-allowed",opacity:attSaving?.6:1,boxShadow:(allMarked&&isDirty)?`0 2px 8px ${TYPE_COLORS[labType]}55`:"none"}}>
+                        {attSaving?"Saving…":!isDirty?"✓ Saved":allMarked?`💾 Save (${total})`:`Mark all first`}
                       </button>
                     )}
                   </div>
@@ -6103,13 +6119,16 @@ function TabAttendance({ project }) {
                     })}
                   </div>
 
-                  {/* Hours */}
-                  {isLocked
-                    ?<input type="number" value={e.hours} min={0} max={14} disabled
-                        style={{width:60,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center",background:T.surfaceB,color:T.t2,opacity:e.status==="A"?.5:1}}/>
-                    :<span style={{fontSize:11.5,color:T.t4,textAlign:"center"}}>—</span>
+                  {/* Hours — editable when locked (except absent) */}
+                  {isLocked && e.status!=="A"
+                    ?<input type="number" value={e.hours} min={0} max={14}
+                        onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,hours:Number(el.target.value)}:en))}
+                        style={{width:60,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center",background:"white",color:T.t1,fontWeight:600}}/>
+                    :isLocked && e.status==="A"
+                      ?<span style={{fontSize:11.5,color:T.t4,textAlign:"center"}}>0h</span>
+                      :<span style={{fontSize:11.5,color:T.t4,textAlign:"center"}}>—</span>
                   }
-                  {/* OT */}
+                  {/* OT — editable when present/half */}
                   {isLocked && e.status!=="A"
                     ?<input type="number" value={e.ot||0} min={0} max={6}
                         onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,ot:Number(el.target.value)}:en))}
