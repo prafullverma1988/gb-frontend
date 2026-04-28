@@ -2217,14 +2217,7 @@ function DailyWagesSettingsTab(){
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:18,marginBottom:14}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:8}}>
           <div style={{fontSize:14,fontWeight:800,color:T.t1}}>Default Rates by Skill</div>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
-            <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,border:`1px solid ${T.bluM}`}}>📋 Synced with Library</span>
-            {rates.length>0&&(
-              <button onClick={dedupe} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${T.amb}`,background:T.ambL,color:T.amb,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
-                🧹 Remove Duplicates
-              </button>
-            )}
-          </div>
+          <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,border:`1px solid ${T.bluM}`}}>📋 Synced with Library</span>
         </div>
         <div style={{fontSize:11,color:T.amb,marginBottom:14,padding:"6px 10px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6}}>
           ⚠️ Base rates hain ye — change karne ke liye <b>admin approval</b> chahiye. Approvals drawer → Finance tab pe approve karna padega.
