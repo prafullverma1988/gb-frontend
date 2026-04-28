@@ -5574,10 +5574,10 @@ function TabAttendance({ project }) {
     const workers = workforce[labType] || [];
     // For subcon/vendor: match by date + type + selected id so each entity has independent rows
     const existing = labType==="subcon"
-      ? attRecs.find(r=>r.date===attDate && r.type===labType && String(r.subcon_id||r.subcon_name||"")===String(selSubconId))
+      ? attRecs.find(r=>String(r.date||"").split("T")[0]===attDate && r.type===labType && String(r.subcon_id||r.subcon_name||"")===String(selSubconId))
       : labType==="vendor"
-        ? attRecs.find(r=>r.date===attDate && r.type===labType && String(r.vendor_id||r.vendor_name||"")===String(selVendorId))
-        : attRecs.find(r=>r.date===attDate && r.type===labType);
+        ? attRecs.find(r=>String(r.date||"").split("T")[0]===attDate && r.type===labType && String(r.vendor_id||r.vendor_name||"")===String(selVendorId))
+        : attRecs.find(r=>String(r.date||"").split("T")[0]===attDate && r.type===labType);
     if(mode==="name") {
       setTodayEntries(workers.map(w => {
         const found = existing?.entries?.find(e=>e.worker_id===w.id||e.name===w.name);
@@ -5682,10 +5682,12 @@ function TabAttendance({ project }) {
     try {
       const r = await api.post(`/projects/${projectId}/attendance`, payload);
       if(r.success) {
-        setAttRecs(prev=>[...prev.filter(rec=>!(rec.date===attDate&&rec.type===labType
-          &&(rec.subcon_id||null)===(sc?.id||null)
-          &&(rec.vendor_id||null)===(vd?.id||null)
-        )), {...payload, id:r.data?.id}]);
+        setAttRecs(prev=>[...prev.filter(rec=>{
+          const rd = String(rec.date||"").split("T")[0];
+          return !(rd===attDate&&rec.type===labType
+            &&(rec.subcon_id||null)===(sc?.id||null)
+            &&(rec.vendor_id||null)===(vd?.id||null));
+        }), {...payload, id:r.data?.id}]);
         setEditingAtt(false);
       }
     } catch(e) {}
@@ -5789,7 +5791,11 @@ function TabAttendance({ project }) {
     return <span style={{padding:"2px 7px",background:T.sltL,color:T.slt,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.b2}`}}>📋 Rate Card</span>;
   };
 
-  const historyRecs = attRecs.filter(r=>r.type===labType).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,14);
+  const historyRecs = attRecs.filter(r=>r.type===labType).sort((a,b)=>{
+    const ad = String(a.date||"").split("T")[0];
+    const bd = String(b.date||"").split("T")[0];
+    return bd.localeCompare(ad);
+  }).slice(0,14);
 
   // placeholder — original code references below replaced by new render
   const [_unused] = useState(false);
@@ -5981,7 +5987,7 @@ function TabAttendance({ project }) {
         <span style={{fontSize:11,color:T.t4,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>DATE:</span>
         {days7.map(d=>{
           const isToday=d===todayStr, isSel=d===attDate;
-          const hasData=attRecs.some(r=>r.date===d&&r.type===labType);
+          const hasData=attRecs.some(r=>String(r.date||"").split("T")[0]===d&&r.type===labType);
           const dd=new Date(d);
           return(
             <button key={d} onClick={()=>setAttDate(d)}
