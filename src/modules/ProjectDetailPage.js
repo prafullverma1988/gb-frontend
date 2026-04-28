@@ -6052,6 +6052,40 @@ function TabAttendance({ project }) {
               ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle subcontractor select karo</span>
               :labType==="vendor"&&!selVendorId
               ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle labour vendor select karo</span>
+              :mode==="count"
+              ?(()=>{
+                // ── Count-wise mode (subcon/vendor): simple Mark Attendance / Save toggle ──
+                const totalCount = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0),0);
+                const savedRecCount = attRecs.find(r=>{
+                  const rd = String(r.date||"").split("T")[0];
+                  if (rd!==attDate||r.type!==labType) return false;
+                  if (labType==="subcon") return String(r.subcon_id||r.subcon_name||"")===String(selSubconId);
+                  if (labType==="vendor") return String(r.vendor_id||r.vendor_name||"")===String(selVendorId);
+                  return true;
+                });
+                if (!editingAtt) return(
+                  <>
+                    {savedRecCount&&<span style={{fontSize:10.5,padding:"2px 8px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700,border:`1px solid ${T.grnM}`}}>✓ SAVED</span>}
+                    {totalCount>0&&<span style={{fontSize:11.5,color:T.t3,fontWeight:600}}>Total: <b style={{color:T.grn}}>{totalCount}</b></span>}
+                    <button onClick={()=>setEditingAtt(true)}
+                      style={{padding:"7px 16px",borderRadius:7,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                      ✏️ {savedRecCount?"Edit":"Mark"} Attendance
+                    </button>
+                  </>
+                );
+                return(
+                  <>
+                    <button onClick={()=>{ setEditingAtt(false); /* reset rows */ }}
+                      style={{padding:"6px 12px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                      Cancel
+                    </button>
+                    <button onClick={saveAttendance} disabled={attSaving}
+                      style={{padding:"7px 18px",borderRadius:7,border:"none",background:TYPE_COLORS[labType],color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:attSaving?.6:1,boxShadow:`0 2px 8px ${TYPE_COLORS[labType]}55`}}>
+                      {attSaving?"Saving…":`💾 Save${totalCount>0?` (${totalCount})`:""}`}
+                    </button>
+                  </>
+                );
+              })()
               :(()=>{
                 const markedCount = todayEntries.filter(e=>e.status).length;
                 const total = todayEntries.length;
