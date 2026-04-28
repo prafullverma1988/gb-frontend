@@ -189,7 +189,8 @@ const Bar=({pct,color,h=5})=>(
 
 // ── CHARTS (unchanged from original) ──────────────────────────────────
 function CashFlowChart({data,height=110}){
-  const maxVal=Math.max(...data.flatMap(d=>[d.in,d.out]));
+  if(!data||data.length<1) return <div style={{padding:"30px 0",textAlign:"center",color:T.t4,fontSize:11}}>No data</div>;
+  const maxVal=Math.max(...data.flatMap(d=>[d.in,d.out]),1);
   const barW=28,gap=14,groupGap=28;
   const totalW=data.length*(barW*2+gap+groupGap);
   const pad={top:10,bottom:24,left:10,right:10};
@@ -210,8 +211,9 @@ function CashFlowChart({data,height=110}){
   );
 }
 function DonutChart({slices,size=110,cx=55,cy=55,r=38,inner=22}){
+  if(!slices||!slices.length||slices.every(s=>!s.value)) return <div style={{width:size,height:size,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:10,border:`2px dashed ${T.b1}`,borderRadius:"50%"}}>No data</div>;
   let cumDeg=-90;
-  const total=slices.reduce((s,sl)=>s+sl.value,0);
+  const total=slices.reduce((s,sl)=>s+sl.value,0)||1;
   const toRad=d=>d*Math.PI/180;
   const arc=(startDeg,endDeg,outerR,innerR)=>{
     const s={x:cx+outerR*Math.cos(toRad(startDeg)),y:cy+outerR*Math.sin(toRad(startDeg))};
@@ -224,18 +226,20 @@ function DonutChart({slices,size=110,cx=55,cy=55,r=38,inner=22}){
   return(<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{slices.map((sl,i)=>{const deg=(sl.value/total)*360;const start=cumDeg;cumDeg+=deg;return <path key={i} d={arc(start,cumDeg-0.5,r,inner)} fill={sl.color} opacity={0.9}/>;})}<circle cx={cx} cy={cy} r={inner-1} fill={T.surface}/></svg>);
 }
 function CashLineChart({data,height=90}){
-  const maxV=Math.max(...data.flatMap(d=>[d.in,d.out]));
+  if(!data||data.length<2) return <div style={{padding:"22px 0",textAlign:"center",color:T.t4,fontSize:11}}>{data?.length===1?"Add more data points to show trend":"No cash flow data yet"}</div>;
+  const maxV=Math.max(...data.flatMap(d=>[d.in,d.out]),1);
   const W=360,pad={top:10,bottom:22,left:8,right:8};
   const cW=W-pad.left-pad.right; const cH=height-pad.top-pad.bottom;
   const n=data.length;
-  const px=(i)=>pad.left+(i/(n-1))*cW;
+  const px=(i)=>pad.left+(i/Math.max(n-1,1))*cW;
   const py=(v)=>pad.top+cH-(v/maxV)*cH;
   const linePoints=(key)=>data.map((d,i)=>`${px(i)},${py(d[key])}`).join(' ');
   const areaPath=(key,fillY)=>{const pts=data.map((d,i)=>`${px(i)},${py(d[key])}`);return `M${px(0)},${fillY} L${pts.join(' L')} L${px(n-1)},${fillY} Z`;};
   return(<svg width="100%" viewBox={`0 0 ${W} ${height}`} style={{overflow:"visible"}}>{[0,0.5,1].map((p,i)=>(<line key={i} x1={pad.left} y1={pad.top+cH*p} x2={W-pad.right} y2={pad.top+cH*p} stroke={T.b1} strokeWidth={0.7} strokeDasharray={p===0?"0":"3,3"}/>))}<path d={areaPath("in",pad.top+cH)} fill={T.grn} opacity={0.1}/><polyline points={linePoints("in")} fill="none" stroke={T.grn} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/><path d={areaPath("out",pad.top+cH)} fill={T.red} opacity={0.1}/><polyline points={linePoints("out")} fill="none" stroke={T.red} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,2"/>{data.map((d,i)=>(<g key={i}><circle cx={px(i)} cy={py(d.in)} r={3} fill={T.grn}/><circle cx={px(i)} cy={py(d.out)} r={3} fill={T.red}/><text x={px(i)} y={height-5} textAnchor="middle" fontSize={9} fill={T.t4} fontFamily="'Segoe UI',sans-serif">{d.month}</text></g>))}</svg>);
 }
 function FinanceBarChart({data,height=130}){
-  const maxV=Math.max(...data.map(d=>Math.max(d.sales,d.expense)));
+  if(!data||data.length<1) return <div style={{padding:"40px 0",textAlign:"center",color:T.t4,fontSize:11}}>No revenue/expense data</div>;
+  const maxV=Math.max(...data.map(d=>Math.max(d.sales,d.expense)),1);
   const bW=18,gap=5,groupGap=20;
   const total=data.length; const W=total*(bW*3+gap*2+groupGap)+20;
   const pad={top:16,bottom:22,left:6,right:6}; const cH=height-pad.top-pad.bottom;
