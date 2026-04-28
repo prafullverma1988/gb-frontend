@@ -5580,9 +5580,27 @@ function TabAttendance({ project }) {
     const workers = workforce[labType] || [];
     // For subcon/vendor: match by date + type + selected id so each entity has independent rows
     const existing = labType==="subcon"
-      ? attRecs.find(r=>String(r.date||"").split("T")[0]===attDate && r.type===labType && String(r.subcon_id||r.subcon_name||"")===String(selSubconId))
+      ? (()=>{
+          const sc = subconLib.find(s=>String(s.id||s.name)===selSubconId);
+          const sName = sc?.name || sc?.company_name;
+          return attRecs.find(r=>{
+            if (String(r.date||"").split("T")[0] !== attDate || r.type !== labType) return false;
+            if (r.subcon_id && sc?.id && String(r.subcon_id) === String(sc.id)) return true;
+            if (r.subcon_name && sName && r.subcon_name === sName) return true;
+            return false;
+          });
+        })()
       : labType==="vendor"
-        ? attRecs.find(r=>String(r.date||"").split("T")[0]===attDate && r.type===labType && String(r.vendor_id||r.vendor_name||"")===String(selVendorId))
+        ? (()=>{
+            const vd = vendorLib.find(v=>String(v.id||v.name)===selVendorId);
+            const vName = vd?.name || vd?.company_name;
+            return attRecs.find(r=>{
+              if (String(r.date||"").split("T")[0] !== attDate || r.type !== labType) return false;
+              if (r.vendor_id && vd?.id && String(r.vendor_id) === String(vd.id)) return true;
+              if (r.vendor_name && vName && r.vendor_name === vName) return true;
+              return false;
+            });
+          })()
         : attRecs.find(r=>String(r.date||"").split("T")[0]===attDate && r.type===labType);
     if(mode==="name") {
       setTodayEntries(workers.map(w => {
@@ -5797,11 +5815,30 @@ function TabAttendance({ project }) {
     return <span style={{padding:"2px 7px",background:T.sltL,color:T.slt,borderRadius:20,fontSize:10,fontWeight:600,border:`1px solid ${T.b2}`}}>📋 Rate Card</span>;
   };
 
-  const historyRecs = attRecs.filter(r=>r.type===labType).sort((a,b)=>{
-    const ad = String(a.date||"").split("T")[0];
-    const bd = String(b.date||"").split("T")[0];
-    return bd.localeCompare(ad);
-  }).slice(0,14);
+  const historyRecs = (()=>{
+    let recs = attRecs.filter(r => r.type === labType);
+    // Filter by selected subcon/vendor for proper per-entity history
+    if (labType === "subcon" && selSubconId) {
+      const sc = subconLib.find(s=>String(s.id||s.name)===selSubconId);
+      const sName = sc?.name || sc?.company_name;
+      recs = recs.filter(r =>
+        (r.subcon_id && sc?.id && String(r.subcon_id) === String(sc.id)) ||
+        (r.subcon_name && sName && r.subcon_name === sName)
+      );
+    } else if (labType === "vendor" && selVendorId) {
+      const vd = vendorLib.find(v=>String(v.id||v.name)===selVendorId);
+      const vName = vd?.name || vd?.company_name;
+      recs = recs.filter(r =>
+        (r.vendor_id && vd?.id && String(r.vendor_id) === String(vd.id)) ||
+        (r.vendor_name && vName && r.vendor_name === vName)
+      );
+    }
+    return recs.sort((a,b)=>{
+      const ad = String(a.date||"").split("T")[0];
+      const bd = String(b.date||"").split("T")[0];
+      return bd.localeCompare(ad);
+    }).slice(0,14);
+  })();
 
   // placeholder — original code references below replaced by new render
   const [_unused] = useState(false);
@@ -9948,37 +9985,60 @@ function TaskSkeleton({gridTemplate}={}){
 
 // PROJECT DETAIL PAGE — SHELL
 // ═══════════════════════════════════════════════════════════════════
+
+// ── Tab icons (inline SVG, single path each) ──
+const TabIc = ({d, size=16, color="currentColor"}) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
+);
+const IcOverview  = (p) => <TabIc {...p} d="M3 12l2-2 4 4 6-6 6 6M3 21h18"/>;
+const IcDesign    = (p) => <TabIc {...p} d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/>;
+const IcEstimate  = (p) => <TabIc {...p} d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zM16 8H8m0 4h8m-8 4h5"/>;
+const IcParty     = (p) => <TabIc {...p} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/>;
+const IcTrans     = (p) => <TabIc {...p} d="M17 1l4 4-4 4M3 11V9a4 4 0 014-4h14M7 23l-4-4 4-4M21 13v2a4 4 0 01-4 4H3"/>;
+const IcTodo      = (p) => <TabIc {...p} d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>;
+const IcTask      = (p) => <TabIc {...p} d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>;
+const IcAttend    = (p) => <TabIc {...p} d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18m-9 4l2 2 4-4"/>;
+const IcMaterial  = (p) => <TabIc {...p} d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16zM3.27 6.96L12 12l8.73-5.04M12 22V12"/>;
+const IcSubcon    = (p) => <TabIc {...p} d="M2 18h20M4 18v-6a8 8 0 0116 0v6M12 4v2M9 5l1 2M15 5l-1 2"/>;
+const IcEquip     = (p) => <TabIc {...p} d="M1 3h15v13H1zM16 8h4l3 3v5h-7V8zM5.5 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3zM18.5 21a1.5 1.5 0 100-3 1.5 1.5 0 000 3z"/>;
+const IcFiles     = (p) => <TabIc {...p} d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM14 2v6h6M16 13H8M16 17H8M10 9H8"/>;
+const IcSite      = (p) => <TabIc {...p} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0"/>;
+const IcMOM       = (p) => <TabIc {...p} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>;
+const IcSolar     = (p) => <TabIc {...p} d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41M12 7a5 5 0 100 10 5 5 0 000-10z"/>;
+const IcSolarInst = (p) => <TabIc {...p} d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>;
+const IcSubsidy   = (p) => <TabIc {...p} d="M19 5L5 19M6.5 6.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3zM17.5 14.5a1.5 1.5 0 100 3 1.5 1.5 0 000-3z"/>;
+
 const TABS = [
-  {id:"overview",   label:"Overview",    key:"o"},
-  {id:"design",     label:"Design",      key:"d"},
-  {id:"estimate",   label:"Estimate",    key:"e"},
-  {id:"party",      label:"Party",       key:"p"},
-  {id:"transaction",label:"Transaction", key:"t"},
-  {id:"todo",       label:"To Do",       key:"k"},
-  {id:"task",       label:"Tasks",       key:"j"},
-  {id:"attendance", label:"Attendance",  key:"a"},
-  {id:"material",   label:"Material",    key:"m"},
-  {id:"subcon",     label:"Subcon",      key:"b"},
-  {id:"equipment",  label:"Equipment",   key:"q"},
-  {id:"files",      label:"Files",       key:"i"},
-  {id:"site",       label:"Site / DPR",  key:"y"},
-  {id:"mom",        label:"MOM",         key:"n"},
+  {id:"overview",   label:"Overview",    key:"o", Icon:IcOverview},
+  {id:"design",     label:"Design",      key:"d", Icon:IcDesign},
+  {id:"estimate",   label:"Estimate",    key:"e", Icon:IcEstimate},
+  {id:"party",      label:"Party",       key:"p", Icon:IcParty},
+  {id:"transaction",label:"Transaction", key:"t", Icon:IcTrans},
+  {id:"todo",       label:"To Do",       key:"k", Icon:IcTodo},
+  {id:"task",       label:"Tasks",       key:"j", Icon:IcTask},
+  {id:"attendance", label:"Attendance",  key:"a", Icon:IcAttend},
+  {id:"material",   label:"Material",    key:"m", Icon:IcMaterial},
+  {id:"subcon",     label:"Subcon",      key:"b", Icon:IcSubcon},
+  {id:"equipment",  label:"Equipment",   key:"q", Icon:IcEquip},
+  {id:"files",      label:"Files",       key:"i", Icon:IcFiles},
+  {id:"site",       label:"Site / DPR",  key:"y", Icon:IcSite},
+  {id:"mom",        label:"MOM",         key:"n", Icon:IcMOM},
 ];
 
 // ── SOLAR EPC TABS (only for project_type = 'solar_epc') ──────────
 const SOLAR_TABS = [
-  {id:"overview",      label:"Overview",        key:"o"},
-  {id:"solar_stages",  label:"Surya Ghar",      key:"s"},
-  {id:"solar_boq",     label:"BOQ / Quotation", key:"e"},
-  {id:"solar_install", label:"Installation",    key:"i"},
-  {id:"solar_subsidy", label:"Subsidy",         key:"u"},
-  {id:"material",      label:"Material",        key:"m"},
-  {id:"transaction",   label:"Finance",         key:"t"},
-  {id:"design",        label:"Design",          key:"d"},
-  {id:"party",         label:"Party",           key:"p"},
-  {id:"todo",          label:"To Do",           key:"k"},
-  {id:"task",          label:"Tasks",           key:"j"},
-  {id:"files",         label:"Files",           key:"f"},
+  {id:"overview",      label:"Overview",        key:"o", Icon:IcOverview},
+  {id:"solar_stages",  label:"Surya Ghar",      key:"s", Icon:IcSolar},
+  {id:"solar_boq",     label:"BOQ / Quotation", key:"e", Icon:IcEstimate},
+  {id:"solar_install", label:"Installation",    key:"i", Icon:IcSolarInst},
+  {id:"solar_subsidy", label:"Subsidy",         key:"u", Icon:IcSubsidy},
+  {id:"material",      label:"Material",        key:"m", Icon:IcMaterial},
+  {id:"transaction",   label:"Finance",         key:"t", Icon:IcTrans},
+  {id:"design",        label:"Design",          key:"d", Icon:IcDesign},
+  {id:"party",         label:"Party",           key:"p", Icon:IcParty},
+  {id:"todo",          label:"To Do",           key:"k", Icon:IcTodo},
+  {id:"task",          label:"Tasks",           key:"j", Icon:IcTask},
+  {id:"files",         label:"Files",           key:"f", Icon:IcFiles},
 ];
 
 // ──────────────────────────────────────────────────────────────────
@@ -11463,6 +11523,43 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   };
   useEffect(()=>{ loadApprovalCounts(); },[project?.id]);
 
+  // ── Layout mode (horizontal tabs vs sidebar) — synced with Settings ──
+  const [layoutMode, setLayoutMode] = useState(() => {
+    try { return localStorage.getItem("gb_project_layout") || "horizontal"; }
+    catch { return "horizontal"; }
+  });
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try { return localStorage.getItem("gb_project_sidebar_collapsed") === "1"; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    const onLayoutChange = (e) => setLayoutMode(e.detail || "horizontal");
+    const onStorageChange = (e) => {
+      if (e.key === "gb_project_layout") setLayoutMode(e.newValue || "horizontal");
+    };
+    window.addEventListener("gb-layout-change", onLayoutChange);
+    window.addEventListener("storage", onStorageChange);
+    return () => {
+      window.removeEventListener("gb-layout-change", onLayoutChange);
+      window.removeEventListener("storage", onStorageChange);
+    };
+  }, []);
+  const toggleSidebar = () => setSidebarCollapsed(c => {
+    const v = !c;
+    try { localStorage.setItem("gb_project_sidebar_collapsed", v ? "1" : "0"); } catch {}
+    return v;
+  });
+
+  // ── Broadcast "inside a project" so App shell can collapse its chrome in sidebar mode ──
+  useEffect(() => {
+    window.__gbInProject = true;
+    window.dispatchEvent(new Event("gb-project-state-change"));
+    return () => {
+      window.__gbInProject = false;
+      window.dispatchEvent(new Event("gb-project-state-change"));
+    };
+  }, []);
+
   const switchTab = (t) => setTab(t);
 
   // ── Ctrl+key tab shortcuts ──────────────────────────────────────
@@ -11509,7 +11606,138 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     solar_subsidy: <TabSolarSubsidy projectId={project.id}/>,
   };
 
-  return (
+  // ── Sidebar layout (Layout B) ──
+  const sidebarWidth = sidebarCollapsed ? 60 : 224;
+  const currentTabLabel = activeTabs.find(t => t.id === tab)?.label || "";
+  const sidebarLayout = (
+    <div style={{display:"flex", height:"100vh", overflow:"hidden", fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif", background:T.bg}}>
+      <style>{`.gb-sb-scroll::-webkit-scrollbar{width:4px}.gb-sb-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px}`}</style>
+
+      {/* ── PROJECT SIDEBAR ── */}
+      <aside style={{width:sidebarWidth, background:"#1E293B", color:"#fff", display:"flex", flexDirection:"column", flexShrink:0, transition:"width .2s ease", overflow:"hidden"}}>
+
+        {/* Header — back to projects (and dashboard via App nav) */}
+        <div style={{padding: sidebarCollapsed?"14px 0":"14px 14px", borderBottom:"1px solid rgba(255,255,255,.08)", display:"flex", alignItems:"center", justifyContent: sidebarCollapsed?"center":"flex-start", gap:10}}>
+          {onBack&&(
+            <button onClick={onBack} title="All Projects (Esc)" style={{display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6, padding: sidebarCollapsed?"6px":"6px 10px", border:"1px solid rgba(255,255,255,.15)", borderRadius:6, background:"rgba(255,255,255,.06)", color:"rgba(255,255,255,.8)", fontSize:11.5, fontWeight:500, cursor:"pointer", transition:"background .15s", width: sidebarCollapsed?32:"auto", height: sidebarCollapsed?32:"auto"}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.12)"}
+              onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.06)"}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+              {!sidebarCollapsed && <span>Projects</span>}
+            </button>
+          )}
+        </div>
+
+        {/* Project name + status */}
+        {!sidebarCollapsed && (
+          <div style={{padding:"14px 14px 12px", borderBottom:"1px solid rgba(255,255,255,.08)"}}>
+            <div title={project.name} style={{fontSize:14, fontWeight:700, color:"#fff", lineHeight:1.3, marginBottom:7, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{project.name}</div>
+            <Pill label={project.status} c={sm.c} bg={`rgba(255,255,255,.1)`}/>
+            {isSolar && <div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,color:"#FBBF24",background:"rgba(251,191,36,.12)",border:"1px solid rgba(251,191,36,.3)",borderRadius:4,padding:"2px 7px",letterSpacing:".3px"}}>☀ SOLAR EPC</span></div>}
+          </div>
+        )}
+
+        {/* Tab list */}
+        <nav className="gb-sb-scroll" style={{flex:1, overflowY:"auto", padding:"6px 0"}}>
+          {activeTabs.map(t=>{
+            const active = tab===t.id;
+            const Icon = t.Icon;
+            return (
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                title={`${t.label}  (Ctrl+${t.key.toUpperCase()})`}
+                style={{
+                  width:"100%", display:"flex", alignItems:"center", gap:12,
+                  padding: sidebarCollapsed ? "11px 0" : "9px 14px",
+                  justifyContent: sidebarCollapsed ? "center" : "flex-start",
+                  border:"none",
+                  background: active ? "rgba(37,99,235,.18)" : "transparent",
+                  borderLeft: active ? "3px solid #3B82F6" : "3px solid transparent",
+                  color: active ? "#fff" : "rgba(255,255,255,.65)",
+                  fontSize:13, fontWeight: active?600:450, cursor:"pointer", textAlign:"left",
+                  transition:"all .12s", fontFamily:"inherit",
+                }}
+                onMouseEnter={e=>{ if(!active) e.currentTarget.style.background="rgba(255,255,255,.05)"; }}
+                onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="transparent"; }}>
+                {Icon && <Icon size={17} color={active?"#fff":"rgba(255,255,255,.6)"}/>}
+                {!sidebarCollapsed && (
+                  <>
+                    <span style={{flex:1, whiteSpace:"nowrap"}}>{t.label}</span>
+                    <span style={{fontSize:9.5, color:"rgba(255,255,255,.32)", fontWeight:500}}>^{t.key.toUpperCase()}</span>
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </nav>
+
+        {/* Bottom — financial chips + progress + collapse */}
+        <div style={{borderTop:"1px solid rgba(255,255,255,.08)", flexShrink:0}}>
+          {!sidebarCollapsed && (
+            <div style={{padding:"12px 14px 6px"}}>
+              {approvalCount>0 && (
+                <div onClick={()=>setShowApprovalDrawer(true)}
+                  style={{background:"rgba(217,119,6,0.15)",border:"1px solid rgba(217,119,6,0.3)",borderRadius:7,padding:"7px 11px",cursor:"pointer",marginBottom:8,transition:"background .15s",display:"flex",alignItems:"center",justifyContent:"space-between"}}
+                  title="Click to view pending approvals"
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(217,119,6,0.28)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="rgba(217,119,6,0.15)"}>
+                  <span style={{fontSize:10,color:"rgba(255,255,255,.55)",textTransform:"uppercase",letterSpacing:".5px",fontWeight:600}}>Approvals</span>
+                  <span style={{fontSize:12,fontWeight:700,color:"#FBBF24",fontVariantNumeric:"tabular-nums"}}>{approvalCount} pending</span>
+                </div>
+              )}
+              {[["BOQ",`₹${fmt(project.boq)}`,"rgba(255,255,255,.85)"],["Spent",`₹${fmt(project.expense)}`,"#FBBF24"],["Margin",`₹${fmt(Math.abs(margin))}`,margin>=0?"#34D399":"#F87171"]].map(([l,v,vc])=>(
+                <div key={l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0"}}>
+                  <span style={{fontSize:10.5,color:"rgba(255,255,255,.45)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>{l}</span>
+                  <span style={{fontSize:12.5,fontWeight:700,color:vc,fontVariantNumeric:"tabular-nums"}}>{v}</span>
+                </div>
+              ))}
+              <div style={{marginTop:8, display:"flex", alignItems:"center", gap:8}}>
+                <div style={{flex:1, height:4, background:"rgba(255,255,255,.08)", borderRadius:3, overflow:"hidden"}}>
+                  <div style={{height:"100%", width:`${project.progress}%`, background:T.blu, borderRadius:3, transition:"width .6s"}}/>
+                </div>
+                <span style={{fontSize:10.5, fontWeight:700, color:"rgba(255,255,255,.7)", fontVariantNumeric:"tabular-nums", minWidth:28, textAlign:"right"}}>{project.progress}%</span>
+              </div>
+            </div>
+          )}
+          {/* Collapse toggle */}
+          <button onClick={toggleSidebar} title={sidebarCollapsed?"Expand sidebar":"Collapse sidebar"}
+            style={{width:"100%", padding:"8px 0", border:"none", borderTop:"1px solid rgba(255,255,255,.06)", background:"transparent", color:"rgba(255,255,255,.5)", cursor:"pointer", fontSize:11, fontWeight:600, display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"background .15s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.04)"}
+            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" style={{transform: sidebarCollapsed?"rotate(180deg)":"none", transition:"transform .2s"}}><path d="M15 18l-6-6 6-6"/></svg>
+            {!sidebarCollapsed && <span>Collapse</span>}
+          </button>
+        </div>
+      </aside>
+
+      {/* ── RIGHT: minimal top strip + content ── */}
+      <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden"}}>
+        {/* Top strip — minimalistic */}
+        <div style={{padding:"9px 20px", background:T.surface, borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", gap:14, flexShrink:0, minHeight:44}}>
+          <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", gap:10, overflow:"hidden"}}>
+            <span style={{fontSize:13, fontWeight:700, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{currentTabLabel}</span>
+            <span style={{fontSize:11.5, color:T.t4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>· {project.client||"—"} · {project.city||"—"} · PM: {project.pm||"—"}</span>
+          </div>
+          {approvalCount>0 && (
+            <button onClick={()=>setShowApprovalDrawer(true)}
+              style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",border:`1px solid ${T.ambM}`,borderRadius:20,background:T.ambL,color:T.amb,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"background .15s",flexShrink:0}}
+              onMouseEnter={e=>e.currentTarget.style.background="#FEF3C7"}
+              onMouseLeave={e=>e.currentTarget.style.background=T.ambL}>
+              <span style={{width:6,height:6,borderRadius:"50%",background:T.amb}}/>
+              {approvalCount} pending
+            </button>
+          )}
+        </div>
+
+        {/* Content */}
+        <div style={{flex:1, overflowY:"auto", background:T.bg}}>
+          {tabContent[tab]}
+        </div>
+      </div>
+    </div>
+  );
+
+  // ── Horizontal layout (Layout A — default) ──
+  const horizontalLayout = (
     <div style={{display:"flex", flexDirection:"column", height:"100vh", overflow:"hidden", fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif", background:T.bg}}>
 
       {/* ── HEADER ── */}
@@ -11580,12 +11808,17 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       <div style={{flex:1, overflowY:"auto", background:T.bg}}>
         {tabContent[tab]}
       </div>
+    </div>
+  );
 
+  return (
+    <>
+      {layoutMode === "sidebar" ? sidebarLayout : horizontalLayout}
       {/* ── PROJECT APPROVAL DRAWER ── */}
       {showApprovalDrawer&&(
         <ProjectApprovalDrawer projectId={project.id} projectName={project.name} onClose={()=>{setShowApprovalDrawer(false);loadApprovalCounts();}}/>
       )}
-    </div>
+    </>
   );
 }
 
