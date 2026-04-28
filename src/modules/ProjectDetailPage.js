@@ -5577,7 +5577,10 @@ function TabAttendance({ project }) {
     if(mode==="name") {
       setTodayEntries(workers.map(w => {
         const found = existing?.entries?.find(e=>e.worker_id===w.id||e.name===w.name);
-        return { worker_id:w.id, name:w.name, role:w.role, dailyRate:w.dailyRate||w.daily_rate||0, status:found?.status||"P", hours:found?.hours??8, ot:found?.ot||0, rateStatus:w.rateStatus||"card" };
+        // Default status = "" (unmarked) — user clicks P/A/H to mark each worker
+        return { worker_id:w.id, name:w.name, role:w.role, dailyRate:w.dailyRate||w.daily_rate||0,
+                 status:found?.status||"", hours:found?.hours??(found?.status==="A"?0:found?.status==="H"?4:8),
+                 ot:found?.ot||0, remark:found?.remark||"", rateStatus:w.rateStatus||"card" };
       }));
     } else {
       // For vendor: pre-fill from selected vendor's skill list (vendor-specific rates)
@@ -6016,27 +6019,31 @@ function TabAttendance({ project }) {
               ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle subcontractor select karo</span>
               :labType==="vendor"&&!selVendorId
               ?<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⬆ Pehle labour vendor select karo</span>
-              :!editingAtt
-                ?<div style={{display:"flex",gap:6}}>
-                    {labType==="company"&&currentWF.length>0&&(
-                      <button onClick={()=>{setTodayEntries(prev=>prev.map(e=>({...e,status:"P",hours:8}))); setEditingAtt(true); }}
-                        style={{padding:"5px 11px",borderRadius:6,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                        ✓ All Present
+              :(()=>{
+                const markedCount = todayEntries.filter(e=>e.status).length;
+                const total = todayEntries.length;
+                const allMarked = total>0 && markedCount===total;
+                return(
+                  <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                    <span style={{fontSize:11.5,color:T.t4,fontWeight:600}}>
+                      {markedCount}/{total} marked
+                    </span>
+                    {labType==="company"&&currentWF.length>0&&markedCount<total&&(
+                      <button onClick={()=>setTodayEntries(prev=>prev.map(e=>e.status?e:({...e,status:"P",hours:8})))}
+                        style={{padding:"6px 12px",borderRadius:6,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                        ✓ Mark Remaining Present
                       </button>
                     )}
-                    <button onClick={()=>setEditingAtt(true)}
-                      style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${TYPE_COLORS[labType]}`,background:TYPE_BG[labType],color:TYPE_COLORS[labType],fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-                      ✏️ Mark Attendance
-                    </button>
+                    {markedCount>0&&(
+                      <button onClick={saveAttendance} disabled={attSaving||!allMarked}
+                        title={!allMarked?"Mark all workers first":"Save attendance"}
+                        style={{padding:"7px 18px",borderRadius:7,border:"none",background:allMarked?TYPE_COLORS[labType]:"#ccc",color:"white",fontSize:12.5,fontWeight:700,cursor:allMarked?"pointer":"not-allowed",opacity:attSaving?.6:1,boxShadow:allMarked?`0 2px 8px ${TYPE_COLORS[labType]}55`:"none"}}>
+                        {attSaving?"Saving…":allMarked?`💾 Save (${total})`:`Mark all first`}
+                      </button>
+                    )}
                   </div>
-                :<>
-                  <button onClick={()=>setEditingAtt(false)}
-                    style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t3,fontSize:11.5,cursor:"pointer"}}>Cancel</button>
-                  <button onClick={saveAttendance} disabled={attSaving}
-                    style={{padding:"5px 14px",borderRadius:6,border:"none",background:TYPE_COLORS[labType],color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",opacity:attSaving?.6:1}}>
-                    {attSaving?"Saving…":"Save"}
-                  </button>
-                </>
+                );
+              })()
             }
           </div>
         </div>
@@ -6046,81 +6053,97 @@ function TabAttendance({ project }) {
           currentWF.length===0
             ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>Register workforce first to mark name-wise attendance.</div>
             :<div>
-              <THead cols="2fr 1fr 130px 75px 65px 95px" headers={["Name","Role","Status","Hours","OT","Daily Rate"]}/>
-              {todayEntries.map((e,idx)=>(
+              <THead cols="2fr 1fr 200px 80px 70px 95px 60px" headers={["Name","Role","Status","Hours","OT","Daily Rate","Action"]}/>
+              {todayEntries.map((e,idx)=>{
+                const isLocked = !!e.status;
+                const borderColor = e.status==="P"?T.grn:e.status==="H"?T.amb:e.status==="A"?T.red:T.b1;
+                const bgTint = e.status==="P"?T.grnL+"55":e.status==="H"?T.ambL+"55":e.status==="A"?T.redL+"55":"transparent";
+                return(
                 <div key={idx}>
-                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 180px 80px 70px 95px",padding:"12px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`4px solid ${e.status==="P"?T.grn:e.status==="H"?T.amb:T.red}`,background:e.status==="P"?T.grnL+"55":e.status==="H"?T.ambL+"55":e.status==="A"?T.redL+"55":"transparent",transition:"background .15s"}}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 200px 80px 70px 95px 60px",padding:"12px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`4px solid ${borderColor}`,background:bgTint,transition:"all .2s"}}>
                   <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{e.name}</span>
                   <span style={{fontSize:12,color:T.t3}}>{e.role}</span>
-                  {editingAtt
-                    ?<div style={{display:"flex",gap:6}}>
-                      {[
-                        {s:"P", label:"Present",  c:T.grn, bg:T.grnL, m:T.grnM},
-                        {s:"A", label:"Absent",   c:T.red, bg:T.redL, m:T.redM},
-                        {s:"H", label:"Half",     c:T.amb, bg:T.ambL, m:T.ambM},
-                      ].map(opt=>{
-                        const active = e.status === opt.s;
-                        return(
-                          <button key={opt.s}
-                            onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{
-                              ...en,status:opt.s,
-                              hours:opt.s==="P"?8:opt.s==="H"?4:0,
-                              remark: opt.s==="A" ? (en.remark||"") : "",
-                            }:en))}
-                            style={{
-                              padding:"7px 13px",borderRadius:8,
-                              border:`2px solid ${active?opt.c:opt.m}`,
-                              background:active?opt.c:opt.bg,
-                              color:active?"white":opt.c,
-                              fontSize:12,fontWeight:700,cursor:"pointer",
-                              minWidth:46,
-                              boxShadow:active?`0 2px 6px ${opt.c}55, inset 0 1px 0 rgba(255,255,255,0.2)`:"none",
-                              transform:active?"scale(1.05)":"scale(1)",
-                              transition:"all .15s cubic-bezier(.2,.9,.3,1.2)",
-                            }}
-                            onMouseEnter={el=>{ if(!active){el.currentTarget.style.background=opt.c+"22"; el.currentTarget.style.transform="scale(1.03)";} }}
-                            onMouseLeave={el=>{ if(!active){el.currentTarget.style.background=opt.bg; el.currentTarget.style.transform="scale(1)";} }}
-                            onMouseDown={el=>{ el.currentTarget.style.transform="scale(0.95)"; }}
-                            onMouseUp={el=>{ el.currentTarget.style.transform=active?"scale(1.05)":"scale(1.03)"; }}>
-                            {opt.s}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    :<Pill label={e.status==="P"?"Present":e.status==="H"?"Half Day":"Absent"} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
+
+                  {/* Status buttons OR locked badge */}
+                  <div style={{display:"flex",gap:6}}>
+                    {[
+                      {s:"P", label:"Present",  c:T.grn, bg:T.grnL, m:T.grnM},
+                      {s:"A", label:"Absent",   c:T.red, bg:T.redL, m:T.redM},
+                      {s:"H", label:"Half",     c:T.amb, bg:T.ambL, m:T.ambM},
+                    ].map(opt=>{
+                      const active = e.status === opt.s;
+                      const dimmed = isLocked && !active; // locked: only show active button styled, others gray
+                      return(
+                        <button key={opt.s} disabled={isLocked && !active}
+                          onClick={()=>{ if(isLocked) return; setTodayEntries(prev=>prev.map((en,i)=>i===idx?{
+                            ...en, status:opt.s,
+                            hours: opt.s==="P"?8:opt.s==="H"?4:0,
+                            remark: opt.s==="A" ? (en.remark||"") : "",
+                          }:en)); }}
+                          style={{
+                            padding:"7px 13px",borderRadius:8,
+                            border: active?`2px solid ${opt.c}`:`1.5px solid ${dimmed?"#E5E7EB":"#CBD5E1"}`,
+                            background: active?opt.c:(dimmed?"#F3F4F6":"#F8FAFC"),
+                            color: active?"white":(dimmed?"#94A3B8":"#475569"),
+                            fontSize:12,fontWeight:700,
+                            cursor: isLocked ? "default" : "pointer",
+                            minWidth:50,
+                            boxShadow: active?`0 2px 8px ${opt.c}55`:"none",
+                            transform: active?"scale(1.06)":"scale(1)",
+                            transition:"all .18s cubic-bezier(.2,.9,.3,1.2)",
+                            opacity: dimmed?0.5:1,
+                          }}
+                          onMouseEnter={el=>{ if(!isLocked&&!active){el.currentTarget.style.background=opt.c+"15"; el.currentTarget.style.borderColor=opt.c; el.currentTarget.style.color=opt.c; el.currentTarget.style.transform="scale(1.04)";} }}
+                          onMouseLeave={el=>{ if(!isLocked&&!active){el.currentTarget.style.background="#F8FAFC"; el.currentTarget.style.borderColor="#CBD5E1"; el.currentTarget.style.color="#475569"; el.currentTarget.style.transform="scale(1)";} }}
+                          onMouseDown={el=>{ if(!isLocked) el.currentTarget.style.transform="scale(0.94)"; }}
+                          onMouseUp={el=>{ if(!isLocked) el.currentTarget.style.transform=active?"scale(1.06)":"scale(1.04)"; }}>
+                          {opt.s}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Hours */}
+                  {isLocked
+                    ?<input type="number" value={e.hours} min={0} max={14} disabled
+                        style={{width:60,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center",background:T.surfaceB,color:T.t2,opacity:e.status==="A"?.5:1}}/>
+                    :<span style={{fontSize:11.5,color:T.t4,textAlign:"center"}}>—</span>
                   }
-                  {editingAtt
-                    ?<input type="number" value={e.hours} min={0} max={14}
-                        onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,hours:Number(el.target.value)}:en))}
-                        style={{width:60,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center"}}/>
-                    :<span style={{fontSize:12.5,color:e.status!=="A"?T.t1:T.t4}}>{e.hours>0?`${e.hours}h`:"—"}</span>
-                  }
-                  {editingAtt
+                  {/* OT */}
+                  {isLocked && e.status!=="A"
                     ?<input type="number" value={e.ot||0} min={0} max={6}
                         onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,ot:Number(el.target.value)}:en))}
                         style={{width:55,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center"}}/>
-                    :<span style={{fontSize:12,color:T.t4}}>{e.ot>0?`${e.ot}h`:"—"}</span>
+                    :<span style={{fontSize:12,color:T.t4,textAlign:"center"}}>—</span>
                   }
                   <span style={{fontSize:12,color:T.t2,fontWeight:600}}>₹{e.dailyRate||0}</span>
+
+                  {/* Edit/Lock indicator */}
+                  {isLocked
+                    ?<button onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,status:"",hours:0,ot:0,remark:""}:en))}
+                        title="Edit / change status"
+                        style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${T.b2}`,background:"white",color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}
+                        onMouseEnter={el=>{el.currentTarget.style.background=T.bluL; el.currentTarget.style.color=T.blu; el.currentTarget.style.borderColor=T.blu;}}
+                        onMouseLeave={el=>{el.currentTarget.style.background="white"; el.currentTarget.style.color=T.t3; el.currentTarget.style.borderColor=T.b2;}}>
+                        ✏️ Edit
+                      </button>
+                    :<span style={{fontSize:10,color:T.t4,fontWeight:600,textAlign:"center"}}>Pending</span>
+                  }
                 </div>
-                {/* Remark row for absent */}
-                {editingAtt && e.status==="A" && (
-                  <div style={{padding:"4px 15px 10px",borderBottom:`1px solid ${T.b1}`,background:T.redL+"33",borderLeft:`4px solid ${T.red}`}}>
+                {/* Remark for absent — only when locked as A */}
+                {isLocked && e.status==="A" && (
+                  <div style={{padding:"4px 15px 10px",borderBottom:`1px solid ${T.b1}`,background:T.redL+"22",borderLeft:`4px solid ${T.red}`}}>
                     <input type="text" value={e.remark||""}
                       onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,remark:el.target.value}:en))}
-                      placeholder="📝 Reason for absence (optional) — e.g. sick leave, personal work, no show"
+                      placeholder="📝 Reason for absence (optional) — sick leave, personal work, no show"
                       style={{width:"100%",padding:"7px 11px",borderRadius:6,border:`1.5px solid ${T.redM}`,background:"white",fontSize:12,color:T.t2,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}
                       onFocus={el=>el.target.style.borderColor=T.red}
                       onBlur={el=>el.target.style.borderColor=T.redM}/>
                   </div>
                 )}
-                {!editingAtt && e.status==="A" && e.remark && (
-                  <div style={{padding:"3px 15px 8px",borderBottom:`1px solid ${T.b1}`,background:T.redL+"22",borderLeft:`4px solid ${T.red}`,fontSize:11,color:T.t3,fontStyle:"italic"}}>
-                    📝 {e.remark}
-                  </div>
-                )}
                 </div>
-              ))}
+                );
+              })}
             </div>
         )}
 
