@@ -2176,18 +2176,34 @@ function DailyWagesSettingsTab(){
   useEffect(()=>{ loadRates(); },[]);
 
   const updateRate=async(item,newRate)=>{
+    if(Number(newRate)===Number(item.rate)) return;
+    const reason=window.prompt("Base rate change reason (optional):", "Quarterly review");
+    if(reason===null) { return; } // user cancelled
     setSavingRow(item.id);
     try{
-      const res=await api.put("/library/labour-rates/"+item.id,{
-        ...item, rate:Number(newRate)||0,
+      const res=await api.post("/library/labour-rates/"+item.id+"/request-change",{
+        requested_rate:Number(newRate)||0,
+        reason: reason || "Base rate update",
       });
       if(res.success){
-        setRates(prev=>prev.map(r=>r.id===item.id?{...r,rate:Number(newRate)||0}:r));
-        setSavedMsg("Updated "+item.role+" → ₹"+newRate);
-        setTimeout(()=>setSavedMsg(""),1500);
+        setSavedMsg("Approval submitted: "+item.role+" → ₹"+newRate+" (Pending admin)");
+        setTimeout(()=>setSavedMsg(""),3000);
+      } else {
+        alert(res.message || "Failed to submit");
+        loadRates(); // reset displayed value
       }
-    }catch(e){}
+    }catch(e){ alert("Error: "+e.message); loadRates(); }
     setSavingRow(null);
+  };
+
+  const dedupe=async()=>{
+    if(!window.confirm("Duplicate skills hata du? (Same role+category waale rakhe ek)")) return;
+    const res=await api.post("/library/labour-rates/dedupe");
+    if(res.success){
+      setSavedMsg(`✓ Cleaned up — kept ${res.data.kept}, removed ${res.data.deduped} duplicates`);
+      setTimeout(()=>setSavedMsg(""),3000);
+      loadRates();
+    }
   };
 
   const saveCycle=()=>{
@@ -2199,11 +2215,20 @@ function DailyWagesSettingsTab(){
   return(
     <div style={{maxWidth:760}}>
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:18,marginBottom:14}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4,flexWrap:"wrap",gap:8}}>
           <div style={{fontSize:14,fontWeight:800,color:T.t1}}>Default Rates by Skill</div>
-          <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,border:`1px solid ${T.bluM}`}}>📋 Synced with Library → Labour Rate Card</span>
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,border:`1px solid ${T.bluM}`}}>📋 Synced with Library</span>
+            {rates.length>0&&(
+              <button onClick={dedupe} style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${T.amb}`,background:T.ambL,color:T.amb,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
+                🧹 Remove Duplicates
+              </button>
+            )}
+          </div>
         </div>
-        <div style={{fontSize:11,color:T.t4,marginBottom:14}}>Yahan rates change karoge → Library aur Project attendance dono mein turant reflect ho jayega.</div>
+        <div style={{fontSize:11,color:T.amb,marginBottom:14,padding:"6px 10px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6}}>
+          ⚠️ Base rates hain ye — change karne ke liye <b>admin approval</b> chahiye. Approvals drawer → Finance tab pe approve karna padega.
+        </div>
         {loading
           ? <div style={{padding:"20px 0",textAlign:"center",color:T.t4,fontSize:12}}>Loading rates from library…</div>
           : rates.length===0
