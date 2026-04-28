@@ -6089,11 +6089,15 @@ function TabAttendance({ project }) {
                         ✓ Mark Remaining Present
                       </button>
                     )}
-                    {savedRec&&(
-                      <button onClick={clearDate}
-                        title="Delete attendance for this date (also removes from Payroll)"
-                        style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${T.redM}`,background:"white",color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                        🗑 Clear Date
+                    {savedRec&&!isDirty&&(
+                      <button onClick={()=>{
+                        // Unfreeze: enable editing by clearing all statuses
+                        if(!window.confirm("Edit attendance for this date? Tum sab P/A/H phir se mark kar sakoge.")) return;
+                        setTodayEntries(prev=>prev.map(e=>({...e,status:"",hours:0,ot:0,remark:""})));
+                      }}
+                        title="Re-mark attendance for this date"
+                        style={{padding:"6px 12px",borderRadius:6,border:`1.5px solid ${T.blu}`,background:T.bluL,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                        ✏️ Edit Attendance
                       </button>
                     )}
                     {markedCount>0&&(
@@ -6111,10 +6115,33 @@ function TabAttendance({ project }) {
         </div>
 
         {/* NAME-WISE VIEW */}
-        {mode==="name"&&(
-          currentWF.length===0
+        {mode==="name"&&(()=>{
+          // Compute saved/dirty state for this date
+          const savedRec2 = attRecs.find(r=>{
+            const recDate = String(r.date||"").split("T")[0];
+            return recDate===attDate&&r.type===labType&&!r.subcon_id&&!r.vendor_id;
+          });
+          const isDirty2 = (()=>{
+            if (!savedRec2) return todayEntries.some(e=>e.status);
+            const savedById = {};
+            (savedRec2.entries||[]).forEach(s => { savedById[s.worker_id||s.name] = s; });
+            for (const e of todayEntries) {
+              const s = savedById[e.worker_id||e.name];
+              if (!s) return e.status ? true : false;
+              if ((s.status||"")!==(e.status||"") || (Number(s.hours)||0)!==(Number(e.hours)||0) ||
+                  (Number(s.ot)||0)!==(Number(e.ot)||0) || (s.remark||"")!==(e.remark||"")) return true;
+            }
+            return false;
+          })();
+          const isFrozen = !!savedRec2 && !isDirty2;
+          return currentWF.length===0
             ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>Register workforce first to mark name-wise attendance.</div>
             :<div>
+              {isFrozen&&(
+                <div style={{padding:"8px 15px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`,fontSize:11.5,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+                  🔒 Attendance saved & locked. Click "Edit Attendance" above to make changes.
+                </div>
+              )}
               <THead cols="2fr 1fr 200px 80px 70px 95px 60px" headers={["Name","Role","Status","Hours","OT","Daily Rate","Action"]}/>
               {todayEntries.map((e,idx)=>{
                 const isLocked = !!e.status;
@@ -6126,44 +6153,50 @@ function TabAttendance({ project }) {
                   <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{e.name}</span>
                   <span style={{fontSize:12,color:T.t3}}>{e.role}</span>
 
-                  {/* Status buttons OR locked badge */}
-                  <div style={{display:"flex",gap:6}}>
-                    {[
-                      {s:"P", label:"Present",  c:T.grn, bg:T.grnL, m:T.grnM},
-                      {s:"A", label:"Absent",   c:T.red, bg:T.redL, m:T.redM},
-                      {s:"H", label:"Half",     c:T.amb, bg:T.ambL, m:T.ambM},
-                    ].map(opt=>{
-                      const active = e.status === opt.s;
-                      const dimmed = isLocked && !active; // locked: only show active button styled, others gray
-                      return(
-                        <button key={opt.s} disabled={isLocked && !active}
-                          onClick={()=>{ if(isLocked) return; setTodayEntries(prev=>prev.map((en,i)=>i===idx?{
-                            ...en, status:opt.s,
-                            hours: opt.s==="P"?8:opt.s==="H"?4:0,
-                            remark: opt.s==="A" ? (en.remark||"") : "",
-                          }:en)); }}
-                          style={{
-                            padding:"7px 13px",borderRadius:8,
-                            border: active?`2px solid ${opt.c}`:`1.5px solid ${dimmed?"#E5E7EB":"#CBD5E1"}`,
-                            background: active?opt.c:(dimmed?"#F3F4F6":"#F8FAFC"),
-                            color: active?"white":(dimmed?"#94A3B8":"#475569"),
-                            fontSize:12,fontWeight:700,
-                            cursor: isLocked ? "default" : "pointer",
-                            minWidth:50,
-                            boxShadow: active?`0 2px 8px ${opt.c}55`:"none",
-                            transform: active?"scale(1.06)":"scale(1)",
-                            transition:"all .18s cubic-bezier(.2,.9,.3,1.2)",
-                            opacity: dimmed?0.5:1,
-                          }}
-                          onMouseEnter={el=>{ if(!isLocked&&!active){el.currentTarget.style.background=opt.c+"15"; el.currentTarget.style.borderColor=opt.c; el.currentTarget.style.color=opt.c; el.currentTarget.style.transform="scale(1.04)";} }}
-                          onMouseLeave={el=>{ if(!isLocked&&!active){el.currentTarget.style.background="#F8FAFC"; el.currentTarget.style.borderColor="#CBD5E1"; el.currentTarget.style.color="#475569"; el.currentTarget.style.transform="scale(1)";} }}
-                          onMouseDown={el=>{ if(!isLocked) el.currentTarget.style.transform="scale(0.94)"; }}
-                          onMouseUp={el=>{ if(!isLocked) el.currentTarget.style.transform=active?"scale(1.06)":"scale(1.04)"; }}>
-                          {opt.s}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {/* Status — pill when frozen, buttons when editing */}
+                  {isFrozen ? (
+                    <Pill label={e.status==="P"?"✓ Present":e.status==="H"?"½ Half Day":"✗ Absent"}
+                      c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red}
+                      bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
+                  ) : (
+                    <div style={{display:"flex",gap:6}}>
+                      {[
+                        {s:"P", label:"Present",  c:T.grn, bg:T.grnL, m:T.grnM},
+                        {s:"A", label:"Absent",   c:T.red, bg:T.redL, m:T.redM},
+                        {s:"H", label:"Half",     c:T.amb, bg:T.ambL, m:T.ambM},
+                      ].map(opt=>{
+                        const active = e.status === opt.s;
+                        const dimmed = isLocked && !active;
+                        return(
+                          <button key={opt.s} disabled={isLocked && !active}
+                            onClick={()=>{ if(isLocked) return; setTodayEntries(prev=>prev.map((en,i)=>i===idx?{
+                              ...en, status:opt.s,
+                              hours: opt.s==="P"?8:opt.s==="H"?4:0,
+                              remark: opt.s==="A" ? (en.remark||"") : "",
+                            }:en)); }}
+                            style={{
+                              padding:"7px 13px",borderRadius:8,
+                              border: active?`2px solid ${opt.c}`:`1.5px solid ${dimmed?"#E5E7EB":"#CBD5E1"}`,
+                              background: active?opt.c:(dimmed?"#F3F4F6":"#F8FAFC"),
+                              color: active?"white":(dimmed?"#94A3B8":"#475569"),
+                              fontSize:12,fontWeight:700,
+                              cursor: isLocked ? "default" : "pointer",
+                              minWidth:50,
+                              boxShadow: active?`0 2px 8px ${opt.c}55`:"none",
+                              transform: active?"scale(1.06)":"scale(1)",
+                              transition:"all .18s cubic-bezier(.2,.9,.3,1.2)",
+                              opacity: dimmed?0.5:1,
+                            }}
+                            onMouseEnter={el=>{ if(!isLocked&&!active){el.currentTarget.style.background=opt.c+"15"; el.currentTarget.style.borderColor=opt.c; el.currentTarget.style.color=opt.c; el.currentTarget.style.transform="scale(1.04)";} }}
+                            onMouseLeave={el=>{ if(!isLocked&&!active){el.currentTarget.style.background="#F8FAFC"; el.currentTarget.style.borderColor="#CBD5E1"; el.currentTarget.style.color="#475569"; el.currentTarget.style.transform="scale(1)";} }}
+                            onMouseDown={el=>{ if(!isLocked) el.currentTarget.style.transform="scale(0.94)"; }}
+                            onMouseUp={el=>{ if(!isLocked) el.currentTarget.style.transform=active?"scale(1.06)":"scale(1.04)"; }}>
+                            {opt.s}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
 
                   {/* Hours — editable when locked (except absent) */}
                   {isLocked && e.status!=="A"
@@ -6184,15 +6217,15 @@ function TabAttendance({ project }) {
                   <span style={{fontSize:12,color:T.t2,fontWeight:600}}>₹{e.dailyRate||0}</span>
 
                   {/* Edit/Lock indicator */}
-                  {isLocked
-                    ?<button onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,status:"",hours:0,ot:0,remark:""}:en))}
-                        title="Edit / change status"
-                        style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${T.b2}`,background:"white",color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}
-                        onMouseEnter={el=>{el.currentTarget.style.background=T.bluL; el.currentTarget.style.color=T.blu; el.currentTarget.style.borderColor=T.blu;}}
-                        onMouseLeave={el=>{el.currentTarget.style.background="white"; el.currentTarget.style.color=T.t3; el.currentTarget.style.borderColor=T.b2;}}>
-                        ✏️ Edit
-                      </button>
-                    :<span style={{fontSize:10,color:T.t4,fontWeight:600,textAlign:"center"}}>Pending</span>
+                  {isFrozen
+                    ?<span style={{fontSize:14,color:T.grn,textAlign:"center"}} title="Saved & locked">🔒</span>
+                    :isLocked
+                      ?<button onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,status:"",hours:0,ot:0,remark:""}:en))}
+                          title="Edit / change status"
+                          style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${T.b2}`,background:"white",color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                          ✏️ Edit
+                        </button>
+                      :<span style={{fontSize:10,color:T.t4,fontWeight:600,textAlign:"center"}}>Pending</span>
                   }
                 </div>
                 {/* Remark for absent — only when locked as A */}
@@ -6209,8 +6242,8 @@ function TabAttendance({ project }) {
                 </div>
                 );
               })}
-            </div>
-        )}
+            </div>;
+        })()}
 
         {/* COUNT-WISE VIEW */}
         {mode==="count"&&(
