@@ -5494,6 +5494,11 @@ function TabAttendance({ project }) {
   const [subconSkills, setSubconSkills] = useState([]);
   const [newSkillInput, setNewSkillInput] = useState("");
   const [skillSaving, setSkillSaving] = useState(false);
+  // Skills picker drawer
+  const [showSkillDrawer, setShowSkillDrawer] = useState(false);
+  const [drawerSelected, setDrawerSelected] = useState(new Set());
+  const [drawerSearch, setDrawerSearch] = useState("");
+  const [drawerNewSkill, setDrawerNewSkill] = useState("");
   // History expand state
   const [expandedHistIdx, setExpandedHistIdx] = useState(null);
   // Add/Edit Labour Vendor modal state
@@ -6264,84 +6269,44 @@ function TabAttendance({ project }) {
             {/* ── SUBCON: skill catalog + count per skill ── */}
             {labType==="subcon" && selSubconId && (
               <>
-                {/* Empty state — first time setup */}
+                {/* Header with Manage Skills button */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,paddingBottom:8,borderBottom:`1.5px solid ${T.b1}`}}>
+                  <div>
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Skills supplied by this subcontractor</div>
+                    <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{subconSkills.length} skill{subconSkills.length!==1?"s":""} configured</div>
+                  </div>
+                  <button onClick={()=>{
+                      setDrawerSelected(new Set(subconSkills.map(s=>s.skill)));
+                      setDrawerSearch("");
+                      setDrawerNewSkill("");
+                      setShowSkillDrawer(true);
+                    }}
+                    style={{padding:"7px 14px",borderRadius:7,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                    Manage Skills
+                  </button>
+                </div>
+
                 {subconSkills.length===0 ? (
-                  <div style={{padding:"22px 18px",border:`1.5px dashed ${T.grn}`,borderRadius:10,background:T.grnL+"33",textAlign:"center"}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:5}}>🎯 First time setup</div>
-                    <div style={{fontSize:11.5,color:T.t3,marginBottom:14}}>Is subcontractor ke saath kaunsi skills supply hoti hain? Add karo — phir har din attendance count mark kar sakoge.</div>
-                    <div style={{display:"flex",gap:7,justifyContent:"center",alignItems:"center",flexWrap:"wrap"}}>
-                      <select value={newSkillInput} onChange={e=>setNewSkillInput(e.target.value)}
-                        style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",background:"white",fontFamily:"inherit"}}>
-                        <option value="">— Select skill —</option>
-                        {ROLES.filter(r=>r!=="Other").map(r=><option key={r} value={r}>{r}</option>)}
-                      </select>
-                      <button onClick={async()=>{
-                        if(!newSkillInput) return;
-                        setSkillSaving(true);
-                        const res=await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:newSkillInput});
-                        if(res.success){ setSubconSkills(p=>[...p,res.data]); setNewSkillInput(""); }
-                        else if(res.message) alert(res.message);
-                        setSkillSaving(false);
-                      }} disabled={!newSkillInput||skillSaving}
-                        style={{padding:"8px 16px",borderRadius:7,border:"none",background:newSkillInput?T.grn:"#ccc",color:"white",fontSize:12.5,fontWeight:700,cursor:newSkillInput?"pointer":"not-allowed"}}>
-                        {skillSaving?"Adding…":"+ Add Skill"}
-                      </button>
-                    </div>
+                  <div style={{padding:"30px 18px",textAlign:"center",border:`1.5px dashed ${T.b1}`,borderRadius:10,background:T.surfaceB}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:5}}>🎯 No skills configured yet</div>
+                    <div style={{fontSize:11.5,color:T.t3,marginBottom:14}}>Click <b>"Manage Skills"</b> above to setup what this subcontractor supplies.</div>
                   </div>
                 ) : (
                   <>
                     {/* Header */}
-                    <div style={{display:"grid",gridTemplateColumns:"2fr 110px 32px",gap:10,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
+                    <div style={{display:"grid",gridTemplateColumns:"2fr 130px",gap:10,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
                       <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>Skill</div>
                       <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",textAlign:"center"}}>Count Today</div>
-                      <div/>
                     </div>
-                    {todayCountRows.map((row,i)=>{
-                      const skillEntry = subconSkills.find(s=>s.skill===row.role);
-                      return(
-                        <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 110px 32px",gap:10,marginBottom:8,alignItems:"center",padding:"6px 0",borderBottom:`1px dashed ${T.b1}`}}>
-                          <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{row.role}</span>
-                          <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
-                            onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
-                            style={{padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.grnM}`,fontSize:14,fontWeight:700,color:T.grn,outline:"none",fontFamily:"inherit",background:T.grnL,opacity:editingAtt?1:.75,boxSizing:"border-box",textAlign:"center"}}/>
-                          {editingAtt && skillEntry
-                            ?<button onClick={async()=>{
-                                if(!window.confirm(`"${row.role}" skill remove karenge from this subcon?`)) return;
-                                await api.del("/labour-vendors/subcon-skills/"+selSubconId+"/"+skillEntry.id);
-                                setSubconSkills(prev=>prev.filter(s=>s.id!==skillEntry.id));
-                                setTodayCountRows(prev=>prev.filter((_,idx)=>idx!==i));
-                              }}
-                              title="Remove skill from this subcon"
-                              style={{width:28,height:28,borderRadius:6,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,cursor:"pointer",fontSize:14,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
-                            :<div/>
-                          }
-                        </div>
-                      );
-                    })}
-                    {/* Add new skill inline */}
-                    {editingAtt && (
-                      <div style={{display:"flex",gap:7,marginTop:10,alignItems:"center",padding:"8px 10px",background:T.surfaceB,borderRadius:7,border:`1px dashed ${T.b1}`}}>
-                        <select value={newSkillInput} onChange={e=>setNewSkillInput(e.target.value)}
-                          style={{flex:1,padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",background:"white",fontFamily:"inherit"}}>
-                          <option value="">+ Add another skill</option>
-                          {ROLES.filter(r=>r!=="Other"&&!subconSkills.some(s=>s.skill===r)).map(r=><option key={r} value={r}>{r}</option>)}
-                        </select>
-                        <button onClick={async()=>{
-                          if(!newSkillInput) return;
-                          setSkillSaving(true);
-                          const res=await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:newSkillInput});
-                          if(res.success){
-                            setSubconSkills(p=>[...p,res.data]);
-                            setTodayCountRows(prev=>[...prev,{role:newSkillInput,present:0,count:0,rate:0}]);
-                            setNewSkillInput("");
-                          } else if(res.message) alert(res.message);
-                          setSkillSaving(false);
-                        }} disabled={!newSkillInput||skillSaving}
-                          style={{padding:"7px 14px",borderRadius:6,border:"none",background:newSkillInput?T.grn:"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:newSkillInput?"pointer":"not-allowed"}}>
-                          {skillSaving?"…":"Add"}
-                        </button>
+                    {todayCountRows.map((row,i)=>(
+                      <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 130px",gap:10,marginBottom:8,alignItems:"center",padding:"8px 0",borderBottom:`1px dashed ${T.b1}`}}>
+                        <span style={{fontSize:13.5,fontWeight:600,color:T.t1}}>{row.role}</span>
+                        <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
+                          onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
+                          style={{padding:"9px 10px",borderRadius:7,border:`1.5px solid ${T.grnM}`,fontSize:15,fontWeight:700,color:T.grn,outline:"none",fontFamily:"inherit",background:T.grnL,opacity:editingAtt?1:.75,boxSizing:"border-box",textAlign:"center"}}/>
                       </div>
-                    )}
+                    ))}
                     {!editingAtt && todayCountRows.every(r=>!r.present) && (
                       <div style={{textAlign:"center",color:T.t4,fontSize:12.5,padding:"18px 0"}}>No count marked yet. Click "Mark Attendance" to enter.</div>
                     )}
@@ -6349,9 +6314,9 @@ function TabAttendance({ project }) {
                     {!editingAtt && todayCountRows.some(r=>r.present>0) && (()=>{
                       const total = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0),0);
                       return(
-                        <div style={{marginTop:10,padding:"10px 14px",background:T.grnL,border:`1.5px solid ${T.grnM}`,borderRadius:7,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                          <div style={{fontSize:11.5,color:T.grn,fontWeight:700}}>TOTAL LABOUR (TODAY)</div>
-                          <div style={{fontSize:18,fontWeight:800,color:T.grn}}>{total}</div>
+                        <div style={{marginTop:10,padding:"12px 14px",background:T.grnL,border:`1.5px solid ${T.grnM}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                          <div style={{fontSize:11.5,color:T.grn,fontWeight:700,letterSpacing:".4px"}}>TOTAL LABOUR (TODAY)</div>
+                          <div style={{fontSize:20,fontWeight:800,color:T.grn}}>{total}</div>
                         </div>
                       );
                     })()}
@@ -6724,6 +6689,126 @@ function TabAttendance({ project }) {
                 {wfSaving?"Adding…":"Add to Workforce"}
               </button>
             </div>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── SKILLS LIBRARY DRAWER (right-side slide-in picker) ─────── */}
+      {showSkillDrawer && labType==="subcon" && selSubconId && (<>
+        <div onClick={()=>setShowSkillDrawer(false)}
+          style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:0,right:0,bottom:0,width:460,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 32px rgba(0,0,0,0.18)",zIndex:301,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .25s ease-out"}}>
+          <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+
+          {/* Header */}
+          <div style={{padding:"16px 20px",borderBottom:`2px solid ${T.grn}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <button onClick={()=>setShowSkillDrawer(false)}
+              style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:6,display:"flex",borderRadius:6}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+              onMouseLeave={e=>e.currentTarget.style.background="none"}>
+              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.t1,letterSpacing:".3px"}}>SKILLS LIBRARY</div>
+            <button onClick={async()=>{
+                setSkillSaving(true);
+                const existingSkills = new Set(subconSkills.map(s=>s.skill));
+                const toAdd = [...drawerSelected].filter(s=>!existingSkills.has(s));
+                const toRemove = subconSkills.filter(s=>!drawerSelected.has(s.skill));
+                // Add new
+                for (const sk of toAdd) {
+                  try {
+                    const r = await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:sk});
+                    if(r.success) setSubconSkills(p=>[...p,r.data]);
+                  } catch(_){}
+                }
+                // Remove unchecked
+                for (const sk of toRemove) {
+                  try {
+                    await api.del("/labour-vendors/subcon-skills/"+selSubconId+"/"+sk.id);
+                    setSubconSkills(p=>p.filter(x=>x.id!==sk.id));
+                  } catch(_){}
+                }
+                setSkillSaving(false);
+                setShowSkillDrawer(false);
+              }} disabled={skillSaving}
+              style={{padding:"7px 18px",borderRadius:7,border:"none",background:T.grn,color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:skillSaving?.6:1,boxShadow:`0 2px 8px ${T.grn}55`}}>
+              {skillSaving?"Saving…":"Save"}
+            </button>
+          </div>
+
+          {/* Search */}
+          <div style={{padding:"14px 20px",flexShrink:0}}>
+            <div style={{position:"relative"}}>
+              <input value={drawerSearch} onChange={e=>setDrawerSearch(e.target.value)} placeholder="Search Skill" autoFocus
+                style={{width:"100%",padding:"10px 38px 10px 14px",borderRadius:9,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:T.surfaceB}}
+                onFocus={e=>e.target.style.borderColor=T.grn}
+                onBlur={e=>e.target.style.borderColor=T.b1}/>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2}
+                style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)"}}>
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+            </div>
+          </div>
+
+          {/* Selection counter + Add new */}
+          <div style={{padding:"0 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <span style={{fontSize:12,color:T.t3,fontWeight:600}}>
+              Select <b style={{color:T.grn}}>({drawerSelected.size}/{ROLES.filter(r=>r!=="Other").length+subconSkills.filter(s=>!ROLES.includes(s.skill)).length})</b>
+            </span>
+            <button onClick={()=>{
+                const s = window.prompt("New skill name:");
+                if(s && s.trim()) {
+                  setDrawerSelected(p=>new Set([...p, s.trim()]));
+                  setDrawerNewSkill(s.trim());
+                }
+              }}
+              style={{background:"none",border:"none",color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer",padding:"4px 8px",borderRadius:5,display:"flex",alignItems:"center",gap:4}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.grnL}
+              onMouseLeave={e=>e.currentTarget.style.background="none"}>
+              <span style={{fontSize:14}}>+</span> New Skill
+            </button>
+          </div>
+
+          {/* Skill list */}
+          <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px"}}>
+            {(()=>{
+              // Combine ROLES list with custom skills already added
+              const allSkills = [...new Set([
+                ...ROLES.filter(r=>r!=="Other"),
+                ...subconSkills.map(s=>s.skill),
+                ...(drawerNewSkill ? [drawerNewSkill] : []),
+              ])];
+              const filtered = allSkills.filter(s =>
+                !drawerSearch.trim() || s.toLowerCase().includes(drawerSearch.toLowerCase())
+              );
+              if(!filtered.length) return(
+                <div style={{padding:"30px 12px",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                  No skills match "{drawerSearch}"
+                </div>
+              );
+              return filtered.map((skill,i)=>{
+                const isSelected = drawerSelected.has(skill);
+                return(
+                  <div key={skill} onClick={()=>setDrawerSelected(prev=>{
+                      const s = new Set(prev);
+                      s.has(skill) ? s.delete(skill) : s.add(skill);
+                      return s;
+                    })}
+                    style={{display:"flex",alignItems:"center",gap:13,padding:"13px 14px",cursor:"pointer",borderRadius:9,marginBottom:6,background:isSelected?T.grnL:"transparent",border:`1.5px solid ${isSelected?T.grn+"55":"transparent"}`,transition:"all .12s"}}
+                    onMouseEnter={el=>{ if(!isSelected) el.currentTarget.style.background=T.surfaceB; }}
+                    onMouseLeave={el=>{ if(!isSelected) el.currentTarget.style.background="transparent"; }}>
+                    {/* Checkbox */}
+                    <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${isSelected?T.grn:T.b2}`,background:isSelected?T.grn:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
+                      {isSelected&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3.5}><path d="M20 6L9 17l-5-5"/></svg>}
+                    </div>
+                    {/* Name */}
+                    <span style={{flex:1,fontSize:13.5,fontWeight:600,color:isSelected?T.grn:T.t1}}>{skill}</span>
+                    {/* Custom badge */}
+                    {!ROLES.includes(skill)&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700,letterSpacing:".3px"}}>CUSTOM</span>}
+                  </div>
+                );
+              });
+            })()}
           </div>
         </div>
       </>)}
