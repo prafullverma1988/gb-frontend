@@ -5482,7 +5482,7 @@ function TabAttendance({ project }) {
   const todayStr = new Date().toISOString().split("T")[0];
   const [labType,      setLabType]      = useState("company"); // company | subcon | vendor
   const [attDate,      setAttDate]      = useState(todayStr);
-  const [showWfPanel,  setShowWfPanel]  = useState(true);
+  const [showWfPanel,  setShowWfPanel]  = useState(false); // collapsed by default — focus on attendance
   const [showHistory,  setShowHistory]  = useState(false);
   const [editingAtt,   setEditingAtt]   = useState(false);
   const [attSaving,    setAttSaving]    = useState(false);
@@ -6048,35 +6048,77 @@ function TabAttendance({ project }) {
             :<div>
               <THead cols="2fr 1fr 130px 75px 65px 95px" headers={["Name","Role","Status","Hours","OT","Daily Rate"]}/>
               {todayEntries.map((e,idx)=>(
-                <div key={idx} style={{display:"grid",gridTemplateColumns:"2fr 1fr 130px 75px 65px 95px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${e.status==="P"?T.grn+"55":e.status==="H"?T.amb+"55":T.red+"55"}`}}
-                  onMouseEnter={el=>el.currentTarget.style.background=T.surfaceB}
-                  onMouseLeave={el=>el.currentTarget.style.background="transparent"}>
-                  <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{e.name}</span>
+                <div key={idx}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 180px 80px 70px 95px",padding:"12px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`4px solid ${e.status==="P"?T.grn:e.status==="H"?T.amb:T.red}`,background:e.status==="P"?T.grnL+"55":e.status==="H"?T.ambL+"55":e.status==="A"?T.redL+"55":"transparent",transition:"background .15s"}}>
+                  <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{e.name}</span>
                   <span style={{fontSize:12,color:T.t3}}>{e.role}</span>
                   {editingAtt
-                    ?<div style={{display:"flex",gap:4}}>
-                      {["P","A","H"].map(s=>(
-                        <button key={s} onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,status:s,hours:s==="P"?8:s==="H"?4:0}:en))}
-                          style={{padding:"3px 9px",borderRadius:20,border:`1px solid ${s==="P"?T.grnM:s==="H"?T.ambM:T.redM}`,background:e.status===s?(s==="P"?T.grnL:s==="H"?T.ambL:T.redL):"transparent",color:s==="P"?T.grn:s==="H"?T.amb:T.red,fontSize:11,fontWeight:e.status===s?700:500,cursor:"pointer"}}>
-                          {s}
-                        </button>
-                      ))}
+                    ?<div style={{display:"flex",gap:6}}>
+                      {[
+                        {s:"P", label:"Present",  c:T.grn, bg:T.grnL, m:T.grnM},
+                        {s:"A", label:"Absent",   c:T.red, bg:T.redL, m:T.redM},
+                        {s:"H", label:"Half",     c:T.amb, bg:T.ambL, m:T.ambM},
+                      ].map(opt=>{
+                        const active = e.status === opt.s;
+                        return(
+                          <button key={opt.s}
+                            onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{
+                              ...en,status:opt.s,
+                              hours:opt.s==="P"?8:opt.s==="H"?4:0,
+                              remark: opt.s==="A" ? (en.remark||"") : "",
+                            }:en))}
+                            style={{
+                              padding:"7px 13px",borderRadius:8,
+                              border:`2px solid ${active?opt.c:opt.m}`,
+                              background:active?opt.c:opt.bg,
+                              color:active?"white":opt.c,
+                              fontSize:12,fontWeight:700,cursor:"pointer",
+                              minWidth:46,
+                              boxShadow:active?`0 2px 6px ${opt.c}55, inset 0 1px 0 rgba(255,255,255,0.2)`:"none",
+                              transform:active?"scale(1.05)":"scale(1)",
+                              transition:"all .15s cubic-bezier(.2,.9,.3,1.2)",
+                            }}
+                            onMouseEnter={el=>{ if(!active){el.currentTarget.style.background=opt.c+"22"; el.currentTarget.style.transform="scale(1.03)";} }}
+                            onMouseLeave={el=>{ if(!active){el.currentTarget.style.background=opt.bg; el.currentTarget.style.transform="scale(1)";} }}
+                            onMouseDown={el=>{ el.currentTarget.style.transform="scale(0.95)"; }}
+                            onMouseUp={el=>{ el.currentTarget.style.transform=active?"scale(1.05)":"scale(1.03)"; }}>
+                            {opt.s}
+                          </button>
+                        );
+                      })}
                     </div>
                     :<Pill label={e.status==="P"?"Present":e.status==="H"?"Half Day":"Absent"} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
                   }
                   {editingAtt
                     ?<input type="number" value={e.hours} min={0} max={14}
                         onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,hours:Number(el.target.value)}:en))}
-                        style={{width:55,padding:"4px 7px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                        style={{width:60,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center"}}/>
                     :<span style={{fontSize:12.5,color:e.status!=="A"?T.t1:T.t4}}>{e.hours>0?`${e.hours}h`:"—"}</span>
                   }
                   {editingAtt
                     ?<input type="number" value={e.ot||0} min={0} max={6}
                         onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,ot:Number(el.target.value)}:en))}
-                        style={{width:52,padding:"4px 7px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                        style={{width:55,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center"}}/>
                     :<span style={{fontSize:12,color:T.t4}}>{e.ot>0?`${e.ot}h`:"—"}</span>
                   }
-                  <span style={{fontSize:12,color:T.t2}}>₹{e.dailyRate||0}</span>
+                  <span style={{fontSize:12,color:T.t2,fontWeight:600}}>₹{e.dailyRate||0}</span>
+                </div>
+                {/* Remark row for absent */}
+                {editingAtt && e.status==="A" && (
+                  <div style={{padding:"4px 15px 10px",borderBottom:`1px solid ${T.b1}`,background:T.redL+"33",borderLeft:`4px solid ${T.red}`}}>
+                    <input type="text" value={e.remark||""}
+                      onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,remark:el.target.value}:en))}
+                      placeholder="📝 Reason for absence (optional) — e.g. sick leave, personal work, no show"
+                      style={{width:"100%",padding:"7px 11px",borderRadius:6,border:`1.5px solid ${T.redM}`,background:"white",fontSize:12,color:T.t2,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}
+                      onFocus={el=>el.target.style.borderColor=T.red}
+                      onBlur={el=>el.target.style.borderColor=T.redM}/>
+                  </div>
+                )}
+                {!editingAtt && e.status==="A" && e.remark && (
+                  <div style={{padding:"3px 15px 8px",borderBottom:`1px solid ${T.b1}`,background:T.redL+"22",borderLeft:`4px solid ${T.red}`,fontSize:11,color:T.t3,fontStyle:"italic"}}>
+                    📝 {e.remark}
+                  </div>
+                )}
                 </div>
               ))}
             </div>
@@ -6254,13 +6296,18 @@ function TabAttendance({ project }) {
                               <div>Name</div><div>Role</div><div style={{textAlign:"center"}}>Status</div><div style={{textAlign:"center"}}>Hours</div><div style={{textAlign:"center"}}>OT</div><div style={{textAlign:"right"}}>Daily Rate</div>
                             </div>
                             {rec.entries.map((e,ei)=>(
-                              <div key={ei} style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 90px 65px 60px 90px",gap:8,padding:"7px 8px",borderBottom:`1px dashed ${T.b1}`,fontSize:12,alignItems:"center",borderLeft:`3px solid ${e.status==="P"?T.grn+"55":e.status==="H"?T.amb+"55":T.red+"55"}`}}>
-                                <span style={{fontWeight:600,color:T.t1}}>{e.name}</span>
-                                <span style={{color:T.t3}}>{e.role||"—"}</span>
-                                <Pill label={e.status==="P"?"Present":e.status==="H"?"Half":"Absent"} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
-                                <span style={{textAlign:"center",color:e.status!=="A"?T.t1:T.t4}}>{e.hours>0?e.hours+"h":"—"}</span>
-                                <span style={{textAlign:"center",color:T.t4}}>{e.ot>0?e.ot+"h":"—"}</span>
-                                <span style={{textAlign:"right",fontWeight:600,color:T.t1}}>₹{e.dailyRate||0}</span>
+                              <div key={ei}>
+                                <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 90px 65px 60px 90px",gap:8,padding:"7px 8px",borderBottom:e.remark?"none":`1px dashed ${T.b1}`,fontSize:12,alignItems:"center",borderLeft:`3px solid ${e.status==="P"?T.grn+"55":e.status==="H"?T.amb+"55":T.red+"55"}`}}>
+                                  <span style={{fontWeight:600,color:T.t1}}>{e.name}</span>
+                                  <span style={{color:T.t3}}>{e.role||"—"}</span>
+                                  <Pill label={e.status==="P"?"Present":e.status==="H"?"Half":"Absent"} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
+                                  <span style={{textAlign:"center",color:e.status!=="A"?T.t1:T.t4}}>{e.hours>0?e.hours+"h":"—"}</span>
+                                  <span style={{textAlign:"center",color:T.t4}}>{e.ot>0?e.ot+"h":"—"}</span>
+                                  <span style={{textAlign:"right",fontWeight:600,color:T.t1}}>₹{e.dailyRate||0}</span>
+                                </div>
+                                {e.status==="A" && e.remark && (
+                                  <div style={{padding:"3px 8px 7px",borderBottom:`1px dashed ${T.b1}`,fontSize:11,color:T.red,fontStyle:"italic",borderLeft:`3px solid ${T.red+"55"}`}}>📝 {e.remark}</div>
+                                )}
                               </div>
                             ))}
                           </>
