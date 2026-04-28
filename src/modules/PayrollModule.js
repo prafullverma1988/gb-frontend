@@ -2251,11 +2251,11 @@ function DailyWagesSettingsTab(){
       </div>
 
       <div style={{display:"flex",alignItems:"center",gap:14}}>
-        <button onClick={save}
+        <button onClick={saveCycle}
           style={{padding:"9px 22px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-          Save Settings
+          Save Payment Cycle
         </button>
-        {savedMsg && <span style={{fontSize:12,fontWeight:600,color:T.grn}}>{savedMsg}</span>}
+        <span style={{fontSize:11,color:T.t4}}>Rates auto-save on edit (synced with Library)</span>
       </div>
     </div>
   );
