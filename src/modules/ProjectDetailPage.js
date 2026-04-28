@@ -6024,7 +6024,24 @@ function TabAttendance({ project }) {
                 const total = todayEntries.length;
                 const allMarked = total>0 && markedCount===total;
                 // Detect unsaved changes: compare current state to last saved attRecs
-                const savedRec = attRecs.find(r=>r.date===attDate&&r.type===labType&&!r.subcon_id&&!r.vendor_id);
+                const savedRec = attRecs.find(r=>{
+                  const recDate = String(r.date||"").split("T")[0];
+                  return recDate===attDate&&r.type===labType&&!r.subcon_id&&!r.vendor_id;
+                });
+                const clearDate = async () => {
+                  if(!window.confirm(`${attDate} ki attendance delete karoge? Payroll mein bhi hatega.`)) return;
+                  try {
+                    const res = await api.del(`/projects/${projectId}/attendance?date=${attDate}&type=${labType}`);
+                    if(res.success) {
+                      setAttRecs(prev=>prev.filter(r=>{
+                        const rd = String(r.date||"").split("T")[0];
+                        return !(rd===attDate&&r.type===labType&&!r.subcon_id&&!r.vendor_id);
+                      }));
+                      // Reset rows to unmarked
+                      setTodayEntries(prev=>prev.map(e=>({...e,status:"",hours:0,ot:0,remark:""})));
+                    }
+                  } catch(_){}
+                };
                 const isDirty = (()=>{
                   if (!savedRec) return markedCount > 0; // never saved → dirty if any marks
                   const savedById = {};
@@ -6048,6 +6065,13 @@ function TabAttendance({ project }) {
                       <button onClick={()=>setTodayEntries(prev=>prev.map(e=>e.status?e:({...e,status:"P",hours:8})))}
                         style={{padding:"6px 12px",borderRadius:6,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
                         ✓ Mark Remaining Present
+                      </button>
+                    )}
+                    {savedRec&&(
+                      <button onClick={clearDate}
+                        title="Delete attendance for this date (also removes from Payroll)"
+                        style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${T.redM}`,background:"white",color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                        🗑 Clear Date
                       </button>
                     )}
                     {markedCount>0&&(
