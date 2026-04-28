@@ -6393,37 +6393,31 @@ function TabAttendance({ project }) {
               );
             })()}
 
-            {/* ── VENDOR: Subcon-style flow with Manage Skills + count + auto rate ── */}
+            {/* ── VENDOR: skills come from vendor onboarding (edit vendor to change) ── */}
             {labType==="vendor"&&selVendorId&&(()=>{
               const vd = vendorLib.find(v=>String(v.id||v.name)===selVendorId);
               const vSkillsCount = (vd?.skills||[]).length;
               return(
               <>
-                {/* Header with Manage Skills button */}
+                {/* Header with skill count + edit vendor hint */}
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,paddingBottom:8,borderBottom:`1.5px solid ${T.b1}`}}>
                   <div>
                     <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Skills supplied by this vendor</div>
-                    <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{vSkillsCount} skill{vSkillsCount!==1?"s":""} configured · rates auto from rate card</div>
+                    <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>
+                      {vSkillsCount} skill{vSkillsCount!==1?"s":""} configured at onboarding · agreed rates locked
+                    </div>
                   </div>
-                  <button onClick={()=>{
-                      setDrawerMode("vendor");
-                      setDrawerSelected(new Set((vd?.skills||[]).map(s=>s.skill)));
-                      setDrawerSearch("");
-                      setDrawerNewSkill("");
-                      setShowSkillDrawer(true);
-                    }}
-                    style={{padding:"7px 14px",borderRadius:7,border:`1.5px solid ${T.amb}`,background:T.ambL,color:T.amb,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-                    Manage Skills
-                  </button>
+                  {vSkillsCount===0&&(
+                    <span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>Edit vendor to add skills</span>
+                  )}
                 </div>
-                {vSkillsCount===0&&(
+
+                {vSkillsCount===0?(
                   <div style={{padding:"30px 18px",textAlign:"center",border:`1.5px dashed ${T.b1}`,borderRadius:10,background:T.surfaceB,marginBottom:10}}>
                     <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:5}}>🎯 No skills configured yet</div>
-                    <div style={{fontSize:11.5,color:T.t3}}>Click <b>"Manage Skills"</b> above to setup what this vendor supplies.</div>
+                    <div style={{fontSize:11.5,color:T.t3}}>Skills + agreed rates onboarding ke time set hote hain. Vendor list mein vendor edit karke skills add karo.</div>
                   </div>
-                )}
-                {vSkillsCount>0&&(<>
+                ):(<>
                 {/* Header row */}
                 <div style={{display:"grid",gridTemplateColumns:"1.5fr 110px 100px 110px",gap:10,marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
                   <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700}}>Skill</div>
@@ -6432,15 +6426,20 @@ function TabAttendance({ project }) {
                   <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:700,textAlign:"right"}}>Wages</div>
                 </div>
                 {todayCountRows.map((row,i)=>{
-                  const rate = Number(row.rate)||getRateForRole(row.role)||0;
+                  const rate = Number(row.rate)||0;
                   const wages = (Number(row.present)||0) * rate;
+                  const isPending = row.rate_status === "pending";
                   return(
                   <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 110px 100px 110px",gap:10,marginBottom:8,alignItems:"center",padding:"8px 0",borderBottom:`1px dashed ${T.b1}`}}>
-                    <span style={{fontSize:13.5,fontWeight:600,color:T.t1}}>{row.role}</span>
+                    <div style={{display:"flex",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:13.5,fontWeight:600,color:T.t1}}>{row.role}</span>
+                      {isPending&&<span style={{fontSize:9,padding:"1px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:700,border:`1px solid ${T.ambM}`}}>🟡 Rate Pending</span>}
+                      {row.rate_status==="approved"&&<span style={{fontSize:9,padding:"1px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700}}>✓</span>}
+                    </div>
                     <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
                       onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
                       style={{padding:"9px 10px",borderRadius:7,border:`1.5px solid ${T.ambM}`,fontSize:15,fontWeight:700,color:T.amb,outline:"none",fontFamily:"inherit",background:T.ambL,opacity:editingAtt?1:.75,boxSizing:"border-box",textAlign:"center"}}/>
-                    <span style={{fontSize:12.5,fontWeight:700,color:rate>0?T.t2:T.red,textAlign:"right",paddingRight:4}}>₹{rate}/day {rate===0&&<span style={{fontSize:9,color:T.red}}>⚠ no card</span>}</span>
+                    <span style={{fontSize:12.5,fontWeight:700,color:T.t2,textAlign:"right",paddingRight:4}}>₹{rate}/day</span>
                     <span style={{fontSize:14,fontWeight:700,color:wages>0?T.grn:T.t4,textAlign:"right",paddingRight:4}}>
                       {wages>0?`₹${wages.toLocaleString()}`:"—"}
                     </span>
@@ -6452,7 +6451,7 @@ function TabAttendance({ project }) {
                 {/* Vendor wages summary */}
                 {!editingAtt&&todayCountRows.some(r=>r.present>0)&&(()=>{
                   const totalLab = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0),0);
-                  const totalWg  = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||getRateForRole(r.role)||0),0);
+                  const totalWg  = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||0),0);
                   return(
                     <div style={{marginTop:12,padding:"12px 14px",background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                       <div style={{fontSize:11.5,color:T.amb,fontWeight:700,letterSpacing:".4px"}}>VENDOR DAILY TOTAL</div>
@@ -6742,63 +6741,42 @@ function TabAttendance({ project }) {
         </div>
       </>)}
 
-      {/* ── SKILLS LIBRARY DRAWER (works for both subcon & vendor) ─────── */}
-      {showSkillDrawer && ((drawerMode==="subcon"&&selSubconId)||(drawerMode==="vendor"&&selVendorId)) && (<>
+      {/* ── SKILLS LIBRARY DRAWER (subcon only — vendor uses Add Vendor modal) ── */}
+      {showSkillDrawer && selSubconId && labType==="subcon" && (<>
         <div onClick={()=>setShowSkillDrawer(false)}
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
         <div style={{position:"fixed",top:0,right:0,bottom:0,width:460,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 32px rgba(0,0,0,0.18)",zIndex:301,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .25s ease-out"}}>
           <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-          {(()=>{ const accent = drawerMode==="vendor"?T.amb:T.grn; const accentBg = drawerMode==="vendor"?T.ambL:T.grnL; return(<>
-
-          {/* Header */}
-          <div style={{padding:"16px 20px",borderBottom:`2px solid ${accent}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          {/* Header (subcon green) */}
+          <div style={{padding:"16px 20px",borderBottom:`2px solid ${T.grn}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <button onClick={()=>setShowSkillDrawer(false)}
               style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:6,display:"flex",borderRadius:6}}
               onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
               onMouseLeave={e=>e.currentTarget.style.background="none"}>
               <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
-            <div style={{fontSize:14.5,fontWeight:700,color:T.t1,letterSpacing:".3px"}}>{drawerMode==="vendor"?"VENDOR SKILLS":"SUBCON SKILLS"}</div>
+            <div style={{fontSize:14.5,fontWeight:700,color:T.t1,letterSpacing:".3px"}}>SUBCON SKILLS</div>
             <button onClick={async()=>{
                 setSkillSaving(true);
-                if (drawerMode==="subcon") {
-                  const existingSkills = new Set(subconSkills.map(s=>s.skill));
-                  const toAdd = [...drawerSelected].filter(s=>!existingSkills.has(s));
-                  const toRemove = subconSkills.filter(s=>!drawerSelected.has(s.skill));
-                  for (const sk of toAdd) {
-                    try {
-                      const r = await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:sk});
-                      if(r.success) setSubconSkills(p=>[...p,r.data]);
-                    } catch(_){}
-                  }
-                  for (const sk of toRemove) {
-                    try {
-                      await api.del("/labour-vendors/subcon-skills/"+selSubconId+"/"+sk.id);
-                      setSubconSkills(p=>p.filter(x=>x.id!==sk.id));
-                    } catch(_){}
-                  }
-                } else {
-                  // vendor mode — manage labour_vendor_skills with rate from rate card
-                  const vd = vendorLib.find(v=>String(v.id||v.name)===selVendorId);
-                  const existingSkills = vd?.skills || [];
-                  const existingNames = new Set(existingSkills.map(s=>s.skill));
-                  const toAdd = [...drawerSelected].filter(s=>!existingNames.has(s));
-                  const toRemove = existingSkills.filter(s=>!drawerSelected.has(s.skill));
-                  for (const sk of toAdd) {
-                    const cardRate = getRateForRole(sk) || 0;
-                    try { await api.post("/labour-vendors/"+selVendorId+"/skills",{ skill:sk, rate:cardRate, card_rate:cardRate }); } catch(_){}
-                  }
-                  for (const sk of toRemove) {
-                    try { await api.del("/labour-vendors/"+selVendorId+"/skills/"+sk.id); } catch(_){}
-                  }
-                  // Reload vendor list
-                  const r = await api.get("/labour-vendors");
-                  if (r.success) setVendorLib(r.data||[]);
+                const existingSkills = new Set(subconSkills.map(s=>s.skill));
+                const toAdd = [...drawerSelected].filter(s=>!existingSkills.has(s));
+                const toRemove = subconSkills.filter(s=>!drawerSelected.has(s.skill));
+                for (const sk of toAdd) {
+                  try {
+                    const r = await api.post("/labour-vendors/subcon-skills/"+selSubconId,{skill:sk});
+                    if(r.success) setSubconSkills(p=>[...p,r.data]);
+                  } catch(_){}
+                }
+                for (const sk of toRemove) {
+                  try {
+                    await api.del("/labour-vendors/subcon-skills/"+selSubconId+"/"+sk.id);
+                    setSubconSkills(p=>p.filter(x=>x.id!==sk.id));
+                  } catch(_){}
                 }
                 setSkillSaving(false);
                 setShowSkillDrawer(false);
               }} disabled={skillSaving}
-              style={{padding:"7px 18px",borderRadius:7,border:"none",background:accent,color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:skillSaving?.6:1,boxShadow:`0 2px 8px ${accent}55`}}>
+              style={{padding:"7px 18px",borderRadius:7,border:"none",background:T.grn,color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:skillSaving?.6:1,boxShadow:`0 2px 8px ${T.grn}55`}}>
               {skillSaving?"Saving…":"Save"}
             </button>
           </div>
@@ -6808,7 +6786,7 @@ function TabAttendance({ project }) {
             <div style={{position:"relative"}}>
               <input value={drawerSearch} onChange={e=>setDrawerSearch(e.target.value)} placeholder="Search Skill" autoFocus
                 style={{width:"100%",padding:"10px 38px 10px 14px",borderRadius:9,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box",background:T.surfaceB}}
-                onFocus={e=>e.target.style.borderColor=accent}
+                onFocus={e=>e.target.style.borderColor=T.grn}
                 onBlur={e=>e.target.style.borderColor=T.b1}/>
               <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2}
                 style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)"}}>
@@ -6820,8 +6798,7 @@ function TabAttendance({ project }) {
           {/* Selection counter + Add new */}
           <div style={{padding:"0 20px 12px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <span style={{fontSize:12,color:T.t3,fontWeight:600}}>
-              Select <b style={{color:accent}}>({drawerSelected.size})</b>
-              {drawerMode==="vendor"&&<span style={{marginLeft:8,fontSize:10,color:T.t4}}>· rates auto from rate card</span>}
+              Select <b style={{color:T.grn}}>({drawerSelected.size})</b>
             </span>
             <button onClick={()=>{
                 const s = window.prompt("New skill name:");
@@ -6830,8 +6807,8 @@ function TabAttendance({ project }) {
                   setDrawerNewSkill(s.trim());
                 }
               }}
-              style={{background:"none",border:"none",color:accent,fontSize:12,fontWeight:600,cursor:"pointer",padding:"4px 8px",borderRadius:5,display:"flex",alignItems:"center",gap:4}}
-              onMouseEnter={e=>e.currentTarget.style.background=accentBg}
+              style={{background:"none",border:"none",color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer",padding:"4px 8px",borderRadius:5,display:"flex",alignItems:"center",gap:4}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.grnL}
               onMouseLeave={e=>e.currentTarget.style.background="none"}>
               <span style={{fontSize:14}}>+</span> New Skill
             </button>
@@ -6840,14 +6817,9 @@ function TabAttendance({ project }) {
           {/* Skill list */}
           <div style={{flex:1,overflowY:"auto",padding:"0 20px 20px"}}>
             {(()=>{
-              const currentSkills = drawerMode==="subcon"
-                ? subconSkills.map(s=>s.skill)
-                : (vendorLib.find(v=>String(v.id||v.name)===selVendorId)?.skills||[]).map(s=>s.skill);
-              // For vendor: also include ALL rate card roles (since they have rates)
               const allSkills = [...new Set([
                 ...ROLES.filter(r=>r!=="Other"),
-                ...currentSkills,
-                ...(drawerMode==="vendor" ? rateCard.map(rc=>rc.role||rc.name).filter(Boolean) : []),
+                ...subconSkills.map(s=>s.skill),
                 ...(drawerNewSkill ? [drawerNewSkill] : []),
               ])];
               const filtered = allSkills.filter(s =>
@@ -6860,33 +6832,25 @@ function TabAttendance({ project }) {
               );
               return filtered.map((skill,i)=>{
                 const isSelected = drawerSelected.has(skill);
-                const rate = drawerMode==="vendor" ? getRateForRole(skill) : 0;
                 return(
                   <div key={skill} onClick={()=>setDrawerSelected(prev=>{
                       const s = new Set(prev);
                       s.has(skill) ? s.delete(skill) : s.add(skill);
                       return s;
                     })}
-                    style={{display:"flex",alignItems:"center",gap:13,padding:"13px 14px",cursor:"pointer",borderRadius:9,marginBottom:6,background:isSelected?accentBg:"transparent",border:`1.5px solid ${isSelected?accent+"55":"transparent"}`,transition:"all .12s"}}
+                    style={{display:"flex",alignItems:"center",gap:13,padding:"13px 14px",cursor:"pointer",borderRadius:9,marginBottom:6,background:isSelected?T.grnL:"transparent",border:`1.5px solid ${isSelected?T.grn+"55":"transparent"}`,transition:"all .12s"}}
                     onMouseEnter={el=>{ if(!isSelected) el.currentTarget.style.background=T.surfaceB; }}
                     onMouseLeave={el=>{ if(!isSelected) el.currentTarget.style.background="transparent"; }}>
-                    {/* Checkbox */}
-                    <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${isSelected?accent:T.b2}`,background:isSelected?accent:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
+                    <div style={{width:20,height:20,borderRadius:5,border:`2px solid ${isSelected?T.grn:T.b2}`,background:isSelected?T.grn:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"all .12s"}}>
                       {isSelected&&<svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3.5}><path d="M20 6L9 17l-5-5"/></svg>}
                     </div>
-                    {/* Name */}
-                    <span style={{flex:1,fontSize:13.5,fontWeight:600,color:isSelected?accent:T.t1}}>{skill}</span>
-                    {/* Rate (vendor mode) */}
-                    {drawerMode==="vendor"&&rate>0&&<span style={{fontSize:11.5,color:T.grn,fontWeight:700,marginRight:8}}>₹{rate}/day</span>}
-                    {drawerMode==="vendor"&&rate===0&&<span style={{fontSize:9.5,padding:"2px 7px",borderRadius:10,background:T.redL,color:T.red,fontWeight:700,marginRight:8}}>NO RATE</span>}
-                    {/* Custom badge */}
-                    {!ROLES.includes(skill)&&!rateCard.some(rc=>(rc.role||rc.name)===skill)&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700,letterSpacing:".3px"}}>CUSTOM</span>}
+                    <span style={{flex:1,fontSize:13.5,fontWeight:600,color:isSelected?T.grn:T.t1}}>{skill}</span>
+                    {!ROLES.includes(skill)&&<span style={{fontSize:9.5,padding:"2px 8px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700,letterSpacing:".3px"}}>CUSTOM</span>}
                   </div>
                 );
               });
             })()}
           </div>
-          </>);})()}
         </div>
       </>)}
 
