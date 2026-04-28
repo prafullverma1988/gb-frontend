@@ -5490,6 +5490,8 @@ function TabAttendance({ project }) {
   const [selSubconId,  setSelSubconId]  = useState("");
   // Vendor selector (direct from library, like subcon)
   const [selVendorId,  setSelVendorId]  = useState("");
+  // History expand state
+  const [expandedHistIdx, setExpandedHistIdx] = useState(null);
   // Add/Edit Labour Vendor modal state
   const [showAddVendor, setShowAddVendor] = useState(false);
   const [vForm, setVForm] = useState({ name:"", owner:"", phone:"", email:"", city:"", gstin:"", trade:"", notes:"" });
@@ -6205,35 +6207,84 @@ function TabAttendance({ project }) {
           {historyRecs.length===0
             ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>No history found.</div>
             :historyRecs.map((rec,i)=>{
-              const rPresent=mode==="name"?(rec.entries||[]).filter(e=>e.status==="P").length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.present)||0),0);
-              const rHalf   =mode==="name"?(rec.entries||[]).filter(e=>e.status==="H").length:0;
-              const rTotal  =mode==="name"?(rec.entries||[]).length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.count)||0),0);
-              const rWages  =mode==="name"
+              const recMode = rec.mode || mode; // use record's own mode
+              const rPresent=recMode==="name"?(rec.entries||[]).filter(e=>e.status==="P").length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.present)||0),0);
+              const rHalf   =recMode==="name"?(rec.entries||[]).filter(e=>e.status==="H").length:0;
+              const rTotal  =recMode==="name"?(rec.entries||[]).length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.count)||0),0);
+              const rWages  =recMode==="name"
                 ?(rec.entries||[]).reduce((s,e)=>s+(e.status==="P"?Number(e.dailyRate)||0:e.status==="H"?(Number(e.dailyRate)||0)/2:0),0)
                 :(rec.entries||[]).reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||0),0);
+              const isExpanded = expandedHistIdx === i;
+              const recId = rec.id || rec.date || i;
               return(
-                <div key={i} style={{padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:14}}>
-                  <div style={{minWidth:85}}>
-                    {(()=>{
-                      // Robust date parsing — handle YYYY-MM-DD, ISO timestamps, or null
-                      const raw = rec.date || rec.att_date || rec.created_at;
-                      if (!raw) return <div style={{fontSize:12,color:T.t4}}>—</div>;
-                      const datePart = String(raw).split("T")[0]; // strip time if ISO
-                      const d = new Date(datePart + "T00:00:00");
-                      if (isNaN(d.getTime())) return <div style={{fontSize:12,color:T.t4}}>—</div>;
-                      return <>
-                        <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>
-                        <div style={{fontSize:10.5,color:T.t4}}>{d.toLocaleDateString("en-IN",{weekday:"short",year:"2-digit"})}</div>
-                      </>;
-                    })()}
+                <div key={recId} style={{borderBottom:`1px solid ${T.b1}`}}>
+                  <div onClick={()=>setExpandedHistIdx(isExpanded?null:i)}
+                    style={{padding:"10px 15px",display:"flex",alignItems:"center",gap:14,cursor:"pointer",background:isExpanded?T.surfaceB:"transparent"}}
+                    onMouseEnter={el=>{if(!isExpanded)el.currentTarget.style.background=T.surfaceB;}}
+                    onMouseLeave={el=>{if(!isExpanded)el.currentTarget.style.background="transparent";}}>
+                    <div style={{minWidth:85}}>
+                      {(()=>{
+                        const raw = rec.date || rec.att_date || rec.created_at;
+                        if (!raw) return <div style={{fontSize:12,color:T.t4}}>—</div>;
+                        const datePart = String(raw).split("T")[0];
+                        const d = new Date(datePart + "T00:00:00");
+                        if (isNaN(d.getTime())) return <div style={{fontSize:12,color:T.t4}}>—</div>;
+                        return <>
+                          <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>
+                          <div style={{fontSize:10.5,color:T.t4}}>{d.toLocaleDateString("en-IN",{weekday:"short",year:"2-digit"})}</div>
+                        </>;
+                      })()}
+                    </div>
+                    <div style={{flex:1,display:"flex",gap:12,flexWrap:"wrap"}}>
+                      <span style={{fontSize:12,color:T.grn,fontWeight:600}}>✓ {rPresent} Present</span>
+                      {rHalf>0&&<span style={{fontSize:12,color:T.amb,fontWeight:600}}>½ {rHalf} Half</span>}
+                      <span style={{fontSize:12,color:T.red}}>✗ {Math.max(0,rTotal-rPresent-rHalf)} Absent</span>
+                      <span style={{fontSize:12,color:T.slt,fontWeight:600}}>₹{fmtN(rWages)}</span>
+                    </div>
+                    <Pill label={recMode==="name"?"Name-wise":"Count-wise"} c={TYPE_COLORS[labType]} bg={TYPE_BG[labType]}/>
+                    <span style={{fontSize:11,color:T.t4,marginLeft:4}}>{isExpanded?"▲":"▼"}</span>
                   </div>
-                  <div style={{flex:1,display:"flex",gap:12,flexWrap:"wrap"}}>
-                    <span style={{fontSize:12,color:T.grn,fontWeight:600}}>✓ {rPresent} Present</span>
-                    {rHalf>0&&<span style={{fontSize:12,color:T.amb,fontWeight:600}}>½ {rHalf} Half</span>}
-                    <span style={{fontSize:12,color:T.red}}>✗ {Math.max(0,rTotal-rPresent-rHalf)} Absent</span>
-                    <span style={{fontSize:12,color:T.slt,fontWeight:600}}>₹{fmtN(rWages)}</span>
-                  </div>
-                  <Pill label={mode==="name"?"Name-wise":"Count-wise"} c={TYPE_COLORS[labType]} bg={TYPE_BG[labType]}/>
+                  {isExpanded&&(
+                    <div style={{padding:"10px 15px 14px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
+                      {(rec.entries||[]).length===0
+                        ?<div style={{textAlign:"center",color:T.t4,fontSize:12,padding:"10px"}}>No entries recorded</div>
+                        :recMode==="name"
+                          ?<>
+                            <div style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 90px 65px 60px 90px",gap:8,padding:"6px 8px",borderBottom:`1px solid ${T.b1}`,fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>
+                              <div>Name</div><div>Role</div><div style={{textAlign:"center"}}>Status</div><div style={{textAlign:"center"}}>Hours</div><div style={{textAlign:"center"}}>OT</div><div style={{textAlign:"right"}}>Daily Rate</div>
+                            </div>
+                            {rec.entries.map((e,ei)=>(
+                              <div key={ei} style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 90px 65px 60px 90px",gap:8,padding:"7px 8px",borderBottom:`1px dashed ${T.b1}`,fontSize:12,alignItems:"center",borderLeft:`3px solid ${e.status==="P"?T.grn+"55":e.status==="H"?T.amb+"55":T.red+"55"}`}}>
+                                <span style={{fontWeight:600,color:T.t1}}>{e.name}</span>
+                                <span style={{color:T.t3}}>{e.role||"—"}</span>
+                                <Pill label={e.status==="P"?"Present":e.status==="H"?"Half":"Absent"} c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red} bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
+                                <span style={{textAlign:"center",color:e.status!=="A"?T.t1:T.t4}}>{e.hours>0?e.hours+"h":"—"}</span>
+                                <span style={{textAlign:"center",color:T.t4}}>{e.ot>0?e.ot+"h":"—"}</span>
+                                <span style={{textAlign:"right",fontWeight:600,color:T.t1}}>₹{e.dailyRate||0}</span>
+                              </div>
+                            ))}
+                          </>
+                          :<>
+                            <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:8,padding:"6px 8px",borderBottom:`1px solid ${T.b1}`,fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>
+                              <div>Skill / Role</div><div style={{textAlign:"center"}}>Present</div><div style={{textAlign:"right"}}>Rate</div><div style={{textAlign:"right"}}>Wages</div>
+                            </div>
+                            {rec.entries.map((e,ei)=>{
+                              const wg = (Number(e.present)||0) * (Number(e.rate)||0);
+                              return(
+                                <div key={ei} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",gap:8,padding:"7px 8px",borderBottom:`1px dashed ${T.b1}`,fontSize:12,alignItems:"center"}}>
+                                  <span style={{fontWeight:600,color:T.t1}}>{e.role}</span>
+                                  <span style={{textAlign:"center",fontWeight:700,color:T.amb}}>{e.present||0}</span>
+                                  <span style={{textAlign:"right",color:T.t2}}>₹{e.rate||0}/day</span>
+                                  <span style={{textAlign:"right",fontWeight:700,color:wg>0?T.grn:T.t4}}>{wg>0?`₹${wg.toLocaleString()}`:"—"}</span>
+                                </div>
+                              );
+                            })}
+                          </>
+                      }
+                      {rec.subcon_name&&<div style={{padding:"6px 8px",fontSize:11,color:T.t4}}>Subcontractor: <b style={{color:T.t2}}>{rec.subcon_name}</b></div>}
+                      {rec.vendor_name&&<div style={{padding:"6px 8px",fontSize:11,color:T.t4}}>Labour Vendor: <b style={{color:T.t2}}>{rec.vendor_name}</b></div>}
+                    </div>
+                  )}
                 </div>
               );
             })
