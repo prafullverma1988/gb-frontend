@@ -2175,25 +2175,30 @@ function DailyWagesSettingsTab(){
   };
   useEffect(()=>{ loadRates(); },[]);
 
-  const updateRate=async(item,newRate)=>{
-    if(Number(newRate)===Number(item.rate)) return;
-    const reason=window.prompt("Base rate change reason (optional):", "Quarterly review");
-    if(reason===null) { return; } // user cancelled
+  const [scopeModal, setScopeModal] = useState(null); // {item, newRate}
+  const submitRateChange = async (item, newRate, scope, reason) => {
     setSavingRow(item.id);
     try{
       const res=await api.post("/library/labour-rates/"+item.id+"/request-change",{
         requested_rate:Number(newRate)||0,
         reason: reason || "Base rate update",
+        apply_scope: scope,
       });
       if(res.success){
-        setSavedMsg("Approval submitted: "+item.role+" → ₹"+newRate+" (Pending admin)");
-        setTimeout(()=>setSavedMsg(""),3000);
+        const scopeMsg = scope === "all" ? "(applies to ALL existing workers)" : "(new appointments only)";
+        setSavedMsg("Approval submitted: "+item.role+" → ₹"+newRate+" "+scopeMsg);
+        setTimeout(()=>setSavedMsg(""),4000);
       } else {
         alert(res.message || "Failed to submit");
-        loadRates(); // reset displayed value
+        loadRates();
       }
     }catch(e){ alert("Error: "+e.message); loadRates(); }
     setSavingRow(null);
+  };
+
+  const updateRate=(item,newRate)=>{
+    if(Number(newRate)===Number(item.rate)) return;
+    setScopeModal({ item, newRate, reason: "Quarterly review" });
   };
 
   const dedupe=async()=>{
@@ -2273,8 +2278,47 @@ function DailyWagesSettingsTab(){
           style={{padding:"9px 22px",borderRadius:7,background:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           Save Payment Cycle
         </button>
-        <span style={{fontSize:11,color:T.t4}}>Rates auto-save on edit (synced with Library)</span>
+        <span style={{fontSize:11,color:T.t4}}>Rate change → admin approval needed</span>
       </div>
+
+      {/* ── SCOPE CHOICE MODAL ── */}
+      {scopeModal&&(<>
+        <div onClick={()=>{setScopeModal(null);loadRates();}} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:"white",borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:301,width:520,maxWidth:"95vw",padding:0,overflow:"hidden"}}>
+          <div style={{background:"#0D1B2A",padding:"14px 18px",color:"white"}}>
+            <div style={{fontSize:14,fontWeight:700}}>Base Rate Change — Scope?</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{scopeModal.item.role}: ₹{scopeModal.item.rate} → ₹{scopeModal.newRate}/day</div>
+          </div>
+          <div style={{padding:"16px 18px"}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.t4,marginBottom:10,letterSpacing:".4px"}}>APPLY THIS RATE CHANGE TO:</div>
+            <div style={{display:"flex",flexDirection:"column",gap:8,marginBottom:14}}>
+              <button onClick={()=>{const r=scopeModal;setScopeModal(null);submitRateChange(r.item,r.newRate,"new_only",r.reason);}}
+                style={{padding:"12px 14px",border:`2px solid ${T.b1}`,borderRadius:9,background:"white",cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}
+                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.background=T.bluL;}}
+                onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background="white";}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:3}}>📋 New Appointments Only</div>
+                <div style={{fontSize:11,color:T.t4}}>Existing workers ke individual rates same rahenge. Naye appointments mein new base rate apply hoga.</div>
+              </button>
+              <button onClick={()=>{const r=scopeModal;setScopeModal(null);submitRateChange(r.item,r.newRate,"all",r.reason);}}
+                style={{padding:"12px 14px",border:`2px solid ${T.amb}`,borderRadius:9,background:T.ambL,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.amb,marginBottom:3}}>🔄 Apply to All Existing Workers</div>
+                <div style={{fontSize:11,color:T.t3}}>Approval ke baad sab projects mein {scopeModal.item.role} ke saare workers ka rate update + naye appointments bhi.</div>
+              </button>
+            </div>
+            <div style={{borderTop:`1px solid ${T.b1}`,paddingTop:12}}>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.t4,marginBottom:5}}>REASON (optional)</div>
+              <input type="text" value={scopeModal.reason}
+                onChange={e=>setScopeModal(p=>({...p,reason:e.target.value}))}
+                placeholder="e.g. Quarterly review, Market correction"
+                style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            <div style={{marginTop:14,display:"flex",justifyContent:"flex-end"}}>
+              <button onClick={()=>{setScopeModal(null);loadRates();}}
+                style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.b1}`,background:"white",fontSize:12,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      </>)}
     </div>
   );
 }

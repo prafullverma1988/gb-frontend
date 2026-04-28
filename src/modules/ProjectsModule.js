@@ -1472,6 +1472,11 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
                 </span>
               </div>
             )}
+            {src==="labour_rate"&&item.labour_type==="base_rate"&&(
+              <div style={{marginTop:5,padding:"4px 9px",borderRadius:6,background:item.apply_scope==="all"?T.ambL:T.surfaceB,border:`1px solid ${item.apply_scope==="all"?T.ambM:T.b1}`,fontSize:10.5,color:item.apply_scope==="all"?T.amb:T.t3,fontWeight:600}}>
+                {item.apply_scope==="all" ? "🔄 SCOPE: Apply to ALL existing workers + future" : "📋 SCOPE: New appointments only"}
+              </div>
+            )}
             {src==="labour_rate"&&item.notes&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>"{item.notes}"</div>}
           </div>
           {item.amount>0&&src!=="labour_rate"&&<span style={{fontSize:13,fontWeight:700,color:mc,flexShrink:0}}>{fmtAmt(item.amount)}</span>}
