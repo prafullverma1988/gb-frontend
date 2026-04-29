@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Sanchalan</string>
+    <string name="title_activity_main">Sanchalan</string>
+    <string name="package_name">com.sanchalan.app</string>
+    <string name="custom_url_scheme">com.sanchalan.app</string>
+</resources>

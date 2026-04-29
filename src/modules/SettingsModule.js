@@ -33,6 +33,7 @@ const IcX          = (p) => <Icon {...p} d="M18 6L6 18M6 6l12 12" />;
 const IcPhone      = (p) => <Icon {...p} d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z" />;
 const IcMail       = (p) => <Icon {...p} d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6" />;
 const IcFolder     = (p) => <Icon {...p} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />;
+const IcLayout     = (p) => <Icon {...p} d="M3 3h18v18H3zM3 9h18M9 21V9" />;
 
 // ─── BALANCED THEME TOKENS ───────────────────────────────────────────
 const T = {
@@ -1557,6 +1558,96 @@ function AttendanceSettings() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
+// UI PREFERENCES (Appearance)
+// ═══════════════════════════════════════════════════════════════════════
+const LAYOUT_KEY = "gb_project_layout";
+const LAYOUT_DEFAULT = "horizontal";
+
+function UIPreferences() {
+  const [layout, setLayout] = useState(() => {
+    try { return localStorage.getItem(LAYOUT_KEY) || LAYOUT_DEFAULT; }
+    catch { return LAYOUT_DEFAULT; }
+  });
+  const [savedFlag, setSavedFlag] = useState(false);
+
+  const apply = (v) => {
+    setLayout(v);
+    try { localStorage.setItem(LAYOUT_KEY, v); } catch {}
+    window.dispatchEvent(new CustomEvent("gb-layout-change", { detail: v }));
+    setSavedFlag(true);
+    setTimeout(() => setSavedFlag(false), 1500);
+  };
+
+  const TopPreview = () => (
+    <svg width="100%" height="84" viewBox="0 0 200 84" preserveAspectRatio="none">
+      <rect x="0" y="0" width="200" height="84" fill="#FFFFFF"/>
+      <rect x="0" y="0" width="200" height="22" fill="#1E293B"/>
+      <rect x="6" y="7" width="40" height="3" rx="1" fill="#FFFFFF"/>
+      <rect x="6" y="13" width="60" height="2" rx="1" fill="#FFFFFF" opacity="0.4"/>
+      <rect x="0" y="22" width="200" height="14" fill="#F8F9FB"/>
+      <rect x="6" y="27" width="20" height="4" rx="1" fill="#2563EB"/>
+      <rect x="30" y="27" width="20" height="4" rx="1" fill="#9CA3AF"/>
+      <rect x="54" y="27" width="20" height="4" rx="1" fill="#9CA3AF"/>
+      <rect x="78" y="27" width="20" height="4" rx="1" fill="#9CA3AF"/>
+      <rect x="102" y="27" width="20" height="4" rx="1" fill="#9CA3AF"/>
+      <rect x="126" y="27" width="20" height="4" rx="1" fill="#9CA3AF"/>
+      <rect x="150" y="27" width="20" height="4" rx="1" fill="#9CA3AF"/>
+      <rect x="6" y="42" width="188" height="38" rx="2" fill="#F4F6F9"/>
+    </svg>
+  );
+
+  const SidePreview = () => (
+    <svg width="100%" height="84" viewBox="0 0 200 84" preserveAspectRatio="none">
+      <rect x="0" y="0" width="200" height="84" fill="#FFFFFF"/>
+      <rect x="0" y="0" width="56" height="84" fill="#1E293B"/>
+      <rect x="6" y="6" width="44" height="4" rx="1" fill="#FFFFFF" opacity="0.85"/>
+      <rect x="6" y="13" width="36" height="3" rx="1" fill="#FFFFFF" opacity="0.4"/>
+      <rect x="3" y="22" width="50" height="6" rx="1" fill="#2563EB"/>
+      <rect x="6" y="32" width="44" height="4" rx="1" fill="#FFFFFF" opacity="0.5"/>
+      <rect x="6" y="40" width="44" height="4" rx="1" fill="#FFFFFF" opacity="0.5"/>
+      <rect x="6" y="48" width="44" height="4" rx="1" fill="#FFFFFF" opacity="0.5"/>
+      <rect x="6" y="56" width="44" height="4" rx="1" fill="#FFFFFF" opacity="0.5"/>
+      <rect x="6" y="64" width="44" height="4" rx="1" fill="#FFFFFF" opacity="0.5"/>
+      <rect x="62" y="6" width="132" height="14" rx="2" fill="#F8F9FB"/>
+      <rect x="62" y="24" width="132" height="56" rx="2" fill="#F4F6F9"/>
+    </svg>
+  );
+
+  const Option = ({ v, title, desc, preview }) => {
+    const active = layout === v;
+    return (
+      <button onClick={() => apply(v)}
+        style={{ flex: 1, textAlign: "left", padding: 0, border: `2px solid ${active ? T.blue : T.border}`, borderRadius: T.radius, background: T.card, cursor: "pointer", overflow: "hidden", transition: "all .15s", fontFamily: T.font, boxShadow: active ? `0 0 0 4px ${T.blue}15` : "none" }}>
+        <div style={{ padding: "12px 14px", borderBottom: `1px solid ${T.borderLight}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ fontSize: 13.5, fontWeight: 700, color: active ? T.blue : T.text }}>{title}</div>
+          <div style={{ width: 18, height: 18, borderRadius: "50%", border: `2px solid ${active ? T.blue : T.border}`, background: active ? T.blue : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            {active && <div style={{ width: 6, height: 6, borderRadius: "50%", background: "white" }} />}
+          </div>
+        </div>
+        <div style={{ padding: 12, background: T.borderLight, lineHeight: 0 }}>{preview}</div>
+        <div style={{ padding: "10px 14px 12px", fontSize: 11.5, color: T.textLight, lineHeight: 1.4 }}>{desc}</div>
+      </button>
+    );
+  };
+
+  return (
+    <div>
+      <SectionCard title="Project Page Layout" desc="Choose how project navigation tabs are displayed">
+        <div style={{ display: "flex", gap: 14, marginTop: 4 }}>
+          <Option v="horizontal" title="Top Tabs" desc="Tabs appear horizontally at the top of the project page. Default for existing users." preview={<TopPreview />} />
+          <Option v="sidebar" title="Side Bar" desc="Tabs appear in a collapsible left sidebar with icons. Cleaner for projects with many tabs." preview={<SidePreview />} />
+        </div>
+        <div style={{ marginTop: 16, padding: "10px 14px", borderRadius: 8, background: T.blueSoft, border: `1px solid ${T.blue}22`, fontSize: 12, color: T.textMid, display: "flex", alignItems: "center", gap: 8 }}>
+          <span>💡</span>
+          <span>Change applies immediately. Open any project to see the new layout. Keyboard shortcuts (Ctrl+key) work in both modes.</span>
+        </div>
+      </SectionCard>
+      {savedFlag && <div style={{ fontSize: 12, color: T.green, fontWeight: 600, textAlign: "right", marginTop: -8 }}>✓ Saved</div>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════
 // MAIN SETTINGS MODULE
 // ═══════════════════════════════════════════════════════════════════════
 const settingsSections = [
@@ -1565,6 +1656,7 @@ const settingsSections = [
   { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,       section: null },
   { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
   { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
+  { id: "appearance",    label: "Appearance",           Icon: IcLayout,    Comp: UIPreferences,          section: "PERSONALIZATION" },
   { id: "bank",          label: "Bank Details",         Icon: IcBank,      Comp: BankDetails,            section: "FINANCE & MATERIAL" },
   { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,       section: null },
   { id: "finance",       label: "Finance Settings",     Icon: IcDollar,    Comp: FinanceSettings,        section: null },
@@ -1582,6 +1674,7 @@ export default function SettingsModule() {
     company: "Manage your company profile and regional settings", roles: "Configure user roles, permissions and project access",
     approval: "Set up multi-level approval workflows", backdate: "Control back-dated entry permissions",
     attendance: "Configure attendance mode and payment cycle for each labour type",
+    appearance: "Choose layout style and other visual preferences",
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
     finance: "Tax, invoicing, and financial controls", notifications: "Email, Push & WhatsApp notification settings",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",

@@ -412,8 +412,8 @@ function TitleDropdown({ value, titles, onSelect, onChange }) {
 }
 
 function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSave, saving, dbTitles=[], dbCats=[], dbTypes=[] }) {
-  const CATS  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
-  const TYPES = dbTypes.length > 0 ? dbTypes.map(t=>t.name) : ["Plan","Elevation","Section","Detail","3D","Diagram"];
+  const CATS  = Array.from(new Set(dbCats.length  > 0 ? dbCats.map(c=>c.name)  : ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"]));
+  const TYPES = Array.from(new Set(dbTypes.length > 0 ? dbTypes.map(t=>t.name) : ["Plan","Elevation","Section","Detail","3D","Diagram"]));
   if (!show) return null;
   return (
     <>
@@ -501,8 +501,8 @@ function TabDesign({ project, isAdmin }) {
   const [dbTitles, setDbTitles]     = useState([]);
 
   // Computed options (library data or fallback)
-  const CATS  = dbCats.length  > 0 ? dbCats.map(c=>c.name)  : CATS_DEFAULT;
-  const TYPES = dbTypes.length > 0 ? dbTypes.map(t=>t.name) : TYPES_DEFAULT;
+  const CATS  = Array.from(new Set(dbCats.length  > 0 ? dbCats.map(c=>c.name)  : CATS_DEFAULT));
+  const TYPES = Array.from(new Set(dbTypes.length > 0 ? dbTypes.map(t=>t.name) : TYPES_DEFAULT));
 
   // Filters - drawings
   const [filter,      setFilter]      = useState("All");
@@ -515,6 +515,7 @@ function TabDesign({ project, isAdmin }) {
   const [hideUploadedReq, setHideUploadedReq] = useState(true); // hide Uploaded/Rejected by default
   const [filterReqCat,    setFilterReqCat]    = useState("All");
   const [searchReq,       setSearchReq]       = useState("");
+  const [expandedReqId,    setExpandedReqId]   = useState(null);
 
   const [sel,      setSel]          = useState(null);
   const [showUpload,  setShowUpload]  = useState(false);
@@ -567,6 +568,16 @@ function TabDesign({ project, isAdmin }) {
     } catch(e) {}
   };
 
+  // Dedupe helper — collapse rows with same case-insensitive name (keep first)
+  const dedupeByName = (arr) => {
+    const seen = new Set();
+    return (arr||[]).filter(item => {
+      const k = String(item.name||"").trim().toLowerCase();
+      if (!k || seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
   const loadCategories = async () => {
     try {
       const [catRes, typeRes, titRes] = await Promise.all([
@@ -574,18 +585,18 @@ function TabDesign({ project, isAdmin }) {
         api.get("/design/categories?type=drawing_type"),
         api.get("/design/titles"),
       ]);
-      if (catRes.success  && catRes.data.length)  setDbCats(catRes.data);
-      if (typeRes.success && typeRes.data.length)  setDbTypes(typeRes.data);
-      if (titRes.success  && titRes.data.length)   setDbTitles(titRes.data);
+      if (catRes.success  && catRes.data.length)  setDbCats(dedupeByName(catRes.data));
+      if (typeRes.success && typeRes.data.length)  setDbTypes(dedupeByName(typeRes.data));
+      if (titRes.success  && titRes.data.length)   setDbTitles(dedupeByName(titRes.data));
     } catch(e) {}
   };
 
   // Load titles immediately on mount (separate from categories for speed)
   useEffect(() => {
     if (!projectId) return;
-    api.get("/design/titles").then(r=>{ if(r.success&&r.data.length) setDbTitles(r.data); }).catch(()=>{});
-    api.get("/design/categories?type=category").then(r=>{ if(r.success&&r.data.length) setDbCats(r.data); }).catch(()=>{});
-    api.get("/design/categories?type=drawing_type").then(r=>{ if(r.success&&r.data.length) setDbTypes(r.data); }).catch(()=>{});
+    api.get("/design/titles").then(r=>{ if(r.success&&r.data.length) setDbTitles(dedupeByName(r.data)); }).catch(()=>{});
+    api.get("/design/categories?type=category").then(r=>{ if(r.success&&r.data.length) setDbCats(dedupeByName(r.data)); }).catch(()=>{});
+    api.get("/design/categories?type=drawing_type").then(r=>{ if(r.success&&r.data.length) setDbTypes(dedupeByName(r.data)); }).catch(()=>{});
     loadDrawings();
     loadRequests();
   }, [projectId]);
@@ -748,8 +759,15 @@ function TabDesign({ project, isAdmin }) {
       if (res.success) {
         setDrawings(p => p.map(d => d.id === id ? { ...d, status } : d));
         setSel(null);
-      } else { setActionErr(res.message || "Failed"); }
-    } catch(e) { setActionErr(e.message); }
+      } else { setActionErr(res.message || "Failed to update status"); }
+    } catch(e) {
+      const msg = String(e?.message || "");
+      if (/ECONNRESET|Failed to fetch|NetworkError|timeout/i.test(msg)) {
+        setActionErr("Connection issue — please try again");
+      } else {
+        setActionErr(msg || "Something went wrong");
+      }
+    }
     setActing(p => ({...p, [id]: null}));
   };
 
@@ -1018,57 +1036,93 @@ function TabDesign({ project, isAdmin }) {
     const [rejNote,    setRejNote]    = useState("");
     const [showRevForm,setShowRevForm]= useState(false);
     const [showRejForm,setShowRejForm]= useState(false);
-    const sm = statusMeta[d.status] || statusMeta["Pending"];
+    const isApproved = d.status === "Approved";
     return(
-      <div style={{margin:"8px 0",padding:"12px 15px",background:sm.bg,borderRadius:8,border:"1px solid "+sm.brd}}>
+      <div style={{margin:"6px 0 8px",padding:"11px 14px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${isApproved?T.grn:T.blu}`}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10,flexWrap:"wrap",gap:8}}>
-          <div>
-            <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
-            <div style={{fontSize:11,color:T.t4}}>{d.category} · {d.current_version} · {d.uploaded_by_name||"—"} · {fmtDate(d.updated_at)}</div>
+          <div style={{minWidth:0,flex:1}}>
+            <div style={{fontSize:13,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{d.title}</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:1}}>{d.category} · {d.current_version} · {d.uploaded_by_name||"—"} · {fmtDate(d.updated_at)}</div>
           </div>
-          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+          <div style={{display:"flex",gap:5,alignItems:"center",flexShrink:0}}>
             {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer"
-              style={{padding:"5px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>
-              👁 View
+              style={{padding:"5px 10px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:5,transition:"all .12s",fontFamily:"inherit"}}
+              onMouseEnter={el=>{el.currentTarget.style.background=T.bluL;el.currentTarget.style.borderColor=T.bluM;}}
+              onMouseLeave={el=>{el.currentTarget.style.background=T.surface;el.currentTarget.style.borderColor=T.b1;}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              View
             </a>}
             {d.file_url&&<a href={d.file_url} download target="_blank" rel="noreferrer"
-              style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,fontWeight:600,textDecoration:"none"}}>
-              ⬇ Download
+              style={{padding:"5px 10px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t2,fontSize:11,fontWeight:600,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:5,transition:"all .12s",fontFamily:"inherit"}}
+              onMouseEnter={el=>{el.currentTarget.style.background=T.bluL;el.currentTarget.style.borderColor=T.bluM;el.currentTarget.style.color=T.blu;}}
+              onMouseLeave={el=>{el.currentTarget.style.background=T.surface;el.currentTarget.style.borderColor=T.b1;el.currentTarget.style.color=T.t2;}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+              Download
             </a>}
-            <button onClick={()=>setShowVer(d)} style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}>
-              🕐 History
+            <button onClick={()=>setShowVer(d)}
+              style={{padding:"5px 10px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t2,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,transition:"all .12s",fontFamily:"inherit"}}
+              onMouseEnter={el=>{el.currentTarget.style.background=T.bluL;el.currentTarget.style.borderColor=T.bluM;el.currentTarget.style.color=T.blu;}}
+              onMouseLeave={el=>{el.currentTarget.style.background=T.surface;el.currentTarget.style.borderColor=T.b1;el.currentTarget.style.color=T.t2;}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              History
             </button>
-            <button onClick={()=>setSel(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:16}}>×</button>
+            <button onClick={()=>setSel(null)} title="Close"
+              style={{width:26,height:26,borderRadius:6,border:"none",background:"transparent",color:T.t4,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",transition:"background .12s",marginLeft:2}}
+              onMouseEnter={el=>{el.currentTarget.style.background=T.b1;el.currentTarget.style.color=T.t2;}}
+              onMouseLeave={el=>{el.currentTarget.style.background="transparent";el.currentTarget.style.color=T.t4;}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
           </div>
         </div>
 
-        {actionErr&&<div style={{padding:"6px 10px",background:T.redL,border:"1px solid "+T.redM,borderRadius:6,fontSize:11.5,color:T.red,marginBottom:8}}>{actionErr}</div>}
+        {actionErr&&<div style={{padding:"7px 11px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11.5,color:T.red,marginBottom:8,display:"flex",alignItems:"center",gap:7}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <span style={{flex:1}}>{actionErr}</span>
+          <button onClick={()=>setActionErr("")} style={{background:"none",border:"none",cursor:"pointer",color:T.red,padding:0,display:"flex",opacity:.7}} title="Dismiss">
+            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>}
 
         {d.status!=="Approved"&&(
-          <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {/* Approve */}
             <button onClick={()=>handleStatus(d.id,"Approved",null)} disabled={!!acting[d.id]}
-              style={{padding:"7px 16px",borderRadius:7,background:acting[d.id]==="Approved"?T.b1:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-              ✓ Approve
+              style={{padding:"6px 14px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",boxShadow:`0 2px 5px ${T.grn}33`,transition:"all .12s",opacity:acting[d.id]?.6:1}}
+              onMouseEnter={el=>{if(!acting[d.id])el.currentTarget.style.background="#047857";}}
+              onMouseLeave={el=>{el.currentTarget.style.background=T.grn;}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Approve
             </button>
             {/* Request Revision */}
             <button onClick={()=>{setShowRevForm(!showRevForm);setShowRejForm(false);}}
-              style={{padding:"7px 16px",borderRadius:7,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-              🔄 Request Revision
+              style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.amb,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"all .12s"}}
+              onMouseEnter={el=>{el.currentTarget.style.background=T.ambL;el.currentTarget.style.borderColor=T.ambM;}}
+              onMouseLeave={el=>{el.currentTarget.style.background=T.surface;el.currentTarget.style.borderColor=T.b1;}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+              Request Revision
             </button>
             {/* Reject */}
             <button onClick={()=>{setShowRejForm(!showRejForm);setShowRevForm(false);}}
-              style={{padding:"7px 16px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-              ✕ Reject
+              style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"all .12s"}}
+              onMouseEnter={el=>{el.currentTarget.style.background=T.redL;el.currentTarget.style.borderColor=T.redM;}}
+              onMouseLeave={el=>{el.currentTarget.style.background=T.surface;el.currentTarget.style.borderColor=T.b1;}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+              Reject
             </button>
           </div>
         )}
 
         {d.status==="Approved"&&(
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <span style={{fontSize:12,color:T.grn,fontWeight:600}}>✓ Approved</span>
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:14,border:`1px solid ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              Approved
+            </span>
             <button onClick={()=>handleStatus(d.id,"Pending","Reopened for revision")}
-              style={{padding:"5px 12px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,color:T.amb,fontSize:11,cursor:"pointer"}}>
+              style={{padding:"4px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.amb,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"all .12s"}}
+              onMouseEnter={el=>{el.currentTarget.style.background=T.ambL;el.currentTarget.style.borderColor=T.ambM;}}
+              onMouseLeave={el=>{el.currentTarget.style.background=T.surface;el.currentTarget.style.borderColor=T.b1;}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
               Reopen
             </button>
           </div>
@@ -1121,21 +1175,27 @@ function TabDesign({ project, isAdmin }) {
       {showVer    && <VersionModal drawing={showVer} />}
       <DesignRequestModal show={showReqForm} onClose={()=>setShowReqForm(false)} editReq={editReq} reqForm={reqForm} setReqForm={setReqForm} onSave={handleSaveRequest} saving={reqSaving} dbTitles={dbTitles} dbCats={dbCats} dbTypes={dbTypes}/>
 
-      {/* Main tab switcher: Drawings | Requests */}
-      <div style={{display:"flex",gap:0,marginBottom:14,borderBottom:"2px solid "+T.b1}}>
+      {/* Main tab switcher — segmented pill */}
+      <div style={{display:"inline-flex",padding:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:10,marginBottom:14,gap:0}}>
         {[
           {id:"drawings", label:"Drawings", count:drawings.length},
           {id:"requests", label:"Design Requests", count:requests.filter(r=>r.status==="Pending").length},
-        ].map(t=>(
-          <button key={t.id} onClick={()=>setMainTab(t.id)}
-            style={{padding:"8px 18px",border:"none",background:"none",
-              color:mainTab===t.id?T.blu:T.t3,fontSize:13,fontWeight:mainTab===t.id?700:400,
-              cursor:"pointer",borderBottom:mainTab===t.id?"2px solid "+T.blu:"2px solid transparent",
-              marginBottom:"-2px",display:"flex",alignItems:"center",gap:6}}>
-            {t.label}
-            {t.count>0&&<span style={{background:mainTab===t.id?T.blu:T.b1,color:mainTab===t.id?"white":T.t3,fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{t.count}</span>}
-          </button>
-        ))}
+        ].map(t=>{
+          const active = mainTab===t.id;
+          return(
+            <button key={t.id} onClick={()=>setMainTab(t.id)}
+              style={{padding:"6px 16px",border:"none",borderRadius:7,
+                background:active?T.surface:"transparent",
+                color:active?T.t1:T.t3,
+                fontSize:12.5,fontWeight:active?700:500,fontFamily:"inherit",
+                cursor:"pointer",display:"flex",alignItems:"center",gap:7,
+                boxShadow:active?"0 1px 3px rgba(0,0,0,.08)":"none",
+                transition:"all .12s"}}>
+              {t.label}
+              {t.count>0&&<span style={{background:active?T.blu:T.b1,color:active?"white":T.t3,fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,fontVariantNumeric:"tabular-nums"}}>{t.count}</span>}
+            </button>
+          );
+        })}
       </div>
 
       {/* ── DRAWINGS TAB ── */}
@@ -1143,39 +1203,52 @@ function TabDesign({ project, isAdmin }) {
       {/* Header toolbar */}
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
         <div style={{display:"flex",gap:5,flex:1,flexWrap:"wrap"}}>
-          {["All",...CATS].map(c=>(
-            <button key={c} onClick={()=>setFilter(c)}
-              style={{padding:"4px 10px",borderRadius:20,border:"1.5px solid "+(filter===c?T.blu:T.b1),
-                background:filter===c?T.bluL:"none",color:filter===c?T.blu:T.t3,
-                fontSize:11,fontWeight:filter===c?700:400,cursor:"pointer",whiteSpace:"nowrap"}}>
-              {c}{c!=="All"&&catCounts[c]>0&&<span style={{marginLeft:4,fontSize:10}}>{catCounts[c]}</span>}
-            </button>
-          ))}
+          {["All",...CATS].map(c=>{
+            const active = filter===c;
+            const count = c!=="All" ? (catCounts[c]||0) : drawings.length;
+            return(
+              <button key={c} onClick={()=>setFilter(c)}
+                style={{padding:"4px 11px",borderRadius:14,border:`1px solid ${active?T.blu:T.b1}`,
+                  background:active?T.bluL:T.surface,color:active?T.blu:T.t3,
+                  fontSize:11,fontWeight:active?700:500,cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:5,transition:"all .12s"}}
+                onMouseEnter={el=>{if(!active){el.currentTarget.style.borderColor=T.b2;el.currentTarget.style.background=T.surfaceB;}}}
+                onMouseLeave={el=>{if(!active){el.currentTarget.style.borderColor=T.b1;el.currentTarget.style.background=T.surface;}}}>
+                {c}
+                {count>0&&<span style={{fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:8,background:active?T.blu:T.b1,color:active?"white":T.t3,fontVariantNumeric:"tabular-nums"}}>{count}</span>}
+              </button>
+            );
+          })}
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center"}}>
           {/* Search + filters */}
           <div style={{position:"relative"}}>
+            <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
             <input value={searchDraw} onChange={e=>setSearchDraw(e.target.value)}
-              placeholder="Search..."
-              style={{padding:"5px 9px 5px 27px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit",width:130}}/>
-            <span style={{position:"absolute",left:7,top:"50%",transform:"translateY(-50%)",fontSize:12,color:T.t4}}>🔍</span>
+              placeholder="Search drawings..."
+              style={{padding:"6px 9px 6px 28px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:160,color:T.t1,background:T.surface,boxSizing:"border-box",transition:"border-color .12s"}}
+              onFocus={el=>el.target.style.borderColor=T.b2}
+              onBlur={el=>el.target.style.borderColor=T.b1}/>
           </div>
           <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}
-            style={{padding:"5px 8px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
+            style={{padding:"6px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface,color:T.t2}}>
             {["All Status","Pending","Approved","Revision","Rejected"].map(s=><option key={s} value={s==="All Status"?"All":s}>{s}</option>)}
           </select>
           {revQueue.length>0&&(
             <button onClick={()=>setShowRevQ(true)}
-              style={{padding:"6px 12px",borderRadius:7,background:T.ambL,border:"1px solid "+T.ambM,
-                color:T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-              🔄 Revision Queue
-              <span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{revQueue.length}</span>
+              style={{padding:"6px 11px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,
+                color:T.amb,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontFamily:"inherit"}}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 4v6h6M23 20v-6h-6M20.49 9A9 9 0 005.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 013.51 15"/></svg>
+              Revision Queue
+              <span style={{background:T.amb,color:"white",fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,fontVariantNumeric:"tabular-nums"}}>{revQueue.length}</span>
             </button>
           )}
           <button onClick={()=>setShowUpload(true)}
-            style={{padding:"6px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",
-              fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            ⬆ Upload Drawing
+            style={{padding:"7px 14px",borderRadius:6,background:T.blu,border:"none",color:"white",
+              fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,transition:"all .12s"}}
+            onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}
+            onMouseLeave={el=>el.currentTarget.style.background=T.blu}>
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            Upload Drawing
           </button>
         </div>
       </div>
@@ -1185,10 +1258,12 @@ function TabDesign({ project, isAdmin }) {
 
       {/* Empty state */}
       {!loading&&drawings.length===0&&(
-        <div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}>
-          <div style={{fontSize:40,marginBottom:10}}>📐</div>
-          <div style={{fontSize:14,fontWeight:600,color:T.t2}}>Koi drawing nahi hai abhi</div>
-          <div style={{fontSize:12,marginTop:4}}>Upload Drawing button se pehli drawing add karo</div>
+        <div style={{textAlign:"center",padding:"70px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+          <div style={{width:64,height:64,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4}}>
+            <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg>
+          </div>
+          <div style={{fontSize:14,fontWeight:700,color:T.t1}}>No drawings yet</div>
+          <div style={{fontSize:12,color:T.t3,maxWidth:300,lineHeight:1.5}}>Click <b>Upload Drawing</b> to add the first drawing for this project.</div>
         </div>
       )}
 
@@ -1227,45 +1302,86 @@ function TabDesign({ project, isAdmin }) {
       </>} {/* end drawings tab */}
 
       {/* ── REQUESTS TAB ── */}
-      {mainTab==="requests"&&(
+      {mainTab==="requests"&&(()=>{
+        // Reusable initials avatar (color seeded from name)
+        const Avatar = ({name, size=20, title}) => {
+          const n = String(name||"?").trim() || "?";
+          const initial = n[0].toUpperCase();
+          // hash → color
+          const palette = ["#3B82F6","#8B5CF6","#EC4899","#F59E0B","#10B981","#06B6D4","#F43F5E","#84CC16"];
+          let h = 0; for (let i=0; i<n.length; i++) h = (h*31 + n.charCodeAt(i)) & 0xffff;
+          const bg = palette[h % palette.length];
+          return (
+            <div title={title||n} style={{width:size,height:size,borderRadius:"50%",background:bg,color:"#fff",fontSize:Math.round(size*0.46),fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,letterSpacing:0}}>{initial}</div>
+          );
+        };
+
+        // Time-ago formatter
+        const fmtTime = (t) => {
+          if (!t) return "";
+          try {
+            const d = new Date(t); if (isNaN(d.getTime())) return "";
+            const diff = (Date.now()-d.getTime())/1000;
+            if (diff < 60) return "just now";
+            if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
+            if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
+            if (diff < 604800) return `${Math.floor(diff/86400)}d ago`;
+            return d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
+          } catch { return ""; }
+        };
+        // Compact credit chip — Avatar + "X by Name · time"
+        const Credit = ({label, name, time}) => name ? (
+          <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,color:T.t3}}>
+            <Avatar name={name} size={16}/>
+            <span>{label}</span>
+            <span style={{color:T.t1,fontWeight:600}}>{name}</span>
+            {time && <span style={{color:T.t4}}>· {fmtTime(time)}</span>}
+          </span>
+        ) : null;
+
+        return(
         <div>
-          {/* Toolbar */}
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-            <div style={{fontSize:12,color:T.t3}}>{requests.length} total requests</div>
+          {/* Single-line toolbar — count + filters + new request */}
+          <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+            <span style={{fontSize:11.5,color:T.t3,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>
+              <b style={{color:T.t1,fontVariantNumeric:"tabular-nums"}}>{requests.length}</b> total
+            </span>
+            <div style={{position:"relative",flex:1,minWidth:200}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round" style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+              <input value={searchReq} onChange={e=>setSearchReq(e.target.value)}
+                placeholder="Search requests..."
+                style={{width:"100%",padding:"6px 9px 6px 28px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",color:T.t1,background:T.surface,transition:"border-color .12s"}}
+                onFocus={el=>el.target.style.borderColor=T.b2}
+                onBlur={el=>el.target.style.borderColor=T.b1}/>
+            </div>
+            <select value={filterReqStatus} onChange={e=>setFilterReqStatus(e.target.value)}
+              style={{padding:"6px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface,color:T.t2,flexShrink:0}}>
+              {["All Status","Pending","In Progress","Uploaded","Rejected"].map(s=><option key={s} value={s==="All Status"?"All":s}>{s}</option>)}
+            </select>
+            <select value={filterReqCat} onChange={e=>setFilterReqCat(e.target.value)}
+              style={{padding:"6px 9px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface,color:T.t2,flexShrink:0}}>
+              <option value="All">All Categories</option>
+              {CATS.map(c=><option key={c}>{c}</option>)}
+            </select>
             {isAdmin&&<button onClick={()=>{setEditReq(null);setReqForm({title:"",category:"Architectural",description:"",priority:"Normal",due_date:""});setShowReqForm(true);}}
-              style={{padding:"6px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-              + New Request
+              style={{padding:"7px 14px",borderRadius:6,background:T.blu,border:"none",color:"white",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,flexShrink:0,transition:"background .12s"}}
+              onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}
+              onMouseLeave={el=>el.currentTarget.style.background=T.blu}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+              New Request
             </button>}
           </div>
 
           {/* Empty state */}
           {requests.length===0&&(
-            <div style={{textAlign:"center",padding:"60px 20px",color:T.t4}}>
-              <div style={{fontSize:36,marginBottom:8}}>📋</div>
-              <div style={{fontSize:14,fontWeight:600,color:T.t2}}>Koi design request nahi</div>
-              <div style={{fontSize:12,marginTop:4}}>New Request button se request karo</div>
+            <div style={{textAlign:"center",padding:"70px 20px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}>
+              <div style={{width:64,height:64,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4}}>
+                <svg width={28} height={28} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round"><path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2"/><path d="M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/></svg>
+              </div>
+              <div style={{fontSize:14,fontWeight:700,color:T.t1}}>No design requests yet</div>
+              <div style={{fontSize:12,color:T.t3,maxWidth:300,lineHeight:1.5}}>Click <b>+ New Request</b> to ask for a drawing from the design team.</div>
             </div>
           )}
-
-          {/* Request cards */}
-          {/* Request filters */}
-          <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-            <div style={{position:"relative",flex:1,minWidth:160}}>
-              <input value={searchReq} onChange={e=>setSearchReq(e.target.value)}
-                placeholder="Search requests..."
-                style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",fontSize:13,color:T.t4}}>🔍</span>
-            </div>
-            <select value={filterReqStatus} onChange={e=>setFilterReqStatus(e.target.value)}
-              style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
-              {["All Status","Pending","In Progress","Uploaded","Rejected"].map(s=><option key={s} value={s==="All Status"?"All":s}>{s}</option>)}
-            </select>
-            <select value={filterReqCat} onChange={e=>setFilterReqCat(e.target.value)}
-              style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
-              <option value="All">All Categories</option>
-              {CATS.map(c=><option key={c}>{c}</option>)}
-            </select>
-          </div>
 
           {requests.filter(req=>{
             if(hideUploadedReq && (req.status==="Uploaded"||req.status==="Rejected")) return false;
@@ -1275,80 +1391,110 @@ function TabDesign({ project, isAdmin }) {
             return true;
           }).map(req=>{
             const prioMeta = {
-              "Urgent": {c:T.red,   bg:T.redL},
-              "High":   {c:T.amb,   bg:T.ambL},
-              "Normal": {c:T.blu,   bg:T.bluL},
-              "Low":    {c:T.t4,    bg:T.surfaceB},
+              "Urgent": {c:T.red,   bg:T.redL, brd:T.redM},
+              "High":   {c:T.amb,   bg:T.ambL, brd:T.ambM},
+              "Normal": {c:T.blu,   bg:T.bluL, brd:T.bluM},
+              "Low":    {c:T.t4,    bg:T.surfaceB, brd:T.b1},
             };
             const statusMeta2 = {
-              "Pending":     {c:T.amb, bg:T.ambL},
-              "In Progress": {c:T.blu, bg:T.bluL},
-              "Uploaded":    {c:T.grn, bg:T.grnL},
-              "Rejected":    {c:T.red, bg:T.redL},
+              "Pending":     {c:T.amb, bg:T.ambL, brd:T.ambM},
+              "In Progress": {c:T.blu, bg:T.bluL, brd:T.bluM},
+              "Uploaded":    {c:T.grn, bg:T.grnL, brd:T.grnM},
+              "Rejected":    {c:T.red, bg:T.redL, brd:T.redM},
             };
             const pm = prioMeta[req.priority]    || prioMeta["Normal"];
             const sm = statusMeta2[req.status]   || statusMeta2["Pending"];
+            const isExpanded = expandedReqId === req.id;
             return(
-              <div key={req.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,
-                padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+pm.c}}>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{req.title}</div>
-                    <div style={{fontSize:11,color:T.t4,marginTop:2}}>
-                      {req.category}
-                      {req.due_date&&<span style={{marginLeft:8}}>· Due: {fmtDate(req.due_date)}</span>}
-                      {req.requested_by&&<span style={{marginLeft:8}}>· By: {req.requested_by}</span>}
+              <div key={req.id} style={{background:T.surface,borderRadius:9,border:`1px solid ${isExpanded?T.b2:T.b1}`,marginBottom:7,borderLeft:`3px solid ${pm.c}`,overflow:"hidden",transition:"border-color .12s"}}>
+                {/* Compact row — single line summary */}
+                <div onClick={()=>setExpandedReqId(isExpanded?null:req.id)}
+                  style={{padding:"10px 14px",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:isExpanded?T.surfaceB:"transparent",transition:"background .12s"}}
+                  onMouseEnter={el=>{if(!isExpanded)el.currentTarget.style.background=T.surfaceB;}}
+                  onMouseLeave={el=>{if(!isExpanded)el.currentTarget.style.background="transparent";}}>
+                  {/* Requester avatar */}
+                  <Avatar name={req.requested_by||"?"} size={26} title={`Requested by ${req.requested_by||"unknown"}`}/>
+                  {/* Title + meta */}
+                  <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:2}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{req.title}</div>
+                    <div style={{fontSize:10.5,color:T.t4,display:"flex",alignItems:"center",gap:6,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      <span>{req.category}</span>
+                      {req.due_date&&<><span>·</span><span>Due {fmtDate(req.due_date)}</span></>}
+                      {req.assigned_to&&<><span>·</span><span style={{display:"inline-flex",alignItems:"center",gap:4}}><Avatar name={req.assigned_to} size={14}/>{req.assigned_to}</span></>}
                     </div>
-                    {req.description&&<div style={{fontSize:11.5,color:T.t2,marginTop:5,lineHeight:1.4}}>{req.description}</div>}
-                    {req.assigned_to&&<div style={{fontSize:11,color:T.blu,marginTop:4}}>👤 Assigned to: {req.assigned_to}</div>}
                   </div>
-                  <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:5,flexShrink:0}}>
-                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,background:pm.bg,color:pm.c}}>{req.priority}</span>
-                    <span style={{fontSize:10,fontWeight:700,padding:"2px 8px",borderRadius:20,background:sm.bg,color:sm.c}}>{req.status}</span>
+                  {/* Status pills */}
+                  <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:14,background:pm.bg,color:pm.c,border:`1px solid ${pm.brd}`,letterSpacing:".3px",textTransform:"uppercase"}}>{req.priority}</span>
+                    <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:14,background:sm.bg,color:sm.c,border:`1px solid ${sm.brd}`,letterSpacing:".3px",textTransform:"uppercase"}}>{req.status}</span>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" style={{transform:isExpanded?"rotate(180deg)":"none",transition:"transform .15s"}}><polyline points="6 9 12 15 18 9"/></svg>
                   </div>
                 </div>
 
-                {/* Actions */}
-                <div style={{display:"flex",gap:6,marginTop:10,flexWrap:"wrap"}}>
-                  {req.status==="Pending"&&<>
-                    <button onClick={()=>{setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
-                      style={{padding:"4px 10px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      👤 Assign
-                    </button>
-                    <button onClick={()=>{
-                      setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
-                      setPendingReqId(req.id);
-                      setMainTab("drawings"); setShowUpload(true);
-                      handleUpdateReqStatus(req.id,"In Progress");
-                    }}
-                      style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      ⬆ Upload Direct
-                    </button>
-                  </>}
-                  {req.status==="In Progress"&&(
-                    <button onClick={()=>{
-                      setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
-                      setPendingReqId(req.id);
-                      setMainTab("drawings"); setShowUpload(true);
-                    }}
-                      style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      ⬆ Upload Drawing
-                    </button>
-                  )}
-                  {isAdmin&&<button onClick={()=>{setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
-                    style={{padding:"4px 10px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t3,fontSize:11,cursor:"pointer"}}>
-                    Edit
-                  </button>}
-                  {isAdmin&&<button onClick={()=>handleDeleteReq(req.id)}
-                    style={{padding:"4px 10px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,cursor:"pointer"}}>
-                    Delete
-                  </button>}
-                </div>
+                {/* Expanded details — compact */}
+                {isExpanded && (
+                  <div style={{padding:"10px 14px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`,display:"flex",flexDirection:"column",gap:9}}>
+                    {req.description && (
+                      <div style={{maxWidth:560,padding:"7px 10px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t2,lineHeight:1.45}}>{req.description}</div>
+                    )}
+                    {/* Compact credits — only Requested by + Uploaded by */}
+                    <div style={{display:"flex",alignItems:"center",gap:18,flexWrap:"wrap"}}>
+                      <Credit label="Requested by" name={req.requested_by} time={req.created_at}/>
+                      {req.status==="Uploaded" && <Credit label="Uploaded by" name={req.updated_by||req.assigned_to} time={req.updated_at}/>}
+                    </div>
+                    {/* Action buttons */}
+                    <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {req.status==="Pending"&&<>
+                        <button onClick={(e)=>{e.stopPropagation();setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
+                          style={{padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6M23 11h-6"/></svg>
+                          Assign
+                        </button>
+                        <button onClick={(e)=>{
+                          e.stopPropagation();
+                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                          setPendingReqId(req.id);
+                          setMainTab("drawings"); setShowUpload(true);
+                          handleUpdateReqStatus(req.id,"In Progress");
+                        }}
+                          style={{padding:"5px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"all .12s"}}
+                          onMouseEnter={el=>{el.currentTarget.style.background=T.bluL; el.currentTarget.style.borderColor=T.bluM;}}
+                          onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1;}}>
+                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                          Upload Direct
+                        </button>
+                      </>}
+                      {req.status==="In Progress"&&(
+                        <button onClick={(e)=>{
+                          e.stopPropagation();
+                          setUForm({title:req.title+" Drawing",category:req.category,drawing_type:"2D",note:req.description||""});
+                          setPendingReqId(req.id);
+                          setMainTab("drawings"); setShowUpload(true);
+                        }}
+                          style={{padding:"5px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"all .12s"}}
+                          onMouseEnter={el=>{el.currentTarget.style.background=T.bluL; el.currentTarget.style.borderColor=T.bluM;}}
+                          onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1;}}>
+                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+                          Upload Drawing
+                        </button>
+                      )}
+                      {isAdmin&&<button onClick={(e)=>{e.stopPropagation();setEditReq(req);setReqForm({title:req.title,category:req.category,description:req.description||"",priority:req.priority,due_date:req.due_date||"",assigned_to:req.assigned_to||""});setShowReqForm(true);}}
+                        style={{padding:"5px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                        Edit
+                      </button>}
+                      {isAdmin&&<button onClick={(e)=>{e.stopPropagation();handleDeleteReq(req.id);}}
+                        style={{padding:"5px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                        Delete
+                      </button>}
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
         </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
@@ -11659,6 +11805,9 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   const [approvalCount, setApprovalCount] = useState(0);
   const [approvalsByModule, setApprovalsByModule] = useState([]);
   const [showApprovalDrawer, setShowApprovalDrawer] = useState(false);
+  const [showSitePulse, setShowSitePulse] = useState(false);
+  const [showProjectSettings, setShowProjectSettings] = useState(false);
+  const [showProjectNotifs, setShowProjectNotifs] = useState(false);
   const loadApprovalCounts=()=>{
     if(!project?.id) return;
     api.get("/approvals/counts?project_id="+project.id).then(r=>{
@@ -11767,7 +11916,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       {/* ── PROJECT SIDEBAR ── */}
       <aside style={{width:sidebarWidth, background:"#1E293B", color:"#fff", display:"flex", flexDirection:"column", flexShrink:0, transition:"width .2s ease", overflow:"hidden"}}>
 
-        {/* Header — hamburger toggle + project name */}
+        {/* Header — hamburger toggle + company name */}
         <div style={{padding: sidebarCollapsed?"10px 0":"10px 12px", borderBottom:"1px solid rgba(255,255,255,.08)", display:"flex", alignItems:"center", justifyContent: sidebarCollapsed?"center":"flex-start", gap:10, minHeight:48}}>
           <button onClick={toggleSidebar} title={sidebarCollapsed?"Open sidebar":"Close sidebar"}
             style={{width:32, height:32, borderRadius:6, border:"none", background:"rgba(255,255,255,.06)", color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"background .15s"}}
@@ -11776,7 +11925,10 @@ function ProjectDetailPage({project=PROJ, onBack}) {
             <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
           </button>
           {!sidebarCollapsed && (
-            <div title={project.name} style={{flex:1, minWidth:0, fontSize:13.5, fontWeight:700, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{project.name}</div>
+            <div title={currentUser.company_name||"Company"} style={{flex:1, minWidth:0, display:"flex", flexDirection:"column", overflow:"hidden"}}>
+              <span style={{fontSize:13.5, fontWeight:700, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", letterSpacing:"-.1px"}}>{currentUser.company_name||"Company"}</span>
+              <span style={{fontSize:9.5, fontWeight:600, color:"rgba(255,255,255,.4)", textTransform:"uppercase", letterSpacing:".5px", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{currentUser.role||"User"}</span>
+            </div>
           )}
         </div>
 
@@ -11828,38 +11980,56 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       </aside>
 
       {/* ── RIGHT: top strip + content ── */}
-      <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden"}}>
-        {/* Top strip — breadcrumb + chips + approvals */}
-        <div style={{padding:"7px 16px", background:T.surface, borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", gap:12, flexShrink:0, minHeight:48}}>
+      <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden", background:T.bg}}>
+        {/* Dark top bar — floating card with rounded edges */}
+        <div style={{margin:"10px 12px 0", padding:"8px 14px", background:"#1E293B", borderRadius:10, boxShadow:"0 2px 10px rgba(15,23,42,0.18)", display:"flex", alignItems:"center", gap:12, flexShrink:0, minHeight:48}}>
           {/* Left: breadcrumb */}
           <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", gap:8, overflow:"hidden"}}>
-            <span title={project.name} style={{fontSize:13.5, fontWeight:700, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:240}}>{project.name}</span>
-            <span style={{fontSize:12, color:T.t4, fontWeight:400}}>/</span>
-            <span style={{fontSize:12.5, fontWeight:600, color:T.t2, whiteSpace:"nowrap"}}>{currentTabLabel}</span>
-            <Pill label={project.status} c={sm.c} bg={sm.bg||T.sltL}/>
-            {isSolar && <span style={{fontSize:9.5,fontWeight:800,color:"#E65100",background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:4,padding:"2px 7px",letterSpacing:".3px"}}>☀ SOLAR</span>}
+            <span title={project.name} style={{fontSize:13.5, fontWeight:700, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:240}}>{project.name}</span>
+            <span style={{fontSize:12, color:"rgba(255,255,255,.35)", fontWeight:400}}>/</span>
+            <span style={{fontSize:12.5, fontWeight:600, color:"rgba(255,255,255,.85)", whiteSpace:"nowrap"}}>{currentTabLabel}</span>
+            <Pill label={project.status} c={sm.c} bg="rgba(255,255,255,.1)"/>
+            {isSolar && <span style={{fontSize:9.5,fontWeight:800,color:"#FBBF24",background:"rgba(251,191,36,.12)",border:"1px solid rgba(251,191,36,.3)",borderRadius:4,padding:"2px 7px",letterSpacing:".3px"}}>☀ SOLAR</span>}
           </div>
 
-          {/* Right: financial chips + approvals */}
-          <div style={{display:"flex", alignItems:"center", gap:7, flexShrink:0}}>
-            <Chip label="BOQ" value={`₹${fmt(project.boq)}`} color={T.t2} bg={T.surfaceB} border={T.b1}/>
-            <Chip label="Spent" value={`₹${fmt(project.expense)}`} color={T.amb} bg={T.ambL} border={T.ambM}/>
-            <Chip label="Margin" value={`₹${fmt(Math.abs(margin))}`} color={margin>=0?T.grn:T.red} bg={margin>=0?T.grnL:T.redL} border={margin>=0?T.grnM:T.redM}/>
-            <Chip label="Progress" value={`${project.progress}%`} color={T.blu} bg={T.bluL} border={T.bluM}/>
-            {approvalCount>0 && (
-              <button onClick={()=>setShowApprovalDrawer(true)}
-                style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",border:`1px solid ${T.ambM}`,borderRadius:14,background:"#FEF3C7",color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"background .15s",flexShrink:0}}
-                onMouseEnter={e=>e.currentTarget.style.background="#FDE68A"}
-                onMouseLeave={e=>e.currentTarget.style.background="#FEF3C7"}>
-                <span style={{width:6,height:6,borderRadius:"50%",background:T.amb}}/>
-                {approvalCount} pending
-              </button>
-            )}
+          {/* Right: action icon buttons */}
+          <div style={{display:"flex", alignItems:"center", gap:2, flexShrink:0}}>
+            {(() => {
+              const IconBtn = ({title, onClick, badge, badgeColor, children}) => (
+                <button onClick={onClick} title={title}
+                  style={{position:"relative", width:34, height:34, borderRadius:7, border:"none", background:"transparent", color:"rgba(255,255,255,.7)", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", transition:"background .12s, color .12s", flexShrink:0}}
+                  onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,.08)"; e.currentTarget.style.color="#fff";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="transparent"; e.currentTarget.style.color="rgba(255,255,255,.7)";}}>
+                  {children}
+                  {badge>0 && (
+                    <span style={{position:"absolute", top:4, right:4, minWidth:14, height:14, padding:"0 3px", borderRadius:8, background:badgeColor||"#F59E0B", color:"#fff", fontSize:9, fontWeight:700, display:"flex", alignItems:"center", justifyContent:"center", border:"2px solid #1E293B", fontVariantNumeric:"tabular-nums", lineHeight:1}}>{badge>9?"9+":badge}</span>
+                  )}
+                </button>
+              );
+              return (<>
+                {/* Site Pulse */}
+                <IconBtn title="Site Pulse — live activity feed" onClick={()=>setShowSitePulse(true)}>
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                </IconBtn>
+                {/* Approvals */}
+                <IconBtn title={`Pending Approvals${approvalCount>0?` (${approvalCount})`:""}`} onClick={()=>setShowApprovalDrawer(true)} badge={approvalCount} badgeColor="#F59E0B">
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                </IconBtn>
+                {/* Notifications */}
+                <IconBtn title="Project Notifications" onClick={()=>setShowProjectNotifs(true)}>
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                </IconBtn>
+                {/* Project Settings */}
+                <IconBtn title="Project Settings" onClick={()=>setShowProjectSettings(true)}>
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+                </IconBtn>
+              </>);
+            })()}
           </div>
         </div>
 
         {/* Content */}
-        <div style={{flex:1, overflowY:"auto", background:T.bg}}>
+        <div style={{flex:1, overflowY:"auto", background:T.bg, marginTop:10}}>
           {tabContent[tab]}
         </div>
       </div>
@@ -11941,12 +12111,73 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     </div>
   );
 
+  // Reusable simple side drawer (right slide-in)
+  const SimpleDrawer = ({title, subtitle, onClose, children}) => (
+    <>
+      <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200}}/>
+      <div style={{position:"fixed",top:0,right:0,height:"100vh",width:520,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.15)",zIndex:201,display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"}}>
+        <div style={{padding:"12px 16px",background:"#0D1B2A",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>{title}</div>
+            {subtitle && <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{subtitle}</div>}
+          </div>
+          <button onClick={onClose} title="Close"
+            style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
+            onMouseEnter={el=>el.currentTarget.style.background="rgba(255,255,255,0.1)"}
+            onMouseLeave={el=>el.currentTarget.style.background="none"}>
+            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+          </button>
+        </div>
+        <div style={{flex:1,overflowY:"auto"}}>{children}</div>
+      </div>
+    </>
+  );
+
+  const PlaceholderEmpty = ({icon, title, desc}) => (
+    <div style={{padding:"60px 30px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:14}}>
+      <div style={{width:56,height:56,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4}}>{icon}</div>
+      <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{title}</div>
+      <div style={{fontSize:12,color:T.t3,maxWidth:340,lineHeight:1.5}}>{desc}</div>
+    </div>
+  );
+
   return (
     <>
       {layoutMode === "sidebar" ? sidebarLayout : horizontalLayout}
       {/* ── PROJECT APPROVAL DRAWER ── */}
       {showApprovalDrawer&&(
         <ProjectApprovalDrawer projectId={project.id} projectName={project.name} onClose={()=>{setShowApprovalDrawer(false);loadApprovalCounts();}}/>
+      )}
+      {/* ── SITE PULSE DRAWER ── */}
+      {showSitePulse && (
+        <SimpleDrawer title="Site Pulse" subtitle={`${project.name} · live activity feed`} onClose={()=>setShowSitePulse(false)}>
+          <PlaceholderEmpty
+            icon={<svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>}
+            title="Live activity feed coming soon"
+            desc="Real-time updates from the site — attendance check-ins, material movements, transactions, photos uploaded by team members will stream here."
+          />
+        </SimpleDrawer>
+      )}
+      {/* ── PROJECT NOTIFICATIONS DRAWER ── */}
+      {showProjectNotifs && (
+        <SimpleDrawer title="Notifications" subtitle={`${project.name}`} onClose={()=>setShowProjectNotifs(false)}>
+          <PlaceholderEmpty
+            icon={<svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>}
+            title="No notifications yet"
+            desc="Project-specific notifications — overdue tasks, low stock alerts, pending approvals updates, mentions in chats — will appear here."
+          />
+        </SimpleDrawer>
+      )}
+      {/* ── PROJECT SETTINGS DRAWER ── */}
+      {showProjectSettings && (
+        <SimpleDrawer title="Project Settings" subtitle={`${project.name}`} onClose={()=>setShowProjectSettings(false)}>
+          <PlaceholderEmpty
+            icon={<svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>}
+            title="Project settings"
+            desc="Edit project name, dates, PM, BOQ value, status, and team members. This panel will host all per-project configuration."
+          />
+        </SimpleDrawer>
       )}
     </>
   );

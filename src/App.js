@@ -125,11 +125,11 @@ const NAV_GROUPS=[
     {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
     {id:"team",      label:"Team Schedule",Icon:IcTeam, sc:"T"},
-    {id:"design",    label:"Design",       Icon:IcDes,  sc:"D", badge:"NEW",bc:C.a},
+    {id:"design",    label:"Design",       Icon:IcDes,  sc:"D"},
   ]},
   {section:"FINANCE & OPS",items:[
     {id:"finance",     label:"Finance",     Icon:IcFin,  sc:"F"},
-    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P", badge:11,bc:C.p},
+    {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P"},
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
     {id:"payroll",     label:"Payroll",     Icon:IcPay,  sc:"Y"},
   ]},
@@ -160,16 +160,24 @@ const Pill=({label,c,bg,brd})=>(
 );
 function KpiTile({label,value,sub,color,Icon,trend,trendVal,onClick}){
   return(
-    <div onClick={onClick} style={{padding:"14px 16px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,borderTop:`3px solid ${color}`,boxShadow:"0 1px 4px rgba(0,0,0,0.05)",cursor:onClick?"pointer":"default",transition:"box-shadow 0.15s",minWidth:0}}
-      onMouseEnter={e=>{if(onClick)e.currentTarget.style.boxShadow="0 4px 14px rgba(0,0,0,0.1)";}}
-      onMouseLeave={e=>{if(onClick)e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.05)";}}>
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8}}>
-        <div style={{width:34,height:34,borderRadius:8,background:color+"18",border:`1px solid ${color}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Icon size={16} color={color}/></div>
-        {trend&&<div style={{display:"flex",alignItems:"center",gap:3,fontSize:10.5,fontWeight:600,color:trend==="up"?T.grn:T.red}}>{trend==="up"?<IcTrend size={11} color={T.grn}/>:<IcTrendD size={11} color={T.red}/>}{trendVal}</div>}
+    <div onClick={onClick} style={{padding:"16px 18px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:12,cursor:onClick?"pointer":"default",transition:"all .15s",minWidth:0,display:"flex",flexDirection:"column",gap:10}}
+      onMouseEnter={e=>{if(onClick){e.currentTarget.style.borderColor=T.b2; e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)";}}}
+      onMouseLeave={e=>{if(onClick){e.currentTarget.style.borderColor=T.b1; e.currentTarget.style.boxShadow="none";}}}>
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+        <div style={{flex:1,minWidth:0,fontSize:12.5,fontWeight:500,color:T.t2,lineHeight:1.3,marginTop:4}}>{label}</div>
+        <div style={{width:40,height:40,borderRadius:9,background:color,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,boxShadow:`0 3px 8px ${color}33`}}>
+          <Icon size={17} color="#fff"/>
+        </div>
       </div>
-      <div style={{fontSize:22,fontWeight:700,color:T.t1,letterSpacing:"-0.5px",lineHeight:1,marginBottom:4}}>{value}</div>
-      <div style={{fontSize:11,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{label}</div>
-      {sub&&<div style={{fontSize:10.5,color:T.t4}}>{sub}</div>}
+      <div>
+        <div style={{fontSize:24,fontWeight:700,color:T.t1,letterSpacing:"-0.5px",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{value}</div>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginTop:5,minHeight:14}}>
+          {sub&&<span style={{fontSize:11.5,color:T.t4}}>{sub}</span>}
+          {trend&&<span style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:11,fontWeight:600,color:trend==="up"?T.grn:T.red,fontVariantNumeric:"tabular-nums"}}>
+            {trend==="up"?<IcTrend size={10} color={T.grn}/>:<IcTrendD size={10} color={T.red}/>}{trendVal}
+          </span>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -189,7 +197,14 @@ const Bar=({pct,color,h=5})=>(
 
 // ── CHARTS (unchanged from original) ──────────────────────────────────
 function CashFlowChart({data,height=110}){
-  if(!data||data.length<1) return <div style={{padding:"30px 0",textAlign:"center",color:T.t4,fontSize:11}}>No data</div>;
+  if(!data||data.length<1) return (
+    <div style={{padding:"24px 16px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:7}}>
+      <div style={{width:36,height:36,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round"><path d="M3 3v18h18M7 14l3-3 3 3 4-5"/></svg>
+      </div>
+      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>No transactions yet</div>
+    </div>
+  );
   const maxVal=Math.max(...data.flatMap(d=>[d.in,d.out]),1);
   const barW=28,gap=14,groupGap=28;
   const totalW=data.length*(barW*2+gap+groupGap);
@@ -211,7 +226,12 @@ function CashFlowChart({data,height=110}){
   );
 }
 function DonutChart({slices,size=110,cx=55,cy=55,r=38,inner=22}){
-  if(!slices||!slices.length||slices.every(s=>!s.value)) return <div style={{width:size,height:size,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:10,border:`2px dashed ${T.b1}`,borderRadius:"50%"}}>No data</div>;
+  if(!slices||!slices.length||slices.every(s=>!s.value)) return (
+    <div style={{width:size,height:size,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:10.5,border:`1.5px dashed ${T.b2}`,borderRadius:"50%",gap:4}}>
+      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-9-9v9z"/><path d="M21 12a9 9 0 00-9-9v9h9z"/></svg>
+      <span style={{fontWeight:600}}>No data</span>
+    </div>
+  );
   let cumDeg=-90;
   const total=slices.reduce((s,sl)=>s+sl.value,0)||1;
   const toRad=d=>d*Math.PI/180;
@@ -226,7 +246,14 @@ function DonutChart({slices,size=110,cx=55,cy=55,r=38,inner=22}){
   return(<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{slices.map((sl,i)=>{const deg=(sl.value/total)*360;const start=cumDeg;cumDeg+=deg;return <path key={i} d={arc(start,cumDeg-0.5,r,inner)} fill={sl.color} opacity={0.9}/>;})}<circle cx={cx} cy={cy} r={inner-1} fill={T.surface}/></svg>);
 }
 function CashLineChart({data,height=90}){
-  if(!data||data.length<2) return <div style={{padding:"22px 0",textAlign:"center",color:T.t4,fontSize:11}}>{data?.length===1?"Add more data points to show trend":"No cash flow data yet"}</div>;
+  if(!data||data.length<2) return (
+    <div style={{padding:"18px 16px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:7}}>
+      <div style={{width:36,height:36,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      </div>
+      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>{data?.length===1?"Add more data points":"No cash flow data yet"}</div>
+    </div>
+  );
   const maxV=Math.max(...data.flatMap(d=>[d.in,d.out]),1);
   const W=360,pad={top:10,bottom:22,left:8,right:8};
   const cW=W-pad.left-pad.right; const cH=height-pad.top-pad.bottom;
@@ -238,7 +265,15 @@ function CashLineChart({data,height=90}){
   return(<svg width="100%" viewBox={`0 0 ${W} ${height}`} style={{overflow:"visible"}}>{[0,0.5,1].map((p,i)=>(<line key={i} x1={pad.left} y1={pad.top+cH*p} x2={W-pad.right} y2={pad.top+cH*p} stroke={T.b1} strokeWidth={0.7} strokeDasharray={p===0?"0":"3,3"}/>))}<path d={areaPath("in",pad.top+cH)} fill={T.grn} opacity={0.1}/><polyline points={linePoints("in")} fill="none" stroke={T.grn} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/><path d={areaPath("out",pad.top+cH)} fill={T.red} opacity={0.1}/><polyline points={linePoints("out")} fill="none" stroke={T.red} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,2"/>{data.map((d,i)=>(<g key={i}><circle cx={px(i)} cy={py(d.in)} r={3} fill={T.grn}/><circle cx={px(i)} cy={py(d.out)} r={3} fill={T.red}/><text x={px(i)} y={height-5} textAnchor="middle" fontSize={9} fill={T.t4} fontFamily="'Segoe UI',sans-serif">{d.month}</text></g>))}</svg>);
 }
 function FinanceBarChart({data,height=130}){
-  if(!data||data.length<1) return <div style={{padding:"40px 0",textAlign:"center",color:T.t4,fontSize:11}}>No revenue/expense data</div>;
+  if(!data||data.length<1) return (
+    <div style={{padding:"36px 16px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+      <div style={{width:38,height:38,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
+      </div>
+      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>No revenue/expense yet</div>
+      <div style={{fontSize:10.5,color:T.t4}}>Add transactions to see trends</div>
+    </div>
+  );
   const maxV=Math.max(...data.map(d=>Math.max(d.sales,d.expense)),1);
   const bW=18,gap=5,groupGap=20;
   const total=data.length; const W=total*(bW*3+gap*2+groupGap)+20;
@@ -587,9 +622,9 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     {isMobile&&!collapsed&&<div onClick={()=>setCollapsed(true)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:199,transition:"opacity 0.2s"}}/>}
     <div style={{
       width:mobileHidden?0:(collapsed&&!isMobile)?62:232,
-      minHeight:"100vh",background:C.sb,display:"flex",flexDirection:"column",
+      minHeight:"100vh",background:"#1E293B",display:"flex",flexDirection:"column",
       transition:"all 0.25s cubic-bezier(.4,0,.2,1)",overflow:"hidden",flexShrink:0,
-      boxShadow:"2px 0 16px rgba(0,0,0,0.28)",zIndex:200,
+      boxShadow:"2px 0 16px rgba(0,0,0,0.18)",zIndex:200,
       ...(isMobile?{position:"fixed",left:mobileHidden?-240:0,top:0,bottom:0,width:mobileHidden?0:250}:{}),
     }}>
       {/* Company header with switcher */}
@@ -657,26 +692,29 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
           </div>
         )}
       </div>
-      <nav style={{flex:1,padding:"10px 0",overflowY:"auto"}}>
+      <nav style={{flex:1,padding:"8px 0 12px",overflowY:"auto"}}>
         {NAV_GROUPS.map((grp,gi)=>{
           const visibleItems=grp.items.filter(item=>isVisible(item.id));
           const showLabel=isMobile||!collapsed;
           if(!visibleItems.length) return null;
           return(
             <div key={gi}>
-              {grp.section&&showLabel&&<div style={{marginTop:gi>0?4:0}}><div style={{height:1,background:"rgba(255,255,255,0.06)",margin:"0 12px 2px"}}/><div style={{color:"rgba(255,255,255,0.28)",fontSize:9,fontWeight:700,letterSpacing:"1.2px",textTransform:"uppercase",padding:"8px 16px 4px"}}>{grp.section}</div></div>}
+              {grp.section&&showLabel&&(
+                <div style={{color:"rgba(255,255,255,0.3)",fontSize:9,fontWeight:700,letterSpacing:"1.3px",textTransform:"uppercase",padding:gi>0?"16px 18px 6px":"6px 18px 6px"}}>{grp.section}</div>
+              )}
               {visibleItems.map(item=>{
                 const isA=active===item.id;
                 return(
-                  <button key={item.id} onClick={()=>handleNav(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label} style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:(!isMobile&&collapsed)?"10px 0":isMobile?"12px 16px":"9px 16px",background:isA?`linear-gradient(90deg,${C.p}DD,${C.p}88)`:"none",border:"none",cursor:"pointer",color:isA?"white":"rgba(255,255,255,0.52)",transition:"all 0.14s",position:"relative",justifyContent:(!isMobile&&collapsed)?"center":"flex-start",borderLeft:isA&&showLabel?`3px solid ${C.a}`:"3px solid transparent"}}
-                    onMouseEnter={e=>{if(!isA){e.currentTarget.style.background=C.sbH;e.currentTarget.style.color="white";}}}
-                    onMouseLeave={e=>{if(!isA){e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.52)";}}}
+                  <button key={item.id} onClick={()=>handleNav(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:(!isMobile&&collapsed)?"10px 0":isMobile?"12px 16px":"9px 14px",background:isA?"rgba(59,130,246,0.22)":"none",border:"none",cursor:"pointer",color:isA?"#fff":"rgba(255,255,255,0.65)",transition:"background .12s, color .12s",position:"relative",justifyContent:(!isMobile&&collapsed)?"center":"flex-start",borderLeft:isA&&showLabel?`3px solid #3B82F6`:"3px solid transparent",fontFamily:"inherit",textAlign:"left"}}
+                    onMouseEnter={e=>{if(!isA){e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}}
+                    onMouseLeave={e=>{if(!isA){e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.65)";}}}
                   >
                     <item.Icon size={isMobile?19:17} color="currentColor"/>
-                    {showLabel&&<span style={{fontSize:isMobile?14:13,fontWeight:isA?600:400,flex:1,whiteSpace:"nowrap"}}>{item.label}</span>}
-                    {showLabel&&!isMobile&&item.sc&&<span style={{fontSize:8,color:"rgba(255,255,255,0.2)",fontWeight:400,marginRight:item.badge?4:0}}>Alt+{item.sc}</span>}
-                    {showLabel&&item.badge&&<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9:8,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{item.badge}</span>}
-                    {isA&&!showLabel&&<div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:C.a,borderRadius:"2px 0 0 2px"}}/>}
+                    {showLabel&&<span style={{fontSize:isMobile?14:13,fontWeight:isA?600:450,flex:1,whiteSpace:"nowrap",letterSpacing:".1px"}}>{item.label}</span>}
+                    {showLabel&&!isMobile&&item.sc&&!item.badge&&<span style={{fontSize:9,color:isA?"rgba(255,255,255,0.45)":"rgba(255,255,255,0.25)",fontWeight:500,fontVariantNumeric:"tabular-nums",flexShrink:0}}>Alt+{item.sc}</span>}
+                    {showLabel&&item.badge&&<span style={{background:item.bc,color:"white",fontSize:typeof item.badge==="number"?9.5:8.5,fontWeight:700,padding:"2px 7px",borderRadius:10,letterSpacing:typeof item.badge==="number"?0:".3px",fontVariantNumeric:"tabular-nums",flexShrink:0}}>{item.badge}</span>}
+                    {isA&&!showLabel&&<div style={{position:"absolute",right:0,top:"50%",transform:"translateY(-50%)",width:3,height:22,background:"#3B82F6",borderRadius:"2px 0 0 2px"}}/>}
                   </button>
                 );
               })}
@@ -838,9 +876,12 @@ function DashboardModule(){
     <div style={{padding:"16px 20px",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       {/* Alerts */}
       {activeAlerts.length>0&&<div style={{marginBottom:12,display:"flex",flexDirection:"column",gap:6}}>
-        {activeAlerts.map(a=>(<div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:a.bg,border:`1px solid ${a.brd}`,borderRadius:8,borderLeft:`3px solid ${a.color}`}}>
-          <a.Icon size={14} color={a.color}/><span style={{flex:1,fontSize:12.5,color:a.color,fontWeight:500}}>{a.msg}</span>
-          <button onClick={()=>setDismissedAlerts(p=>[...p,a.id])} style={{background:"none",border:"none",cursor:"pointer",color:a.color,opacity:.6,display:"flex",padding:2}}><IcX size={13}/></button>
+        {activeAlerts.map(a=>(<div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderLeft:`3px solid ${a.color}`}}>
+          <a.Icon size={14} color={a.color}/>
+          <span style={{flex:1,fontSize:12.5,color:T.t2,fontWeight:500}}>{a.msg}</span>
+          <button onClick={()=>setDismissedAlerts(p=>[...p,a.id])} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:2,borderRadius:4,transition:"background .12s"}}
+            onMouseEnter={el=>el.currentTarget.style.background=T.surfaceB}
+            onMouseLeave={el=>el.currentTarget.style.background="none"}><IcX size={13}/></button>
         </div>))}
       </div>}
       {/* KPI row */}
@@ -873,23 +914,26 @@ function DashboardModule(){
             </tr></thead>
             <tbody>
               {filteredProjects.map(p=>{
-                const sm=STATUS_META[p.status]||STATUS_META["Ongoing"];
+                const fmtStatus = (s) => (s||"").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
+                const stLabel = fmtStatus(p.status);
+                const sm=STATUS_META[stLabel]||STATUS_META[p.status]||STATUS_META["Ongoing"];
                 const margin=p.boq-p.expense; const mPct=p.boq>0?((margin/p.boq)*100).toFixed(1):0;
                 const spentPct=p.boq>0?((p.expense/p.boq)*100).toFixed(0):0;
-                const pColor=p.progress===100?T.grn:p.progress>60?T.blu:p.progress>30?T.amb:T.red;
+                const pColor=p.progress>=100?T.grn:p.progress>60?T.blu:p.progress>30?T.amb:p.progress>0?T.slt:T.t4;
                 const isExp=expandedProjId===p.id;
+                const pmName = p.pm ? p.pm.split(" ")[0] : "—";
                 return(<>
                   <tr key={p.id} onClick={()=>setExpandedProjId(isExp?null:p.id)} style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 110px 80px 90px 90px 90px 70px 80px 40px",padding:"10px 14px",borderBottom:`1px solid ${isExp?T.bluM:T.b1}`,alignItems:"center",cursor:"pointer",background:isExp?T.bluL:"none",borderLeft:isExp?`3px solid ${T.blu}`:"3px solid transparent",transition:"all 0.1s"}} onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.surfaceB;}} onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background="none";}}>
                     <td style={{display:"contents"}}>
                       <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:isExp?T.blu:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</div><div style={{fontSize:10.5,color:T.t4}}>{p.city} · {p.type}</div></div>
-                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.client||"--").split(" ").slice(0,2).join(" ")}</span>
-                      <span style={{display:"inline-block"}}><span style={{background:sm.bg,color:sm.c,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,border:`1px solid ${sm.brd}`,whiteSpace:"nowrap"}}>{p.status}</span></span>
-                      <div><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:10,fontWeight:700,color:pColor}}>{p.progress}%</span></div><div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:pColor,borderRadius:3}}/></div></div>
-                      <span style={{fontSize:12,fontWeight:600,color:T.t1}}>₹{fmt(p.boq)}</span>
-                      <div><span style={{fontSize:12,fontWeight:600,color:T.amb}}>₹{fmt(p.expense)}</span><div style={{height:3,background:T.b1,borderRadius:2,marginTop:3,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(spentPct,100)}%`,background:Number(spentPct)>90?T.red:T.amb,borderRadius:2}}/></div></div>
-                      <span style={{fontSize:12,fontWeight:700,color:margin>=0?T.grn:T.red}}>₹{fmt(Math.abs(margin))}</span>
-                      <span style={{fontSize:12,fontWeight:700,color:Number(mPct)>=20?T.grn:Number(mPct)>=10?T.amb:T.red}}>{mPct}%</span>
-                      <span style={{fontSize:11.5,color:T.t3}}>{p.pm.split(" ")[0]}</span>
+                      <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(p.client||"—").split(" ").slice(0,2).join(" ")}</span>
+                      <span style={{display:"inline-block"}}><span style={{background:sm.bg,color:sm.c,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,border:`1px solid ${sm.brd}`,whiteSpace:"nowrap"}}>{stLabel}</span></span>
+                      <div><div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:10,fontWeight:700,color:pColor,fontVariantNumeric:"tabular-nums"}}>{p.progress}%</span></div><div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:pColor,borderRadius:3,transition:"width .3s"}}/></div></div>
+                      <span style={{fontSize:12,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmt(p.boq)}</span>
+                      <div><span style={{fontSize:12,fontWeight:600,color:p.expense>0?T.amb:T.t4,fontVariantNumeric:"tabular-nums"}}>₹{fmt(p.expense)}</span><div style={{height:3,background:T.b1,borderRadius:2,marginTop:3,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(spentPct,100)}%`,background:Number(spentPct)>90?T.red:T.amb,borderRadius:2}}/></div></div>
+                      <span style={{fontSize:12,fontWeight:700,color:margin>=0?T.grn:T.red,fontVariantNumeric:"tabular-nums"}}>₹{fmt(Math.abs(margin))}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:Number(mPct)>=20?T.grn:Number(mPct)>=10?T.amb:T.red,fontVariantNumeric:"tabular-nums"}}>{mPct}%</span>
+                      <span style={{fontSize:11.5,color:pmName==="—"?T.t4:T.t3}}>{pmName}</span>
                       <span style={{display:"flex",alignItems:"center",justifyContent:"center"}}><svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke={T.t4} strokeWidth={1.5}><path d={isExp?"M2 5l5 5 5-5":"M2 9l5-5 5 5"}/></svg></span>
                     </td>
                   </tr>
@@ -903,10 +947,10 @@ function DashboardModule(){
       {/* Actions + Activity */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:12,marginBottom:14}}>
         <Panel title={<span>Pending Actions <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,marginLeft:5,border:`1px solid ${T.redM}`}}>{pendingCount}</span></span>} action={<button onClick={()=>setShowAllActions(!showAllActions)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActions?"Less":"All"}</button>}>
-          <div style={{overflowY:"auto",maxHeight:260}}>{actionsToShow.map((a,i)=>(<div key={a.id} style={{padding:"9px 14px",borderBottom:i<actionsToShow.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}><div style={{width:30,height:30,borderRadius:7,background:a.bg,border:`1px solid ${a.brd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.Icon size={13} color={a.color}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1,marginBottom:1}}>{a.label}</div><div style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.desc}</div></div><div style={{textAlign:"right",flexShrink:0}}>{a.amount&&<div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(a.amount)}</div>}<div style={{width:7,height:7,borderRadius:"50%",background:a.color,marginLeft:"auto",marginTop:a.amount?4:0}}/></div></div>))}</div>
+          <div style={{overflowY:"auto",maxHeight:260}}>{actionsToShow.map((a,i)=>(<div key={a.id} style={{padding:"9px 14px",borderBottom:i<actionsToShow.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}><div style={{width:26,height:26,borderRadius:6,background:`${a.color}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.Icon size={12} color={a.color}/></div><div style={{flex:1,minWidth:0}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1,marginBottom:1}}>{a.label}</div><div style={{fontSize:10.5,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.desc}</div></div><div style={{textAlign:"right",flexShrink:0}}>{a.amount&&<div style={{fontSize:12,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(a.amount)}</div>}<div style={{width:6,height:6,borderRadius:"50%",background:a.color,marginLeft:"auto",marginTop:a.amount?4:0}}/></div></div>))}</div>
         </Panel>
         <Panel title="Recent Activity" action={<button onClick={()=>setShowAllActivity(!showAllActivity)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActivity?"Collapse":"View all"}</button>}>
-          <div style={{overflowY:"auto",maxHeight:260}}>{activityToShow.map((a,i)=>(<div key={a.id} style={{padding:"9px 14px",borderBottom:i<activityToShow.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}><div style={{width:32,height:32,borderRadius:8,background:a.color+"15",border:`1px solid ${a.color}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.icon size={14} color={a.color}/></div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{a.title}</span>{a.dir&&<span style={{fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:20,background:a.dir==="in"?T.grnL:a.dir==="pending"?T.ambL:T.redL,color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red}}>{a.dir==="in"?"IN":a.dir==="pending"?"PENDING":"OUT"}</span>}</div><div style={{fontSize:10.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:1}}>{a.desc}</div><div style={{fontSize:10,color:T.t4}}>{a.project} · {a.time}</div></div>{a.amount&&<div style={{fontSize:12.5,fontWeight:700,color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red,flexShrink:0}}>{a.dir==="in"?"+":"−"}₹{fmtN(a.amount)}</div>}</div>))}</div>
+          <div style={{overflowY:"auto",maxHeight:260}}>{activityToShow.map((a,i)=>(<div key={a.id} style={{padding:"9px 14px",borderBottom:i<activityToShow.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}><div style={{width:26,height:26,borderRadius:6,background:`${a.color}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.icon size={13} color={a.color}/></div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{a.title}</span>{a.dir&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:a.dir==="in"?T.grnL:a.dir==="pending"?T.ambL:T.redL,color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red,border:`1px solid ${a.dir==="in"?T.grnM:a.dir==="pending"?T.ambM:T.redM}`,letterSpacing:".3px"}}>{a.dir==="in"?"IN":a.dir==="pending"?"PENDING":"OUT"}</span>}</div><div style={{fontSize:10.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:1}}>{a.desc}</div><div style={{fontSize:10,color:T.t4}}>{a.project} · {a.time}</div></div>{a.amount&&<div style={{fontSize:12.5,fontWeight:700,color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{a.dir==="in"?"+":"−"}₹{fmtN(a.amount)}</div>}</div>))}</div>
         </Panel>
       </div>
     </div>
@@ -931,13 +975,34 @@ export default function App(){
   const [user,setUser]=useState(()=>getUser());
   const [companies,setCompanies]=useState(()=>getCompanies());
   const [switching,setSwitching]=useState(false);
-  const [nav,setNav]=useState("dashboard");
+  const [nav,setNav]=useState("projects");
   const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showSearch,setShowSearch]=useState(false);
   const [showCheatsheet,setShowCheatsheet]=useState(false);
   // enabledModules: null=loading, {}=map of key→boolean
   const [enabledModules,setEnabledModules]=useState(null);
+
+  // ── App shell visibility for project pages (sidebar layout mode) ──
+  const [inProject,setInProject]=useState(()=>!!window.__gbInProject);
+  const [projectLayoutMode,setProjectLayoutMode]=useState(()=>{
+    try { return localStorage.getItem("gb_project_layout") || "horizontal"; }
+    catch { return "horizontal"; }
+  });
+  useEffect(()=>{
+    const onProjState=()=>setInProject(!!window.__gbInProject);
+    const onLayout=(e)=>setProjectLayoutMode(e.detail||"horizontal");
+    const onStorage=(e)=>{ if(e.key==="gb_project_layout") setProjectLayoutMode(e.newValue||"horizontal"); };
+    window.addEventListener("gb-project-state-change",onProjState);
+    window.addEventListener("gb-layout-change",onLayout);
+    window.addEventListener("storage",onStorage);
+    return()=>{
+      window.removeEventListener("gb-project-state-change",onProjState);
+      window.removeEventListener("gb-layout-change",onLayout);
+      window.removeEventListener("storage",onStorage);
+    };
+  },[]);
+  const hideAppShell = inProject && projectLayoutMode==="sidebar";
 
   const loggedIn=!!user&&!!getToken();
 
@@ -1106,9 +1171,9 @@ export default function App(){
         <div style={{width:32,height:32,border:"3px solid rgba(255,255,255,0.15)",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
         <div style={{color:"white",fontSize:14,fontWeight:600}}>Switching company...</div>
       </div>}
-      <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany}/>
+      {!hideAppShell && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>
+        {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>}
         <div style={{flex:1,overflowY:"auto"}}>
           <Suspense fallback={<ModuleLoader/>}>
             {MODULE_MAP[nav]||<DashboardModule/>}
