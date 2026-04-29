@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import uploadManager from "../utils/uploadManager";
 import useDebounce from "../utils/useDebounce";
+import SearchSelect from "../components/SearchSelect";
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -155,27 +156,26 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
           {/* Project */}
           <div style={{marginBottom:12}}>
             <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Project *</label>
-            <select value={form.project_id} onChange={e=>setForm(p=>({...p,project_id:e.target.value}))}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-              <option value="">Select project...</option>
-              {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
-            </select>
+            <SearchSelect value={form.project_id}
+              options={projects.map(p=>({value:p.id,label:p.name}))}
+              onChange={v=>setForm(p=>({...p,project_id:v}))}
+              placeholder="Select project..."/>
           </div>
           {/* Category + Type */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
-              <select value={form.category} onChange={e=>setForm(p=>({...p,category:e.target.value,title:""}))}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {(dbCats.length>0?dbCats.map(c=>c.name):CATS).map(c=><option key={c}>{c}</option>)}
-              </select>
+              <SearchSelect value={form.category}
+                options={Array.from(new Set(dbCats.length>0?dbCats.map(c=>c.name):CATS))}
+                onChange={v=>setForm(p=>({...p,category:v,title:""}))}
+                placeholder="Select category..."/>
             </div>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Type</label>
-              <select value={form.drawing_type} onChange={e=>setForm(p=>({...p,drawing_type:e.target.value}))}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {(dbTypes.length>0?dbTypes.map(t=>t.name):TYPES).map(t=><option key={t}>{t}</option>)}
-              </select>
+              <SearchSelect value={form.drawing_type}
+                options={Array.from(new Set(dbTypes.length>0?dbTypes.map(t=>t.name):TYPES))}
+                onChange={v=>setForm(p=>({...p,drawing_type:v}))}
+                placeholder="Select type..."/>
             </div>
           </div>
           {/* Title — searchable from library */}
@@ -400,10 +400,9 @@ export default function DesignModule() {
           {val:dStatus, set:setDStatus, opts:["All","Pending","Approved","Revision","Rejected"],label:"Status"},
           {val:dType,   set:setDType,   opts:["All",...TYPES_LIST],label:"Type"},
         ].map(f=>(
-          <select key={f.label} value={f.val} onChange={e=>f.set(e.target.value)}
-            style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(f.val!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:f.val!=="All"?T.bluL:T.surface,color:f.val!=="All"?T.blu:T.t2}}>
-            {f.opts.map(o=><option key={o} value={o}>{o==="All"?`All ${f.label}s`:o}</option>)}
-          </select>
+          <div key={f.label} style={{minWidth:140}}>
+            <SearchSelect value={f.val} options={f.opts.map(o=>({value:o,label:o==="All"?`All ${f.label}s`:o}))} onChange={f.set} placeholder={`All ${f.label}s`}/>
+          </div>
         ))}
         <button onClick={()=>setShowUpload(true)}
           style={{padding:"7px 14px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
@@ -484,10 +483,9 @@ export default function DesignModule() {
             {val:rStatus, set:setRStatus, opts:["All","Pending","In Progress","Uploaded","Rejected"],label:"Status"},
             {val:rPrio,   set:setRPrio,   opts:["All","Urgent","High","Normal","Low"],label:"Priority"},
           ].map(f=>(
-            <select key={f.label} value={f.val} onChange={e=>f.set(e.target.value)}
-              style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+(f.val!=="All"?T.blu:T.b1),fontSize:11.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:f.val!=="All"?T.bluL:T.surface,color:f.val!=="All"?T.blu:T.t2}}>
-              {f.opts.map(o=><option key={o} value={o}>{o==="All"?`All ${f.label}s`:o}</option>)}
-            </select>
+            <div key={f.label} style={{minWidth:140}}>
+              <SearchSelect value={f.val} options={f.opts.map(o=>({value:o,label:o==="All"?`All ${f.label}s`:o}))} onChange={f.set} placeholder={`All ${f.label}s`}/>
+            </div>
           ))}
           <button onClick={()=>setHideUploadedR(!hideUploadedR)}
             style={{padding:"6px 11px",borderRadius:7,border:"1.5px solid "+(hideUploadedR?T.b1:T.grn),background:hideUploadedR?"none":T.grnL,color:hideUploadedR?T.t4:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>

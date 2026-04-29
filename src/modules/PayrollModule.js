@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
+import SearchSelect from "../components/SearchSelect";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -1213,10 +1214,7 @@ function ManualSalaryTab({salaryRecords,setSalaryRecords,defaultDueDays,month,ye
             {/* Category */}
             <div>
               <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Category</label>
-              <select value={form.category} onChange={upd("category")}
-                style={{width:"100%",padding:"8px 9px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                {["Monthly Staff","Daily Worker","Contractor","Consultant","Other"].map(c=><option key={c}>{c}</option>)}
-              </select>
+              <SearchSelect value={form.category} options={["Monthly Staff","Daily Worker","Contractor","Consultant","Other"]} onChange={v=>upd("category")({target:{value:v}})} placeholder="Select category..."/>
             </div>
           </div>
 
@@ -1918,11 +1916,7 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
 
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>Skill</label>
-                <select value={modal.data.skill||""} onChange={e=>setModal({...modal,data:{...modal.data,skill:e.target.value}})}
-                  style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                  <option value="">— Select —</option>
-                  {SKILLS.map(s=><option key={s} value={s}>{s}</option>)}
-                </select>
+                <SearchSelect value={modal.data.skill||""} options={SKILLS} onChange={v=>setModal({...modal,data:{...modal.data,skill:v}})} placeholder="Select skill..."/>
               </div>
 
               <div>
@@ -1951,11 +1945,7 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
 
               <div>
                 <label style={{fontSize:11,fontWeight:700,color:T.t3,display:"block",marginBottom:4}}>Project</label>
-                <select value={modal.data.project||""} onChange={e=>setModal({...modal,data:{...modal.data,project:e.target.value}})}
-                  style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                  <option value="">— Any —</option>
-                  {(PROJECTS||[]).map(p=><option key={p} value={p}>{p}</option>)}
-                </select>
+                <SearchSelect value={modal.data.project||""} options={PROJECTS||[]} onChange={v=>setModal({...modal,data:{...modal.data,project:v}})} placeholder="— Any project —"/>
               </div>
             </div>
 

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
+import SearchSelect from "../components/SearchSelect";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -254,24 +255,16 @@ function WorkDetailDrawer({item,items,onClose,onUpdate,onDelete,isAdmin=false}){
           <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,padding:"13px 14px",marginBottom:12}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
               <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Assigned To</label>
-                <select value={form.assignee} onChange={upd("assignee")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                  {TEAM_MEMBERS.map(m=><option key={m.id} value={m.id}>{m.name}</option>)}
-                </select>
+                <SearchSelect value={form.assignee} options={TEAM_MEMBERS.map(m=>({value:m.id,label:m.name}))} onChange={v=>setForm(p=>({...p,assignee:v}))} placeholder="Select member..."/>
               </div>
               <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Site</label>
-                <select value={form.site} onChange={upd("site")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                  {SITES.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
-                </select>
+                <SearchSelect value={form.site} options={SITES.map(s=>({value:s.id,label:s.name}))} onChange={v=>setForm(p=>({...p,site:v}))} placeholder="Select site..."/>
               </div>
               <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Status</label>
-                <select value={form.status} onChange={upd("status")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                  {Object.keys(STATUS_META).map(s=><option key={s}>{s}</option>)}
-                </select>
+                <SearchSelect value={form.status} options={Object.keys(STATUS_META)} onChange={v=>setForm(p=>({...p,status:v}))} placeholder="Select status..."/>
               </div>
               <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Priority</label>
-                <select value={form.priority} onChange={upd("priority")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                  {["High","Medium","Low"].map(p=><option key={p}>{p}</option>)}
-                </select>
+                <SearchSelect value={form.priority} options={["High","Medium","Low"]} onChange={v=>setForm(p=>({...p,priority:v}))} placeholder="Select priority..."/>
               </div>
               <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Start Date</label>
                 <input type="date" value={form.startDate} onChange={upd("startDate")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
