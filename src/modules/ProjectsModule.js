@@ -1229,7 +1229,7 @@ function TransferCard({tr}){
   );
 }
 
-function ApprovalsDrawer({onClose,mode="approvals"}){
+function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   // mode: "approvals" → Design/Finance/Payment tabs
   //       "materials" → MR / PO / Warehouse tabs
   const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"mr");
@@ -1511,6 +1511,26 @@ function ApprovalsDrawer({onClose,mode="approvals"}){
             {act==="approving"?"Approving...":"✓ Approve"}
           </button>
         </div>
+        {/* View Details / Open in Project link */}
+        {item.project_id && onSelectProject && (()=>{
+          const tabFor = src==="ra_bill"||src==="wo_amendment" ? "subcon"
+                       : src==="design" ? "design"
+                       : src==="material_request"||src==="purchase_order" ? "material"
+                       : src==="payment_request" ? "transaction"
+                       : src==="labour_rate" ? "attendance"
+                       : "overview";
+          return(
+            <button onClick={()=>{
+                onClose();
+                onSelectProject({ id:item.project_id, name:item.project_name, initialTab:tabFor });
+              }}
+              style={{marginTop:7,width:"100%",padding:"6px",borderRadius:6,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}
+              onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.color=T.blu;}}
+              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
+              📋 Open in Project — full details →
+            </button>
+          );
+        })()}
       </div>
     );
   };
@@ -2310,7 +2330,7 @@ function ProjectsPage({onSelectProject}){
         </div>
       )}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
-      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} mode={approvalMode}/>}
+      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} mode={approvalMode} onSelectProject={onSelectProject}/>}
       {showIssuesDrawer&&<IssuesDrawer issues={allIssues} loading={issuesLoading} filter={issueFilter} setFilter={setIssueFilter} onClose={()=>setShowIssuesDrawer(false)} onIssueClose={(id)=>setAllIssues(p=>p.map(x=>x.id===id?{...x,status:"Closed"}:x))}/>}
       {showTodoDrawer&&<TodoDrawer todos={allTodos} loading={todosLoading} onClose={()=>{setShowTodoDrawer(false);api.get("/projects/my-todo-count").then(r=>{if(r.success&&r.data)setTodoCount(r.data.count||0);}).catch(()=>{});}} onSelectProject={onSelectProject}/>}
       {settingsOf&&<ProjectSettingsModal
