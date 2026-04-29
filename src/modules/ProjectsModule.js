@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
+import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -916,7 +917,10 @@ function MRApprovalCard({mr, onApprove, onReject}){
           <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{mr.item_name}</div>
           <div style={{fontSize:11,color:T.t4,marginTop:2}}>{mr.project_name||"—"} · {mr.quantity} {mr.unit}</div>
           {taskInfo&&<div style={{fontSize:10.5,color:T.blu,marginTop:2,fontWeight:600}}>📌 {taskInfo}</div>}
-          <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>By {mr.requested_by||"Site Team"} · {mr.mr_number}</div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginTop:3,flexWrap:"wrap"}}>
+            <Credit label="By" name={mr.requested_by||"Site Team"} time={mr.created_at}/>
+            <span style={{fontSize:10.5,color:T.t4,fontFamily:"monospace"}}>{mr.mr_number}</span>
+          </div>
         </div>
         {mr.approx_amount>0&&<span style={{fontSize:12,fontWeight:700,color:T.amb,flexShrink:0}}>{fmtAmt(mr.approx_amount)}</span>}
       </div>
@@ -987,8 +991,8 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
         {/* Project */}
         <div style={{fontSize:11.5,color:T.t3,marginBottom:3,fontWeight:500}}>{mr.project_name||"—"}</div>
         {/* Meta row */}
-        <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:mr.notes?4:0}}>
-          <span style={{fontSize:11,color:T.t4}}>By {mr.requested_by||"Site Team"} · {fmtDate(mr.created_at)}</span>
+        <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:mr.notes?4:0,alignItems:"center"}}>
+          <Credit label="Requested by" name={mr.requested_by||"Site Team"} time={mr.created_at}/>
           {mr.required_date&&<span style={{fontSize:11,color:T.t4}}>Expected {fmtDate(mr.required_date)}</span>}
         </div>
         {mr.notes&&<div style={{fontSize:11,color:T.t3,fontStyle:"italic",marginTop:2}}>"{mr.notes}"</div>}
@@ -1169,9 +1173,7 @@ function WHMRCard({mr, acting, onApprove, onReject, rejectId, setRejectId, rejec
             {mr.items.length>3&&<div style={{fontSize:10.5,color:T.t4,fontStyle:"italic",marginTop:2}}>+{mr.items.length-3} more items</div>}
           </div>
         )}
-        <div style={{fontSize:10.5,color:T.t4}}>
-          By {mr.requested_by_name||"Site Team"} · {fmtDate(mr.date||mr.created_at)}
-        </div>
+        <Credit label="Requested by" name={mr.requested_by_name||"Site Team"} time={mr.date||mr.created_at}/>
       </div>
       {(mr.status==="Pending"||!mr.status)&&(
         <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>

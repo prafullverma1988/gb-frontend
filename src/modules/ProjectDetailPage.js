@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api, { API_BASE } from "../config/api";
+import { Avatar, Credit } from "../components/Credit";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
@@ -1303,42 +1304,6 @@ function TabDesign({ project, isAdmin }) {
 
       {/* ── REQUESTS TAB ── */}
       {mainTab==="requests"&&(()=>{
-        // Reusable initials avatar (color seeded from name)
-        const Avatar = ({name, size=20, title}) => {
-          const n = String(name||"?").trim() || "?";
-          const initial = n[0].toUpperCase();
-          // hash → color
-          const palette = ["#3B82F6","#8B5CF6","#EC4899","#F59E0B","#10B981","#06B6D4","#F43F5E","#84CC16"];
-          let h = 0; for (let i=0; i<n.length; i++) h = (h*31 + n.charCodeAt(i)) & 0xffff;
-          const bg = palette[h % palette.length];
-          return (
-            <div title={title||n} style={{width:size,height:size,borderRadius:"50%",background:bg,color:"#fff",fontSize:Math.round(size*0.46),fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0,letterSpacing:0}}>{initial}</div>
-          );
-        };
-
-        // Time-ago formatter
-        const fmtTime = (t) => {
-          if (!t) return "";
-          try {
-            const d = new Date(t); if (isNaN(d.getTime())) return "";
-            const diff = (Date.now()-d.getTime())/1000;
-            if (diff < 60) return "just now";
-            if (diff < 3600) return `${Math.floor(diff/60)}m ago`;
-            if (diff < 86400) return `${Math.floor(diff/3600)}h ago`;
-            if (diff < 604800) return `${Math.floor(diff/86400)}d ago`;
-            return d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
-          } catch { return ""; }
-        };
-        // Compact credit chip — Avatar + "X by Name · time"
-        const Credit = ({label, name, time}) => name ? (
-          <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11,color:T.t3}}>
-            <Avatar name={name} size={16}/>
-            <span>{label}</span>
-            <span style={{color:T.t1,fontWeight:600}}>{name}</span>
-            {time && <span style={{color:T.t4}}>· {fmtTime(time)}</span>}
-          </span>
-        ) : null;
-
         return(
         <div>
           {/* Single-line toolbar — count + filters + new request */}

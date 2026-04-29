@@ -126,10 +126,10 @@ const NAV_GROUPS=[
     {id:"projects",  label:"Projects",     Icon:IcProj, sc:"J"},
     {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
-    {id:"team",      label:"Team Schedule",Icon:IcTeam, sc:"T"},
-    {id:"design",    label:"Design",       Icon:IcDes,  sc:"D"},
+    {id:"team",      label:"My Team",      Icon:IcTeam, sc:"T"},
   ]},
   {section:"FINANCE & OPS",items:[
+    {id:"design",      label:"Design",      Icon:IcDes,  sc:"D"},
     {id:"finance",     label:"Finance",     Icon:IcFin,  sc:"F"},
     {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P"},
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
@@ -433,7 +433,7 @@ const SEARCH_ITEMS=[
   {id:"payroll",   label:"Payroll",       icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
   {id:"crm",       label:"CRM",           icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+C", section:"Navigation"},
   {id:"design",    label:"Design",        icon:"M12 19l7-7 3 3-7 7-3-3z",                                 sc:"Alt+D", section:"Navigation"},
-  {id:"team",      label:"Team Schedule", icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+T", section:"Navigation"},
+  {id:"team",      label:"My Team", icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+T", section:"Navigation"},
   {id:"mom",       label:"MOM",           icon:"M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7",    sc:"Alt+M", section:"Navigation"},
   {id:"reports",   label:"Reports",       icon:"M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5",           sc:"Alt+B", section:"Reports"},
   {id:"library",   label:"Library",       icon:"M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5",            sc:"Alt+L", section:"Reports"},
@@ -510,7 +510,7 @@ function ShortcutCheatsheet({onClose}){
   const GLOBAL=[
     ["Alt+H","Dashboard"],["Alt+J","Projects"],["Alt+F","Finance"],["Alt+P","Procurement"],
     ["Alt+W","Warehouse"],["Alt+Y","Payroll"],["Alt+C","CRM"],["Alt+D","Design"],
-    ["Alt+T","Team Schedule"],["Alt+M","MOM"],["Alt+B","Reports"],["Alt+L","Library"],["Alt+S","Settings"],
+    ["Alt+T","My Team"],["Alt+M","MOM"],["Alt+B","Reports"],["Alt+L","Library"],["Alt+S","Settings"],
   ];
   const PROJ=[
     ["Ctrl+O","Overview"],["Ctrl+D","Design"],["Ctrl+E","Estimate"],["Ctrl+P","Party"],
@@ -1150,7 +1150,7 @@ export default function App(){
     projects:{title:"Projects",sub:"All Construction Projects"},
     crm:{title:"CRM",sub:"Clients & Leads"},
     mom:{title:"MOM",sub:"Minutes of Meeting"},
-    team:{title:"Team Schedule",sub:"Gantt · Timesheets"},
+    team:{title:"My Team",sub:"Gantt · Timesheets"},
     design:{title:"Design",sub:"Drawings & Tasks"},
     finance:{title:"Finance",sub:"Cash Book · Transactions"},
     procurement:{title:"Procurement",sub:"PO · RFQ · Materials"},
@@ -1180,7 +1180,7 @@ export default function App(){
     design:    guard("design",   "Design",        <DesignModule/>),
     payroll:   guard("payroll",  "Payroll",        <PayrollModule/>),
     crm:       guard("crm",      "CRM",            <CRMModule/>),
-    team:      guard("team",     "Team Schedule",  <TeamScheduleModule/>),
+    team:      guard("team",     "My Team",  <TeamScheduleModule/>),
     mom:       guard("mom",      "MOM",            <MOMModule/>),
     library:   guard("library",  "Library",        <MasterLibraryModule/>),
     warehouse: guard("warehouse","Warehouse",      <WarehouseModule/>),

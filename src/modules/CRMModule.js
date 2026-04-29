@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import { Credit } from "../components/Credit";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -676,7 +677,10 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
                         <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{q.title||`Quotation V${q.version}`}</span>
                         <span style={{display:"inline-block",background:ss.bg,color:ss.c,fontSize:9.5,fontWeight:700,padding:"1px 7px",borderRadius:20,border:`1px solid ${ss.brd}`}}>{q.status}</span>
                       </div>
-                      <div style={{fontSize:11,color:T.t4}}>{q.created_by_name||"—"} · {q.created_at?new Date(q.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—"} · {q.file_size||"—"}</div>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+                        {q.created_by_name && <Credit label="Created by" name={q.created_by_name} time={q.created_at}/>}
+                        {q.file_size && <span style={{fontSize:11,color:T.t4}}>· {q.file_size}</span>}
+                      </div>
                     </div>
                     {q.amount>0&&<div style={{fontSize:15,fontWeight:700,color:T.grn}}>₹{fmtN(q.amount)}</div>}
                   </div>

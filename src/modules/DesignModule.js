@@ -3,6 +3,7 @@ import api from "../config/api";
 import uploadManager from "../utils/uploadManager";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
+import { Avatar, Credit } from "../components/Credit";
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -508,10 +509,12 @@ export default function DesignModule() {
                     <span>{req.project_name||"—"}</span>
                     <span>{req.category}</span>
                     {req.due_date&&<span style={{color:new Date(req.due_date)<today?T.red:T.t4}}>Due: {fmtDate(req.due_date)}</span>}
-                    {req.requested_by&&<span>By: {req.requested_by}</span>}
                   </div>
                   {req.description&&<div style={{fontSize:11.5,color:T.t2,marginTop:5}}>{req.description}</div>}
-                  {req.assigned_to&&<div style={{fontSize:11,color:T.blu,marginTop:4}}>👤 {req.assigned_to}</div>}
+                  <div style={{display:"flex",gap:14,flexWrap:"wrap",marginTop:5}}>
+                    {req.requested_by&&<Credit label="Requested by" name={req.requested_by} time={req.created_at}/>}
+                    {req.assigned_to&&<Credit label="Assigned to" name={req.assigned_to}/>}
+                  </div>
                 </div>
                 <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
                   <Pill label={req.priority} c={pm.c} bg={pm.bg}/>
@@ -680,7 +683,7 @@ export default function DesignModule() {
                   <span>{d.category}</span>
                   <span style={{fontFamily:"monospace"}}>{d.current_version||"v1"}</span>
                   <span>{d.drawing_type}</span>
-                  {d.uploaded_by_name&&<span>By: {d.uploaded_by_name}</span>}
+                  {d.uploaded_by_name&&<Credit label="Uploaded by" name={d.uploaded_by_name} time={d.created_at||d.updated_at}/>}
                 </div>
                 {d.note&&<div style={{fontSize:11.5,color:T.t3,marginTop:4,padding:"4px 8px",background:T.surfaceB,borderRadius:5}}>{d.note}</div>}
               </div>
@@ -770,8 +773,9 @@ export default function DesignModule() {
                 <Pill label={d.status} c={sm.c} bg={sm.bg}/>
                 <span style={{fontSize:11,color:T.t4}}>{d.file_size||"—"}</span>
                 <div>
-                  <div style={{fontSize:11,color:T.t3}}>{fmtDate(d.updated_at||d.created_at)}</div>
-                  {d.uploaded_by_name&&<div style={{fontSize:10,color:T.t4}}>{d.uploaded_by_name}</div>}
+                  {d.uploaded_by_name
+                    ? <Credit name={d.uploaded_by_name} time={d.updated_at||d.created_at} compact/>
+                    : <div style={{fontSize:11,color:T.t3}}>{fmtDate(d.updated_at||d.created_at)}</div>}
                 </div>
               </div>
             );
