@@ -12,9 +12,10 @@
 //     onSaved={()=>refresh()}
 //   />
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "./SearchSelect";
+import { Credit, fmtTimeAgo } from "./Credit";
 
 const T = {
   bg: "#F4F6F9",
@@ -57,6 +58,22 @@ const PRIORITIES = [
   { id: "Urgent", c: T.pur, bg: T.purL,     brd: T.purM },
 ];
 
+// Status pill meta (matches what admin approval sets)
+const STATUS_META = {
+  Pending:  { label: "PENDING",  c: T.amb, bg: T.ambL, brd: T.ambM },
+  Approved: { label: "APPROVED", c: T.grn, bg: T.grnL, brd: T.grnM },
+  Rejected: { label: "REJECTED", c: T.red, bg: T.redL, brd: T.redM },
+  Paid:     { label: "PAID",     c: T.blu, bg: T.bluL, brd: T.bluM },
+};
+
+// Quick lookup of type meta by id
+const TYPE_BY_ID = TYPES.reduce((acc, t) => ({ ...acc, [t.id]: t }), {});
+
+const fmtAmount = (n) => {
+  const x = Number(n) || 0;
+  return "₹" + x.toLocaleString("en-IN");
+};
+
 export default function PaymentRequestDrawer({
   open,
   onClose,
@@ -65,6 +82,8 @@ export default function PaymentRequestDrawer({
   prefillParty,
   onSaved,
 }) {
+  // mode: "list" (browse existing requests) or "form" (create new)
+  const [mode, setMode] = useState("list");
   const [type, setType] = useState(prefillType || "subcon");
   const [partyName, setPartyName] = useState(prefillParty?.name || "");
   const [partyId, setPartyId] = useState(prefillParty?.id || null);
@@ -76,9 +95,38 @@ export default function PaymentRequestDrawer({
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
-  // Reset when reopened
+  // List state
+  const [requests, setRequests] = useState([]);
+  const [loadingList, setLoadingList] = useState(false);
+  const [statusFilter, setStatusFilter] = useState("All");
+  const [expandedId, setExpandedId] = useState(null);
+
+  const loadRequests = useCallback(async () => {
+    setLoadingList(true);
+    try {
+      const r = await api.get("/finance/payment-requests");
+      if (r.success && Array.isArray(r.data)) {
+        // Filter to this project (server may not support query param)
+        const all = r.data;
+        const filtered = project?.id
+          ? all.filter(x =>
+              String(x.project_id || "") === String(project.id) ||
+              (x.project_name || "") === (project?.name || "__none__")
+            )
+          : all;
+        setRequests(filtered);
+      }
+    } catch (e) {
+      // graceful fallback
+    }
+    setLoadingList(false);
+  }, [project?.id, project?.name]);
+
+  // Reset when reopened — go to list, OR straight to form if prefill given
   useEffect(() => {
     if (open) {
+      const hasPrefill = !!(prefillType || prefillParty?.id || prefillParty?.name);
+      setMode(hasPrefill ? "form" : "list");
       setType(prefillType || "subcon");
       setPartyName(prefillParty?.name || "");
       setPartyId(prefillParty?.id || null);
@@ -87,8 +135,15 @@ export default function PaymentRequestDrawer({
       setNote("");
       setPriority("Medium");
       setErr("");
+      setExpandedId(null);
+      setStatusFilter("All");
     }
   }, [open, prefillType, prefillParty]);
+
+  // Load list when in list mode
+  useEffect(() => {
+    if (open && mode === "list") loadRequests();
+  }, [open, mode, loadRequests]);
 
   // Load parties (filtered by type)
   useEffect(() => {
@@ -110,7 +165,12 @@ export default function PaymentRequestDrawer({
   })();
 
   const handleSave = async () => {
-    if (!partyName.trim() && !partyId) { setErr("Please specify the beneficiary"); return; }
+    // Resolve a usable name even if user only has partyId (looking up parties list)
+    const resolvedName = (partyName || "").trim()
+      || parties.find(p => String(p.id) === String(partyId))?.name
+      || prefillParty?.name
+      || "";
+    if (!resolvedName) { setErr("Please specify the beneficiary by name"); return; }
     if (!purpose.trim()) { setErr("Purpose is required"); return; }
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { setErr("Enter a valid amount"); return; }
@@ -121,7 +181,7 @@ export default function PaymentRequestDrawer({
       const typeMeta = TYPES.find(t => t.id === type);
       const res = await api.post("/finance/payment-requests", {
         party_id: partyId,
-        party_name: partyName,
+        party_name: resolvedName,
         project_id: project?.id || null,
         project_name: project?.name || "",
         amount: amt,
@@ -138,7 +198,10 @@ export default function PaymentRequestDrawer({
       }
       if (window.toast) window.toast.success("Payment request sent for approval");
       onSaved && onSaved();
-      onClose && onClose();
+      // Switch back to list mode + refresh, instead of closing — user can see their submission
+      setMode("list");
+      setAmount(""); setPurpose(""); setNote(""); setErr("");
+      loadRequests();
     } catch (e) {
       setErr(e?.message || "Network error");
     }
@@ -158,21 +221,168 @@ export default function PaymentRequestDrawer({
         fontFamily: "'Segoe UI', system-ui, -apple-system, sans-serif",
       }}>
         {/* Header */}
-        <div style={{ padding: "13px 16px", background: "#0D1B2A", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
-          <div>
-            <div style={{ fontSize: 13.5, fontWeight: 700, color: "white" }}>Request Payment</div>
-            <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2 }}>
-              {project?.name ? `${project.name} · ` : ""}Sent for admin approval
+        <div style={{ padding: "13px 16px", background: "#0D1B2A", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, gap: 10 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, minWidth: 0, flex: 1 }}>
+            {mode === "form" && (
+              <button onClick={() => setMode("list")} title="Back to list"
+                style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", cursor: "pointer", color: "rgba(255,255,255,0.7)", padding: "5px 9px", borderRadius: 6, display: "flex", alignItems: "center", gap: 5, fontSize: 11, fontFamily: "inherit", flexShrink: 0, transition: "background .12s" }}
+                onMouseEnter={el => el.currentTarget.style.background = "rgba(255,255,255,0.12)"}
+                onMouseLeave={el => el.currentTarget.style.background = "rgba(255,255,255,0.06)"}>
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7" /></svg>
+              </button>
+            )}
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 13.5, fontWeight: 700, color: "white" }}>{mode === "form" ? "New Payment Request" : "Payment Requests"}</div>
+              <div style={{ fontSize: 11, color: "rgba(255,255,255,0.5)", marginTop: 2, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                {project?.name || ""}
+                {mode === "form" && " · Sent for admin approval"}
+                {mode === "list" && requests.length > 0 && ` · ${requests.length} ${requests.length === 1 ? "request" : "requests"}`}
+              </div>
             </div>
           </div>
-          <button onClick={onClose} title="Close"
-            style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", padding: 6, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", transition: "background .12s" }}
-            onMouseEnter={el => el.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-            onMouseLeave={el => el.currentTarget.style.background = "none"}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
-          </button>
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexShrink: 0 }}>
+            {mode === "list" && (
+              <button onClick={() => { setMode("form"); setErr(""); }} title="New request"
+                style={{ padding: "6px 12px", borderRadius: 6, background: T.blu, border: "none", color: "white", fontSize: 11.5, fontWeight: 600, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit", transition: "background .12s" }}
+                onMouseEnter={el => el.currentTarget.style.background = "#1D4ED8"}
+                onMouseLeave={el => el.currentTarget.style.background = T.blu}>
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14" /></svg>
+                New Request
+              </button>
+            )}
+            <button onClick={onClose} title="Close"
+              style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", padding: 6, borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", transition: "background .12s" }}
+              onMouseEnter={el => el.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+              onMouseLeave={el => el.currentTarget.style.background = "none"}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12" /></svg>
+            </button>
+          </div>
         </div>
 
+        {/* ─── LIST MODE ─────────────────────────────────────────────── */}
+        {mode === "list" && (
+          <>
+            {/* Status filter chips */}
+            <div style={{ padding: "10px 16px", borderBottom: `1px solid ${T.b1}`, display: "flex", gap: 6, flexShrink: 0, background: T.surfaceB, overflowX: "auto" }}>
+              {["All", "Pending", "Approved", "Rejected", "Paid"].map(s => {
+                const active = statusFilter === s;
+                const meta = s !== "All" ? STATUS_META[s] : null;
+                const count = s === "All" ? requests.length : requests.filter(r => (r.status || "Pending") === s).length;
+                return (
+                  <button key={s} onClick={() => setStatusFilter(s)}
+                    style={{
+                      padding: "4px 10px", borderRadius: 14,
+                      border: `1px solid ${active ? (meta?.c || T.blu) : T.b1}`,
+                      background: active ? (meta?.bg || T.bluL) : T.surface,
+                      color: active ? (meta?.c || T.blu) : T.t3,
+                      fontSize: 11, fontWeight: active ? 700 : 500, cursor: "pointer",
+                      fontFamily: "inherit", whiteSpace: "nowrap",
+                      display: "inline-flex", alignItems: "center", gap: 5, flexShrink: 0,
+                      transition: "all .12s",
+                    }}>
+                    {s}
+                    {count > 0 && <span style={{ fontSize: 9.5, fontWeight: 700, padding: "1px 5px", borderRadius: 8, background: active ? (meta?.c || T.blu) : T.b1, color: active ? "white" : T.t3 }}>{count}</span>}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* List body */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "10px 14px" }}>
+              {loadingList ? (
+                <div style={{ padding: "32px", textAlign: "center", color: T.t4, fontSize: 12 }}>Loading...</div>
+              ) : (() => {
+                const filtered = requests.filter(r => statusFilter === "All" || (r.status || "Pending") === statusFilter);
+                if (filtered.length === 0) {
+                  return (
+                    <div style={{ padding: "60px 20px", textAlign: "center", display: "flex", flexDirection: "column", alignItems: "center", gap: 12 }}>
+                      <div style={{ width: 56, height: 56, borderRadius: "50%", border: `1.5px dashed ${T.b2}`, display: "flex", alignItems: "center", justifyContent: "center", color: T.t4 }}>
+                        <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />
+                        </svg>
+                      </div>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: T.t1 }}>
+                        {statusFilter === "All" ? "No payment requests yet" : `No ${statusFilter.toLowerCase()} requests`}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: T.t3, maxWidth: 320, lineHeight: 1.5 }}>
+                        Click <b>+ New Request</b> at top right to raise a payment request for subcon, labour or expense.
+                      </div>
+                    </div>
+                  );
+                }
+                return filtered.map(r => {
+                  // Detect type from request_type or purpose prefix [Type]
+                  const detectedType = r.request_type
+                    || (TYPES.find(t => (r.purpose || "").toLowerCase().includes(`[${t.label.toLowerCase()}]`))?.id)
+                    || "other";
+                  const tMeta = TYPE_BY_ID[detectedType] || TYPE_BY_ID.other;
+                  const sMeta = STATUS_META[r.status || "Pending"] || STATUS_META.Pending;
+                  const isExp = expandedId === r.id;
+                  const cleanPurpose = String(r.purpose || "").replace(/^\[[^\]]+\]\s*/, "");
+                  const partyDisplay = r.party_name || r.party || "—";
+                  return (
+                    <div key={r.id}
+                      style={{ background: T.surface, border: `1px solid ${isExp ? T.b2 : T.b1}`, borderRadius: 8, marginBottom: 8, borderLeft: `3px solid ${tMeta.c}`, overflow: "hidden", transition: "border-color .12s" }}>
+                      {/* Compact row */}
+                      <div onClick={() => setExpandedId(isExp ? null : r.id)}
+                        style={{ padding: "10px 12px", display: "flex", alignItems: "center", gap: 10, cursor: "pointer", background: isExp ? T.surfaceB : "transparent", transition: "background .12s" }}
+                        onMouseEnter={el => { if (!isExp) el.currentTarget.style.background = T.surfaceB; }}
+                        onMouseLeave={el => { if (!isExp) el.currentTarget.style.background = "transparent"; }}>
+                        {/* Type icon */}
+                        <div style={{ width: 28, height: 28, borderRadius: 7, background: tMeta.bg, border: `1px solid ${tMeta.brd}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={tMeta.c} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                            <path d={tMeta.icon} />
+                          </svg>
+                        </div>
+                        {/* Title + meta */}
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{partyDisplay}</span>
+                            <span style={{ fontSize: 9.5, color: T.t4, fontFamily: "monospace", flexShrink: 0 }}>PR-{r.id}</span>
+                          </div>
+                          <div style={{ fontSize: 11, color: T.t3, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                            {tMeta.label} · {cleanPurpose || r.note || "—"}
+                          </div>
+                        </div>
+                        {/* Amount + status */}
+                        <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4, flexShrink: 0 }}>
+                          <span style={{ fontSize: 13.5, fontWeight: 700, color: T.t1, fontVariantNumeric: "tabular-nums" }}>{fmtAmount(r.amount)}</span>
+                          <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 7px", borderRadius: 12, background: sMeta.bg, color: sMeta.c, border: `1px solid ${sMeta.brd}`, letterSpacing: ".4px" }}>{sMeta.label}</span>
+                        </div>
+                      </div>
+                      {/* Expanded details */}
+                      {isExp && (
+                        <div style={{ padding: "10px 14px 12px", background: T.surfaceB, borderTop: `1px solid ${T.b1}`, display: "flex", flexDirection: "column", gap: 8 }}>
+                          {(r.description || r.note) && (
+                            <div style={{ padding: "7px 10px", borderRadius: 6, background: T.surface, border: `1px solid ${T.b1}`, fontSize: 11.5, color: T.t2, lineHeight: 1.45 }}>
+                              {r.description || r.note}
+                            </div>
+                          )}
+                          <div style={{ display: "flex", flexWrap: "wrap", gap: 14, alignItems: "center" }}>
+                            {(r.requested_by_name || r.requested_by || r.created_by_name) && (
+                              <Credit label="Requested by" name={r.requested_by_name || r.requested_by || r.created_by_name} time={r.created_at || r.requested_at} />
+                            )}
+                            {(r.approved_by_name || r.approved_by) && (r.status === "Approved" || r.status === "Paid") && (
+                              <Credit label="Approved by" name={r.approved_by_name || r.approved_by} time={r.approved_at || r.updated_at} />
+                            )}
+                            {r.priority && r.priority !== "Medium" && (
+                              <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 10, textTransform: "uppercase", letterSpacing: ".4px", color: PRIORITIES.find(p => p.id === r.priority)?.c || T.t3, background: PRIORITIES.find(p => p.id === r.priority)?.bg || T.surfaceB, border: `1px solid ${PRIORITIES.find(p => p.id === r.priority)?.brd || T.b1}` }}>
+                                {r.priority}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
+            </div>
+          </>
+        )}
+
+        {/* ─── FORM MODE ─────────────────────────────────────────────── */}
+        {mode === "form" && (<>
         {/* Body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px" }}>
           {/* Type — visual chip cards */}
@@ -222,7 +432,23 @@ export default function PaymentRequestDrawer({
           {/* Beneficiary */}
           <div style={{ marginBottom: 14 }}>
             <label style={lbl}>{type === "subcon" ? "Subcontractor *" : type === "labour" ? "Worker / Group *" : type === "expense" ? "Vendor / Recipient *" : "Beneficiary *"}</label>
-            {(type === "subcon" || type === "expense") && partyOptions.length > 0 ? (
+            {/* Prefilled party — show as locked pill (e.g. came from Subcon tab) */}
+            {prefillParty?.name && partyName === prefillParty.name ? (
+              <div style={{
+                display: "flex", alignItems: "center", gap: 10,
+                padding: "8px 12px", borderRadius: 7,
+                border: `1.5px solid ${T.grnM}`, background: T.grnL,
+              }}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                <span style={{flex:1,fontSize:13,fontWeight:700,color:T.grn,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{partyName}</span>
+                <button type="button" onClick={()=>{ setPartyName(""); setPartyId(null); }}
+                  style={{padding:"3px 8px",background:"none",border:`1px solid ${T.grnM}`,borderRadius:5,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                  Change
+                </button>
+              </div>
+            ) : (type === "subcon" || type === "expense") && partyOptions.length > 0 ? (
               <SearchSelect
                 value={partyId ? String(partyId) : ""}
                 options={partyOptions}
@@ -300,7 +526,7 @@ export default function PaymentRequestDrawer({
 
         {/* Footer */}
         <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.b1}`, display: "flex", gap: 8, justifyContent: "flex-end", flexShrink: 0, background: T.surfaceB }}>
-          <button onClick={onClose} disabled={saving}
+          <button onClick={()=>setMode("list")} disabled={saving}
             style={{ padding: "9px 16px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b2}`, color: T.t2, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit" }}>
             Cancel
           </button>
@@ -314,6 +540,7 @@ export default function PaymentRequestDrawer({
             {saving ? "Sending..." : "Send Request"}
           </button>
         </div>
+        </>)}
       </div>
     </>
   );
