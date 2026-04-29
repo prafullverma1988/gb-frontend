@@ -1196,7 +1196,7 @@ function TabSubscriptions({ companies }) {
   };
 
   const cancelSub = async (id) => {
-    if (!window.confirm("Cancel this subscription?")) return;
+    if (!await window.confirmAsync("Cancel this subscription?")) return;
     const res = await apiFetch("/saas-admin/subscriptions/" + id + "/cancel", { method:"PUT" });
     if (res.success) { setToast({ msg:"Subscription cancelled", type:"success" }); load(); }
   };
@@ -1360,7 +1360,7 @@ function CompanyDetailPage({ companyId, onBack }) {
   };
 
   const deleteNote = async (nid) => {
-    if (!window.confirm("Delete this note?")) return;
+    if (!await window.confirmAsync("Delete this note?")) return;
     await apiFetch("/saas-admin/crm-notes/" + nid, { method:"DELETE" });
     load();
   };
@@ -2250,7 +2250,7 @@ function TabSanchalan({ onOpenDetail }) {
       setToast({ msg: "This template is coming soon. Pick a full template.", type: "error" });
       return;
     }
-    if (!window.confirm(`Apply "${tpl?.name}" to ${tplTarget.name}?\n\nPrevious DEMO data (if any) will be wiped first. Real data stays.\n\nContinue?`)) return;
+    if (!await window.confirmAsync(`Apply "${tpl?.name}" to ${tplTarget.name}?\n\nPrevious DEMO data (if any) will be wiped first. Real data stays.\n\nContinue?`)) return;
     setApplyingTpl(true);
     const r = await apiFetch("/saas-admin/sanchalan/companies/" + tplTarget.id + "/apply-template", {
       method: "POST",
@@ -2303,7 +2303,7 @@ function TabSanchalan({ onOpenDetail }) {
   };
 
   const runFactoryReset = async (c) => {
-    if (!window.confirm(`⚠️ FACTORY RESET "${c.name}"?\n\nThis will delete ALL operational data — projects, finance, CRM, procurement, warehouse, payroll, tasks — real and demo both. Company login, users, subscription stay intact.\n\nThis cannot be undone. Continue?`)) return;
+    if (!await window.confirmAsync(`⚠️ FACTORY RESET "${c.name}"?\n\nThis will delete ALL operational data — projects, finance, CRM, procurement, warehouse, payroll, tasks — real and demo both. Company login, users, subscription stay intact.\n\nThis cannot be undone. Continue?`)) return;
     const r = await apiFetch("/saas-admin/sanchalan/" + c.id + "/factory-reset", { method: "POST" });
     if (r.success) {
       setToast({ msg: r.message, type: "success" });
@@ -2314,7 +2314,7 @@ function TabSanchalan({ onOpenDetail }) {
   };
 
   const handleUnmark = async (id, name) => {
-    if (!window.confirm(`Move "${name}" back to regular customers list?`)) return;
+    if (!await window.confirmAsync(`Move "${name}" back to regular customers list?`)) return;
     const r = await apiFetch("/saas-admin/companies/" + id + "/toggle-internal", {
       method: "PUT",
       body: { is_internal: false },

@@ -647,7 +647,7 @@ function TabDesign({ project, isAdmin }) {
   };
 
   const handleDeleteReq = async (id) => {
-    if (!window.confirm("Delete this request?")) return;
+    if (!await window.confirmAsync("Delete this request?")) return;
     try {
       await api.del("/design/requests/" + id);
       setRequests(p => p.filter(r => r.id !== id));
@@ -3132,7 +3132,7 @@ function TabTasks({ projectId, isAdmin }) {
               {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:"Edit Task",action:()=>{setEditTask(contextMenu.task);setContextMenu(null);},admin:true},
               {icon:"M20 6L9 17l-5-5",label:"Mark Complete",action:async()=>{await api.put("/tasks/"+contextMenu.task.id,{progress:100});setTasks(updateInTree(tasks,contextMenu.task.id,{progress:100,status:"Completed"}));setContextMenu(null);}},
               null,
-              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{if(window.confirm("Delete this task?")){await api.del("/tasks/"+contextMenu.task.id);const removeFromTree=(list,id)=>list.filter(t=>t.id!==id).map(t=>({...t,children:removeFromTree(t.children||[],id)}));setTasks(removeFromTree(tasks,contextMenu.task.id));setContextMenu(null);}},color:"#EF4444",admin:true},
+              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{if(await window.confirmAsync("Delete this task?")){await api.del("/tasks/"+contextMenu.task.id);const removeFromTree=(list,id)=>list.filter(t=>t.id!==id).map(t=>({...t,children:removeFromTree(t.children||[],id)}));setTasks(removeFromTree(tasks,contextMenu.task.id));setContextMenu(null);}},color:"#EF4444",admin:true},
             ].filter(item=>item===null||!item.admin||isAdmin).map((item,i)=>
               item === null
               ? <div key={i} style={{height:1,background:"#F3F4F6",margin:"4px 0"}}/>
@@ -3461,7 +3461,7 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
     setError("");
     if (!selected) { setError("Pick a template first"); return; }
     const tpl = list.find(t => t.id === selected);
-    if (wipeExisting && !window.confirm(`⚠️ This will DELETE all existing Gantt tasks for this project before loading "${tpl?.name}".\n\nTodos (in the To-Do tab) are not affected.\n\nContinue?`)) return;
+    if (wipeExisting && !await window.confirmAsync(`⚠️ This will DELETE all existing Gantt tasks for this project before loading "${tpl?.name}".\n\nTodos (in the To-Do tab) are not affected.\n\nContinue?`)) return;
     setApplying(true);
     try {
       const body = { template_id: selected, wipe_existing: wipeExisting, include_boq: includeBOQ };
@@ -5236,7 +5236,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                   </div>
                   <div style={{padding:"7px 10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                     <span style={{fontSize:10.5,color:"#94A3B8"}}>{new Date(p.created_at).toLocaleDateString("en-IN")}</span>
-                    <button onClick={async e=>{e.stopPropagation();if(window.confirm("Delete photo?")){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
+                    <button onClick={async e=>{e.stopPropagation();if(await window.confirmAsync("Delete photo?")){const r=await api.del("/tasks/"+task.id+"/photos/"+p.id);if(r.success)setPhotos(prev=>prev.filter(x=>x.id!==p.id));}}}
                       style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:4,display:"flex"}}>
                       <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
                     </button>
@@ -5378,7 +5378,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                         ))}
                       </div>
                     </div>
-                    <button onClick={async()=>{if(window.confirm("Delete issue?")){const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success){setIssues(p=>p.filter(x=>x.id!==issue.id));setExpandedIssue(null);}}}}
+                    <button onClick={async()=>{if(await window.confirmAsync("Delete issue?")){const r=await api.del("/tasks/"+task.id+"/issues/"+issue.id);if(r.success){setIssues(p=>p.filter(x=>x.id!==issue.id));setExpandedIssue(null);}}}}
                       style={{fontSize:11,color:"#EF4444",background:"none",border:"none",cursor:"pointer",padding:0}}>Delete Issue</button>
                   </div>
                 )}
@@ -6273,7 +6273,7 @@ function TabAttendance({ project }) {
                   return recDate===attDate&&r.type===labType&&!r.subcon_id&&!r.vendor_id;
                 });
                 const clearDate = async () => {
-                  if(!window.confirm(`${attDate} ki attendance delete karoge? Payroll mein bhi hatega.`)) return;
+                  if(!await window.confirmAsync(`${attDate} ki attendance delete karoge? Payroll mein bhi hatega.`)) return;
                   try {
                     const res = await api.del(`/projects/${projectId}/attendance?date=${attDate}&type=${labType}`);
                     if(res.success) {
@@ -6312,9 +6312,9 @@ function TabAttendance({ project }) {
                       </button>
                     )}
                     {savedRec&&!isDirty&&(
-                      <button onClick={()=>{
+                      <button onClick={async()=>{
                         // Unfreeze: enable editing by clearing all statuses
-                        if(!window.confirm("Edit attendance for this date? Tum sab P/A/H phir se mark kar sakoge.")) return;
+                        if(!await window.confirmAsync("Edit attendance for this date? Tum sab P/A/H phir se mark kar sakoge.")) return;
                         setTodayEntries(prev=>prev.map(e=>({...e,status:"",hours:0,ot:0,remark:""})));
                       }}
                         title="Re-mark attendance for this date"
@@ -8528,7 +8528,7 @@ function TabSubcon({ projectId }) {
                         )}
                         {b.status!=="Paid"&&(
                           <button onClick={async()=>{
-                              if(!window.confirm(`Delete ${b.bill_no}? This will permanently remove the bill.`)) return;
+                              if(!await window.confirmAsync(`Delete ${b.bill_no}? This will permanently remove the bill.`)) return;
                               const res = await api.del("/subcon/ra-bills/"+b.id);
                               if(res.success){
                                 selectWo(selWo); // reload bills

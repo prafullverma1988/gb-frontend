@@ -496,7 +496,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
   };
 
   const deleteQuotation=async(qid)=>{
-    if(!window.confirm("Delete this quotation?")) return;
+    if(!await window.confirmAsync("Delete this quotation?")) return;
     try{
       const res=await api.del("/crm/quotations/"+qid);
       if(res.success) setQuotations(p=>p.filter(q=>q.id!==qid));
@@ -969,7 +969,7 @@ function TemplateBuilderModal({onClose}){
   };
 
   const deleteTpl=async(tid)=>{
-    if(!window.confirm("Delete this template?")) return;
+    if(!await window.confirmAsync("Delete this template?")) return;
     try{
       await api.del("/crm/templates/"+tid);
       setTemplates(p=>p.filter(t=>t.id!==tid));

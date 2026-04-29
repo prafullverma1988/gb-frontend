@@ -1826,7 +1826,7 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
   };
 
   const remove=async(w)=>{
-    if(!window.confirm(`Remove worker "${w.name}"?`)) return;
+    if(!await window.confirmAsync(`Remove worker "${w.name}"?`)) return;
     try{
       const res=await api.delete(`/payroll/workers/${w.id}`);
       if(res.success) setWorkers(p=>p.filter(x=>x.id!==w.id));
@@ -2005,7 +2005,7 @@ function DailyPaymentsTab({workers,isAdmin}){
   useEffect(()=>{load();},[load]);
 
   const generate=async()=>{
-    if(!window.confirm(`Generate payments from ${from} to ${to}?\n\nThis will compute payable amount per worker based on attendance in this period.`)) return;
+    if(!await window.confirmAsync(`Generate payments from ${from} to ${to}?\n\nThis will compute payable amount per worker based on attendance in this period.`)) return;
     setGenerating(true);setErr("");
     try{
       const r=await api.post("/payroll/daily-labour/payments/generate",{
@@ -2026,7 +2026,7 @@ function DailyPaymentsTab({workers,isAdmin}){
     }catch(e){ alert(e.message); }
   };
   const cancel=async(p)=>{
-    if(!window.confirm("Cancel this payment record?")) return;
+    if(!await window.confirmAsync("Cancel this payment record?")) return;
     try{
       const r=await api.patch(`/payroll/daily-labour/payments/${p.id}`,{status:"cancelled"});
       if(r.success) load();
@@ -2192,7 +2192,7 @@ function DailyWagesSettingsTab(){
   };
 
   const dedupe=async()=>{
-    if(!window.confirm("Duplicate skills hata du? (Same role+category waale rakhe ek)")) return;
+    if(!await window.confirmAsync("Duplicate skills hata du? (Same role+category waale rakhe ek)")) return;
     const res=await api.post("/library/labour-rates/dedupe");
     if(res.success){
       setSavedMsg(`✓ Cleaned up — kept ${res.data.kept}, removed ${res.data.deduped} duplicates`);

@@ -1852,7 +1852,7 @@ function UOMMasterSection() {
   };
 
   const del = async (id) => {
-    if (!window.confirm("Delete this unit?")) return;
+    if (!await window.confirmAsync("Delete this unit?")) return;
     await api.del("/library/uom/"+id);
     reload();
   };

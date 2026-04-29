@@ -1725,7 +1725,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
                     setActing(p=>({...p,["po"+po.id]:null}));
                   }}
                   onCancel={async()=>{
-                    if(!window.confirm("Cancel this PO?")) return;
+                    if(!await window.confirmAsync("Cancel this PO?")) return;
                     setActing(p=>({...p,["po"+po.id]:"cancelling"}));
                     await api.patch("/procurement/pos/"+po.id+"/cancel",{});
                     setData(p=>({...p,pos:p.pos.filter(x=>x.id!==po.id)}));
