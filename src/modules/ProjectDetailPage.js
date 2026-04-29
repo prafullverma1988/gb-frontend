@@ -5525,6 +5525,8 @@ function TabAttendance({ project }) {
   const [todayEntries,   setTodayEntries]   = useState([]);
   // ── Count-wise rows ─────────────────────────────────────────────
   const [todayCountRows, setTodayCountRows] = useState([]);
+  // ── Worker search (filter rows by name/role) ────────────────────
+  const [workerSearch,   setWorkerSearch]   = useState("");
 
   // ── Add workforce modal ──────────────────────────────────────────
   const [showAddWf,      setShowAddWf]      = useState(false);
@@ -5879,173 +5881,158 @@ function TabAttendance({ project }) {
 
       {/* ── SUBCON SELECTOR (replaces workforce panel for subcon) ─────── */}
       {labType==="subcon"&&(
-        <div style={{background:T.surface,border:`1.5px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"13px 16px"}}>
-          <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Select Subcontractor</div>
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",flexShrink:0}}>Subcontractor</span>
           {subconLib.length===0
-            ?<div style={{fontSize:12.5,color:T.t4,padding:"8px 0"}}>
-                No subcontractors in library. Go to <b>Master Library → Subcontractors</b> to add them first.
-             </div>
-            :<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            ?<span style={{fontSize:12,color:T.t4}}>No subcontractors in library. Add via <b>Master Library → Subcontractors</b>.</span>
+            :<div style={{display:"flex",gap:6,flexWrap:"wrap",flex:1}}>
               {subconLib.map(s=>{
                 const sid = s.id||s.name;
                 const isSelected = selSubconId===String(sid);
                 return(
-                  <button key={sid} onClick={()=>setSelSubconId(String(sid))}
-                    style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${isSelected?T.grn:T.b1}`,background:isSelected?T.grnL:T.surface,color:isSelected?T.grn:T.t2,fontSize:12.5,fontWeight:isSelected?700:500,cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
-                    {isSelected&&<span style={{width:7,height:7,borderRadius:"50%",background:T.grn,display:"inline-block"}}/>}
+                  <button key={sid} onClick={()=>setSelSubconId(isSelected?"":String(sid))}
+                    title={s.phone||s.trade||""}
+                    style={{padding:"4px 11px",borderRadius:14,border:`1px solid ${isSelected?T.grn:T.b1}`,background:isSelected?T.grnL:T.surface,color:isSelected?T.grn:T.t2,fontSize:12,fontWeight:isSelected?700:500,cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit"}}
+                    onMouseEnter={el=>{if(!isSelected){el.currentTarget.style.borderColor=T.b2; el.currentTarget.style.background=T.surfaceB;}}}
+                    onMouseLeave={el=>{if(!isSelected){el.currentTarget.style.borderColor=T.b1; el.currentTarget.style.background=T.surface;}}}>
+                    {isSelected&&<span style={{width:6,height:6,borderRadius:"50%",background:T.grn,display:"inline-block"}}/>}
                     {s.name||s.company_name}
-                    {s.trade&&<span style={{fontSize:10.5,color:isSelected?T.grn:T.t4,fontWeight:400}}>· {s.trade}</span>}
                   </button>
                 );
               })}
             </div>
           }
-          {selSubconId&&(()=>{
-            const sc = subconLib.find(s=>String(s.id||s.name)===selSubconId);
-            return sc?(
-              <div style={{marginTop:10,padding:"8px 12px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                <div>
-                  <span style={{fontSize:13,fontWeight:700,color:T.grn}}>{sc.name||sc.company_name}</span>
-                  {sc.phone&&<span style={{fontSize:11.5,color:T.t3,marginLeft:8}}>{sc.phone}</span>}
-                  {sc.trade&&<span style={{fontSize:11.5,color:T.t4,marginLeft:8}}>· {sc.trade}</span>}
-                </div>
-                <button onClick={()=>setSelSubconId("")} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:16,lineHeight:1}}>×</button>
-              </div>
-            ):null;
-          })()}
         </div>
       )}
 
       {/* ── VENDOR SELECTOR (mirrors subcon flow + Add new vendor) ───── */}
       {labType==="vendor"&&(
-        <div style={{background:T.surface,border:`1.5px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"13px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px"}}>Select Labour Vendor</div>
-            <button onClick={()=>{
-                setVForm({name:"",owner:"",phone:"",email:"",city:"",gstin:"",trade:"",notes:""});
-                // Pre-fill with first rate card skill if available
-                const first = rateCard[0];
-                if (first) {
-                  const skill = first.role||first.name||first.skill;
-                  const rate  = getRateForRole(skill) || 0;
-                  setVSkills([{ skill, rate, card_rate:rate }]);
-                } else {
-                  setVSkills([]);
-                }
-                setShowAddVendor(true);
-              }}
-              style={{padding:"5px 12px",borderRadius:6,background:T.amb,color:"white",border:"none",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-              Add Labour Vendor
-            </button>
-          </div>
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,padding:"8px 12px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+          <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",flexShrink:0}}>Labour Vendor</span>
           {vendorLib.length===0
-            ?<div style={{fontSize:12.5,color:T.t4,padding:"8px 0",textAlign:"center"}}>
-                No labour vendors yet. Click <b>"Add Labour Vendor"</b> above to onboard one.
-             </div>
-            :<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            ?<span style={{fontSize:12,color:T.t4}}>No labour vendors yet. Click <b>Add Vendor</b> →</span>
+            :<div style={{display:"flex",gap:6,flexWrap:"wrap",flex:1}}>
               {vendorLib.map(v=>{
                 const vid = v.id||v.name;
                 const isSelected = selVendorId===String(vid);
                 const skillCount = (v.skills||[]).length;
                 return(
-                  <button key={vid} onClick={()=>setSelVendorId(String(vid))}
-                    style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${isSelected?T.amb:T.b1}`,background:isSelected?T.ambL:T.surface,color:isSelected?T.amb:T.t2,fontSize:12.5,fontWeight:isSelected?700:500,cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",gap:5}}>
-                    {isSelected&&<span style={{width:7,height:7,borderRadius:"50%",background:T.amb,display:"inline-block"}}/>}
+                  <button key={vid} onClick={()=>setSelVendorId(isSelected?"":String(vid))}
+                    title={[v.owner,v.phone,v.city].filter(Boolean).join(" · ")}
+                    style={{padding:"4px 11px",borderRadius:14,border:`1px solid ${isSelected?T.amb:T.b1}`,background:isSelected?T.ambL:T.surface,color:isSelected?T.amb:T.t2,fontSize:12,fontWeight:isSelected?700:500,cursor:"pointer",transition:"all .12s",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit"}}
+                    onMouseEnter={el=>{if(!isSelected){el.currentTarget.style.borderColor=T.b2; el.currentTarget.style.background=T.surfaceB;}}}
+                    onMouseLeave={el=>{if(!isSelected){el.currentTarget.style.borderColor=T.b1; el.currentTarget.style.background=T.surface;}}}>
+                    {isSelected&&<span style={{width:6,height:6,borderRadius:"50%",background:T.amb,display:"inline-block"}}/>}
                     {v.name||v.company_name}
-                    {skillCount>0&&<span style={{fontSize:9.5,padding:"1px 6px",background:isSelected?T.amb:T.b1,color:isSelected?"white":T.t3,borderRadius:10,fontWeight:700}}>{skillCount} skills</span>}
+                    {skillCount>0&&<span style={{fontSize:9.5,padding:"1px 5px",background:isSelected?T.amb:T.b1,color:isSelected?"white":T.t3,borderRadius:8,fontWeight:700}}>{skillCount}</span>}
                   </button>
                 );
               })}
             </div>
           }
-          {selVendorId&&(()=>{
-            const vd = vendorLib.find(v=>String(v.id||v.name)===selVendorId);
-            return vd?(
-              <div style={{marginTop:10,padding:"10px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7}}>
-                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:vd.skills?.length?8:0}}>
-                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.amb} strokeWidth={2.5}><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-                  <div style={{flex:1}}>
-                    <span style={{fontSize:13,fontWeight:700,color:T.amb}}>{vd.name||vd.company_name}</span>
-                    {vd.owner&&<span style={{fontSize:11.5,color:T.t3,marginLeft:8}}>· {vd.owner}</span>}
-                    {vd.phone&&<span style={{fontSize:11.5,color:T.t3,marginLeft:8}}>· {vd.phone}</span>}
-                    {vd.city&&<span style={{fontSize:11.5,color:T.t4,marginLeft:8}}>· {vd.city}</span>}
-                  </div>
-                  <button onClick={()=>setSelVendorId("")} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:16,lineHeight:1}}>×</button>
-                </div>
-                {vd.skills?.length>0&&(
-                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                    {vd.skills.map(s=>(
-                      <span key={s.id} style={{fontSize:10.5,padding:"3px 9px",borderRadius:14,background:"white",border:`1px solid ${s.rate_status==="pending"?T.ambM:T.b1}`,color:T.t2,fontWeight:600,display:"inline-flex",alignItems:"center",gap:5}}>
-                        {s.skill} <b style={{color:T.amb}}>₹{s.rate}/day</b>
-                        {s.rate_status==="pending"&&<span style={{fontSize:9,color:T.amb}}>🟡</span>}
-                        {s.rate_status==="approved"&&<span style={{fontSize:9,color:T.grn}}>✓</span>}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ):null;
-          })()}
+          <button onClick={()=>{
+              setVForm({name:"",owner:"",phone:"",email:"",city:"",gstin:"",trade:"",notes:""});
+              const first = rateCard[0];
+              if (first) {
+                const skill = first.role||first.name||first.skill;
+                const rate  = getRateForRole(skill) || 0;
+                setVSkills([{ skill, rate, card_rate:rate }]);
+              } else {
+                setVSkills([]);
+              }
+              setShowAddVendor(true);
+            }}
+            title="Add new labour vendor"
+            style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",flexShrink:0,transition:"all .12s"}}
+            onMouseEnter={el=>{el.currentTarget.style.background=T.surfaceB; el.currentTarget.style.borderColor=T.b2;}}
+            onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1;}}>
+            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4}><path d="M12 5v14M5 12h14"/></svg>
+            Add Vendor
+          </button>
         </div>
       )}
 
       {/* ── WORKFORCE PANEL (Company only) ───────────────────────────── */}
-      {labType==="company"&&showWfPanel&&(
-        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,overflow:"hidden"}}>
-          <div style={{padding:"10px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Registered Workforce — {TYPE_LABELS[labType]}</span>
-            <span style={{fontSize:11.5,color:T.t4}}>{currentWF.length} registered &nbsp;·&nbsp; Mode: <b style={{color:TYPE_COLORS[labType]}}>{mode==="name"?"Name-wise":"Count-wise"}</b></span>
+      {labType==="company"&&showWfPanel&&(<>
+        <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+        <div onClick={()=>setShowWfPanel(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200}}/>
+        <div style={{position:"fixed",top:0,right:0,height:"100vh",width:620,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.15)",zIndex:201,display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"}}>
+          {/* Header */}
+          <div style={{padding:"12px 16px",background:"#0D1B2A",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Registered Workforce</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{TYPE_LABELS[labType]} · {currentWF.length} registered · Mode: {mode==="name"?"Name-wise":"Count-wise"}</div>
+            </div>
+            <button onClick={()=>setShowWfPanel(false)} title="Close"
+              style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
+              onMouseEnter={el=>el.currentTarget.style.background="rgba(255,255,255,0.1)"}
+              onMouseLeave={el=>el.currentTarget.style.background="none"}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
           </div>
-          {wfLoading
-            ?<div style={{padding:"18px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>Loading…</div>
-            :currentWF.length===0
-              ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                No {TYPE_LABELS[labType]} registered yet. Click "Add" above to register workforce for this project.
-               </div>
-              :<div>
-                <THead cols="2fr 1fr 90px 100px 100px" headers={["Name","Role","Daily Rate","Rate Status","Action"]}/>
-                {currentWF.map((w,i)=>(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 90px 100px 100px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",fontSize:12.5}}
-                    onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <span style={{fontWeight:600,color:T.t1}}>{w.name}</span>
-                    <span style={{color:T.t2,fontSize:12}}>{w.role||"—"}</span>
-                    <span style={{fontWeight:600,color:T.t1}}>₹{w.dailyRate||w.daily_rate||0}</span>
-                    <RateBadge worker={w}/>
-                    <button onClick={()=>{setRateReqWorker(w);setNewRateVal("");setRateReason("");setShowRateModal(true);}}
-                      style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${T.b2}`,background:T.surface,color:T.t3,fontSize:11,cursor:"pointer",width:"max-content"}}>
-                      Change Rate
-                    </button>
-                  </div>
-                ))}
-               </div>
-          }
+          {/* Body */}
+          <div style={{flex:1,overflowY:"auto"}}>
+            {wfLoading
+              ?<div style={{padding:"32px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>Loading…</div>
+              :currentWF.length===0
+                ?<div style={{padding:"40px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                  No {TYPE_LABELS[labType]} registered yet.<br/>Click <b>"+ Add Labour"</b> above to register workforce for this project.
+                 </div>
+                :<>
+                  <THead cols="2fr 1fr 90px 100px 100px" headers={["Name","Role","Daily Rate","Rate Status","Action"]}/>
+                  {currentWF.map((w,i)=>(
+                    <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 90px 100px 100px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",fontSize:12.5,gap:8}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <span style={{fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w.name}</span>
+                      <span style={{color:T.t2,fontSize:12,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{w.role||"—"}</span>
+                      <span style={{fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{w.dailyRate||w.daily_rate||0}</span>
+                      <RateBadge worker={w}/>
+                      <button onClick={()=>{setRateReqWorker(w);setNewRateVal("");setRateReason("");setShowRateModal(true);}}
+                        style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${T.b2}`,background:T.surface,color:T.t3,fontSize:11,cursor:"pointer",width:"max-content",fontFamily:"inherit"}}>
+                        Change Rate
+                      </button>
+                    </div>
+                  ))}
+                 </>
+            }
+          </div>
         </div>
-      )}
+      </>)}
 
       {/* ── DATE NAVIGATOR ───────────────────────────────────────────── */}
       <div style={{display:"flex",gap:6,marginBottom:14,alignItems:"center",overflowX:"auto",paddingBottom:2}}>
-        <span style={{fontSize:11,color:T.t4,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>DATE:</span>
+        <span style={{fontSize:11,color:T.t4,fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>DATE</span>
         {days7.map(d=>{
           const isToday=d===todayStr, isSel=d===attDate;
           const hasData=attRecs.some(r=>String(r.date||"").split("T")[0]===d&&r.type===labType);
           const dd=new Date(d);
+          const dow=dd.getDay(); // 0=Sun, 6=Sat
+          const isWeekend=dow===0||dow===6;
+          const labelColor = isSel ? TYPE_COLORS[labType] : (isWeekend ? T.t4 : T.t3);
           return(
             <button key={d} onClick={()=>setAttDate(d)}
-              style={{padding:"6px 11px",borderRadius:7,border:`1.5px solid ${isSel?TYPE_COLORS[labType]:T.b1}`,background:isSel?TYPE_BG[labType]:T.surface,color:isSel?TYPE_COLORS[labType]:T.t2,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1,minWidth:46,position:"relative",flexShrink:0,transition:"all .15s"}}>
-              <span style={{fontSize:9.5,fontWeight:isSel?700:500,textTransform:"uppercase",color:isSel?TYPE_COLORS[labType]:T.t4}}>
+              title={isToday ? "Today" : (hasData ? "Attendance marked" : "")}
+              style={{padding:"6px 11px 8px",borderRadius:7,border:`1.5px solid ${isSel?TYPE_COLORS[labType]:T.b1}`,background:isSel?TYPE_BG[labType]:T.surface,color:isSel?TYPE_COLORS[labType]:T.t2,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:1,minWidth:46,position:"relative",flexShrink:0,transition:"all .15s",boxShadow:isToday&&!isSel?`inset 0 -2px 0 ${T.blu}`:"none"}}>
+              <span style={{fontSize:9.5,fontWeight:isSel?700:500,textTransform:"uppercase",color:labelColor,letterSpacing:".3px"}}>
                 {dd.toLocaleDateString("en-IN",{weekday:"short"})}
               </span>
-              <span style={{fontSize:13,fontWeight:isSel?700:600}}>{dd.getDate()}</span>
-              {hasData&&<span style={{width:5,height:5,borderRadius:"50%",background:TYPE_COLORS[labType],position:"absolute",bottom:3,right:3}}/>}
-              {isToday&&!isSel&&<span style={{width:4,height:4,borderRadius:"50%",background:T.t4,position:"absolute",bottom:3,left:"50%",transform:"translateX(-50%)"}}/>}
+              <span style={{fontSize:13,fontWeight:isSel?700:600,color:isSel?TYPE_COLORS[labType]:(isWeekend?T.t3:T.t1)}}>{dd.getDate()}</span>
+              {hasData&&<span title="Attendance marked" style={{width:5,height:5,borderRadius:"50%",background:T.grn,position:"absolute",top:5,right:5}}/>}
             </button>
           );
         })}
         <input type="date" value={attDate} onChange={e=>setAttDate(e.target.value)} max={todayStr}
           style={{marginLeft:4,padding:"5px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit",flexShrink:0}}/>
+        {/* Legend */}
+        <div style={{display:"flex",alignItems:"center",gap:10,marginLeft:"auto",fontSize:10.5,color:T.t4,flexShrink:0}}>
+          <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+            <span style={{width:6,height:6,borderRadius:"50%",background:T.grn}}/>Marked
+          </span>
+          <span style={{display:"inline-flex",alignItems:"center",gap:5}}>
+            <span style={{width:14,height:2,borderRadius:1,background:T.blu}}/>Today
+          </span>
+        </div>
       </div>
 
       {/* ── KPI STRIP ────────────────────────────────────────────────── */}
@@ -6057,9 +6044,12 @@ function TabAttendance({ project }) {
             {l:"Roles Working", v:todayCountRows.filter(r=>r.present>0).length, c:T.blu},
             {l:"Mode",         v:"Count-wise",c:T.slt},
           ].map((s,i)=>(
-            <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-              <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{s.l}</div>
-              <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
+            <div key={i} style={{padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:s.c,flexShrink:0}}/>
+                <span style={{fontSize:10,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>{s.l}</span>
+              </div>
+              <div style={{fontSize:22,fontWeight:700,color:T.t1,lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.v}</div>
             </div>
           ))}
         </div>
@@ -6069,11 +6059,14 @@ function TabAttendance({ project }) {
             {l:"Present",    v:presentCount,                                     c:T.grn},
             {l:"Half Day",   v:halfCount,                                        c:T.amb},
             {l:"Absent",     v:Math.max(0,totalCount-presentCount-halfCount),    c:T.red},
-            {l:"Daily Wages",v:`₹${fmtN(totalWages)}`,                           c:T.slt},
+            {l:"Daily Wages",v:`₹${fmtN(totalWages)}`,                           c:T.blu},
           ].map((s,i)=>(
-            <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-              <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>{s.l}</div>
-              <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
+            <div key={i} style={{padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,display:"flex",flexDirection:"column",gap:6}}>
+              <div style={{display:"flex",alignItems:"center",gap:7}}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:s.c,flexShrink:0}}/>
+                <span style={{fontSize:10,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>{s.l}</span>
+              </div>
+              <div style={{fontSize:22,fontWeight:700,color:T.t1,lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.v}</div>
             </div>
           ))}
         </div>
@@ -6081,9 +6074,9 @@ function TabAttendance({ project }) {
 
       {/* ── ATTENDANCE ENTRY PANEL ───────────────────────────────────── */}
       <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,marginBottom:14,overflow:"hidden"}}>
-        <div style={{padding:"10px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>
-            Attendance — {new Date(attDate+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"short",year:"numeric"})}
+        <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:12}}>
+          <span style={{fontSize:12.5,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {new Date(attDate+"T00:00:00").toLocaleDateString("en-IN",{weekday:"long",day:"2-digit",month:"short",year:"numeric"})}
           </span>
           <div style={{display:"flex",gap:7,alignItems:"center"}}>
             {labType==="subcon"&&!selSubconId
@@ -6221,18 +6214,34 @@ function TabAttendance({ project }) {
             ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>Register workforce first to mark name-wise attendance.</div>
             :<div>
               {isFrozen&&(
-                <div style={{padding:"8px 15px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`,fontSize:11.5,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
-                  🔒 Attendance saved & locked. Click "Edit Attendance" above to make changes.
+                <div style={{padding:"6px 14px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`,fontSize:11,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                  Saved & locked — click <b style={{margin:"0 2px"}}>Edit Attendance</b> above to change
                 </div>
               )}
-              <THead cols="2fr 1fr 200px 80px 70px 95px 60px" headers={["Name","Role","Status","Hours","OT","Daily Rate","Action"]}/>
+              {/* Worker search bar */}
+              {currentWF.length>3 && (
+                <div style={{padding:"7px 14px 8px",borderBottom:`1px solid ${T.b1}`,background:T.surface,display:"flex",alignItems:"center",gap:8}}>
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round"><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+                  <input value={workerSearch} onChange={el=>setWorkerSearch(el.target.value)} placeholder="Search by name or role..."
+                    style={{flex:1,padding:"3px 0",border:"none",outline:"none",fontSize:12,color:T.t1,background:"transparent",fontFamily:"inherit"}}/>
+                  {workerSearch && (
+                    <button onClick={()=>setWorkerSearch("")} title="Clear"
+                      style={{padding:"2px 6px",border:"none",background:"transparent",color:T.t4,cursor:"pointer",fontSize:14,lineHeight:1,fontFamily:"inherit"}}>×</button>
+                  )}
+                </div>
+              )}
+              <THead cols="2fr 1fr 160px 95px 100px" headers={["Name","Role","Status","Daily Rate","Action"]}/>
               {todayEntries.map((e,idx)=>{
                 const isLocked = !!e.status;
                 const borderColor = e.status==="P"?T.grn:e.status==="H"?T.amb:e.status==="A"?T.red:T.b1;
                 const bgTint = e.status==="P"?T.grnL+"55":e.status==="H"?T.ambL+"55":e.status==="A"?T.redL+"55":"transparent";
+                // Filter by search
+                const q = workerSearch.trim().toLowerCase();
+                if (q && !(String(e.name||"").toLowerCase().includes(q) || String(e.role||"").toLowerCase().includes(q))) return null;
                 return(
                 <div key={idx}>
-                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 200px 80px 70px 95px 60px",padding:"12px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`4px solid ${borderColor}`,background:bgTint,transition:"all .2s"}}>
+                <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 160px 95px 100px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`4px solid ${borderColor}`,background:bgTint,transition:"all .2s",gap:10}}>
                   <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{e.name}</span>
                   <span style={{fontSize:12,color:T.t3}}>{e.role}</span>
 
@@ -6242,38 +6251,33 @@ function TabAttendance({ project }) {
                       c={e.status==="P"?T.grn:e.status==="H"?T.amb:T.red}
                       bg={e.status==="P"?T.grnL:e.status==="H"?T.ambL:T.redL}/>
                   ) : (
-                    <div style={{display:"flex",gap:6}}>
+                    <div style={{display:"inline-flex", padding:2, background:"#F1F5F9", border:`1px solid ${T.b1}`, borderRadius:8, gap:0}}>
                       {[
-                        {s:"P", label:"Present",  c:T.grn, bg:T.grnL, m:T.grnM},
-                        {s:"A", label:"Absent",   c:T.red, bg:T.redL, m:T.redM},
-                        {s:"H", label:"Half",     c:T.amb, bg:T.ambL, m:T.ambM},
+                        {s:"P", label:"Present",  c:T.grn},
+                        {s:"A", label:"Absent",   c:T.red},
+                        {s:"H", label:"Half Day", c:T.amb},
                       ].map(opt=>{
                         const active = e.status === opt.s;
                         const dimmed = isLocked && !active;
                         return(
                           <button key={opt.s} disabled={isLocked && !active}
+                            title={opt.label}
                             onClick={()=>{ if(isLocked) return; setTodayEntries(prev=>prev.map((en,i)=>i===idx?{
                               ...en, status:opt.s,
                               hours: opt.s==="P"?8:opt.s==="H"?4:0,
                               remark: opt.s==="A" ? (en.remark||"") : "",
                             }:en)); }}
                             style={{
-                              padding:"7px 13px",borderRadius:8,
-                              border: active?`2px solid ${opt.c}`:`1.5px solid ${dimmed?"#E5E7EB":"#CBD5E1"}`,
-                              background: active?opt.c:(dimmed?"#F3F4F6":"#F8FAFC"),
-                              color: active?"white":(dimmed?"#94A3B8":"#475569"),
-                              fontSize:12,fontWeight:700,
+                              padding:"5px 14px", minWidth:38, borderRadius:6, border:"none",
+                              background: active ? opt.c : "transparent",
+                              color: active ? "#fff" : (dimmed ? "#CBD5E1" : T.t3),
+                              fontSize:12, fontWeight:700, fontFamily:"inherit",
                               cursor: isLocked ? "default" : "pointer",
-                              minWidth:50,
-                              boxShadow: active?`0 2px 8px ${opt.c}55`:"none",
-                              transform: active?"scale(1.06)":"scale(1)",
-                              transition:"all .18s cubic-bezier(.2,.9,.3,1.2)",
-                              opacity: dimmed?0.5:1,
+                              boxShadow: active ? "0 1px 2px rgba(0,0,0,.12)" : "none",
+                              transition:"background .12s, color .12s",
                             }}
-                            onMouseEnter={el=>{ if(!isLocked&&!active){el.currentTarget.style.background=opt.c+"15"; el.currentTarget.style.borderColor=opt.c; el.currentTarget.style.color=opt.c; el.currentTarget.style.transform="scale(1.04)";} }}
-                            onMouseLeave={el=>{ if(!isLocked&&!active){el.currentTarget.style.background="#F8FAFC"; el.currentTarget.style.borderColor="#CBD5E1"; el.currentTarget.style.color="#475569"; el.currentTarget.style.transform="scale(1)";} }}
-                            onMouseDown={el=>{ if(!isLocked) el.currentTarget.style.transform="scale(0.94)"; }}
-                            onMouseUp={el=>{ if(!isLocked) el.currentTarget.style.transform=active?"scale(1.06)":"scale(1.04)"; }}>
+                            onMouseEnter={el=>{ if(!isLocked && !active){ el.currentTarget.style.background = opt.c + "14"; el.currentTarget.style.color = opt.c; } }}
+                            onMouseLeave={el=>{ if(!isLocked && !active){ el.currentTarget.style.background = "transparent"; el.currentTarget.style.color = dimmed ? "#CBD5E1" : T.t3; } }}>
                             {opt.s}
                           </button>
                         );
@@ -6281,45 +6285,38 @@ function TabAttendance({ project }) {
                     </div>
                   )}
 
-                  {/* Hours — editable when locked (except absent) */}
-                  {isLocked && e.status!=="A"
-                    ?<input type="number" value={e.hours} min={0} max={14}
-                        onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,hours:Number(el.target.value)}:en))}
-                        style={{width:60,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center",background:"white",color:T.t1,fontWeight:600}}/>
-                    :isLocked && e.status==="A"
-                      ?<span style={{fontSize:11.5,color:T.t4,textAlign:"center"}}>0h</span>
-                      :<span style={{fontSize:11.5,color:T.t4,textAlign:"center"}}>—</span>
-                  }
-                  {/* OT — editable when present/half */}
-                  {isLocked && e.status!=="A"
-                    ?<input type="number" value={e.ot||0} min={0} max={6}
-                        onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,ot:Number(el.target.value)}:en))}
-                        style={{width:55,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",textAlign:"center"}}/>
-                    :<span style={{fontSize:12,color:T.t4,textAlign:"center"}}>—</span>
-                  }
-                  <span style={{fontSize:12,color:T.t2,fontWeight:600}}>₹{e.dailyRate||0}</span>
+                  <span style={{fontSize:12.5,color:T.t1,fontWeight:600,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>₹{e.dailyRate||0}</span>
 
                   {/* Edit/Lock indicator */}
                   {isFrozen
-                    ?<span style={{fontSize:14,color:T.grn,textAlign:"center"}} title="Saved & locked">🔒</span>
+                    ?<span title="Saved & locked" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:14,border:`1px solid ${T.grnM}`,background:T.grnL,color:T.grn,fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>
+                        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                        Saved
+                      </span>
                     :isLocked
                       ?<button onClick={()=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,status:"",hours:0,ot:0,remark:""}:en))}
                           title="Edit / change status"
-                          style={{padding:"5px 10px",borderRadius:6,border:`1.5px solid ${T.b2}`,background:"white",color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
-                          ✏️ Edit
+                          style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:6,border:`1px solid ${T.b2}`,background:T.surface,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"all .12s"}}
+                          onMouseEnter={el=>{el.currentTarget.style.background=T.surfaceB; el.currentTarget.style.borderColor=T.b1; el.currentTarget.style.color=T.t2;}}
+                          onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b2; el.currentTarget.style.color=T.t3;}}>
+                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                          Edit
                         </button>
-                      :<span style={{fontSize:10,color:T.t4,fontWeight:600,textAlign:"center"}}>Pending</span>
+                      :<span title="Not yet marked" style={{display:"inline-flex",alignItems:"center",gap:5,padding:"4px 10px",borderRadius:14,border:`1px dashed ${T.b2}`,background:"transparent",color:T.t4,fontSize:10.5,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>
+                          <span style={{width:6,height:6,borderRadius:"50%",border:`1.5px solid ${T.t4}`,display:"inline-block"}}/>
+                          Pending
+                        </span>
                   }
                 </div>
                 {/* Remark for absent — only when locked as A */}
                 {isLocked && e.status==="A" && (
-                  <div style={{padding:"4px 15px 10px",borderBottom:`1px solid ${T.b1}`,background:T.redL+"22",borderLeft:`4px solid ${T.red}`}}>
+                  <div style={{padding:"2px 16px 10px 22px",borderBottom:`1px solid ${T.b1}`}}>
                     <input type="text" value={e.remark||""}
                       onChange={el=>setTodayEntries(prev=>prev.map((en,i)=>i===idx?{...en,remark:el.target.value}:en))}
-                      placeholder="📝 Reason for absence (optional) — sick leave, personal work, no show"
-                      style={{width:"100%",padding:"7px 11px",borderRadius:6,border:`1.5px solid ${T.redM}`,background:"white",fontSize:12,color:T.t2,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}
-                      onFocus={el=>el.target.style.borderColor=T.red}
-                      onBlur={el=>el.target.style.borderColor=T.redM}/>
+                      placeholder="Reason for absence (optional)"
+                      style={{width:"100%",maxWidth:380,padding:"5px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:T.surface,fontSize:11.5,color:T.t2,outline:"none",fontFamily:"inherit",boxSizing:"border-box",transition:"border-color .12s"}}
+                      onFocus={el=>el.target.style.borderColor=T.t4}
+                      onBlur={el=>el.target.style.borderColor=T.b1}/>
                   </div>
                 )}
                 </div>
@@ -6341,20 +6338,19 @@ function TabAttendance({ project }) {
             {/* ── SUBCON: skill catalog + count per skill ── */}
             {labType==="subcon" && selSubconId && (
               <>
-                {/* Header with Manage Skills button */}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,paddingBottom:8,borderBottom:`1.5px solid ${T.b1}`}}>
-                  <div>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Skills supplied by this subcontractor</div>
-                    <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{subconSkills.length} skill{subconSkills.length!==1?"s":""} configured</div>
-                  </div>
+                {/* Manage Skills — top right (label removed, count inline) */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",marginBottom:8,gap:10}}>
+                  <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{subconSkills.length} skill{subconSkills.length!==1?"s":""}</span>
                   <button onClick={()=>{
                       setDrawerSelected(new Set(subconSkills.map(s=>s.skill)));
                       setDrawerSearch("");
                       setDrawerNewSkill("");
                       setShowSkillDrawer(true);
                     }}
-                    style={{padding:"7px 14px",borderRadius:7,border:`1.5px solid ${T.grn}`,background:T.grnL,color:T.grn,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
+                    style={{padding:"5px 11px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .12s",fontFamily:"inherit"}}
+                    onMouseEnter={el=>{el.currentTarget.style.background=T.surfaceB; el.currentTarget.style.borderColor=T.b2; el.currentTarget.style.color=T.t1;}}
+                    onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1; el.currentTarget.style.color=T.t2;}}>
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M12 5v14M5 12h14"/></svg>
                     Manage Skills
                   </button>
                 </div>
@@ -6372,11 +6368,13 @@ function TabAttendance({ project }) {
                       <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",textAlign:"center"}}>Count Today</div>
                     </div>
                     {todayCountRows.map((row,i)=>(
-                      <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 130px",gap:10,marginBottom:8,alignItems:"center",padding:"8px 0",borderBottom:`1px dashed ${T.b1}`}}>
-                        <span style={{fontSize:13.5,fontWeight:600,color:T.t1}}>{row.role}</span>
+                      <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 130px",gap:10,marginBottom:6,alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
+                        <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{row.role}</span>
                         <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
                           onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
-                          style={{padding:"9px 10px",borderRadius:7,border:`1.5px solid ${T.grnM}`,fontSize:15,fontWeight:700,color:T.grn,outline:"none",fontFamily:"inherit",background:T.grnL,opacity:editingAtt?1:.75,boxSizing:"border-box",textAlign:"center"}}/>
+                          style={{padding:"7px 10px",borderRadius:6,border:`1px solid ${editingAtt?T.b1:"transparent"}`,fontSize:14,fontWeight:700,color:row.present>0?T.t1:T.t4,outline:"none",fontFamily:"inherit",background:editingAtt?T.surface:T.surfaceB,opacity:1,boxSizing:"border-box",textAlign:"center",cursor:editingAtt?"text":"default",transition:"border-color .12s"}}
+                          onFocus={el=>{if(editingAtt)el.target.style.borderColor=T.blu;}}
+                          onBlur={el=>{if(editingAtt)el.target.style.borderColor=T.b1;}}/>
                       </div>
                     ))}
                     {!editingAtt && todayCountRows.every(r=>!r.present) && (
@@ -6386,9 +6384,12 @@ function TabAttendance({ project }) {
                     {!editingAtt && todayCountRows.some(r=>r.present>0) && (()=>{
                       const total = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0),0);
                       return(
-                        <div style={{marginTop:10,padding:"12px 14px",background:T.grnL,border:`1.5px solid ${T.grnM}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                          <div style={{fontSize:11.5,color:T.grn,fontWeight:700,letterSpacing:".4px"}}>TOTAL LABOUR (TODAY)</div>
-                          <div style={{fontSize:20,fontWeight:800,color:T.grn}}>{total}</div>
+                        <div style={{marginTop:10,padding:"10px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7}}>
+                            <span style={{width:6,height:6,borderRadius:"50%",background:T.grn}}/>
+                            <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>Total Labour Today</span>
+                          </div>
+                          <span style={{fontSize:20,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{total}</span>
                         </div>
                       );
                     })()}
@@ -6413,16 +6414,19 @@ function TabAttendance({ project }) {
               if(skillTotals.length===0) return null;
               const grandTotal = skillTotals.reduce((s,[,v])=>s+v,0);
               return(
-                <div style={{marginTop:12,padding:"12px 14px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:8}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
-                    <div style={{fontSize:11.5,color:T.blu,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>📊 Total Till Date — by Skill</div>
-                    <div style={{fontSize:13,color:T.blu,fontWeight:800}}>Grand Total: {grandTotal}</div>
+                <div style={{marginTop:12,padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7}}>
+                      <span style={{width:6,height:6,borderRadius:"50%",background:T.blu}}/>
+                      <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>Total Till Date — by Skill</span>
+                    </div>
+                    <span style={{fontSize:12,color:T.t3,fontWeight:600}}>Grand Total <b style={{color:T.t1,marginLeft:4,fontVariantNumeric:"tabular-nums"}}>{grandTotal}</b></span>
                   </div>
-                  <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                     {skillTotals.map(([skill,count])=>(
-                      <div key={skill} style={{padding:"5px 11px",background:"white",border:`1px solid ${T.bluM}`,borderRadius:14,display:"flex",alignItems:"center",gap:7}}>
-                        <span style={{fontSize:11.5,color:T.t2,fontWeight:600}}>{skill}</span>
-                        <span style={{fontSize:13,fontWeight:800,color:T.blu}}>{count}</span>
+                      <div key={skill} style={{padding:"4px 10px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:14,display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{fontSize:11.5,color:T.t2,fontWeight:500}}>{skill}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{count}</span>
                       </div>
                     ))}
                   </div>
@@ -6436,17 +6440,10 @@ function TabAttendance({ project }) {
               const vSkillsCount = (vd?.skills||[]).length;
               return(
               <>
-                {/* Header with skill count + edit vendor hint */}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:12,paddingBottom:8,borderBottom:`1.5px solid ${T.b1}`}}>
-                  <div>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Skills supplied by this vendor</div>
-                    <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>
-                      {vSkillsCount} skill{vSkillsCount!==1?"s":""} configured at onboarding · agreed rates locked
-                    </div>
-                  </div>
-                  {vSkillsCount===0&&(
-                    <span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>Edit vendor to add skills</span>
-                  )}
+                {/* Skill count + edit hint (compact, label removed) */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",marginBottom:8,gap:10}}>
+                  <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{vSkillsCount} skill{vSkillsCount!==1?"s":""} · rates locked at onboarding</span>
+                  {vSkillsCount===0&&<span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>Edit vendor to add skills</span>}
                 </div>
 
                 {vSkillsCount===0?(
@@ -6467,17 +6464,19 @@ function TabAttendance({ project }) {
                   const wages = (Number(row.present)||0) * rate;
                   const isPending = row.rate_status === "pending";
                   return(
-                  <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 110px 100px 110px",gap:10,marginBottom:8,alignItems:"center",padding:"8px 0",borderBottom:`1px dashed ${T.b1}`}}>
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1.5fr 110px 100px 110px",gap:10,marginBottom:6,alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
                     <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <span style={{fontSize:13.5,fontWeight:600,color:T.t1}}>{row.role}</span>
-                      {isPending&&<span style={{fontSize:9,padding:"1px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:700,border:`1px solid ${T.ambM}`}}>🟡 Rate Pending</span>}
-                      {row.rate_status==="approved"&&<span style={{fontSize:9,padding:"1px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700}}>✓</span>}
+                      <span style={{fontSize:13,fontWeight:600,color:T.t1}}>{row.role}</span>
+                      {isPending&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,padding:"2px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:700,border:`1px solid ${T.ambM}`}}><span style={{width:5,height:5,borderRadius:"50%",background:T.amb}}/>Rate Pending</span>}
+                      {row.rate_status==="approved"&&<span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:9.5,padding:"2px 7px",borderRadius:10,background:T.grnL,color:T.grn,fontWeight:700,border:`1px solid ${T.grnM}`}}><svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>Approved</span>}
                     </div>
                     <input type="number" value={row.present||""} disabled={!editingAtt} placeholder="0" min={0}
                       onChange={e=>setTodayCountRows(prev=>prev.map((rw,idx)=>idx===i?{...rw,present:Number(e.target.value),count:Number(e.target.value)}:rw))}
-                      style={{padding:"9px 10px",borderRadius:7,border:`1.5px solid ${T.ambM}`,fontSize:15,fontWeight:700,color:T.amb,outline:"none",fontFamily:"inherit",background:T.ambL,opacity:editingAtt?1:.75,boxSizing:"border-box",textAlign:"center"}}/>
-                    <span style={{fontSize:12.5,fontWeight:700,color:T.t2,textAlign:"right",paddingRight:4}}>₹{rate}/day</span>
-                    <span style={{fontSize:14,fontWeight:700,color:wages>0?T.grn:T.t4,textAlign:"right",paddingRight:4}}>
+                      style={{padding:"7px 10px",borderRadius:6,border:`1px solid ${editingAtt?T.b1:"transparent"}`,fontSize:14,fontWeight:700,color:row.present>0?T.t1:T.t4,outline:"none",fontFamily:"inherit",background:editingAtt?T.surface:T.surfaceB,opacity:1,boxSizing:"border-box",textAlign:"center",cursor:editingAtt?"text":"default",transition:"border-color .12s"}}
+                      onFocus={el=>{if(editingAtt)el.target.style.borderColor=T.blu;}}
+                      onBlur={el=>{if(editingAtt)el.target.style.borderColor=T.b1;}}/>
+                    <span style={{fontSize:12.5,fontWeight:600,color:T.t3,textAlign:"right",paddingRight:4,fontVariantNumeric:"tabular-nums"}}>₹{rate}/day</span>
+                    <span style={{fontSize:13.5,fontWeight:700,color:wages>0?T.t1:T.t4,textAlign:"right",paddingRight:4,fontVariantNumeric:"tabular-nums"}}>
                       {wages>0?`₹${wages.toLocaleString()}`:"—"}
                     </span>
                   </div>
@@ -6490,11 +6489,14 @@ function TabAttendance({ project }) {
                   const totalLab = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0),0);
                   const totalWg  = todayCountRows.reduce((s,r)=>s+(Number(r.present)||0)*(Number(r.rate)||0),0);
                   return(
-                    <div style={{marginTop:12,padding:"12px 14px",background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                      <div style={{fontSize:11.5,color:T.amb,fontWeight:700,letterSpacing:".4px"}}>VENDOR DAILY TOTAL</div>
-                      <div style={{display:"flex",gap:18,alignItems:"center"}}>
-                        <span style={{fontSize:12,color:T.t3}}>Labour: <b style={{color:T.amb,fontSize:16}}>{totalLab}</b></span>
-                        <span style={{fontSize:12,color:T.t3}}>Wages: <b style={{color:T.grn,fontSize:16}}>₹{totalWg.toLocaleString()}</b></span>
+                    <div style={{marginTop:12,padding:"10px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:7}}>
+                        <span style={{width:6,height:6,borderRadius:"50%",background:T.amb}}/>
+                        <span style={{fontSize:10.5,color:T.t3,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px"}}>Vendor Daily Total</span>
+                      </div>
+                      <div style={{display:"flex",gap:20,alignItems:"baseline"}}>
+                        <span style={{display:"inline-flex",alignItems:"baseline",gap:6,fontSize:11,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Labour <b style={{color:T.t1,fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{totalLab}</b></span>
+                        <span style={{display:"inline-flex",alignItems:"baseline",gap:6,fontSize:11,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Wages <b style={{color:T.grn,fontSize:18,fontWeight:700,fontVariantNumeric:"tabular-nums"}}>₹{totalWg.toLocaleString()}</b></span>
                       </div>
                     </div>
                   );
@@ -6506,14 +6508,28 @@ function TabAttendance({ project }) {
         )}
       </div>
 
-      {/* ── HISTORY ──────────────────────────────────────────────────── */}
-      {showHistory&&(
-        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden",marginBottom:14}}>
-          <div style={{padding:"10px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
-            <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Attendance History — {TYPE_LABELS[labType]}</span>
+      {/* ── HISTORY DRAWER (side-slide from right) ───────────────────── */}
+      {showHistory&&(<>
+        <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+        <div onClick={()=>setShowHistory(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,animation:"fadeIn .15s ease-out"}}/>
+        <div style={{position:"fixed",top:0,right:0,height:"100vh",width:560,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.15)",zIndex:201,display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"}}>
+          {/* Header */}
+          <div style={{padding:"12px 16px",background:"#0D1B2A",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Attendance History</div>
+              <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{TYPE_LABELS[labType]} · {historyRecs.length} record{historyRecs.length!==1?"s":""}</div>
+            </div>
+            <button onClick={()=>setShowHistory(false)} title="Close (Esc)"
+              style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
+              onMouseEnter={el=>el.currentTarget.style.background="rgba(255,255,255,0.1)"}
+              onMouseLeave={el=>el.currentTarget.style.background="none"}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
           </div>
+          {/* Body */}
+          <div style={{flex:1,overflowY:"auto"}}>
           {historyRecs.length===0
-            ?<div style={{padding:"22px 15px",textAlign:"center",color:T.t4,fontSize:12.5}}>No history found.</div>
+            ?<div style={{padding:"40px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>No history found.</div>
             :historyRecs.map((rec,i)=>{
               const recMode = rec.mode || mode; // use record's own mode
               const rPresent=recMode==="name"?(rec.entries||[]).filter(e=>e.status==="P").length:(rec.entries||[]).reduce((s,r)=>s+(Number(r.present)||0),0);
@@ -6602,8 +6618,9 @@ function TabAttendance({ project }) {
               );
             })
           }
+          </div>
         </div>
-      )}
+      </>)}
 
       {/* ── ADD WORKFORCE MODAL ───────────────────────────────────────── */}
       {showAddWf&&labType==="company"&&(<>
@@ -6893,15 +6910,19 @@ function TabAttendance({ project }) {
 
       {/* ── ADD LABOUR VENDOR MODAL ──────────────────────────────────── */}
       {showAddVendor&&(<>
-        <div onClick={()=>setShowAddVendor(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300}}/>
-        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:301,width:580,maxWidth:"95vw",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
+        <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+        <div onClick={()=>setShowAddVendor(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
+        <div style={{position:"fixed",top:0,right:0,height:"100vh",width:620,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.18)",zIndex:301,fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif",display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div>
               <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add Labour Vendor</div>
               <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Vendor info + skills they supply with rates (auto from rate card)</div>
             </div>
-            <button onClick={()=>setShowAddVendor(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)"}}>
-              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <button onClick={()=>setShowAddVendor(false)} title="Close"
+              style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
+              onMouseEnter={el=>el.currentTarget.style.background="rgba(255,255,255,0.1)"}
+              onMouseLeave={el=>el.currentTarget.style.background="none"}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>
           <div style={{padding:"14px 18px",overflowY:"auto",flex:1}}>
@@ -8104,6 +8125,9 @@ function TabSubcon({ projectId }) {
   const [showEditWO, setShowEditWO] = useState(false);
   const [amendments, setAmendments] = useState([]);
   const [expandedBill, setExpandedBill] = useState(null);
+  const [showEditBillModal, setShowEditBillModal] = useState(false);
+  const [editBill, setEditBill] = useState(null);
+  const [editBillSaving, setEditBillSaving] = useState(false);
   const [billItems, setBillItems] = useState({});
   const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
   const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"" });
@@ -8339,9 +8363,37 @@ function TabSubcon({ projectId }) {
                           </div>
                         ))}
                       </div>
-                      <div style={{display:"flex",gap:8,marginBottom:8}}>
-                        {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
-                        {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>₹ Record Payment</button>}
+                      <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+                        {b.status==="Submitted"&&<button onClick={async()=>{await api.patch("/subcon/ra-bills/"+b.id+"/status",{status:"Approved"});selectWo(selWo);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.blu,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>✓ Approve</button>}
+                        {(b.status==="Approved"||b.status==="Submitted")&&<button onClick={()=>{setShowPayModal(b.id);}} style={{flex:1,minWidth:100,padding:"6px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>₹ Record Payment</button>}
+                        {/* Edit + Delete (not for Paid) */}
+                        {b.status!=="Paid"&&(
+                          <button onClick={async()=>{
+                              // Load bill items for editing
+                              const r = await api.get("/subcon/ra-bills/"+b.id);
+                              if(r.success){
+                                setEditBill({...r.data, _itemsLoaded:true});
+                                setShowEditBillModal(true);
+                              }
+                            }}
+                            style={{padding:"6px 12px",borderRadius:5,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                            ✏️ Edit
+                          </button>
+                        )}
+                        {b.status!=="Paid"&&(
+                          <button onClick={async()=>{
+                              if(!window.confirm(`Delete ${b.bill_no}? This will permanently remove the bill.`)) return;
+                              const res = await api.del("/subcon/ra-bills/"+b.id);
+                              if(res.success){
+                                selectWo(selWo); // reload bills
+                              } else {
+                                alert(res.message || "Delete failed");
+                              }
+                            }}
+                            style={{padding:"6px 12px",borderRadius:5,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                            🗑 Delete
+                          </button>
+                        )}
                       </div>
 
                       {/* View Item Detail toggle */}
@@ -8434,6 +8486,101 @@ function TabSubcon({ projectId }) {
         <NewRaBillModal woId={selWo.id} fmtC={fmtC} inpStyle={inpStyle} lblStyle={lblStyle}
           billForm={billForm} setBillForm={setBillForm} saving={saving}
           onClose={()=>setShowNewBill(false)} onSave={submitBill}/>
+      )}
+
+      {/* EDIT RA BILL MODAL */}
+      {showEditBillModal && editBill && (
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
+          <div style={{background:T.surface,borderRadius:10,width:"min(560px,94vw)",maxHeight:"92vh",overflowY:"auto",padding:20,boxShadow:"0 20px 50px rgba(0,0,0,0.2)"}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Edit RA Bill — {editBill.bill_no}</div>
+              <button onClick={()=>{setShowEditBillModal(false);setEditBill(null);}} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:18}}>×</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <div>
+                <label style={lblStyle}>Bill Date</label>
+                <input type="date" value={(editBill.bill_date||"").split("T")[0]} onChange={e=>setEditBill(p=>({...p,bill_date:e.target.value}))} style={inpStyle}/>
+              </div>
+              <div>
+                <label style={lblStyle}>Status</label>
+                <select value={editBill.status||"Submitted"} onChange={e=>setEditBill(p=>({...p,status:e.target.value}))} style={inpStyle}>
+                  <option>Submitted</option><option>Approved</option><option>Rejected</option>
+                </select>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <div>
+                <label style={lblStyle}>Gross Amount</label>
+                <input type="number" value={editBill.gross_amount||0} onChange={e=>{
+                  const g = Number(e.target.value)||0;
+                  const ret = g * (Number(editBill.retention_pct)||5)/100;
+                  const tds = (g-ret) * (Number(editBill.tds_pct)||2)/100;
+                  setEditBill(p=>({...p,gross_amount:g,retention_amt:ret,tds_amt:tds,net_payable:g-ret-tds}));
+                }} style={inpStyle}/>
+              </div>
+              <div>
+                <label style={lblStyle}>Net Payable</label>
+                <input type="number" value={editBill.net_payable||0} disabled style={{...inpStyle,background:T.surfaceB,color:T.t3}}/>
+              </div>
+              <div>
+                <label style={lblStyle}>Retention %</label>
+                <input type="number" value={editBill.retention_pct||5} onChange={e=>{
+                  const r = Number(e.target.value)||0;
+                  const g = Number(editBill.gross_amount)||0;
+                  const ret = g * r/100;
+                  const tds = (g-ret) * (Number(editBill.tds_pct)||2)/100;
+                  setEditBill(p=>({...p,retention_pct:r,retention_amt:ret,tds_amt:tds,net_payable:g-ret-tds}));
+                }} style={inpStyle}/>
+              </div>
+              <div>
+                <label style={lblStyle}>TDS %</label>
+                <input type="number" value={editBill.tds_pct||2} onChange={e=>{
+                  const t = Number(e.target.value)||0;
+                  const g = Number(editBill.gross_amount)||0;
+                  const ret = Number(editBill.retention_amt)||0;
+                  const tds = (g-ret) * t/100;
+                  setEditBill(p=>({...p,tds_pct:t,tds_amt:tds,net_payable:g-ret-tds}));
+                }} style={inpStyle}/>
+              </div>
+            </div>
+            <div style={{marginBottom:12}}>
+              <label style={lblStyle}>Remark / Notes</label>
+              <textarea value={editBill.remark||""} onChange={e=>setEditBill(p=>({...p,remark:e.target.value}))}
+                style={{...inpStyle,minHeight:60,resize:"vertical"}} placeholder="Optional notes..."/>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={()=>{setShowEditBillModal(false);setEditBill(null);}}
+                style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+              <button onClick={async()=>{
+                  setEditBillSaving(true);
+                  try {
+                    const res = await api.put("/subcon/ra-bills/"+editBill.id, {
+                      bill_date: editBill.bill_date,
+                      gross_amount: Number(editBill.gross_amount)||0,
+                      retention_pct: Number(editBill.retention_pct)||0,
+                      retention_amt: Number(editBill.retention_amt)||0,
+                      tds_pct: Number(editBill.tds_pct)||0,
+                      tds_amt: Number(editBill.tds_amt)||0,
+                      net_payable: Number(editBill.net_payable)||0,
+                      status: editBill.status,
+                      remark: editBill.remark,
+                    });
+                    if (res.success) {
+                      setShowEditBillModal(false);
+                      setEditBill(null);
+                      selectWo(selWo); // reload
+                    } else {
+                      alert(res.message || "Update failed");
+                    }
+                  } catch(e) { alert("Error: "+e.message); }
+                  setEditBillSaving(false);
+                }} disabled={editBillSaving}
+                style={{flex:2,padding:"9px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",opacity:editBillSaving?.6:1}}>
+                {editBillSaving?"Saving…":"💾 Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* PAYMENT MODAL */}
@@ -11528,10 +11675,8 @@ function ProjectDetailPage({project=PROJ, onBack}) {
     try { return localStorage.getItem("gb_project_layout") || "horizontal"; }
     catch { return "horizontal"; }
   });
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    try { return localStorage.getItem("gb_project_sidebar_collapsed") === "1"; }
-    catch { return false; }
-  });
+  // Default: sidebar open. Auto-fold only on Task tab (needs more space).
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => (project.initialTab || "overview") === "task");
   useEffect(() => {
     const onLayoutChange = (e) => setLayoutMode(e.detail || "horizontal");
     const onStorageChange = (e) => {
@@ -11544,11 +11689,11 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       window.removeEventListener("storage", onStorageChange);
     };
   }, []);
-  const toggleSidebar = () => setSidebarCollapsed(c => {
-    const v = !c;
-    try { localStorage.setItem("gb_project_sidebar_collapsed", v ? "1" : "0"); } catch {}
-    return v;
-  });
+  // Auto-fold sidebar on Task tab; expand on every other tab.
+  useEffect(() => {
+    setSidebarCollapsed(tab === "task");
+  }, [tab]);
+  const toggleSidebar = () => setSidebarCollapsed(c => !c);
 
   // ── Broadcast "inside a project" so App shell can collapse its chrome in sidebar mode ──
   useEffect(() => {
@@ -11607,8 +11752,14 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   };
 
   // ── Sidebar layout (Layout B) ──
-  const sidebarWidth = sidebarCollapsed ? 60 : 224;
+  const sidebarWidth = sidebarCollapsed ? 56 : 192;
   const currentTabLabel = activeTabs.find(t => t.id === tab)?.label || "";
+  const Chip = ({label, value, color, bg, border}) => (
+    <div style={{display:"flex", alignItems:"baseline", gap:5, padding:"4px 10px", borderRadius:14, border:`1px solid ${border||T.b1}`, background:bg||T.surfaceB, fontSize:11, fontWeight:600, color:color||T.t2, whiteSpace:"nowrap", flexShrink:0}}>
+      <span style={{fontSize:9.5, textTransform:"uppercase", letterSpacing:".4px", opacity:.7}}>{label}</span>
+      <span style={{fontVariantNumeric:"tabular-nums"}}>{value}</span>
+    </div>
+  );
   const sidebarLayout = (
     <div style={{display:"flex", height:"100vh", overflow:"hidden", fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif", background:T.bg}}>
       <style>{`.gb-sb-scroll::-webkit-scrollbar{width:4px}.gb-sb-scroll::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:2px}`}</style>
@@ -11616,29 +11767,34 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       {/* ── PROJECT SIDEBAR ── */}
       <aside style={{width:sidebarWidth, background:"#1E293B", color:"#fff", display:"flex", flexDirection:"column", flexShrink:0, transition:"width .2s ease", overflow:"hidden"}}>
 
-        {/* Header — back to projects (and dashboard via App nav) */}
-        <div style={{padding: sidebarCollapsed?"14px 0":"14px 14px", borderBottom:"1px solid rgba(255,255,255,.08)", display:"flex", alignItems:"center", justifyContent: sidebarCollapsed?"center":"flex-start", gap:10}}>
+        {/* Header — hamburger toggle + project name */}
+        <div style={{padding: sidebarCollapsed?"10px 0":"10px 12px", borderBottom:"1px solid rgba(255,255,255,.08)", display:"flex", alignItems:"center", justifyContent: sidebarCollapsed?"center":"flex-start", gap:10, minHeight:48}}>
+          <button onClick={toggleSidebar} title={sidebarCollapsed?"Open sidebar":"Close sidebar"}
+            style={{width:32, height:32, borderRadius:6, border:"none", background:"rgba(255,255,255,.06)", color:"#fff", cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, transition:"background .15s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.14)"}
+            onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.06)"}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
+          </button>
+          {!sidebarCollapsed && (
+            <div title={project.name} style={{flex:1, minWidth:0, fontSize:13.5, fontWeight:700, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{project.name}</div>
+          )}
+        </div>
+
+        {/* Back to projects */}
+        <div style={{padding: sidebarCollapsed?"6px 0":"8px 10px"}}>
           {onBack&&(
-            <button onClick={onBack} title="All Projects (Esc)" style={{display:"inline-flex", alignItems:"center", justifyContent:"center", gap:6, padding: sidebarCollapsed?"6px":"6px 10px", border:"1px solid rgba(255,255,255,.15)", borderRadius:6, background:"rgba(255,255,255,.06)", color:"rgba(255,255,255,.8)", fontSize:11.5, fontWeight:500, cursor:"pointer", transition:"background .15s", width: sidebarCollapsed?32:"auto", height: sidebarCollapsed?32:"auto"}}
-              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.12)"}
-              onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.06)"}>
+            <button onClick={onBack} title="All Projects (Esc)"
+              style={{width:"100%", display:"inline-flex", alignItems:"center", justifyContent: sidebarCollapsed?"center":"flex-start", gap:6, padding: sidebarCollapsed?"6px 0":"6px 10px", border:"1px solid rgba(255,255,255,.1)", borderRadius:6, background:"rgba(255,255,255,.04)", color:"rgba(255,255,255,.7)", fontSize:11.5, fontWeight:500, cursor:"pointer", transition:"background .15s", height:30}}
+              onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.1)"}
+              onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,.04)"}>
               <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
               {!sidebarCollapsed && <span>Projects</span>}
             </button>
           )}
         </div>
 
-        {/* Project name + status */}
-        {!sidebarCollapsed && (
-          <div style={{padding:"14px 14px 12px", borderBottom:"1px solid rgba(255,255,255,.08)"}}>
-            <div title={project.name} style={{fontSize:14, fontWeight:700, color:"#fff", lineHeight:1.3, marginBottom:7, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{project.name}</div>
-            <Pill label={project.status} c={sm.c} bg={`rgba(255,255,255,.1)`}/>
-            {isSolar && <div style={{marginTop:8}}><span style={{fontSize:9,fontWeight:800,color:"#FBBF24",background:"rgba(251,191,36,.12)",border:"1px solid rgba(251,191,36,.3)",borderRadius:4,padding:"2px 7px",letterSpacing:".3px"}}>☀ SOLAR EPC</span></div>}
-          </div>
-        )}
-
         {/* Tab list */}
-        <nav className="gb-sb-scroll" style={{flex:1, overflowY:"auto", padding:"6px 0"}}>
+        <nav className="gb-sb-scroll" style={{flex:1, overflowY:"auto", padding:"6px 0", borderTop:"1px solid rgba(255,255,255,.06)", marginTop:4}}>
           {activeTabs.map(t=>{
             const active = tab===t.id;
             const Icon = t.Icon;
@@ -11646,86 +11802,60 @@ function ProjectDetailPage({project=PROJ, onBack}) {
               <button key={t.id} onClick={()=>setTab(t.id)}
                 title={`${t.label}  (Ctrl+${t.key.toUpperCase()})`}
                 style={{
-                  width:"100%", display:"flex", alignItems:"center", gap:12,
-                  padding: sidebarCollapsed ? "11px 0" : "9px 14px",
+                  width:"100%", display:"flex", alignItems:"center", gap:11,
+                  padding: sidebarCollapsed ? "10px 0" : "8px 12px",
                   justifyContent: sidebarCollapsed ? "center" : "flex-start",
                   border:"none",
                   background: active ? "rgba(37,99,235,.18)" : "transparent",
                   borderLeft: active ? "3px solid #3B82F6" : "3px solid transparent",
                   color: active ? "#fff" : "rgba(255,255,255,.65)",
-                  fontSize:13, fontWeight: active?600:450, cursor:"pointer", textAlign:"left",
+                  fontSize:12.5, fontWeight: active?600:450, cursor:"pointer", textAlign:"left",
                   transition:"all .12s", fontFamily:"inherit",
                 }}
                 onMouseEnter={e=>{ if(!active) e.currentTarget.style.background="rgba(255,255,255,.05)"; }}
                 onMouseLeave={e=>{ if(!active) e.currentTarget.style.background="transparent"; }}>
-                {Icon && <Icon size={17} color={active?"#fff":"rgba(255,255,255,.6)"}/>}
+                {Icon && <Icon size={16} color={active?"#fff":"rgba(255,255,255,.6)"}/>}
                 {!sidebarCollapsed && (
                   <>
                     <span style={{flex:1, whiteSpace:"nowrap"}}>{t.label}</span>
-                    <span style={{fontSize:9.5, color:"rgba(255,255,255,.32)", fontWeight:500}}>^{t.key.toUpperCase()}</span>
+                    <span style={{fontSize:9.5, color:"rgba(255,255,255,.3)", fontWeight:500}}>^{t.key.toUpperCase()}</span>
                   </>
                 )}
               </button>
             );
           })}
         </nav>
-
-        {/* Bottom — financial chips + progress + collapse */}
-        <div style={{borderTop:"1px solid rgba(255,255,255,.08)", flexShrink:0}}>
-          {!sidebarCollapsed && (
-            <div style={{padding:"12px 14px 6px"}}>
-              {approvalCount>0 && (
-                <div onClick={()=>setShowApprovalDrawer(true)}
-                  style={{background:"rgba(217,119,6,0.15)",border:"1px solid rgba(217,119,6,0.3)",borderRadius:7,padding:"7px 11px",cursor:"pointer",marginBottom:8,transition:"background .15s",display:"flex",alignItems:"center",justifyContent:"space-between"}}
-                  title="Click to view pending approvals"
-                  onMouseEnter={e=>e.currentTarget.style.background="rgba(217,119,6,0.28)"}
-                  onMouseLeave={e=>e.currentTarget.style.background="rgba(217,119,6,0.15)"}>
-                  <span style={{fontSize:10,color:"rgba(255,255,255,.55)",textTransform:"uppercase",letterSpacing:".5px",fontWeight:600}}>Approvals</span>
-                  <span style={{fontSize:12,fontWeight:700,color:"#FBBF24",fontVariantNumeric:"tabular-nums"}}>{approvalCount} pending</span>
-                </div>
-              )}
-              {[["BOQ",`₹${fmt(project.boq)}`,"rgba(255,255,255,.85)"],["Spent",`₹${fmt(project.expense)}`,"#FBBF24"],["Margin",`₹${fmt(Math.abs(margin))}`,margin>=0?"#34D399":"#F87171"]].map(([l,v,vc])=>(
-                <div key={l} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"5px 0"}}>
-                  <span style={{fontSize:10.5,color:"rgba(255,255,255,.45)",textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>{l}</span>
-                  <span style={{fontSize:12.5,fontWeight:700,color:vc,fontVariantNumeric:"tabular-nums"}}>{v}</span>
-                </div>
-              ))}
-              <div style={{marginTop:8, display:"flex", alignItems:"center", gap:8}}>
-                <div style={{flex:1, height:4, background:"rgba(255,255,255,.08)", borderRadius:3, overflow:"hidden"}}>
-                  <div style={{height:"100%", width:`${project.progress}%`, background:T.blu, borderRadius:3, transition:"width .6s"}}/>
-                </div>
-                <span style={{fontSize:10.5, fontWeight:700, color:"rgba(255,255,255,.7)", fontVariantNumeric:"tabular-nums", minWidth:28, textAlign:"right"}}>{project.progress}%</span>
-              </div>
-            </div>
-          )}
-          {/* Collapse toggle */}
-          <button onClick={toggleSidebar} title={sidebarCollapsed?"Expand sidebar":"Collapse sidebar"}
-            style={{width:"100%", padding:"8px 0", border:"none", borderTop:"1px solid rgba(255,255,255,.06)", background:"transparent", color:"rgba(255,255,255,.5)", cursor:"pointer", fontSize:11, fontWeight:600, display:"flex", alignItems:"center", justifyContent:"center", gap:6, transition:"background .15s"}}
-            onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,.04)"}
-            onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" style={{transform: sidebarCollapsed?"rotate(180deg)":"none", transition:"transform .2s"}}><path d="M15 18l-6-6 6-6"/></svg>
-            {!sidebarCollapsed && <span>Collapse</span>}
-          </button>
-        </div>
       </aside>
 
-      {/* ── RIGHT: minimal top strip + content ── */}
+      {/* ── RIGHT: top strip + content ── */}
       <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden"}}>
-        {/* Top strip — minimalistic */}
-        <div style={{padding:"9px 20px", background:T.surface, borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", gap:14, flexShrink:0, minHeight:44}}>
-          <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", gap:10, overflow:"hidden"}}>
-            <span style={{fontSize:13, fontWeight:700, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>{currentTabLabel}</span>
-            <span style={{fontSize:11.5, color:T.t4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis"}}>· {project.client||"—"} · {project.city||"—"} · PM: {project.pm||"—"}</span>
+        {/* Top strip — breadcrumb + chips + approvals */}
+        <div style={{padding:"7px 16px", background:T.surface, borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", gap:12, flexShrink:0, minHeight:48}}>
+          {/* Left: breadcrumb */}
+          <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", gap:8, overflow:"hidden"}}>
+            <span title={project.name} style={{fontSize:13.5, fontWeight:700, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:240}}>{project.name}</span>
+            <span style={{fontSize:12, color:T.t4, fontWeight:400}}>/</span>
+            <span style={{fontSize:12.5, fontWeight:600, color:T.t2, whiteSpace:"nowrap"}}>{currentTabLabel}</span>
+            <Pill label={project.status} c={sm.c} bg={sm.bg||T.sltL}/>
+            {isSolar && <span style={{fontSize:9.5,fontWeight:800,color:"#E65100",background:"#FFF8E1",border:"1px solid #FFD54F",borderRadius:4,padding:"2px 7px",letterSpacing:".3px"}}>☀ SOLAR</span>}
           </div>
-          {approvalCount>0 && (
-            <button onClick={()=>setShowApprovalDrawer(true)}
-              style={{display:"flex",alignItems:"center",gap:6,padding:"5px 11px",border:`1px solid ${T.ambM}`,borderRadius:20,background:T.ambL,color:T.amb,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",transition:"background .15s",flexShrink:0}}
-              onMouseEnter={e=>e.currentTarget.style.background="#FEF3C7"}
-              onMouseLeave={e=>e.currentTarget.style.background=T.ambL}>
-              <span style={{width:6,height:6,borderRadius:"50%",background:T.amb}}/>
-              {approvalCount} pending
-            </button>
-          )}
+
+          {/* Right: financial chips + approvals */}
+          <div style={{display:"flex", alignItems:"center", gap:7, flexShrink:0}}>
+            <Chip label="BOQ" value={`₹${fmt(project.boq)}`} color={T.t2} bg={T.surfaceB} border={T.b1}/>
+            <Chip label="Spent" value={`₹${fmt(project.expense)}`} color={T.amb} bg={T.ambL} border={T.ambM}/>
+            <Chip label="Margin" value={`₹${fmt(Math.abs(margin))}`} color={margin>=0?T.grn:T.red} bg={margin>=0?T.grnL:T.redL} border={margin>=0?T.grnM:T.redM}/>
+            <Chip label="Progress" value={`${project.progress}%`} color={T.blu} bg={T.bluL} border={T.bluM}/>
+            {approvalCount>0 && (
+              <button onClick={()=>setShowApprovalDrawer(true)}
+                style={{display:"flex",alignItems:"center",gap:6,padding:"4px 11px",border:`1px solid ${T.ambM}`,borderRadius:14,background:"#FEF3C7",color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"background .15s",flexShrink:0}}
+                onMouseEnter={e=>e.currentTarget.style.background="#FDE68A"}
+                onMouseLeave={e=>e.currentTarget.style.background="#FEF3C7"}>
+                <span style={{width:6,height:6,borderRadius:"50%",background:T.amb}}/>
+                {approvalCount} pending
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Content */}
