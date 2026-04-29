@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
+import SearchSelect from "../components/SearchSelect";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -66,16 +67,15 @@ function FormField({ label, value, onChange, placeholder, type = "text", half = 
   );
 }
 
-function FormSelect({ label, value, onChange, options, half = false, required = false }) {
+function FormSelect({ label, value, onChange, options, half = false, required = false, placeholder }) {
+  // Normalize options to {value,label} for SearchSelect
+  const opts = (options || []).map(o => typeof o === "string" ? { value: o, label: o } : (o.value !== undefined ? o : { value: o.key ?? o, label: o.label ?? o }));
   return (
     <div style={{ flex: half ? 1 : undefined, minWidth: half ? 180 : undefined }}>
       <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>
         {label}{required && <span style={{ color: T.red }}> *</span>}
       </label>
-      <select value={value} onChange={e => onChange(e.target.value)}
-        style={{ width: "100%", padding: "10px 14px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13.5, color: T.text, background: "white", outline: "none", cursor: "pointer", fontFamily: T.font, boxSizing: "border-box" }}>
-        {options.map(o => <option key={o.value ?? o} value={o.value ?? o}>{o.label ?? o}</option>)}
-      </select>
+      <SearchSelect value={value} options={opts} onChange={onChange} placeholder={placeholder || `Select ${String(label||"").toLowerCase()}...`}/>
     </div>
   );
 }
@@ -852,10 +852,9 @@ function MaterialMasterSection() {
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="materials" onAdd={openCreate} addLabel="Add Material"
         templateConfig={matTemplateConfig} currentData={materials} onImportData={handleMatImport}
         filterEl={
-          <select value={filterCat} onChange={e => setFilterCat(e.target.value)}
-            style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, fontSize: 12, color: T.text, background: "white", cursor: "pointer", fontFamily: T.font }}>
-            {allCats.map(c => <option key={c}>{c}</option>)}
-          </select>
+          <div style={{ minWidth: 180 }}>
+            <SearchSelect value={filterCat} options={allCats} onChange={setFilterCat} placeholder="Filter category..."/>
+          </div>
         }
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
@@ -996,7 +995,7 @@ function PartyMasterSection() {
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="parties" onAdd={openCreate} addLabel="Add Party"
         templateConfig={partyTemplateConfig} currentData={parties} onImportData={handlePartyImport}
-        filterEl={<select value={filterType} onChange={e => setFilterType(e.target.value)} style={{ padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, fontSize: 12, color: T.text, background: "white", cursor: "pointer", fontFamily: T.font }}>{types.map(t => <option key={t}>{t}</option>)}</select>}
+        filterEl={<div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder="Filter type..."/></div>}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Party" : "Add Party"} desc="Party / supplier / client details" width={660}>
@@ -1273,11 +1272,12 @@ function SubconRateCardSection() {
       {/* Subcon selector */}
       <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
         <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", whiteSpace: "nowrap" }}>SELECT SUBCONTRACTOR</label>
-        <select value={selectedSubcon} onChange={e => setSelectedSubcon(e.target.value)}
-          style={{ flex: 1, padding: "9px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, color: "#111827", fontFamily: "inherit", cursor: "pointer" }}>
-          <option value="">-- Select subcontractor --</option>
-          {subcons.map(s => <option key={s.id} value={s.id}>{s.name} ({s.trade || ""})</option>)}
-        </select>
+        <div style={{flex:1}}>
+          <SearchSelect value={selectedSubcon}
+            options={subcons.map(s => ({ value: s.id, label: `${s.name}${s.trade?` (${s.trade})`:""}` }))}
+            onChange={setSelectedSubcon}
+            placeholder="Select subcontractor..."/>
+        </div>
         {selectedSubcon && (
           <button onClick={openCreate}
             style={{ padding: "9px 18px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
@@ -1891,9 +1891,7 @@ function UOMMasterSection() {
         <div style={{height:12}}/>
         <div>
           <label style={{fontSize:11,fontWeight:600,color:T.textMid,display:"block",marginBottom:5}}>Type</label>
-          <select value={form.type} onChange={e=>upd("type",e.target.value)} style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.border}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
-            {TYPES.map(t=><option key={t}>{t}</option>)}
-          </select>
+          <SearchSelect value={form.type} options={TYPES} onChange={v=>upd("type",v)} placeholder="Select type..."/>
         </div>
         <ModalFooter onClose={()=>setShowModal(false)} onSave={save} saveLabel={editing?"Update":"Add"}/>
       </Modal>
@@ -2093,11 +2091,9 @@ function DesignLibrarySection() {
             style={{ padding: "8px 14px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, width: 240, fontFamily: "inherit" }} />
           {/* Category filter for titles */}
           {subTab === "titles" && (
-            <select value={catFilter} onChange={e => setCatFilter(e.target.value)}
-              style={{ padding: "8px 12px", borderRadius: 8, border: "1.5px solid #E5E7EB", fontSize: 13, fontFamily: "inherit" }}>
-              <option>All</option>
-              {catNames.map(c => <option key={c}>{c}</option>)}
-            </select>
+            <div style={{minWidth:180}}>
+              <SearchSelect value={catFilter} options={["All",...catNames]} onChange={setCatFilter} placeholder="Filter category..."/>
+            </div>
           )}
         </div>
         <button
@@ -2355,17 +2351,13 @@ function WorkersSection() {
         <div style={{display:"flex",gap:14,flexWrap:"wrap",marginBottom:14}}>
           <div style={{flex:1,minWidth:180}}>
             <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Skill / Role <span style={{color:T.red}}>*</span></label>
-            <select value={form.role} onChange={e=>{upd("role",e.target.value);upd("category",ROLE_CAT_MAP[e.target.value]||"Semi-Skilled");}}
-              style={{width:"100%",padding:"10px 14px",borderRadius:T.radiusSm,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,background:"white",outline:"none",cursor:"pointer",fontFamily:T.font,boxSizing:"border-box"}}>
-              {WORKER_ROLES.map(r=><option key={r}>{r}</option>)}
-            </select>
+            <SearchSelect value={form.role} options={WORKER_ROLES}
+              onChange={v=>{upd("role",v);upd("category",ROLE_CAT_MAP[v]||"Semi-Skilled");}}
+              placeholder="Select role..."/>
           </div>
           <div style={{flex:1,minWidth:180}}>
             <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Category</label>
-            <select value={form.category} onChange={e=>upd("category",e.target.value)}
-              style={{width:"100%",padding:"10px 14px",borderRadius:T.radiusSm,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,background:"white",outline:"none",cursor:"pointer",fontFamily:T.font,boxSizing:"border-box"}}>
-              {WORKER_CATS.map(c=><option key={c}>{c}</option>)}
-            </select>
+            <SearchSelect value={form.category} options={WORKER_CATS} onChange={v=>upd("category",v)} placeholder="Select category..."/>
           </div>
         </div>
         {/* Rate */}
@@ -2373,10 +2365,7 @@ function WorkersSection() {
           <FormField label="Daily Rate (₹)" value={form.daily_rate||""} onChange={v=>upd("daily_rate",v)} type="number" placeholder="e.g. 650" half required />
           <div style={{flex:1,minWidth:180}}>
             <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Status</label>
-            <select value={form.status} onChange={e=>upd("status",e.target.value)}
-              style={{width:"100%",padding:"10px 14px",borderRadius:T.radiusSm,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,background:"white",outline:"none",cursor:"pointer",fontFamily:T.font,boxSizing:"border-box"}}>
-              {["Active","Inactive","Blacklisted"].map(s=><option key={s}>{s}</option>)}
-            </select>
+            <SearchSelect value={form.status} options={["Active","Inactive","Blacklisted"]} onChange={v=>upd("status",v)} placeholder="Select status..."/>
           </div>
         </div>
         {/* Contact */}

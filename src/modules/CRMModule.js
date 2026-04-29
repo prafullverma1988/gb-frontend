@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../config/api";
+import SearchSelect from "../components/SearchSelect";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -817,9 +818,7 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
             <div key={f.k} style={{gridColumn:`span ${f.col}`}}>
               <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
               {f.type==="select"
-                ?<select value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                  {f.opts.map(o=><option key={o}>{o}</option>)}
-                </select>
+                ?<SearchSelect value={form[f.k]} options={f.opts} onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={`Select ${f.l.replace(/\s*\*$/,"").toLowerCase()}...`}/>
                 :<input type={f.type||"text"} value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph}
                   style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -938,7 +937,16 @@ function TemplateBuilderModal({onClose}){
     setItems([{description:"",qty:1,unit:"SqFt",rate:0}]);
   };
 
-  const addRow=()=>setItems(p=>[...p,{description:"",qty:1,unit:"SqFt",rate:0}]);
+  // Auto-focus newly added row's description input
+  const itemRefs=useRef({});
+  const [pendingItemFocus,setPendingItemFocus]=useState(null);
+  useEffect(()=>{
+    if(pendingItemFocus!==null && itemRefs.current[pendingItemFocus]){
+      itemRefs.current[pendingItemFocus].focus();
+      setPendingItemFocus(null);
+    }
+  },[pendingItemFocus]);
+  const addRow=()=>setItems(p=>{ const next=[...p,{description:"",qty:1,unit:"SqFt",rate:0}]; setPendingItemFocus(next.length-1); return next; });
   const removeRow=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
   const updItem=(i,k,v)=>setItems(p=>p.map((it,j)=>j===i?{...it,[k]:v}:it));
 
@@ -1037,18 +1045,17 @@ function TemplateBuilderModal({onClose}){
                 ))}
               </div>
               {items.map((it,i)=>(
-                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 90px 90px 30px",padding:"5px 10px",borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
-                  <input value={it.description} onChange={e=>updItem(i,"description",e.target.value)} placeholder="Work description"
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 90px 30px",padding:"5px 10px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:6}}>
+                  <input ref={el=>{if(el) itemRefs.current[i]=el;}}
+                    value={it.description} onChange={e=>updItem(i,"description",e.target.value)} placeholder="Work description"
                     style={{padding:"5px 7px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
                   <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)}
-                    style={{padding:"5px 5px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",width:"90%",fontFamily:"inherit"}}/>
-                  <select value={it.unit} onChange={e=>updItem(i,"unit",e.target.value)}
-                    style={{padding:"4px 2px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11,color:T.t2,outline:"none",fontFamily:"inherit"}}>
-                    {["SqFt","SqM","CuM","Rft","LS","Nos","KG","MT","Bags","Set"].map(u=><option key={u}>{u}</option>)}
-                  </select>
+                    style={{padding:"5px 5px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",width:"100%",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                  <SearchSelect value={it.unit} options={["SqFt","SqM","CuM","Rft","LS","Nos","KG","MT","Bags","Set"]} onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
                   <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="₹"
-                    style={{padding:"5px 5px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",width:"90%",fontFamily:"inherit"}}/>
-                  <span style={{fontSize:12,fontWeight:600,color:T.blu,paddingLeft:4}}>₹{fmtN((Number(it.qty)||0)*(Number(it.rate)||0))}</span>
+                    onKeyDown={e=>{if(e.key==="Enter" && i===items.length-1){e.preventDefault();addRow();}}}
+                    style={{padding:"5px 5px",border:`1px solid ${T.b1}`,borderRadius:4,fontSize:11.5,color:T.t1,outline:"none",width:"100%",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                  <span style={{fontSize:12,fontWeight:600,color:T.blu,paddingLeft:4,fontVariantNumeric:"tabular-nums"}}>₹{fmtN((Number(it.qty)||0)*(Number(it.rate)||0))}</span>
                   {items.length>1&&<button onClick={()=>removeRow(i)} style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:14,padding:0}}>×</button>}
                 </div>
               ))}
