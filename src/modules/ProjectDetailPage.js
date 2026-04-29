@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api, { API_BASE } from "../config/api";
 import { Avatar, Credit } from "../components/Credit";
+import PaymentRequestDrawer from "../components/PaymentRequestDrawer";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
@@ -6013,6 +6014,20 @@ function TabAttendance({ project }) {
               })}
             </div>
           }
+          {/* Request Payment — auto-fills selected subcon if any */}
+          {selSubconId&&(()=>{
+            const sc = subconLib.find(x=>String(x.id||x.name)===String(selSubconId));
+            return(
+              <button onClick={()=>setPaymentReq({type:"subcon",party:sc?{id:sc.id,name:sc.name||sc.company_name}:null})}
+                title={`Request payment for ${sc?.name||sc?.company_name||"this subcontractor"}`}
+                style={{padding:"5px 12px",borderRadius:6,border:"none",background:T.blu,color:"#fff",fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",boxShadow:`0 2px 6px ${T.blu}33`,flexShrink:0,transition:"background .12s"}}
+                onMouseEnter={el=>el.currentTarget.style.background="#1D4ED8"}
+                onMouseLeave={el=>el.currentTarget.style.background=T.blu}>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                Request Payment
+              </button>
+            );
+          })()}
         </div>
       )}
 
@@ -11773,6 +11788,8 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   const [showSitePulse, setShowSitePulse] = useState(false);
   const [showProjectSettings, setShowProjectSettings] = useState(false);
   const [showProjectNotifs, setShowProjectNotifs] = useState(false);
+  // Payment Request: { type, party } when triggered with prefill
+  const [paymentReq, setPaymentReq] = useState(null);
   const loadApprovalCounts=()=>{
     if(!project?.id) return;
     api.get("/approvals/counts?project_id="+project.id).then(r=>{
@@ -11972,6 +11989,10 @@ function ProjectDetailPage({project=PROJ, onBack}) {
                 </button>
               );
               return (<>
+                {/* Request Payment */}
+                <IconBtn title="Request Payment — for subcon, labour or expense" onClick={()=>setPaymentReq({})}>
+                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                </IconBtn>
                 {/* Site Pulse */}
                 <IconBtn title="Site Pulse — live activity feed" onClick={()=>setShowSitePulse(true)}>
                   <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
@@ -12144,6 +12165,15 @@ function ProjectDetailPage({project=PROJ, onBack}) {
           />
         </SimpleDrawer>
       )}
+      {/* ── PAYMENT REQUEST DRAWER ── */}
+      <PaymentRequestDrawer
+        open={!!paymentReq}
+        onClose={()=>setPaymentReq(null)}
+        project={{id:project.id, name:project.name}}
+        prefillType={paymentReq?.type}
+        prefillParty={paymentReq?.party}
+        onSaved={()=>{ loadApprovalCounts(); }}
+      />
     </>
   );
 }
