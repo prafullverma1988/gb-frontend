@@ -11901,7 +11901,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
   };
 
   // ── Sidebar layout (Layout B) ──
-  const sidebarWidth = sidebarCollapsed ? 56 : 192;
+  const sidebarWidth = sidebarCollapsed ? 60 : 220;
   const currentTabLabel = activeTabs.find(t => t.id === tab)?.label || "";
   const Chip = ({label, value, color, bg, border}) => (
     <div style={{display:"flex", alignItems:"baseline", gap:5, padding:"4px 10px", borderRadius:14, border:`1px solid ${border||T.b1}`, background:bg||T.surfaceB, fontSize:11, fontWeight:600, color:color||T.t2, whiteSpace:"nowrap", flexShrink:0}}>

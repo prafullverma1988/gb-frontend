@@ -570,7 +570,9 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   const [showCreateCo,setShowCreateCo]=useState(false);
   const [newCo,setNewCo]=useState({name:"",domain:"surya_ghar",city:""});
   const [creating,setCreating]=useState(false);
+  const [showProfileMenu,setShowProfileMenu]=useState(false);
   const switcherRef=useRef(null);
+  const profileMenuRef=useRef(null);
 
   // Close switcher on outside click
   useEffect(()=>{
@@ -579,6 +581,14 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     document.addEventListener("mousedown",handler);
     return()=>document.removeEventListener("mousedown",handler);
   },[showSwitcher]);
+
+  // Close profile menu on outside click
+  useEffect(()=>{
+    if(!showProfileMenu) return;
+    const handler=(e)=>{if(profileMenuRef.current&&!profileMenuRef.current.contains(e.target)) setShowProfileMenu(false);};
+    document.addEventListener("mousedown",handler);
+    return()=>document.removeEventListener("mousedown",handler);
+  },[showProfileMenu]);
 
   const domainIcons={"surya_ghar":"☀️","surya_ghar_plus":"☀️","solar_commercial":"⚡","construction_individual":"🏗️","housing_projects":"🏠"};
   const domainColors={"surya_ghar":"#E65100","surya_ghar_plus":"#FF8F00","solar_commercial":"#1565C0","construction_individual":"#2E7D32","housing_projects":"#6A1B9A"};
@@ -621,22 +631,22 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   return(<>
     {isMobile&&!collapsed&&<div onClick={()=>setCollapsed(true)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:199,transition:"opacity 0.2s"}}/>}
     <div style={{
-      width:mobileHidden?0:(collapsed&&!isMobile)?62:232,
+      width:mobileHidden?0:(collapsed&&!isMobile)?60:220,
       minHeight:"100vh",background:"#1E293B",display:"flex",flexDirection:"column",
       transition:"all 0.25s cubic-bezier(.4,0,.2,1)",overflow:"hidden",flexShrink:0,
       boxShadow:"2px 0 16px rgba(0,0,0,0.18)",zIndex:200,
-      ...(isMobile?{position:"fixed",left:mobileHidden?-240:0,top:0,bottom:0,width:mobileHidden?0:250}:{}),
+      ...(isMobile?{position:"fixed",left:mobileHidden?-240:0,top:0,bottom:0,width:mobileHidden?0:240}:{}),
     }}>
-      {/* Company header with switcher */}
+      {/* Company header with switcher — matches project sidebar style */}
       <div ref={switcherRef} style={{position:"relative"}}>
         <div onClick={()=>{if(showLabel) setShowSwitcher(!showSwitcher);}}
-          style={{padding:(!isMobile&&collapsed)?"18px 0":"18px 16px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.07)",minHeight:66,justifyContent:(!isMobile&&collapsed)?"center":"flex-start",cursor:showLabel?"pointer":"default",transition:"background .15s"}}
+          style={{padding:(!isMobile&&collapsed)?"10px 0":"10px 12px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.08)",minHeight:48,justifyContent:(!isMobile&&collapsed)?"center":"flex-start",cursor:showLabel?"pointer":"default",transition:"background .15s"}}
           onMouseEnter={e=>{if(showLabel) e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{width:34,height:34,borderRadius:9,background:`linear-gradient(135deg,${activeColor},${activeColor}99)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:16}}>{activeIcon}</div>
-          {showLabel&&<div style={{flex:1,minWidth:0}}>
-            <div style={{color:"white",fontWeight:800,fontSize:14,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.company_name||"Company"}</div>
-            <div style={{color:"rgba(255,255,255,0.32)",fontSize:9,letterSpacing:"0.8px",textTransform:"uppercase"}}>{(DOMAINS.find(d=>d.id===activeDomain)||{}).label||"Construction"}</div>
+          <div style={{width:32,height:32,borderRadius:7,background:`linear-gradient(135deg,${activeColor},${activeColor}99)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>{activeIcon}</div>
+          {showLabel&&<div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+            <span style={{color:"#fff",fontWeight:700,fontSize:13.5,letterSpacing:"-.1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.company_name||"Company"}</span>
+            <span style={{color:"rgba(255,255,255,0.4)",fontSize:9.5,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(DOMAINS.find(d=>d.id===activeDomain)||{}).label||"Construction"}</span>
           </div>}
           {showLabel&&<svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.3)" strokeWidth={1.5}><path d={showSwitcher?"M2 8l4-4 4 4":"M2 4l4 4 4-4"}/></svg>}
         </div>
@@ -722,17 +732,44 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
           );
         })}
       </nav>
-      {/* User profile + logout */}
-      <div style={{padding:(!isMobile&&collapsed)?"10px 0":"10px 14px",borderTop:"1px solid rgba(255,255,255,0.07)",display:"flex",alignItems:"center",gap:9,justifyContent:(!isMobile&&collapsed)?"center":"flex-start"}}>
-        <div style={{width:30,height:30,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:12,fontWeight:700,color:"white"}}>{(user?.name||"U")[0].toUpperCase()}</div>
-        {(isMobile||!collapsed)&&<div style={{flex:1,overflow:"hidden"}}><div style={{color:"white",fontSize:12.5,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.name||"User"}</div><div style={{color:"rgba(255,255,255,0.32)",fontSize:10}}>{user?.role||"User"}</div></div>}
-        {(isMobile||!collapsed)&&onLogout&&(
-          <button onClick={onLogout} style={{background:"rgba(255,255,255,0.08)",border:"1px solid rgba(255,255,255,0.15)",borderRadius:6,cursor:"pointer",color:"rgba(255,255,255,0.55)",padding:"5px 8px",display:"flex",alignItems:"center",gap:4,fontSize:11,transition:"all 0.15s"}} title="Logout"
-            onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.2)";e.currentTarget.style.color="white";e.currentTarget.style.borderColor="rgba(220,38,38,0.4)";}}
-            onMouseLeave={e=>{e.currentTarget.style.background="rgba(255,255,255,0.08)";e.currentTarget.style.color="rgba(255,255,255,0.55)";e.currentTarget.style.borderColor="rgba(255,255,255,0.15)";}}>
-            <IcX size={13}/>
-            <span>Logout</span>
-          </button>
+      {/* User profile — click opens menu with personal settings + logout */}
+      <div ref={profileMenuRef} style={{position:"relative",borderTop:"1px solid rgba(255,255,255,0.08)"}}>
+        <div onClick={()=>{if(showLabel) setShowProfileMenu(!showProfileMenu);}}
+          style={{padding:(!isMobile&&collapsed)?"10px 0":"10px 12px",display:"flex",alignItems:"center",gap:10,justifyContent:(!isMobile&&collapsed)?"center":"flex-start",cursor:showLabel?"pointer":"default",transition:"background .12s",background:showProfileMenu?"rgba(255,255,255,0.05)":"transparent"}}
+          onMouseEnter={e=>{if(showLabel && !showProfileMenu) e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
+          onMouseLeave={e=>{if(!showProfileMenu) e.currentTarget.style.background="transparent";}}>
+          <div style={{width:32,height:32,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:13,fontWeight:700,color:"white"}}>{(user?.name||"U")[0].toUpperCase()}</div>
+          {showLabel&&<div style={{flex:1,minWidth:0,overflow:"hidden"}}>
+            <div style={{color:"#fff",fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",letterSpacing:"-.1px"}}>{user?.name||"User"}</div>
+            <div style={{color:"rgba(255,255,255,0.4)",fontSize:9.5,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.role||"User"}</div>
+          </div>}
+          {showLabel&&<svg width={12} height={12} viewBox="0 0 12 12" fill="none" stroke="rgba(255,255,255,0.4)" strokeWidth={1.5}><path d={showProfileMenu?"M2 4l4 4 4-4":"M2 8l4-4 4 4"}/></svg>}
+        </div>
+
+        {/* Profile menu popover (opens upward) */}
+        {showProfileMenu&&showLabel&&(
+          <div style={{position:"absolute",bottom:"100%",left:8,right:8,marginBottom:6,background:"#0F172A",borderRadius:9,boxShadow:"0 -8px 30px rgba(0,0,0,0.4)",border:"1px solid rgba(255,255,255,0.08)",overflow:"hidden",animation:"fadeIn .12s ease"}}>
+            <div style={{padding:"10px 12px 8px",borderBottom:"1px solid rgba(255,255,255,0.06)"}}>
+              <div style={{color:"#fff",fontSize:12,fontWeight:700}}>{user?.name||"User"}</div>
+              <div style={{color:"rgba(255,255,255,0.45)",fontSize:10.5,marginTop:1}}>{user?.email||user?.phone||""}</div>
+            </div>
+            <button onClick={()=>{setShowProfileMenu(false);handleNav("settings");}}
+              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.75)",fontSize:12,fontFamily:"inherit",textAlign:"left",transition:"background .12s"}}
+              onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}
+              onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.75)";}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+              <span>Settings</span>
+            </button>
+            {onLogout&&<div style={{borderTop:"1px solid rgba(255,255,255,0.06)"}}>
+              <button onClick={()=>{setShowProfileMenu(false);onLogout();}}
+                style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"#F87171",fontSize:12,fontFamily:"inherit",fontWeight:600,textAlign:"left",transition:"background .12s"}}
+                onMouseEnter={e=>{e.currentTarget.style.background="rgba(220,38,38,0.15)";}}
+                onMouseLeave={e=>{e.currentTarget.style.background="none";}}>
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9"/></svg>
+                <span>Logout</span>
+              </button>
+            </div>}
+          </div>
         )}
       </div>
     </div>
