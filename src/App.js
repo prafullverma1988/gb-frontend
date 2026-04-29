@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, lazy, Suspense } from "react";
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth } from "./config/api";
 import apiCache from "./utils/apiCache";
 import UploadToast from "./components/UploadToast";
+import { ToastProvider } from "./components/Toast";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
@@ -1141,7 +1142,7 @@ export default function App(){
     setSwitching(false);
   };
 
-  if(!loggedIn) return <LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());}}/>;
+  if(!loggedIn) return <ToastProvider><LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());}}/></ToastProvider>;
 
   const PAGES={
     dashboard:{title:"Dashboard",sub:"Company Overview"},
@@ -1190,6 +1191,7 @@ export default function App(){
   const page=PAGES[nav]||PAGES.dashboard;
 
   return(
+    <ToastProvider>
     <div style={{display:"flex",height:"100vh",overflow:"hidden",background:T.bg,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <style>{`
         *{box-sizing:border-box}
@@ -1224,5 +1226,6 @@ export default function App(){
       {/* Background Upload Toast — always visible */}
       <UploadToast/>
     </div>
+    </ToastProvider>
   );
 }
