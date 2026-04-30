@@ -279,82 +279,84 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
     <div
       draggable
       onClick={()=>onOpen(lead)}
-      style={{background:T.surface,borderRadius:10,border:`1.5px solid ${isOverdue?T.redM:isToday?T.ambM:T.b1}`,padding:"12px 13px",cursor:"pointer",transition:"all .15s",marginBottom:8,boxShadow:isOverdue?"0 2px 8px rgba(220,38,38,0.1)":isToday?"0 2px 8px rgba(217,119,6,0.1)":"0 1px 3px rgba(0,0,0,0.05)",borderLeft:`3px solid ${stage?.color||T.slt}`}}
-      onMouseEnter={e=>e.currentTarget.style.transform="translateY(-1px)"}
-      onMouseLeave={e=>e.currentTarget.style.transform="none"}>
+      style={{background:T.surface,borderRadius:9,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:T.b1}`,padding:"9px 10px",cursor:"pointer",transition:"all .15s",marginBottom:7,boxShadow:isOverdue?"0 2px 8px rgba(220,38,38,0.08)":isToday?"0 2px 8px rgba(217,119,6,0.08)":"0 1px 2px rgba(15,23,42,0.04)",borderLeft:`3px solid ${stage?.color||T.slt}`}}
+      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(15,23,42,0.08)";}}
+      onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=isOverdue?"0 2px 8px rgba(220,38,38,0.08)":isToday?"0 2px 8px rgba(217,119,6,0.08)":"0 1px 2px rgba(15,23,42,0.04)";}}>
 
-      {/* Top row */}
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:6}}>
+      {/* Top row: name + priority */}
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:6,marginBottom:5}}>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:2}}>
-            {lead._type==="solar"&&<span style={{fontSize:9,fontWeight:800,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 5px",flexShrink:0}}>☀ Solar</span>}
-            <div style={{fontSize:13,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lead.name}</div>
+          <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:1}}>
+            {lead._type==="solar"&&<span style={{fontSize:8.5,fontWeight:800,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 4px",flexShrink:0}}>☀</span>}
+            <div style={{fontSize:12.5,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lead.name}</div>
           </div>
-          <div style={{fontSize:11,color:T.t4,display:"flex",alignItems:"center",gap:4}}>
-            <IcLoc size={10} color={T.t4}/>{lead.city}
+          <div style={{fontSize:10.5,color:T.t4,display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            <IcLoc size={9} color={T.t4}/><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{lead.city||"—"}</span>
+            {lead.projType&&<span style={{color:T.b2}}>·</span>}
+            {lead.projType&&<span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{lead.projType}</span>}
           </div>
         </div>
         <Pill label={lead.priority} c={ps.c} bg={ps.bg} brd={ps.brd}/>
       </div>
 
-      {/* Project + Budget */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-        <span style={{fontSize:11.5,color:T.t3}}>{lead.projType}</span>
-        <span style={{fontSize:13,fontWeight:700,color:T.blu}}>₹{fmt(lead.budget)}</span>
-      </div>
+      {/* Budget — prominent */}
+      {lead.budget>0&&(
+        <div style={{fontSize:14,fontWeight:800,color:T.blu,marginBottom:6,letterSpacing:"-.2px"}}>
+          ₹{fmt(lead.budget)}
+        </div>
+      )}
 
-      {/* Source + Assigned */}
-      <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap"}}>
-        <span style={{fontSize:10.5,background:T.sltL,color:T.slt,padding:"2px 7px",borderRadius:20,border:`1px solid ${T.b2}`}}>{lead.source}</span>
-        <span style={{fontSize:10.5,background:T.purL,color:T.pur,padding:"2px 7px",borderRadius:20,border:`1px solid ${T.purM}`}}>{lead.assignedTo}</span>
-        {lead.tags?.map(tg=><span key={tg} style={{fontSize:10.5,background:T.ambL,color:T.amb,padding:"2px 7px",borderRadius:20,border:`1px solid ${T.ambM}`}}>{tg}</span>)}
+      {/* Source + Assigned (compact) */}
+      <div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
+        {lead.source&&<span style={{fontSize:10,background:T.sltL,color:T.slt,padding:"1px 6px",borderRadius:20,border:`1px solid ${T.b2}`,whiteSpace:"nowrap"}}>{lead.source}</span>}
+        {lead.assignedTo&&lead.assignedTo!=="—"&&<span style={{fontSize:10,background:T.purL,color:T.pur,padding:"1px 6px",borderRadius:20,border:`1px solid ${T.purM}`,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:110}}>👤 {lead.assignedTo}</span>}
+        {lead.tags?.slice(0,1).map(tg=><span key={tg} style={{fontSize:10,background:T.ambL,color:T.amb,padding:"1px 6px",borderRadius:20,border:`1px solid ${T.ambM}`,whiteSpace:"nowrap"}}>{tg}</span>)}
       </div>
 
       {/* Contact date */}
       {lead.contactDate&&(
-        <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",background:isOverdue?T.redL:isToday?T.ambL:isDueSoon?"#FEF9EC":T.surfaceB,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:isDueSoon?T.ambM:T.b1}`,borderRadius:6,marginBottom:8}}>
-          <IcCal size={11} color={isOverdue?T.red:isToday?T.amb:T.t4}/>
-          <span style={{fontSize:11,fontWeight:isOverdue||isToday?700:400,color:isOverdue?T.red:isToday?T.amb:T.t3}}>
+        <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",background:isOverdue?T.redL:isToday?T.ambL:isDueSoon?"#FEF9EC":T.surfaceB,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:isDueSoon?T.ambM:T.b1}`,borderRadius:5,marginBottom:6}}>
+          <IcCal size={10} color={isOverdue?T.red:isToday?T.amb:T.t4}/>
+          <span style={{fontSize:10.5,fontWeight:isOverdue||isToday?700:500,color:isOverdue?T.red:isToday?T.amb:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1,minWidth:0}}>
             {isOverdue?`Overdue ${Math.abs(diff)}d`:isToday?"Contact today!":isDueSoon?`Due in ${diff}d`:lead.contactDate}
           </span>
           {(isOverdue||isToday)&&(
             <button onClick={e=>{e.stopPropagation();onWhatsApp(lead);}}
-              style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:3,padding:"2px 7px",borderRadius:5,background:T.wa,color:"white",border:"none",cursor:"pointer",fontSize:10,fontWeight:700}}>
-              <IcWA size={9} color="white"/> WA
+              style={{display:"flex",alignItems:"center",justifyContent:"center",width:18,height:18,borderRadius:4,background:T.wa,color:"white",border:"none",cursor:"pointer",flexShrink:0}}>
+              <IcWA size={10} color="white"/>
             </button>
           )}
         </div>
       )}
 
-      {/* Design button — appears on every stage */}
+      {/* Design button — compact */}
       {onDesign && (
-        <div onClick={e=>e.stopPropagation()} style={{marginBottom:7}}>
+        <div onClick={e=>e.stopPropagation()} style={{marginBottom:6}}>
           <button onClick={()=>onDesign(lead)}
             title="Design requests for this lead"
-            style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px dashed ${T.purM||"#DDD6FE"}`,background:T.purL||"#F5F3FF",color:T.pur||"#7C3AED",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5,transition:"all .12s"}}
+            style={{width:"100%",padding:"5px 8px",borderRadius:5,border:`1px dashed ${T.purM||"#DDD6FE"}`,background:T.purL||"#F5F3FF",color:T.pur||"#7C3AED",fontSize:10.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:4,transition:"all .12s"}}
             onMouseEnter={e=>e.currentTarget.style.background="#EDE9FE"}
             onMouseLeave={e=>e.currentTarget.style.background=T.purL||"#F5F3FF"}>
-            <span>🎨</span>
-            <span>Design Plan</span>
-            {lead.design_count>0&&<span style={{background:T.pur||"#7C3AED",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:8}}>{lead.design_count}</span>}
+            <span>🎨</span><span>Design Plan</span>
+            {lead.design_count>0&&<span style={{background:T.pur||"#7C3AED",color:"#fff",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:8}}>{lead.design_count}</span>}
           </button>
         </div>
       )}
 
-      {/* Footer: followup count + quick move */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:7,borderTop:`1px solid ${T.b1}`}}>
-        <span style={{fontSize:10.5,color:T.t4}}>{lead.followupHistory?.length||0} follow-up{lead.followupHistory?.length!==1?"s":""}</span>
-        <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
-          <button onClick={()=>onWhatsApp(lead)}
-            style={{width:24,height:24,borderRadius:5,background:"#DCFCE7",border:"1px solid #A7F3D0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <IcWA size={11} color={T.wa}/>
+      {/* Footer: followup count + quick actions */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:5,borderTop:`1px solid ${T.b1}`,gap:4}}>
+        <span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap"}}>💬 {lead.followupHistory?.length||0}</span>
+        <div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
+          <button onClick={()=>onWhatsApp(lead)} title="WhatsApp"
+            style={{width:22,height:22,borderRadius:4,background:"#DCFCE7",border:"1px solid #A7F3D0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <IcWA size={10} color={T.wa}/>
           </button>
-          <button onClick={()=>onMove(lead,-1)}
-            style={{width:24,height:24,borderRadius:5,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>
+          <button onClick={()=>onMove(lead,-1)} title="Previous stage"
+            style={{width:22,height:22,borderRadius:4,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:T.t3}}>
             ←
           </button>
-          <button onClick={()=>onMove(lead,1)}
-            style={{width:24,height:24,borderRadius:5,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11}}>
+          <button onClick={()=>onMove(lead,1)} title="Next stage"
+            style={{width:22,height:22,borderRadius:4,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:T.t3}}>
             →
           </button>
         </div>
@@ -364,8 +366,12 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
 }
 
 // ── KANBAN BOARD ─────────────────────────────────────────────────
-function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,onAddLead}){
-  const stagesShow=STAGES.filter(s=>(s.id!=="lost"&&s.id!=="project")||leads.some(l=>l.stage===s.id));
+function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,onAddLead,showLost=false}){
+  // Active 5 stages always — Lost optional, Project hidden from kanban
+  const ACTIVE_IDS = ["soft_lead","lead","followup","proposal","converted"];
+  const stagesShow = STAGES.filter(s =>
+    ACTIVE_IDS.includes(s.id) || (s.id === "lost" && showLost)
+  );
 
   const filterLeads=(stageId)=>leads.filter(l=>{
     if(l.stage!==stageId) return false;
@@ -382,37 +388,41 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
     return true;
   });
 
+  const colCount = stagesShow.length;
   return(
-    <div style={{display:"flex",gap:12,overflowX:"auto",paddingBottom:12,height:"100%",alignItems:"flex-start"}}>
+    <div style={{display:"grid",gridTemplateColumns:`repeat(${colCount}, minmax(0, 1fr))`,gap:10,paddingBottom:12,height:"100%",alignItems:"flex-start"}}>
       {stagesShow.map(stage=>{
         const stageLeads=filterLeads(stage.id);
         const stageValue=stageLeads.reduce((s,l)=>s+(Number(l.budget)||0),0);
         const overdueInStage=stageLeads.filter(l=>daysDiff(l.contactDate)<0&&l.contactDate).length;
         return(
           <div key={stage.id}
-            style={{minWidth:270,maxWidth:290,flexShrink:0,display:"flex",flexDirection:"column",height:"100%"}}>
-            {/* Column header */}
-            <div style={{borderRadius:"9px 9px 0 0",padding:"11px 13px",background:stage.color,marginBottom:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:3}}>
-                <span style={{fontSize:13,fontWeight:700,color:"white"}}>{stage.label}</span>
-                <div style={{display:"flex",gap:5,alignItems:"center"}}>
+            style={{minWidth:0,display:"flex",flexDirection:"column",height:"100%"}}>
+            {/* Column header — softer, accent dot + count */}
+            <div style={{borderRadius:"10px 10px 0 0",padding:"9px 11px",background:stage.bg,borderBottom:`2px solid ${stage.color}`,position:"relative"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
+                  <span style={{width:7,height:7,borderRadius:"50%",background:stage.color,flexShrink:0}}/>
+                  <span style={{fontSize:12.5,fontWeight:700,color:stage.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{stage.label}</span>
+                </div>
+                <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
                   {overdueInStage>0&&(
-                    <span style={{background:"rgba(255,255,255,0.25)",color:"white",fontSize:9.5,fontWeight:800,padding:"1px 6px",borderRadius:10,border:"1px solid rgba(255,255,255,0.3)"}}>
-                      {overdueInStage} overdue
+                    <span title={`${overdueInStage} overdue`} style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10,border:"1px solid #FECACA"}}>
+                      ⚠ {overdueInStage}
                     </span>
                   )}
-                  <span style={{background:"rgba(255,255,255,0.25)",color:"white",fontSize:11,fontWeight:700,padding:"2px 8px",borderRadius:20}}>{stageLeads.length}</span>
+                  <span style={{background:stage.color,color:"#fff",fontSize:10.5,fontWeight:800,padding:"1px 7px",borderRadius:20,minWidth:18,textAlign:"center"}}>{stageLeads.length}</span>
                 </div>
               </div>
-              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.75)"}}>{stage.desc}</div>
-              {stageValue>0&&<div style={{fontSize:11,color:"rgba(255,255,255,0.9)",fontWeight:600,marginTop:3}}>₹{fmt(stageValue)}</div>}
+              <div style={{fontSize:10,color:`${stage.color}AA`,fontWeight:500,letterSpacing:".1px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{stage.desc}</div>
+              {stageValue>0&&<div style={{fontSize:10.5,color:stage.color,fontWeight:700,marginTop:2}}>₹{fmt(stageValue)}</div>}
             </div>
 
             {/* Cards container */}
-            <div style={{flex:1,overflowY:"auto",background:stage.bg,borderRadius:"0 0 9px 9px",border:`1px solid ${stage.color}44`,borderTop:"none",padding:"10px 9px",minHeight:200}}>
+            <div style={{flex:1,overflowY:"auto",background:"#FAFBFC",borderRadius:"0 0 10px 10px",border:`1px solid ${T.b1}`,borderTop:"none",padding:"9px 8px",minHeight:200}}>
               {stageLeads.length===0&&(
-                <div style={{textAlign:"center",padding:"24px 12px",color:`${stage.color}88`,fontSize:12}}>
-                  No leads in this stage
+                <div style={{textAlign:"center",padding:"18px 8px",color:`${stage.color}88`,fontSize:11,opacity:0.7}}>
+                  Empty
                 </div>
               )}
               {stageLeads.map(lead=>(
@@ -429,10 +439,10 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
 
               {/* Add lead shortcut */}
               {stage.id!=="lost"&&stage.id!=="project"&&(
-                <button onClick={()=>onAddLead(stage.id)} style={{width:"100%",padding:"7px",borderRadius:7,border:`1.5px dashed ${stage.color}66`,background:"transparent",color:`${stage.color}BB`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5,marginTop:4}}
-                  onMouseEnter={e=>{e.currentTarget.style.background=`${stage.color}11`;}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-                  <IcAdd size={12} color="currentColor"/> Add {stage.label}
+                <button onClick={()=>onAddLead(stage.id)} style={{width:"100%",padding:"6px",borderRadius:6,border:`1.5px dashed ${stage.color}55`,background:"transparent",color:`${stage.color}CC`,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginTop:4}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=`${stage.color}11`;e.currentTarget.style.color=stage.color;}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=`${stage.color}CC`;}}>
+                  <IcAdd size={11} color="currentColor"/> Add {stage.label}
                 </button>
               )}
             </div>
@@ -2026,6 +2036,7 @@ function CRMModule(){
   const [designLead,setDesignLead]=useState(null);
   const [shareTarget,setShareTarget]=useState(null);
   const [showDesignOverview,setShowDesignOverview]=useState(false);
+  const [showLost,setShowLost]=useState(false);
   const [showTypeSelector,setShowTypeSelector]=useState(false);
   const [showAdd,setShowAdd]=useState(false);
   const [showAddSolar,setShowAddSolar]=useState(false);
@@ -2233,6 +2244,15 @@ function CRMModule(){
             <IcAlert size={11} color={T.amb}/>
             <span style={{fontSize:10.5,fontWeight:700,color:T.ambM}}>{todayDueCount} due today</span>
           </div>}
+          {leads.filter(l=>l.stage==="lost").length>0&&(
+            <button onClick={()=>setShowLost(s=>!s)}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,background:showLost?"rgba(107,114,128,0.25)":"rgba(255,255,255,0.07)",border:`1px solid ${showLost?"rgba(255,255,255,0.3)":"rgba(255,255,255,0.18)"}`,color:showLost?"#fff":"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+              {showLost?"Hide":"Show"} Lost
+              <span style={{background:showLost?"rgba(255,255,255,0.25)":"rgba(255,255,255,0.15)",color:"#fff",fontSize:9.5,fontWeight:800,padding:"1px 5px",borderRadius:10}}>
+                {leads.filter(l=>l.stage==="lost").length}
+              </span>
+            </button>
+          )}
           <button onClick={()=>setShowDesignOverview(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:"rgba(124,58,237,0.15)",border:"1px solid rgba(124,58,237,0.4)",color:"#C4B5FD",fontSize:12,fontWeight:700,cursor:"pointer"}}>
             🎨 Design Status
@@ -2276,6 +2296,7 @@ function CRMModule(){
         <KanbanBoard
           leads={[...(canConstruction?leads:[]),...(canSolar?solarLeads:[])]}
           filters={filters}
+          showLost={showLost}
           onOpenLead={(lead)=>lead._type==="solar"?setSelSolarLead(lead):setSelLead(lead)}
           onMoveLead={moveLead}
           onWhatsApp={(lead)=>setWaLead(lead)}
