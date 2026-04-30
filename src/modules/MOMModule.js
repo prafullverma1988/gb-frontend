@@ -415,7 +415,7 @@ function CreateMOMModal({onClose,onSave}){
         setSites(r.data.map(p=>({key:String(p.id||p.name), label:p.name||"Untitled"})));
       }
     }).catch(()=>{});
-    api.get("/users").then(r=>{
+    api.get("/settings/users").then(r=>{
       if(r.success && Array.isArray(r.data)){
         setTeam(r.data.map(u=>({key:String(u.id||u.name), label:u.name||u.email||"User"})));
       } else if(r.users && Array.isArray(r.users)){

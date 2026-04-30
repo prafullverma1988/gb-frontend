@@ -913,6 +913,7 @@ function ProcurementModule(){
   // MR state
   const [mrTab,setMrTab]=useState("Pending");
   const [mrProject,setMrProject]=useState("All");
+  const [mrMaterial,setMrMaterial]=useState("All");
   const [mrSearch,setMrSearch]=useState("");
   const [selected,setSelected]=useState({});        // {mrId: bool}
   const [approveTgt,setApproveTgt]=useState(null);
@@ -943,9 +944,27 @@ function ProcurementModule(){
       const matchByName = m.project===mrProject;
       if(!matchById&&!matchByName) return false;
     }
-    if(mrSearch           &&!m.item.toLowerCase().includes(mrSearch.toLowerCase())&&!m.project.toLowerCase().includes(mrSearch.toLowerCase())) return false;
+    if(mrMaterial!=="All" && (m.item||"").trim().toLowerCase()!==mrMaterial.toLowerCase()) return false;
+    if(mrSearch){
+      const q = mrSearch.toLowerCase();
+      const hay = `${m.item||""} ${m.project||""} ${m.id||""} ${m.requestedBy||""}`.toLowerCase();
+      if(!hay.includes(q)) return false;
+    }
     return true;
   });
+  // Distinct material names from currently visible tab (for the Material filter dropdown)
+  const materialOptions = Array.from(new Set(
+    mrs
+      .filter(m=>{
+        if(mrTab==="Pending"  &&m.mrStatus!=="Pending") return false;
+        if(mrTab==="Approved" &&!(m.mrStatus==="Approved"&&m.matStatus==="Pending")) return false;
+        if(mrTab==="Ordered"  &&m.matStatus!=="Ordered") return false;
+        if(mrTab==="Received" &&!(m.matStatus==="Received"||m.matStatus==="PartialReceived")) return false;
+        if(mrTab==="Rejected" &&m.mrStatus!=="Rejected") return false;
+        return true;
+      })
+      .map(m=>(m.item||"").trim()).filter(Boolean)
+  )).sort();
 
   // Group by project for approved tab
   const groupedMRs=filteredMRs.reduce((acc,m)=>{
@@ -1089,14 +1108,16 @@ function ProcurementModule(){
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif",overflow:"hidden"}}>
       {apiError&&<div style={{margin:"12px 18px",padding:"10px 14px",background:T.redL,border:"1px solid "+T.redM,borderRadius:7,fontSize:12,color:T.red}}>{apiError}</div>}
 
-      {/* Stat tiles */}
-      <div style={{padding:"14px 18px 10px",flexShrink:0}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      {/* Stat tiles — compact single-row strip */}
+      <div style={{padding:"10px 18px 6px",flexShrink:0}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
           {curTiles.map((s,i)=>(
-            <div key={i} style={{padding:"13px 15px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-              <div style={{fontSize:10,color:T.t3,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",marginBottom:5}}>{s.l}</div>
-              <div style={{fontSize:22,fontWeight:700,color:T.t1,letterSpacing:"-.5px",lineHeight:1}}>{s.v}</div>
-              <div style={{fontSize:11,color:T.t4,marginTop:4}}>{s.sub}</div>
+            <div key={i} style={{padding:"8px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,borderLeft:`3px solid ${s.c}`,display:"flex",alignItems:"center",gap:10,minHeight:0}}>
+              <div style={{flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:7,flexWrap:"wrap"}}>
+                <span style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>{s.l}</span>
+                <span style={{fontSize:17,fontWeight:800,color:T.t1,lineHeight:1,letterSpacing:"-.3px"}}>{s.v}</span>
+                <span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.sub}</span>
+              </div>
             </div>
           ))}
         </div>
@@ -1145,29 +1166,38 @@ function ProcurementModule(){
               })}
             </div>
 
-            {/* Filter row */}
+            {/* Filter row — search + Project + Material */}
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,flexShrink:0,flexWrap:"wrap"}}>
-              <div style={{position:"relative",flex:1,minWidth:160}}>
-                <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                <input value={mrSearch} onChange={e=>setMrSearch(e.target.value)} placeholder="Search material or project..."
-                  style={{width:"100%",height:32,padding:"0 8px 0 28px",borderRadius:6,border:`1.5px solid ${mrSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:mrSearch?T.bluL:T.surface}}/>
+              <div style={{position:"relative",flex:1,minWidth:200}}>
+                <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                <input value={mrSearch} onChange={e=>setMrSearch(e.target.value)} placeholder="Search material, project, MR# or requester..."
+                  style={{width:"100%",height:32,padding:"0 8px 0 30px",borderRadius:6,border:`1.5px solid ${mrSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:mrSearch?T.bluL:T.surface}}/>
               </div>
-              <div style={{position:"relative"}}>
-                <select value={mrProject} onChange={e=>setMrProject(e.target.value)}
-                  style={{height:32,padding:"0 22px 0 9px",borderRadius:6,border:`1.5px solid ${mrProject!=="All"?T.blu:T.b1}`,background:mrProject!=="All"?T.bluL:T.surface,fontSize:11.5,color:mrProject!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:140,appearance:"none",WebkitAppearance:"none"}}>
-                  <option value="All">All Projects</option>
-                  {dbProjects.length>0
-                    ?dbProjects.map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)
-                    :[...new Set(mrs.map(m=>m.project).filter(Boolean))].map(n=><option key={n} value={n}>{n}</option>)
-                  }
-                </select>
-                <IcDown size={10} color={T.t4} style={{position:"absolute",right:5,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}/>
+              <div style={{minWidth:160}}>
+                <SearchSelect value={mrProject} compact
+                  options={[{key:"All",label:"All Projects"},
+                    ...(dbProjects.length>0
+                      ?dbProjects.map(p=>({key:String(p.id),label:p.name}))
+                      :[...new Set(mrs.map(m=>m.project).filter(Boolean))].map(n=>({key:n,label:n})))]}
+                  onChange={v=>setMrProject(v||"All")} placeholder="All Projects"/>
               </div>
-              <span style={{fontSize:11,color:T.t4}}>{filteredMRs.length} items</span>
+              <div style={{minWidth:160}}>
+                <SearchSelect value={mrMaterial} compact
+                  options={[{key:"All",label:"All Materials"},
+                    ...materialOptions.map(n=>({key:n,label:n}))]}
+                  onChange={v=>setMrMaterial(v||"All")} placeholder="All Materials"/>
+              </div>
+              <span style={{fontSize:11,color:T.t4,whiteSpace:"nowrap"}}>{filteredMRs.length} items</span>
+              {(mrProject!=="All"||mrMaterial!=="All"||mrSearch)&&(
+                <button onClick={()=>{setMrProject("All");setMrMaterial("All");setMrSearch("");}}
+                  style={{padding:"5px 10px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                  Clear
+                </button>
+              )}
               {/* Bulk order button */}
               {selectedItems.length>0&&(
                 <button onClick={()=>setShowBulkOrder(true)}
-                  style={{display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",boxShadow:`0 2px 8px ${T.blu}44`}}>
+                  style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:5,padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",boxShadow:`0 2px 8px ${T.blu}44`}}>
                   <IcFlow size={13} color="white"/> Order {selectedItems.length} item{selectedItems.length>1?"s":""}
                 </button>
               )}
@@ -1181,27 +1211,31 @@ function ProcurementModule(){
                 <>
                   {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcMR size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No pending requests</div></div>}
                   {filteredMRs.map((m,idx)=>(
-                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"40px 70px 1fr 90px 80px 80px 140px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background 0.1s"}}
+                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"54px 1fr 110px 130px 110px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:12,transition:"background 0.1s"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                      <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{String(idx+1).padStart(2,"0")}</span>
-                      <div>
-                        <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
-                        <div style={{fontSize:10.5,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{m.id}</div>
+                      {/* Left date rail */}
+                      <DateRail date={m.date}/>
+                      {/* Material + MR# + project */}
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.item}</div>
+                        <div style={{fontSize:10.5,color:T.t4,marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
+                          <span style={{fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{m.id}</span>
+                          <span>· {m.project}</span>
+                          {m.requestedBy&&<span>· {m.requestedBy}</span>}
+                        </div>
                       </div>
-                      <div>
-                        <div style={{fontSize:13,fontWeight:500,color:T.t1}}>{m.item}</div>
-                        <div style={{fontSize:11,color:T.t3}}>{m.project} · {m.requestedBy}</div>
-                      </div>
+                      {/* Total */}
                       <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{m.qty}</div>
-                        <div style={{fontSize:10,color:T.t4}}>{m.unit}</div>
+                        <div style={{fontSize:9.5,color:T.t4,fontWeight:600,letterSpacing:".3px",textTransform:"uppercase"}}>Total</div>
+                        <div style={{fontSize:15,fontWeight:800,color:T.t1,letterSpacing:"-.3px",lineHeight:1.1}}>{m.qty}<span style={{fontSize:10,color:T.t4,fontWeight:600,marginLeft:3}}>{m.unit}</span></div>
                       </div>
+                      {/* Stock pill */}
                       <div style={{textAlign:"center"}}>
                         {m.inStock>0
-                          ?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"2px 7px",borderRadius:10,border:`1px solid ${T.grnM}`}}>In Stock: {m.inStock}</span>
+                          ?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"3px 9px",borderRadius:10,border:`1px solid ${T.grnM}`}}>In Stock: {m.inStock}</span>
                           :<span style={{fontSize:10.5,color:T.t4}}>No stock</span>}
                       </div>
-                      <div style={{display:"flex",gap:5,justifyContent:"center"}}>
+                      <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
                         <button onClick={()=>setApproveTgt(m)} title="Approve"
                           style={{width:28,height:28,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
                           <IcChk size={13} color={T.grn}/>
