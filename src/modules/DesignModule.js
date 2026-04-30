@@ -277,6 +277,7 @@ export default function DesignModule() {
   // Due date filters
   const [ddView,    setDdView]    = useState("all"); // all|overdue|today|week
   const [ddProject, setDdProject] = useState("All");
+  const [ddSource,  setDdSource]  = useState("all"); // all|site|house
 
   // Load all data
   const loadAll = useCallback(async () => {
@@ -385,10 +386,12 @@ export default function DesignModule() {
     return true;
   });
 
-  // Due date data — requests with due_date
+  // Due date data — requests with due_date (both Site Drawings + House Plans)
   const today = new Date(); today.setHours(0,0,0,0);
   const dueDateItems = requests.filter(r=>r.due_date&&r.status!=="Uploaded"&&r.status!=="Rejected").filter(r=>{
     if (ddProject!=="All" && (r.project_name||"")!==ddProject) return false;
+    if (ddSource==="site"  && !isSiteRequest(r))  return false;
+    if (ddSource==="house" && !isHouseRequest(r)) return false;
     const d = new Date(r.due_date); d.setHours(0,0,0,0);
     const diff = Math.floor((d-today)/(1000*60*60*24));
     if (ddView==="overdue" && diff>=0) return false;
@@ -396,6 +399,8 @@ export default function DesignModule() {
     if (ddView==="week"    && (diff<0||diff>7)) return false;
     return true;
   }).sort((a,b)=>new Date(a.due_date)-new Date(b.due_date));
+  const siteDueCt  = requests.filter(r=>r.due_date&&r.status!=="Uploaded"&&r.status!=="Rejected"&&isSiteRequest(r)).length;
+  const houseDueCt = requests.filter(r=>r.due_date&&r.status!=="Uploaded"&&r.status!=="Rejected"&&isHouseRequest(r)).length;
 
   const overdueCt = requests.filter(r=>{if(!r.due_date||r.status==="Uploaded"||r.status==="Rejected")return false;const d=new Date(r.due_date);d.setHours(0,0,0,0);return d<today;}).length;
 
@@ -832,7 +837,8 @@ export default function DesignModule() {
     // ── TAB: DUE DATES ───────────────────────────────────────────────
   const DueDatesTab = () => (
     <div>
-      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+      {/* View filters: All / Overdue / Today / This Week */}
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
         {[
           {id:"all",label:"All"},
           {id:"overdue",label:`Overdue ${overdueCt>0?"("+overdueCt+")":""}`,color:overdueCt>0?T.red:null},
@@ -851,13 +857,30 @@ export default function DesignModule() {
           {projectNames.map(p=><option key={p}>{p}</option>)}
         </select>
       </div>
-      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{dueDateItems.length} items</div>
+
+      {/* Source filter: All / Site Drawings / House Plans */}
+      <div style={{display:"flex",gap:6,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+        {[
+          {id:"all",  label:`All (${siteDueCt+houseDueCt})`,    c:T.t2,  bg:T.surfaceB, brd:T.b1},
+          {id:"site", label:`🏗️ Site Drawings (${siteDueCt})`,  c:T.blu, bg:T.bluL,     brd:T.bluM},
+          {id:"house",label:`🏠 House Plans (${houseDueCt})`,    c:T.pur, bg:T.purL,     brd:T.purM},
+        ].map(s=>(
+          <button key={s.id} onClick={()=>setDdSource(s.id)}
+            style={{padding:"5px 11px",borderRadius:20,border:`1.5px solid ${ddSource===s.id?s.c:s.brd}`,
+              background:ddSource===s.id?s.bg:T.surface,
+              color:ddSource===s.id?s.c:T.t3,fontSize:11.5,fontWeight:ddSource===s.id?700:600,cursor:"pointer"}}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{dueDateItems.length} items {ddSource!=="all"&&`· ${ddSource==="site"?"Site Drawings":"House Plans"}`}</div>
       {dueDateItems.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>📅</div><div style={{fontSize:13,color:T.t2}}>Koi due date nahi</div></div>}
 
       {/* Table */}
       <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"2fr 130px 110px 100px 100px 90px",padding:"7px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
-          {["Drawing Request","Project","Category","Due Date","Priority","Status"].map((h,i)=>(
+        <div style={{display:"grid",gridTemplateColumns:"60px 2fr 150px 110px 100px 100px 90px",padding:"7px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,gap:8}}>
+          {["Source","Drawing Request","Project / Lead","Category","Due Date","Priority","Status"].map((h,i)=>(
             <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px"}}>{h}</span>
           ))}
         </div>
@@ -868,14 +891,21 @@ export default function DesignModule() {
           const isToday   = diff === 0;
           const pm=PRIO_META[r.priority]||PRIO_META["Normal"];
           const sm=STATUS_META[r.status]||STATUS_META["Pending"];
+          const isHouse = isHouseRequest(r);
+          const sourceLabel = isHouse ? "🏠 House" : "🏗️ Site";
+          const sourceColor = isHouse ? T.pur : T.blu;
+          const sourceBg    = isHouse ? T.purL : T.bluL;
+          const sourceBrd   = isHouse ? T.purM : T.bluM;
+          const partyLabel  = isHouse ? (r.lead_name||"—") : (r.project_name||"—");
           return(
-            <div key={r.id} style={{display:"grid",gridTemplateColumns:"2fr 130px 110px 100px 100px 90px",padding:"9px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center",gap:8,
+            <div key={r.id} style={{display:"grid",gridTemplateColumns:"60px 2fr 150px 110px 100px 100px 90px",padding:"9px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center",gap:8,
               background:isOverdue?"#FFF5F5":isToday?"#FFFBEB":"none"}}>
+              <span style={{display:"inline-flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:800,padding:"2px 6px",borderRadius:4,background:sourceBg,color:sourceColor,border:`1px solid ${sourceBrd}`,whiteSpace:"nowrap"}}>{sourceLabel}</span>
               <div>
                 <div style={{fontSize:12.5,fontWeight:600,color:isOverdue?T.red:T.t1}}>{r.title}</div>
                 {r.assigned_to&&<div style={{fontSize:10.5,color:T.blu,marginTop:1}}>👤 {r.assigned_to}</div>}
               </div>
-              <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.project_name||"—"}</span>
+              <span style={{fontSize:11,color:isHouse?T.pur:T.t3,fontWeight:isHouse?600:400,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={partyLabel}>{partyLabel}</span>
               <span style={{fontSize:11,color:T.t2}}>{r.category}</span>
               <div>
                 <div style={{fontSize:12,fontWeight:700,color:isOverdue?T.red:isToday?T.amb:T.t1}}>{fmtDate(r.due_date)}</div>
