@@ -1353,7 +1353,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
 
   // ── Data splits by category ──────────────────────────────────────────
   const designItems   = data.centralized.filter(i=>i._source==="design");
-  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","purchase_order","labour_rate"].includes(i._source));
+  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","purchase_order","labour_rate","salary_edit"].includes(i._source));
   const paymentItems  = [
     ...data.centralized.filter(i=>i._source==="payment_request"),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
@@ -1420,7 +1420,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   };
 
   const CentralCard=({item})=>{
-    const modColors={"Material Request":T.amb,"Design Approval":"#7C3AED","Purchase Order (PO)":T.blu,"RA Bill":"#0891B2","Subcon WO Amendment":"#EA580C","Payment Request":T.blu,"Material Site Transfer":"#059669","Material Issue":"#059669"};
+    const modColors={"Material Request":T.amb,"Design Approval":"#7C3AED","Purchase Order (PO)":T.blu,"RA Bill":"#0891B2","Subcon WO Amendment":"#EA580C","Payment Request":T.blu,"Material Site Transfer":"#059669","Material Issue":"#059669","Salary Edit":"#DB2777"};
     const mc=modColors[item.module]||T.slt;
     const act=acting["c"+item.id];
     const src=item._source;
@@ -1445,6 +1445,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
           res=await api.patch("/subcon/amendments/"+item._source_id+"/action",{status:isRej?"Rejected":"Approved"});
         } else if(src==="labour_rate"){
           res=await api.patch("/approvals/labour-rate/"+item._source_id+"/action",{action:isRej?"reject":"approve"});
+        } else if(src==="salary_edit"){
+          res=await api.patch("/payroll/salary-edit-requests/"+item._source_id,{status:isRej?"rejected":"approved"});
         } else {
           res=await api.patch("/approvals/"+item.id+"/action",{action:isRej?"reject":"approve"});
         }
@@ -1480,8 +1482,19 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
               </div>
             )}
             {src==="labour_rate"&&item.notes&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>"{item.notes}"</div>}
+            {src==="salary_edit"&&(
+              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:T.bluL,borderRadius:6,border:"1px solid "+T.bluM}}>
+                <span style={{fontSize:11,color:T.t3}}>Current: <b style={{color:T.t2}}>{fmtAmt(item.old_amount||0)}</b></span>
+                <span style={{fontSize:13,color:T.blu,fontWeight:700}}>→</span>
+                <span style={{fontSize:11,color:T.t3}}>Requested: <b style={{color:T.blu}}>{fmtAmt(item.new_amount||0)}</b></span>
+                <span style={{fontSize:10,color:item.new_amount<item.old_amount?T.amb:T.grn,fontWeight:700,marginLeft:"auto"}}>
+                  {item.new_amount<item.old_amount?"−":"+"}{fmtAmt(Math.abs((item.new_amount||0)-(item.old_amount||0)))}
+                </span>
+              </div>
+            )}
+            {src==="salary_edit"&&item.notes&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>"{item.notes}"</div>}
           </div>
-          {item.amount>0&&src!=="labour_rate"&&<span style={{fontSize:13,fontWeight:700,color:mc,flexShrink:0}}>{fmtAmt(item.amount)}</span>}
+          {item.amount>0&&src!=="labour_rate"&&src!=="salary_edit"&&<span style={{fontSize:13,fontWeight:700,color:mc,flexShrink:0}}>{fmtAmt(item.amount)}</span>}
         </div>
         {!src&&item.max_level>0&&(
           <div style={{display:"flex",gap:4,margin:"6px 0",alignItems:"center"}}>
