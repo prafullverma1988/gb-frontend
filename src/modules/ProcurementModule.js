@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
+import SearchSelect from "../components/SearchSelect";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -250,10 +251,9 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[]}){
         {(medium==="po"||medium==="manual")&&(
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <Fld label="Vendor" required>
-              <Sel value={vendor} onChange={e=>setVendor(e.target.value)}>
-                <option value="">Select vendor...</option>
-                {(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS).map(v=><option key={v}>{v}</option>)}
-              </Sel>
+              <SearchSelect value={vendor}
+                options={(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS)}
+                onChange={v=>setVendor(v)} placeholder="Select vendor..."/>
             </Fld>
             <Fld label="Expected Delivery" required>
               <Inp type="date" value={delivery} onChange={e=>setDelivery(e.target.value)}/>
@@ -355,10 +355,8 @@ function GRNModal({po,onClose,onSave}){
               </div>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Quality</label>
-                <select value={rows[i].quality} onChange={e=>{const r=[...rows];r[i]={...r[i],quality:e.target.value};setRows(r);}}
-                  style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-                  <option>Good</option><option>Partial</option><option>Rejected</option>
-                </select>
+                <SearchSelect value={rows[i].quality} options={["Good","Partial","Rejected"]}
+                  onChange={v=>{const r=[...rows];r[i]={...r[i],quality:v};setRows(r);}} placeholder="Quality"/>
               </div>
               <div>
                 <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:4}}>Remark</label>
@@ -665,7 +663,7 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
 }
 
 // ── CREATE PO MODAL ───────────────────────────────────────────────────
-function CreatePOModal({onClose,onSave,prefillItems,dbProjects}){
+function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
   // Auto-fill project from first MR item
   const firstMR = prefillItems?.[0];
   const autoProjectId   = firstMR?.project_id   || "";
@@ -703,15 +701,17 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects}){
       <MHead title="Create Purchase Order" sub="Direct PO — no RFQ required" onClose={onClose}/>
       <MBody>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-          <Fld label="Vendor" required><Sel value={form.vendor} onChange={e=>upd("vendor",e.target.value)}><option value="">Select vendor...</option>{(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS).map(v=><option key={v}>{v}</option>)}</Sel></Fld>
+          <Fld label="Vendor" required>
+            <SearchSelect value={form.vendor}
+              options={(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS)}
+              onChange={v=>upd("vendor",v)} placeholder="Select vendor..."/>
+          </Fld>
           <Fld label="Project" required>
             {prefillItems&&autoProjectName
               ?<div style={{padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.grnM,background:T.grnL,fontSize:12.5,color:T.grn,fontWeight:600}}>{autoProjectName} <span style={{fontSize:10,fontWeight:400,color:T.grn,opacity:.7}}>(from MR)</span></div>
-              :<select value={form.projectId} onChange={handleProjectChange}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                <option value="">Select project...</option>
-                {(dbProjects.length>0?dbProjects:PROJECTS.map((n,i)=>({id:i+1,name:n}))).map(p=><option key={p.id} value={String(p.id)}>{p.name}</option>)}
-              </select>
+              :<SearchSelect value={form.projectId}
+                options={(dbProjects.length>0?dbProjects:PROJECTS.map((n,i)=>({id:i+1,name:n}))).map(p=>({key:String(p.id),label:p.name}))}
+                onChange={v=>handleProjectChange({target:{value:v}})} placeholder="Select project..."/>
             }
           </Fld>
         </div>
@@ -734,10 +734,8 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects}){
               style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
               style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <select value={it.unit} onChange={e=>updItem(i,"unit",e.target.value)}
-              style={{padding:"7px 6px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
-              {UNITS.map(u=><option key={u}>{u}</option>)}
-            </select>
+            <SearchSelect value={it.unit} options={UNITS} compact
+              onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
             <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="Rate"
               style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <button onClick={()=>removeItem(i)} style={{width:26,height:26,borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcX size={12} color={T.red}/></button>

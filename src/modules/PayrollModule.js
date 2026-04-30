@@ -1554,20 +1554,15 @@ function MobilePunchTab(){
       {/* Worker select */}
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"13px 16px",marginBottom:10}}>
         <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:6}}>Worker / Employee</label>
-        <select value={workerName} onChange={e=>setWorkerName(e.target.value)}
-          style={{width:"100%",padding:"11px 12px",borderRadius:8,border:`1.5px solid ${T.blu}`,background:T.bluL,fontSize:14,fontWeight:600,color:T.blu,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
-          {ALL_WORKERS.map(n=><option key={n}>{n}</option>)}
-        </select>
+        <SearchSelect value={workerName} options={ALL_WORKERS}
+          onChange={v=>setWorkerName(v)} placeholder="Select worker..."/>
       </div>
 
       {/* Project select */}
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"13px 16px",marginBottom:10}}>
         <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:6}}>Project / Site</label>
-        <select value={selProject} onChange={e=>setSelProject(e.target.value)}
-          style={{width:"100%",padding:"11px 12px",borderRadius:8,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:13.5,color:T.t1,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
-          <option value="">Select project...</option>
-          {PROJECTS.map(p=><option key={p}>{p}</option>)}
-        </select>
+        <SearchSelect value={selProject} options={PROJECTS}
+          onChange={v=>setSelProject(v)} placeholder="Select project..."/>
       </div>
 
       {/* GPS Location */}

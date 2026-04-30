@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
+import SearchSelect from "../components/SearchSelect";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -596,9 +597,8 @@ function IssueModal({material,onClose}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           {[{l:"Project",k:"project",type:"select",opts:PROJECTS},{l:"Issued To",k:"issuedTo",type:"select",opts:team}].map(f=>(
             <div key={f.k}><label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
-              <select value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-                {f.opts.map(o=><option key={o}>{o}</option>)}
-              </select>
+              <SearchSelect value={form[f.k]} options={f.opts}
+                onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={`Select ${f.l.toLowerCase()}...`}/>
             </div>
           ))}
         </div>

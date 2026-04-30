@@ -442,17 +442,13 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
-              <select value={reqForm.category} onChange={e=>setReqForm(p=>({...p,category:e.target.value}))}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {CATS.map(c=><option key={c}>{c}</option>)}
-              </select>
+              <SearchSelect value={reqForm.category} options={CATS}
+                onChange={v=>setReqForm(p=>({...p,category:v}))} placeholder="Select category..."/>
             </div>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Priority</label>
-              <select value={reqForm.priority} onChange={e=>setReqForm(p=>({...p,priority:e.target.value}))}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {["Low","Normal","High","Urgent"].map(p=><option key={p}>{p}</option>)}
-              </select>
+              <SearchSelect value={reqForm.priority} options={["Low","Normal","High","Urgent"]}
+                onChange={v=>setReqForm(p=>({...p,priority:v}))} placeholder="Select priority..."/>
             </div>
           </div>
           <div style={{marginBottom:12}}>
@@ -826,17 +822,13 @@ function TabDesign({ project, isAdmin }) {
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Category</label>
-              <select value={uForm.category} onChange={e=>setUForm(p=>({...p,category:e.target.value}))}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {CATS.map(c=><option key={c}>{c}</option>)}
-              </select>
+              <SearchSelect value={uForm.category} options={CATS}
+                onChange={v=>setUForm(p=>({...p,category:v}))} placeholder="Select category..."/>
             </div>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Type</label>
-              <select value={uForm.drawing_type} onChange={e=>setUForm(p=>({...p,drawing_type:e.target.value}))}
-                style={{width:"100%",padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                {TYPES.map(t=><option key={t}>{t}</option>)}
-              </select>
+              <SearchSelect value={uForm.drawing_type} options={TYPES}
+                onChange={v=>setUForm(p=>({...p,drawing_type:v}))} placeholder="Select type..."/>
             </div>
           </div>
 
@@ -5250,19 +5242,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:12}}>
                 <div>
                   <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Assign To</label>
-                  <select value={issueForm.assigned_to} onChange={e=>setIssueForm(p=>({...p,assigned_to:e.target.value}))}
-                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
-                    <option value="">-- Select --</option>
-                    {issueTeam.map(m=><option key={m} value={m}>{m}</option>)}
-                  </select>
+                  <SearchSelect value={issueForm.assigned_to} options={issueTeam}
+                    onChange={v=>setIssueForm(p=>({...p,assigned_to:v}))} placeholder="-- Select --"/>
                 </div>
                 <div>
                   <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Category</label>
-                  <select value={issueForm.work_category} onChange={e=>setIssueForm(p=>({...p,work_category:e.target.value}))}
-                    style={{width:"100%",padding:"10px",borderRadius:8,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
-                    <option value="">-- Select --</option>
-                    {issueWorkCats.map(c=><option key={c} value={c}>{c}</option>)}
-                  </select>
+                  <SearchSelect value={issueForm.work_category} options={issueWorkCats}
+                    onChange={v=>setIssueForm(p=>({...p,work_category:v}))} placeholder="-- Select --"/>
                 </div>
               </div>
               {/* Photo upload */}
@@ -5410,8 +5396,9 @@ function PTEditTask({task,allTasks,onClose,onSave}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
           {[{l:"Category",k:"category",type:"select",opts:["Civil","Electrical","Plumbing","Finishing","Custom"]},{l:"Tag",k:"tag",type:"input",ph:"e.g. critical"}].map(f=>(
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
-              {f.type==="select"?<select value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>{f.opts.map(o=><option key={o}>{o}</option>)}</select>
-              :<input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
+              {f.type==="select"
+                ?<SearchSelect value={form[f.k]} options={f.opts} onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={`Select ${f.l.toLowerCase()}...`}/>
+                :<input value={form[f.k]} onChange={upd(f.k)} placeholder={f.ph} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
             </div>
           ))}
         </div>
@@ -5419,7 +5406,7 @@ function PTEditTask({task,allTasks,onClose,onSave}){
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
           {[{l:"Assigned To",k:"assignee",opts:TEAM_PT},{l:"Status",k:"status",opts:["Not Started","Ongoing","Hold","Completed"]}].map(f=>(
             <div key={f.k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{f.l}</label>
-              <select value={form[f.k]} onChange={upd(f.k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>{f.opts.map(o=><option key={o}>{o}</option>)}</select>
+              <SearchSelect value={form[f.k]} options={f.opts} onChange={v=>setForm(p=>({...p,[f.k]:v}))} placeholder={`Select ${f.l.toLowerCase()}...`}/>
             </div>
           ))}
         </div>
@@ -6832,14 +6819,10 @@ function TabAttendance({ project }) {
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                 <input value={wfForm.name} onChange={e=>setWfForm(p=>({...p,name:e.target.value}))} placeholder="Worker name *"
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",gridColumn:"1/-1"}}/>
-                <select value={wfForm.role} onChange={e=>setWfForm(p=>({...p,role:e.target.value,dailyRate:p.dailyRate||getRateForRole(e.target.value)||""}))}
-                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:"white"}}>
-                  {ROLES.map(r=><option key={r}>{r}</option>)}
-                </select>
-                <select value={wfForm.category} onChange={e=>setWfForm(p=>({...p,category:e.target.value}))}
-                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:"white"}}>
-                  {["Unskilled","Semi-Skilled","Skilled","Highly Skilled"].map(c=><option key={c}>{c}</option>)}
-                </select>
+                <SearchSelect value={wfForm.role} options={ROLES}
+                  onChange={v=>setWfForm(p=>({...p,role:v,dailyRate:p.dailyRate||getRateForRole(v)||""}))} placeholder="Select role..."/>
+                <SearchSelect value={wfForm.category} options={["Unskilled","Semi-Skilled","Skilled","Highly Skilled"]}
+                  onChange={v=>setWfForm(p=>({...p,category:v}))} placeholder="Select category..."/>
                 <input type="number" value={wfForm.dailyRate} onChange={e=>setWfForm(p=>({...p,dailyRate:e.target.value}))}
                   placeholder={`Daily Rate ₹ (Card: ${getRateForRole(wfForm.role)||"—"})`}
                   style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
@@ -8628,9 +8611,8 @@ function TabSubcon({ projectId }) {
               </div>
               <div>
                 <label style={lblStyle}>Status</label>
-                <select value={editBill.status||"Submitted"} onChange={e=>setEditBill(p=>({...p,status:e.target.value}))} style={inpStyle}>
-                  <option>Submitted</option><option>Approved</option><option>Rejected</option>
-                </select>
+                <SearchSelect value={editBill.status||"Submitted"} options={["Submitted","Approved","Rejected"]}
+                  onChange={v=>setEditBill(p=>({...p,status:v}))} placeholder="Select status..."/>
               </div>
             </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
@@ -8724,9 +8706,8 @@ function TabSubcon({ projectId }) {
               </div>
               <div>
                 <label style={lblStyle}>Mode</label>
-                <select value={payForm.payment_mode} onChange={e=>setPayForm(p=>({...p,payment_mode:e.target.value}))} style={inpStyle}>
-                  {["Bank Transfer","Cheque","Cash","NEFT","RTGS","UPI"].map(m=><option key={m}>{m}</option>)}
-                </select>
+                <SearchSelect value={payForm.payment_mode} options={["Bank Transfer","Cheque","Cash","NEFT","RTGS","UPI"]}
+                  onChange={v=>setPayForm(p=>({...p,payment_mode:v}))} placeholder="Select mode..."/>
               </div>
               <div>
                 <label style={lblStyle}>Reference No.</label>
@@ -8840,9 +8821,8 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
             </div>
             <div>
               <label style={lblStyle}>Category</label>
-              <select value={form.subcon_category} onChange={e=>setForm(p=>({...p,subcon_category:e.target.value}))} style={inpStyle}>
-                {CATS.map(c=><option key={c}>{c}</option>)}
-              </select>
+              <SearchSelect value={form.subcon_category} options={CATS}
+                onChange={v=>setForm(p=>({...p,subcon_category:v}))} placeholder="Select category..."/>
             </div>
             <div>
               <label style={lblStyle}>Retention %</label>
@@ -9091,15 +9071,13 @@ function EditWOModal({ wo, subcons, fmtC, inpStyle, lblStyle, onClose, onSaved }
             </div>
             <div>
               <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Category</label>
-              <select value={form.subcon_category} onChange={e=>setForm(p=>({...p,subcon_category:e.target.value}))} style={inpStyle}>
-                {CATS.map(c=><option key={c}>{c}</option>)}
-              </select>
+              <SearchSelect value={form.subcon_category} options={CATS}
+                onChange={v=>setForm(p=>({...p,subcon_category:v}))} placeholder="Select category..."/>
             </div>
             <div>
               <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Status</label>
-              <select value={form.status} onChange={e=>setForm(p=>({...p,status:e.target.value}))} style={inpStyle}>
-                {["Active","On Hold","Completed","Cancelled"].map(s=><option key={s}>{s}</option>)}
-              </select>
+              <SearchSelect value={form.status} options={["Active","On Hold","Completed","Cancelled"]}
+                onChange={v=>setForm(p=>({...p,status:v}))} placeholder="Select status..."/>
             </div>
             <div>
               <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Retention %</label>

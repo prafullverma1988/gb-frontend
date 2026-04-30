@@ -3,6 +3,7 @@ import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
+import SearchSelect from "../components/SearchSelect";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -322,10 +323,9 @@ function NewProjectModal({onClose,onCreated}){
   const sel = (label, key, opts, full=false) => (
     <div style={{gridColumn:full?"1/3":"auto"}}>
       <label style={{fontSize:10.5,fontWeight:600,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>{label}</label>
-      <select value={form[key]} onChange={e=>setF(key,e.target.value)}
-        style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-        {opts.map(o=><option key={o.v||o} value={o.v||o}>{o.l||o.charAt(0).toUpperCase()+o.slice(1)}</option>)}
-      </select>
+      <SearchSelect value={form[key]}
+        options={opts.map(o=>({key:String(o.v||o),label:o.l||(typeof o==="string"?o.charAt(0).toUpperCase()+o.slice(1):String(o))}))}
+        onChange={v=>setF(key,v)} placeholder={`Select ${label.toLowerCase()}...`}/>
     </div>
   );
 
@@ -696,10 +696,8 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
       onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
   );
   const sel = (k,opts) => (
-    <select value={form[k]} onChange={e=>upd(k,e.target.value)}
-      style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:13,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-      {opts.map(o=><option key={o}>{o}</option>)}
-    </select>
+    <SearchSelect value={form[k]} options={opts}
+      onChange={v=>upd(k,v)} placeholder={`Select ${k}...`}/>
   );
   const lbl = (txt,req) => (
     <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>
@@ -2693,14 +2691,10 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
             placeholder="Todo title..." autoFocus
             style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #DDD6FE",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:8}}/>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
-            <select value={newTodo.priority} onChange={e=>setNewTodo(p=>({...p,priority:e.target.value}))}
-              style={{padding:"6px 8px",borderRadius:6,border:"1px solid #DDD6FE",fontSize:11,outline:"none",background:"white"}}>
-              <option>High</option><option>Medium</option><option>Low</option>
-            </select>
-            <select value={newTodo.category} onChange={e=>setNewTodo(p=>({...p,category:e.target.value}))}
-              style={{padding:"6px 8px",borderRadius:6,border:"1px solid #DDD6FE",fontSize:11,outline:"none",background:"white"}}>
-              <option>Admin</option><option>Finance</option><option>HR</option><option>Compliance</option><option>Other</option>
-            </select>
+            <SearchSelect value={newTodo.priority} options={["High","Medium","Low"]} compact
+              onChange={v=>setNewTodo(p=>({...p,priority:v}))} placeholder="Priority"/>
+            <SearchSelect value={newTodo.category} options={["Admin","Finance","HR","Compliance","Other"]} compact
+              onChange={v=>setNewTodo(p=>({...p,category:v}))} placeholder="Category"/>
             <input type="date" value={newTodo.due_date} onChange={e=>setNewTodo(p=>({...p,due_date:e.target.value}))}
               style={{padding:"6px 8px",borderRadius:6,border:"1px solid #DDD6FE",fontSize:11,outline:"none"}}/>
           </div>
