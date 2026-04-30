@@ -4,6 +4,7 @@ import SearchSelect from "../components/SearchSelect";
 import { Credit } from "../components/Credit";
 import LeadDesignDrawer from "../components/LeadDesignDrawer";
 import ShareDrawingDrawer from "../components/ShareDrawingDrawer";
+import DesignOverviewDrawer from "../components/DesignOverviewDrawer";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -2024,6 +2025,7 @@ function CRMModule(){
   const [waLead,setWaLead]=useState(null);
   const [designLead,setDesignLead]=useState(null);
   const [shareTarget,setShareTarget]=useState(null);
+  const [showDesignOverview,setShowDesignOverview]=useState(false);
   const [showTypeSelector,setShowTypeSelector]=useState(false);
   const [showAdd,setShowAdd]=useState(false);
   const [showAddSolar,setShowAddSolar]=useState(false);
@@ -2231,6 +2233,10 @@ function CRMModule(){
             <IcAlert size={11} color={T.amb}/>
             <span style={{fontSize:10.5,fontWeight:700,color:T.ambM}}>{todayDueCount} due today</span>
           </div>}
+          <button onClick={()=>setShowDesignOverview(true)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:"rgba(124,58,237,0.15)",border:"1px solid rgba(124,58,237,0.4)",color:"#C4B5FD",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            🎨 Design Status
+          </button>
           <button onClick={()=>setShowTemplates(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             📋 Templates
@@ -2333,6 +2339,16 @@ function CRMModule(){
       <ShareDrawingDrawer
         target={shareTarget}
         onClose={()=>setShareTarget(null)}
+      />
+      {/* Company-wide Design Overview */}
+      <DesignOverviewDrawer
+        open={showDesignOverview}
+        onClose={()=>setShowDesignOverview(false)}
+        onOpenLead={(leadId)=>{
+          const l = leads.find(x=>x.id===leadId);
+          if(l) setSelLead(l);
+        }}
+        onShareClick={(target)=>setShareTarget(target)}
       />
 
       {/* Proposal stage prompt */}
