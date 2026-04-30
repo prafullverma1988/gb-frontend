@@ -1235,32 +1235,25 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
           {inp("City","city","Raipur, Durg...")}
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>System Size (kW)</label>
-            <select value={form.requirement_kw} onChange={e=>upd("requirement_kw",e.target.value)}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-              {KW_OPTIONS.map(k=><option key={k} value={k}>{k} kW</option>)}
-            </select>
+            <SearchSelect value={form.requirement_kw}
+              options={KW_OPTIONS.map(k=>({key:k,label:`${k} kW`}))}
+              onChange={v=>upd("requirement_kw",v)} placeholder="Select size..."/>
           </div>
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Lead Source</label>
-            <select value={form.source} onChange={e=>upd("source",e.target.value)}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-              {SOURCES.map(s=><option key={s}>{s}</option>)}
-            </select>
+            <SearchSelect value={form.source} options={SOURCES}
+              onChange={v=>upd("source",v)} placeholder="Select source..."/>
           </div>
           <div style={{gridColumn:"1/3"}}>{inp("Location / Area","location","Approx location or landmark")}</div>
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Assigned To</label>
-            <select value={form.assignedTo} onChange={e=>upd("assignedTo",e.target.value)}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-              {ASSIGNED_TO.map(a=><option key={a}>{a}</option>)}
-            </select>
+            <SearchSelect value={form.assignedTo} options={ASSIGNED_TO}
+              onChange={v=>upd("assignedTo",v)} placeholder="Select assignee..."/>
           </div>
           <div>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Priority</label>
-            <select value={form.priority} onChange={e=>upd("priority",e.target.value)}
-              style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-              {["High","Medium","Low"].map(p=><option key={p}>{p}</option>)}
-            </select>
+            <SearchSelect value={form.priority} options={["High","Medium","Low"]}
+              onChange={v=>upd("priority",v)} placeholder="Select priority..."/>
           </div>
           <div style={{gridColumn:"1/3"}}>
             <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Next Contact Date</label>
@@ -1645,25 +1638,20 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
                   {inp("Location / Area","location","Landmark")}
                   <div>
                     <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>System Size</label>
-                    <select value={ovForm.requirement_kw} onChange={e=>upd("requirement_kw",e.target.value)}
-                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit"}}>
-                      {KW_OPTIONS.map(k=><option key={k} value={k}>{k} kW</option>)}
-                    </select>
+                    <SearchSelect value={ovForm.requirement_kw}
+                      options={KW_OPTIONS.map(k=>({key:k,label:`${k} kW`}))}
+                      onChange={v=>upd("requirement_kw",v)} placeholder="Select size..."/>
                   </div>
                   <div>
                     <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Type</label>
-                    <select value={ovForm.requirement_type} onChange={e=>upd("requirement_type",e.target.value)}
-                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit"}}>
-                      <option value="residential">Residential</option>
-                      <option value="commercial">Commercial</option>
-                    </select>
+                    <SearchSelect value={ovForm.requirement_type}
+                      options={[{key:"residential",label:"Residential"},{key:"commercial",label:"Commercial"}]}
+                      onChange={v=>upd("requirement_type",v)} placeholder="Select type..."/>
                   </div>
                   <div>
                     <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3}}>Lead Source</label>
-                    <select value={ovForm.source} onChange={e=>upd("source",e.target.value)}
-                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit"}}>
-                      {SOURCES.map(s=><option key={s}>{s}</option>)}
-                    </select>
+                    <SearchSelect value={ovForm.source} options={SOURCES}
+                      onChange={v=>upd("source",v)} placeholder="Select source..."/>
                   </div>
                 </div>
                 <div style={{borderTop:`1px solid ${T.b1}`,paddingTop:10,marginBottom:10}}>
