@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api, { API_BASE } from "../config/api";
 import { Avatar, Credit } from "../components/Credit";
 import PaymentRequestDrawer from "../components/PaymentRequestDrawer";
+import SearchSelect from "../components/SearchSelect";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
@@ -2156,9 +2157,9 @@ function TabTodo({projectId}) {
                 style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none"}}/>
             </div>
             {[
-              {l:"Category",key:"cat",opts:CATS.map(c=>({v:c,l:c})),type:"select"},
-              {l:"Priority",key:"priority",opts:PRIS.map(p=>({v:p,l:p})),type:"select"},
-              {l:"Assigned To",key:"assigneeId",opts:team.map(m=>({v:String(m.id),l:m.name})),type:"select"},
+              {l:"Category",key:"cat",opts:CATS.map(c=>({key:c,label:c})),type:"search"},
+              {l:"Priority",key:"priority",opts:PRIS.map(p=>({key:p,label:p})),type:"search"},
+              {l:"Assigned To",key:"assigneeId",opts:team.map(m=>({key:String(m.id),label:m.name})),type:"search"},
               {l:"Due Date",key:"due",type:"date"},
             ].map(f=>(
               <div key={f.key}>
@@ -2166,11 +2167,8 @@ function TabTodo({projectId}) {
                 {f.type==="date"
                   ?<input type="date" value={newForm[f.key]} onChange={e=>setNewForm(p=>({...p,[f.key]:e.target.value}))}
                       style={{width:"100%",height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}/>
-                  :<select value={newForm[f.key]} onChange={e=>setNewForm(p=>({...p,[f.key]:e.target.value}))}
-                      style={{width:"100%",height:30,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}>
-                      <option value="">Select...</option>
-                      {f.opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}
-                    </select>
+                  :<SearchSelect value={newForm[f.key]} options={f.opts} compact
+                      onChange={v=>setNewForm(p=>({...p,[f.key]:v}))} placeholder="Select..."/>
                 }
               </div>
             ))}
