@@ -63,13 +63,14 @@ const fmtN=(n)=>n==null?"—":Number(n).toLocaleString("en-IN");
 
 // ── PIPELINE STAGES ──────────────────────────────────────────────
 const STAGES=[
-  {id:"soft_lead",label:"Soft Lead",  color:"#F59E0B", bg:"#FFFBEB", desc:"Engaging with free design plan"},
-  {id:"lead",     label:"Lead",       color:"#6366F1", bg:"#EEF2FF", desc:"New enquiry received"},
-  {id:"followup", label:"Follow Up",  color:"#0891B2", bg:"#E0F2FE", desc:"Active conversation"},
-  {id:"proposal", label:"Proposal",   color:"#D97706", bg:"#FFFBEB", desc:"Quotation sent"},
-  {id:"converted",label:"Converted",  color:"#059669", bg:"#ECFDF5", desc:"Deal closed!"},
-  {id:"lost",     label:"Lost",       color:"#6B7280", bg:"#F1F5F9", desc:"Not interested"},
-  {id:"project",  label:"Converted to Project", color:"#1565C0", bg:"#E3F2FD", desc:"Active project"},
+  // bg = column body tint (soft pastel) | bgPill = small status pill bg | color = accent
+  {id:"soft_lead",label:"Soft Lead",  color:"#D97706", bg:"#FEF9EC", bgPill:"#FEF3C7", desc:"Engaging with free design plan"},
+  {id:"lead",     label:"Lead",       color:"#4F46E5", bg:"#F0F1FE", bgPill:"#E0E7FF", desc:"New enquiry received"},
+  {id:"followup", label:"Follow Up",  color:"#0E7490", bg:"#ECFEFF", bgPill:"#CFFAFE", desc:"Active conversation"},
+  {id:"proposal", label:"Proposal",   color:"#B45309", bg:"#FFF7ED", bgPill:"#FED7AA", desc:"Quotation sent"},
+  {id:"converted",label:"Converted",  color:"#047857", bg:"#ECFDF5", bgPill:"#D1FAE5", desc:"Deal closed!"},
+  {id:"lost",     label:"Lost",       color:"#6B7280", bg:"#F8FAFC", bgPill:"#F1F5F9", desc:"Not interested"},
+  {id:"project",  label:"Converted to Project", color:"#1565C0", bg:"#E3F2FD", bgPill:"#BFDBFE", desc:"Active project"},
 ];
 
 const SOURCES=["Direct Call","Reference","Site Visit","Facebook Ad","Instagram","Google","Newspaper","Banner","Just Dial","Builder Fair","Other"];
@@ -279,84 +280,82 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
     <div
       draggable
       onClick={()=>onOpen(lead)}
-      style={{background:T.surface,borderRadius:9,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:T.b1}`,padding:"9px 10px",cursor:"pointer",transition:"all .15s",marginBottom:7,boxShadow:isOverdue?"0 2px 8px rgba(220,38,38,0.08)":isToday?"0 2px 8px rgba(217,119,6,0.08)":"0 1px 2px rgba(15,23,42,0.04)",borderLeft:`3px solid ${stage?.color||T.slt}`}}
-      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 4px 12px rgba(15,23,42,0.08)";}}
-      onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=isOverdue?"0 2px 8px rgba(220,38,38,0.08)":isToday?"0 2px 8px rgba(217,119,6,0.08)":"0 1px 2px rgba(15,23,42,0.04)";}}>
+      style={{background:"#FFFFFF",borderRadius:8,border:`1px solid ${isOverdue?T.redM:T.b1}`,padding:"9px 10px",cursor:"pointer",transition:"all .15s",marginBottom:6,boxShadow:isOverdue?"0 1px 4px rgba(220,38,38,0.06)":"0 1px 2px rgba(15,23,42,0.03)"}}
+      onMouseEnter={e=>{e.currentTarget.style.transform="translateY(-1px)";e.currentTarget.style.boxShadow="0 3px 10px rgba(15,23,42,0.07)";e.currentTarget.style.borderColor=stage?.color+"60"||T.b2;}}
+      onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow=isOverdue?"0 1px 4px rgba(220,38,38,0.06)":"0 1px 2px rgba(15,23,42,0.03)";e.currentTarget.style.borderColor=isOverdue?T.redM:T.b1;}}>
 
-      {/* Top row: name + priority */}
-      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:6,marginBottom:5}}>
+      {/* Top row: name + priority dot */}
+      <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:6,marginBottom:4}}>
         <div style={{flex:1,minWidth:0}}>
           <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:1}}>
-            {lead._type==="solar"&&<span style={{fontSize:8.5,fontWeight:800,color:"#E65100",background:"#FFF3E0",border:"1px solid #FFD54F",borderRadius:3,padding:"1px 4px",flexShrink:0}}>☀</span>}
-            <div style={{fontSize:12.5,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lead.name}</div>
+            {lead._type==="solar"&&<span style={{fontSize:9,flexShrink:0}}>☀</span>}
+            <div style={{fontSize:12.5,fontWeight:700,color:"#0F172A",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{lead.name}</div>
           </div>
-          <div style={{fontSize:10.5,color:T.t4,display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-            <IcLoc size={9} color={T.t4}/><span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{lead.city||"—"}</span>
-            {lead.projType&&<span style={{color:T.b2}}>·</span>}
-            {lead.projType&&<span style={{overflow:"hidden",textOverflow:"ellipsis"}}>{lead.projType}</span>}
+          <div style={{fontSize:10.5,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {[lead.city,lead.projType].filter(Boolean).join(" · ")||"—"}
           </div>
         </div>
-        <Pill label={lead.priority} c={ps.c} bg={ps.bg} brd={ps.brd}/>
+        {/* Priority — only colored signal on the card */}
+        {lead.priority&&<span title={`Priority: ${lead.priority}`} style={{width:8,height:8,borderRadius:"50%",background:ps.c,flexShrink:0,marginTop:5,boxShadow:`0 0 0 2px ${ps.c}22`}}/>}
       </div>
 
-      {/* Budget — prominent */}
+      {/* Budget — dark text, not blue */}
       {lead.budget>0&&(
-        <div style={{fontSize:14,fontWeight:800,color:T.blu,marginBottom:6,letterSpacing:"-.2px"}}>
+        <div style={{fontSize:13,fontWeight:700,color:"#0F172A",marginBottom:5,letterSpacing:"-.1px"}}>
           ₹{fmt(lead.budget)}
         </div>
       )}
 
-      {/* Source + Assigned — neutral, single line */}
-      <div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
-        {lead.source&&<span style={{fontSize:10,background:T.surfaceB,color:T.t3,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.b1}`,whiteSpace:"nowrap"}}>{lead.source}</span>}
-        {lead.assignedTo&&lead.assignedTo!=="—"&&<span style={{fontSize:10,background:T.surfaceB,color:T.t3,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.b1}`,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:110}}>👤 {lead.assignedTo}</span>}
-        {lead.tags?.slice(0,1).map(tg=><span key={tg} style={{fontSize:10,background:T.surfaceB,color:T.t3,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.b1}`,whiteSpace:"nowrap"}}>#{tg}</span>)}
-      </div>
+      {/* Metadata — single neutral line, comma-separated */}
+      {(lead.source||lead.assignedTo&&lead.assignedTo!=="—")&&(
+        <div style={{fontSize:10,color:T.t3,marginBottom:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+          {[lead.source,lead.assignedTo!=="—"&&lead.assignedTo].filter(Boolean).join(" · ")}
+        </div>
+      )}
 
-      {/* Contact date */}
+      {/* Contact date — neutral unless overdue/today */}
       {lead.contactDate&&(
-        <div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 8px",background:isOverdue?T.redL:isToday?T.ambL:isDueSoon?"#FEF9EC":T.surfaceB,border:`1px solid ${isOverdue?T.redM:isToday?T.ambM:isDueSoon?T.ambM:T.b1}`,borderRadius:5,marginBottom:6}}>
-          <IcCal size={10} color={isOverdue?T.red:isToday?T.amb:T.t4}/>
-          <span style={{fontSize:10.5,fontWeight:isOverdue||isToday?700:500,color:isOverdue?T.red:isToday?T.amb:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1,minWidth:0}}>
-            {isOverdue?`Overdue ${Math.abs(diff)}d`:isToday?"Contact today!":isDueSoon?`Due in ${diff}d`:lead.contactDate}
+        <div style={{display:"flex",alignItems:"center",gap:5,padding:"3px 7px",background:isOverdue?"#FEF2F2":isToday?"#FFFBEB":"#F8FAFC",borderRadius:4,marginBottom:5,border:`1px solid ${isOverdue?"#FECACA":isToday?"#FDE68A":T.b1}`}}>
+          <IcCal size={9} color={isOverdue?"#DC2626":isToday?"#D97706":T.t4}/>
+          <span style={{fontSize:10,fontWeight:isOverdue||isToday?700:500,color:isOverdue?"#DC2626":isToday?"#D97706":T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1,minWidth:0}}>
+            {isOverdue?`Overdue ${Math.abs(diff)}d`:isToday?"Today":isDueSoon?`In ${diff}d`:lead.contactDate}
           </span>
           {(isOverdue||isToday)&&(
             <button onClick={e=>{e.stopPropagation();onWhatsApp(lead);}}
-              style={{display:"flex",alignItems:"center",justifyContent:"center",width:18,height:18,borderRadius:4,background:T.wa,color:"white",border:"none",cursor:"pointer",flexShrink:0}}>
-              <IcWA size={10} color="white"/>
+              style={{display:"flex",alignItems:"center",justifyContent:"center",width:16,height:16,borderRadius:3,background:T.wa,color:"white",border:"none",cursor:"pointer",flexShrink:0}}>
+              <IcWA size={9} color="white"/>
             </button>
           )}
         </div>
       )}
 
-      {/* Design button — subtle, blends with neutral palette */}
+      {/* Design Plan — text-link style, no color noise */}
       {onDesign && (
-        <div onClick={e=>e.stopPropagation()} style={{marginBottom:6}}>
+        <div onClick={e=>e.stopPropagation()} style={{marginBottom:4}}>
           <button onClick={()=>onDesign(lead)}
-            title="Design requests for this lead"
-            style={{width:"100%",padding:"4px 8px",borderRadius:5,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5,transition:"all .12s"}}
-            onMouseEnter={e=>{e.currentTarget.style.background=T.surfaceB;e.currentTarget.style.borderColor=T.b2;}}
-            onMouseLeave={e=>{e.currentTarget.style.background=T.surface;e.currentTarget.style.borderColor=T.b1;}}>
-            <span style={{fontSize:11}}>🎨</span><span>Design Plan</span>
+            style={{width:"100%",padding:"3px 6px",borderRadius:4,border:"none",background:"transparent",color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:4,transition:"all .12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background="#F8FAFC";e.currentTarget.style.color="#0F172A";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.t3;}}>
+            🎨 Design Plan
             {lead.design_count>0&&<span style={{background:T.t2,color:"#fff",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:8}}>{lead.design_count}</span>}
           </button>
         </div>
       )}
 
-      {/* Footer: followup count + quick actions */}
+      {/* Footer: stage badge + actions */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:5,borderTop:`1px solid ${T.b1}`,gap:4}}>
-        <span style={{fontSize:10,color:T.t4,whiteSpace:"nowrap"}}>💬 {lead.followupHistory?.length||0}</span>
+        <span style={{fontSize:9.5,color:T.t4,whiteSpace:"nowrap"}}>💬 {lead.followupHistory?.length||0}</span>
         <div style={{display:"flex",gap:3}} onClick={e=>e.stopPropagation()}>
           <button onClick={()=>onWhatsApp(lead)} title="WhatsApp"
-            style={{width:22,height:22,borderRadius:4,background:"#DCFCE7",border:"1px solid #A7F3D0",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <IcWA size={10} color={T.wa}/>
+            style={{width:20,height:20,borderRadius:4,background:"transparent",border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.t3}}>
+            <IcWA size={10} color="currentColor"/>
           </button>
           <button onClick={()=>onMove(lead,-1)} title="Previous stage"
-            style={{width:22,height:22,borderRadius:4,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:T.t3}}>
+            style={{width:20,height:20,borderRadius:4,background:"transparent",border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:T.t3}}>
             ←
           </button>
           <button onClick={()=>onMove(lead,1)} title="Next stage"
-            style={{width:22,height:22,borderRadius:4,background:T.surfaceB,border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:T.t3}}>
+            style={{width:20,height:20,borderRadius:4,background:"transparent",border:`1px solid ${T.b1}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:T.t3}}>
             →
           </button>
         </div>
@@ -419,10 +418,10 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
               <div style={{position:"absolute",left:0,right:0,bottom:-1,height:2,background:stage.color}}/>
             </div>
 
-            {/* Cards container — uniform neutral bg */}
-            <div style={{flex:1,overflowY:"auto",background:"#F8F9FB",borderRadius:"0 0 8px 8px",border:`1px solid ${T.b1}`,borderTop:"none",padding:"8px 7px",minHeight:200}}>
+            {/* Cards container — light tinted bg per stage */}
+            <div style={{flex:1,overflowY:"auto",background:stage.bg,borderRadius:"0 0 8px 8px",border:`1px solid ${T.b1}`,borderTop:"none",padding:"8px 7px",minHeight:200}}>
               {stageLeads.length===0&&(
-                <div style={{textAlign:"center",padding:"18px 8px",color:`${stage.color}88`,fontSize:11,opacity:0.7}}>
+                <div style={{textAlign:"center",padding:"20px 8px",color:T.t4,fontSize:11,fontStyle:"italic",opacity:0.6}}>
                   Empty
                 </div>
               )}
@@ -438,11 +437,11 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
                 />
               ))}
 
-              {/* Add lead shortcut */}
+              {/* Add lead shortcut — neutral, only column color hint on hover */}
               {stage.id!=="lost"&&stage.id!=="project"&&(
-                <button onClick={()=>onAddLead(stage.id)} style={{width:"100%",padding:"6px",borderRadius:6,border:`1.5px dashed ${stage.color}55`,background:"transparent",color:`${stage.color}CC`,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginTop:4}}
-                  onMouseEnter={e=>{e.currentTarget.style.background=`${stage.color}11`;e.currentTarget.style.color=stage.color;}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=`${stage.color}CC`;}}>
+                <button onClick={()=>onAddLead(stage.id)} style={{width:"100%",padding:"6px",borderRadius:6,border:`1px dashed ${T.b2}`,background:"transparent",color:T.t4,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,marginTop:4,transition:"all .12s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background="#FFFFFF";e.currentTarget.style.color=stage.color;e.currentTarget.style.borderColor=stage.color+"55";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=T.t4;e.currentTarget.style.borderColor=T.b2;}}>
                   <IcAdd size={11} color="currentColor"/> Add {stage.label}
                 </button>
               )}
