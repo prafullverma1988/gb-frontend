@@ -19,6 +19,7 @@ const FinanceModule      = lazyWithPreload("finance",      () => import("./modul
 const ProcurementModule  = lazyWithPreload("procurement",  () => import("./modules/ProcurementModule"));
 const DesignModule       = lazyWithPreload("design",       () => import("./modules/DesignModule"));
 const ClientPreview3D    = lazyWithPreload("preview3d",    () => import("./pages/ClientPreview3D"));
+const PublicDrawingPage  = lazyWithPreload("publicdrawing",() => import("./components/PublicDrawingPage"));
 const PayrollModule      = lazyWithPreload("payroll",      () => import("./modules/PayrollModule"));
 const SettingsModule     = lazyWithPreload("settings",     () => import("./modules/SettingsModule"));
 const CRMModule          = lazyWithPreload("crm",          () => import("./modules/CRMModule"));
@@ -1009,6 +1010,10 @@ export default function App(){
   // Public route — 3D client preview (no login needed)
   if(window.location.pathname.startsWith("/3d-preview/")){
     return <Suspense fallback={<ModuleLoader/>}><ClientPreview3D/></Suspense>;
+  }
+  // Public route — drawing share link (no login needed)
+  if(window.location.pathname.startsWith("/d/")){
+    return <Suspense fallback={<ModuleLoader/>}><PublicDrawingPage/></Suspense>;
   }
 
   const [user,setUser]=useState(()=>getUser());

@@ -2,6 +2,8 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { Credit } from "../components/Credit";
+import LeadDesignDrawer from "../components/LeadDesignDrawer";
+import ShareDrawingDrawer from "../components/ShareDrawingDrawer";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -60,6 +62,7 @@ const fmtN=(n)=>n==null?"—":Number(n).toLocaleString("en-IN");
 
 // ── PIPELINE STAGES ──────────────────────────────────────────────
 const STAGES=[
+  {id:"soft_lead",label:"Soft Lead",  color:"#F59E0B", bg:"#FFFBEB", desc:"Engaging with free design plan"},
   {id:"lead",     label:"Lead",       color:"#6366F1", bg:"#EEF2FF", desc:"New enquiry received"},
   {id:"followup", label:"Follow Up",  color:"#0891B2", bg:"#E0F2FE", desc:"Active conversation"},
   {id:"proposal", label:"Proposal",   color:"#D97706", bg:"#FFFBEB", desc:"Quotation sent"},
@@ -263,7 +266,7 @@ function WhatsAppModal({lead,onClose}){
 }
 
 // ── LEAD CARD (Kanban) ───────────────────────────────────────────
-function LeadCard({lead,onOpen,onMove,onWhatsApp,stages}){
+function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
   const diff=daysDiff(lead.contactDate);
   const isOverdue=diff!==null&&diff<0;
   const isToday=diff===0;
@@ -322,6 +325,21 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,stages}){
         </div>
       )}
 
+      {/* Design button — appears on every stage */}
+      {onDesign && (
+        <div onClick={e=>e.stopPropagation()} style={{marginBottom:7}}>
+          <button onClick={()=>onDesign(lead)}
+            title="Design requests for this lead"
+            style={{width:"100%",padding:"6px 10px",borderRadius:6,border:`1px dashed ${T.purM||"#DDD6FE"}`,background:T.purL||"#F5F3FF",color:T.pur||"#7C3AED",fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5,transition:"all .12s"}}
+            onMouseEnter={e=>e.currentTarget.style.background="#EDE9FE"}
+            onMouseLeave={e=>e.currentTarget.style.background=T.purL||"#F5F3FF"}>
+            <span>🎨</span>
+            <span>Design Plan</span>
+            {lead.design_count>0&&<span style={{background:T.pur||"#7C3AED",color:"#fff",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:8}}>{lead.design_count}</span>}
+          </button>
+        </div>
+      )}
+
       {/* Footer: followup count + quick move */}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:7,borderTop:`1px solid ${T.b1}`}}>
         <span style={{fontSize:10.5,color:T.t4}}>{lead.followupHistory?.length||0} follow-up{lead.followupHistory?.length!==1?"s":""}</span>
@@ -345,7 +363,7 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,stages}){
 }
 
 // ── KANBAN BOARD ─────────────────────────────────────────────────
-function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onAddLead}){
+function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,onAddLead}){
   const stagesShow=STAGES.filter(s=>(s.id!=="lost"&&s.id!=="project")||leads.some(l=>l.stage===s.id));
 
   const filterLeads=(stageId)=>leads.filter(l=>{
@@ -403,6 +421,7 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onAddLead})
                   onOpen={onOpenLead}
                   onMove={(l,dir)=>onMoveLead(l,dir)}
                   onWhatsApp={onWhatsApp}
+                  onDesign={onDesign}
                   stages={STAGES}
                 />
               ))}
@@ -2003,6 +2022,8 @@ function CRMModule(){
   const [selLead,setSelLead]=useState(null);
   const [selSolarLead,setSelSolarLead]=useState(null);
   const [waLead,setWaLead]=useState(null);
+  const [designLead,setDesignLead]=useState(null);
+  const [shareTarget,setShareTarget]=useState(null);
   const [showTypeSelector,setShowTypeSelector]=useState(false);
   const [showAdd,setShowAdd]=useState(false);
   const [showAddSolar,setShowAddSolar]=useState(false);
@@ -2252,6 +2273,7 @@ function CRMModule(){
           onOpenLead={(lead)=>lead._type==="solar"?setSelSolarLead(lead):setSelLead(lead)}
           onMoveLead={moveLead}
           onWhatsApp={(lead)=>setWaLead(lead)}
+          onDesign={(lead)=>setDesignLead(lead)}
           onAddLead={(stageId)=>openNewLead(stageId)}
         />
       </div>
@@ -2301,6 +2323,17 @@ function CRMModule(){
       {showAdd&&<AddLeadModal onClose={()=>setShowAdd(false)} onSave={addLead} assignedToList={ASSIGNED_TO} defaultStage={addStage}/>}
       {showAddSolar&&<AddSolarLeadModal onClose={()=>setShowAddSolar(false)} onSave={addSolarLead} assignedToList={ASSIGNED_TO} defaultStage={addStage}/>}
       {waLead&&<WhatsAppModal lead={waLead} onClose={()=>setWaLead(null)}/>}
+      {/* Lead Design Drawer */}
+      <LeadDesignDrawer
+        lead={designLead}
+        onClose={()=>setDesignLead(null)}
+        onShareClick={(target)=>setShareTarget({...target,lead_phone:designLead?.phone})}
+      />
+      {/* Share Drawing Drawer */}
+      <ShareDrawingDrawer
+        target={shareTarget}
+        onClose={()=>setShareTarget(null)}
+      />
 
       {/* Proposal stage prompt */}
       {quotPromptLead&&(<>
