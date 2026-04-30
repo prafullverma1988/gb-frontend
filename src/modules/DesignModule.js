@@ -355,15 +355,26 @@ export default function DesignModule() {
     return true;
   });
 
-  const filteredRequests = requests.filter(r=>{
+  // Source split: site = project-linked (no lead), house = lead-linked (sales/CRM)
+  const isSiteRequest  = (r) => !r.lead_id && r.project_id;
+  const isHouseRequest = (r) => !!r.lead_id;
+
+  const baseFilteredRequests = requests.filter(r=>{
     if (hideUploadedR && (r.status==="Uploaded"||r.status==="Rejected")) return false;
     if (rProject!=="All" && (r.project_name||"")!==rProject) return false;
     if (rStatus!=="All" && r.status!==rStatus) return false;
     if (rCat!=="All" && r.category!==rCat) return false;
     if (rPrio!=="All" && r.priority!==rPrio) return false;
-    if (rSearchD && !r.title.toLowerCase().includes(rSearchD.toLowerCase())) return false;
+    if (rSearchD) {
+      const q = rSearchD.toLowerCase();
+      const hay = `${r.title||""} ${r.lead_name||""} ${r.project_name||""}`.toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
     return true;
   });
+  const filteredSiteRequests  = baseFilteredRequests.filter(isSiteRequest);
+  const filteredHouseRequests = baseFilteredRequests.filter(isHouseRequest);
+  const filteredRequests = baseFilteredRequests; // legacy (kept for any internal refs)
 
   const revQueue = drawings.filter(d=>d.status==="Revision").filter(d=>{
     if (revProject!=="All" && (d.project_name||"")!==revProject) return false;
@@ -465,21 +476,34 @@ export default function DesignModule() {
     </div>
   );
 
-  // ── TAB: DESIGN REQUESTS ─────────────────────────────────────────
-  const RequestsTab = () => {
+  // ── TAB: DESIGN REQUESTS (mode: "site" | "house") ─────────────────
+  const RequestsTab = ({ mode = "site" }) => {
     const [assignId,  setAssignId]  = useState(null);
     const [assignVal, setAssignVal] = useState("");
+    const isHouse = mode === "house";
+    const list   = isHouse ? filteredHouseRequests : filteredSiteRequests;
+    const total  = requests.filter(isHouse ? isHouseRequest : isSiteRequest);
+    const pending = total.filter(r => r.status === "Pending").length;
+    const headerNote = isHouse
+      ? "House plans requested via CRM / Sales (lead-linked)"
+      : "Site drawings requested by site team (project-linked)";
+    const emptyText = isHouse
+      ? "Koi house plan request nahi. CRM se lead khol kar 🎨 Design Plan se request bhejo."
+      : "Koi site drawing request nahi. Project ke andar se site team request bhej sakti hai.";
     return(
       <div>
+        <div style={{fontSize:12,color:T.t3,marginBottom:10,padding:"7px 11px",background:isHouse?T.purL:T.bluL,border:`1px solid ${isHouse?T.purM:T.bluM}`,borderRadius:7,display:"inline-block"}}>
+          {isHouse ? "🏠 " : "🏗️ "}{headerNote}
+        </div>
         {/* Filters */}
         <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
           <div style={{position:"relative",flex:1,minWidth:160}}>
-            <input value={rSearch} onChange={e=>setRSearch(e.target.value)} placeholder="Search requests..."
+            <input value={rSearch} onChange={e=>setRSearch(e.target.value)} placeholder={isHouse?"Search lead / title...":"Search requests..."}
               style={{width:"100%",padding:"7px 10px 7px 30px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
           </div>
           {[
-            {val:rProject,set:setRProject,opts:projectNames,label:"Project"},
+            ...(isHouse ? [] : [{val:rProject,set:setRProject,opts:projectNames,label:"Project"}]),
             {val:rCat,    set:setRCat,    opts:["All",...CATS_LIST],label:"Category"},
             {val:rStatus, set:setRStatus, opts:["All","Pending","In Progress","Uploaded","Rejected"],label:"Status"},
             {val:rPrio,   set:setRPrio,   opts:["All","Urgent","High","Normal","Low"],label:"Priority"},
@@ -493,11 +517,11 @@ export default function DesignModule() {
             {hideUploadedR?"Show Completed":"Hide Completed"}
           </button>
         </div>
-        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{filteredRequests.length} requests · {requests.filter(r=>r.status==="Pending").length} pending</div>
+        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{list.length} {isHouse?"house plans":"site drawings"} · {pending} pending</div>
 
-        {filteredRequests.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>📋</div><div style={{fontSize:13,color:T.t2}}>No requests</div></div>}
+        {list.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>{isHouse?"🏠":"🏗️"}</div><div style={{fontSize:13,color:T.t2}}>{emptyText}</div></div>}
 
-        {filteredRequests.map(req=>{
+        {list.map(req=>{
           const pm=PRIO_META[req.priority]||PRIO_META["Normal"];
           const sm=STATUS_META[req.status]||STATUS_META["Pending"];
           return(
@@ -506,7 +530,11 @@ export default function DesignModule() {
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{req.title}</div>
                   <div style={{fontSize:11,color:T.t4,marginTop:2,display:"flex",gap:10,flexWrap:"wrap"}}>
-                    <span>{req.project_name||"—"}</span>
+                    {isHouse && req.lead_name ? (
+                      <span style={{color:T.pur,fontWeight:600}}>👤 {req.lead_name}</span>
+                    ) : (
+                      <span>{req.project_name||"—"}</span>
+                    )}
                     <span>{req.category}</span>
                     {req.due_date&&<span style={{color:new Date(req.due_date)<today?T.red:T.t4}}>Due: {fmtDate(req.due_date)}</span>}
                   </div>
@@ -902,13 +930,17 @@ export default function DesignModule() {
 
   const pendingApprovalCt = drawings.filter(d=>d.status==="Pending").length;
 
+  const sitePendingCt  = requests.filter(r=>isSiteRequest(r)  && r.status==="Pending").length;
+  const housePendingCt = requests.filter(r=>isHouseRequest(r) && r.status==="Pending").length;
+
   const TABS = [
-    {id:"drawings",  label:"All Drawings",    Icon:IcDraw,   count:drawings.length,                              badge:null},
-    {id:"requests",  label:"Design Requests", Icon:IcReq,    count:requests.filter(r=>r.status==="Pending").length, badge:"amber"},
-    {id:"revision",  label:"Revision Queue",  Icon:IcRevise, count:drawings.filter(d=>d.status==="Revision").length, badge:"amber"},
-    {id:"approval",  label:"Approval",        Icon:IcCheck,  count:pendingApprovalCt,                            badge:pendingApprovalCt>0?"amber":null},
-    {id:"history",   label:"History",         Icon:IcHist,   count:null,                                         badge:null},
-    {id:"duedate",   label:"Due Dates",       Icon:IcCal,    count:overdueCt,                                    badge:overdueCt>0?"red":null},
+    {id:"drawings",     label:"All Drawings",   Icon:IcDraw,   count:drawings.length,                                badge:null},
+    {id:"site_req",     label:"Site Drawings",  Icon:IcReq,    count:sitePendingCt,                                  badge:sitePendingCt>0?"amber":null},
+    {id:"house_req",    label:"House Plans",    Icon:IcReq,    count:housePendingCt,                                 badge:housePendingCt>0?"amber":null},
+    {id:"revision",     label:"Revision Queue", Icon:IcRevise, count:drawings.filter(d=>d.status==="Revision").length, badge:"amber"},
+    {id:"approval",     label:"Approval",       Icon:IcCheck,  count:pendingApprovalCt,                              badge:pendingApprovalCt>0?"amber":null},
+    {id:"history",      label:"History",        Icon:IcHist,   count:null,                                           badge:null},
+    {id:"duedate",      label:"Due Dates",      Icon:IcCal,    count:overdueCt,                                      badge:overdueCt>0?"red":null},
   ];
 
   return (
@@ -952,12 +984,14 @@ export default function DesignModule() {
 
       {/* Tab content */}
       <div>
-        {activeTab==="drawings" && <DrawingsTab/>}
-        {activeTab==="requests" && <RequestsTab/>}
-        {activeTab==="revision" && <RevisionTab/>}
-        {activeTab==="approval" && <ApprovalTab/>}
-        {activeTab==="history"  && <HistoryTab/>}
-        {activeTab==="duedate"  && <DueDatesTab/>}
+        {activeTab==="drawings"  && <DrawingsTab/>}
+        {activeTab==="site_req"  && <RequestsTab mode="site"/>}
+        {activeTab==="house_req" && <RequestsTab mode="house"/>}
+        {activeTab==="requests"  && <RequestsTab mode="site"/>}{/* legacy fallback */}
+        {activeTab==="revision"  && <RevisionTab/>}
+        {activeTab==="approval"  && <ApprovalTab/>}
+        {activeTab==="history"   && <HistoryTab/>}
+        {activeTab==="duedate"   && <DueDatesTab/>}
       </div>
 
       {/* Modals */}
