@@ -1,28 +1,36 @@
-// ── SEARCHSELECT — searchable, keyboard-friendly combobox ────────
-// Drop-in replacement for <select>:
-// • Tab into → auto-opens dropdown + focuses search input
-// • Type to filter, Arrow keys navigate, Enter selects
-// • After select / Tab → closes, Tab continues to next form field
-//   (button is skipped via manual focus-jump — no Tab loops)
-// • Visible blue focus ring shows keyboard position clearly
+// ── SEARCHSELECT — portal-based searchable combobox ─────────────
+// Single input that doubles as the search field when open.
+// Dropdown renders via React portal at document.body, so it never
+// gets clipped by parent modals' overflow:hidden and z-index walls.
+//
+// Behavior:
+// • Click / focus → opens dropdown, input becomes search box
+// • Type to filter; Arrow keys navigate; Enter selects
+// • Click anywhere outside (or Tab / Esc) → closes
+// • onMouseDown selects (prevents blur from closing first)
+// • Auto-repositions on scroll / resize while open
 //
 // Usage:
 //   <SearchSelect
 //     value={selectedKey}
 //     options={["A","B","C"]}                       // strings → key=label
 //     options={[{key:1,label:"One"},...]}            // or objects
+//     options={[{value:1,label:"One"},...]}          // value/label also OK
+//     options={[{id:1,name:"One"},...]}              // id/name also OK
 //     onChange={(key) => setSelected(key)}
 //     placeholder="Select a project..."
+//     accent="#2563EB"      // optional border / highlight color
+//     compact               // smaller height (28px) for tables
+//     onAfterSelect={fn}    // optional callback after select (e.g. focus next field)
+//     inputRef={ref}        // optional — caller controls focus
+//     disabled
+//     theme={{...}}         // optional color overrides
 //   />
-//
-// Options can be:
-//   - array of strings (key = label)
-//   - array of {key, label} objects
-//   - array of {value/id/name, label/name} (auto-mapped)
 
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 
-// Design tokens — keep in sync with module-level T objects
+// Default theme tokens — keep in sync with module-level T objects
 const C = {
   surface: "#FFFFFF",
   surfaceB: "#F8F9FB",
@@ -42,347 +50,324 @@ export default function SearchSelect({
   placeholder = "Select...",
   style = {},
   disabled = false,
-  // Optional: pass theme override if your module uses different colors
   theme,
+  accent,
+  compact = false,
+  onAfterSelect,
+  inputRef,
 }) {
   const T = theme || C;
+  const ac = accent || T.blu;
+  const ht = compact ? 28 : 34;
 
   const [open, setOpen] = useState(false);
-  const [focused, setFocused] = useState(false);
-  const [query, setQuery] = useState("");
-  const [hi, setHi] = useState(0);
-  const wrapRef = useRef(null);
-  const inputRef = useRef(null);
-  const btnRef = useRef(null);
-  const skipReopenRef = useRef(false); // prevents auto-reopen after select/Tab
+  const [q, setQ] = useState("");
+  const [hi, setHi] = useState(-1);
+  const [pos, setPos] = useState({ top: 0, left: 0, width: 180 });
 
-  // Close on outside click
+  const wrapRef = useRef(null);
+  const ownInputRef = useRef(null);
+  const listRef = useRef(null);
+
+  // Normalize options: strings | {key,label} | {value,label} | {id,name}
+  const list = (Array.isArray(options) ? options : []).map((o) => {
+    if (typeof o === "string" || typeof o === "number") {
+      return { key: String(o), label: String(o) };
+    }
+    if (o.key !== undefined) return { key: String(o.key), label: String(o.label ?? o.key) };
+    return {
+      key: String(o.value ?? o.id ?? o.name ?? ""),
+      label: String(o.label ?? o.name ?? o.value ?? o.id ?? ""),
+    };
+  });
+
+  const filtered = q.trim()
+    ? list.filter((o) => o.label.toLowerCase().includes(q.toLowerCase()))
+    : list;
+  const selectedItem = list.find((o) => o.key === String(value ?? ""));
+
+  // Close on outside click (covers BOTH the wrapper and the portal'd dropdown)
   useEffect(() => {
     if (!open) return;
-    const h = (e) => {
-      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false);
+    const onDown = (e) => {
+      const inWrap = wrapRef.current && wrapRef.current.contains(e.target);
+      const inList = listRef.current && listRef.current.contains(e.target);
+      if (!inWrap && !inList) {
+        setOpen(false);
+        setQ("");
+        setHi(-1);
+      }
     };
-    document.addEventListener("mousedown", h);
-    return () => document.removeEventListener("mousedown", h);
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
 
-  // Auto-focus search input on open; reset query on close
+  // Reposition portal dropdown on scroll / resize
   useEffect(() => {
-    if (open) setTimeout(() => inputRef.current?.focus(), 10);
-    if (!open) {
-      setQuery("");
-      setHi(0);
-    }
+    if (!open) return;
+    const recalc = () => {
+      const el = ownInputRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 180) });
+    };
+    recalc();
+    window.addEventListener("scroll", recalc, true);
+    window.addEventListener("resize", recalc);
+    return () => {
+      window.removeEventListener("scroll", recalc, true);
+      window.removeEventListener("resize", recalc);
+    };
   }, [open]);
 
-  // Normalize options into [{key, label}]
-  const list = options.map((o) =>
-    typeof o === "string"
-      ? { key: o, label: o }
-      : o.key !== undefined
-      ? o
-      : {
-          key: o.value || o.id || o.name || String(o),
-          label: o.label || o.name || String(o),
-        }
-  );
-  const filtered = query.trim()
-    ? list.filter((o) =>
-        String(o.label).toLowerCase().includes(query.toLowerCase())
-      )
-    : list;
-  const selectedItem = list.find((o) => String(o.key) === String(value));
+  // Scroll highlighted option into view
+  useEffect(() => {
+    if (hi >= 0 && listRef.current) {
+      const items = listRef.current.querySelectorAll("[data-opt]");
+      if (items[hi]) items[hi].scrollIntoView({ block: "nearest" });
+    }
+  }, [hi]);
 
-  // After selection: close + return focus to button (so Tab continues forward)
-  const selectAndClose = (key) => {
-    skipReopenRef.current = true;
-    onChange(key);
+  const openDrop = () => {
+    if (disabled) return;
+    const el = ownInputRef.current;
+    if (el) {
+      const r = el.getBoundingClientRect();
+      setPos({ top: r.bottom + 4, left: r.left, width: Math.max(r.width, 180) });
+    }
+    setQ("");
+    setHi(-1);
+    setOpen(true);
+  };
+
+  const handleSelect = (key) => {
+    onChange && onChange(key);
+    setQ("");
     setOpen(false);
-    setTimeout(() => {
-      btnRef.current?.focus();
-      skipReopenRef.current = false;
-    }, 10);
+    setHi(-1);
+    if (onAfterSelect) setTimeout(() => onAfterSelect(), 30);
   };
 
-  // Manually move focus to next/prev form field (skipping our own button)
-  const moveTabFocus = (shift) => {
-    const focusables = Array.from(
-      document.querySelectorAll(
-        'input:not([disabled]):not([type="hidden"]), button:not([disabled]), select:not([disabled]), textarea:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
-      )
-    ).filter(
-      (el) =>
-        el.offsetParent !== null && el.getAttribute("tabindex") !== "-1"
-    );
-    const btnIdx = focusables.indexOf(btnRef.current);
-    if (btnIdx < 0) return;
-    const target = focusables[shift ? btnIdx - 1 : btnIdx + 1];
-    if (target) target.focus();
-    else btnRef.current?.focus();
+  const assignRef = (el) => {
+    ownInputRef.current = el;
+    if (inputRef) {
+      if (typeof inputRef === "function") inputRef(el);
+      else inputRef.current = el;
+    }
   };
 
-  const onSearchKey = (e) => {
+  const onKeyDown = (e) => {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "Enter") {
+        e.preventDefault();
+        openDrop();
+      }
+      return;
+    }
+    if (e.key === "Escape" || e.key === "Tab") {
+      setOpen(false);
+      setQ("");
+      setHi(-1);
+      if (e.key === "Escape") e.preventDefault();
+      return;
+    }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHi((h) => Math.min(h + 1, filtered.length - 1));
+      setHi((p) => (p < filtered.length - 1 ? p + 1 : 0));
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setHi((h) => Math.max(h - 1, 0));
+      setHi((p) => (p > 0 ? p - 1 : filtered.length - 1));
     } else if (e.key === "Enter") {
-      if (filtered[hi]) {
-        e.preventDefault();
-        selectAndClose(filtered[hi].key);
-      }
-    } else if (e.key === "Escape") {
       e.preventDefault();
-      setOpen(false);
-      setTimeout(() => btnRef.current?.focus(), 0);
-    } else if (e.key === "Tab") {
-      // Manual focus jump — skip our own button to avoid loops
-      e.preventDefault();
-      skipReopenRef.current = true;
-      setOpen(false);
-      setTimeout(() => {
-        moveTabFocus(e.shiftKey);
-        setTimeout(() => {
-          skipReopenRef.current = false;
-        }, 50);
-      }, 0);
+      const idx = hi >= 0 ? hi : 0;
+      if (filtered[idx]) handleSelect(filtered[idx].key);
     }
   };
-
-  const onBtnKey = (e) => {
-    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      setOpen(true);
-    } else if (e.key === "Escape" && open) {
-      e.preventDefault();
-      setOpen(false);
-    }
-  };
-
-  // Auto-open dropdown when button receives focus (e.g. via Tab)
-  const onBtnFocus = () => {
-    setFocused(true);
-    if (!disabled && !skipReopenRef.current) setOpen(true);
-  };
-  const onBtnBlur = (e) => {
-    if (!wrapRef.current?.contains(e.relatedTarget)) setFocused(false);
-  };
-
-  const focusRing = (focused || open) && !disabled;
 
   return (
     <div ref={wrapRef} style={{ position: "relative", ...style }}>
-      <button
-        ref={btnRef}
-        type="button"
+      <input
+        ref={assignRef}
         disabled={disabled}
-        onClick={() => !disabled && setOpen((o) => !o)}
-        onKeyDown={onBtnKey}
-        onFocus={onBtnFocus}
-        onBlur={onBtnBlur}
+        value={open ? q : selectedItem?.label || ""}
+        onChange={(e) => {
+          setQ(e.target.value);
+          setHi(-1);
+          if (!open) openDrop();
+        }}
+        onFocus={() => {
+          if (!open) openDrop();
+        }}
+        onMouseDown={(e) => {
+          // Click while open → close (toggle behavior)
+          if (open) {
+            e.preventDefault();
+            setOpen(false);
+            setQ("");
+            setHi(-1);
+          }
+        }}
+        onBlur={() => {
+          // Delay close so option onMouseDown can fire first
+          setTimeout(() => {
+            if (
+              document.activeElement &&
+              listRef.current &&
+              listRef.current.contains(document.activeElement)
+            )
+              return;
+            setOpen(false);
+            setQ("");
+            setHi(-1);
+          }, 150);
+        }}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        autoComplete="off"
         style={{
+          height: ht,
           width: "100%",
-          padding: "8px 10px",
+          padding: "0 28px 0 11px",
           borderRadius: 7,
-          border: `1.5px solid ${focusRing ? T.blu : T.b1}`,
+          border: `1.5px solid ${open ? ac : T.b1}`,
+          fontSize: compact ? 11 : 13,
+          color: T.t1,
           background: disabled ? T.surfaceB : T.surface,
-          fontSize: 13,
-          color: selectedItem ? T.t1 : T.t4,
-          fontFamily: "inherit",
-          textAlign: "left",
-          cursor: disabled ? "not-allowed" : "pointer",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          gap: 8,
           outline: "none",
-          transition: "border-color .12s, box-shadow .12s",
+          fontFamily: "inherit",
           boxSizing: "border-box",
-          boxShadow: focusRing ? `0 0 0 3px ${T.blu}26` : "none",
+          cursor: disabled ? "not-allowed" : "pointer",
           opacity: disabled ? 0.6 : 1,
+          boxShadow: open ? `0 0 0 3px ${ac}26` : "none",
+          transition: "border-color .12s, box-shadow .12s",
+        }}
+      />
+      <span
+        style={{
+          position: "absolute",
+          right: 9,
+          top: "50%",
+          transform: `translateY(-50%) rotate(${open ? 180 : 0}deg)`,
+          pointerEvents: "none",
+          display: "flex",
+          color: open ? ac : T.t4,
+          transition: "transform .18s, color .12s",
         }}
       >
-        <span
-          style={{
-            flex: 1,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-          }}
-        >
-          {selectedItem ? selectedItem.label : placeholder}
-        </span>
         <svg
           width={12}
           height={12}
           viewBox="0 0 24 24"
           fill="none"
-          stroke={focusRing ? T.blu : T.t4}
-          strokeWidth={2}
+          stroke="currentColor"
+          strokeWidth={2.2}
           strokeLinecap="round"
-          style={{
-            transform: open ? "rotate(180deg)" : "none",
-            transition: "transform .15s, stroke .12s",
-          }}
+          strokeLinejoin="round"
         >
           <polyline points="6 9 12 15 18 9" />
         </svg>
-      </button>
-      {open && (
-        <div
-          style={{
-            position: "absolute",
-            top: "calc(100% + 4px)",
-            left: 0,
-            right: 0,
-            background: T.surface,
-            border: `1px solid ${T.b1}`,
-            borderRadius: 8,
-            boxShadow: "0 8px 24px rgba(0,0,0,0.12)",
-            zIndex: 1100,
-            maxHeight: 280,
-            display: "flex",
-            flexDirection: "column",
-            overflow: "hidden",
-          }}
-        >
+      </span>
+
+      {open &&
+        createPortal(
           <div
+            ref={listRef}
             style={{
-              padding: "7px 9px",
-              borderBottom: `1px solid ${T.b1}`,
-              position: "relative",
-            }}
-          >
-            <svg
-              width={13}
-              height={13}
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={T.t4}
-              strokeWidth={2}
-              strokeLinecap="round"
-              style={{
-                position: "absolute",
-                left: 18,
-                top: "50%",
-                transform: "translateY(-50%)",
-                pointerEvents: "none",
-              }}
-            >
-              <path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
-            </svg>
-            <input
-              ref={inputRef}
-              value={query}
-              onChange={(e) => {
-                setQuery(e.target.value);
-                setHi(0);
-              }}
-              onKeyDown={onSearchKey}
-              placeholder="Type to search..."
-              style={{
-                width: "100%",
-                padding: "5px 8px 5px 24px",
-                border: `1px solid ${T.b1}`,
-                borderRadius: 5,
-                fontSize: 12,
-                outline: "none",
-                fontFamily: "inherit",
-                color: T.t1,
-                boxSizing: "border-box",
-              }}
-              onFocus={(e) => (e.target.style.borderColor = T.b2)}
-              onBlur={(e) => (e.target.style.borderColor = T.b1)}
-            />
-          </div>
-          <div
-            style={{
-              flex: 1,
+              position: "fixed",
+              top: pos.top,
+              left: pos.left,
+              minWidth: pos.width,
+              background: T.surface,
+              borderRadius: 8,
+              border: `1.5px solid ${ac}`,
+              boxShadow: "0 10px 32px rgba(0,0,0,0.18)",
+              zIndex: 99999,
+              maxHeight: 260,
               overflowY: "auto",
-              padding: "4px 0",
-              maxHeight: 220,
+              animation: "ssFadeIn .12s ease",
             }}
           >
-            {filtered.length === 0 ? (
+            {filtered.length === 0 && (
               <div
                 style={{
-                  padding: "14px 12px",
-                  textAlign: "center",
-                  color: T.t4,
+                  padding: "12px 10px",
                   fontSize: 11.5,
+                  color: T.t4,
+                  textAlign: "center",
                 }}
               >
-                {options.length === 0 ? "No options yet" : "No matches"}
+                {list.length === 0 ? "No options yet" : "No match found"}
               </div>
-            ) : (
-              filtered.map((opt, i) => {
-                const isHi = i === hi;
-                const isSel = String(opt.key) === String(value);
-                return (
-                  <div
-                    key={opt.key}
-                    onMouseEnter={() => setHi(i)}
-                    onClick={() => selectAndClose(opt.key)}
+            )}
+            {filtered.map((opt, i) => {
+              const isCur = opt.key === String(value ?? "");
+              const isHi = i === hi;
+              return (
+                <div
+                  key={opt.key + ":" + i}
+                  data-opt={i}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleSelect(opt.key);
+                  }}
+                  onMouseEnter={() => setHi(i)}
+                  style={{
+                    padding: "8px 12px",
+                    fontSize: 12.5,
+                    cursor: "pointer",
+                    color: isCur ? ac : T.t1,
+                    fontWeight: isCur ? 700 : 500,
+                    background: isHi
+                      ? isCur
+                        ? ac + "28"
+                        : T.bluL
+                      : isCur
+                      ? ac + "14"
+                      : "transparent",
+                    borderBottom:
+                      i < filtered.length - 1 ? `1px solid ${T.b1}` : "none",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                  }}
+                >
+                  <span
                     style={{
-                      padding: "7px 12px",
-                      cursor: "pointer",
-                      background: isHi ? T.bluL : "transparent",
-                      color: isSel ? T.blu : T.t1,
-                      fontSize: 12.5,
-                      fontWeight: isSel ? 700 : 500,
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 8,
+                      flex: 1,
+                      whiteSpace: "nowrap",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
                     }}
                   >
-                    <span
-                      style={{
-                        flex: 1,
-                        whiteSpace: "nowrap",
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                      }}
+                    {opt.label}
+                  </span>
+                  {isCur && (
+                    <svg
+                      width={12}
+                      height={12}
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth={2.5}
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
                     >
-                      {opt.label}
-                    </span>
-                    {isSel && (
-                      <svg
-                        width={12}
-                        height={12}
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={2.5}
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-          <div
-            style={{
-              padding: "5px 9px",
-              borderTop: `1px solid ${T.b1}`,
-              fontSize: 9.5,
-              color: T.t4,
-              display: "flex",
-              gap: 10,
-              justifyContent: "space-between",
-              background: T.surfaceB,
-            }}
-          >
-            <span>↑↓ Navigate · Enter Select</span>
-            <span>Tab Next · Esc Close</span>
-          </div>
-        </div>
-      )}
+                      <polyline points="20 6 9 17 4 12" />
+                    </svg>
+                  )}
+                </div>
+              );
+            })}
+          </div>,
+          document.body
+        )}
+
+      <style>{`
+        @keyframes ssFadeIn {
+          from { opacity: 0; transform: translateY(-4px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
     </div>
   );
 }
