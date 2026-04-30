@@ -306,11 +306,11 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
         </div>
       )}
 
-      {/* Source + Assigned (compact) */}
+      {/* Source + Assigned — neutral, single line */}
       <div style={{display:"flex",gap:4,marginBottom:6,flexWrap:"wrap"}}>
-        {lead.source&&<span style={{fontSize:10,background:T.sltL,color:T.slt,padding:"1px 6px",borderRadius:20,border:`1px solid ${T.b2}`,whiteSpace:"nowrap"}}>{lead.source}</span>}
-        {lead.assignedTo&&lead.assignedTo!=="—"&&<span style={{fontSize:10,background:T.purL,color:T.pur,padding:"1px 6px",borderRadius:20,border:`1px solid ${T.purM}`,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:110}}>👤 {lead.assignedTo}</span>}
-        {lead.tags?.slice(0,1).map(tg=><span key={tg} style={{fontSize:10,background:T.ambL,color:T.amb,padding:"1px 6px",borderRadius:20,border:`1px solid ${T.ambM}`,whiteSpace:"nowrap"}}>{tg}</span>)}
+        {lead.source&&<span style={{fontSize:10,background:T.surfaceB,color:T.t3,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.b1}`,whiteSpace:"nowrap"}}>{lead.source}</span>}
+        {lead.assignedTo&&lead.assignedTo!=="—"&&<span style={{fontSize:10,background:T.surfaceB,color:T.t3,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.b1}`,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:110}}>👤 {lead.assignedTo}</span>}
+        {lead.tags?.slice(0,1).map(tg=><span key={tg} style={{fontSize:10,background:T.surfaceB,color:T.t3,padding:"1px 6px",borderRadius:4,border:`1px solid ${T.b1}`,whiteSpace:"nowrap"}}>#{tg}</span>)}
       </div>
 
       {/* Contact date */}
@@ -329,16 +329,16 @@ function LeadCard({lead,onOpen,onMove,onWhatsApp,onDesign,stages}){
         </div>
       )}
 
-      {/* Design button — compact */}
+      {/* Design button — subtle, blends with neutral palette */}
       {onDesign && (
         <div onClick={e=>e.stopPropagation()} style={{marginBottom:6}}>
           <button onClick={()=>onDesign(lead)}
             title="Design requests for this lead"
-            style={{width:"100%",padding:"5px 8px",borderRadius:5,border:`1px dashed ${T.purM||"#DDD6FE"}`,background:T.purL||"#F5F3FF",color:T.pur||"#7C3AED",fontSize:10.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:4,transition:"all .12s"}}
-            onMouseEnter={e=>e.currentTarget.style.background="#EDE9FE"}
-            onMouseLeave={e=>e.currentTarget.style.background=T.purL||"#F5F3FF"}>
-            <span>🎨</span><span>Design Plan</span>
-            {lead.design_count>0&&<span style={{background:T.pur||"#7C3AED",color:"#fff",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:8}}>{lead.design_count}</span>}
+            style={{width:"100%",padding:"4px 8px",borderRadius:5,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:5,transition:"all .12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=T.surfaceB;e.currentTarget.style.borderColor=T.b2;}}
+            onMouseLeave={e=>{e.currentTarget.style.background=T.surface;e.currentTarget.style.borderColor=T.b1;}}>
+            <span style={{fontSize:11}}>🎨</span><span>Design Plan</span>
+            {lead.design_count>0&&<span style={{background:T.t2,color:"#fff",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:8}}>{lead.design_count}</span>}
           </button>
         </div>
       )}
@@ -398,28 +398,29 @@ function KanbanBoard({leads,filters,onOpenLead,onMoveLead,onWhatsApp,onDesign,on
         return(
           <div key={stage.id}
             style={{minWidth:0,display:"flex",flexDirection:"column",height:"100%"}}>
-            {/* Column header — softer, accent dot + count */}
-            <div style={{borderRadius:"10px 10px 0 0",padding:"9px 11px",background:stage.bg,borderBottom:`2px solid ${stage.color}`,position:"relative"}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:2,gap:6}}>
+            {/* Column header — neutral, just dot + accent line */}
+            <div style={{borderRadius:"8px 8px 0 0",padding:"8px 10px",background:"#FFFFFF",border:`1px solid ${T.b1}`,borderBottom:"none",position:"relative"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
                 <div style={{display:"flex",alignItems:"center",gap:6,minWidth:0}}>
-                  <span style={{width:7,height:7,borderRadius:"50%",background:stage.color,flexShrink:0}}/>
-                  <span style={{fontSize:12.5,fontWeight:700,color:stage.color,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{stage.label}</span>
+                  <span style={{width:8,height:8,borderRadius:"50%",background:stage.color,flexShrink:0,boxShadow:`0 0 0 2px ${stage.color}22`}}/>
+                  <span style={{fontSize:12,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",letterSpacing:"-.1px"}}>{stage.label}</span>
                 </div>
                 <div style={{display:"flex",gap:4,alignItems:"center",flexShrink:0}}>
                   {overdueInStage>0&&(
-                    <span title={`${overdueInStage} overdue`} style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10,border:"1px solid #FECACA"}}>
+                    <span title={`${overdueInStage} overdue`} style={{background:"#FEE2E2",color:"#B91C1C",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>
                       ⚠ {overdueInStage}
                     </span>
                   )}
-                  <span style={{background:stage.color,color:"#fff",fontSize:10.5,fontWeight:800,padding:"1px 7px",borderRadius:20,minWidth:18,textAlign:"center"}}>{stageLeads.length}</span>
+                  <span style={{background:T.surfaceB,color:T.t2,fontSize:10.5,fontWeight:700,padding:"1px 7px",borderRadius:20,minWidth:18,textAlign:"center",border:`1px solid ${T.b1}`}}>{stageLeads.length}</span>
                 </div>
               </div>
-              <div style={{fontSize:10,color:`${stage.color}AA`,fontWeight:500,letterSpacing:".1px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{stage.desc}</div>
-              {stageValue>0&&<div style={{fontSize:10.5,color:stage.color,fontWeight:700,marginTop:2}}>₹{fmt(stageValue)}</div>}
+              {stageValue>0&&<div style={{fontSize:10,color:T.t4,fontWeight:600,marginTop:3,letterSpacing:".1px"}}>₹{fmt(stageValue)} pipeline</div>}
+              {/* Bottom accent line */}
+              <div style={{position:"absolute",left:0,right:0,bottom:-1,height:2,background:stage.color}}/>
             </div>
 
-            {/* Cards container */}
-            <div style={{flex:1,overflowY:"auto",background:"#FAFBFC",borderRadius:"0 0 10px 10px",border:`1px solid ${T.b1}`,borderTop:"none",padding:"9px 8px",minHeight:200}}>
+            {/* Cards container — uniform neutral bg */}
+            <div style={{flex:1,overflowY:"auto",background:"#F8F9FB",borderRadius:"0 0 8px 8px",border:`1px solid ${T.b1}`,borderTop:"none",padding:"8px 7px",minHeight:200}}>
               {stageLeads.length===0&&(
                 <div style={{textAlign:"center",padding:"18px 8px",color:`${stage.color}88`,fontSize:11,opacity:0.7}}>
                   Empty
@@ -2209,18 +2210,18 @@ function CRMModule(){
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
 
-      {/* KPI Tiles */}
-      <div style={{padding:"12px 18px 8px",flexShrink:0}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
+      {/* KPI Strip — compact one-liner tiles */}
+      <div style={{padding:"8px 16px 6px",flexShrink:0}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
           {TILES.map((s,i)=>(
-            <div key={i} style={{padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,borderTop:`3px solid ${s.c}`,display:"flex",alignItems:"flex-start",gap:11}}>
-              <div style={{width:34,height:34,borderRadius:8,background:s.c+"18",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                <s.I size={16} color={s.c}/>
+            <div key={i} style={{padding:"8px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,display:"flex",alignItems:"center",gap:10,minHeight:0}}>
+              <div style={{width:24,height:24,borderRadius:6,background:s.c+"15",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <s.I size={12} color={s.c}/>
               </div>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
-                <div style={{fontSize:20,fontWeight:700,color:T.t1,lineHeight:1}}>{s.v}</div>
-                <div style={{fontSize:10.5,color:T.t4,marginTop:3}}>{s.sub}</div>
+              <div style={{flex:1,minWidth:0,display:"flex",alignItems:"baseline",gap:7,flexWrap:"wrap"}}>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",whiteSpace:"nowrap"}}>{s.l}</div>
+                <div style={{fontSize:15,fontWeight:800,color:T.t1,lineHeight:1,letterSpacing:"-.2px"}}>{s.v}</div>
+                <div style={{fontSize:9.5,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1}}>{s.sub}</div>
               </div>
             </div>
           ))}
@@ -2228,9 +2229,9 @@ function CRMModule(){
       </div>
 
       {/* Toolbar */}
-      <div style={{padding:"0 18px 8px",flexShrink:0}}>
-        <div style={{background:"#0D1B2A",borderRadius:10,padding:"0 10px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
-          <div style={{position:"relative",flex:1,maxWidth:220,margin:"8px 0"}}>
+      <div style={{padding:"0 16px 6px",flexShrink:0}}>
+        <div style={{background:"#0D1B2A",borderRadius:8,padding:"0 8px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 1px 4px rgba(0,0,0,0.15)"}}>
+          <div style={{position:"relative",flex:1,maxWidth:220,margin:"6px 0"}}>
             <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={12} color="rgba(255,255,255,0.3)"/></span>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search name or phone..."
               style={{width:"100%",height:30,padding:"0 8px 0 26px",borderRadius:6,border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.1)",fontSize:12,color:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
@@ -2292,7 +2293,7 @@ function CRMModule(){
       </div>
 
       {/* Kanban Board */}
-      <div style={{flex:1,overflowY:"auto",padding:"0 18px 16px"}}>
+      <div style={{flex:1,overflowY:"auto",padding:"0 16px 12px"}}>
         <KanbanBoard
           leads={[...(canConstruction?leads:[]),...(canSolar?solarLeads:[])]}
           filters={filters}
