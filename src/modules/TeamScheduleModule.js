@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
-import LiveTeamView from "../components/LiveTeamView";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -27,7 +26,6 @@ const IcFilter=(p)=><Ic {...p} d="M22 3H2l8 9.46V19l4 2v-8.54L22 3z"/>;
 const IcCal   =(p)=><Ic {...p} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>;
 const IcAlert =(p)=><Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/>;
 const IcLoc   =(p)=><Ic {...p} d="M17.657 16.657L13.414 20.9a2 2 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0zM15 11a3 3 0 11-6 0 3 3 0 016 0"/>;
-const IcLive  =(p)=><Ic {...p} d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M5 19l1.5-1.5M17.5 6.5L19 5M16 12a4 4 0 11-8 0 4 4 0 018 0z" sw={2}/>;
 const IcIssue =(p)=><Ic {...p} d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/>;
 const IcTodo  =(p)=><Ic {...p} d="M9 11l3 3L22 4M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>;
 const IcAssign=(p)=><Ic {...p} d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8M19 8l2 2 4-4"/>;
@@ -861,7 +859,6 @@ function TeamScheduleModule(){
     {id:"site",   l:"Sites",  I:IcLoc},
     {id:"gantt",  l:"Gantt",  I:IcGantt},
     {id:"list",   l:"List",   I:IcList},
-    {id:"live",   l:"Live",   I:IcLive},
   ];
 
   return(
@@ -1002,8 +999,8 @@ function TeamScheduleModule(){
       {/* Content */}
       <div style={{flex:1,overflowY:"auto",padding:"10px 18px 16px"}}>
 
-        {/* Empty state (only for work-item views) */}
-        {items.length===0&&view!=="live"&&<div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📅</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>No work items yet</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>Create tasks, issues, or todos to get started</div></div>}
+        {/* Empty state */}
+        {items.length===0&&<div style={{textAlign:"center",padding:"80px 0"}}><div style={{fontSize:36,marginBottom:8}}>📅</div><div style={{color:"#64748B",fontSize:14,fontWeight:600}}>No work items yet</div><div style={{color:"#94A3B8",fontSize:12,marginTop:4}}>Create tasks, issues, or todos to get started</div></div>}
 
         {/* BOARD VIEW — Kanban by status */}
         {view==="board"&&(
@@ -1034,9 +1031,6 @@ function TeamScheduleModule(){
 
         {/* GANTT VIEW */}
         {view==="gantt"&&<ScheduleGanttView items={filteredItems}/>}
-
-        {/* LIVE VIEW — real-time location map + team grid */}
-        {view==="live"&&<LiveTeamView/>}
 
         {/* LIST VIEW */}
         {view==="list"&&(
