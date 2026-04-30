@@ -88,13 +88,15 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
   if (!show) return null;
 
   const upload = async () => {
-    if (!form.project_id) { setErr("Project select karo"); return; }
+    // project_id optional when linked to a request (e.g. lead-only house plan)
+    if (!form.project_id && !prefill?.linked_request_id) { setErr("Project select karo"); return; }
     if (!form.title.trim()) { setErr("Title required"); return; }
     if (!file) { setErr("File select karo"); return; }
 
     // Capture form values before closing modal
     const capturedForm = { ...form };
     const capturedFile = file;
+    const linkedRequestId = prefill?.linked_request_id || null;
     const proj = projects.find(p => p.id === parseInt(capturedForm.project_id));
     const fileSize = Math.round(capturedFile.size / 1024) + " KB";
 
@@ -112,7 +114,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
       onDone: async (url) => {
         try {
           const res = await api.post("/design/drawings", {
-            project_id:   capturedForm.project_id,
+            project_id:   capturedForm.project_id || null,
             project_name: proj?.name || "",
             title:        capturedForm.title,
             category:     capturedForm.category,
@@ -120,6 +122,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
             note:         capturedForm.note || null,
             file_url:     url,
             file_size:    fileSize,
+            linked_request_id: linkedRequestId,
           });
           if (res.success) {
             api.post("/approvals/submit", {
@@ -565,13 +568,13 @@ export default function DesignModule() {
                       👤 Assign
                     </button>
                   )}
-                  <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||""});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
+                  <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);updateReqStatus(req.id,"In Progress");}}
                     style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                     ⬆ Upload Direct
                   </button>
                 </>}
                 {req.status==="In Progress"&&(
-                  <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||""});setShowUpload(true);}}
+                  <button onClick={()=>{setUploadPrefill({project_id:projects.find(p=>p.name===req.project_name)?.id||"",title:req.title,category:req.category,drawing_type:"2D",note:req.description||"",linked_request_id:req.id});setShowUpload(true);}}
                     style={{padding:"4px 10px",borderRadius:6,background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>
                     ⬆ Upload Drawing
                   </button>
