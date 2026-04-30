@@ -7252,7 +7252,10 @@ function TabMaterial({ project }) {
   const projectName = project?.name || "Project";
 
   // ── Tab state ──────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState("requests"); // requests | ledger | inventory
+  const [activeTab, setActiveTab] = useState("requests"); // kept for legacy data-load compat
+  const [mainTab,   setMainTab]   = useState("material"); // material | inventory
+  const [invSubTab, setInvSubTab] = useState("stock");    // stock | used | transfer
+  const [matLedgerItem, setMatLedgerItem] = useState(null); // material name for ledger drilldown
 
   // ── Requests tab state (existing) ──────────────────────────
   const [materials, setMaterials] = useState([]);
@@ -7363,9 +7366,11 @@ function TabMaterial({ project }) {
     loadMRs();
   }, [projectId]);
 
-  // Load ledger on tab switch
+  // Load data when switching to Inventory tab
   useEffect(() => {
-    if (activeTab === "ledger" && !ledgerLoaded && projectId) {
+    if (mainTab !== "inventory" || !projectId) return;
+    // Always load ledger (needed for drilldown from any inventory sub-tab)
+    if (!ledgerLoaded) {
       setLedgerLoading(true);
       api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
         if (r.success) setLedger(r.data || []);
@@ -7373,7 +7378,7 @@ function TabMaterial({ project }) {
         setLedgerLoading(false);
       }).catch(() => setLedgerLoading(false));
     }
-    if (activeTab === "inventory" && !invLoaded && projectId) {
+    if (invSubTab === "stock" && !invLoaded) {
       setInvLoading(true);
       api.get("/tasks/project/" + projectId + "/inventory").then(r => {
         if (r.success) setInventory(r.data || []);
@@ -7381,7 +7386,14 @@ function TabMaterial({ project }) {
         setInvLoading(false);
       }).catch(() => setInvLoading(false));
     }
-  }, [activeTab]);
+    if (invSubTab === "used") {
+      setUsedLogLoading(true);
+      api.get("/tasks/project/" + projectId + "/used-history").then(r => {
+        if (r.success) setUsedLog(r.data || []);
+        setUsedLogLoading(false);
+      }).catch(() => setUsedLogLoading(false));
+    }
+  }, [mainTab, invSubTab]);
 
   useEffect(() => {
     if (!showGRN || !projectId) return;
@@ -7522,361 +7534,215 @@ function TabMaterial({ project }) {
     return true;
   });
 
-  const TABS = [{id:"requests",l:"Requests"},{id:"ledger",l:"Material Ledger"},{id:"inventory",l:"Inventory"}];
+  // Ledger helper — build chronological rows for a given material
+  const buildLedgerRows = (mat) => {
+    let runBal = 0;
+    return [
+      ...(mat.receipts||[]).map(r=>({...r,_type:"grn",  _date:new Date(r.received_date||0)})),
+      ...(mat.usage  ||[]).map(u=>({...u,_type:"used", _date:new Date(u.used_date||0)})),
+    ].sort((a,b)=>a._date-b._date).map((e,i)=>{
+      if(e._type==="grn") runBal+=Number(e.qty||0);
+      else                runBal-=Number(e.qty||0);
+      return {...e,runBal,idx:i};
+    });
+  };
 
   return (
     <div style={{padding:"14px 18px"}}>
 
-      {/* ── TAB SWITCHER ── */}
-      <div style={{display:"flex",gap:0,marginBottom:16,borderBottom:"2px solid "+T.b1}}>
-        {TABS.map(t=>(
-          <button key={t.id} onClick={()=>setActiveTab(t.id)}
-            style={{padding:"9px 16px",border:"none",background:"none",fontSize:13,fontWeight:activeTab===t.id?700:400,
-              color:activeTab===t.id?T.blu:T.t3,borderBottom:activeTab===t.id?"2px solid "+T.blu:"2px solid transparent",
-              cursor:"pointer",marginBottom:-2,transition:"all .15s"}}>
+      {/* ════ MODALS — always mounted, shown via state ════ */}
+
+      {/* NEW MR MODAL */}
+      {showModal && (<>
+        <div onClick={()=>setShowModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.32)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:10,boxShadow:"0 20px 60px rgba(0,0,0,0.18)",zIndex:401,width:440,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div><div style={{fontSize:13.5,fontWeight:700,color:"white"}}>New Material Request</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1}}>{projectName}</div></div>
+            <button onClick={()=>setShowModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
+          </div>
+          <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
+            <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.amb}}>Request Procurement mein jayegi — Admin approve karenge phir order hoga</div>
+            <div>
+              <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
+              <input value={form.item_name} onChange={e=>{const val=e.target.value;const found=matLibReal.find(m=>m.name===val);setForm(p=>({...p,item_name:val,unit:found?.unit||p.unit}));}}
+                placeholder="Type to search material..." list="mat-lib-list"
+                style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              <datalist id="mat-lib-list">{matLibReal.map(m=><option key={m.name} value={m.name}>{m.name}{m.unit?" ("+m.unit+")":""}</option>)}</datalist>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div><label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Quantity *</label>
+                <input type="number" value={form.quantity} onChange={e=>setForm(p=>({...p,quantity:e.target.value}))} placeholder="200"
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+              <div><label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Unit</label>
+                <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                  {UNITS_MR.map(u=><option key={u}>{u}</option>)}</select></div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <div><label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Required By</label>
+                <input type="date" value={form.required_date} onChange={e=>setForm(p=>({...p,required_date:e.target.value}))}
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+              <div><label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Approx. Amount</label>
+                <input type="number" value={form.approx_amount} onChange={e=>setForm(p=>({...p,approx_amount:e.target.value}))} placeholder="76000"
+                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+            </div>
+            <div><label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Notes</label>
+              <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Special requirements..."
+                style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/></div>
+          </div>
+          <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8}}>
+            <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={handleSubmitMR} disabled={saving||!form.item_name||!form.quantity}
+              style={{flex:2,padding:"8px",borderRadius:7,background:(saving||!form.item_name||!form.quantity)?T.b1:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(saving||!form.item_name||!form.quantity)?"not-allowed":"pointer"}}>
+              {saving?"Saving...":"Submit Request"}</button>
+          </div>
+        </div>
+      </>)}
+
+      {/* GRN MODAL */}
+      {showGRN&&(<>
+        <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:400,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:401,width:580,maxHeight:"85vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
+          <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+            <div><div style={{fontSize:14,fontWeight:700,color:"white"}}>Record GRN — Material Received</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:2}}>{projectName}</div></div>
+            <button onClick={()=>setShowGRN(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
+          </div>
+          <div style={{display:"flex",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
+            {[{id:"ordered",label:"Ordered Materials"},{id:"direct",label:"Direct Receive"}].map(t=>(
+              <button key={t.id} onClick={()=>setGrnTab(t.id)}
+                style={{flex:1,padding:"10px",border:"none",background:grnTab===t.id?T.surface:T.surfaceB,color:grnTab===t.id?T.blu:T.t3,fontSize:12.5,fontWeight:grnTab===t.id?700:400,cursor:"pointer",borderBottom:grnTab===t.id?"2px solid "+T.blu:"2px solid transparent"}}>
+                {t.label}{t.id==="ordered"&&orderedMRs.length>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,marginLeft:5}}>{orderedMRs.length}</span>}
+              </button>
+            ))}
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+            {grnTab==="ordered"&&(
+              <div>
+                {orderedMRs.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}><div style={{fontSize:13,fontWeight:600,color:T.t2,marginBottom:4}}>Koi ordered material nahi hai</div></div>}
+                {orderedMRs.map(mr=>{
+                  const isDone=grnDone.includes(mr.id); const row=grnRows[mr.id]||{};
+                  return(<div key={mr.id} style={{background:isDone?T.grnL:T.surface,border:"1px solid "+(isDone?T.grnM:T.b1),borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+(isDone?T.grn:T.amb)}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone?0:10}}>
+                      <div><div style={{fontSize:13,fontWeight:700,color:isDone?T.grn:T.t1}}>{mr.item_name}</div>
+                        <div style={{fontSize:11,color:T.t4,marginTop:2}}>Ordered: {mr.quantity} {mr.unit}{mr.linked_vendor&&<span style={{marginLeft:8,color:T.blu}}>· {mr.linked_vendor}</span>}</div></div>
+                      {isDone&&<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>✓ Received</span>}
+                    </div>
+                    {!isDone&&(<div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
+                      <div><label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
+                        <input value={row.challan||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],challan:e.target.value}}))} placeholder="e.g. CH-445"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+                      <div><label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received Qty</label>
+                        <input type="number" value={row.received_qty||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))} placeholder={String(mr.quantity)}
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+                      <button onClick={()=>handleReceiveMR(mr.id)} disabled={!row.challan||grnSaving}
+                        style={{padding:"7px 14px",borderRadius:6,background:row.challan?T.grn:T.b1,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:row.challan?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
+                        {grnSaving?"...":"✓ Receive"}</button>
+                    </div>)}
+                  </div>);
+                })}
+              </div>
+            )}
+            {grnTab==="direct"&&(
+              <div>
+                <div style={{background:T.bluL,border:"1px solid "+T.bluM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.blu,marginBottom:12}}>Bina PO ke directly site pe aaya material — challan se receive karo</div>
+                {directRows.map((row,i)=>(
+                  <div key={row.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px",marginBottom:8}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <span style={{fontSize:11,fontWeight:600,color:T.t3}}>Item {i+1}</span>
+                      {directRows.length>1&&<button onClick={()=>setDirectRows(p=>p.filter(r=>r.id!==row.id))} style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:18,lineHeight:1}}>×</button>}
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                      <div><label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Material Name *</label>
+                        <input value={row.item_name} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,item_name:e.target.value}:r))} placeholder="e.g. Cement OPC 53" list={"mat_lib_"+row.id}
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        <datalist id={"mat_lib_"+row.id}>{MAT_LIB.map(m=><option key={m} value={m}/>)}</datalist></div>
+                      <div><label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor</label>
+                        <input value={row.vendor} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:e.target.value}:r))} placeholder="Select or type vendor" list="vendor-list-grn"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        <datalist id="vendor-list-grn">{vendorList.map(v=><option key={v.id} value={v.name}>{v.name}{v.city?" — "+v.city:""}</option>)}</datalist></div>
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:8}}>
+                      <div><label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Qty *</label>
+                        <input type="number" value={row.qty} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,qty:e.target.value}:r))} placeholder="0"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+                      <div><label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Unit</label>
+                        <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                          {UNITS_MR.map(u=><option key={u}>{u}</option>)}</select></div>
+                      <div><label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
+                        <input value={row.challan} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,challan:e.target.value}:r))} placeholder="e.g. CH-445"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+                      <div><label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received By</label>
+                        <input value={row.received_by||""} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,received_by:e.target.value}:r))} placeholder="Site person"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={()=>setDirectRows(p=>[...p,{id:Date.now(),item_name:"",qty:"",unit:"Bags",vendor:"",challan:"",received_by:""}])}
+                  style={{width:"100%",padding:"8px",borderRadius:7,border:"1.5px dashed "+T.b2,background:"none",color:T.t4,fontSize:12,cursor:"pointer",marginTop:4}}>+ Add Another Item</button>
+              </div>
+            )}
+          </div>
+          <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
+            <button onClick={()=>setShowGRN(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
+            {grnTab==="direct"&&(<button onClick={handleDirectReceive} disabled={grnSaving}
+              style={{flex:2,padding:"8px",borderRadius:7,background:grnSaving?T.b1:T.grn,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer"}}>
+              {grnSaving?"Saving...":"Submit GRN"}</button>)}
+            {grnTab==="ordered"&&grnDone.length>0&&(<button onClick={()=>setShowGRN(false)}
+              style={{flex:2,padding:"8px",borderRadius:7,background:T.grn,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>Done ✓ ({grnDone.length} received)</button>)}
+          </div>
+        </div>
+      </>)}
+
+      {/* ════ TOP TOGGLE: Material | Inventory ════ */}
+      <div style={{display:"flex",background:"#F1F5F9",borderRadius:10,padding:4,marginBottom:14,gap:0}}>
+        {[{id:"material",l:"📦 Material"},{id:"inventory",l:"🗃️ Inventory"}].map(t=>(
+          <button key={t.id} onClick={()=>{setMainTab(t.id);setMatLedgerItem(null);}}
+            style={{flex:1,padding:"9px",borderRadius:7,border:"none",
+              background:mainTab===t.id?"white":"transparent",
+              color:mainTab===t.id?T.blu:T.t3,
+              fontSize:13,fontWeight:mainTab===t.id?700:500,
+              cursor:"pointer",
+              boxShadow:mainTab===t.id?"0 1px 4px rgba(0,0,0,0.12)":"none",
+              transition:"all .18s",fontFamily:"inherit"}}>
             {t.l}
           </button>
         ))}
       </div>
 
-      {/* ══════════════════════════════════════════════════════
-          TAB 1: REQUESTS (existing UI — unchanged)
-      ══════════════════════════════════════════════════════ */}
-      {activeTab==="requests"&&(<>
+      {/* ════════════════════════════════════════════════════
+          TAB 1 — MATERIAL: MR flow with stage filter pills
+      ════════════════════════════════════════════════════ */}
+      {mainTab==="material"&&(<>
 
-        {/* NEW REQUEST MODAL */}
-        {showModal && (<>
-          <div onClick={()=>setShowModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.32)",zIndex:400,backdropFilter:"blur(2px)"}}/>
-          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:10,boxShadow:"0 20px 60px rgba(0,0,0,0.18)",zIndex:401,width:440,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
-            <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div>
-                <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>New Material Request</div>
-                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1}}>{projectName}</div>
-              </div>
-              <button onClick={()=>setShowModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
-            </div>
-            <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
-              <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.amb}}>
-                Request Procurement mein jayegi — Admin approve karenge phir order hoga
-              </div>
-              <div>
-                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
-                <input value={form.item_name} onChange={e=>{const val=e.target.value;const found=matLibReal.find(m=>m.name===val);setForm(p=>({...p,item_name:val,unit:found?.unit||p.unit}));}}
-                  placeholder="Type to search material..." list="mat-lib-list"
-                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <datalist id="mat-lib-list">
-                  {matLibReal.map(m=><option key={m.name} value={m.name}>{m.name}{m.unit?" ("+m.unit+")":""}</option>)}
-                </datalist>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Quantity *</label>
-                  <input type="number" value={form.quantity} onChange={e=>setForm(p=>({...p,quantity:e.target.value}))} placeholder="200"
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                </div>
-                <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Unit</label>
-                  <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                    {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Required By</label>
-                  <input type="date" value={form.required_date} onChange={e=>setForm(p=>({...p,required_date:e.target.value}))}
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                </div>
-                <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Approx. Amount</label>
-                  <input type="number" value={form.approx_amount} onChange={e=>setForm(p=>({...p,approx_amount:e.target.value}))} placeholder="76000"
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                </div>
-              </div>
-              <div>
-                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Notes</label>
-                <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Special requirements..."
-                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
-              </div>
-            </div>
-            <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8}}>
-              <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-              <button onClick={handleSubmitMR} disabled={saving||!form.item_name||!form.quantity}
-                style={{flex:2,padding:"8px",borderRadius:7,background:(saving||!form.item_name||!form.quantity)?T.b1:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(saving||!form.item_name||!form.quantity)?"not-allowed":"pointer"}}>
-                {saving?"Saving...":"Submit Request"}
-              </button>
-            </div>
-          </div>
-        </>)}
-
-        {/* Stage pipeline */}
-        <div style={{display:"grid",gridTemplateColumns:"repeat("+STAGES.length+",1fr)",gap:8,marginBottom:12}}>
-          {stageData.map((s,i)=>{
-            const isA=fStage===s.stage;
+        {/* Stage filter pills */}
+        <div style={{display:"flex",gap:6,marginBottom:12,overflowX:"auto",paddingBottom:4}}>
+          {["All","Requested","Approved","Ordered","Received"].map(s=>{
+            const count = s==="All" ? materials.length : materials.filter(m=>m.stage===s).length;
+            const isA   = fStage===s;
+            const ss    = s==="All"?{c:"#475569",bg:"#F1F5F9"}:(STAGE_S[s]||{c:T.slt,bg:T.sltL});
             return(
-              <div key={s.stage} onClick={()=>{
-                if(s.stage==="Used"){
-                  setUsedLogLoading(true);
-                  setShowUsedLog(true);
-                  api.get("/tasks/project/"+projectId+"/used-history").then(r=>{
-                    if(r.success) setUsedLog(r.data||[]);
-                    setUsedLogLoading(false);
-                  }).catch(()=>setUsedLogLoading(false));
-                } else {
-                  setFStage(isA?"All":s.stage);
-                }
-              }}
-                style={{padding:"9px 12px",background:isA?s.bg:T.surface,border:"1.5px solid "+(isA?s.c:T.b1),borderRadius:8,borderTop:"3px solid "+s.c,cursor:"pointer",transition:"all .15s",textAlign:"center"}}>
-                {i>0&&<div style={{display:"flex",justifyContent:"center",marginBottom:3}}>
-                  <svg width={12} height={8} viewBox="0 0 12 8" fill="none"><path d="M1 4h8M6 1l3 3-3 3" stroke={isA?s.c:T.b2} strokeWidth={1.5} strokeLinecap="round"/></svg>
-                </div>}
-                <div style={{fontSize:18,fontWeight:700,color:isA?s.c:T.t1}}>{s.count}</div>
-                <div style={{fontSize:11,fontWeight:600,color:isA?s.c:T.t2}}>{s.stage}</div>
-              </div>
+              <button key={s} onClick={()=>setFStage(s)}
+                style={{flexShrink:0,display:"flex",alignItems:"center",gap:5,padding:"5px 13px",borderRadius:20,
+                  border:"1.5px solid "+(isA?ss.c:T.b1),
+                  background:isA?ss.bg:"white",
+                  cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>
+                <span style={{fontSize:11,fontWeight:700,color:isA?ss.c:T.t3}}>{s}</span>
+                <span style={{fontSize:10,fontWeight:700,
+                  color:isA?ss.c:T.t4,background:isA?ss.c+"22":"#F1F5F9",
+                  borderRadius:10,padding:"1px 6px",minWidth:16,textAlign:"center"}}>{count}</span>
+              </button>
             );
           })}
         </div>
-
-        {/* USED LOG DRAWER */}
-        {showUsedLog&&(<>
-          <div onClick={()=>setShowUsedLog(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
-          <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(580px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
-            {/* Header */}
-            <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:4}}>
-                <div style={{fontSize:15,fontWeight:700,color:"white"}}>Material Used Log</div>
-                <button onClick={()=>setShowUsedLog(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
-                  <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
-                </button>
-              </div>
-              <div style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>{projectName} · {usedLog.length} entries</div>
-            </div>
-            {/* Filters */}
-            <div style={{padding:"10px 14px",borderBottom:"1px solid "+T.b1,background:"#F8FAFC",flexShrink:0}}>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:7}}>
-                <input value={ulFilterMat} onChange={e=>setUlFilterMat(e.target.value)} placeholder="Filter by material..."
-                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-                <input value={ulFilterTask} onChange={e=>setUlFilterTask(e.target.value)} placeholder="Filter by task..."
-                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7}}>
-                <input value={ulFilterBy} onChange={e=>setUlFilterBy(e.target.value)} placeholder="Used by..."
-                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-                <input type="date" value={ulFilterFrom} onChange={e=>setUlFilterFrom(e.target.value)}
-                  title="From date"
-                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
-                <input type="date" value={ulFilterTo} onChange={e=>setUlFilterTo(e.target.value)}
-                  title="To date"
-                  style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
-              </div>
-              {(ulFilterMat||ulFilterTask||ulFilterBy||ulFilterFrom||ulFilterTo)&&(
-                <button onClick={()=>{setUlFilterMat("");setUlFilterTask("");setUlFilterBy("");setUlFilterFrom("");setUlFilterTo("");}}
-                  style={{marginTop:6,background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:11,padding:0,fontWeight:600}}>
-                  × Clear filters
-                </button>
-              )}
-            </div>
-            {/* Table */}
-            <div style={{flex:1,overflowY:"auto"}}>
-              {usedLogLoading&&<div style={{textAlign:"center",padding:"60px 0",color:T.t4}}><div style={{width:28,height:28,border:"3px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}></div>Loading...</div>}
-              {!usedLogLoading&&(()=>{
-                const filtered=usedLog.filter(u=>{
-                  if(ulFilterMat&&!u.material_name?.toLowerCase().includes(ulFilterMat.toLowerCase())) return false;
-                  if(ulFilterTask&&!(u.task_name||"").toLowerCase().includes(ulFilterTask.toLowerCase())) return false;
-                  if(ulFilterBy&&!(u.user_name||"").toLowerCase().includes(ulFilterBy.toLowerCase())) return false;
-                  if(ulFilterFrom&&u.used_date&&u.used_date<ulFilterFrom) return false;
-                  if(ulFilterTo&&u.used_date&&u.used_date>ulFilterTo) return false;
-                  return true;
-                });
-                return filtered.length===0?(
-                  <div style={{textAlign:"center",padding:"60px",color:T.t4,fontSize:13}}>
-                    {usedLog.length===0?"No used entries yet":"No entries match filters"}
-                  </div>
-                ):(
-                  <div>
-                    <div style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr",background:"#1E293B",padding:"7px 16px",gap:8}}>
-                      {["Date","Material","Qty","Used By","Remark/Task"].map(h=>(
-                        <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
-                      ))}
-                    </div>
-                    {filtered.map((u,i)=>(
-                      <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr",padding:"9px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
-                        <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
-                        <div>
-                          <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{u.material_name}</div>
-                          <div style={{fontSize:10,color:T.t4}}>{u.unit}</div>
-                        </div>
-                        <div style={{fontSize:13,fontWeight:700,color:T.amb}}>{u.used_qty}</div>
-                        <div style={{fontSize:11.5,color:T.t2}}>{u.user_name||"Site"}</div>
-                        <div style={{fontSize:11,color:T.t3}}>
-                          {u.task_name&&<div style={{color:T.blu,fontWeight:600,fontSize:10.5}}>{u.task_no} {u.task_name}</div>}
-                          {u.remark&&<div>{u.remark}</div>}
-                          {!u.task_name&&!u.remark&&"—"}
-                        </div>
-                      </div>
-                    ))}
-                    {/* Summary footer */}
-                    <div style={{padding:"8px 16px",background:"#0F172A",borderTop:"2px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                      <span style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>{filtered.length} entries shown</span>
-                      <span style={{fontSize:13,fontWeight:800,color:T.amb}}>
-                        Total: {filtered.reduce((s,u)=>s+Number(u.used_qty||0),0).toFixed(2)}
-                      </span>
-                    </div>
-                  </div>
-                );
-              })()}
-            </div>
-          </div>
-        </>)}
-
-        {/* GRN MODAL */}
-        {showGRN&&(<>
-          <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:400,backdropFilter:"blur(2px)"}}/>
-          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:401,width:580,maxHeight:"85vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
-            <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:700,color:"white"}}>Record GRN — Material Received</div>
-                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:2}}>{projectName}</div>
-              </div>
-              <button onClick={()=>setShowGRN(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
-            </div>
-            <div style={{display:"flex",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
-              {[{id:"ordered",label:"Ordered Materials"},{id:"direct",label:"Direct Receive"}].map(t=>(
-                <button key={t.id} onClick={()=>setGrnTab(t.id)}
-                  style={{flex:1,padding:"10px",border:"none",background:grnTab===t.id?T.surface:T.surfaceB,color:grnTab===t.id?T.blu:T.t3,fontSize:12.5,fontWeight:grnTab===t.id?700:400,cursor:"pointer",borderBottom:grnTab===t.id?"2px solid "+T.blu:"2px solid transparent"}}>
-                  {t.label}
-                  {t.id==="ordered"&&orderedMRs.length>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,marginLeft:5}}>{orderedMRs.length}</span>}
-                </button>
-              ))}
-            </div>
-            <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
-              {grnTab==="ordered"&&(
-                <div>
-                  {orderedMRs.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}><div style={{fontSize:13,fontWeight:600,color:T.t2,marginBottom:4}}>Koi ordered material nahi hai</div></div>}
-                  {orderedMRs.map(mr=>{
-                    const isDone=grnDone.includes(mr.id);
-                    const row=grnRows[mr.id]||{};
-                    return(
-                      <div key={mr.id} style={{background:isDone?T.grnL:T.surface,border:"1px solid "+(isDone?T.grnM:T.b1),borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+(isDone?T.grn:T.amb)}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone?0:10}}>
-                          <div>
-                            <div style={{fontSize:13,fontWeight:700,color:isDone?T.grn:T.t1}}>{mr.item_name}</div>
-                            <div style={{fontSize:11,color:T.t4,marginTop:2}}>Ordered: {mr.quantity} {mr.unit}{mr.linked_vendor&&<span style={{marginLeft:8,color:T.blu}}>· {mr.linked_vendor}</span>}</div>
-                          </div>
-                          {isDone&&<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>✓ Received</span>}
-                        </div>
-                        {!isDone&&(
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
-                            <div>
-                              <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
-                              <input value={row.challan||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],challan:e.target.value}}))} placeholder="e.g. CH-445"
-                                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                            </div>
-                            <div>
-                              <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received Qty</label>
-                              <input type="number" value={row.received_qty||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))} placeholder={String(mr.quantity)}
-                                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                            </div>
-                            <button onClick={()=>handleReceiveMR(mr.id)} disabled={!row.challan||grnSaving}
-                              style={{padding:"7px 14px",borderRadius:6,background:row.challan?T.grn:T.b1,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:row.challan?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
-                              {grnSaving?"...":"✓ Receive"}
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-              {grnTab==="direct"&&(
-                <div>
-                  <div style={{background:T.bluL,border:"1px solid "+T.bluM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.blu,marginBottom:12}}>
-                    Bina PO ke directly site pe aaya material — challan se receive karo
-                  </div>
-                  {directRows.map((row,i)=>(
-                    <div key={row.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px",marginBottom:8}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                        <span style={{fontSize:11,fontWeight:600,color:T.t3}}>Item {i+1}</span>
-                        {directRows.length>1&&<button onClick={()=>setDirectRows(p=>p.filter(r=>r.id!==row.id))} style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:18,lineHeight:1}}>×</button>}
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Material Name *</label>
-                          <input value={row.item_name} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,item_name:e.target.value}:r))}
-                            placeholder="e.g. Cement OPC 53" list={"mat_lib_"+row.id}
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                          <datalist id={"mat_lib_"+row.id}>{MAT_LIB.map(m=><option key={m} value={m}/>)}</datalist>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor</label>
-                          <input value={row.vendor} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:e.target.value}:r))}
-                            placeholder="Select or type vendor" list="vendor-list-grn"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                          <datalist id="vendor-list-grn">
-                            {vendorList.map(v=><option key={v.id} value={v.name}>{v.name}{v.city?" — "+v.city:""}</option>)}
-                          </datalist>
-                        </div>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:8,marginBottom:8}}>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Qty *</label>
-                          <input type="number" value={row.qty} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,qty:e.target.value}:r))} placeholder="0"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Unit</label>
-                          <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                            {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                          </select>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
-                          <input value={row.challan} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,challan:e.target.value}:r))} placeholder="e.g. CH-445"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received By</label>
-                          <input value={row.received_by||""} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,received_by:e.target.value}:r))} placeholder="Site person"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <button onClick={()=>setDirectRows(p=>[...p,{id:Date.now(),item_name:"",qty:"",unit:"Bags",vendor:"",challan:"",received_by:""}])}
-                    style={{width:"100%",padding:"8px",borderRadius:7,border:"1.5px dashed "+T.b2,background:"none",color:T.t4,fontSize:12,cursor:"pointer",marginTop:4}}>
-                    + Add Another Item
-                  </button>
-                </div>
-              )}
-            </div>
-            <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
-              <button onClick={()=>setShowGRN(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
-              {grnTab==="direct"&&(
-                <button onClick={handleDirectReceive} disabled={grnSaving}
-                  style={{flex:2,padding:"8px",borderRadius:7,background:grnSaving?T.b1:T.grn,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer"}}>
-                  {grnSaving?"Saving...":"Submit GRN"}
-                </button>
-              )}
-              {grnTab==="ordered"&&grnDone.length>0&&(
-                <button onClick={()=>setShowGRN(false)}
-                  style={{flex:2,padding:"8px",borderRadius:7,background:T.grn,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
-                  Done ✓ ({grnDone.length} received)
-                </button>
-              )}
-            </div>
-          </div>
-        </>)}
 
         {/* Toolbar */}
         <div style={{background:T.surface,borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",gap:10,alignItems:"center",flexWrap:"wrap",border:"1px solid "+T.b1}}>
           <div style={{position:"relative",flex:1,minWidth:180}}>
             <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search material..."
-              style={{width:"100%",padding:"7px 9px 7px 28px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-              onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              style={{width:"100%",padding:"7px 9px 7px 28px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
           </div>
           <select value={fMaterial} onChange={e=>setFMaterial(e.target.value)}
             style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
@@ -7885,21 +7751,17 @@ function TabMaterial({ project }) {
           <div style={{display:"flex",gap:3,background:T.surfaceB,borderRadius:6,padding:3}}>
             {[["tile","⊞"],["list","☰"]].map(([id,icon])=>(
               <button key={id} onClick={()=>setViewMode(id)}
-                style={{padding:"4px 9px",borderRadius:4,border:"none",background:viewMode===id?T.blu:"none",color:viewMode===id?"white":T.t3,fontSize:13,cursor:"pointer"}}>
-                {icon}
-              </button>
+                style={{padding:"4px 9px",borderRadius:4,border:"none",background:viewMode===id?T.blu:"none",color:viewMode===id?"white":T.t3,fontSize:13,cursor:"pointer"}}>{icon}</button>
             ))}
           </div>
           <span style={{fontSize:11,color:T.t4}}>{filtered.length} items · Rs.{fmtN(totalAmt)}</span>
           <button onClick={()=>setShowModal(true)}
             style={{padding:"7px 13px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-            New Request
+            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>New Request
           </button>
           <button onClick={()=>setShowGRN(true)}
             style={{padding:"7px 13px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
-            Record GRN
+            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>Record GRN
           </button>
         </div>
 
@@ -7941,7 +7803,7 @@ function TabMaterial({ project }) {
             {filtered.map(m=>{
               const ss=STAGE_S[m.stage]||STAGE_S["Requested"];
               return(
-                <div key={m.id} style={{display:"grid",gridTemplateColumns:"2fr 90px 110px 130px 110px 110px",padding:"9px 15px",borderBottom:"1px solid "+T.b1,alignItems:"center",borderLeft:"3px solid "+ss.c+"44",transition:"background .1s"}}
+                <div key={m.id} style={{display:"grid",gridTemplateColumns:"2fr 90px 110px 130px 110px 110px",padding:"9px 15px",borderBottom:"1px solid "+T.b1,alignItems:"center",borderLeft:"3px solid "+ss.c+"44"}}
                   onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                   onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                   <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.name}</span>
@@ -7958,282 +7820,293 @@ function TabMaterial({ project }) {
         )}
       </>)}
 
-      {/* ══════════════════════════════════════════════════════
-          TAB 2: MATERIAL LEDGER
-      ══════════════════════════════════════════════════════ */}
-      {activeTab==="ledger"&&(
-        <div>
-          {ledgerLoading&&<div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>Loading ledger...</div>}
-          {!ledgerLoading&&(
-            <div>
-              {/* Search + Vendor filter */}
-              <div style={{display:"flex",gap:8,marginBottom:12}}>
-                <div style={{position:"relative",flex:1}}>
-                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)"}}><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
-                  <input value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="Search material..."
-                    style={{width:"100%",padding:"7px 9px 7px 28px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:"white",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                </div>
-                <select value={ledgerVendor} onChange={e=>setLedgerVendor(e.target.value)}
-                  style={{padding:"7px 10px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:"white",fontFamily:"inherit",cursor:"pointer"}}>
-                  {allVendors.map(v=><option key={v}>{v}</option>)}
-                </select>
-              </div>
+      {/* ════════════════════════════════════════════════════
+          TAB 2 — INVENTORY: Stock | Used | Transfer
+      ════════════════════════════════════════════════════ */}
+      {mainTab==="inventory"&&(<>
 
-              {ledgerFiltered.length===0&&<div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>No material data — Record GRN to see ledger</div>}
-
-              {/* Material accordion */}
-              {ledgerFiltered.map((mat,mi)=>{
-                const isOpen=expandedMat===mat.material_name;
-                const balColor=mat.balance<=0?T.red:mat.balance<mat.total_received*0.2?T.amb:T.grn;
-
-                // Build chronological rows with running balance
-                const allRows=[];
-                let runBal=0;
-                const allEntries=[
-                  ...(mat.receipts||[]).map(r=>({...r,_type:"grn",_date:new Date(r.received_date||0)})),
-                  ...(mat.usage||[]).map(u=>({...u,_type:"used",_date:new Date(u.used_date||0)})),
-                ].sort((a,b)=>a._date-b._date);
-                allEntries.forEach((e,i)=>{
-                  if(e._type==="grn"){
-                    runBal+=Number(e.qty||0);
-                    allRows.push({...e,runBal,idx:i});
-                  } else {
-                    runBal-=Number(e.qty||0);
-                    allRows.push({...e,runBal,idx:i});
-                  }
-                });
-
-                return(
-                  <div key={mat.material_name} style={{marginBottom:10,background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
-                    {/* Accordion header */}
-                    <div onClick={()=>setExpandedMat(isOpen?null:mat.material_name)}
-                      style={{padding:"11px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",background:isOpen?"#0F172A":T.surface,transition:"background .15s"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:10}}>
-                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={isOpen?"white":T.t3} strokeWidth={2.5} style={{transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}><path d="M9 18l6-6-6-6"/></svg>
-                        <div>
-                          <span style={{fontSize:13,fontWeight:700,color:isOpen?"white":T.t1}}>{mat.material_name}</span>
-                          <span style={{fontSize:10.5,color:isOpen?"rgba(255,255,255,0.5)":T.t4,marginLeft:8}}>{mat.unit} · {mat.receipts?.length||0} GRN · {mat.usage?.length||0} used entries</span>
-                        </div>
-                      </div>
-                      <div style={{display:"flex",gap:20,alignItems:"center"}}>
-                        <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:10,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Received</div>
-                          <div style={{fontSize:14,fontWeight:700,color:isOpen?"#4ADE80":T.grn}}>{mat.total_received}</div>
-                        </div>
-                        <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:10,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Used</div>
-                          <div style={{fontSize:14,fontWeight:700,color:isOpen?"#FCD34D":T.amb}}>{mat.total_used}</div>
-                        </div>
-                        <div style={{textAlign:"right"}}>
-                          <div style={{fontSize:10,color:isOpen?"rgba(255,255,255,0.4)":T.t4}}>Balance</div>
-                          <div style={{fontSize:14,fontWeight:800,color:mat.balance<=0?"#F87171":isOpen?"white":balColor}}>{mat.balance}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Finance-style ledger table */}
-                    {isOpen&&(
-                      <div style={{overflowX:"auto"}}>
-                        {/* Column headers */}
-                        <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",background:"#1E293B",padding:"7px 14px",gap:8,minWidth:900}}>
-                          {["Date","Vendor","Challan","Remark / Task","Ref#","Cr (In)","Dr (Out)","Balance","By"].map((h,hi)=>(
-                            <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".5px",textAlign:hi>=5&&hi<=7?"right":"left"}}>{h}</div>
-                          ))}
-                        </div>
-
-                        {/* Rows */}
-                        {allRows.length===0&&(
-                          <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>No entries yet</div>
-                        )}
-                        {allRows.map((row,ri)=>{
-                          const isGRN=row._type==="grn";
-                          const balNeg=row.runBal<0;
-                          const balLow=row.runBal>=0&&row.runBal<mat.total_received*0.2;
-                          const balColor=balNeg?T.red:balLow?T.amb:T.grn;
-                          const dateStr=row._date?row._date.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—";
-                          return(
-                            <div key={ri} style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:900,borderLeft:"3px solid "+(isGRN?T.grn:T.amb)}}>
-                              {/* Date */}
-                              <div style={{fontSize:11.5,color:T.t3,fontWeight:500}}>{dateStr}</div>
-                              {/* Vendor */}
-                              <div style={{fontSize:12,color:T.t2,fontWeight:isGRN?500:400}}>{isGRN?(row.vendor_name||"—"):"—"}</div>
-                              {/* Challan */}
-                              <div style={{fontSize:11,color:T.blu,fontFamily:"monospace"}}>{isGRN?(row.challan_no||"—"):"—"}</div>
-                              {/* Remark/Task */}
-                              <div style={{fontSize:12,color:T.t1}}>
-                                {isGRN
-                                  ? <span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>GRN Received</span>
-                                  : <span>{row.task_name?<span style={{fontSize:10,color:T.t4,marginRight:4}}>{row.task_no}</span>:""}{row.task_name||""}{row.remark?<span style={{color:T.t3}}>{row.task_name?" · ":""}{row.remark}</span>:<span style={{color:T.t4,fontSize:10}}>{!row.task_name?"Project level":""}</span>}</span>
-                                }
-                              </div>
-                              {/* Ref# */}
-                              <div style={{fontSize:11,fontWeight:700,color:isGRN?T.grn:T.amb,fontFamily:"monospace"}}>{isGRN?(row.grn_number||"—"):("USE-"+(ri+1))}</div>
-                              {/* Cr (In) */}
-                              <div style={{fontSize:13,fontWeight:800,color:isGRN?T.grn:T.t4,textAlign:"right"}}>{isGRN?row.qty:"—"}</div>
-                              {/* Dr (Out) */}
-                              <div style={{fontSize:13,fontWeight:800,color:!isGRN?T.red:T.t4,textAlign:"right"}}>{!isGRN?row.qty:"—"}</div>
-                              {/* Running Balance */}
-                              <div style={{fontSize:13,fontWeight:800,color:balColor,textAlign:"right",background:balNeg?T.redL:"transparent",borderRadius:4,padding:"1px 4px"}}>{row.runBal}</div>
-                              {/* By */}
-                              <div style={{fontSize:11.5,color:T.t2}}>{isGRN?(row.received_by||"—"):(row.used_by||row.user_name||"—")}</div>
-                            </div>
-                          );
-                        })}
-
-                        {/* Footer summary */}
-                        <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",padding:"8px 14px",gap:8,background:"#0F172A",minWidth:900,borderTop:"2px solid "+T.b1}}>
-                          <div style={{gridColumn:"1/6",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px"}}>Total</div>
-                          <div style={{fontSize:13,fontWeight:800,color:"#4ADE80",textAlign:"right"}}>{mat.total_received}</div>
-                          <div style={{fontSize:13,fontWeight:800,color:"#F87171",textAlign:"right"}}>{mat.total_used}</div>
-                          <div style={{fontSize:13,fontWeight:800,color:mat.balance<=0?"#F87171":"#4ADE80",textAlign:"right"}}>{mat.balance}</div>
-                          <div/>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
+        {/* Sub-tab bar */}
+        <div style={{display:"flex",gap:0,borderBottom:"2px solid "+T.b1,marginBottom:14}}>
+          {[{id:"stock",l:"Material Inventory"},{id:"used",l:"Used"},{id:"transfer",l:"Transfer"}].map(t=>(
+            <button key={t.id} onClick={()=>{setInvSubTab(t.id);setMatLedgerItem(null);}}
+              style={{padding:"9px 16px",border:"none",background:"none",fontSize:13,
+                fontWeight:invSubTab===t.id?700:400,
+                color:invSubTab===t.id?T.blu:T.t3,
+                borderBottom:invSubTab===t.id?"2px solid "+T.blu:"2px solid transparent",
+                cursor:"pointer",marginBottom:-2,transition:"all .15s",fontFamily:"inherit"}}>
+              {t.l}
+            </button>
+          ))}
+          <div style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:8,paddingBottom:6}}>
+            <button onClick={()=>setShowGRN(true)}
+              style={{padding:"5px 12px",borderRadius:6,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+              <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>Record GRN
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* ══════════════════════════════════════════════════════
-          TAB 3: INVENTORY (live stock)
-      ══════════════════════════════════════════════════════ */}
-      {activeTab==="inventory"&&(
-        <div>
-          {invLoading&&<div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>Loading inventory...</div>}
-          {!invLoading&&inventory.length===0&&(
-            <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}>
-              <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 12px",display:"block"}}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
-              <div style={{fontSize:14,fontWeight:600,color:T.t3}}>No inventory yet</div>
-              <div style={{fontSize:12,marginTop:4}}>Record GRN to see live stock</div>
-            </div>
-          )}
-          {!invLoading&&inventory.length>0&&(
+        {/* ── STOCK SUB-TAB ── */}
+        {invSubTab==="stock"&&(
+          matLedgerItem ? (
+            /* ─ LEDGER DRILLDOWN for selected material ─ */
             <div>
-              {/* Summary stats */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9,marginBottom:14}}>
-                {[
-                  {l:"Total Materials",v:inventory.length,c:T.slt},
-                  {l:"Low / Exhausted",v:inventory.filter(i=>i.status==="Low"||i.status==="Exhausted").length,c:T.red},
-                  {l:"Available",v:inventory.filter(i=>i.status==="Available").length,c:T.grn},
-                ].map(s=>(
-                  <div key={s.l} style={{padding:"10px 12px",background:T.surface,border:"1px solid "+T.b1,borderRadius:8,borderTop:"3px solid "+s.c,textAlign:"center"}}>
-                    <div style={{fontSize:20,fontWeight:800,color:s.c}}>{s.v}</div>
-                    <div style={{fontSize:10,color:T.t3,marginTop:2}}>{s.l}</div>
-                  </div>
-                ))}
-              </div>
-              {/* Cards grid */}
-              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:9}}>
-                {inventory.map((item,i)=>{
-                  const rec=Number(item.total_received||0);
-                  const used=Number(item.total_used||0);
-                  const bal=Number(item.balance||0);
-                  const pct=rec>0?Math.min(100,Math.round((used/rec)*100)):0;
-                  const stC=item.status==="Exhausted"?T.red:item.status==="Low"?T.amb:T.grn;
-                  const stBg=item.status==="Exhausted"?T.redL:item.status==="Low"?T.ambL:T.grnL;
-                  const isExpanded = invExpandedMat===item.material_name;
-                  const today = new Date().toISOString().split("T")[0];
-                  const uForm = invUsedForm[item.material_name]||{qty:"",remark:"",used_date:today};
+              {/* Back + header */}
+              <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:14}}>
+                <button onClick={()=>setMatLedgerItem(null)}
+                  style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,border:"1.5px solid "+T.b1,background:T.surface,fontSize:12,fontWeight:600,color:T.t2,cursor:"pointer",fontFamily:"inherit"}}>
+                  ← Back to Inventory
+                </button>
+                <div style={{flex:1}}>
+                  <span style={{fontSize:15,fontWeight:700,color:T.t1}}>{matLedgerItem}</span>
+                  {(()=>{
+                    const mat=ledger.find(m=>m.material_name===matLedgerItem);
+                    if(!mat) return null;
+                    return <span style={{fontSize:12,color:T.t4,marginLeft:8}}>{mat.unit} · {mat.receipts?.length||0} GRN · {mat.usage?.length||0} used</span>;
+                  })()}
+                </div>
+                {(()=>{
+                  const mat=ledger.find(m=>m.material_name===matLedgerItem);
+                  if(!mat) return null;
+                  const balColor=mat.balance<=0?T.red:mat.balance<mat.total_received*0.2?T.amb:T.grn;
                   return(
-                    <div key={i} style={{background:T.surface,borderRadius:9,border:"1.5px solid "+(isExpanded?T.grn:T.b1),padding:"11px 13px",borderTop:"3px solid "+stC,transition:"border .2s"}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:1}}>
-                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{item.material_name}</div>
-                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stBg,color:stC}}>{item.status}</span>
-                      </div>
-                      <div style={{fontSize:10,color:T.t4,marginBottom:8}}>{item.unit}</div>
-                      <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:15,fontWeight:800,color:T.grn}}>{rec}</div>
-                          <div style={{fontSize:8.5,color:T.t4}}>Received</div>
+                    <div style={{display:"flex",gap:20}}>
+                      {[{l:"Received",v:mat.total_received,c:T.grn},{l:"Used",v:mat.total_used,c:T.amb},{l:"Balance",v:mat.balance,c:balColor}].map(x=>(
+                        <div key={x.l} style={{textAlign:"right"}}>
+                          <div style={{fontSize:11,color:T.t4}}>{x.l}</div>
+                          <div style={{fontSize:18,fontWeight:800,color:x.c}}>{x.v}</div>
                         </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:15,fontWeight:800,color:T.amb}}>{used}</div>
-                          <div style={{fontSize:8.5,color:T.t4}}>Used</div>
-                        </div>
-                        <div style={{textAlign:"center"}}>
-                          <div style={{fontSize:15,fontWeight:800,color:stC}}>{bal}</div>
-                          <div style={{fontSize:8.5,color:T.t4}}>Balance</div>
-                        </div>
-                      </div>
-                      {rec>0&&<div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:8}}>
-                        <div style={{height:"100%",width:pct+"%",background:pct>=100?T.red:pct>60?T.amb:T.grn,borderRadius:2,transition:"width .4s"}}/>
-                      </div>}
-                      {/* Mark Used button */}
-                      {bal>0&&<button onClick={()=>{
-                        setInvExpandedMat(isExpanded?null:item.material_name);
-                        if(!isExpanded) setInvUsedForm(p=>({...p,[item.material_name]:{qty:"",remark:"",used_date:today}}));
-                      }}
-                        style={{width:"100%",padding:"5px",borderRadius:6,border:"1.5px solid "+(isExpanded?T.grn:T.grnM),background:isExpanded?T.grn:T.grnL,color:isExpanded?"white":T.grn,fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:isExpanded?8:0,transition:"all .15s"}}>
-                        {isExpanded?"▲ Cancel":"▼ Mark Used"}
-                      </button>}
-                      {/* Inline form */}
-                      {isExpanded&&bal>0&&(
-                        <div style={{borderTop:"1px solid "+T.grnM,paddingTop:8}}>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:7}}>
-                            <div>
-                              <label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Qty Used *</label>
-                              <input type="number" value={uForm.qty}
-                                onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,qty:e.target.value}}))}
-                                placeholder={"max "+bal}
-                                style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:13,fontWeight:700,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                            </div>
-                            <div>
-                              <label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Date</label>
-                              <input type="date" value={uForm.used_date}
-                                onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,used_date:e.target.value}}))}
-                                style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                            </div>
-                          </div>
-                          <input value={uForm.remark}
-                            onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,remark:e.target.value}}))}
-                            placeholder="Remark (optional)"
-                            style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:7}}/>
-                          <button onClick={async()=>{
-                            if(!uForm.qty||parseFloat(uForm.qty)<=0) return alert("Qty required");
-                            if(parseFloat(uForm.qty)>bal) return alert("Qty exceeds balance ("+bal+")");
-                            setInvUsedSaving(item.material_name);
-                            try{
-                              const res=await api.post("/tasks/project/"+projectId+"/mark-used",{
-                                material_name:item.material_name,
-                                used_qty:parseFloat(uForm.qty),
-                                unit:item.unit,
-                                remark:uForm.remark||null,
-                                used_date:uForm.used_date,
-                              });
-                              if(res.success){
-                                setInvExpandedMat(null);
-                                // Reload inventory
-                                setInvLoading(true);
-                                api.get("/tasks/project/"+projectId+"/inventory").then(r=>{
-                                  if(r.success)setInventory(r.data||[]);
-                                  setInvLoading(false);
-                                });
-                                setLedgerLoaded(false);
-                              } else alert(res.message||"Failed");
-                            }catch(e){alert(e.message);}
-                            setInvUsedSaving(null);
-                          }} disabled={invUsedSaving===item.material_name}
-                            style={{width:"100%",padding:"7px",borderRadius:6,background:invUsedSaving===item.material_name?T.b1:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-                            {invUsedSaving===item.material_name?"Saving...":"✓ Save Used Entry"}
-                          </button>
-                        </div>
-                      )}
+                      ))}
                     </div>
                   );
-                })}
+                })()}
               </div>
+              {ledgerLoading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>Loading ledger...</div>}
+              {!ledgerLoading&&(()=>{
+                const mat=ledger.find(m=>m.material_name===matLedgerItem);
+                if(!mat) return <div style={{textAlign:"center",padding:"40px",color:T.t4}}>No ledger data found</div>;
+                const rows=buildLedgerRows(mat);
+                return(
+                  <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+                    <div style={{overflowX:"auto"}}>
+                      <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",background:"#1E293B",padding:"8px 14px",gap:8,minWidth:900}}>
+                        {["Date","Vendor","Challan","Remark / Task","Ref#","Cr (In)","Dr (Out)","Balance","By"].map((h,hi)=>(
+                          <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".5px",textAlign:hi>=5&&hi<=7?"right":"left"}}>{h}</div>
+                        ))}
+                      </div>
+                      {rows.length===0&&<div style={{padding:"32px",textAlign:"center",color:T.t4}}>No entries yet</div>}
+                      {rows.map((row,ri)=>{
+                        const isGRN=row._type==="grn";
+                        const runBal=row.runBal;
+                        const balNeg=runBal<0;
+                        const balLow=runBal>=0&&runBal<mat.total_received*0.2;
+                        const bC=balNeg?T.red:balLow?T.amb:T.grn;
+                        const dateStr=row._date?row._date.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—";
+                        return(
+                          <div key={ri} style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:900,borderLeft:"3px solid "+(isGRN?T.grn:T.amb)}}>
+                            <div style={{fontSize:11.5,color:T.t3,fontWeight:500}}>{dateStr}</div>
+                            <div style={{fontSize:12,color:T.t2}}>{isGRN?(row.vendor_name||"—"):"—"}</div>
+                            <div style={{fontSize:11,color:T.blu,fontFamily:"monospace"}}>{isGRN?(row.challan_no||"—"):"—"}</div>
+                            <div style={{fontSize:12,color:T.t1}}>
+                              {isGRN
+                                ?<span style={{fontSize:10.5,padding:"2px 7px",borderRadius:3,background:T.grnL,color:T.grn,fontWeight:600}}>GRN Received</span>
+                                :<span>{row.task_name&&<span style={{fontSize:10,color:T.t4,marginRight:4}}>{row.task_no}</span>}{row.task_name||""}{row.remark&&<span style={{color:T.t3}}>{row.task_name?" · ":""}{row.remark}</span>}{!row.task_name&&!row.remark&&<span style={{color:T.t4,fontSize:10}}>Project level</span>}</span>
+                              }
+                            </div>
+                            <div style={{fontSize:11,fontWeight:700,color:isGRN?T.grn:T.amb,fontFamily:"monospace"}}>{isGRN?(row.grn_number||"—"):("USE-"+(ri+1))}</div>
+                            <div style={{fontSize:13,fontWeight:800,color:isGRN?T.grn:T.t4,textAlign:"right"}}>{isGRN?row.qty:"—"}</div>
+                            <div style={{fontSize:13,fontWeight:800,color:!isGRN?T.red:T.t4,textAlign:"right"}}>{!isGRN?row.qty:"—"}</div>
+                            <div style={{fontSize:13,fontWeight:800,color:bC,textAlign:"right",background:balNeg?T.redL:"transparent",borderRadius:4,padding:"1px 4px"}}>{runBal}</div>
+                            <div style={{fontSize:11.5,color:T.t2}}>{isGRN?(row.received_by||"—"):(row.used_by||row.user_name||"—")}</div>
+                          </div>
+                        );
+                      })}
+                      <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",padding:"8px 14px",gap:8,background:"#0F172A",minWidth:900,borderTop:"2px solid "+T.b1}}>
+                        <div style={{gridColumn:"1/6",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px"}}>Total</div>
+                        <div style={{fontSize:13,fontWeight:800,color:"#4ADE80",textAlign:"right"}}>{mat.total_received}</div>
+                        <div style={{fontSize:13,fontWeight:800,color:"#F87171",textAlign:"right"}}>{mat.total_used}</div>
+                        <div style={{fontSize:13,fontWeight:800,color:mat.balance<=0?"#F87171":"#4ADE80",textAlign:"right"}}>{mat.balance}</div>
+                        <div/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
-          )}
-        </div>
-      )}
+          ) : (
+            /* ─ INVENTORY GRID ─ */
+            <div>
+              {invLoading&&<div style={{textAlign:"center",padding:"50px 0",color:T.t4}}>Loading inventory...</div>}
+              {!invLoading&&inventory.length===0&&(
+                <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}>
+                  <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 12px",display:"block"}}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+                  <div style={{fontSize:14,fontWeight:600,color:T.t3}}>No inventory yet</div>
+                  <div style={{fontSize:12,marginTop:4}}>Record GRN to see live stock</div>
+                </div>
+              )}
+              {!invLoading&&inventory.length>0&&(
+                <div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:9,marginBottom:14}}>
+                    {[{l:"Total Materials",v:inventory.length,c:T.slt},{l:"Low / Exhausted",v:inventory.filter(i=>i.status==="Low"||i.status==="Exhausted").length,c:T.red},{l:"Available",v:inventory.filter(i=>i.status==="Available").length,c:T.grn}].map(s=>(
+                      <div key={s.l} style={{padding:"10px 12px",background:T.surface,border:"1px solid "+T.b1,borderRadius:8,borderTop:"3px solid "+s.c,textAlign:"center"}}>
+                        <div style={{fontSize:20,fontWeight:800,color:s.c}}>{s.v}</div>
+                        <div style={{fontSize:10,color:T.t3,marginTop:2}}>{s.l}</div>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:9}}>
+                    {inventory.map((item,i)=>{
+                      const rec=Number(item.total_received||0),used=Number(item.total_used||0),bal=Number(item.balance||0);
+                      const pct=rec>0?Math.min(100,Math.round((used/rec)*100)):0;
+                      const stC=item.status==="Exhausted"?T.red:item.status==="Low"?T.amb:T.grn;
+                      const stBg=item.status==="Exhausted"?T.redL:item.status==="Low"?T.ambL:T.grnL;
+                      const isExpanded=invExpandedMat===item.material_name;
+                      const today=new Date().toISOString().split("T")[0];
+                      const uForm=invUsedForm[item.material_name]||{qty:"",remark:"",used_date:today};
+                      return(
+                        <div key={i} style={{background:T.surface,borderRadius:9,border:"1.5px solid "+(isExpanded?T.grn:T.b1),padding:"11px 13px",borderTop:"3px solid "+stC,cursor:"pointer"}}
+                          onClick={e=>{
+                            // If click is NOT on the Mark Used button or its children — open ledger
+                            if(!e.target.closest("[data-mark-used]")){
+                              setMatLedgerItem(item.material_name);
+                            }
+                          }}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:1}}>
+                            <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{item.material_name}</div>
+                            <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stBg,color:stC}}>{item.status}</span>
+                          </div>
+                          <div style={{fontSize:10,color:T.t4,marginBottom:8}}>{item.unit}</div>
+                          <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                            <div style={{textAlign:"center"}}><div style={{fontSize:15,fontWeight:800,color:T.grn}}>{rec}</div><div style={{fontSize:8.5,color:T.t4}}>Received</div></div>
+                            <div style={{textAlign:"center"}}><div style={{fontSize:15,fontWeight:800,color:T.amb}}>{used}</div><div style={{fontSize:8.5,color:T.t4}}>Used</div></div>
+                            <div style={{textAlign:"center"}}><div style={{fontSize:15,fontWeight:800,color:stC}}>{bal}</div><div style={{fontSize:8.5,color:T.t4}}>Balance</div></div>
+                          </div>
+                          {rec>0&&<div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:8}}><div style={{height:"100%",width:pct+"%",background:pct>=100?T.red:pct>60?T.amb:T.grn,borderRadius:2}}/></div>}
+                          {bal>0&&<button data-mark-used onClick={e=>{e.stopPropagation();setInvExpandedMat(isExpanded?null:item.material_name);if(!isExpanded)setInvUsedForm(p=>({...p,[item.material_name]:{qty:"",remark:"",used_date:today}}));}}
+                            style={{width:"100%",padding:"5px",borderRadius:6,border:"1.5px solid "+(isExpanded?T.grn:T.grnM),background:isExpanded?T.grn:T.grnL,color:isExpanded?"white":T.grn,fontSize:11,fontWeight:700,cursor:"pointer",marginBottom:isExpanded?8:0}}>
+                            {isExpanded?"▲ Cancel":"▼ Mark Used"}
+                          </button>}
+                          {isExpanded&&bal>0&&(
+                            <div style={{borderTop:"1px solid "+T.grnM,paddingTop:8}} onClick={e=>e.stopPropagation()}>
+                              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:7}}>
+                                <div><label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Qty Used *</label>
+                                  <input type="number" value={uForm.qty} onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,qty:e.target.value}}))} placeholder={"max "+bal}
+                                    style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:13,fontWeight:700,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+                                <div><label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Date</label>
+                                  <input type="date" value={uForm.used_date} onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,used_date:e.target.value}}))}
+                                    style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+                              </div>
+                              <input value={uForm.remark} onChange={e=>setInvUsedForm(p=>({...p,[item.material_name]:{...uForm,remark:e.target.value}}))} placeholder="Remark (optional)"
+                                style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:7}}/>
+                              <button onClick={async()=>{
+                                if(!uForm.qty||parseFloat(uForm.qty)<=0) return alert("Qty required");
+                                if(parseFloat(uForm.qty)>bal) return alert("Qty exceeds balance ("+bal+")");
+                                setInvUsedSaving(item.material_name);
+                                try{
+                                  const res=await api.post("/tasks/project/"+projectId+"/mark-used",{material_name:item.material_name,used_qty:parseFloat(uForm.qty),unit:item.unit,remark:uForm.remark||null,used_date:uForm.used_date});
+                                  if(res.success){
+                                    setInvExpandedMat(null);
+                                    setInvLoading(true);
+                                    api.get("/tasks/project/"+projectId+"/inventory").then(r=>{if(r.success)setInventory(r.data||[]);setInvLoading(false);});
+                                    setLedgerLoaded(false);
+                                  } else alert(res.message||"Failed");
+                                }catch(e){alert(e.message);}
+                                setInvUsedSaving(null);
+                              }} disabled={invUsedSaving===item.material_name}
+                                style={{width:"100%",padding:"7px",borderRadius:6,background:invUsedSaving===item.material_name?T.b1:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+                                {invUsedSaving===item.material_name?"Saving...":"✓ Save Used Entry"}
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        )}
+
+        {/* ── USED SUB-TAB — inline table ── */}
+        {invSubTab==="used"&&(
+          <div>
+            {/* Filters */}
+            <div style={{background:T.surface,borderRadius:10,padding:"10px 14px",marginBottom:12,border:"1px solid "+T.b1}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7,marginBottom:7}}>
+                <input value={ulFilterMat} onChange={e=>setUlFilterMat(e.target.value)} placeholder="Filter by material..."
+                  style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+                <input value={ulFilterTask} onChange={e=>setUlFilterTask(e.target.value)} placeholder="Filter by task..."
+                  style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7}}>
+                <input value={ulFilterBy} onChange={e=>setUlFilterBy(e.target.value)} placeholder="Used by..."
+                  style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+                <input type="date" value={ulFilterFrom} onChange={e=>setUlFilterFrom(e.target.value)} title="From date"
+                  style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+                <input type="date" value={ulFilterTo} onChange={e=>setUlFilterTo(e.target.value)} title="To date"
+                  style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:11,outline:"none",fontFamily:"inherit"}}/>
+              </div>
+              {(ulFilterMat||ulFilterTask||ulFilterBy||ulFilterFrom||ulFilterTo)&&(
+                <button onClick={()=>{setUlFilterMat("");setUlFilterTask("");setUlFilterBy("");setUlFilterFrom("");setUlFilterTo("");}}
+                  style={{marginTop:6,background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:11,padding:0,fontWeight:600}}>× Clear filters</button>
+              )}
+            </div>
+            {usedLogLoading&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}>Loading...</div>}
+            {!usedLogLoading&&(()=>{
+              const fu=usedLog.filter(u=>{
+                if(ulFilterMat&&!u.material_name?.toLowerCase().includes(ulFilterMat.toLowerCase())) return false;
+                if(ulFilterTask&&!(u.task_name||"").toLowerCase().includes(ulFilterTask.toLowerCase())) return false;
+                if(ulFilterBy&&!(u.user_name||"").toLowerCase().includes(ulFilterBy.toLowerCase())) return false;
+                if(ulFilterFrom&&u.used_date&&u.used_date<ulFilterFrom) return false;
+                if(ulFilterTo&&u.used_date&&u.used_date>ulFilterTo) return false;
+                return true;
+              });
+              if(fu.length===0) return <div style={{textAlign:"center",padding:"60px",color:T.t4,fontSize:13}}>{usedLog.length===0?"No used entries yet":"No entries match filters"}</div>;
+              return(
+                <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr",background:"#1E293B",padding:"8px 16px",gap:8}}>
+                    {["Date","Material","Qty","Used By","Remark/Task"].map(h=>(
+                      <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
+                    ))}
+                  </div>
+                  {fu.map((u,i)=>(
+                    <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr",padding:"9px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
+                      <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
+                      <div><div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{u.material_name}</div><div style={{fontSize:10,color:T.t4}}>{u.unit}</div></div>
+                      <div style={{fontSize:13,fontWeight:700,color:T.amb}}>{u.used_qty}</div>
+                      <div style={{fontSize:11.5,color:T.t2}}>{u.user_name||"Site"}</div>
+                      <div style={{fontSize:11,color:T.t3}}>
+                        {u.task_name&&<div style={{color:T.blu,fontWeight:600,fontSize:10.5}}>{u.task_no} {u.task_name}</div>}
+                        {u.remark&&<div>{u.remark}</div>}
+                        {!u.task_name&&!u.remark&&"—"}
+                      </div>
+                    </div>
+                  ))}
+                  <div style={{padding:"8px 16px",background:"#0F172A",borderTop:"2px solid "+T.b1,display:"flex",justifyContent:"space-between"}}>
+                    <span style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>{fu.length} entries</span>
+                    <span style={{fontSize:13,fontWeight:800,color:T.amb}}>Total: {fu.reduce((s,u)=>s+Number(u.used_qty||0),0).toFixed(2)}</span>
+                  </div>
+                </div>
+              );
+            })()}
+          </div>
+        )}
+
+        {/* ── TRANSFER SUB-TAB ── */}
+        {invSubTab==="transfer"&&(
+          <div style={{textAlign:"center",padding:"60px 0",color:T.t4}}>
+            <svg width={40} height={40} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 12px",display:"block"}}><path d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"/></svg>
+            <div style={{fontSize:14,fontWeight:600,color:T.t3}}>Material Transfer</div>
+            <div style={{fontSize:12,marginTop:4}}>Site-to-site transfer — coming soon</div>
+            <button style={{marginTop:16,padding:"8px 20px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>+ New Transfer</button>
+          </div>
+        )}
+      </>)}
 
     </div>
   );
 }
+
 
 
 function TabSubcon({ projectId }) {
