@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import ExportMenu from "../components/DataExport";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -746,6 +747,27 @@ function MOMModule(){
             <option value="All">All Types</option>
             {MEETING_TYPES.map(t=><option key={t} style={{color:T.t1,background:T.surface}}>{t}</option>)}
           </select>
+          {/* Export */}
+          <ExportMenu
+            filename="moms"
+            title="Minutes of Meeting"
+            columns={[
+              {key:"id",label:"ID"},
+              {key:"title",label:"Title"},
+              {key:"type",label:"Type"},
+              {key:"site",label:"Site / Project"},
+              {key:"date",label:"Date"},
+              {key:"time",label:"Time"},
+              {key:"venue",label:"Venue"},
+              {key:"conductedBy",label:"Conducted By"},
+              {key:"attendees",label:"Attendees",get:r=>Array.isArray(r.attendees)?r.attendees.join(", "):(r.attendees||"")},
+              {key:"agenda",label:"Agenda"},
+              {key:"discussion",label:"Discussion",get:r=>Array.isArray(r.discussion)?r.discussion.map(d=>d.point||d).join(" | "):(r.discussion||"")},
+              {key:"actionItems",label:"Action Items",get:r=>Array.isArray(r.actionItems)?r.actionItems.map(a=>`${a.task||""}${a.assignee?` (@${a.assignee})`:""}${a.dueDate?` due ${a.dueDate}`:""}`).join(" | "):""},
+              {key:"status",label:"Status"},
+            ]}
+            rows={filtered}
+          />
           {/* New MOM */}
           <button onClick={()=>setShowCreate(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>

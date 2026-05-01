@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useCallback } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LiveTeamView from "../components/LiveTeamView";
+import ExportMenu from "../components/DataExport";
 
 // ── ICONS ──────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -906,11 +907,24 @@ function TeamScheduleModule(){
             <IcFilter size={12} color="currentColor"/> Filters {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
           </button>
 
-          {/* Export */}
-          <button onClick={exportCSV}
-            style={{display:"flex",alignItems:"center",gap:4,padding:"5px 10px",borderRadius:6,border:"1px solid rgba(255,255,255,0.18)",background:"rgba(255,255,255,0.07)",color:"rgba(255,255,255,0.7)",fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-            Export
-          </button>
+          {/* Export — Excel + PDF */}
+          <ExportMenu
+            filename="my-team"
+            title="My Team — Schedule"
+            columns={[
+              {key:"type",label:"Type"},
+              {key:"title",label:"Title"},
+              {key:"assignee",label:"Assignee",get:r=>{const m=TEAM_MEMBERS.find(mm=>mm.id===r.assignee);return m?.name||r.assigneeName||"";}},
+              {key:"site",label:"Site",get:r=>{const s=SITES.find(ss=>ss.id===r.site);return s?.name||r.siteName||"";}},
+              {key:"status",label:"Status"},
+              {key:"priority",label:"Priority"},
+              {key:"startDate",label:"Start"},
+              {key:"dueDate",label:"Due"},
+              {key:"description",label:"Description"},
+            ]}
+            rows={filteredItems}
+            size="sm"
+          />
 
           {/* Create buttons */}
           {isAdmin&&[{type:"Task",c:T.blu},{type:"Issue",c:T.red},{type:"Todo",c:T.grn}].map(({type,c})=>(

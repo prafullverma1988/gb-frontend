@@ -5,6 +5,7 @@ import { Credit } from "../components/Credit";
 import LeadDesignDrawer from "../components/LeadDesignDrawer";
 import ShareDrawingDrawer from "../components/ShareDrawingDrawer";
 import DesignOverviewDrawer from "../components/DesignOverviewDrawer";
+import ExportMenu from "../components/DataExport";
 
 // ── ICONS ──────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -2225,6 +2226,49 @@ function CRMModule(){
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:"rgba(124,58,237,0.15)",border:"1px solid rgba(124,58,237,0.4)",color:"#C4B5FD",fontSize:12,fontWeight:700,cursor:"pointer"}}>
             🎨 Design Status
           </button>
+          <ExportMenu
+            filename="crm-leads"
+            title="CRM Leads"
+            columns={[
+              {key:"name",label:"Name"},
+              {key:"phone",label:"Phone"},
+              {key:"email",label:"Email"},
+              {key:"city",label:"City"},
+              {key:"projType",label:"Project Type"},
+              {key:"budget",label:"Budget",get:r=>r.budget?`₹${r.budget}`:""},
+              {key:"source",label:"Source"},
+              {key:"assignedTo",label:"Assigned To"},
+              {key:"stage",label:"Stage",get:r=>STAGES.find(s=>s.id===r.stage)?.label||r.stage||""},
+              {key:"priority",label:"Priority"},
+              {key:"contactDate",label:"Next Contact"},
+              {key:"createdAt",label:"Created"},
+              {key:"notes",label:"Notes"},
+            ]}
+            rows={[...(canConstruction?leads:[]),...(canSolar?solarLeads:[])]}
+            onImport={async(rows)=>{
+              if(!rows.length){alert("No rows to import");return;}
+              if(!window.confirm(`Import ${rows.length} lead${rows.length>1?"s":""}?`))return;
+              let ok=0,fail=0;
+              for(const r of rows){
+                try{
+                  const res=await api.post("/crm/leads",{
+                    name:r.Name||r.name||"",
+                    phone:r.Phone||r.phone||"",
+                    email:r.Email||r.email||"",
+                    city:r.City||r.city||"",
+                    projType:r["Project Type"]||r.projType||"Residential",
+                    budget:Number(String(r.Budget||r.budget||"").replace(/[^\d.]/g,""))||0,
+                    source:r.Source||r.source||"",
+                    stage:"lead",priority:r.Priority||r.priority||"Medium",
+                    notes:r.Notes||r.notes||"",
+                  });
+                  if(res.success)ok++;else fail++;
+                }catch{fail++;}
+              }
+              alert(`Imported: ${ok}${fail?` · Failed: ${fail}`:""}`);
+              loadLeads();
+            }}
+          />
           <button onClick={()=>setShowTemplates(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             📋 Templates
