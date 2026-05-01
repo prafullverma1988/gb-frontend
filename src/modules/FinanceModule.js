@@ -1674,7 +1674,30 @@ function FinanceModule(){
   const [sortCB,setSortCB]=useState({col:"date",dir:"desc"});
   // PR / Pending
   const [editReqId,setEditReqId]=useState(null);const [editAmt,setEditAmt]=useState("");
-  const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);const [pendPmts,setPendPmts]=useState(PEND_PMTS_DATA);
+  const [payReqs,setPayReqs]=useState(PAY_REQS_DATA);
+  // pendBills holds only non-PR bills (from backend). Approved PRs are derived from payReqs.
+  const [pendBills,setPendBills]=useState(PEND_PMTS_DATA);
+  // Derived list: approved (unpaid) PRs from payReqs + pending bills — always in sync
+  const pendPmts = (()=>{
+    const today = new Date(); today.setHours(0,0,0,0);
+    const fromPRs = payReqs
+      .filter(r=>r.status==="Approved" && !r.paid)
+      .map(r=>({
+        id:`pr-${r.id}`,
+        type:"pr",
+        no:r.no,
+        party:r.party||"",
+        project:r.project||"",
+        amount:Number(r.amount)||0,
+        date:r.date||"",
+        priority:r.priority||"Medium",
+        subType:r.subType,
+        overdue:false,
+        _src:r,
+      }));
+    return [...fromPRs, ...pendBills];
+  })();
+  const setPendPmts = setPendBills; // legacy compat — only bill mutations should use this now
   const [showNewPR,setShowNewPR]=useState(false);
   // API data
   const [apiAccounts,setApiAccounts]=useState(null);
@@ -1805,15 +1828,19 @@ function FinanceModule(){
   };
 
   const refreshPendPmts=async()=>{
-    // /finance/pending-payments endpoint not yet available on backend
-    // Pending payments are managed locally (from approved PRs + hardcoded bills)
-    // TODO: enable when backend endpoint is ready
+    // pendPmts is now derived from payReqs (PR portion) + pendBills (from backend).
+    // We only fetch the BILLS portion here; PRs are computed live from payReqs so
+    // amounts always match what's shown in Payment Requests.
     try{
       setLoading(l=>({...l,pendpmts:true}));
       const r=await api.get("/finance/pending-payments");
-      if(r.success&&r.data?.length) setPendPmts(r.data.map(mapPendPmt));
+      if(r.success&&Array.isArray(r.data)){
+        // Drop any "pr" rows from the API response — those are derived elsewhere
+        const billsOnly = r.data.map(mapPendPmt).filter(p=>p.type!=="pr");
+        setPendBills(billsOnly);
+      }
     }catch(e){
-      // 404 expected — backend endpoint not yet implemented, use local state
+      // 404 expected on installs without the bills endpoint — leave pendBills as-is
       if(!e?.message?.includes("404")) console.error("Refresh pending:",e);
     }
     finally{setLoading(l=>({...l,pendpmts:false}));}
@@ -2078,9 +2105,8 @@ function FinanceModule(){
   const APPROVER_NAME=localStorage.getItem("gb_user_name")||"Admin"; // logged-in admin
   const approveReq=async(id)=>{
     const req=payReqs.find(r=>r.id===id);
-    // Optimistic update
+    // Optimistic update — pendPmts derives from payReqs automatically
     setPayReqs(prev=>prev.map(r=>r.id===id?{...r,status:"Approved",approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}:r));
-    if(req) setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:req.amount,date:req.date,overdue:false}]);
     try{
       await api.put(`/finance/payment-requests/${id}/approve`,{
         approved_amount:req?.amount||0,
@@ -2921,8 +2947,8 @@ function FinanceModule(){
                           <button onClick={()=>setEditReqId(null)} style={{padding:"6px 14px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
                           <button onClick={()=>{
                             const newAmt=Number(editAmt);if(!newAmt||newAmt<=0) return;const orig=req.amount;
+                            // pendPmts derives from payReqs automatically — no separate push needed
                             setPayReqs(prev=>prev.map(r=>r.id===req.id?{...r,status:"Approved",amount:newAmt,originalAmt:newAmt!==orig?orig:undefined,modified:newAmt!==orig,approvedBy:APPROVER_NAME,approvedDate:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}:r));
-                            setPendPmts(prev=>[...prev,{id:Date.now(),type:"pr",no:req.no,party:req.party,project:req.project,amount:newAmt,date:req.date,overdue:false}]);
                             setEditReqId(null);
                           }} style={{padding:"6px 14px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
                             <IcThumbUp size={13} color="white"/> Approve {Number(editAmt)?"₹"+fmtN(Number(editAmt)):"..."}
