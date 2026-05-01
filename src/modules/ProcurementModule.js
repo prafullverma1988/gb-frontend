@@ -120,6 +120,30 @@ const Sel=({value,onChange,children})=>(
   <select value={value} onChange={onChange} style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>{children}</select>
 );
 
+// Vertical date rail — "16 Apr" stacked, used in MR cards
+const DateRail=({date})=>{
+  // date may be "16 Apr 2026" / "16/04/2026" / ISO; extract day + month
+  let day="", mon="";
+  if(date){
+    const parsed = new Date(date);
+    if(!isNaN(parsed)){
+      day = String(parsed.getDate()).padStart(2,"0");
+      mon = parsed.toLocaleString("en-IN",{month:"short"});
+    } else {
+      // fallback: split on space (e.g. "16 Apr 2026")
+      const parts = String(date).split(" ");
+      day = parts[0]||"";
+      mon = parts[1]||"";
+    }
+  }
+  return(
+    <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",lineHeight:1.1}}>
+      <span style={{fontSize:14,fontWeight:800,color:T.t1,letterSpacing:"-.3px"}}>{day||"--"}</span>
+      <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",marginTop:1}}>{mon||""}</span>
+    </div>
+  );
+};
+
 // ── APPROVE MR MODAL (with qty edit) ─────────────────────────────────
 function ApproveMRModal({mr,onSave,onClose}){
   const [qty,setQty]=useState(String(mr.qty));
@@ -1267,40 +1291,40 @@ function ProcurementModule(){
                   {/* Grouped by project */}
                   {Object.entries(groupedMRs).map(([project,items])=>(
                     <div key={project}>
-                      {/* Project group header */}
-                      <div style={{padding:"7px 14px",background:"#F0F4FF",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8}}>
-                        <span style={{fontSize:11,fontWeight:700,color:T.blu}}>{project}</span>
-                        <span style={{fontSize:10,color:T.t4}}>{items.length} item{items.length>1?"s":""}</span>
-                        {/* Create PO for this project */}
-                        <button onClick={()=>{setCreatePOPrefill(items);setShowCreatePO(true);}} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4,padding:"3px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
+                      {/* Project group header — subtle */}
+                      <div style={{padding:"8px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{width:6,height:6,borderRadius:"50%",background:T.blu,flexShrink:0}}/>
+                        <span style={{fontSize:12,fontWeight:700,color:T.t1}}>{project}</span>
+                        <span style={{fontSize:10,color:T.t4,background:T.surface,padding:"1px 7px",borderRadius:10,border:`1px solid ${T.b1}`}}>{items.length} item{items.length>1?"s":""}</span>
+                        <button onClick={()=>{setCreatePOPrefill(items);setShowCreatePO(true);}} style={{marginLeft:"auto",display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
                           <IcPO size={11} color={T.blu}/> Create PO
                         </button>
                       </div>
                       {items.map((m,idx)=>(
-                        <div key={m.id} style={{display:"grid",gridTemplateColumns:"46px 70px 1fr 90px 80px 120px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:selected[m.id]?"#EFF6FF":"none",transition:"background 0.1s"}}
+                        <div key={m.id} style={{display:"grid",gridTemplateColumns:"30px 54px 1fr 110px 130px 110px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:12,background:selected[m.id]?"#EFF6FF":"none",transition:"background 0.1s"}}
                           onMouseEnter={e=>{if(!selected[m.id])e.currentTarget.style.background=T.surfaceB;}} onMouseLeave={e=>{if(!selected[m.id])e.currentTarget.style.background="none";}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
                             <input type="checkbox" checked={!!selected[m.id]} onChange={()=>toggleSelect(m.id)}
                               style={{width:15,height:15,cursor:"pointer",accentColor:T.blu}}/>
                           </div>
-                          <div>
-                            <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
-                            <div style={{fontSize:10.5,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{m.id}</div>
-                          </div>
-                          <div>
-                            <div style={{fontSize:13,fontWeight:500,color:T.t1}}>{m.item}</div>
-                            <div style={{fontSize:11,color:T.t3}}>{m.requestedBy}</div>
+                          <DateRail date={m.date}/>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:13,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.item}</div>
+                            <div style={{fontSize:10.5,color:T.t4,marginTop:2,display:"flex",gap:8,flexWrap:"wrap"}}>
+                              <span style={{fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{m.id}</span>
+                              {m.requestedBy&&<span>· {m.requestedBy}</span>}
+                            </div>
                           </div>
                           <div style={{textAlign:"right"}}>
-                            <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{m.approvedQty||m.qty}</div>
-                            <div style={{fontSize:10,color:T.t4}}>{m.unit}</div>
+                            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,letterSpacing:".3px",textTransform:"uppercase"}}>Total</div>
+                            <div style={{fontSize:15,fontWeight:800,color:T.t1,letterSpacing:"-.3px",lineHeight:1.1}}>{m.approvedQty||m.qty}<span style={{fontSize:10,color:T.t4,fontWeight:600,marginLeft:3}}>{m.unit}</span></div>
                             {m.approvedQty&&m.approvedQty<m.qty&&<div style={{fontSize:9.5,color:T.amb}}>req: {m.qty}</div>}
                           </div>
                           <div style={{textAlign:"center"}}>
-                            {m.inStock>0?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"2px 7px",borderRadius:10,border:`1px solid ${T.grnM}`}}>Stock: {m.inStock}</span>:<span style={{fontSize:10,color:T.t4}}>No stock</span>}
+                            {m.inStock>0?<span style={{fontSize:10.5,fontWeight:600,color:T.grn,background:T.grnL,padding:"3px 9px",borderRadius:10,border:`1px solid ${T.grnM}`}}>Stock: {m.inStock}</span>:<span style={{fontSize:10.5,color:T.t4}}>No stock</span>}
                           </div>
                           <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
-                            <button onClick={()=>{setSelected({[String(m.id)]:true});setShowBulkOrder(true);}} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
+                            <button onClick={()=>{setSelected({[String(m.id)]:true});setShowBulkOrder(true);}} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:5,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
                               <IcTruck size={11} color={T.amb}/> Order
                             </button>
                           </div>
