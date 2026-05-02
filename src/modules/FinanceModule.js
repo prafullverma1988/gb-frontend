@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import api from "../config/api";
 import useDebounce from "../utils/useDebounce";
@@ -479,11 +479,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const partyOptions=type==="Payment Received"?CLIENT_LIST:isInvoice?CLIENT_LIST:isMaterial?SUPPLIER_LIST:isSubcon?SUBCON_LIST:ALL_PARTIES;
 
   // ── core state ──────────────────────────────────────────────
-  const [billDate,setBillDate]=useState("2026-03-16");
-  const [delivDate,setDelivDate]=useState(prefillGRN?.deliveryDate||"2026-03-16");
-  // prefillGRN = {vendor, deliveryDate, project, items:[{name,qty,unit,head}]}
+  const _today = new Date().toISOString().slice(0,10);
+  const [billDate,setBillDate]=useState(_today);
+  const [delivDate,setDelivDate]=useState(prefillGRN?.deliveryDate||_today);
+  // prefillGRN = {grnId, grnNumber, vendor, deliveryDate, project, items:[{name,qty,unit,head}]}
   const [party,setParty]=useState(prefillGRN?.vendor||preParty||"");
   const [project,setProject]=useState(prefillGRN?.project||PROJECTS_LIST[0]);
+  // GRN-prefilled fields are locked (vendor / project / delivery date / material+qty)
+  const isFromGRN = !!prefillGRN;
+  const grnItemCount = (prefillGRN?.items?.length)||0;
   const [account,setAccount]=useState(ACCOUNTS_LIST[0]);
   const [toAccount,setToAccount]=useState(ACCOUNTS_LIST[1]);
   const [mop,setMop]=useState(MOPS_LIST[0]);
@@ -495,6 +499,25 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [invMode,setInvMode]=useState("fresh");
   const [invoiceNo,setInvoiceNo]=useState("INV-2026-001");
   const [dueDate,setDueDate]=useState("2026-04-15");
+
+  // ── Material Bill: payment due date (default = bill_date + party.credit_days) ──
+  const partyObj = useMemo(()=>(dbParties||[]).find(p=>(p.name||"").toLowerCase().trim()===String(party||"").toLowerCase().trim()),[dbParties,party]);
+  const partyCreditDays = parseInt(partyObj?.credit_days)||7;
+  const [payDueDate,setPayDueDate]=useState(()=>{
+    const d=new Date(); d.setDate(d.getDate()+7);
+    return d.toISOString().slice(0,10);
+  });
+  const [payDueDirty,setPayDueDirty]=useState(false);
+  // Auto-recompute payDueDate when bill date or party credit_days change (unless user edited it)
+  useEffect(()=>{
+    if(payDueDirty) return;
+    if(!billDate) return;
+    const d=new Date(billDate);
+    if(isNaN(d.getTime())) return;
+    d.setDate(d.getDate()+partyCreditDays);
+    setPayDueDate(d.toISOString().slice(0,10));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[billDate,partyCreditDays,party]);
 
   // ── linked Payment IN (invoice → received same time) ─────────
   const [payInLinked,setPayInLinked]=useState(false);
@@ -579,6 +602,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         unit:it.unit||UNITS[0],
         rate:String(it.rate||""),
         total:0,
+        fromGRN:true, // material name + qty + unit locked, only rate / head editable
       }));
     }
     return [blankRow()];
@@ -657,6 +681,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         to_account_name:type==="Bank Transfer"?toAccount:null,
       };
 
+      // Material bill — payment due date (from party credit days, user-overridable)
+      if(isMaterial){
+        if(payDueDate) payload.due_date = payDueDate;
+        if(prefillGRN?.grnId) payload.grn_id = prefillGRN.grnId;
+      }
+
       // Line items for material/subcon/invoice
       if(isMaterial&&rows?.length){
         payload.line_items=rows.filter(r=>r.material&&r.qty&&r.rate).map(r=>({
@@ -667,6 +697,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           rate:parseFloat(r.rate)||0,
           amount:(parseFloat(r.qty)||0)*(parseFloat(r.rate)||0),
           head:r.head||"",
+          fromGRN: !!r.fromGRN,      // marker so backend can route new rows to inventory
         }));
       }
       if(isSubcon&&Object.keys(subBoqSel).length){
@@ -899,7 +930,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               </>
             )}
 
-            {/* Material: billDate + delivDate + supplier + project + account */}
+            {/* Material: billDate + delivDate + supplier + project + payDueDate */}
             {isMaterial&&(
               <>
                 <div>
@@ -908,17 +939,31 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 </div>
                 <div>
-                  {lbl("Delivery Date")}
-                  <input type="date" value={delivDate} onChange={e=>setDelivDate(e.target.value)}
-                    style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                  {lbl("Delivery Date"+(isFromGRN?" (from GRN)":""))}
+                  {isFromGRN
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{delivDate||"—"}</div>
+                    : <input type="date" value={delivDate} onChange={e=>setDelivDate(e.target.value)}
+                        style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>}
                 </div>
                 <div>
-                  {lbl("Supplier / Party *")}
-                  <SearchSelect options={SUPPLIER_LIST} value={party} onChange={setParty} placeholder="Select supplier..."/>
+                  {lbl("Supplier / Party *"+(isFromGRN?" (from GRN)":""))}
+                  {isFromGRN
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
+                    : <SearchSelect options={SUPPLIER_LIST} value={party} onChange={setParty} placeholder="Select supplier..."/>}
                 </div>
                 <div>
-                  {lbl("Project")}
-                  <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>
+                  {lbl("Project"+(isFromGRN?" (from GRN)":""))}
+                  {isFromGRN
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
+                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>}
+                </div>
+                <div>
+                  {lbl(`Payment Due Date — ${partyCreditDays}d credit`)}
+                  <input type="date" value={payDueDate} onChange={e=>{setPayDueDate(e.target.value);setPayDueDirty(true);}}
+                    style={{...inp(),borderColor:payDueDirty?T.amb:T.b1}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=payDueDirty?T.amb:T.b1}/>
+                  <div style={{fontSize:10,color:payDueDirty?T.amb:T.t4,marginTop:2}}>
+                    {payDueDirty?"Custom — overridden by user":`Auto: bill date + ${partyCreditDays} days credit`}
+                  </div>
                 </div>
               </>
             )}
@@ -1059,21 +1104,24 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               </div>
               {rows.map((row,idx)=>(
                 <div key={row.id} style={{display:"grid",gridTemplateColumns:colTpl,gap:7,padding:"7px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:idx%2===0?T.surface:T.surfaceB}}>
-                  <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}</span>
-                  {/* Material — locked if from GRN */}
-                  {prefillGRN
+                  <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}{row.fromGRN&&<span title="Locked from GRN" style={{marginLeft:3,fontSize:9}}>🔒</span>}</span>
+                  {/* Material — locked only for rows from GRN, new added rows editable */}
+                  {row.fromGRN
                     ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.material||"—"}</div>
                     :<SearchSelect inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}} options={MATERIAL_LIBRARY} value={row.material} onChange={v=>updRow(row.id,"material",v)} placeholder="Search material..." compact={true}/>
                   }
                   <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
                   <input data-field="desc" value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Grade, spec, brand..."
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                  {/* Qty — locked if from GRN */}
-                  {prefillGRN
+                  {/* Qty — locked only for GRN rows */}
+                  {row.fromGRN
                     ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>{row.qty}</div>
                     :<input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0" style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                   }
-                  <SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>
+                  {row.fromGRN
+                    ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center"}}>{row.unit||"—"}</div>
+                    :<SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>
+                  }
                   <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
                     style={inp({textAlign:"right",borderColor:T.amb,background:T.ambL})}
                     onFocus={e=>e.target.style.borderColor=T.amb} onBlur={e=>e.target.style.borderColor=T.amb}
