@@ -1837,16 +1837,28 @@ function FinanceModule(){
     };
   };
 
-  const mapPendPmt=p=>({
-    id:p.id,
-    type:p.type==="payment_request"||p.type==="pr"?"pr":"bill",
-    no:p.reference_no||p.pr_number||`PP-${p.id}`,
-    party:p.party_name||p.party||"",
-    project:p.project_name||p.project||"",
-    amount:parseFloat(p.amount||p.balance)||0,
-    date:p.due_date?new Date(p.due_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):p.date||"",
-    overdue:p.overdue===true||(p.due_date&&new Date(p.due_date)<new Date()),
-  });
+  const mapPendPmt=p=>{
+    const dueDateRaw = p.due_date || p.date || null;
+    let daysToDue = p.days_to_due;
+    if (daysToDue == null && dueDateRaw) {
+      const d = new Date(dueDateRaw);
+      const today = new Date(); today.setHours(0,0,0,0);
+      d.setHours(0,0,0,0);
+      daysToDue = Math.floor((d - today) / (1000*60*60*24));
+    }
+    return {
+      id:p.id,
+      type:p.type==="payment_request"||p.type==="pr"?"pr":"bill",
+      no:p.reference_no||p.pr_number||`PP-${p.id}`,
+      party:p.party_name||p.party||"",
+      project:p.project_name||p.project||"",
+      amount:parseFloat(p.amount||p.balance)||0,
+      date:dueDateRaw?new Date(dueDateRaw).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+      dueDateRaw,
+      daysToDue: daysToDue ?? null,
+      overdue:p.overdue===true||(dueDateRaw&&new Date(dueDateRaw)<new Date(new Date().setHours(0,0,0,0))),
+    };
+  };
 
   const mapAccount=a=>({
     id:a.id,name:a.name||a.account_name||"",
@@ -2343,9 +2355,9 @@ function FinanceModule(){
             colors:{"Pending":{c:T.amb,bg:T.ambL},"Approved":{c:T.grn,bg:T.grnL},"Rejected":{c:T.red,bg:T.redL}},
           },
           pending:{
-            chips:["All","Overdue","High","Medium","Low"],
+            chips:["All","Overdue","Due in 7d","Due in 15d","Due in 30d"],
             active:chipPend, set:setChipPend,
-            colors:{"Overdue":{c:T.red,bg:T.redL},"High":{c:T.red,bg:T.redL},"Medium":{c:T.amb,bg:T.ambL},"Low":{c:T.grn,bg:T.grnL}},
+            colors:{"Overdue":{c:T.red,bg:T.redL},"Due in 7d":{c:T.red,bg:T.redL},"Due in 15d":{c:T.amb,bg:T.ambL},"Due in 30d":{c:T.grn,bg:T.grnL}},
           },
         };
         const cfg=FILTER_CONFIGS[tab];
@@ -3059,9 +3071,11 @@ function FinanceModule(){
               const COLS="90px 110px 1fr 100px 100px 110px 90px 110px";
               const filtered=[...pendPmts].filter(pmt=>{
                 if(chipPend==="All") return true;
-                const pri=pmt.overdue?"High":pmt.type==="pr"?"Medium":"Low";
                 if(chipPend==="Overdue") return pmt.overdue;
-                if(chipPend==="High"||chipPend==="Medium"||chipPend==="Low") return pri===chipPend;
+                const days = pmt.daysToDue;
+                if(chipPend==="Due in 7d")  return !pmt.overdue && days != null && days >= 0 && days <= 7;
+                if(chipPend==="Due in 15d") return !pmt.overdue && days != null && days >= 0 && days <= 15;
+                if(chipPend==="Due in 30d") return !pmt.overdue && days != null && days >= 0 && days <= 30;
                 return true;
               }).sort(sortFn);
               return(
