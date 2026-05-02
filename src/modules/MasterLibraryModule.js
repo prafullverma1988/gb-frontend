@@ -1021,6 +1021,13 @@ function PartyMasterSection() {
           <FormField label="City" value={form.city} onChange={v => upd("city", v)} half />
           <FormField label="Pincode" value={form.pincode || ""} onChange={v => upd("pincode", v)} half />
         </div>
+        {/* Payment terms */}
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+          <FormSelect label="Credit Days" value={String(form.credit_days ?? 7)} onChange={v => upd("credit_days", parseInt(v) || 7)} options={["7","15","30","45","60","90"]} half />
+          <div style={{ flex: 1, minWidth: 220, fontSize: 11.5, color: T.textMid, alignSelf: "flex-end", paddingBottom: 6 }}>
+            Bills se payment due date <b>credit days ke baad</b> auto-set hota hai. Override at billing.
+          </div>
+        </div>
         {/* Bank details section */}
         <div style={{ padding: "12px 0 4px", fontSize: 13, fontWeight: 700, color: T.text, borderTop: `1px solid ${T.borderLight}`, marginTop: 4 }}>Bank Details (for payment)</div>
         <div style={{ height: 10 }} />
