@@ -3703,11 +3703,27 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
               onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}/>
           </div>
           <div>
-            <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Unit</label>
-            <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
-              style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
-              {UNITS.map(u=><option key={u}>{u}</option>)}
-            </select>
+            {(() => {
+              const libMatch = matLib.find(m => (m.name||"").trim().toLowerCase() === (form.item_name||"").trim().toLowerCase());
+              const isLocked = !!libMatch && !!libMatch.unit;
+              return (
+                <>
+                  <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
+                    Unit{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>(from library)</span>}
+                  </label>
+                  {isLocked ? (
+                    <div style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+                      <span>🔒</span>{libMatch.unit}
+                    </div>
+                  ) : (
+                    <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                      style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
+                      {UNITS.map(u=><option key={u}>{u}</option>)}
+                    </select>
+                  )}
+                </>
+              );
+            })()}
           </div>
           <div>
             <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Required By</label>
@@ -7559,11 +7575,27 @@ function TabMaterial({ project }) {
                     style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
                 <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Unit</label>
-                  <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                    {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                  </select>
+                  {(() => {
+                    const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (form.item_name||"").trim().toLowerCase());
+                    const isLocked = !!libMatch && !!libMatch.unit;
+                    return (
+                      <>
+                        <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>
+                          Unit{isLocked && <span style={{marginLeft:5,fontSize:9.5,color:T.t4,textTransform:"none",fontWeight:500}}>(from library)</span>}
+                        </label>
+                        {isLocked ? (
+                          <div style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
+                            <span>🔒</span>{libMatch.unit}
+                          </div>
+                        ) : (
+                          <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                            style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                            {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                          </select>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
