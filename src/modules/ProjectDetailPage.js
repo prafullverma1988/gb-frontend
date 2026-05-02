@@ -7406,8 +7406,10 @@ function TabMaterial({ project }) {
   };
 
   const handleDirectReceive = async () => {
-    const validRows = directRows.filter(r => r.item_name && r.qty && r.challan);
-    if (!validRows.length) { alert("Item name, qty aur challan required hai"); return; }
+    const validRows = directRows.filter(r => r.item_name && r.qty && r.challan && r.vendor);
+    if (!validRows.length) { alert("Material name, qty, vendor aur challan — sab required hain"); return; }
+    const missingVendor = directRows.find(r => (r.item_name || r.qty || r.challan) && !r.vendor);
+    if (missingVendor) { alert("Vendor name compulsory hai — har row me set karo"); return; }
     setGrnSaving(true);
     try {
       const res = await api.post("/procurement/grns", {
@@ -7791,10 +7793,10 @@ function TabMaterial({ project }) {
                           <datalist id={"mat_lib_"+row.id}>{MAT_LIB.map(m=><option key={m} value={m}/>)}</datalist>
                         </div>
                         <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor</label>
+                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor *</label>
                           <input value={row.vendor} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:e.target.value}:r))}
-                            placeholder="Select or type vendor" list="vendor-list-grn"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                            placeholder="Vendor name (required)" list="vendor-list-grn"
+                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${row.vendor?T.b1:T.redM}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:row.vendor?T.surface:T.redL}}/>
                           <datalist id="vendor-list-grn">
                             {vendorList.map(v=><option key={v.id} value={v.name}>{v.name}{v.city?" — "+v.city:""}</option>)}
                           </datalist>

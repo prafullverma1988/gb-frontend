@@ -356,12 +356,27 @@ function MarkReceivedModal({mr,onSave,onClose}){
 // ── GRN MODAL ─────────────────────────────────────────────────────────
 function GRNModal({po,onClose,onSave}){
   const [challan,setChallan]=useState("");
+  const [vendorOverride,setVendorOverride]=useState(po.vendor||"");
   const [rows,setRows]=useState(po.items.map(it=>({qty:String(it.qty),quality:"Good",remark:""})));
   const isPartial=rows.some((r,i)=>parseFloat(r.qty)<po.items[i].qty);
+  const effectiveVendor = (po.vendor && String(po.vendor).trim()) || vendorOverride.trim();
+  const canSubmit = !!challan.trim() && !!effectiveVendor;
   return(
     <Modal onClose={onClose} width={500}>
-      <MHead title="Goods Receipt Note" sub={`${po.id} · ${po.vendor}`} onClose={onClose}/>
+      <MHead title="Goods Receipt Note" sub={`${po.id} · ${po.vendor||"— vendor missing —"}`} onClose={onClose}/>
       <MBody>
+        {!po.vendor&&(
+          <div style={{marginBottom:12,padding:"9px 11px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,fontSize:11.5,color:T.red}}>
+            ⚠ Source PO has no vendor set. Type vendor name below to continue.
+          </div>
+        )}
+        {!po.vendor&&(
+          <div style={{marginBottom:12}}>
+            <Fld label="Vendor *" required>
+              <Inp value={vendorOverride} onChange={e=>setVendorOverride(e.target.value)} placeholder="Vendor name"/>
+            </Fld>
+          </div>
+        )}
         <div style={{marginBottom:12}}>
           <Fld label="Challan / DC Number" required>
             <Inp value={challan} onChange={e=>setChallan(e.target.value)} placeholder="Supplier challan number"/>
@@ -397,7 +412,7 @@ function GRNModal({po,onClose,onSave}){
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn onClick={()=>onSave(po.id,challan,rows)} disabled={!challan} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
+        <Btn onClick={()=>onSave(po.id,challan,rows,effectiveVendor)} disabled={!canSubmit} color={T.grn} full icon={<IcGRN size={14} color="white"/>}>
           {isPartial?"Confirm Partial GRN":"Confirm Full GRN"}
         </Btn>
       </MFoot>
@@ -1047,12 +1062,14 @@ function ProcurementModule(){
     setMarkRecvTgt(null);
     setMrTab("Received");
   };
-  const saveGRN=async(poId,challan,rows)=>{
+  const saveGRN=async(poId,challan,rows,vendorOverride)=>{
     const po=pos.find(p=>p.id===poId);
+    const vendor = (vendorOverride && vendorOverride.trim()) || po?.vendor || "";
+    if(!vendor){alert("Vendor name compulsory hai");return;}
     try{
       const grnPayload={
         po_id:       poId,
-        vendor_name: po?.vendor    || "",
+        vendor_name: vendor,
         project_id:  po?.project_id|| po?._raw?.project_id || null,
         project_name:po?.project   || "",
         challan_no:  challan,
