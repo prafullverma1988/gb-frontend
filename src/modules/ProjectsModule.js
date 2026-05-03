@@ -1245,7 +1245,18 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   const [rejectId,setRejectId]=useState(null);
   const [rejectNote,setRejectNote]=useState("");
   const [saveErr,setSaveErr]=useState("");
-  const [raDetail,setRaDetail]=useState(null);  // {id, item} when an RA bill detail drawer is open
+  const [expandedRa,setExpandedRa]=useState(null);          // bill id of the currently expanded RA card
+  const [raItemsCache,setRaItemsCache]=useState({});        // {billId: {bill, items}}
+  const [raItemsLoading,setRaItemsLoading]=useState(null);  // billId currently being fetched
+  const loadRaDetail=async(billId)=>{
+    if(raItemsCache[billId]) return;
+    setRaItemsLoading(billId);
+    try{
+      const r=await api.get("/subcon/ra-bills/"+billId);
+      if(r.success) setRaItemsCache(p=>({...p,[billId]:{bill:r.data,items:r.data.items||[]}}));
+    }catch(_){/* ignore */}
+    setRaItemsLoading(null);
+  };
 
   const load=async()=>{
     setLoading(true);
@@ -1455,11 +1466,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
       setActing(p=>({...p,["c"+item.id]:null}));
     };
     const isRaBill = src==="ra_bill";
+    const isRaExpanded = isRaBill && expandedRa===item._source_id;
+    const raDetail = isRaBill ? raItemsCache[item._source_id] : null;
     return(
-      <div onClick={isRaBill ? ()=>setRaDetail({id:item._source_id,item}) : undefined}
-        style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc,cursor:isRaBill?"pointer":"default",transition:"background .12s"}}
-        onMouseEnter={isRaBill?(e)=>{e.currentTarget.style.background=T.surfaceB;}:undefined}
-        onMouseLeave={isRaBill?(e)=>{e.currentTarget.style.background=T.surface;}:undefined}>
+      <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
           <div style={{flex:1}}>
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3}}>
@@ -1511,27 +1521,76 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
             <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
           </div>
         )}
-        <div style={{display:"flex",gap:6,marginTop:6}} onClick={isRaBill?(e)=>e.stopPropagation():undefined}>
+        <div style={{display:"flex",gap:6,marginTop:6}}>
           {src!=="purchase_order"&&(
-            <button onClick={(e)=>{e.stopPropagation();srcAction("reject");}} disabled={!!act}
+            <button onClick={()=>srcAction("reject")} disabled={!!act}
               style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
               {act==="rejecting"?"...":"✕ Reject"}
             </button>
           )}
           {src==="design"&&(
-            <button onClick={(e)=>{e.stopPropagation();srcAction("Revision");}} disabled={!!act}
+            <button onClick={()=>srcAction("Revision")} disabled={!!act}
               style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
               ↻ Revision
             </button>
           )}
-          <button onClick={(e)=>{e.stopPropagation();srcAction("approve");}} disabled={!!act}
+          <button onClick={()=>srcAction("approve")} disabled={!!act}
             style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
             {act==="approving"?"Approving...":"✓ Approve"}
           </button>
         </div>
         {isRaBill&&(
-          <div style={{marginTop:7,padding:"5px 9px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:6,fontSize:10.5,color:T.blu,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-            Tap card to view bill items <span style={{fontSize:11}}>→</span>
+          <button onClick={()=>{
+              const next=isRaExpanded?null:item._source_id;
+              setExpandedRa(next);
+              if(next) loadRaDetail(next);
+            }}
+            style={{marginTop:7,width:"100%",padding:"6px 8px",borderRadius:6,background:isRaExpanded?T.bluL:"transparent",border:`1px solid ${isRaExpanded?T.bluM:T.b1}`,color:isRaExpanded?T.blu:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+            <span style={{fontSize:8}}>{isRaExpanded?"▲":"▼"}</span>
+            {isRaExpanded?"Hide bill detail":"View bill detail"}
+          </button>
+        )}
+        {isRaBill&&isRaExpanded&&(
+          <div style={{marginTop:8,borderTop:`1px solid ${T.b1}`,paddingTop:10}}>
+            {raItemsLoading===item._source_id&&!raDetail?(
+              <div style={{textAlign:"center",padding:"18px 0",color:T.t4,fontSize:12}}>
+                <div style={{width:18,height:18,border:`2px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}/>
+                Loading items…
+              </div>
+            ):raDetail?(<>
+              {/* 4 KPI tiles */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:5,marginBottom:8}}>
+                {[
+                  {l:"Gross",v:raDetail.bill.gross_amount,c:T.t1},
+                  {l:"Retention",v:raDetail.bill.retention_amt,c:T.amb},
+                  {l:"TDS",v:raDetail.bill.tds_amt,c:T.red},
+                  {l:"Net",v:raDetail.bill.net_payable,c:T.grn},
+                ].map(s=>(
+                  <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:5,padding:"5px 4px"}}>
+                    <div style={{fontSize:8,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>{s.l}</div>
+                    <div style={{fontSize:10.5,fontWeight:700,color:s.c,marginTop:1}}>{"₹"+Number(s.v||0).toLocaleString("en-IN")}</div>
+                  </div>
+                ))}
+              </div>
+              {/* Items list (compact) */}
+              <div style={{border:`1px solid ${T.b1}`,borderRadius:6,overflow:"hidden",fontSize:11}}>
+                <div style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",background:"#1E293B",padding:"5px 8px",gap:4}}>
+                  {["Description","Unit","Qty","Rate","Amount"].map((h,i)=>(
+                    <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
+                  ))}
+                </div>
+                {raDetail.items.length===0&&<div style={{padding:"14px 0",textAlign:"center",color:T.t4,fontSize:11}}>No items</div>}
+                {raDetail.items.map(it=>(
+                  <div key={it.id} style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",padding:"5px 8px",gap:4,borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
+                    <div style={{color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
+                    <div style={{color:T.t3}}>{it.unit}</div>
+                    <div style={{color:T.t1,textAlign:"right",fontWeight:600}}>{parseFloat(it.this_bill_qty||0)}</div>
+                    <div style={{color:T.blu,textAlign:"right"}}>{"₹"+Number(it.rate||0).toLocaleString("en-IN")}</div>
+                    <div style={{color:T.grn,textAlign:"right",fontWeight:700}}>{"₹"+Number(it.this_bill_amount||0).toLocaleString("en-IN")}</div>
+                  </div>
+                ))}
+              </div>
+            </>):null}
           </div>
         )}
         {/* View Details / Open in Project link */}
@@ -1543,8 +1602,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
                        : src==="labour_rate" ? "attendance"
                        : "overview";
           return(
-            <button onClick={(e)=>{
-                e.stopPropagation();
+            <button onClick={()=>{
                 onClose();
                 onSelectProject({ id:item.project_id, name:item.project_name, initialTab:tabFor });
               }}
@@ -1852,176 +1910,6 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
         </>)}
       </div>
     </div>
-    {raDetail && (
-      <RaBillDetailDrawer
-        billId={raDetail.id}
-        item={raDetail.item}
-        onClose={()=>setRaDetail(null)}
-        onActionDone={(actedBillId)=>{
-          // Remove the approved/rejected item from drawer & close detail
-          setData(p=>({...p,centralized:p.centralized.filter(c=>!(c._source==="ra_bill"&&c._source_id===actedBillId))}));
-          setRaDetail(null);
-        }}
-        onOpenProject={()=>{
-          if(onSelectProject && raDetail.item.project_id){
-            onClose();
-            onSelectProject({ id:raDetail.item.project_id, name:raDetail.item.project_name, initialTab:"subcon" });
-          }
-        }}
-      />
-    )}
-  </>);
-}
-
-// ── RA BILL DETAIL DRAWER (shown over ApprovalsDrawer) ───────────
-function RaBillDetailDrawer({billId, item, onClose, onActionDone, onOpenProject}){
-  const [bill,setBill]=useState(null);
-  const [items,setItems]=useState([]);
-  const [loading,setLoading]=useState(true);
-  const [acting,setActing]=useState(null);  // 'approving' | 'rejecting'
-  const [err,setErr]=useState("");
-
-  useEffect(()=>{
-    let alive=true;
-    (async()=>{
-      setLoading(true);
-      try{
-        const r=await api.get("/subcon/ra-bills/"+billId);
-        if(!alive) return;
-        if(r.success){ setBill(r.data); setItems(r.data.items||[]); }
-        else setErr(r.message||"Failed to load");
-      }catch(e){ if(alive) setErr(e.message); }
-      finally{ if(alive) setLoading(false); }
-    })();
-    return ()=>{ alive=false; };
-  },[billId]);
-
-  const fmtINR=n=>"₹"+Number(n||0).toLocaleString("en-IN");
-  const fmtDate=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—";
-
-  const act=async(approve)=>{
-    setErr(""); setActing(approve?"approving":"rejecting");
-    try{
-      const res=await api.patch("/subcon/ra-bills/"+billId+"/status",{status:approve?"Approved":"Rejected"});
-      if(res.success!==false){ onActionDone(billId); }
-      else setErr(res.message||"Action failed");
-    }catch(e){ setErr(e.message); }
-    setActing(null);
-  };
-
-  const stC = bill?.status==="Paid"?T.grn:bill?.status==="Approved"?T.blu:bill?.status==="Submitted"?T.amb:T.t4;
-
-  return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:310,backdropFilter:"blur(2px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:560,background:T.bg,zIndex:311,boxShadow:"-6px 0 36px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideInRight .18s ease-out"}}>
-
-      {/* Header */}
-      <div style={{background:"#0891B2",padding:"14px 18px",flexShrink:0,color:"white"}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-          <div>
-            <div style={{fontSize:10,fontWeight:700,opacity:0.7,textTransform:"uppercase",letterSpacing:"0.5px"}}>RA Bill</div>
-            <div style={{fontSize:17,fontWeight:700,marginTop:2}}>{bill?.bill_no || item?.ref_no || "—"}</div>
-          </div>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"6px",borderRadius:6,display:"flex"}}>
-            <IcX size={16}/>
-          </button>
-        </div>
-        <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11.5,opacity:0.9}}>
-          <span>{item?.title || bill?.subcon_name}</span>
-          <span style={{opacity:0.5}}>·</span>
-          <span>{item?.project_name || "—"}</span>
-          {bill?.bill_date && <><span style={{opacity:0.5}}>·</span><span>{fmtDate(bill.bill_date)}</span></>}
-          {bill?.status && <span style={{marginLeft:"auto",background:"rgba(255,255,255,0.18)",padding:"2px 9px",borderRadius:12,fontSize:10,fontWeight:700}}>{bill.status}</span>}
-        </div>
-      </div>
-
-      {/* Body */}
-      <div style={{flex:1,overflowY:"auto",padding:"14px"}}>
-        {err && <div style={{margin:"0 0 12px",padding:"8px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,fontSize:12,color:T.red}}>{err}</div>}
-        {loading ? (
-          <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>
-            <div style={{width:26,height:26,border:`3px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 12px"}}/>
-            Loading bill…
-          </div>
-        ) : bill ? (
-          <>
-            {/* KPI tiles */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
-              {[
-                {l:"Gross",       v:fmtINR(bill.gross_amount),  c:T.t1},
-                {l:"Retention",   v:fmtINR(bill.retention_amt), c:T.amb},
-                {l:"TDS",         v:fmtINR(bill.tds_amt),       c:T.red},
-                {l:"Net Payable", v:fmtINR(bill.net_payable),   c:T.grn},
-              ].map(s=>(
-                <div key={s.l} style={{textAlign:"center",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"10px 8px"}}>
-                  <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>{s.l}</div>
-                  <div style={{fontSize:13.5,fontWeight:800,color:s.c}}>{s.v}</div>
-                </div>
-              ))}
-            </div>
-
-            {/* Items table */}
-            <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden",marginBottom:14}}>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 50px 64px 64px 64px 70px 80px",background:"#1E293B",padding:"7px 10px",gap:6}}>
-                {["Description","Unit","WO Qty","Prev Cum","This Bill","Rate","Amount"].map((h,i)=>(
-                  <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
-                ))}
-              </div>
-              {items.length===0 && (
-                <div style={{textAlign:"center",padding:"22px 0",color:T.t4,fontSize:12}}>No item breakdown</div>
-              )}
-              {items.map(it=>(
-                <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 50px 64px 64px 64px 70px 80px",padding:"8px 10px",gap:6,borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
-                  <div style={{fontSize:11.5,color:T.t1}}>{it.description}</div>
-                  <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
-                  <div style={{fontSize:11,color:T.t2,textAlign:"right"}}>{parseFloat(it.wo_qty||0)}</div>
-                  <div style={{fontSize:11,color:T.t3,textAlign:"right"}}>{parseFloat(it.prev_cumulative||0)>0?parseFloat(it.prev_cumulative||0):"—"}</div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.t1,textAlign:"right"}}>{parseFloat(it.this_bill_qty||0)}</div>
-                  <div style={{fontSize:11,color:T.blu,textAlign:"right",fontWeight:600}}>{fmtINR(it.rate)}</div>
-                  <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtINR(it.this_bill_amount)}</div>
-                </div>
-              ))}
-              {items.length>0 && (
-                <div style={{display:"grid",gridTemplateColumns:"2fr 50px 64px 64px 64px 70px 80px",padding:"9px 10px",gap:6,background:T.surfaceB,borderTop:`1.5px solid ${T.b2}`}}>
-                  <div style={{fontSize:11.5,fontWeight:700,color:T.t1,gridColumn:"1/7"}}>Total</div>
-                  <div style={{fontSize:12.5,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtINR(bill.gross_amount)}</div>
-                </div>
-              )}
-            </div>
-
-            {bill.remark && (
-              <div style={{padding:"10px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:12,color:T.t2,marginBottom:14}}>
-                <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>Remarks</div>
-                {bill.remark}
-              </div>
-            )}
-          </>
-        ) : null}
-      </div>
-
-      {/* Footer actions */}
-      {!loading && bill && (
-        <div style={{flexShrink:0,padding:"10px 14px 14px",borderTop:`1px solid ${T.b1}`,background:T.surface}}>
-          <div style={{display:"flex",gap:8,marginBottom:8}}>
-            <button onClick={()=>act(false)} disabled={!!acting}
-              style={{flex:1,padding:"10px",borderRadius:8,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:13,fontWeight:700,cursor:acting?"not-allowed":"pointer"}}>
-              {acting==="rejecting" ? "Rejecting…" : "✕ Reject"}
-            </button>
-            <button onClick={()=>act(true)} disabled={!!acting}
-              style={{flex:2,padding:"10px",borderRadius:8,background:acting==="approving"?T.b2:T.grn,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:acting?"not-allowed":"pointer",boxShadow:"0 2px 6px rgba(5,150,105,0.25)"}}>
-              {acting==="approving" ? "Approving…" : "✓ Approve"}
-            </button>
-          </div>
-          <button onClick={onOpenProject}
-            style={{width:"100%",padding:"7px",borderRadius:7,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer"}}
-            onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.color=T.blu;}}
-            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
-            📋 Open in Project — for full WO context →
-          </button>
-        </div>
-      )}
-    </div>
-    <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
   </>);
 }
 

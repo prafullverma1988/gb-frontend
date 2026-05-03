@@ -8605,7 +8605,6 @@ function TabSubcon({ projectId }) {
                 {bills.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No bills raised yet</div>}
                 {bills.map(b=>{
                   const stC=b.status==="Paid"?T.grn:b.status==="Approved"?T.blu:b.status==="Submitted"?T.amb:T.t4;
-                  const isExp = expandedBill===b.id;
                   return(
                     <div key={b.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+stC}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
@@ -8656,35 +8655,81 @@ function TabSubcon({ projectId }) {
                         )}
                       </div>
 
-                      {/* View Item Detail toggle */}
+                      {/* View Item Detail — opens a side slide drawer */}
                       <button
                         onClick={async()=>{
-                          const next = isExp ? null : b.id;
-                          setExpandedBill(next);
-                          if(next && !billItems[b.id]){
+                          setExpandedBill(b.id);
+                          if(!billItems[b.id]){
                             const r = await api.get("/subcon/ra-bills/"+b.id);
                             if(r.success) setBillItems(p=>({...p,[b.id]:r.data.items||[]}));
                           }
                         }}
                         style={{background:"none",border:"none",color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer",padding:0,display:"flex",alignItems:"center",gap:4}}
                       >
-                        <span style={{fontSize:9}}>{isExp?"▲":"▼"}</span>
-                        {isExp?"Hide Item Detail":"View Item Detail"}
+                        <span style={{fontSize:11}}>›</span>
+                        View Item Detail
                       </button>
+                    </div>
+                  );
+                })}
 
-                      {/* Expanded item breakdown */}
-                      {isExp&&(
-                        <div style={{marginTop:8,border:"1px solid "+T.b1,borderRadius:6,overflow:"hidden"}}>
-                          <div style={{display:"grid",gridTemplateColumns:"2fr 50px 70px 70px 70px 70px 80px",background:"#1E293B",padding:"6px 10px",gap:6}}>
+                {/* ── Item Detail SIDE SLIDE drawer ────────────────── */}
+                {expandedBill && (() => {
+                  const b = bills.find(x=>x.id===expandedBill);
+                  if (!b) return null;
+                  const items = billItems[expandedBill];
+                  const stC = b.status==="Paid"?T.grn:b.status==="Approved"?T.blu:b.status==="Submitted"?T.amb:T.t4;
+                  return (<>
+                    <div onClick={()=>setExpandedBill(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:310,backdropFilter:"blur(2px)"}}/>
+                    <div style={{position:"fixed",right:0,top:0,bottom:0,width:580,maxWidth:"95vw",background:T.bg,zIndex:311,boxShadow:"-6px 0 36px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideInRight .18s ease-out"}}>
+                      {/* Header */}
+                      <div style={{background:"#0891B2",padding:"14px 18px",flexShrink:0,color:"white"}}>
+                        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                          <div>
+                            <div style={{fontSize:10,fontWeight:700,opacity:0.7,textTransform:"uppercase",letterSpacing:"0.5px"}}>RA Bill · Item Detail</div>
+                            <div style={{fontSize:17,fontWeight:700,marginTop:2}}>{b.bill_no}</div>
+                          </div>
+                          <button onClick={()=>setExpandedBill(null)} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"6px 9px",borderRadius:6,fontSize:13,fontWeight:700}}>✕</button>
+                        </div>
+                        <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11.5,opacity:0.9}}>
+                          {b.bill_date && <span>{new Date(b.bill_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</span>}
+                          <span style={{marginLeft:"auto",background:stC+"33",border:`1px solid ${stC}55`,padding:"2px 9px",borderRadius:12,fontSize:10,fontWeight:700,color:"white"}}>{b.status}</span>
+                        </div>
+                      </div>
+                      {/* Body */}
+                      <div style={{flex:1,overflowY:"auto",padding:14}}>
+                        {/* KPI tiles */}
+                        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+                          {[
+                            {l:"Gross",       v:fmtC(b.gross_amount),  c:T.t1},
+                            {l:"Retention",   v:fmtC(b.retention_amt), c:T.amb},
+                            {l:"TDS",         v:fmtC(b.tds_amt),       c:T.red},
+                            {l:"Net Payable", v:fmtC(b.net_payable),   c:T.grn},
+                          ].map(s=>(
+                            <div key={s.l} style={{textAlign:"center",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"10px 8px"}}>
+                              <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>{s.l}</div>
+                              <div style={{fontSize:13.5,fontWeight:800,color:s.c}}>{s.v}</div>
+                            </div>
+                          ))}
+                        </div>
+                        {/* Items table */}
+                        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
+                          <div style={{display:"grid",gridTemplateColumns:"2fr 50px 64px 64px 64px 70px 80px",background:"#1E293B",padding:"7px 10px",gap:6}}>
                             {["Description","Unit","WO Qty","Prev Cum","This Bill","Rate","Amount"].map((h,i)=>(
-                              <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.5)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
+                              <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
                             ))}
                           </div>
-                          {!(billItems[b.id]?.length)&&(
-                            <div style={{textAlign:"center",padding:"20px 0",color:T.t4}}><div style={{width:22,height:22,border:"2px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}></div><span style={{fontSize:12}}>Loading...</span></div>
+                          {!items && (
+                            <div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>
+                              <div style={{width:22,height:22,border:"2px solid #E2E8F0",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 8px"}}/>
+                              Loading…
+                            </div>
                           )}
-                          {(billItems[b.id]||[]).map(it=>(
-                            <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 50px 70px 70px 70px 70px 80px",padding:"7px 10px",gap:6,borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
+                          {items && items.length===0 && (
+                            <div style={{textAlign:"center",padding:"22px 0",color:T.t4,fontSize:12}}>No item breakdown</div>
+                          )}
+                          {(items||[]).map(it=>(
+                            <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 50px 64px 64px 64px 70px 80px",padding:"8px 10px",gap:6,borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
                               <div style={{fontSize:11.5,color:T.t1}}>{it.description}</div>
                               <div style={{fontSize:11,color:T.t3}}>{it.unit}</div>
                               <div style={{fontSize:11,color:T.t2,textAlign:"right"}}>{parseFloat(it.wo_qty||0)}</div>
@@ -8694,17 +8739,24 @@ function TabSubcon({ projectId }) {
                               <div style={{fontSize:11,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(it.this_bill_amount)}</div>
                             </div>
                           ))}
-                          {(billItems[b.id]?.length>0)&&(
-                            <div style={{display:"grid",gridTemplateColumns:"2fr 50px 70px 70px 70px 70px 80px",padding:"7px 10px",gap:6,background:T.surfaceB}}>
-                              <div style={{fontSize:11,fontWeight:700,color:T.t2,gridColumn:"1/7"}}>Total</div>
-                              <div style={{fontSize:12,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtC(b.gross_amount)}</div>
+                          {items && items.length>0 && (
+                            <div style={{display:"grid",gridTemplateColumns:"2fr 50px 64px 64px 64px 70px 80px",padding:"9px 10px",gap:6,background:T.surfaceB,borderTop:`1.5px solid ${T.b2}`}}>
+                              <div style={{fontSize:11.5,fontWeight:700,color:T.t1,gridColumn:"1/7"}}>Total</div>
+                              <div style={{fontSize:12.5,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtC(b.gross_amount)}</div>
                             </div>
                           )}
                         </div>
-                      )}
+                        {b.remark && (
+                          <div style={{marginTop:14,padding:"10px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:12,color:T.t2}}>
+                            <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:3}}>Remarks</div>
+                            {b.remark}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  );
-                })}
+                    <style>{`@keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }`}</style>
+                  </>);
+                })()}
               </div>
             )}
 
