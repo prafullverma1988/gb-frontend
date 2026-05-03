@@ -3655,6 +3655,10 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
   });
   const [saving,setSaving]=useState(false);
   const [matLib,setMatLib]=useState([]);
+  const [showAddMat,setShowAddMat]=useState(false);
+  const [newMatName,setNewMatName]=useState("");
+  const [newMatUnit,setNewMatUnit]=useState("Nos");
+  const [newMatSaving,setNewMatSaving]=useState(false);
   const UNITS=["Bag","Kg","CFT","Sq.Ft","Piece","Meter","Litre","MT","Running Ft","Nos","Cu.M","Sq.M"];
 
   useEffect(()=>{
@@ -3694,6 +3698,49 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
             <option value="">-- Select Material --</option>
             {matLib.map(m=><option key={m.name} value={m.name}>{m.name} ({m.unit||"Nos"})</option>)}
           </select>
+          {!showAddMat ? (
+            <button type="button" onClick={()=>{setShowAddMat(true);setNewMatName("");setNewMatUnit("Nos");}}
+              style={{marginTop:6,padding:"4px 10px",borderRadius:5,background:"transparent",border:"1px dashed #CBD5E1",color:"#64748B",fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+              + Add New Material to Library
+            </button>
+          ) : (
+            <div style={{marginTop:6,padding:"10px 11px",borderRadius:7,border:"1px solid #BFDBFE",background:"#EFF6FF"}}>
+              <div style={{fontSize:10.5,fontWeight:700,color:"#2563EB",marginBottom:7}}>🆕 Add new material to library</div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:7,marginBottom:7}}>
+                <input value={newMatName} onChange={e=>setNewMatName(e.target.value)} autoFocus placeholder="Material name *"
+                  style={{padding:"6px 9px",borderRadius:5,border:"1.5px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
+                <select value={newMatUnit} onChange={e=>setNewMatUnit(e.target.value)}
+                  style={{padding:"6px 9px",borderRadius:5,border:"1.5px solid #E2E8F0",fontSize:12,outline:"none",fontFamily:"inherit",background:"white",cursor:"pointer"}}>
+                  {UNITS.map(u=><option key={u}>{u}</option>)}
+                </select>
+              </div>
+              <div style={{display:"flex",gap:6}}>
+                <button type="button" onClick={()=>{setShowAddMat(false);setNewMatName("");}}
+                  style={{padding:"5px 10px",borderRadius:5,border:"1px solid #E2E8F0",background:"white",color:"#64748B",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                <button type="button" disabled={newMatSaving||!newMatName.trim()}
+                  onClick={async()=>{
+                    const name=newMatName.trim();
+                    if(!name) return;
+                    if(matLib.some(m=>m.name.toLowerCase()===name.toLowerCase())){alert("This material already exists");return;}
+                    setNewMatSaving(true);
+                    try{
+                      const res=await api.post("/library/materials",{name,unit:newMatUnit});
+                      if(res.success){
+                        const newMat=res.data||{name,unit:newMatUnit};
+                        setMatLib(prev=>[...prev,newMat].sort((a,b)=>a.name.localeCompare(b.name)));
+                        setForm(p=>({...p,item_name:name,unit:newMatUnit}));
+                        setShowAddMat(false);
+                        setNewMatName("");
+                      }else alert(res.message||"Failed");
+                    }catch(e){alert("Network error");}
+                    setNewMatSaving(false);
+                  }}
+                  style={{flex:1,padding:"5px 10px",borderRadius:5,border:"none",background:newMatSaving||!newMatName.trim()?"#94A3B8":"#2563EB",color:"white",fontSize:11,fontWeight:700,cursor:newMatSaving||!newMatName.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                  {newMatSaving?"Saving...":"Save & use"}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
@@ -7258,6 +7305,10 @@ function TabMaterial({ project }) {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState("tile");
   const [showModal, setShowModal] = useState(false);
+  const [showAddMat, setShowAddMat] = useState(false);
+  const [newMatName, setNewMatName] = useState("");
+  const [newMatUnit, setNewMatUnit] = useState("Nos");
+  const [newMatSaving, setNewMatSaving] = useState(false);
   const [showGRN, setShowGRN] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"" });
@@ -7560,13 +7611,60 @@ function TabMaterial({ project }) {
               </div>
               <div>
                 <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
-                <input value={form.item_name} onChange={e=>{const val=e.target.value;const found=matLibReal.find(m=>m.name===val);setForm(p=>({...p,item_name:val,unit:found?.unit||p.unit}));}}
-                  placeholder="Type to search material..." list="mat-lib-list"
-                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <datalist id="mat-lib-list">
-                  {matLibReal.map(m=><option key={m.name} value={m.name}>{m.name}{m.unit?" ("+m.unit+")":""}</option>)}
-                </datalist>
+                <SearchSelect value={form.item_name}
+                  options={matLibReal.map(m=>({key:m.name,label:`${m.name}${m.unit?` (${m.unit})`:""}`}))}
+                  onChange={v=>{const found=matLibReal.find(m=>m.name===v);setForm(p=>({...p,item_name:v,unit:found?.unit||p.unit}));}}
+                  placeholder="Search material from library..."/>
+                {!showAddMat ? (
+                  <button type="button" onClick={()=>{setShowAddMat(true);setNewMatName("");setNewMatUnit("Nos");}}
+                    style={{marginTop:6,padding:"4px 10px",borderRadius:5,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:4}}>
+                    + Add New Material to Library
+                  </button>
+                ) : (
+                  <div style={{marginTop:6,padding:"10px 11px",borderRadius:7,border:`1px solid ${T.bluM||"#BFDBFE"}`,background:T.bluL||"#EFF6FF"}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.blu,marginBottom:7}}>🆕 Add new material to library</div>
+                    <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:7,marginBottom:7}}>
+                      <input value={newMatName} onChange={e=>setNewMatName(e.target.value)} autoFocus placeholder="Material name *"
+                        style={{padding:"6px 9px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
+                      <select value={newMatUnit} onChange={e=>setNewMatUnit(e.target.value)}
+                        style={{padding:"6px 9px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:"white",cursor:"pointer"}}>
+                        {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button type="button" onClick={()=>{setShowAddMat(false);setNewMatName("");}}
+                        style={{padding:"5px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:"white",color:T.t3,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                      <button type="button" disabled={newMatSaving||!newMatName.trim()}
+                        onClick={async()=>{
+                          const name = newMatName.trim();
+                          if(!name) return;
+                          if(matLibReal.some(m=>m.name.toLowerCase()===name.toLowerCase())){
+                            alert("This material already exists in library");return;
+                          }
+                          setNewMatSaving(true);
+                          try{
+                            const res = await api.post("/library/materials", {name, unit:newMatUnit});
+                            if(res.success){
+                              const newMat = res.data || {name, unit:newMatUnit};
+                              setMatLibReal(prev=>[...prev, newMat].sort((a,b)=>a.name.localeCompare(b.name)));
+                              setForm(p=>({...p, item_name:name, unit:newMatUnit}));
+                              setShowAddMat(false);
+                              setNewMatName("");
+                            }else{
+                              alert(res.message||"Failed to add material");
+                            }
+                          }catch(e){alert("Network error: "+e.message);}
+                          setNewMatSaving(false);
+                        }}
+                        style={{flex:1,padding:"5px 10px",borderRadius:5,border:"none",background:newMatSaving||!newMatName.trim()?"#9CA3AF":T.blu,color:"white",fontSize:11,fontWeight:700,cursor:newMatSaving||!newMatName.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                        {newMatSaving?"Saving...":"Save & use in this MR"}
+                      </button>
+                    </div>
+                    <div style={{fontSize:10,color:T.t4,marginTop:6}}>
+                      Library me save hoga aur is MR me automatic select ho jayega
+                    </div>
+                  </div>
+                )}
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div>
