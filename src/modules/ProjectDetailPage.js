@@ -7414,7 +7414,22 @@ function TabMaterial({ project }) {
           });
       }
 
-      setMaterials([...directEntries, ...mrEntries]);
+      // Dedupe: if a Direct GRN exists for the same material (case-insensitive)
+      // AND an MR for the same material is sitting in "Received" status, drop
+      // the MR card. The GRN card represents the actual receipt — keeping both
+      // makes it look like the same delivery happened twice (user reported
+      // Distemper showing twice while Inventory was correct).
+      const norm = s => (s || "").toString().trim().toLowerCase();
+      const receivedDirectMaterials = new Set(
+        directEntries.map(d => norm(d.name))
+      );
+      const dedupedMrEntries = mrEntries.filter(m => {
+        const isReceivedStage = norm(m.stage) === "received";
+        if (!isReceivedStage) return true;            // pending / approved / ordered → keep
+        return !receivedDirectMaterials.has(norm(m.name));
+      });
+
+      setMaterials([...directEntries, ...dedupedMrEntries]);
     }).catch(() => {});
   };
 
