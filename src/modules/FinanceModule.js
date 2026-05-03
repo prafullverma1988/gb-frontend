@@ -498,7 +498,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // ── invoice state ────────────────────────────────────────────
   const [invMode,setInvMode]=useState("fresh");
   const [invoiceNo,setInvoiceNo]=useState("INV-2026-001");
-  const [dueDate,setDueDate]=useState("2026-04-15");
+  const _today15 = (() => { const d = new Date(); d.setDate(d.getDate()+15); return d.toISOString().slice(0,10); })();
+  const [dueDate,setDueDate]=useState(_today15);
 
   // ── Material Bill: payment due date (default = bill_date + party.credit_days) ──
   const partyObj = useMemo(()=>(dbParties||[]).find(p=>(p.name||"").toLowerCase().trim()===String(party||"").toLowerCase().trim()),[dbParties,party]);
@@ -524,7 +525,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [payInAcc,setPayInAcc]=useState(ACCOUNTS_LIST[0]);
   const [payInMop,setPayInMop]=useState("Bank Transfer");
   const [payInAmt,setPayInAmt]=useState("");
-  const [payInDate,setPayInDate]=useState("2026-03-16");
+  const [payInDate,setPayInDate]=useState(_today);
 
   // ── linked Payment OUT (subcon bill → paid same time) ────────
   const [payOutLinked,setPayOutLinked]=useState(false);
@@ -532,7 +533,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [payOutMop,setPayOutMop]=useState(MOPS_LIST[0]);
   const [payOutAmt,setPayOutAmt]=useState("");
   const [payOutDesc,setPayOutDesc]=useState("");
-  const [payOutDate,setPayOutDate]=useState("2026-03-16");
+  const [payOutDate,setPayOutDate]=useState(_today);
 
   // ── BOQ items (shared between invoice & subcon) ──────────────
   const BOQ_ITEMS=[
