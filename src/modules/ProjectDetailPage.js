@@ -7387,11 +7387,14 @@ function TabMaterial({ project }) {
           }))
         : [];
 
-      // Direct GRNs = grn_entries with po_id=null (no PO/MR linked)
+      // Direct GRNs = grn_entries with po_id=null (no PO/MR linked).
+      // Exclude Auto-Bill GRNs — those are synthesized by the bill flow; they live
+      // in inventory but don't represent a separate site receipt here, so showing
+      // them as Direct cards visually duplicates the original GRN row.
       const directEntries = [];
       if (grnRes.success && Array.isArray(grnRes.data)) {
         grnRes.data
-          .filter(g => !g.po_id && !g.linked_mr_id)
+          .filter(g => !g.po_id && !g.linked_mr_id && g.grn_type !== "Auto-Bill")
           .forEach(g => {
             (g.items || []).forEach((item, i) => {
               directEntries.push({

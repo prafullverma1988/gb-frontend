@@ -1680,14 +1680,16 @@ function FinanceModule(){
   const [grnFilter,setGrnFilter]=useState({project:"All",material:"",head:"All"});
   const [prefillGRNData,setPrefillGRNData]=useState(null);
 
-  // Load GRN data when tab opens
+  // Load GRN data when tab opens (or refresh requested)
+  const loadUnbilledGRNs=()=>{
+    setGrnLoading(true);
+    api.get("/procurement/grns?unbilled=1").then(res=>{
+      if(res.success) setGrnList(res.data||[]);
+    }).catch(()=>{}).finally(()=>setGrnLoading(false));
+  };
   useEffect(()=>{
-    if(tab==="unbilled_grn"&&grnList.length===0){
-      setGrnLoading(true);
-      api.get("/procurement/grns").then(res=>{
-        if(res.success) setGrnList(res.data||[]);
-      }).catch(()=>{}).finally(()=>setGrnLoading(false));
-    }
+    if(tab==="unbilled_grn"&&grnList.length===0) loadUnbilledGRNs();
+  // eslint-disable-next-line
   },[tab]);
 
   const openTxn=(type,party="",grnPrefill=null)=>{
@@ -1704,11 +1706,15 @@ function FinanceModule(){
     const savedPrefill=prefillGRNData;
     closeTxn(); // close modal immediately
     await refreshAll();
-    // Remove billed GRN from unbilled list
+    // Re-fetch unbilled list so a server-side check confirms what's still pending.
+    // (Backend ?unbilled=1 query excludes anything with transactions.grn_id linked +
+    // Auto-Bill GRNs, so the bill we just saved drops off automatically.)
     if(savedPrefill){
+      // Optimistic local removal first so UI feels instant
       const grnNum=savedPrefill.grnNumber;
       if(grnNum) setGrnList(p=>p.filter(g=>g.grn_number!==grnNum));
-      else setGrnList(p=>p.filter(g=>!(g.vendor_name===savedPrefill.vendor&&g.received_date===savedPrefill.receivedDate)));
+      // Then authoritative refresh from server
+      loadUnbilledGRNs();
     }
   };
   // Filter chips (one per tab)
@@ -3176,7 +3182,7 @@ function FinanceModule(){
               <button onClick={()=>setGrnFilter({project:"All",material:"",head:"All"})}
                 style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>
             )}
-            <button onClick={()=>{setGrnLoading(true);api.get("/procurement/grns").then(r=>{if(r.success)setGrnList(r.data||[]);}).finally(()=>setGrnLoading(false));}}
+            <button onClick={loadUnbilledGRNs}
               style={{height:30,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               ↻ Refresh
             </button>
