@@ -516,7 +516,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     if(isNaN(d.getTime())) return;
     d.setDate(d.getDate()+partyCreditDays);
     setPayDueDate(d.toISOString().slice(0,10));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line
   },[billDate,partyCreditDays,party]);
 
   // ── linked Payment IN (invoice → received same time) ─────────
