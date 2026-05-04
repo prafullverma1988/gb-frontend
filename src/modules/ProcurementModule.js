@@ -860,7 +860,7 @@ function ProcurementModule(){
     vendor:m.linked_vendor||null,
     expectedDelivery:m.expected_delivery?fmtDate(m.expected_delivery):null,
     challan:m.challan_no||null, rejectedReason:m.rejected_reason||null,
-    receivedQty:null, inStock:0, approxAmount:m.approx_amount||0,
+    receivedQty:parseFloat(m.received_qty)||null, inStock:0, approxAmount:m.approx_amount||0,
   });
   const mapPO=p=>({
     id:p.id, poNum:p.po_number,
@@ -1393,7 +1393,10 @@ function ProcurementModule(){
                   </div>
                   {filteredMRs.map(m=>{
                     const isPartial=m.matStatus==="PartialReceived";
-                    const pct=m.receivedQty&&m.qty?Math.round((m.receivedQty/m.qty)*100):100;
+                    // For partial: percent of approved qty actually received.
+                    // For full: 100. Guard against divide-by-zero + null receivedQty.
+                    const recd = isPartial ? (m.receivedQty || 0) : (m.qty || 0);
+                    const pct = (m.qty && recd) ? Math.min(100, Math.round((recd/m.qty)*100)) : (isPartial ? 0 : 100);
                     const accentColor=isPartial?T.amb:T.grn;
                     return(
                       <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1fr 140px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${accentColor}`,transition:"background 0.1s"}}
@@ -1407,7 +1410,7 @@ function ProcurementModule(){
                           {m.vendor&&<div style={{fontSize:11,color:T.t3}}>{m.vendor}</div>}
                         </div>
                         <div>
-                          <div style={{fontSize:14,fontWeight:700,color:isPartial?T.amb:T.grn}}>{m.receivedQty||m.qty}</div>
+                          <div style={{fontSize:14,fontWeight:700,color:isPartial?T.amb:T.grn}}>{isPartial ? recd : (m.receivedQty||m.qty)}</div>
                           <div style={{fontSize:10,color:T.t4}}>{m.unit}</div>
                           {isPartial&&<div style={{fontSize:9.5,color:T.amb}}>of {m.qty}</div>}
                         </div>
