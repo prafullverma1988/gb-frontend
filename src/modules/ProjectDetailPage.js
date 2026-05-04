@@ -4,6 +4,8 @@ import { Avatar, Credit } from "../components/Credit";
 import PaymentRequestDrawer from "../components/PaymentRequestDrawer";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
+import MaterialFlowDrawer from "../components/MaterialFlowDrawer";
+import MRDetailDrawer from "../components/MRDetailDrawer";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
@@ -7306,6 +7308,9 @@ function TabMaterial({ project }) {
   const [ledgerLoaded, setLedgerLoaded] = useState(false);
   const [expandedMat, setExpandedMat] = useState(null);
   const [ledgerSearch, setLedgerSearch] = useState("");
+  // Flow drawer state — opens when user clicks a GRN row in Material Ledger
+  const [flowGrnId, setFlowGrnId] = useState(null);
+  const [flowEditMR, setFlowEditMR] = useState(null);
   const [ledgerVendor, setLedgerVendor] = useState("All");
 
   // ── Inventory tab state ─────────────────────────────────────
@@ -8122,7 +8127,11 @@ function TabMaterial({ project }) {
                           const balColor=balNeg?T.red:balLow?T.amb:T.grn;
                           const dateStr=row._date?row._date.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—";
                           return(
-                            <div key={ri} style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:900,borderLeft:"3px solid "+(isGRN?T.grn:T.amb)}}>
+                            <div key={ri}
+                              onClick={()=>{ if(isGRN && row.grn_id) setFlowGrnId(row.grn_id); }}
+                              style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:900,borderLeft:"3px solid "+(isGRN?T.grn:T.amb),cursor:isGRN&&row.grn_id?"pointer":"default",transition:"background .1s"}}
+                              onMouseEnter={e=>{ if(isGRN && row.grn_id) e.currentTarget.style.background=T.bluL+"66"; }}
+                              onMouseLeave={e=>{ e.currentTarget.style.background=ri%2===0?T.surface:"#F8FAFC"; }}>
                               {/* Date */}
                               <div style={{fontSize:11.5,color:T.t3,fontWeight:500}}>{dateStr}</div>
                               {/* Vendor */}
@@ -12291,6 +12300,35 @@ function ProjectDetailPage({project=PROJ, onBack}) {
         prefillType={paymentReq?.type}
         prefillParty={paymentReq?.party}
         onSaved={()=>{ loadApprovalCounts(); }}
+      />
+      {/* ── MATERIAL FLOW DRAWER (Material Ledger row click) ── */}
+      <MaterialFlowDrawer
+        grnId={flowGrnId}
+        onClose={()=>setFlowGrnId(null)}
+        onChanged={async()=>{
+          // Reload ledger after edit
+          try {
+            const r = await api.get("/tasks/project/"+projectId+"/material-ledger");
+            if (r.success) setLedger(r.data || []);
+          } catch {}
+        }}
+        onEditMR={(mr)=>{ setFlowEditMR(mr); setFlowGrnId(null); }}
+      />
+      {/* ── MR Edit Drawer (opened from Material Flow's Edit button) ── */}
+      <MRDetailDrawer
+        mr={flowEditMR}
+        onClose={()=>setFlowEditMR(null)}
+        onChanged={async()=>{
+          // Refresh ledger + inventory
+          try {
+            const [r1, r2] = await Promise.all([
+              api.get("/tasks/project/"+projectId+"/material-ledger"),
+              api.get("/tasks/project/"+projectId+"/inventory"),
+            ]);
+            if (r1.success) setLedger(r1.data || []);
+            if (r2.success) setInventory(r2.data || []);
+          } catch {}
+        }}
       />
     </>
   );
