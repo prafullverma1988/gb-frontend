@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
+import TransactionDetailDrawer from "../components/TransactionDetailDrawer";
 import api from "../config/api";
 import useDebounce from "../utils/useDebounce";
 
@@ -1696,6 +1697,8 @@ function FinanceModule(){
   const [grnLoading,setGrnLoading]=useState(false);
   const [grnFilter,setGrnFilter]=useState({project:"All",material:"",head:"All"});
   const [prefillGRNData,setPrefillGRNData]=useState(null);
+  // Transaction detail drawer (used from Fin Activity + Party Ledger)
+  const [selTxn,setSelTxn]=useState(null);
 
   // Load GRN data when tab opens (or refresh requested)
   const loadUnbilledGRNs=()=>{
@@ -2535,8 +2538,8 @@ function FinanceModule(){
                             // note = user's remark, sub/description = auto-generated full text
                             const noteLabel=txn.note&&txn.note.trim()&&txn.note!==txn.sub?txn.note.trim():(txn.sub||"");
                             return(
-                          <div onClick={()=>isBillType&&setSelBill(isExpanded?null:txn.id)}
-                            style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"8px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:isBillType?"pointer":"default",background:isExpanded?T.bluL+"44":"none",transition:"background 0.1s"}}
+                          <div onClick={()=>setSelTxn(txn)}
+                            style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"8px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",transition:"background 0.1s"}}
                             onMouseEnter={e=>{if(!isExpanded)e.currentTarget.style.background=T.surfaceB;}}
                             onMouseLeave={e=>{if(!isExpanded)e.currentTarget.style.background="none";}}>
                             {/* 1. Date */}
@@ -2544,7 +2547,7 @@ function FinanceModule(){
                             {/* 2. Type */}
                             <div style={{display:"flex",flexDirection:"column",gap:2}}>
                               <span style={{fontSize:11.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{typeLabel}</span>
-                              {isBillType&&<span style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer"}}>{isExpanded?"▲ hide":"▼ view bill"}{hasItems?` (${txn.items.length})`:""}</span>}
+                              {isBillType&&<span onClick={e=>{e.stopPropagation();setSelBill(isExpanded?null:txn.id);}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer"}}>{isExpanded?"▲ hide":"▼ view bill"}{hasItems?` (${txn.items.length})`:""}</span>}
                             </div>
                             {/* 3. Site/Project */}
                             <span style={{fontSize:11,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{siteLabel}</span>
@@ -2720,7 +2723,8 @@ function FinanceModule(){
                     :(txn.party||"—");
                   return(
                     <div key={txn.id||i}
-                      style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"default"}}
+                      onClick={()=>setSelTxn(txn)}
+                      style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"pointer"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
                       onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
                       {/* 1. Date */}
@@ -3387,6 +3391,13 @@ function FinanceModule(){
           dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
         />
       )}
+      {/* ══ Transaction Detail Drawer (Fin Activity + Party Ledger row click) ══ */}
+      <TransactionDetailDrawer
+        txn={selTxn}
+        onClose={()=>setSelTxn(null)}
+        onChanged={async()=>{ await refreshTxns(); await refreshPendPmts(); await refreshParties(); }}
+      />
+
       {/* Shimmer CSS */}
       <style>{`
         @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
