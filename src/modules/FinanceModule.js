@@ -634,10 +634,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     <label style={{fontSize:9.5,fontWeight:700,color:color||T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>{text}</label>
   );
   const [saveErr,setSaveErr]=useState("");
+  const [savingTxn,setSavingTxn]=useState(false);
+  const savingRef = useRef(false); // ref-based guard against rapid double-click (state lags)
   const handleSave=async()=>{
+    if(savingRef.current||savingTxn) return;       // ← idempotent: ignore subsequent clicks
     const amt=isMaterial||isSubcon||isInvoice?grandTotal:Number(payAmt)||0;
     if(!amt){setSaveErr(isMaterial?"Rate enter karo — Grand Total 0 hai.":"Amount required.");return;}
     setSaveErr("");
+    savingRef.current=true; setSavingTxn(true);    // ← lock immediately
     try{
       // Map type to backend enum
       const TXN_TYPE_BACK={
@@ -725,6 +729,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         const errMsg=res.message||res.error||"Server rejected the entry.";
         console.error("[FinanceModule] Server error:", errMsg, res);
         setSaveErr(`Save failed: ${errMsg}`);
+        savingRef.current=false; setSavingTxn(false);   // ← release lock so user can retry
         return; // ← DO NOT close modal on failure
       }
 
@@ -732,11 +737,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       if(onSaved) onSaved(); // refresh parent
       setSaved(true);
       setTimeout(()=>{setSaved(false);onClose();},900);
+      // savingRef stays locked until modal closes — prevents any post-success double-click
 
     }catch(e){
       console.error("[FinanceModule] Save exception:", e);
       const msg=e?.message||e?.response?.data?.message||"Network error. Check connection.";
       setSaveErr(`Error: ${msg}`);
+      savingRef.current=false; setSavingTxn(false);     // ← release lock so user can retry
       // ← Modal stays open so user can retry
     }
   };
@@ -1434,8 +1441,18 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           )}
           <button onClick={onClose} style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
           {!saved?(
-            <button onClick={handleSave} style={{padding:"8px 22px",borderRadius:7,background:tc,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6,opacity:saveErr?0.85:1}}>
-              <IcChk size={14} color="white"/> Save Entry
+            <button onClick={handleSave} disabled={savingTxn}
+              style={{padding:"8px 22px",borderRadius:7,background:savingTxn?"#9CA3AF":tc,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:savingTxn?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:6,opacity:saveErr?0.85:1}}>
+              {savingTxn ? (
+                <>
+                  <span style={{width:12,height:12,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",display:"inline-block",animation:"spin 0.6s linear infinite"}}/>
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <IcChk size={14} color="white"/> Save Entry
+                </>
+              )}
             </button>
           ):(
             <div style={{padding:"8px 22px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:700,display:"flex",alignItems:"center",gap:6}}>
