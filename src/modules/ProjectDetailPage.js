@@ -7325,6 +7325,9 @@ function TabMaterial({ project }) {
   const [orderedMRs, setOrderedMRs] = useState([]);
   const [grnRows, setGrnRows] = useState({});
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
+  const [showAddVenGRN, setShowAddVenGRN] = useState(false);
+  const [newVenGRN, setNewVenGRN] = useState({ name: "", phone: "", city: "", rowId: null });
+  const [newVenGRNSaving, setNewVenGRNSaving] = useState(false);
   const [grnSaving, setGrnSaving] = useState(false);
   const [grnDone, setGrnDone] = useState([]);
   const [directGrns, setDirectGrns] = useState([]); // Direct GRNs without MR
@@ -7975,12 +7978,51 @@ function TabMaterial({ project }) {
                         </div>
                         <div>
                           <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor *</label>
-                          <input value={row.vendor} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:e.target.value}:r))}
-                            placeholder="Vendor name (required)" list="vendor-list-grn"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${row.vendor?T.b1:T.redM}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:row.vendor?T.surface:T.redL}}/>
-                          <datalist id="vendor-list-grn">
-                            {vendorList.map(v=><option key={v.id} value={v.name}>{v.name}{v.city?" — "+v.city:""}</option>)}
-                          </datalist>
+                          <SearchSelect value={row.vendor}
+                            options={vendorList.map(v=>({key:v.name,label:`${v.name}${v.city?` — ${v.city}`:""}`}))}
+                            onChange={v=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:v||""}:r))}
+                            placeholder="Pick from library..."/>
+                          {showAddVenGRN && newVenGRN.rowId === row.id ? (
+                            <div style={{marginTop:6,padding:"8px 10px",borderRadius:6,border:"1px solid #BFDBFE",background:"#EFF6FF"}}>
+                              <div style={{fontSize:10,fontWeight:700,color:T.blu,marginBottom:5}}>🆕 Add new vendor (saved to Party Master)</div>
+                              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:5,marginBottom:5}}>
+                                <input value={newVenGRN.name} onChange={e=>setNewVenGRN(p=>({...p,name:e.target.value}))} autoFocus placeholder="Vendor name *"
+                                  style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
+                                <input value={newVenGRN.phone} onChange={e=>setNewVenGRN(p=>({...p,phone:e.target.value}))} placeholder="Phone"
+                                  style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
+                                <input value={newVenGRN.city} onChange={e=>setNewVenGRN(p=>({...p,city:e.target.value}))} placeholder="City"
+                                  style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
+                              </div>
+                              <div style={{display:"flex",gap:5}}>
+                                <button type="button" onClick={()=>{setShowAddVenGRN(false);setNewVenGRN({name:"",phone:"",city:"",rowId:null});}}
+                                  style={{padding:"4px 9px",borderRadius:4,border:`1px solid ${T.b1}`,background:"white",color:T.t3,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                                <button type="button" disabled={newVenGRNSaving||!newVenGRN.name.trim()}
+                                  onClick={async()=>{
+                                    const name=newVenGRN.name.trim();
+                                    if(!name)return;
+                                    if(vendorList.some(v=>(v.name||"").toLowerCase()===name.toLowerCase())){alert("Vendor already in library");return;}
+                                    setNewVenGRNSaving(true);
+                                    try{
+                                      const partyRes=await api.post("/finance/parties",{name,type:"Material Supplier",phone:newVenGRN.phone.trim()||null,city:newVenGRN.city.trim()||null,credit_days:7});
+                                      if(partyRes.success===false){alert(partyRes.message||"Save failed");setNewVenGRNSaving(false);return;}
+                                      api.post("/procurement/vendors",{name,phone:newVenGRN.phone.trim()||null,city:newVenGRN.city.trim()||null,category:"Material"}).catch(()=>{});
+                                      setVendorList(prev=>[...prev,{name,city:newVenGRN.city.trim()||null,phone:newVenGRN.phone.trim()||null}].sort((a,b)=>(a.name||"").localeCompare(b.name||"")));
+                                      setDirectRows(p=>p.map(r=>r.id===newVenGRN.rowId?{...r,vendor:name}:r));
+                                      setShowAddVenGRN(false); setNewVenGRN({name:"",phone:"",city:"",rowId:null});
+                                    }catch(e){alert("Network error");}
+                                    setNewVenGRNSaving(false);
+                                  }}
+                                  style={{flex:1,padding:"4px 9px",borderRadius:4,border:"none",background:newVenGRNSaving||!newVenGRN.name.trim()?"#94A3B8":T.blu,color:"white",fontSize:10,fontWeight:700,cursor:newVenGRNSaving||!newVenGRN.name.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                                  {newVenGRNSaving?"Saving...":"Save & use"}
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <button type="button" onClick={()=>{setShowAddVenGRN(true);setNewVenGRN({name:"",phone:"",city:"",rowId:row.id});}}
+                              style={{marginTop:5,padding:"3px 9px",borderRadius:4,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                              + Add New Vendor to Library
+                            </button>
+                          )}
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:8,marginBottom:8}}>
