@@ -957,8 +957,14 @@ const MR_STAGE_COLORS={
   Received: {c:"#7C3AED",bg:"#F5F3FF",bdr:"#DDD6FE",label:"Delivered"},
   Rejected: {c:T.red,bg:T.redL,bdr:T.redM,label:"Rejected"},
 };
-function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setRejectId, rejectNote, setRejectNote, onMarkOrdered, onMarkReceived}){
+function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setRejectId, rejectNote, setRejectNote, onMarkOrdered, onMarkReceived, vendorList=[]}){
   const [editQty,setEditQty]=useState(String(mr.quantity||""));
+  const [showManual,setShowManual]=useState(false);
+  const [manualVendor,setManualVendor]=useState("");
+  const [manualDelivery,setManualDelivery]=useState(()=>{
+    const d=new Date(); d.setDate(d.getDate()+3);
+    return d.toISOString().slice(0,10);
+  });
   const sc=MR_STAGE_COLORS[stage]||MR_STAGE_COLORS.Requested;
   const act=acting[mr.id];
   const isReject=rejectId===mr.id;
@@ -1027,11 +1033,48 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
           }
         </>)}
         {stage==="Approved"&&(
-          <button onClick={onWhatsApp}
-            style={{width:"100%",padding:"9px",borderRadius:7,background:"#25D366",border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:7}}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="white"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
-            Order via WhatsApp
-          </button>
+          showManual ? (
+            <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,padding:"9px 11px"}}>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Manual Order</div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
+                <div>
+                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>Vendor *</label>
+                  <input value={manualVendor} onChange={e=>setManualVendor(e.target.value)}
+                    placeholder="Vendor name" list={`vlist-${mr.id}`}
+                    style={{width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${manualVendor?T.b1:T.redM}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:manualVendor?T.surface:T.redL}}/>
+                  <datalist id={`vlist-${mr.id}`}>
+                    {vendorList.map(v=><option key={v.id||v.name} value={v.name}>{v.name}{v.city?` — ${v.city}`:""}</option>)}
+                  </datalist>
+                </div>
+                <div>
+                  <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>Delivery *</label>
+                  <input type="date" value={manualDelivery} onChange={e=>setManualDelivery(e.target.value)}
+                    style={{width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+              </div>
+              <div style={{display:"flex",gap:5}}>
+                <button onClick={()=>{setShowManual(false);setManualVendor("");}} disabled={!!act}
+                  style={{flex:1,padding:"6px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>Cancel</button>
+                <button onClick={()=>onMarkOrdered(mr.id, manualVendor.trim(), manualDelivery)}
+                  disabled={!!act || !manualVendor.trim() || !manualDelivery}
+                  style={{flex:2,padding:"6px",borderRadius:5,background:(!manualVendor.trim()||!manualDelivery||act)?"#9CA3AF":T.blu,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:(!manualVendor.trim()||!manualDelivery||act)?"not-allowed":"pointer"}}>
+                  {act==="ordering"?"Saving...":"✓ Mark as Ordered"}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div style={{display:"flex",gap:6}}>
+              <button onClick={()=>setShowManual(true)}
+                style={{flex:1,padding:"9px",borderRadius:7,background:T.bluL||"#EFF6FF",border:`1px solid ${T.bluM||"#BFDBFE"}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                📋 Manual Order
+              </button>
+              <button onClick={onWhatsApp}
+                style={{flex:1,padding:"9px",borderRadius:7,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                <svg width={13} height={13} viewBox="0 0 24 24" fill="white"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                WhatsApp
+              </button>
+            </div>
+          )
         )}
         {stage==="Ordered"&&(
           <button onClick={()=>onMarkReceived(mr.id)} disabled={acting[mr.id]==="receiving"}
@@ -1240,6 +1283,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   const [mrSite,setMrSite]=useState("All");           // project filter
   const [mrSearch,setMrSearch]=useState("");          // material name search
   const [data,setData]=useState({mrs:[],pos:[],whmrs:[],grns:[],transfers:[],finance:[],centralized:[]});
+  const [vendorList,setVendorList]=useState([]);
   const [loading,setLoading]=useState(true);
   const [acting,setActing]=useState({});
   const [rejectId,setRejectId]=useState(null);
@@ -1262,12 +1306,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     setLoading(true);
     try{
       if(mode==="materials"){
-        const [mrRes,poRes,whmrRes,grnRes,trRes]=await Promise.all([
+        const [mrRes,poRes,whmrRes,grnRes,trRes,venRes]=await Promise.all([
           api.get("/procurement/mrs"),
           api.get("/procurement/pos"),
           api.get("/warehouse/mr").catch(()=>({success:false})),
           api.get("/warehouse/grn").catch(()=>({success:false})),
           api.get("/warehouse/transfers").catch(()=>({success:false})),
+          api.get("/procurement/vendors").catch(()=>({success:false})),
         ]);
         setData({
           mrs:    mrRes.success  ? mrRes.data   : [],
@@ -1277,6 +1322,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
           transfers: trRes.success ? trRes.data  : [],
           finance:[], centralized:[],
         });
+        if(venRes.success&&Array.isArray(venRes.data)) setVendorList(venRes.data);
       } else {
         const [prRes,apRes]=await Promise.all([
           api.get("/finance/payment-requests"),
@@ -1762,12 +1808,19 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
               :mrFiltered(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
                   onApprove={approveMR} onReject={rejectMR} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
-                  onMarkOrdered={async(id)=>{
+                  onMarkOrdered={async(id, vendor, expected_delivery)=>{
                     setActing(p=>({...p,[id]:"ordering"}));
-                    await api.patch("/procurement/mrs/"+id+"/mark-ordered",{}).catch(()=>{});
-                    setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Ordered",mat_status:"Ordered"}:m)}));
+                    try{
+                      const res=await api.patch("/procurement/mrs/"+id+"/mark-ordered",{
+                        vendor: vendor||null,
+                        expected_delivery: expected_delivery||null,
+                      });
+                      if(res.success===false) throw new Error(res.message||"Failed");
+                      setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Ordered",mat_status:"Ordered",linked_vendor:vendor||m.linked_vendor,expected_delivery:expected_delivery||m.expected_delivery}:m)}));
+                    }catch(e){alert("Mark as ordered failed: "+e.message);}
                     setActing(p=>({...p,[id]:null}));
                   }}
+                  vendorList={vendorList}
                   onMarkReceived={async(id)=>{
                     setActing(p=>({...p,[id]:"receiving"}));
                     await api.patch("/procurement/mrs/"+id+"/mark-received",{received_qty:mr.approved_qty||mr.quantity}).catch(()=>{});
