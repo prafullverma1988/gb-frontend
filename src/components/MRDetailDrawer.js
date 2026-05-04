@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
+import LibrarySelect from "./LibrarySelect";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -198,7 +199,15 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
           ) : (
             // Edit form
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              <Field label="Material *" value={form.item_name} onChange={v => setForm(p => ({ ...p, item_name: v }))}/>
+              <div>
+                <label style={lblStyle}>Material *</label>
+                <LibrarySelect type="material"
+                  value={form.item_name}
+                  onChange={v => {
+                    // Auto-fill unit from library entry if known
+                    setForm(p => ({ ...p, item_name: v, unit: p.unit }));
+                  }}/>
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 10 }}>
                 <Field label="Quantity *" type="number" value={form.quantity} onChange={v => setForm(p => ({ ...p, quantity: v }))}/>
                 <Field label="Unit *" value={form.unit} onChange={v => setForm(p => ({ ...p, unit: v }))}/>
@@ -208,7 +217,12 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
                 <Field label="Approx. Amount" type="number" value={form.approx_amount} onChange={v => setForm(p => ({ ...p, approx_amount: v }))}/>
               </div>
               <Field label="Requested By" value={form.requested_by} onChange={v => setForm(p => ({ ...p, requested_by: v }))}/>
-              <Field label="Vendor" value={form.linked_vendor} onChange={v => setForm(p => ({ ...p, linked_vendor: v }))}/>
+              <div>
+                <label style={lblStyle}>Vendor (Material Supplier)</label>
+                <LibrarySelect type="supplier"
+                  value={form.linked_vendor}
+                  onChange={v => setForm(p => ({ ...p, linked_vendor: v }))}/>
+              </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 <Field label="Expected Delivery" type="date" value={form.expected_delivery} onChange={v => setForm(p => ({ ...p, expected_delivery: v }))}/>
                 <Field label="Challan No." value={form.challan_no} onChange={v => setForm(p => ({ ...p, challan_no: v }))}/>
