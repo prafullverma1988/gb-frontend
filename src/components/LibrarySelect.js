@@ -50,7 +50,10 @@ const TYPE_CONFIG = {
       const r = await api.get("/finance/parties");
       if (!r.success || !Array.isArray(r.data)) return [];
       return r.data
-        .filter(p => p.type === "Material Supplier" || p.type === "material_supplier" || p.type === "Other Vendor")
+        .filter(p => {
+          const t = String(p.type || "").toLowerCase();
+          return t === "material supplier" || t === "supplier" || t === "other vendor" || t === "material_supplier" || t === "vendor";
+        })
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
     save: async (form) => {
@@ -79,7 +82,10 @@ const TYPE_CONFIG = {
       const r = await api.get("/finance/parties");
       if (!r.success || !Array.isArray(r.data)) return [];
       return r.data
-        .filter(p => p.type === "Sub-Con" || p.type === "contractor" || p.type === "subcontractor")
+        .filter(p => {
+          const t = String(p.type || "").toLowerCase();
+          return t === "sub-con" || t === "subcon" || t === "subcontractor" || t === "contractor";
+        })
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
     save: async (form) => {
@@ -102,7 +108,7 @@ const TYPE_CONFIG = {
       const r = await api.get("/finance/parties");
       if (!r.success || !Array.isArray(r.data)) return [];
       return r.data
-        .filter(p => p.type === "Client")
+        .filter(p => String(p.type || "").toLowerCase() === "client")
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
     save: async (form) => {
@@ -125,7 +131,10 @@ const TYPE_CONFIG = {
       const r = await api.get("/finance/parties");
       if (!r.success || !Array.isArray(r.data)) return [];
       return r.data
-        .filter(p => p.type === "Labour" || p.type === "Labour Contractor" || p.type === "Labour Vendor")
+        .filter(p => {
+          const t = String(p.type || "").toLowerCase();
+          return t === "labour" || t === "labour contractor" || t === "labour vendor";
+        })
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
     save: async (form) => {
