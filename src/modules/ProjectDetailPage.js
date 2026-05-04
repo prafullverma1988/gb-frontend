@@ -7394,33 +7394,35 @@ function TabMaterial({ project }) {
       const norm = s => (s || "").toString().trim().toLowerCase();
       const allMrMaterials = new Set(mrEntries.map(m => norm(m.name)));
 
-      // Direct GRNs = grn_entries with po_id=null (no PO/MR linked).
-      // Exclude Auto-Bill GRNs — those are synthesized by the bill flow; they live
-      // in inventory but don't represent a separate site receipt here, so showing
-      // them as Direct cards visually duplicates the original GRN row.
+      // GRNs without PO/MR link → either Direct receipts OR Auto-Bill (synthesized
+       // when finance team added an extra material row inside a bill). Both should
+       // surface in the Requests view as Received items, with different badges so
+       // the user can tell where a material came from.
       const directEntries = [];
       if (grnRes.success && Array.isArray(grnRes.data)) {
         grnRes.data
-          .filter(g => !g.po_id && !g.linked_mr_id && g.grn_type !== "Auto-Bill")
+          .filter(g => !g.po_id && !g.linked_mr_id)
           .forEach(g => {
             (g.items || []).forEach((item, i) => {
               const matName = item.description || item.item_name || "Material";
               const hasMatchingMr = allMrMaterials.has(norm(matName));
+              const isAutoBill = g.grn_type === "Auto-Bill";
               directEntries.push({
-                id: "d-" + g.id + "-" + i,
+                id: (isAutoBill ? "ab-" : "d-") + g.id + "-" + i,
                 name: matName,
                 qty: (Number.isInteger(Number(item.received_qty)) ? Number(item.received_qty) : parseFloat(item.received_qty||0)) + " " + (item.unit || ""),
                 stage: "Received",
-                by: g.received_by || "Site",
+                by: g.received_by || (isAutoBill ? "Finance" : "Site"),
                 date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
                 vendor: g.vendor_name || null,
                 amt: 0,
-                // Only flag as "Direct" if NO MR exists for this material in the project.
-                // Otherwise it came via the procurement flow even if the GRN row isn't
-                // wired with linked_mr_id — the badge would mislead the user.
-                isDirect: !hasMatchingMr,
+                // "Direct" badge: only when NO MR exists for this material AND not an Auto-Bill.
+                // Auto-Bill rows get a separate "via Bill" badge below.
+                isDirect: !hasMatchingMr && !isAutoBill,
+                isViaBill: isAutoBill,
                 challan: g.challan_no,
                 grn_number: g.grn_number,
+                _autoBillGrnId: isAutoBill ? g.id : null,
               });
             });
           });
@@ -8081,6 +8083,7 @@ function TabMaterial({ project }) {
                     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
                       {m.vendor&&<span style={{fontSize:11,color:T.blu}}>🏪 {m.vendor}</span>}
                       {m.isDirect&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"#DCFCE7",color:"#16A34A",border:"1px solid #BBF7D0"}}>Direct</span>}
+                      {m.isViaBill&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:"#FEF3C7",color:"#92400E",border:"1px solid #FDE68A"}}>Via Bill</span>}
                       {m.challan&&<span style={{fontSize:9,color:T.t4}}>CH: {m.challan}</span>}
                     </div>
                     <div style={{fontSize:11,color:T.t4}}>{m.date} · {m.by}</div>
@@ -8109,7 +8112,10 @@ function TabMaterial({ project }) {
                   <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.name}</span>
                   <span style={{fontSize:12,color:T.t2}}>{m.qty}</span>
                   <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
-                  <span style={{fontSize:12,color:T.t2}}>{m.vendor||"—"}{m.isDirect&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:"#DCFCE7",color:"#16A34A"}}>Direct</span>}</span>
+                  <span style={{fontSize:12,color:T.t2}}>{m.vendor||"—"}
+                    {m.isDirect&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:"#DCFCE7",color:"#16A34A"}}>Direct</span>}
+                    {m.isViaBill&&<span style={{marginLeft:5,fontSize:9,fontWeight:700,padding:"1px 5px",borderRadius:3,background:"#FEF3C7",color:"#92400E"}}>Via Bill</span>}
+                  </span>
                   <span style={{fontSize:12,color:T.t2}}>{(m.by||"—").split(" ")[0]}</span>
                   <span style={{fontSize:13,fontWeight:600,color:T.t1}}>Rs.{fmtN(m.amt||0)}</span>
                 </div>
