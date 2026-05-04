@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import TransactionDetailDrawer from "../components/TransactionDetailDrawer";
+import LibrarySelect from "../components/LibrarySelect";
 import api from "../config/api";
 import useDebounce from "../utils/useDebounce";
 
@@ -930,7 +931,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 </div>
                 <div>
                   {lbl("Client / Billed To *",T.grn)}
-                  <SearchSelect options={CLIENT_LIST} value={party} onChange={setParty} placeholder="Select client..." accent={T.grn}/>
+                  <LibrarySelect type="client" value={party} onChange={setParty} placeholder="Select client..." accent={T.grn}/>
                 </div>
                 <div>
                   {lbl("Project")}
@@ -958,7 +959,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   {lbl("Supplier / Party *"+(isFromGRN?" (from GRN)":""))}
                   {isFromGRN
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
-                    : <SearchSelect options={SUPPLIER_LIST} value={party} onChange={setParty} placeholder="Select supplier..."/>}
+                    : <LibrarySelect type="supplier" value={party} onChange={setParty} placeholder="Select supplier..."/>}
                 </div>
                 <div>
                   {lbl("Project"+(isFromGRN?" (from GRN)":""))}
@@ -987,7 +988,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 </div>
                 <div>
                   {lbl("Contractor / Party *")}
-                  <SearchSelect options={SUBCON_LIST} value={party} onChange={setParty} placeholder="Select contractor..." accent={T.slt}/>
+                  <LibrarySelect type="subcon" value={party} onChange={setParty} placeholder="Select contractor..." accent={T.slt}/>
                 </div>
                 <div>
                   {lbl("Project")}
@@ -1028,7 +1029,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 </div>
                 <div>
                   {lbl(type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":"Party *")}
-                  <SearchSelect options={partyOptions} value={party} onChange={setParty} placeholder="Type or select..."/>
+                  <LibrarySelect
+                    type={type==="Payment Received"||isInvoice?"client":isMaterial?"supplier":isSubcon?"subcon":"any-party"}
+                    value={party} onChange={setParty} placeholder="Select party..."/>
                 </div>
                 <div>
                   {lbl("Project")}
@@ -1117,7 +1120,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   {/* Material — locked only for rows from GRN, new added rows editable */}
                   {row.fromGRN
                     ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{row.material||"—"}</div>
-                    :<SearchSelect inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}} options={MATERIAL_LIBRARY} value={row.material} onChange={v=>updRow(row.id,"material",v)} placeholder="Search material..." compact={true}/>
+                    :<LibrarySelect type="material" inputRef={el=>{if(el) matRowRefs.current[row.id]=el;}} value={row.material} onChange={v=>updRow(row.id,"material",v)} placeholder="Search material..." compact={true}/>
                   }
                   <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
                   <input data-field="desc" value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Grade, spec, brand..."
@@ -1619,7 +1622,7 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Party / Vendor *</label>
-              <SearchSelect options={ALL_PARTIES} value={party} onChange={setParty} placeholder="Select party..." accent={T.blu} compact/>
+              <LibrarySelect type="any-party" value={party} onChange={setParty} placeholder="Select party..." accent={T.blu} compact/>
             </div>
             <div>
               <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Project / Site</label>

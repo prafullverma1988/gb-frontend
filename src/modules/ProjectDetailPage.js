@@ -3,6 +3,7 @@ import api, { API_BASE } from "../config/api";
 import { Avatar, Credit } from "../components/Credit";
 import PaymentRequestDrawer from "../components/PaymentRequestDrawer";
 import SearchSelect from "../components/SearchSelect";
+import LibrarySelect from "../components/LibrarySelect";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
@@ -3689,58 +3690,12 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
         </div>
         <div style={{marginBottom:10}}>
           <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name *</label>
-          <select value={form.item_name} onChange={e=>{
-              const found=matLib.find(m=>m.name===e.target.value);
-              setForm(p=>({...p,item_name:e.target.value,unit:found?found.unit||"Bag":p.unit}));
+          <LibrarySelect type="material" value={form.item_name}
+            onChange={v=>{
+              const found=matLib.find(m=>m.name===v);
+              setForm(p=>({...p,item_name:v,unit:found?found.unit||"Bag":p.unit}));
             }}
-            style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white",cursor:"pointer"}}
-            onFocus={e=>e.target.style.borderColor="#3B82F6"} onBlur={e=>e.target.style.borderColor="#E2E8F0"}>
-            <option value="">-- Select Material --</option>
-            {matLib.map(m=><option key={m.name} value={m.name}>{m.name} ({m.unit||"Nos"})</option>)}
-          </select>
-          {!showAddMat ? (
-            <button type="button" onClick={()=>{setShowAddMat(true);setNewMatName("");setNewMatUnit("Nos");}}
-              style={{marginTop:6,padding:"4px 10px",borderRadius:5,background:"transparent",border:"1px dashed #CBD5E1",color:"#64748B",fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-              + Add New Material to Library
-            </button>
-          ) : (
-            <div style={{marginTop:6,padding:"10px 11px",borderRadius:7,border:"1px solid #BFDBFE",background:"#EFF6FF"}}>
-              <div style={{fontSize:10.5,fontWeight:700,color:"#2563EB",marginBottom:7}}>🆕 Add new material to library</div>
-              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:7,marginBottom:7}}>
-                <input value={newMatName} onChange={e=>setNewMatName(e.target.value)} autoFocus placeholder="Material name *"
-                  style={{padding:"6px 9px",borderRadius:5,border:"1.5px solid #E2E8F0",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
-                <select value={newMatUnit} onChange={e=>setNewMatUnit(e.target.value)}
-                  style={{padding:"6px 9px",borderRadius:5,border:"1.5px solid #E2E8F0",fontSize:12,outline:"none",fontFamily:"inherit",background:"white",cursor:"pointer"}}>
-                  {UNITS.map(u=><option key={u}>{u}</option>)}
-                </select>
-              </div>
-              <div style={{display:"flex",gap:6}}>
-                <button type="button" onClick={()=>{setShowAddMat(false);setNewMatName("");}}
-                  style={{padding:"5px 10px",borderRadius:5,border:"1px solid #E2E8F0",background:"white",color:"#64748B",fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-                <button type="button" disabled={newMatSaving||!newMatName.trim()}
-                  onClick={async()=>{
-                    const name=newMatName.trim();
-                    if(!name) return;
-                    if(matLib.some(m=>m.name.toLowerCase()===name.toLowerCase())){alert("This material already exists");return;}
-                    setNewMatSaving(true);
-                    try{
-                      const res=await api.post("/library/materials",{name,unit:newMatUnit});
-                      if(res.success){
-                        const newMat=res.data||{name,unit:newMatUnit};
-                        setMatLib(prev=>[...prev,newMat].sort((a,b)=>a.name.localeCompare(b.name)));
-                        setForm(p=>({...p,item_name:name,unit:newMatUnit}));
-                        setShowAddMat(false);
-                        setNewMatName("");
-                      }else alert(res.message||"Failed");
-                    }catch(e){alert("Network error");}
-                    setNewMatSaving(false);
-                  }}
-                  style={{flex:1,padding:"5px 10px",borderRadius:5,border:"none",background:newMatSaving||!newMatName.trim()?"#94A3B8":"#2563EB",color:"white",fontSize:11,fontWeight:700,cursor:newMatSaving||!newMatName.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
-                  {newMatSaving?"Saving...":"Save & use"}
-                </button>
-              </div>
-            </div>
-          )}
+            onAdded={(m)=>{setMatLib(prev=>[...prev,m].sort((a,b)=>(a.name||"").localeCompare(b.name||"")));}}/>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
           <div>
@@ -7325,9 +7280,7 @@ function TabMaterial({ project }) {
   const [orderedMRs, setOrderedMRs] = useState([]);
   const [grnRows, setGrnRows] = useState({});
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
-  const [showAddVenGRN, setShowAddVenGRN] = useState(false);
-  const [newVenGRN, setNewVenGRN] = useState({ name: "", phone: "", city: "", rowId: null });
-  const [newVenGRNSaving, setNewVenGRNSaving] = useState(false);
+  // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const [grnSaving, setGrnSaving] = useState(false);
   const [grnDone, setGrnDone] = useState([]);
   const [directGrns, setDirectGrns] = useState([]); // Direct GRNs without MR
@@ -7654,60 +7607,9 @@ function TabMaterial({ project }) {
               </div>
               <div>
                 <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
-                <SearchSelect value={form.item_name}
-                  options={matLibReal.map(m=>({key:m.name,label:`${m.name}${m.unit?` (${m.unit})`:""}`}))}
+                <LibrarySelect type="material" value={form.item_name}
                   onChange={v=>{const found=matLibReal.find(m=>m.name===v);setForm(p=>({...p,item_name:v,unit:found?.unit||p.unit}));}}
-                  placeholder="Search material from library..."/>
-                {!showAddMat ? (
-                  <button type="button" onClick={()=>{setShowAddMat(true);setNewMatName("");setNewMatUnit("Nos");}}
-                    style={{marginTop:6,padding:"4px 10px",borderRadius:5,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:4}}>
-                    + Add New Material to Library
-                  </button>
-                ) : (
-                  <div style={{marginTop:6,padding:"10px 11px",borderRadius:7,border:`1px solid ${T.bluM||"#BFDBFE"}`,background:T.bluL||"#EFF6FF"}}>
-                    <div style={{fontSize:10.5,fontWeight:700,color:T.blu,marginBottom:7}}>🆕 Add new material to library</div>
-                    <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:7,marginBottom:7}}>
-                      <input value={newMatName} onChange={e=>setNewMatName(e.target.value)} autoFocus placeholder="Material name *"
-                        style={{padding:"6px 9px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
-                      <select value={newMatUnit} onChange={e=>setNewMatUnit(e.target.value)}
-                        style={{padding:"6px 9px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",background:"white",cursor:"pointer"}}>
-                        {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                      </select>
-                    </div>
-                    <div style={{display:"flex",gap:6}}>
-                      <button type="button" onClick={()=>{setShowAddMat(false);setNewMatName("");}}
-                        style={{padding:"5px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:"white",color:T.t3,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-                      <button type="button" disabled={newMatSaving||!newMatName.trim()}
-                        onClick={async()=>{
-                          const name = newMatName.trim();
-                          if(!name) return;
-                          if(matLibReal.some(m=>m.name.toLowerCase()===name.toLowerCase())){
-                            alert("This material already exists in library");return;
-                          }
-                          setNewMatSaving(true);
-                          try{
-                            const res = await api.post("/library/materials", {name, unit:newMatUnit});
-                            if(res.success){
-                              const newMat = res.data || {name, unit:newMatUnit};
-                              setMatLibReal(prev=>[...prev, newMat].sort((a,b)=>a.name.localeCompare(b.name)));
-                              setForm(p=>({...p, item_name:name, unit:newMatUnit}));
-                              setShowAddMat(false);
-                              setNewMatName("");
-                            }else{
-                              alert(res.message||"Failed to add material");
-                            }
-                          }catch(e){alert("Network error: "+e.message);}
-                          setNewMatSaving(false);
-                        }}
-                        style={{flex:1,padding:"5px 10px",borderRadius:5,border:"none",background:newMatSaving||!newMatName.trim()?"#9CA3AF":T.blu,color:"white",fontSize:11,fontWeight:700,cursor:newMatSaving||!newMatName.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
-                        {newMatSaving?"Saving...":"Save & use in this MR"}
-                      </button>
-                    </div>
-                    <div style={{fontSize:10,color:T.t4,marginTop:6}}>
-                      Library me save hoga aur is MR me automatic select ho jayega
-                    </div>
-                  </div>
-                )}
+                  onAdded={(m)=>setMatLibReal(prev=>[...prev,m].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}/>
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div>
@@ -7978,51 +7880,9 @@ function TabMaterial({ project }) {
                         </div>
                         <div>
                           <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor *</label>
-                          <SearchSelect value={row.vendor}
-                            options={vendorList.map(v=>({key:v.name,label:`${v.name}${v.city?` — ${v.city}`:""}`}))}
+                          <LibrarySelect type="supplier" value={row.vendor}
                             onChange={v=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:v||""}:r))}
-                            placeholder="Pick from library..."/>
-                          {showAddVenGRN && newVenGRN.rowId === row.id ? (
-                            <div style={{marginTop:6,padding:"8px 10px",borderRadius:6,border:"1px solid #BFDBFE",background:"#EFF6FF"}}>
-                              <div style={{fontSize:10,fontWeight:700,color:T.blu,marginBottom:5}}>🆕 Add new vendor (saved to Party Master)</div>
-                              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:5,marginBottom:5}}>
-                                <input value={newVenGRN.name} onChange={e=>setNewVenGRN(p=>({...p,name:e.target.value}))} autoFocus placeholder="Vendor name *"
-                                  style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
-                                <input value={newVenGRN.phone} onChange={e=>setNewVenGRN(p=>({...p,phone:e.target.value}))} placeholder="Phone"
-                                  style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
-                                <input value={newVenGRN.city} onChange={e=>setNewVenGRN(p=>({...p,city:e.target.value}))} placeholder="City"
-                                  style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
-                              </div>
-                              <div style={{display:"flex",gap:5}}>
-                                <button type="button" onClick={()=>{setShowAddVenGRN(false);setNewVenGRN({name:"",phone:"",city:"",rowId:null});}}
-                                  style={{padding:"4px 9px",borderRadius:4,border:`1px solid ${T.b1}`,background:"white",color:T.t3,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-                                <button type="button" disabled={newVenGRNSaving||!newVenGRN.name.trim()}
-                                  onClick={async()=>{
-                                    const name=newVenGRN.name.trim();
-                                    if(!name)return;
-                                    if(vendorList.some(v=>(v.name||"").toLowerCase()===name.toLowerCase())){alert("Vendor already in library");return;}
-                                    setNewVenGRNSaving(true);
-                                    try{
-                                      const partyRes=await api.post("/finance/parties",{name,type:"Material Supplier",phone:newVenGRN.phone.trim()||null,city:newVenGRN.city.trim()||null,credit_days:7});
-                                      if(partyRes.success===false){alert(partyRes.message||"Save failed");setNewVenGRNSaving(false);return;}
-                                      api.post("/procurement/vendors",{name,phone:newVenGRN.phone.trim()||null,city:newVenGRN.city.trim()||null,category:"Material"}).catch(()=>{});
-                                      setVendorList(prev=>[...prev,{name,city:newVenGRN.city.trim()||null,phone:newVenGRN.phone.trim()||null}].sort((a,b)=>(a.name||"").localeCompare(b.name||"")));
-                                      setDirectRows(p=>p.map(r=>r.id===newVenGRN.rowId?{...r,vendor:name}:r));
-                                      setShowAddVenGRN(false); setNewVenGRN({name:"",phone:"",city:"",rowId:null});
-                                    }catch(e){alert("Network error");}
-                                    setNewVenGRNSaving(false);
-                                  }}
-                                  style={{flex:1,padding:"4px 9px",borderRadius:4,border:"none",background:newVenGRNSaving||!newVenGRN.name.trim()?"#94A3B8":T.blu,color:"white",fontSize:10,fontWeight:700,cursor:newVenGRNSaving||!newVenGRN.name.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
-                                  {newVenGRNSaving?"Saving...":"Save & use"}
-                                </button>
-                              </div>
-                            </div>
-                          ) : (
-                            <button type="button" onClick={()=>{setShowAddVenGRN(true);setNewVenGRN({name:"",phone:"",city:"",rowId:row.id});}}
-                              style={{marginTop:5,padding:"3px 9px",borderRadius:4,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
-                              + Add New Vendor to Library
-                            </button>
-                          )}
+                            onAdded={(v)=>setVendorList(prev=>[...prev,v].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}/>
                         </div>
                       </div>
                       <div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:8,marginBottom:8}}>

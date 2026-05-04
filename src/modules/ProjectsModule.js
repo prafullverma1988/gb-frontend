@@ -4,6 +4,7 @@ import apiCache from "../utils/apiCache";
 import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
+import LibrarySelect from "../components/LibrarySelect";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -965,12 +966,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
     const d=new Date(); d.setDate(d.getDate()+3);
     return d.toISOString().slice(0,10);
   });
-  // Add-new-vendor inline form state
-  const [showAddVen,setShowAddVen]=useState(false);
-  const [newVenName,setNewVenName]=useState("");
-  const [newVenPhone,setNewVenPhone]=useState("");
-  const [newVenCity,setNewVenCity]=useState("");
-  const [newVenSaving,setNewVenSaving]=useState(false);
+  // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const sc=MR_STAGE_COLORS[stage]||MR_STAGE_COLORS.Requested;
   const act=acting[mr.id];
   const isReject=rejectId===mr.id;
@@ -1045,10 +1041,9 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:6}}>
                 <div>
                   <label style={{fontSize:9.5,fontWeight:600,color:T.t4,display:"block",marginBottom:3}}>Vendor *</label>
-                  <SearchSelect value={manualVendor}
-                    options={vendorList.map(v=>({key:v.name,label:`${v.name}${v.city?` — ${v.city}`:""}`}))}
+                  <LibrarySelect type="supplier" value={manualVendor}
                     onChange={v=>setManualVendor(v||"")}
-                    placeholder="Pick from library..."
+                    onAdded={onVendorAdded}
                     compact/>
                 </div>
                 <div>
@@ -1057,60 +1052,8 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
                     style={{width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
-              {!showAddVen ? (
-                <button type="button" onClick={()=>{setShowAddVen(true);setNewVenName("");setNewVenPhone("");setNewVenCity("");}}
-                  style={{padding:"3px 9px",borderRadius:5,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10,fontWeight:600,cursor:"pointer",fontFamily:"inherit",marginBottom:6}}>
-                  + Add New Vendor to Library
-                </button>
-              ) : (
-                <div style={{padding:"8px 9px",borderRadius:6,border:`1px solid ${T.bluM||"#BFDBFE"}`,background:T.bluL||"#EFF6FF",marginBottom:6}}>
-                  <div style={{fontSize:10,fontWeight:700,color:T.blu,marginBottom:5}}>🆕 Add new vendor (saved to Party Master)</div>
-                  <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr",gap:5,marginBottom:5}}>
-                    <input value={newVenName} onChange={e=>setNewVenName(e.target.value)} autoFocus placeholder="Vendor name *"
-                      style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
-                    <input value={newVenPhone} onChange={e=>setNewVenPhone(e.target.value)} placeholder="Phone"
-                      style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
-                    <input value={newVenCity} onChange={e=>setNewVenCity(e.target.value)} placeholder="City"
-                      style={{padding:"5px 7px",borderRadius:4,border:`1.5px solid ${T.b1}`,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:"white"}}/>
-                  </div>
-                  <div style={{display:"flex",gap:5}}>
-                    <button type="button" onClick={()=>{setShowAddVen(false);setNewVenName("");}}
-                      style={{padding:"4px 9px",borderRadius:4,border:`1px solid ${T.b1}`,background:"white",color:T.t3,fontSize:10,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-                    <button type="button" disabled={newVenSaving||!newVenName.trim()}
-                      onClick={async()=>{
-                        const name=newVenName.trim();
-                        if(!name) return;
-                        if(vendorList.some(v=>(v.name||"").toLowerCase()===name.toLowerCase())){
-                          alert("This vendor already exists in library");return;
-                        }
-                        setNewVenSaving(true);
-                        try{
-                          // Save to Party Master (parties table) — this is what bill auto-link checks.
-                          // Also save to procurement vendor list (separate table) so it shows everywhere.
-                          const partyRes=await api.post("/finance/parties",{
-                            name, type:"Material Supplier",
-                            phone:newVenPhone.trim()||null, city:newVenCity.trim()||null,
-                            credit_days:7,
-                          });
-                          if(partyRes.success===false){alert(partyRes.message||"Save failed");setNewVenSaving(false);return;}
-                          // Best-effort: also push into procurement.vendors for inline lists
-                          api.post("/procurement/vendors",{
-                            name, phone:newVenPhone.trim()||null, city:newVenCity.trim()||null, category:"Material",
-                          }).catch(()=>{});
-                          if(onVendorAdded) onVendorAdded({name,city:newVenCity.trim()||null,phone:newVenPhone.trim()||null});
-                          setManualVendor(name);
-                          setShowAddVen(false); setNewVenName("");
-                        }catch(e){alert("Network error");}
-                        setNewVenSaving(false);
-                      }}
-                      style={{flex:1,padding:"4px 9px",borderRadius:4,border:"none",background:newVenSaving||!newVenName.trim()?"#94A3B8":T.blu,color:"white",fontSize:10,fontWeight:700,cursor:newVenSaving||!newVenName.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
-                      {newVenSaving?"Saving...":"Save & use"}
-                    </button>
-                  </div>
-                </div>
-              )}
               <div style={{display:"flex",gap:5}}>
-                <button onClick={()=>{setShowManual(false);setManualVendor("");setShowAddVen(false);}} disabled={!!act}
+                <button onClick={()=>{setShowManual(false);setManualVendor("");}} disabled={!!act}
                   style={{flex:1,padding:"6px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:11,cursor:"pointer"}}>Cancel</button>
                 <button onClick={()=>onMarkOrdered(mr.id, manualVendor.trim(), manualDelivery)}
                   disabled={!!act || !manualVendor.trim() || !manualDelivery}
