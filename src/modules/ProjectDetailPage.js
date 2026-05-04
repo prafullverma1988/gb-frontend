@@ -8310,6 +8310,33 @@ function TabMaterial({ project }) {
         </div>
       )}
 
+      {/* ── MATERIAL FLOW DRAWER (Material Ledger row click) ── */}
+      <MaterialFlowDrawer
+        grnId={flowGrnId}
+        onClose={()=>setFlowGrnId(null)}
+        onChanged={async()=>{
+          try {
+            const r = await api.get("/tasks/project/"+projectId+"/material-ledger");
+            if (r.success) setLedger(r.data || []);
+          } catch {}
+        }}
+        onEditMR={(mr)=>{ setFlowEditMR(mr); setFlowGrnId(null); }}
+      />
+      {/* ── MR Edit Drawer (opened from Material Flow's Edit button) ── */}
+      <MRDetailDrawer
+        mr={flowEditMR}
+        onClose={()=>setFlowEditMR(null)}
+        onChanged={async()=>{
+          try {
+            const [r1, r2] = await Promise.all([
+              api.get("/tasks/project/"+projectId+"/material-ledger"),
+              api.get("/tasks/project/"+projectId+"/inventory"),
+            ]);
+            if (r1.success) setLedger(r1.data || []);
+            if (r2.success) setInventory(r2.data || []);
+          } catch {}
+        }}
+      />
     </div>
   );
 }
@@ -12301,35 +12328,8 @@ function ProjectDetailPage({project=PROJ, onBack}) {
         prefillParty={paymentReq?.party}
         onSaved={()=>{ loadApprovalCounts(); }}
       />
-      {/* ── MATERIAL FLOW DRAWER (Material Ledger row click) ── */}
-      <MaterialFlowDrawer
-        grnId={flowGrnId}
-        onClose={()=>setFlowGrnId(null)}
-        onChanged={async()=>{
-          // Reload ledger after edit
-          try {
-            const r = await api.get("/tasks/project/"+projectId+"/material-ledger");
-            if (r.success) setLedger(r.data || []);
-          } catch {}
-        }}
-        onEditMR={(mr)=>{ setFlowEditMR(mr); setFlowGrnId(null); }}
-      />
-      {/* ── MR Edit Drawer (opened from Material Flow's Edit button) ── */}
-      <MRDetailDrawer
-        mr={flowEditMR}
-        onClose={()=>setFlowEditMR(null)}
-        onChanged={async()=>{
-          // Refresh ledger + inventory
-          try {
-            const [r1, r2] = await Promise.all([
-              api.get("/tasks/project/"+projectId+"/material-ledger"),
-              api.get("/tasks/project/"+projectId+"/inventory"),
-            ]);
-            if (r1.success) setLedger(r1.data || []);
-            if (r2.success) setInventory(r2.data || []);
-          } catch {}
-        }}
-      />
+      {/* (MaterialFlowDrawer + MRDetailDrawer mounted inside TabMaterial — they
+           depend on flowGrnId / flowEditMR state declared in that component.) */}
     </>
   );
 }
