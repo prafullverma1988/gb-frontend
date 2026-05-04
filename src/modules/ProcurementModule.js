@@ -80,6 +80,7 @@ const MR_TAB_META={
   Ordered: {label:"Ordered",   c:T.pur, bg:T.purL, brd:T.purM},
   Received:{label:"Received",  c:T.grn, bg:T.grnL, brd:T.grnM},
   Rejected:{label:"Rejected",  c:T.red, bg:T.redL, brd:T.redM},
+  Closed:  {label:"Closed",    c:T.t3,  bg:"#F1F5F9", brd:"#CBD5E0"},
 };
 
 // ── SHARED COMPONENTS ─────────────────────────────────────────────────
@@ -964,18 +965,23 @@ function ProcurementModule(){
   const [markRecvTgt,setMarkRecvTgt]=useState(null);
   const [showBulkOrder,setShowBulkOrder]=useState(false);
 
-  // ── Counts ──
+  // ── Counts ── (Closed MRs are excluded from all active tabs)
+  const isClosed = m => m.mrStatus === "Closed";
   const mrTabCounts={
-    Pending: mrs.filter(m=>m.mrStatus==="Pending").length,
-    Approved:mrs.filter(m=>m.mrStatus==="Approved"&&m.matStatus==="Pending").length,
-    Ordered: mrs.filter(m=>m.matStatus==="Ordered").length,
-    Received:mrs.filter(m=>m.matStatus==="Received"||m.matStatus==="PartialReceived").length,
-    Rejected:mrs.filter(m=>m.mrStatus==="Rejected").length,
+    Pending: mrs.filter(m=>!isClosed(m) && m.mrStatus==="Pending").length,
+    Approved:mrs.filter(m=>!isClosed(m) && m.mrStatus==="Approved"&&m.matStatus==="Pending").length,
+    Ordered: mrs.filter(m=>!isClosed(m) && m.matStatus==="Ordered").length,
+    Received:mrs.filter(m=>!isClosed(m) && (m.matStatus==="Received"||m.matStatus==="PartialReceived")).length,
+    Rejected:mrs.filter(m=>!isClosed(m) && m.mrStatus==="Rejected").length,
+    Closed:  mrs.filter(isClosed).length,
   };
   const pendingMRs=mrTabCounts.Approved;
 
   // ── Filtered MRs ──
   const filteredMRs=mrs.filter(m=>{
+    // Closed MRs only show in the Closed tab; everywhere else they're hidden
+    if(mrTab!=="Closed" && isClosed(m)) return false;
+    if(mrTab==="Closed"   &&!isClosed(m)) return false;
     if(mrTab==="Pending"  &&m.mrStatus!=="Pending") return false;
     if(mrTab==="Approved" &&!(m.mrStatus==="Approved"&&m.matStatus==="Pending")) return false;
     if(mrTab==="Ordered"  &&m.matStatus!=="Ordered") return false;
@@ -999,6 +1005,8 @@ function ProcurementModule(){
   const materialOptions = Array.from(new Set(
     mrs
       .filter(m=>{
+        if(mrTab!=="Closed" && m.mrStatus==="Closed") return false;
+        if(mrTab==="Closed"   &&m.mrStatus!=="Closed") return false;
         if(mrTab==="Pending"  &&m.mrStatus!=="Pending") return false;
         if(mrTab==="Approved" &&!(m.mrStatus==="Approved"&&m.matStatus==="Pending")) return false;
         if(mrTab==="Ordered"  &&m.matStatus!=="Ordered") return false;
@@ -1472,6 +1480,37 @@ function ProcurementModule(){
                       </div>
                       <div style={{padding:"5px 10px",background:T.redL,borderRadius:6,border:`1px solid ${T.redM}`}}>
                         <div style={{fontSize:11,color:T.red}}>{m.rejectedReason||"Rejected"}</div>
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
+              {mrTab==="Closed"&&(
+                <>
+                  {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><div style={{fontSize:28,marginBottom:6}}>⊘</div><div style={{marginTop:6,fontSize:13,color:T.t3}}>No closed requests</div><div style={{fontSize:11,color:T.t4,marginTop:4}}>MRs that were manually closed before being received will appear here with the reason.</div></div>}
+                  {filteredMRs.map(m=>(
+                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1.5fr 90px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${T.t3}`,transition:"background 0.1s",cursor:"pointer",gap:8}}
+                      onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                      <div>
+                        <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
+                        <div style={{fontSize:10.5,fontWeight:700,color:T.t3,fontFamily:"monospace"}}>{m.id}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:13,fontWeight:500,color:T.t1}}>{m.item}</div>
+                        <div style={{fontSize:11,color:T.t3}}>{m.project} · {m.requestedBy}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:14,fontWeight:700,color:T.t2}}>{m.qty}</div>
+                        <div style={{fontSize:10,color:T.t4}}>{m.unit}</div>
+                      </div>
+                      <div style={{padding:"6px 10px",background:"#FEF3C7",borderRadius:6,border:"1px solid #FDE68A"}}>
+                        <div style={{fontSize:9,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>Reason</div>
+                        <div style={{fontSize:11,color:"#92400E",lineHeight:1.4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.closed_reason || "—"}</div>
+                      </div>
+                      <div style={{textAlign:"right"}}>
+                        {m.closed_at && <div style={{fontSize:10,color:T.t4}}>Closed</div>}
+                        {m.closed_at && <div style={{fontSize:11,color:T.t3,fontWeight:500}}>{new Date(m.closed_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</div>}
                       </div>
                     </div>
                   ))}

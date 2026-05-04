@@ -32,6 +32,7 @@ const STAGE_META = {
   PartialReceived: { label: "Partial Received", c: T.amb, bg: T.ambL },
   Rejected:  { label: "Rejected",         c: T.red, bg: T.redL },
   Used:      { label: "Used",             c: T.t3,  bg: T.b1  },
+  Closed:    { label: "Closed",           c: T.t3,  bg: T.b1  },
 };
 
 const fmtDate = (d) => {
@@ -74,8 +75,14 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
 
   if (!open) return null;
 
-  const stage = mr.stage || (mr.mat_status === "Received" || mr.mat_status === "PartialReceived" ? "Received" : (mr.mat_status === "Ordered" ? "Ordered" : (mr.mr_status === "Approved" ? "Approved" : (mr.mr_status === "Rejected" ? "Rejected" : "Requested"))));
+  const stage = mr.mr_status === "Closed" ? "Closed"
+    : (mr.stage || (mr.mat_status === "Received" || mr.mat_status === "PartialReceived" ? "Received" : (mr.mat_status === "Ordered" ? "Ordered" : (mr.mr_status === "Approved" ? "Approved" : (mr.mr_status === "Rejected" ? "Rejected" : "Requested")))));
   const meta = STAGE_META[stage] || STAGE_META.Requested;
+  // Stage logic: Pending / Approved / Ordered → "Close" with reason (preserves audit trail)
+  //              Received / PartialReceived → "Delete" cascades to inventory
+  //              Closed / Rejected → no destructive action (already terminal)
+  const canClose  = ["Requested", "Approved", "Ordered"].includes(stage);
+  const canDelete = ["Received", "PartialReceived"].includes(stage);
 
   const handleSave = async () => {
     if (savingRef.current) return;
@@ -109,7 +116,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
 
   const handleDelete = async () => {
     if (deleting) return;
-    if (!window.confirm(`Delete MR-${mr.id} (${mr.item_name})? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete MR-${mr.id} (${mr.item_name})?\n\nThis will also remove the linked GRN entry from inventory. Cannot be undone.`)) return;
     setDeleting(true); setErr("");
     try {
       const res = await api.del("/procurement/mrs/" + mr.id);
@@ -122,6 +129,31 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
       setErr(e?.message || "Network error");
       setDeleting(false);
     }
+  };
+
+  const [showCloseForm, setShowCloseForm] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
+  const [closing, setClosing] = useState(false);
+  const handleClose = async () => {
+    const reason = closeReason.trim();
+    if (!reason) { setErr("Reason is required to close — log dekhne wale ko pata chalega kyu close hua"); return; }
+    if (closing) return;
+    setClosing(true); setErr("");
+    try {
+      const res = await api.put("/procurement/mrs/" + mr.id, {
+        mr_status: "Closed",
+        closed_reason: reason,
+      });
+      if (res?.success === false) {
+        setErr(res.message || "Close failed"); setClosing(false); return;
+      }
+      setShowCloseForm(false); setCloseReason("");
+      onChanged && onChanged();
+      onClose && onClose();
+    } catch (e) {
+      setErr(e?.message || "Network error");
+    }
+    setClosing(false);
   };
 
   return (
@@ -195,6 +227,14 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
                   <div style={{ fontSize: 12.5, color: T.red, lineHeight: 1.5 }}>{mr.rejected_reason}</div>
                 </div>
               )}
+              {mr.closed_reason && (
+                <div style={{ padding: "10px 12px", background: "#FEF3C7", border: `1px solid #FDE68A`, borderRadius: 8, marginBottom: 14 }}>
+                  <div style={{ fontSize: 9.5, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
+                    Close Reason {mr.closed_at && <span style={{ marginLeft: 6, fontWeight: 500, color: T.t4 }}>· {fmtDate(mr.closed_at)}</span>}
+                  </div>
+                  <div style={{ fontSize: 12.5, color: "#92400E", lineHeight: 1.5 }}>{mr.closed_reason}</div>
+                </div>
+              )}
             </>
           ) : (
             // Edit form
@@ -256,6 +296,29 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
           )}
         </div>
 
+        {/* Close-reason form (shown above footer when admin clicks Close) */}
+        {showCloseForm && (
+          <div style={{ padding: "12px 20px", background: "#FEF3C7", borderTop: `1px solid #FDE68A` }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#92400E", marginBottom: 6 }}>
+              Close MR — kyu close kar rahe ho? (will show in Closed tab log)
+            </div>
+            <textarea value={closeReason} onChange={e => setCloseReason(e.target.value)} autoFocus
+              placeholder="e.g. Project cancelled, vendor rate too high, alternate material chosen..."
+              rows={2}
+              style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: `1.5px solid #FDE68A`, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", marginBottom: 7 }}/>
+            <div style={{ display: "flex", gap: 6 }}>
+              <button onClick={() => { setShowCloseForm(false); setCloseReason(""); setErr(""); }} disabled={closing}
+                style={{ flex: 1, padding: "7px", borderRadius: 6, background: "white", border: `1px solid ${T.b1}`, color: T.t3, fontSize: 11.5, fontWeight: 600, cursor: closing ? "not-allowed" : "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={handleClose} disabled={closing || !closeReason.trim()}
+                style={{ flex: 2, padding: "7px", borderRadius: 6, background: closing || !closeReason.trim() ? "#9CA3AF" : "#D97706", border: "none", color: "white", fontSize: 11.5, fontWeight: 700, cursor: closing || !closeReason.trim() ? "not-allowed" : "pointer" }}>
+                {closing ? "Closing..." : "Confirm Close"}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Footer */}
         <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, flexShrink: 0, display: "flex", gap: 8 }}>
           {editing ? (
@@ -271,10 +334,16 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
             </>
           ) : (
             <>
-              {isAdmin && (
+              {isAdmin && canClose && !showCloseForm && (
+                <button onClick={() => { setShowCloseForm(true); setCloseReason(""); }}
+                  style={{ padding: "9px 14px", borderRadius: 7, background: "#FFFBEB", border: `1px solid #FDE68A`, color: "#D97706", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  ⊘ Close
+                </button>
+              )}
+              {isAdmin && canDelete && (
                 <button onClick={handleDelete} disabled={deleting}
                   style={{ padding: "9px 14px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer" }}>
-                  {deleting ? "Deleting..." : "🗑 Delete"}
+                  {deleting ? "Deleting..." : "🗑 Delete (cascades to inventory)"}
                 </button>
               )}
               <div style={{ flex: 1 }}/>
