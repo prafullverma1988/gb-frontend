@@ -1842,6 +1842,10 @@ function FinanceModule(){
       to_account_name:t.to_account_name||null,
       mop:t.mop||"",
       entryBy:t.created_by_name||t.entry_by||"",
+      // Line items — Billed Material tab reads `items` to show one row per material.
+      // Backend GET /finance/transactions now returns line_items[] for bill-type txns.
+      items:t.items||t.line_items||null,
+      grn_id:t.grn_id||null,
     };
   };
 
