@@ -54,13 +54,17 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
   const [showCloseForm, setShowCloseForm] = useState(false);
   const [closeReason, setCloseReason] = useState("");
   const [closing, setClosing] = useState(false);
+  // closeMode: "close" = soft close (Pending/Approved/Ordered) — preserves audit
+  //            "received" = close-with-cascade — also drops inventory rows
+  const [closeMode, setCloseMode] = useState("close");
+  const [editNote, setEditNote] = useState("");
   const savingRef = useRef(false);
-  const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState("");
 
   useEffect(() => {
     if (mr) {
-      setEditing(false); setSavingState(false); savingRef.current = false; setDeleting(false); setErr("");
+      setEditing(false); setSavingState(false); savingRef.current = false; setErr("");
+      setEditNote(""); setShowCloseForm(false); setCloseReason(""); setCloseMode("close");
       setForm({
         item_name:         mr.item_name || mr.item || "",
         quantity:          mr.quantity ?? mr.qty ?? "",
@@ -91,6 +95,10 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
 
   const handleSave = async () => {
     if (savingRef.current) return;
+    if (!editNote.trim()) {
+      setErr("Edit reason is compulsory — log mein dikhega kyu change kiya");
+      return;
+    }
     savingRef.current = true; setSavingState(true); setErr("");
     try {
       const payload = {
@@ -106,6 +114,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
         challan_no: form.challan_no || null,
         mr_status: form.mr_status || undefined,
         mat_status: form.mat_status || undefined,
+        edit_note: editNote.trim(),
       };
       const res = await api.put("/procurement/mrs/" + mr.id, payload);
       if (res?.success === false) {
@@ -117,23 +126,6 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
       setErr(e?.message || "Network error");
     }
     savingRef.current = false; setSavingState(false);
-  };
-
-  const handleDelete = async () => {
-    if (deleting) return;
-    if (!window.confirm(`Delete MR-${mr.id} (${mr.item_name})?\n\nThis will also remove the linked GRN entry from inventory. Cannot be undone.`)) return;
-    setDeleting(true); setErr("");
-    try {
-      const res = await api.del("/procurement/mrs/" + mr.id);
-      if (res?.success === false) {
-        setErr(res.message || "Delete failed"); setDeleting(false); return;
-      }
-      onChanged && onChanged();
-      onClose && onClose();
-    } catch (e) {
-      setErr(e?.message || "Network error");
-      setDeleting(false);
-    }
   };
 
   const handleClose = async () => {
@@ -241,6 +233,14 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
           ) : (
             // Edit form
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ padding: "10px 12px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 8 }}>
+                <label style={{ ...lblStyle, color: "#92400E" }}>
+                  Edit Reason * <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>(compulsory — log me record hoga)</span>
+                </label>
+                <textarea value={editNote} onChange={e => setEditNote(e.target.value)} rows={2}
+                  placeholder="e.g. Site team ne 56 kg ki jagah 50 kg nikala, baki return — qty correct kar raha hu"
+                  style={{ ...inpStyle, resize: "vertical", fontFamily: "inherit", borderColor: "#FDE68A", background: "#fff" }}/>
+              </div>
               <div>
                 <label style={lblStyle}>Material *</label>
                 <LibrarySelect type="material"
@@ -300,12 +300,16 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
 
         {/* Close-reason form (shown above footer when admin clicks Close) */}
         {showCloseForm && (
-          <div style={{ padding: "12px 20px", background: "#FEF3C7", borderTop: `1px solid #FDE68A` }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#92400E", marginBottom: 6 }}>
-              Close MR — kyu close kar rahe ho? (will show in Closed tab log)
+          <div style={{ padding: "12px 20px", background: closeMode === "received" ? "#FEE2E2" : "#FEF3C7", borderTop: `1px solid ${closeMode === "received" ? "#FECACA" : "#FDE68A"}` }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: closeMode === "received" ? "#991B1B" : "#92400E", marginBottom: 6 }}>
+              {closeMode === "received"
+                ? "Close Received MR — inventory se bhi ye qty hat jayega. Reason compulsory hai:"
+                : "Close MR — kyu close kar rahe ho? (will show in Closed tab log)"}
             </div>
             <textarea value={closeReason} onChange={e => setCloseReason(e.target.value)} autoFocus
-              placeholder="e.g. Project cancelled, vendor rate too high, alternate material chosen..."
+              placeholder={closeMode === "received"
+                ? "e.g. Galat material aaya, vendor ko wapas kar diya — stock se hata do"
+                : "e.g. Project cancelled, vendor rate too high, alternate material chosen..."}
               rows={2}
               style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: `1.5px solid #FDE68A`, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", marginBottom: 7 }}/>
             <div style={{ display: "flex", gap: 6 }}>
@@ -337,15 +341,15 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
           ) : (
             <>
               {isAdmin && canClose && !showCloseForm && (
-                <button onClick={() => { setShowCloseForm(true); setCloseReason(""); }}
+                <button onClick={() => { setShowCloseForm(true); setCloseReason(""); setCloseMode("close"); }}
                   style={{ padding: "9px 14px", borderRadius: 7, background: "#FFFBEB", border: `1px solid #FDE68A`, color: "#D97706", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
                   ⊘ Close
                 </button>
               )}
-              {isAdmin && canDelete && (
-                <button onClick={handleDelete} disabled={deleting}
-                  style={{ padding: "9px 14px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: deleting ? "not-allowed" : "pointer" }}>
-                  {deleting ? "Deleting..." : "🗑 Delete (cascades to inventory)"}
+              {isAdmin && canDelete && !showCloseForm && (
+                <button onClick={() => { setShowCloseForm(true); setCloseReason(""); setCloseMode("received"); }}
+                  style={{ padding: "9px 14px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  🗑 Delete → Close (drops inventory)
                 </button>
               )}
               <div style={{ flex: 1 }}/>
