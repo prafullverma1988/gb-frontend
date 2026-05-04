@@ -7387,6 +7387,13 @@ function TabMaterial({ project }) {
           }))
         : [];
 
+      // Build a set of all MR material names BEFORE building direct entries.
+      // We use it to decide whether a GRN is *truly* direct (= walk-in receipt
+      // with no MR ever filed for it) vs a procurement-flow receipt that just
+      // happens to be saved without po_id / linked_mr_id.
+      const norm = s => (s || "").toString().trim().toLowerCase();
+      const allMrMaterials = new Set(mrEntries.map(m => norm(m.name)));
+
       // Direct GRNs = grn_entries with po_id=null (no PO/MR linked).
       // Exclude Auto-Bill GRNs — those are synthesized by the bill flow; they live
       // in inventory but don't represent a separate site receipt here, so showing
@@ -7397,16 +7404,21 @@ function TabMaterial({ project }) {
           .filter(g => !g.po_id && !g.linked_mr_id && g.grn_type !== "Auto-Bill")
           .forEach(g => {
             (g.items || []).forEach((item, i) => {
+              const matName = item.description || item.item_name || "Material";
+              const hasMatchingMr = allMrMaterials.has(norm(matName));
               directEntries.push({
                 id: "d-" + g.id + "-" + i,
-                name: item.description || item.item_name || "Material",
+                name: matName,
                 qty: (Number.isInteger(Number(item.received_qty)) ? Number(item.received_qty) : parseFloat(item.received_qty||0)) + " " + (item.unit || ""),
                 stage: "Received",
                 by: g.received_by || "Site",
                 date: g.received_date ? new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
                 vendor: g.vendor_name || null,
                 amt: 0,
-                isDirect: true,
+                // Only flag as "Direct" if NO MR exists for this material in the project.
+                // Otherwise it came via the procurement flow even if the GRN row isn't
+                // wired with linked_mr_id — the badge would mislead the user.
+                isDirect: !hasMatchingMr,
                 challan: g.challan_no,
                 grn_number: g.grn_number,
               });
@@ -7419,7 +7431,6 @@ function TabMaterial({ project }) {
       // the MR card. The GRN card represents the actual receipt — keeping both
       // makes it look like the same delivery happened twice (user reported
       // Distemper showing twice while Inventory was correct).
-      const norm = s => (s || "").toString().trim().toLowerCase();
       const receivedDirectMaterials = new Set(
         directEntries.map(d => norm(d.name))
       );
