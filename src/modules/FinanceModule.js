@@ -2216,7 +2216,7 @@ function FinanceModule(){
     }catch(e){console.error("Reject PR error:",e);}
   };
 
-  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"unbilled_grn",l:"Unbilled GRN"}];
+  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"unbilled_grn",l:"Unbilled GRN"},{id:"billed_mat",l:"Billed Material"}];
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -3305,6 +3305,86 @@ function FinanceModule(){
             );
           })()}
         </div>
+        )}
+        {/* BILLED MATERIAL TAB ─────────────────────────────────────── */}
+        {tab==="billed_mat"&&(
+          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+            {(()=>{
+              const billRows = [];
+              activeTxns
+                .filter(t => t.txnType === "material_purchase" && Array.isArray(t.items) && t.items.length > 0)
+                .forEach(t => {
+                  t.items.forEach((it, i) => {
+                    billRows.push({
+                      key: `${t.id}-${i}`,
+                      date: t.date,
+                      ds: t.ds,
+                      vendor: t.party || "—",
+                      project: t.project || "—",
+                      material: it.item_name || it.item || it.name || it.description || "—",
+                      qty: parseFloat(it.qty || it.quantity) || 0,
+                      unit: it.unit || "",
+                      rate: parseFloat(it.rate) || 0,
+                      amount: parseFloat(it.amount || it.amt) || 0,
+                      _txn: t,
+                    });
+                  });
+                });
+              billRows.sort((a, b) => (b.ds || 0) - (a.ds || 0));
+              const search = txnSearch || "";
+              const filtered = billRows.filter(r => {
+                if (!search) return true;
+                const q = search.toLowerCase();
+                return (r.material||"").toLowerCase().includes(q) ||
+                       (r.vendor||"").toLowerCase().includes(q) ||
+                       (r.project||"").toLowerCase().includes(q);
+              });
+              const totalAmt = filtered.reduce((s, r) => s + r.amount, 0);
+              return (
+                <>
+                  <div style={{background:T.surface,borderRadius:8,padding:"6px 10px",marginBottom:6,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
+                    <div style={{position:"relative",flex:1,minWidth:200}}>
+                      <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                      <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search material, vendor or project..."
+                        style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${txnSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:txnSearch?T.bluL:T.surface}}/>
+                    </div>
+                    <span style={{fontSize:11,color:T.t4,whiteSpace:"nowrap"}}>{filtered.length} item{filtered.length===1?"":"s"} · ₹{fmtN(totalAmt)}</span>
+                  </div>
+                  <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+                    <div style={{display:"grid",gridTemplateColumns:"80px 1.4fr 1.2fr 1.2fr 70px 60px 80px 100px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,flexShrink:0,gap:6}}>
+                      {["Date","Material","Vendor","Project","Qty","Unit","Rate","Amount"].map((h,i)=>(
+                        <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",textAlign:i>=4?"right":"left"}}>{h}</span>
+                      ))}
+                    </div>
+                    <div style={{flex:1,overflowY:"auto"}}>
+                      {filtered.length===0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No billed materials yet</div>}
+                      {filtered.map((r,i) => (
+                        <div key={r.key} onClick={()=>setSelTxn(r._txn)}
+                          style={{display:"grid",gridTemplateColumns:"80px 1.4fr 1.2fr 1.2fr 70px 60px 80px 100px",padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"pointer"}}
+                          onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
+                          onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
+                          <span style={{fontSize:11,color:T.t3,whiteSpace:"nowrap"}}>{r.date}</span>
+                          <span style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.material}</span>
+                          <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.vendor}</span>
+                          <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.project}</span>
+                          <span style={{fontSize:12,color:T.t1,textAlign:"right",fontWeight:600}}>{r.qty || "—"}</span>
+                          <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>{r.unit || "—"}</span>
+                          <span style={{fontSize:11.5,color:T.t2,textAlign:"right"}}>{r.rate ? `₹${fmtN(r.rate)}` : "—"}</span>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.t1,textAlign:"right"}}>₹{fmtN(r.amount)}</span>
+                        </div>
+                      ))}
+                    </div>
+                    {filtered.length > 0 && (
+                      <div style={{display:"grid",gridTemplateColumns:"80px 1.4fr 1.2fr 1.2fr 70px 60px 80px 100px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
+                        <span style={{gridColumn:"1 / 8",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {filtered.length} entr{filtered.length===1?"y":"ies"}</span>
+                        <span style={{fontSize:13,fontWeight:800,color:T.blu,textAlign:"right"}}>₹{fmtN(totalAmt)}</span>
+                      </div>
+                    )}
+                  </div>
+                </>
+              );
+            })()}
+          </div>
         )}
       </div>
 
