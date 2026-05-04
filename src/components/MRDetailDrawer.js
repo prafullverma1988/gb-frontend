@@ -49,6 +49,11 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
   const [savingState, setSavingState] = useState(false);
+  // Close-with-reason state (hoisted to top so hook order stays stable
+  // when the early `if (!open) return null` returns early)
+  const [showCloseForm, setShowCloseForm] = useState(false);
+  const [closeReason, setCloseReason] = useState("");
+  const [closing, setClosing] = useState(false);
   const savingRef = useRef(false);
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState("");
@@ -131,9 +136,6 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
     }
   };
 
-  const [showCloseForm, setShowCloseForm] = useState(false);
-  const [closeReason, setCloseReason] = useState("");
-  const [closing, setClosing] = useState(false);
   const handleClose = async () => {
     const reason = closeReason.trim();
     if (!reason) { setErr("Reason is required to close — log dekhne wale ko pata chalega kyu close hua"); return; }
