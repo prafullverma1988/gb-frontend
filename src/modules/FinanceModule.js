@@ -3203,6 +3203,21 @@ function FinanceModule(){
               <button onClick={()=>setGrnFilter({project:"All",material:"",head:"All"})}
                 style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>
             )}
+            <button onClick={async()=>{
+                if(!window.confirm("Re-link existing bills to their source GRNs?\n\nUse this after adding a missing vendor to Party Master so old bills auto-link properly."))return;
+                try{
+                  const r=await api.post("/finance/admin/relink-bills",{});
+                  if(r.success){
+                    alert(`✓ ${r.linked || 0} bill(s) re-linked to source GRNs.\n  • via party match: ${r.via_party || 0}\n  • via description fallback: ${r.via_description || 0}`);
+                    loadUnbilledGRNs();
+                  } else {
+                    alert("Failed: "+(r.message||"Unknown error"));
+                  }
+                }catch(e){alert("Network error: "+e.message);}
+              }}
+              style={{height:30,padding:"0 12px",borderRadius:6,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",marginRight:5}}>
+              🔗 Re-link Bills
+            </button>
             <button onClick={loadUnbilledGRNs}
               style={{height:30,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               ↻ Refresh
