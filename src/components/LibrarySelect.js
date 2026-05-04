@@ -225,6 +225,13 @@ export default function LibrarySelect({
     label: it.city ? `${it.name} — ${it.city}` : (it.unit ? `${it.name} (${it.unit})` : it.name),
     _raw: it,
   }));
+  // If the current value isn't represented in the library yet (legacy data
+  // entered before this component existed, or library still loading), surface
+  // it as a synthetic option so the field shows the saved value instead of
+  // looking blank. The user can re-pick or just keep it.
+  if (value && !options.some((o) => (o.key || "").toLowerCase() === String(value).toLowerCase())) {
+    options.unshift({ key: value, label: value, _raw: { name: value, _ghost: true } });
+  }
 
   const handleAdd = async () => {
     const name = (form.name || "").trim();
@@ -264,7 +271,7 @@ export default function LibrarySelect({
         value={value}
         options={options}
         onChange={(v) => onChange && onChange(v || "")}
-        placeholder={placeholder || `Pick ${cfg.label} from library...`}
+        placeholder={placeholder || `Search ${cfg.label}...`}
         compact={compact}
         accent={accent}
         inputRef={inputRef}

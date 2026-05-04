@@ -189,7 +189,7 @@ export default function SearchSelect({
       <input
         ref={assignRef}
         disabled={disabled}
-        value={open ? q : selectedItem?.label || ""}
+        value={open ? q : (selectedItem?.label ?? (value != null && value !== "" ? String(value) : ""))}
         onChange={(e) => {
           setQ(e.target.value);
           setHi(-1);
