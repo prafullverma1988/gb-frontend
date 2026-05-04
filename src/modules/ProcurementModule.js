@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import MRDetailDrawer from "../components/MRDetailDrawer";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -850,6 +851,8 @@ function ProcurementModule(){
   // ── Map backend fields to frontend shape ──────────────────────
   const fmtDate=d=>{try{return d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—"}catch{return d||"—"}};
   const mapMR=m=>({
+    // Keep all backend snake_case fields available too — needed by MRDetailDrawer
+    ...m,
     id:m.id, mrNum:m.mr_number,
     date:fmtDate(m.created_at),
     project:m.project_name||"—", site:m.project_name||"—",
@@ -951,6 +954,7 @@ function ProcurementModule(){
 
   // MR state
   const [mrTab,setMrTab]=useState("Pending");
+  const [selMR,setSelMR]=useState(null);     // clicked MR for detail drawer
   const [mrProject,setMrProject]=useState("All");
   const [mrMaterial,setMrMaterial]=useState("All");
   const [mrSearch,setMrSearch]=useState("");
@@ -1252,7 +1256,8 @@ function ProcurementModule(){
                 <>
                   {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcMR size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No pending requests</div></div>}
                   {filteredMRs.map((m,idx)=>(
-                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"54px 1fr 110px 130px 110px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:12,transition:"background 0.1s"}}
+                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"54px 1fr 110px 130px 110px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:12,transition:"background 0.1s",cursor:"pointer"}}
+                      onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       {/* Left date rail */}
                       <DateRail date={m.date}/>
@@ -1318,7 +1323,8 @@ function ProcurementModule(){
                         </button>
                       </div>
                       {items.map((m,idx)=>(
-                        <div key={m.id} style={{display:"grid",gridTemplateColumns:"30px 54px 1fr 110px 130px 110px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:12,background:selected[m.id]?"#EFF6FF":"none",transition:"background 0.1s"}}
+                        <div key={m.id} style={{display:"grid",gridTemplateColumns:"30px 54px 1fr 110px 130px 110px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:12,background:selected[m.id]?"#EFF6FF":"none",transition:"background 0.1s",cursor:"pointer"}}
+                          onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                           onMouseEnter={e=>{if(!selected[m.id])e.currentTarget.style.background=T.surfaceB;}} onMouseLeave={e=>{if(!selected[m.id])e.currentTarget.style.background="none";}}>
                           <div style={{display:"flex",alignItems:"center",justifyContent:"center"}}>
                             <input type="checkbox" checked={!!selected[m.id]} onChange={()=>toggleSelect(m.id)}
@@ -1360,7 +1366,8 @@ function ProcurementModule(){
                     {["MR#","Material","Qty","Unit","Vendor · ETA","Action"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
                   </div>
                   {filteredMRs.map(m=>(
-                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 80px 1fr 120px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background 0.1s"}}
+                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 80px 1fr 120px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background 0.1s",cursor:"pointer"}}
+                      onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       <div>
                         <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
@@ -1399,7 +1406,8 @@ function ProcurementModule(){
                     const pct = (m.qty && recd) ? Math.min(100, Math.round((recd/m.qty)*100)) : (isPartial ? 0 : 100);
                     const accentColor=isPartial?T.amb:T.grn;
                     return(
-                      <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1fr 140px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${accentColor}`,transition:"background 0.1s"}}
+                      <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1fr 140px",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${accentColor}`,transition:"background 0.1s",cursor:"pointer"}}
+                        onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                         onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                         <div>
                           <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
@@ -1447,7 +1455,8 @@ function ProcurementModule(){
                 <>
                   {filteredMRs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcBan size={30} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No rejected requests</div></div>}
                   {filteredMRs.map(m=>(
-                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1fr",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${T.red}`,transition:"background 0.1s"}}
+                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 90px 1fr",padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${T.red}`,transition:"background 0.1s",cursor:"pointer"}}
+                      onClick={e=>{if(e.target.closest("button,input"))return;setSelMR(m);}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
                       <div>
                         <div style={{fontSize:10,color:T.t4}}>{m.date}</div>
@@ -1562,6 +1571,18 @@ function ProcurementModule(){
       {approveTgt&&<ApproveMRModal mr={approveTgt} onSave={saveApproveMR} onClose={()=>setApproveTgt(null)}/>}
       {rejectTgt&&<RejectMRModal mr={rejectTgt} onSave={saveRejectMR} onClose={()=>setRejectTgt(null)}/>}
       {markRecvTgt&&<MarkReceivedModal mr={markRecvTgt} onSave={saveMarkReceived} onClose={()=>setMarkRecvTgt(null)}/>}
+      {/* MR detail drawer — opens on row click in any MR tab. Admin can edit/delete. */}
+      <MRDetailDrawer
+        mr={selMR}
+        onClose={()=>setSelMR(null)}
+        onChanged={async()=>{
+          // Reload MRs from server so the row reflects changes
+          try{
+            const r=await api.get("/procurement/mrs");
+            if(r.success) setMRs(r.data.map(mapMR));
+          }catch(e){}
+        }}
+      />
       {showBulkOrder&&selectedItems.length>0&&<BulkOrderModal items={selectedItems} onSave={saveBulkOrder} onClose={()=>setShowBulkOrder(false)} dbVendors={dbVendors}/>}
       {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbVendors={dbVendors} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={async(newPO)=>{
         // Save PO to backend
