@@ -19,7 +19,7 @@
 //   isAdmin
 //   onEditMR    — optional callback to open MRDetailDrawer with the linked MR
 
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import api from "../config/api";
 
 const T = {
@@ -301,22 +301,110 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
             </div>
           )}
 
-          {/* Summary tile */}
-          {!loading && grn && (
-            <div style={{ marginTop: 18, padding: "10px 12px", background: T.surfaceB, borderRadius: 8, border: `1px solid ${T.b1}` }}>
-              <div style={{ fontSize: 9.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>Summary</div>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, fontSize: 11.5 }}>
-                <Cell label="GRN #" value={grn.grn_number}/>
-                <Cell label="Vendor" value={grn.vendor_name}/>
-                <Cell label="Challan" value={grn.challan_no}/>
-                <Cell label="Received Date" value={fmtDate(grn.received_date)}/>
-                {mr && <Cell label="Source MR" value={`MR-${mr.id} (${mr.requested_by || "?"})`}/>}
-                {po && <Cell label="Source PO" value={po.po_number}/>}
-                {bills.length > 0 && <Cell label="Billed" value={`₹${fmtN(bills.reduce((s, b) => s + Number(b.amount || 0), 0))}`} c={T.red}/>}
-                {usage.length > 0 && <Cell label="Used" value={`${usage.reduce((s, u) => s + Number(u.used_qty || 0), 0)} units in ${usage.length} task(s)`} c={T.t3}/>}
+          {/* Stage summary cards — MR / Approval / Order / GRN */}
+          {!loading && data && (() => {
+            const approvalEntry = audit.find(a => /APPROV/i.test(a.action || ""));
+            const rejectEntry   = audit.find(a => /REJECT/i.test(a.action || ""));
+            const orderEntry    = audit.find(a => /ORDER/i.test(a.action || ""));
+            let approvedQty = null;
+            if (approvalEntry?.details) { try { approvedQty = JSON.parse(approvalEntry.details).approved_qty; } catch {} }
+            return (
+              <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
+                {/* MR Request Summary */}
+                <Section
+                  color={T.amb} bg={T.ambL} icon="📝" title="Material Request"
+                  empty={!mr}
+                  emptyText="No MR linked — direct GRN entry"
+                  rows={mr ? [
+                    ["MR #",       `MR-${mr.id}`],
+                    ["Material",   `${mr.item_name} · ${mr.quantity} ${mr.unit}`],
+                    ["Requested By", mr.requested_by || "Site Team"],
+                    ["Requested On", fmtDateTime(mr.created_at)],
+                    ["Required By", fmtDate(mr.required_date)],
+                    ...(mr.approx_amount > 0 ? [["Approx. Amount", `₹${fmtN(mr.approx_amount)}`]] : []),
+                    ...(mr.notes ? [["Notes", mr.notes]] : []),
+                  ] : []}
+                />
+
+                {/* Approval Summary */}
+                <Section
+                  color={rejectEntry ? T.red : T.blu}
+                  bg={rejectEntry ? T.redL : T.bluL}
+                  icon={rejectEntry ? "✕" : "✓"}
+                  title={rejectEntry ? "Rejection" : "Approval"}
+                  empty={!mr || (mr.mr_status !== "Approved" && mr.mr_status !== "Rejected" && !approvalEntry && !rejectEntry)}
+                  emptyText={mr ? `Currently ${mr.mr_status || "Pending"}` : "—"}
+                  rows={(approvalEntry || rejectEntry) ? [
+                    ["Status",      rejectEntry ? "Rejected" : "Approved"],
+                    ["By",          (rejectEntry || approvalEntry).user_name || "Admin"],
+                    ["On",          fmtDateTime((rejectEntry || approvalEntry).created_at)],
+                    ...(approvedQty != null ? [["Approved Qty", `${approvedQty} ${mr?.unit || ""}`]] : []),
+                    ...(mr?.rejected_reason ? [["Reason", mr.rejected_reason]] : []),
+                  ] : (mr?.mr_status === "Approved" ? [
+                    // Fallback when audit log missing: show MR's current status
+                    ["Status",      "Approved"],
+                    ["Approved Qty", `${mr.quantity} ${mr.unit}`],
+                  ] : [])}
+                />
+
+                {/* Order Summary */}
+                <Section
+                  color={T.pur} bg={T.purL} icon="🚚" title="Order Placed"
+                  empty={!mr?.linked_vendor && !po && !orderEntry}
+                  emptyText="Not ordered yet"
+                  rows={[
+                    ...(po ? [["PO #", po.po_number]] : []),
+                    ["Vendor",          mr?.linked_vendor || po?.vendor_name || grn?.vendor_name || "—"],
+                    ["Expected Delivery", fmtDate(mr?.expected_delivery || po?.expected_delivery)],
+                    ...(orderEntry ? [
+                      ["Ordered By", orderEntry.user_name || "Admin"],
+                      ["Ordered On", fmtDateTime(orderEntry.created_at)],
+                    ] : []),
+                  ].filter(([_, v]) => v && v !== "—" || _ === "Vendor" || _ === "Expected Delivery")}
+                />
+
+                {/* GRN / Receipt Summary */}
+                {grn && (
+                  <Section
+                    color={T.grn} bg={T.grnL} icon="📦" title="GRN Received"
+                    rows={[
+                      ["GRN #",          grn.grn_number],
+                      ["Vendor",         grn.vendor_name],
+                      ["Challan",        grn.challan_no],
+                      ["Received On",    fmtDate(grn.received_date)],
+                      ["Received By",    grn.received_by || "Site"],
+                      ["Type",           grn.grn_type || "Full"],
+                      ...items.map(it => [it.description || "Item", `${it.received_qty} ${it.unit}`]),
+                    ]}
+                  />
+                )}
+
+                {/* Billing Summary */}
+                {bills.length > 0 && (
+                  <Section
+                    color={T.red} bg={T.redL} icon="🧾" title={`Bills (${bills.length})`}
+                    rows={[
+                      ["Total Billed", `₹${fmtN(bills.reduce((s, b) => s + Number(b.amount || 0), 0))}`],
+                      ...bills.flatMap(b => [
+                        [`Bill ${fmtDate(b.date)}`, `₹${fmtN(b.amount)} · ${b.status || "—"}${b.due_date ? ` · due ${fmtDate(b.due_date)}` : ""}`],
+                      ]),
+                    ]}
+                  />
+                )}
+
+                {/* Usage Summary */}
+                {usage.length > 0 && (
+                  <Section
+                    color={T.t3} bg={T.b1} icon="🔧" title={`Material Used (${usage.length})`}
+                    rows={[
+                      ["Total Used", `${usage.reduce((s, u) => s + Number(u.used_qty || 0), 0)} ${usage[0]?.unit || ""}`],
+                      ...usage.slice(0, 5).map(u => [u.task_name || "Task", `${u.used_qty} ${u.unit || ""}${u.used_by ? ` · by ${u.used_by}` : ""}`]),
+                    ]}
+                  />
+                )}
               </div>
-            </div>
-          )}
+            );
+          })()}
         </div>
 
         {/* Footer — admin actions */}
@@ -347,6 +435,29 @@ function Cell({ label, value, c }) {
     <div>
       <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px" }}>{label}</div>
       <div style={{ fontSize: 11.5, fontWeight: 600, color: c || T.t1, marginTop: 2 }}>{value || "—"}</div>
+    </div>
+  );
+}
+
+function Section({ color, bg, icon, title, rows = [], empty = false, emptyText = "—" }) {
+  return (
+    <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "10px 13px" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: empty ? 4 : 8 }}>
+        <span style={{ width: 22, height: 22, borderRadius: "50%", background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{icon}</span>
+        <span style={{ fontSize: 12, fontWeight: 700, color: color }}>{title}</span>
+      </div>
+      {empty || rows.length === 0 ? (
+        <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic", paddingLeft: 29 }}>{emptyText}</div>
+      ) : (
+        <div style={{ display: "grid", gridTemplateColumns: "auto 1fr", gap: "5px 12px", paddingLeft: 29 }}>
+          {rows.map(([k, v], i) => (
+            <React.Fragment key={i}>
+              <span style={{ fontSize: 10.5, color: T.t4, fontWeight: 500, whiteSpace: "nowrap" }}>{k}</span>
+              <span style={{ fontSize: 11.5, color: T.t1, fontWeight: 600, wordBreak: "break-word" }}>{v || "—"}</span>
+            </React.Fragment>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
