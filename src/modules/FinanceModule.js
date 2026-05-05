@@ -544,9 +544,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const MOPS_LIST=["Cash","Cheque","Bank Transfer","UPI","NEFT"];
   const WORK_TYPES=["Plastering","Brickwork","Concrete Casting","Tile Laying","Electrical Work","Plumbing","Bar Bending","Painting","Waterproofing","Flooring","Carpentry","False Ceiling","Other"];
   const PROJECTS_LIST=dbProjects?.length?dbProjects:[];
-  const CLIENT_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Client").map(p=>p.name):[];
-  const SUPPLIER_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Material Supplier"||p.type==="material_supplier").map(p=>p.name):[];
-  const SUBCON_LIST=dbParties?.length?dbParties.filter(p=>p.type==="Sub-Con"||p.type==="contractor"||p.type==="subcontractor").map(p=>p.name):[];
+  // Case-insensitive type matching — DB has mixed casing ("client", "Supplier", "subcontractor", "Labour Vendor")
+  const _ptype = (p) => String(p?.type||"").toLowerCase().trim();
+  const CLIENT_LIST=dbParties?.length?dbParties.filter(p=>_ptype(p)==="client").map(p=>p.name):[];
+  const SUPPLIER_LIST=dbParties?.length?dbParties.filter(p=>{const t=_ptype(p);return t==="supplier"||t==="material supplier"||t==="material_supplier";}).map(p=>p.name):[];
+  const SUBCON_LIST=dbParties?.length?dbParties.filter(p=>{const t=_ptype(p);return t==="sub-con"||t==="subcon"||t==="contractor"||t==="subcontractor";}).map(p=>p.name):[];
+  // Staff loaded from payroll_staff (advances / salary disbursement)
+  const [staffList,setStaffList]=useState([]);
+  useEffect(()=>{ api.get("/payroll/staff").then(r=>{ if(r?.success&&Array.isArray(r.data)) setStaffList(r.data.map(s=>s.name)); }).catch(()=>{}); },[]);
   const ALL_PARTIES=dbParties?.length?dbParties.map(p=>p.name):[...CLIENT_LIST,...SUPPLIER_LIST,...SUBCON_LIST];
 
   // Pre-defined material library (used in Material Purchase Bill)
@@ -576,8 +581,24 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const isMaterial=type==="Material Purchase Bill";
   const isSubcon=type==="Sub-Con Bill";
   const isInvoice=type==="Sales Invoice";
+  // Site Expense (Petty Cash) — no fixed party master, recipient is free-text.
+  // Bill heads to Site Expense regardless of who received the cash.
+  const isSiteExpense=type==="Petty Cash Expense";
 
-  const partyOptions=type==="Payment Received"?CLIENT_LIST:isInvoice?CLIENT_LIST:isMaterial?SUPPLIER_LIST:isSubcon?SUBCON_LIST:ALL_PARTIES;
+  // Paid To list:
+  //  - Payment Received / Sales Invoice → Clients only
+  //  - Material Purchase Bill            → Vendors (Supplier)
+  //  - Sub-Con Bill                      → Subcontractors
+  //  - Payment Made / Advance Payment    → Vendor + Subcon + Staff (no clients)
+  //  - Site Expense                      → free text, no dropdown
+  //  - everything else                   → all parties (legacy fallback)
+  const PAYABLE_LIST=[...new Set([...SUPPLIER_LIST,...SUBCON_LIST,...staffList])];
+  const partyOptions=type==="Payment Received"||isInvoice?CLIENT_LIST
+    :isMaterial?SUPPLIER_LIST
+    :isSubcon?SUBCON_LIST
+    :(type==="Payment Made"||type==="Advance Payment")?PAYABLE_LIST
+    :isSiteExpense?[] // free-text input — dropdown disabled
+    :ALL_PARTIES;
 
   // ── core state ──────────────────────────────────────────────
   const _today = new Date().toISOString().slice(0,10);
@@ -822,7 +843,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         account_name:account||null,
         project_name:project||null,
         note:note||null,
-        status:"paid",
+        // Bills (material_purchase / subcon) start as 'unpaid' so they land
+        // in Pending Payments per due_date until user records a settlement.
+        // Direct money movements (payments, transfers, receipts) are 'paid'.
+        status:(isMaterial||isSubcon)?"unpaid":"paid",
         // DR = money going OUT (expense), CR = money coming IN (receipt)
         dr: ["material_purchase","subcon_expense","site_expense","party_payment","bank_transfer","payment"].includes(backType),
         // Bank Transfer: destination account (always include, null for non-transfer)
@@ -1203,10 +1227,19 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 </div>
                 <div>
-                  {lbl(type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":"Party *")}
-                  <LibrarySelect
-                    type={type==="Payment Received"||isInvoice?"client":isMaterial?"supplier":isSubcon?"subcon":"any-party"}
-                    value={party} onChange={setParty} placeholder="Select party..."/>
+                  {lbl(type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":isSiteExpense?"Recipient (free text)":"Party *")}
+                  {isSiteExpense ? (
+                    <input value={party} onChange={e=>setParty(e.target.value)}
+                      placeholder="e.g. Site supervisor, transport, tea-stall"
+                      style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                  ) : (type==="Payment Made"||type==="Advance Payment") ? (
+                    <SearchSelect options={PAYABLE_LIST} value={party} onChange={setParty}
+                      placeholder="Vendor / Subcon / Staff..."/>
+                  ) : (
+                    <LibrarySelect
+                      type={type==="Payment Received"||isInvoice?"client":isMaterial?"supplier":isSubcon?"subcon":"any-party"}
+                      value={party} onChange={setParty} placeholder="Select party..."/>
+                  )}
                 </div>
                 <div>
                   {lbl("Project")}
@@ -1950,6 +1983,9 @@ function FinanceModule(){
   const [chipCB,setChipCB]=useState("All");
   const [chipPR,setChipPR]=useState("All");
   const [chipPend,setChipPend]=useState("All");
+  // Universal search — single box, matches ANY column value (no, type, party, amount, priority, date, status...)
+  const [searchPend,setSearchPend]=useState("");
+  const [searchPR,setSearchPR]=useState("");
   // Sort states for each tab
   const [sortPend,setSortPend]=useState({col:"overdue",dir:"desc"});
   const [sortPR,setSortPR]=useState({col:"date",dir:"desc"});
@@ -3103,8 +3139,15 @@ function FinanceModule(){
         {tab==="payreq"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
             {/* Toolbar */}
-            <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-              <div style={{fontSize:14,fontWeight:700,color:T.t1}}>All Payment Requests</div>
+            <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,gap:10}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap"}}>All Payment Requests</div>
+              <div style={{position:"relative",flex:1,maxWidth:380}}>
+                <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                <input value={searchPR} onChange={e=>setSearchPR(e.target.value)}
+                  placeholder="Search by no, party, project, purpose, amount, priority, status…"
+                  style={{width:"100%",height:30,padding:"0 28px 0 28px",borderRadius:7,border:`1.5px solid ${searchPR?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:searchPR?T.bluL:T.surface}}/>
+                {searchPR&&<button onClick={()=>setSearchPR("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",alignItems:"center"}} title="Clear"><IcX size={12}/></button>}
+              </div>
               <div style={{display:"flex",gap:7}}>
                 <button onClick={dlPRcsv} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
                 <button onClick={dlPRpdf} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
@@ -3152,7 +3195,14 @@ function FinanceModule(){
                 if(col==="by") return ((a.by||"")>(b.by||"")? 1:-1)*mul;
                 if(col==="priority"){const pw={High:3,Medium:2,Low:1};return((pw[a.priority||"Medium"]||2)-(pw[b.priority||"Medium"]||2))*mul;}
                 return (b.ds||0)-(a.ds||0);
-              }).filter(r=>chipPR==="All"||r.status===chipPR).map((req,i)=>{
+              }).filter(r=>chipPR==="All"||r.status===chipPR).filter(r=>{
+                const q=searchPR.trim().toLowerCase();
+                if(!q) return true;
+                const pi=masterParties.find(p=>p.name===r.party);
+                const pt=pi?.type||"Vendor";
+                const hay=[r.no,r.date,r.party,pt,r.project,r.purpose,r.note,r.by,r.priority,r.amount,r.status].join(" ").toLowerCase();
+                return hay.includes(q);
+              }).map((req,i)=>{
                 const isEditing=editReqId===req.id;
                 const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:{c:T.amb,bg:T.ambL,brd:T.ambM};
                 const pri=req.priority||"Medium";
@@ -3267,8 +3317,15 @@ function FinanceModule(){
         {tab==="pending"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
             {/* Toolbar */}
-            <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-              <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Pending Payments</div>
+            <div style={{background:T.surface,borderRadius:8,padding:"9px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0,gap:10}}>
+              <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap"}}>Pending Payments</div>
+              <div style={{position:"relative",flex:1,maxWidth:380}}>
+                <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                <input value={searchPend} onChange={e=>setSearchPend(e.target.value)}
+                  placeholder="Search by no, type, party, amount, priority…"
+                  style={{width:"100%",height:30,padding:"0 28px 0 28px",borderRadius:7,border:`1.5px solid ${searchPend?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:searchPend?T.bluL:T.surface}}/>
+                {searchPend&&<button onClick={()=>setSearchPend("")} style={{position:"absolute",right:6,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.t4,padding:2,display:"flex",alignItems:"center"}} title="Clear"><IcX size={12}/></button>}
+              </div>
               <div style={{display:"flex",gap:7,alignItems:"center"}}>
                 <button onClick={dlPendCSV} style={{padding:"5px 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.grn}/> Excel</button>
                 <button onClick={dlPendPDF} style={{padding:"5px 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}><IcDown size={12} color={T.red}/> PDF</button>
@@ -3308,14 +3365,22 @@ function FinanceModule(){
                 );
               };
               const COLS="90px 110px 1fr 100px 100px 110px 90px 110px";
+              const q=searchPend.trim().toLowerCase();
               const filtered=[...pendPmts].filter(pmt=>{
-                if(chipPend==="All") return true;
-                if(chipPend==="Overdue") return pmt.overdue;
+                if(chipPend==="Overdue" && !pmt.overdue) return false;
                 const days = pmt.daysToDue;
-                if(chipPend==="Due in 7d")  return !pmt.overdue && days != null && days >= 0 && days <= 7;
-                if(chipPend==="Due in 15d") return !pmt.overdue && days != null && days >= 0 && days <= 15;
-                if(chipPend==="Due in 30d") return !pmt.overdue && days != null && days >= 0 && days <= 30;
-                return true;
+                if(chipPend==="Due in 7d"  && !(!pmt.overdue && days != null && days >= 0 && days <= 7))  return false;
+                if(chipPend==="Due in 15d" && !(!pmt.overdue && days != null && days >= 0 && days <= 15)) return false;
+                if(chipPend==="Due in 30d" && !(!pmt.overdue && days != null && days >= 0 && days <= 30)) return false;
+                if(!q) return true;
+                // Universal search: stitch every visible column into a haystack
+                const typeLabel=pmt.type==="pr"?"approved pr":
+                  pmt.subType==="subcon"?"sub-con":
+                  pmt.subType==="staff"?"staff":
+                  pmt.party?.toLowerCase().includes("labour")?"labour":"vendor";
+                const pri=pmt.overdue?"high":pmt.priority||(pmt.type==="pr"?"medium":"low");
+                const hay=[pmt.no,typeLabel,pmt.party,pmt.amount,pmt.date,pri,pmt.overdue?"overdue":"upcoming"].join(" ").toLowerCase();
+                return hay.includes(q);
               }).sort(sortFn);
               return(
               <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
