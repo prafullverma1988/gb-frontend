@@ -7531,7 +7531,9 @@ function TabMaterial({ project }) {
         item_name: form.item_name, quantity: parseFloat(form.quantity),
         unit: form.unit, required_date: form.required_date || null,
         approx_amount: form.approx_amount ? parseFloat(form.approx_amount) : null,
-        notes: form.notes || null, requested_by: "Site Team",
+        notes: form.notes || null,
+        // requested_by deliberately omitted — backend defaults to the
+        // logged-in user.name so the audit trail captures the real person.
       });
       if (res.success) {
         api.post("/approvals/submit", {
@@ -7545,7 +7547,7 @@ function TabMaterial({ project }) {
         }).catch(e => console.error("Approval submit:", e));
         const m = res.data;
         setMaterials(prev => [{ id:m.id, name:m.item_name, qty:m.quantity+" "+m.unit,
-          stage:"Requested", by:"Site Team",
+          stage:"Requested", by: m.requested_by || "—",
           date:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
           vendor:null, amt:parseFloat(m.approx_amount)||0 }, ...prev]);
         setForm({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"" });

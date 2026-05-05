@@ -63,6 +63,11 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   const [grnEditNote, setGrnEditNote] = useState("");
   const [grnSaving, setGrnSaving] = useState(false);
   const [grnDeleting, setGrnDeleting] = useState(false);
+  // Issue creation state
+  const [showIssueForm, setShowIssueForm] = useState(false);
+  const [issueType, setIssueType] = useState("Quality");
+  const [issueNote, setIssueNote] = useState("");
+  const [issueSaving, setIssueSaving] = useState(false);
 
   const reload = () => {
     if (!grnId) return;
@@ -128,6 +133,33 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
     setGrnSaving(false);
   };
 
+  const handleRaiseIssue = async () => {
+    if (issueSaving) return;
+    if (!issueNote.trim()) { setErr("Issue note compulsory hai"); return; }
+    setIssueSaving(true); setErr("");
+    try {
+      const res = await api.post(`/procurement/grns/${grnId}/issues`, {
+        issue_type: issueType,
+        note: issueNote.trim(),
+      });
+      if (res?.success === false) { setErr(res.message || "Issue raise failed"); setIssueSaving(false); return; }
+      setShowIssueForm(false); setIssueNote(""); setIssueType("Quality");
+      reload();
+      onChanged && onChanged();
+    } catch (e) { setErr(e?.message || "Network error"); }
+    setIssueSaving(false);
+  };
+
+  const handleResolveIssue = async (issueId) => {
+    const note = window.prompt("Resolution note (kya kiya issue solve karne ke liye):");
+    if (note == null) return;
+    try {
+      const res = await api.patch(`/procurement/grns/issues/${issueId}/resolve`, { resolution_note: note });
+      if (res?.success === false) { setErr(res.message || "Resolve failed"); return; }
+      reload();
+    } catch (e) { setErr(e?.message || "Network error"); }
+  };
+
   const handleGrnDelete = async () => {
     if (grnDeleting) return;
     const reason = window.prompt(`Delete GRN ${data?.grn?.grn_number}?\n\nYe inventory se bhi qty hata dega. Reason batao (compulsory):`);
@@ -151,6 +183,8 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   const audit = data?.audit || [];
   const bills = data?.bills || [];
   const usage = data?.usage || [];
+  const issues = data?.issues || [];
+  const openIssueCount = issues.filter(i => i.status !== "Resolved").length;
 
   // Build chronological events — combines all sources into a single timeline.
   const events = [];
@@ -443,6 +477,85 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                     ))}
                   </div>
                 )}
+
+                {/* Issues Section — Quality / Short / Damaged / Wrong-Item / Other */}
+                <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${openIssueCount > 0 ? T.red : T.t3}`, borderRadius: 8, padding: "10px 13px" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 8 }}>
+                    <span style={{ width: 22, height: 22, borderRadius: "50%", background: openIssueCount > 0 ? T.redL : T.b1, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>⚠️</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: openIssueCount > 0 ? T.red : T.t3 }}>
+                      Issues {issues.length > 0 ? `(${openIssueCount} open / ${issues.length} total)` : ""}
+                    </span>
+                    <div style={{ flex: 1 }}/>
+                    {!showIssueForm && grn && (
+                      <button onClick={() => setShowIssueForm(true)}
+                        style={{ padding: "4px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
+                        + Create Issue
+                      </button>
+                    )}
+                  </div>
+
+                  {showIssueForm && (
+                    <div style={{ padding: "10px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 7, marginBottom: 8 }}>
+                      <div style={{ display: "flex", gap: 6, marginBottom: 7, flexWrap: "wrap" }}>
+                        {["Quality", "Short", "Damaged", "WrongItem", "Other"].map(t => (
+                          <button key={t} onClick={() => setIssueType(t)}
+                            style={{ padding: "4px 10px", borderRadius: 12, fontSize: 10.5, fontWeight: 700, cursor: "pointer", background: issueType === t ? T.red : "white", color: issueType === t ? "white" : T.red, border: `1px solid ${T.red}` }}>
+                            {t}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea value={issueNote} onChange={e => setIssueNote(e.target.value)} autoFocus rows={2}
+                        placeholder="Issue describe karo — kya problem hai? (compulsory)"
+                        style={{ width: "100%", padding: "7px 9px", borderRadius: 5, border: `1.5px solid ${T.redM}`, fontSize: 11.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", marginBottom: 7, background: "white" }}/>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => { setShowIssueForm(false); setIssueNote(""); setErr(""); }} disabled={issueSaving}
+                          style={{ flex: 1, padding: "6px", borderRadius: 5, background: "white", border: `1px solid ${T.b1}`, color: T.t3, fontSize: 11, fontWeight: 600, cursor: issueSaving ? "not-allowed" : "pointer" }}>
+                          Cancel
+                        </button>
+                        <button onClick={handleRaiseIssue} disabled={issueSaving || !issueNote.trim()}
+                          style={{ flex: 2, padding: "6px", borderRadius: 5, background: issueSaving || !issueNote.trim() ? "#9CA3AF" : T.red, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: issueSaving || !issueNote.trim() ? "not-allowed" : "pointer" }}>
+                          {issueSaving ? "Saving..." : "⚠ Raise Issue"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {issues.length === 0 && !showIssueForm && (
+                    <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic", paddingLeft: 29 }}>No issues raised — quality OK</div>
+                  )}
+
+                  {issues.length > 0 && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 6, paddingLeft: 29 }}>
+                      {issues.map(iss => {
+                        const resolved = iss.status === "Resolved";
+                        return (
+                          <div key={iss.id} style={{ padding: "7px 9px", background: resolved ? "#F1F5F9" : "#FEF2F2", borderRadius: 6, border: `1px solid ${resolved ? T.b1 : T.redM}` }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                              <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 8, background: resolved ? T.t3 : T.red, color: "white" }}>{iss.issue_type}</span>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: resolved ? T.t3 : T.red, textTransform: "uppercase" }}>{resolved ? "Resolved" : "Open"}</span>
+                              <div style={{ flex: 1 }}/>
+                              <span style={{ fontSize: 10, color: T.t4 }}>{fmtDateTime(iss.created_at)}</span>
+                            </div>
+                            <div style={{ fontSize: 11.5, color: T.t1, marginBottom: 4 }}>{iss.note}</div>
+                            <div style={{ fontSize: 10.5, color: T.t3 }}>👤 Raised by {iss.raised_by_name || "—"}</div>
+                            {resolved && (
+                              <div style={{ marginTop: 4, padding: "5px 7px", background: "white", borderRadius: 4, border: `1px solid ${T.b1}` }}>
+                                <div style={{ fontSize: 10, fontWeight: 700, color: T.grn, marginBottom: 2 }}>✓ Resolved by {iss.resolved_by_name} · {fmtDateTime(iss.resolved_at)}</div>
+                                {iss.resolution_note && <div style={{ fontSize: 11, color: T.t2 }}>{iss.resolution_note}</div>}
+                              </div>
+                            )}
+                            {!resolved && isAdmin && (
+                              <button onClick={() => handleResolveIssue(iss.id)}
+                                style={{ marginTop: 5, padding: "3px 9px", borderRadius: 4, background: T.grn, border: "none", color: "white", fontSize: 10, fontWeight: 700, cursor: "pointer" }}>
+                                ✓ Mark Resolved
+                              </button>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
 
                 {/* Billing Summary */}
                 {bills.length > 0 && (
