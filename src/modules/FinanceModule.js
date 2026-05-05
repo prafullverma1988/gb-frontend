@@ -3425,6 +3425,24 @@ function FinanceModule(){
               style={{height:30,padding:"0 12px",borderRadius:6,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",marginRight:5}}>
               🔗 Re-link Bills
             </button>
+            {/* Clean duplicate bills — testing tool, hard-deletes duplicate
+                (party_id, challan_no, project_id) buckets keeping the earliest. */}
+            <button onClick={async()=>{
+                if(!window.confirm("⚠ HARD-DELETE duplicate bills?\n\nFor every (vendor + challan + project) combo with multiple bills, the earliest will be KEPT and the rest will be PERMANENTLY DELETED.\n\nAccount balances + project expense + party balance will be reversed automatically.\n\nThis cannot be undone. Proceed?"))return;
+                try{
+                  const r=await api.post("/finance/admin/clean-duplicate-bills",{});
+                  if(r.success){
+                    alert(`✓ ${r.message}\n\nKept: ${r.kept?.length||0} bill(s)\nDeleted: ${r.deleted?.length||0} duplicate bill(s)\nGRNs locked: ${r.stamped_grns||0}`);
+                    loadUnbilledGRNs();
+                    if(typeof refreshTxns==="function") refreshTxns();
+                  } else {
+                    alert("Failed: "+(r.message||"Unknown error"));
+                  }
+                }catch(e){alert("Network error: "+e.message);}
+              }}
+              style={{height:30,padding:"0 12px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",marginRight:5}}>
+              🧹 Clean Duplicates
+            </button>
             <button onClick={loadUnbilledGRNs}
               style={{height:30,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               ↻ Refresh
