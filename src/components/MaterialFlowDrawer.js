@@ -186,6 +186,15 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   const issues = data?.issues || [];
   const openIssueCount = issues.filter(i => i.status !== "Resolved").length;
 
+  // photo_urls is stored as a JSON array string. Parse defensively.
+  const parsePhotos = (raw) => {
+    if (!raw) return [];
+    if (Array.isArray(raw)) return raw;
+    try { const v = JSON.parse(raw); return Array.isArray(v) ? v : []; } catch { return []; }
+  };
+  const mrPhotos  = parsePhotos(mr?.photo_urls);
+  const grnPhotos = parsePhotos(grn?.photo_urls);
+
   // Build chronological events — combines all sources into a single timeline.
   const events = [];
   if (mr?.created_at) {
@@ -374,12 +383,13 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                   rows={mr ? [
                     ["MR #",       `MR-${mr.id}`],
                     ["Material",   `${mr.item_name} · ${mr.quantity} ${mr.unit}`],
-                    ["Requested By", mr.requested_by || "Site Team"],
+                    ["Requested By", mr.requested_by || "—"],
                     ["Requested On", fmtDateTime(mr.created_at)],
                     ["Required By", fmtDate(mr.required_date)],
                     ...(mr.approx_amount > 0 ? [["Approx. Amount", `₹${fmtN(mr.approx_amount)}`]] : []),
                     ...(mr.notes ? [["Notes", mr.notes]] : []),
                   ] : []}
+                  photos={mrPhotos}
                 />
 
                 {/* Approval Summary */}
@@ -436,6 +446,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       ["Type",           grn.grn_type || "Full"],
                       ...items.map(it => [it.description || "Item", `${it.received_qty} ${it.unit}`]),
                     ]}
+                    photos={grnPhotos}
                   />
                 )}
                 {grn && grnEditing && (
@@ -648,12 +659,18 @@ function Cell({ label, value, c }) {
   );
 }
 
-function Section({ color, bg, icon, title, rows = [], empty = false, emptyText = "—" }) {
+function Section({ color, bg, icon, title, rows = [], empty = false, emptyText = "—", photos = [] }) {
+  const [zoom, setZoom] = useState(null);
   return (
     <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${color}`, borderRadius: 8, padding: "10px 13px" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: empty ? 4 : 8 }}>
         <span style={{ width: 22, height: 22, borderRadius: "50%", background: bg, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>{icon}</span>
         <span style={{ fontSize: 12, fontWeight: 700, color: color }}>{title}</span>
+        {photos.length > 0 && (
+          <span style={{ marginLeft: 6, fontSize: 9.5, fontWeight: 700, color: color, background: bg, padding: "1px 6px", borderRadius: 8 }}>
+            📷 {photos.length}
+          </span>
+        )}
       </div>
       {empty || rows.length === 0 ? (
         <div style={{ fontSize: 11, color: T.t4, fontStyle: "italic", paddingLeft: 29 }}>{emptyText}</div>
@@ -665,6 +682,21 @@ function Section({ color, bg, icon, title, rows = [], empty = false, emptyText =
               <span style={{ fontSize: 11.5, color: T.t1, fontWeight: 600, wordBreak: "break-word" }}>{v || "—"}</span>
             </React.Fragment>
           ))}
+        </div>
+      )}
+      {photos.length > 0 && (
+        <div style={{ paddingLeft: 29, marginTop: 8, display: "flex", gap: 6, flexWrap: "wrap" }}>
+          {photos.map((url, i) => (
+            <img key={i} src={url} alt="" onClick={() => setZoom(url)}
+              onError={e => { e.target.style.display = "none"; }}
+              style={{ width: 60, height: 60, objectFit: "cover", borderRadius: 6, border: `1px solid ${T.b1}`, cursor: "zoom-in" }}/>
+          ))}
+        </div>
+      )}
+      {zoom && (
+        <div onClick={() => setZoom(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
+          <img src={zoom} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}/>
         </div>
       )}
     </div>

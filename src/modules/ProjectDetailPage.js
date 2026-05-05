@@ -6,6 +6,7 @@ import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import MaterialFlowDrawer from "../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../components/MRDetailDrawer";
+import uploadManager from "../utils/uploadManager";
 
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
@@ -7277,11 +7278,12 @@ function TabMaterial({ project }) {
   const [newMatSaving, setNewMatSaving] = useState(false);
   const [showGRN, setShowGRN] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"" });
+  const [form, setForm] = useState({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"", photos: [] });
   const [grnTab, setGrnTab] = useState("ordered");
   const [orderedMRs, setOrderedMRs] = useState([]);
   const [grnRows, setGrnRows] = useState({});
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
+  const [grnPhotos, setGrnPhotos] = useState([]);
   // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const [grnSaving, setGrnSaving] = useState(false);
   const [grnDone, setGrnDone] = useState([]);
@@ -7488,6 +7490,7 @@ function TabMaterial({ project }) {
         challan_no: validRows[0].challan,
         received_by: validRows[0].received_by || null,
         received_date: new Date().toISOString().split("T")[0],
+        photo_urls: grnPhotos.length ? grnPhotos : null,
         items: validRows.map(r => ({
           po_item_id: null,
           description: r.item_name,
@@ -7499,6 +7502,7 @@ function TabMaterial({ project }) {
       if (res.success) {
         setShowGRN(false);
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
+        setGrnPhotos([]);
         // Reload MRs + direct GRNs + ledger + inventory
         loadMRs();
         // Reload ledger + inventory
@@ -7532,6 +7536,7 @@ function TabMaterial({ project }) {
         unit: form.unit, required_date: form.required_date || null,
         approx_amount: form.approx_amount ? parseFloat(form.approx_amount) : null,
         notes: form.notes || null,
+        photo_urls: form.photos && form.photos.length ? form.photos : null,
         // requested_by deliberately omitted — backend defaults to the
         // logged-in user.name so the audit trail captures the real person.
       });
@@ -7550,7 +7555,7 @@ function TabMaterial({ project }) {
           stage:"Requested", by: m.requested_by || "—",
           date:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
           vendor:null, amt:parseFloat(m.approx_amount)||0 }, ...prev]);
-        setForm({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"" });
+        setForm({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"", photos: [] });
         setShowModal(false);
       }
     } catch(e) { alert("Error: " + e.message); }
@@ -7675,6 +7680,36 @@ function TabMaterial({ project }) {
                 <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Notes</label>
                 <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Special requirements..."
                   style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+              </div>
+              {/* Photos — mobile camera capture supported via accept+capture attrs */}
+              <div>
+                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Photos (optional)</label>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                  {(form.photos||[]).map((url,idx)=>(
+                    <div key={idx} style={{position:"relative",width:64,height:64,borderRadius:6,overflow:"hidden",border:"1px solid "+T.b1}}>
+                      <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                      <button onClick={()=>setForm(p=>({...p,photos:(p.photos||[]).filter((_,i)=>i!==idx)}))}
+                        style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,0.6)",color:"white",border:"none",fontSize:10,cursor:"pointer",lineHeight:1,padding:0}}>×</button>
+                    </div>
+                  ))}
+                  <label style={{width:64,height:64,borderRadius:6,border:"1.5px dashed "+T.b2,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:11,color:T.t3,fontWeight:600,flexDirection:"column",gap:2}}>
+                    <span style={{fontSize:18}}>📷</span>
+                    <span>Add</span>
+                    <input type="file" accept="image/*" capture="environment" multiple style={{display:"none"}}
+                      onChange={e=>{
+                        const files = Array.from(e.target.files||[]);
+                        files.forEach(file=>{
+                          uploadManager.add({
+                            file, folder:"gb_buildcon/mr",
+                            label:"MR photo: "+file.name,
+                            onDone:(url)=>setForm(p=>({...p,photos:[...(p.photos||[]),url]})),
+                          });
+                        });
+                        e.target.value="";
+                      }}/>
+                  </label>
+                </div>
+                <div style={{fontSize:10,color:T.t4}}>Mobile pe camera bhi khulega · Multi-select ok</div>
               </div>
             </div>
             <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8}}>
@@ -7925,6 +7960,37 @@ function TabMaterial({ project }) {
                 </div>
               )}
             </div>
+            {/* Photos — Direct Receive ke liye attached photos (challan, qty, quality) */}
+            {grnTab==="direct"&&(
+              <div style={{padding:"10px 16px",borderTop:"1px solid "+T.b1,background:"white",flexShrink:0}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6}}>GRN Photos (challan / material / quality issue)</div>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                  {grnPhotos.map((url,idx)=>(
+                    <div key={idx} style={{position:"relative",width:60,height:60,borderRadius:6,overflow:"hidden",border:"1px solid "+T.b1}}>
+                      <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                      <button onClick={()=>setGrnPhotos(p=>p.filter((_,i)=>i!==idx))}
+                        style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,0.6)",color:"white",border:"none",fontSize:10,cursor:"pointer",lineHeight:1,padding:0}}>×</button>
+                    </div>
+                  ))}
+                  <label style={{width:60,height:60,borderRadius:6,border:"1.5px dashed "+T.b2,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:10,color:T.t3,fontWeight:600,flexDirection:"column",gap:1}}>
+                    <span style={{fontSize:16}}>📷</span>
+                    <span>Add</span>
+                    <input type="file" accept="image/*" capture="environment" multiple style={{display:"none"}}
+                      onChange={e=>{
+                        const files=Array.from(e.target.files||[]);
+                        files.forEach(file=>{
+                          uploadManager.add({
+                            file, folder:"gb_buildcon/grn",
+                            label:"GRN photo: "+file.name,
+                            onDone:(url)=>setGrnPhotos(p=>[...p,url]),
+                          });
+                        });
+                        e.target.value="";
+                      }}/>
+                  </label>
+                </div>
+              </div>
+            )}
             <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
               <button onClick={()=>setShowGRN(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
               {grnTab==="direct"&&(
