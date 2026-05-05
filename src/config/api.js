@@ -47,7 +47,7 @@ api.get   = (endpoint)        => api(endpoint);
 api.post  = (endpoint, body)  => api(endpoint, { method:"POST",  body:JSON.stringify(body) });
 api.put   = (endpoint, body)  => api(endpoint, { method:"PUT",   body:JSON.stringify(body) });
 api.patch = (endpoint, body)  => api(endpoint, { method:"PATCH", body:JSON.stringify(body) });
-api.del   = (endpoint)        => api(endpoint, { method:"DELETE" });
+api.del   = (endpoint, body)  => api(endpoint, body !== undefined ? { method:"DELETE", body:JSON.stringify(body) } : { method:"DELETE" });
 
 // Legacy email+password login — kept for backwards compatibility
 api.login = async (email, password) => {

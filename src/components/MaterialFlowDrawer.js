@@ -56,9 +56,15 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  // GRN edit state
+  const [grnEditing, setGrnEditing] = useState(false);
+  const [grnForm, setGrnForm] = useState({});
+  const [grnEditNote, setGrnEditNote] = useState("");
+  const [grnSaving, setGrnSaving] = useState(false);
+  const [grnDeleting, setGrnDeleting] = useState(false);
 
-  useEffect(() => {
-    if (!grnId) { setData(null); return; }
+  const reload = () => {
+    if (!grnId) return;
     setLoading(true); setErr("");
     api.get(`/procurement/grns/${grnId}/flow`)
       .then((r) => {
@@ -67,7 +73,73 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
       })
       .catch((e) => setErr(e?.message || "Network error"))
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    if (!grnId) { setData(null); setGrnEditing(false); setGrnEditNote(""); return; }
+    reload();
   }, [grnId]);
+
+  // Reset edit form whenever GRN data loads
+  useEffect(() => {
+    if (data?.grn) {
+      const g = data.grn;
+      setGrnForm({
+        vendor_name:   g.vendor_name || "",
+        challan_no:    g.challan_no || "",
+        received_date: g.received_date ? String(g.received_date).slice(0, 10) : "",
+        received_by:   g.received_by || "",
+        items: (data.items || []).map(it => ({
+          id: it.id,
+          description:  it.description || "",
+          received_qty: it.received_qty != null ? String(it.received_qty) : "",
+          unit:         it.unit || "",
+        })),
+      });
+    }
+  }, [data]);
+
+  const handleGrnSave = async () => {
+    if (grnSaving) return;
+    if (!grnEditNote.trim()) { setErr("Edit reason compulsory hai — log me record hoga"); return; }
+    setGrnSaving(true); setErr("");
+    try {
+      const payload = {
+        vendor_name:   grnForm.vendor_name?.trim() || null,
+        challan_no:    grnForm.challan_no?.trim() || null,
+        received_date: grnForm.received_date || null,
+        received_by:   grnForm.received_by?.trim() || null,
+        edit_note:     grnEditNote.trim(),
+        items: (grnForm.items || []).map(it => ({
+          id: it.id,
+          description:  it.description?.trim() || null,
+          received_qty: it.received_qty !== "" ? parseFloat(it.received_qty) : null,
+          ordered_qty:  it.received_qty !== "" ? parseFloat(it.received_qty) : null,
+          unit:         it.unit || null,
+        })),
+      };
+      const res = await api.put("/procurement/grns/" + grnId, payload);
+      if (res?.success === false) { setErr(res.message || "Save failed"); setGrnSaving(false); return; }
+      setGrnEditing(false); setGrnEditNote("");
+      reload();
+      onChanged && onChanged();
+    } catch (e) { setErr(e?.message || "Network error"); }
+    setGrnSaving(false);
+  };
+
+  const handleGrnDelete = async () => {
+    if (grnDeleting) return;
+    const reason = window.prompt(`Delete GRN ${data?.grn?.grn_number}?\n\nYe inventory se bhi qty hata dega. Reason batao (compulsory):`);
+    if (reason == null) return;
+    if (!reason.trim()) { setErr("Delete reason compulsory hai"); return; }
+    setGrnDeleting(true); setErr("");
+    try {
+      const res = await api.del("/procurement/grns/" + grnId, { reason: reason.trim() });
+      if (res?.success === false) { setErr(res.message || "Delete failed"); setGrnDeleting(false); return; }
+      onChanged && onChanged();
+      onClose && onClose();
+    } catch (e) { setErr(e?.message || "Network error"); setGrnDeleting(false); }
+  };
 
   if (!open) return null;
 
@@ -151,24 +223,9 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
       ].filter(Boolean),
     });
   }
-  // GRN
-  if (grn) {
-    events.push({
-      key: `grn-${grn.id}`,
-      ts: grn.received_date || grn.created_at,
-      icon: "📦",
-      color: T.grn,
-      bg: T.grnL,
-      title: "GRN Received",
-      who: grn.received_by || "Site",
-      lines: [
-        `Vendor: ${grn.vendor_name || "—"}`,
-        grn.challan_no ? `Challan: ${grn.challan_no}` : null,
-        items.map((it) => `${it.description}: ${it.received_qty} ${it.unit}`).join(" · "),
-        grn.grn_type ? `Type: ${grn.grn_type}` : null,
-      ].filter(Boolean),
-    });
-  }
+  // (GRN intentionally NOT pushed here — it has its own dedicated section
+  // card below so we don't show it twice. The timeline still shows it via
+  // the audit_logs CREATE entry if present.)
   // Bills
   bills.forEach((b) => {
     events.push({
@@ -252,54 +309,9 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
               {err}
             </div>
           )}
-          {!loading && !err && events.length === 0 && (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: T.t4, fontSize: 13 }}>
-              No flow data found.
-            </div>
-          )}
-          {!loading && events.length > 0 && (
-            <div style={{ position: "relative", paddingLeft: 30 }}>
-              {/* Vertical track line */}
-              <div style={{ position: "absolute", left: 14, top: 0, bottom: 0, width: 2, background: T.b1 }}/>
-              {events.map((ev, i) => (
-                <div key={ev.key} style={{ position: "relative", marginBottom: 16 }}>
-                  {/* Dot */}
-                  <div style={{
-                    position: "absolute", left: -23, top: 4, width: 28, height: 28, borderRadius: "50%",
-                    background: ev.bg, border: `2px solid ${ev.color}`,
-                    display: "flex", alignItems: "center", justifyContent: "center", fontSize: 13,
-                    boxShadow: `0 0 0 4px ${T.surface}`,
-                  }}>
-                    {ev.icon}
-                  </div>
-                  {/* Card */}
-                  <div style={{
-                    background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${ev.color}`,
-                    borderRadius: 8, padding: "10px 12px",
-                  }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
-                      <div style={{ fontSize: 12.5, fontWeight: 700, color: ev.color }}>
-                        {ev.title}
-                      </div>
-                      <div style={{ fontSize: 10.5, color: T.t4, whiteSpace: "nowrap", marginLeft: 8 }}>
-                        {fmtDateTime(ev.ts)}
-                      </div>
-                    </div>
-                    {ev.who && (
-                      <div style={{ fontSize: 11, color: T.t3, marginBottom: ev.lines.length > 0 ? 5 : 0, fontWeight: 500 }}>
-                        👤 {ev.who}
-                      </div>
-                    )}
-                    {ev.lines.map((line, j) => (
-                      <div key={j} style={{ fontSize: 11.5, color: T.t2, lineHeight: 1.5 }}>
-                        {line}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Timeline removed — the per-stage section cards below already
+              tell the full chronological story without duplicating the GRN
+              card.  Keeping `events` array for any future use. */}
 
           {/* Stage summary cards — MR / Approval / Order / GRN */}
           {!loading && data && (() => {
@@ -347,15 +359,18 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                   ] : [])}
                 />
 
-                {/* Order Summary */}
+                {/* Order Summary — for direct-GRN entries (no MR/PO) we
+                    still surface vendor + date from the GRN itself, marked
+                    as "Direct order" so it's clear no formal MR/PO exists. */}
                 <Section
                   color={T.pur} bg={T.purL} icon="🚚" title="Order Placed"
-                  empty={!mr?.linked_vendor && !po && !orderEntry}
+                  empty={!mr?.linked_vendor && !po && !orderEntry && !grn?.vendor_name}
                   emptyText="Not ordered yet"
                   rows={[
                     ...(po ? [["PO #", po.po_number]] : []),
+                    ...(!mr && !po && grn?.vendor_name ? [["Type", "Direct GRN (no MR/PO)"]] : []),
                     ["Vendor",          mr?.linked_vendor || po?.vendor_name || grn?.vendor_name || "—"],
-                    ["Expected Delivery", fmtDate(mr?.expected_delivery || po?.expected_delivery)],
+                    ["Expected Delivery", fmtDate(mr?.expected_delivery || po?.expected_delivery || grn?.received_date)],
                     ...(orderEntry ? [
                       ["Ordered By", orderEntry.user_name || "Admin"],
                       ["Ordered On", fmtDateTime(orderEntry.created_at)],
@@ -363,8 +378,8 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                   ].filter(([_, v]) => v && v !== "—" || _ === "Vendor" || _ === "Expected Delivery")}
                 />
 
-                {/* GRN / Receipt Summary */}
-                {grn && (
+                {/* GRN / Receipt Summary — read-only OR inline edit form */}
+                {grn && !grnEditing && (
                   <Section
                     color={T.grn} bg={T.grnL} icon="📦" title="GRN Received"
                     rows={[
@@ -377,6 +392,38 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       ...items.map(it => [it.description || "Item", `${it.received_qty} ${it.unit}`]),
                     ]}
                   />
+                )}
+                {grn && grnEditing && (
+                  <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderLeft: `3px solid ${T.grn}`, borderRadius: 8, padding: "12px 14px" }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 10 }}>
+                      <span style={{ width: 22, height: 22, borderRadius: "50%", background: T.grnL, display: "inline-flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>📦</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.grn }}>Edit GRN — {grn.grn_number}</span>
+                    </div>
+                    <div style={{ padding: "8px 10px", background: "#FFFBEB", border: `1px solid #FDE68A`, borderRadius: 7, marginBottom: 10 }}>
+                      <div style={{ fontSize: 9.5, fontWeight: 700, color: "#92400E", textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 4 }}>
+                        Edit Reason * <span style={{ fontWeight: 500, textTransform: "none", letterSpacing: 0 }}>(compulsory)</span>
+                      </div>
+                      <textarea value={grnEditNote} onChange={e => setGrnEditNote(e.target.value)} rows={2}
+                        placeholder="e.g. Vendor naam galat tha, theek kar raha hu"
+                        style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: `1.5px solid #FDE68A`, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", background: "#fff" }}/>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+                      <FInput label="Vendor" value={grnForm.vendor_name} onChange={v => setGrnForm(p => ({ ...p, vendor_name: v }))}/>
+                      <FInput label="Challan No." value={grnForm.challan_no} onChange={v => setGrnForm(p => ({ ...p, challan_no: v }))}/>
+                      <FInput label="Received On" type="date" value={grnForm.received_date} onChange={v => setGrnForm(p => ({ ...p, received_date: v }))}/>
+                      <FInput label="Received By" value={grnForm.received_by} onChange={v => setGrnForm(p => ({ ...p, received_by: v }))}/>
+                    </div>
+                    {(grnForm.items || []).map((it, idx) => (
+                      <div key={it.id || idx} style={{ display: "grid", gridTemplateColumns: "1.6fr 80px 70px", gap: 6, marginBottom: 6 }}>
+                        <FInput label={idx === 0 ? "Material" : ""} value={it.description}
+                          onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, description: v } : x) }))}/>
+                        <FInput label={idx === 0 ? "Qty" : ""} type="number" value={it.received_qty}
+                          onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, received_qty: v } : x) }))}/>
+                        <FInput label={idx === 0 ? "Unit" : ""} value={it.unit}
+                          onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, unit: v } : x) }))}/>
+                      </div>
+                    ))}
+                  </div>
                 )}
 
                 {/* Billing Summary */}
@@ -409,15 +456,36 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
 
         {/* Footer — admin actions */}
         {!loading && data && isAdmin && (
-          <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, flexShrink: 0, display: "flex", gap: 8 }}>
-            <div style={{ flex: 1, fontSize: 11, color: T.t4, alignSelf: "center" }}>
-              Admin can edit the source MR. Changes propagate to inventory.
-            </div>
-            {mr && onEditMR && (
-              <button onClick={() => onEditMR(mr)}
-                style={{ padding: "9px 18px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
-                ✏ Edit MR / Flow
-              </button>
+          <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.b1}`, background: T.surfaceB, flexShrink: 0, display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {grnEditing ? (
+              <>
+                <button onClick={() => { setGrnEditing(false); setGrnEditNote(""); setErr(""); }} disabled={grnSaving}
+                  style={{ flex: 1, padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 12, fontWeight: 600, cursor: grnSaving ? "not-allowed" : "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={handleGrnSave} disabled={grnSaving}
+                  style={{ flex: 2, padding: "9px", borderRadius: 7, background: grnSaving ? "#9CA3AF" : T.grn, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: grnSaving ? "not-allowed" : "pointer" }}>
+                  {grnSaving ? "Saving..." : "✓ Save GRN"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button onClick={() => setGrnEditing(true)}
+                  style={{ padding: "9px 12px", borderRadius: 7, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  ✏ Edit GRN
+                </button>
+                <button onClick={handleGrnDelete} disabled={grnDeleting}
+                  style={{ padding: "9px 12px", borderRadius: 7, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12, fontWeight: 700, cursor: grnDeleting ? "not-allowed" : "pointer" }}>
+                  {grnDeleting ? "Deleting..." : "🗑 Delete GRN"}
+                </button>
+                <div style={{ flex: 1 }}/>
+                {mr && onEditMR && (
+                  <button onClick={() => onEditMR(mr)}
+                    style={{ padding: "9px 14px", borderRadius: 7, background: T.blu, border: "none", color: "#fff", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                    ✏ Edit MR
+                  </button>
+                )}
+              </>
             )}
           </div>
         )}
@@ -427,6 +495,16 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
         @keyframes matSpin { to { transform: rotate(360deg); } }
       `}</style>
     </>
+  );
+}
+
+function FInput({ label, value, onChange, type = "text" }) {
+  return (
+    <div>
+      {label && <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>{label}</div>}
+      <input type={type} value={value || ""} onChange={e => onChange(e.target.value)}
+        style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: `1.5px solid ${T.b1}`, fontSize: 11.5, color: T.t1, background: T.surface, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }}/>
+    </div>
   );
 }
 
