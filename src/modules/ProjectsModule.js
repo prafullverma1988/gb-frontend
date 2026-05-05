@@ -1814,6 +1814,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
                       const res=await api.patch("/procurement/mrs/"+id+"/mark-ordered",{
                         vendor: vendor||null,
                         expected_delivery: expected_delivery||null,
+                        order_type: "Manual",
                       });
                       if(res.success===false) throw new Error(res.message||"Failed");
                       setData(p=>({...p,mrs:p.mrs.map(m=>m.id===id?{...m,stage:"Ordered",mat_status:"Ordered",linked_vendor:vendor||m.linked_vendor,expected_delivery:expected_delivery||m.expected_delivery}:m)}));

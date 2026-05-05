@@ -319,8 +319,17 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
             const approvalEntry = audit.find(a => /APPROV/i.test(a.action || ""));
             const rejectEntry   = audit.find(a => /REJECT/i.test(a.action || ""));
             const orderEntry    = audit.find(a => /ORDER/i.test(a.action || ""));
+            const receivedEntry = audit.find(a => /RECEIV/i.test(a.action || ""));
             let approvedQty = null;
             if (approvalEntry?.details) { try { approvedQty = JSON.parse(approvalEntry.details).approved_qty; } catch {} }
+            // Order type: PO if MR has linked_po_id, else from audit details, else "Manual"
+            let orderType = "Manual";
+            if (mr?.linked_po_id || po) orderType = "PO";
+            else if (orderEntry?.details) {
+              try { orderType = JSON.parse(orderEntry.details).order_type || "Manual"; } catch {}
+            }
+            // Receiver name — prefer audit user, then GRN.received_by
+            const receivedByName = receivedEntry?.user_name || grn?.received_by || "Site";
             return (
               <div style={{ marginTop: 18, display: "flex", flexDirection: "column", gap: 10 }}>
                 {/* MR Request Summary */}
@@ -360,23 +369,24 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                   ] : [])}
                 />
 
-                {/* Order Summary — for direct-GRN entries (no MR/PO) we
-                    still surface vendor + date from the GRN itself, marked
-                    as "Direct order" so it's clear no formal MR/PO exists. */}
+                {/* Order Summary — shows order type (Manual / PO / RFQ),
+                    vendor, expected delivery, and who/when ordered. For
+                    truly direct GRNs (no MR + no PO + no order audit) we
+                    still surface vendor info from the GRN itself. */}
                 <Section
                   color={T.pur} bg={T.purL} icon="🚚" title="Order Placed"
                   empty={!mr?.linked_vendor && !po && !orderEntry && !grn?.vendor_name}
                   emptyText="Not ordered yet"
                   rows={[
+                    ["Type",            (!mr && !po && !orderEntry && grn?.vendor_name) ? "Direct GRN (no MR/PO)" : orderType],
                     ...(po ? [["PO #", po.po_number]] : []),
-                    ...(!mr && !po && grn?.vendor_name ? [["Type", "Direct GRN (no MR/PO)"]] : []),
                     ["Vendor",          mr?.linked_vendor || po?.vendor_name || grn?.vendor_name || "—"],
                     ["Expected Delivery", fmtDate(mr?.expected_delivery || po?.expected_delivery || grn?.received_date)],
                     ...(orderEntry ? [
                       ["Ordered By", orderEntry.user_name || "Admin"],
                       ["Ordered On", fmtDateTime(orderEntry.created_at)],
                     ] : []),
-                  ].filter(([_, v]) => v && v !== "—" || _ === "Vendor" || _ === "Expected Delivery")}
+                  ].filter(([_, v]) => v && v !== "—" || _ === "Vendor" || _ === "Expected Delivery" || _ === "Type")}
                 />
 
                 {/* GRN / Receipt Summary — read-only OR inline edit form */}
@@ -388,7 +398,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       ["Vendor",         grn.vendor_name],
                       ["Challan",        grn.challan_no],
                       ["Received On",    fmtDate(grn.received_date)],
-                      ["Received By",    grn.received_by || "Site"],
+                      ["Received By",    receivedByName],
                       ["Type",           grn.grn_type || "Full"],
                       ...items.map(it => [it.description || "Item", `${it.received_qty} ${it.unit}`]),
                     ]}

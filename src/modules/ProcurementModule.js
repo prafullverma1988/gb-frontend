@@ -1103,7 +1103,7 @@ function ProcurementModule(){
   };
   const saveBulkOrder=async(medium,vendor,delivery,items)=>{
     if(medium==="manual"){
-      await Promise.all(items.map(m=>api.patch("/procurement/mrs/"+m.id+"/mark-ordered",{vendor,expected_delivery:delivery})));
+      await Promise.all(items.map(m=>api.patch("/procurement/mrs/"+m.id+"/mark-ordered",{vendor,expected_delivery:delivery,order_type:"Manual"})));
       setMRs(p=>p.map(m=>items.find(i=>i.id===m.id)?{...m,matStatus:"Ordered",vendor,expectedDelivery:delivery}:m));
       setMrTab("Ordered");
     } else if(medium==="po"){
