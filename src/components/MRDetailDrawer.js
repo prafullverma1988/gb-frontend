@@ -12,6 +12,7 @@
 import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
 import LibrarySelect from "./LibrarySelect";
+import ActivityLog from "./ActivityLog";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -229,6 +230,8 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
                   <div style={{ fontSize: 12.5, color: "#92400E", lineHeight: 1.5 }}>{mr.closed_reason}</div>
                 </div>
               )}
+              {/* Full audit trail — kisne kya kab kiya */}
+              <ActivityLog entity_type="material_request" entity_id={mr.id}/>
             </>
           ) : (
             // Edit form

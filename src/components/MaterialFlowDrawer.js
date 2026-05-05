@@ -22,6 +22,8 @@
 import React, { useState, useEffect } from "react";
 import api from "../config/api";
 import LibrarySelect from "./LibrarySelect";
+import uploadManager from "../utils/uploadManager";
+import ActivityLog from "./ActivityLog";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -67,6 +69,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   const [showIssueForm, setShowIssueForm] = useState(false);
   const [issueType, setIssueType] = useState("Quality");
   const [issueNote, setIssueNote] = useState("");
+  const [issuePhoto, setIssuePhoto] = useState("");
   const [issueSaving, setIssueSaving] = useState(false);
 
   const reload = () => {
@@ -141,9 +144,10 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
       const res = await api.post(`/procurement/grns/${grnId}/issues`, {
         issue_type: issueType,
         note: issueNote.trim(),
+        photo_url: issuePhoto || null,
       });
       if (res?.success === false) { setErr(res.message || "Issue raise failed"); setIssueSaving(false); return; }
-      setShowIssueForm(false); setIssueNote(""); setIssueType("Quality");
+      setShowIssueForm(false); setIssueNote(""); setIssueType("Quality"); setIssuePhoto("");
       reload();
       onChanged && onChanged();
     } catch (e) { setErr(e?.message || "Network error"); }
@@ -518,6 +522,35 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                       <textarea value={issueNote} onChange={e => setIssueNote(e.target.value)} autoFocus rows={2}
                         placeholder="Issue describe karo — kya problem hai? (compulsory)"
                         style={{ width: "100%", padding: "7px 9px", borderRadius: 5, border: `1.5px solid ${T.redM}`, fontSize: 11.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", marginBottom: 7, background: "white" }}/>
+                      {/* Issue photo — proof of damage / quality problem */}
+                      <div style={{ display: "flex", gap: 6, marginBottom: 7, alignItems: "center" }}>
+                        {issuePhoto ? (
+                          <div style={{ position: "relative", width: 50, height: 50, borderRadius: 5, overflow: "hidden", border: `1px solid ${T.redM}` }}>
+                            <img src={issuePhoto} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }}/>
+                            <button onClick={() => setIssuePhoto("")}
+                              style={{ position: "absolute", top: 1, right: 1, width: 16, height: 16, borderRadius: "50%", background: "rgba(0,0,0,0.6)", color: "white", border: "none", fontSize: 9, cursor: "pointer", lineHeight: 1, padding: 0 }}>×</button>
+                          </div>
+                        ) : (
+                          <label style={{ width: 50, height: 50, borderRadius: 5, border: `1.5px dashed ${T.redM}`, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", fontSize: 9, color: T.red, fontWeight: 700, flexDirection: "column", gap: 1, background: "white" }}>
+                            <span style={{ fontSize: 14 }}>📷</span>
+                            <span>Add</span>
+                            <input type="file" accept="image/*" capture="environment" style={{ display: "none" }}
+                              onChange={e => {
+                                const file = e.target.files?.[0];
+                                if (!file) return;
+                                uploadManager.add({
+                                  file, folder: "gb_buildcon/issues",
+                                  label: "Issue photo: " + file.name,
+                                  onDone: (url) => setIssuePhoto(url),
+                                });
+                                e.target.value = "";
+                              }}/>
+                          </label>
+                        )}
+                        <span style={{ fontSize: 10, color: T.t4, fontStyle: "italic" }}>
+                          {issuePhoto ? "Photo attached — proof of issue" : "Photo lagao (optional) — quality/damage proof"}
+                        </span>
+                      </div>
                       <div style={{ display: "flex", gap: 6 }}>
                         <button onClick={() => { setShowIssueForm(false); setIssueNote(""); setErr(""); }} disabled={issueSaving}
                           style={{ flex: 1, padding: "6px", borderRadius: 5, background: "white", border: `1px solid ${T.b1}`, color: T.t3, fontSize: 11, fontWeight: 600, cursor: issueSaving ? "not-allowed" : "pointer" }}>
@@ -548,6 +581,11 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                               <span style={{ fontSize: 10, color: T.t4 }}>{fmtDateTime(iss.created_at)}</span>
                             </div>
                             <div style={{ fontSize: 11.5, color: T.t1, marginBottom: 4 }}>{iss.note}</div>
+                            {iss.photo_url && (
+                              <img src={iss.photo_url} alt="" onClick={() => window.open(iss.photo_url, "_blank")}
+                                onError={e => { e.target.style.display = "none"; }}
+                                style={{ display: "block", width: 80, height: 80, objectFit: "cover", borderRadius: 5, border: `1px solid ${resolved ? T.b1 : T.redM}`, marginBottom: 4, cursor: "zoom-in" }}/>
+                            )}
                             <div style={{ fontSize: 10.5, color: T.t3 }}>👤 Raised by {iss.raised_by_name || "—"}</div>
                             {resolved && (
                               <div style={{ marginTop: 4, padding: "5px 7px", background: "white", borderRadius: 4, border: `1px solid ${T.b1}` }}>
@@ -591,6 +629,10 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                     ]}
                   />
                 )}
+
+                {/* Activity Log — full kisne kya kab kiya trail */}
+                {mr?.id && <ActivityLog entity_type="material_request" entity_id={mr.id}/>}
+                {grn?.id && <ActivityLog entity_type="grn" entity_id={grn.id}/>}
               </div>
             );
           })()}

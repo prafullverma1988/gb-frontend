@@ -18,6 +18,7 @@
 
 import { useState, useEffect } from "react";
 import api from "../config/api";
+import ActivityLog from "./ActivityLog";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -257,11 +258,10 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged }) {
             </div>
           )}
 
-          {/* Audit trail */}
-          {(txn.created_at || txn.updated_at) && (
-            <div style={{ padding: "10px 12px", background: T.surfaceB, borderRadius: 8, fontSize: 10.5, color: T.t4, lineHeight: 1.6 }}>
-              {txn.created_at && <div>Created: {fmtDate(txn.created_at)}</div>}
-              {txn.updated_at && txn.updated_at !== txn.created_at && <div>Last edited: {fmtDate(txn.updated_at)}</div>}
+          {/* Activity Log — full kisne kya kab kiya trail from audit_logs */}
+          {txn.id && (
+            <div style={{ marginTop: 12 }}>
+              <ActivityLog entity_type="transaction" entity_id={txn.id}/>
             </div>
           )}
         </div>
