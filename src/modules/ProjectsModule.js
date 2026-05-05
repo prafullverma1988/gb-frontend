@@ -902,6 +902,40 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
 // APPROVALS DRAWER
 // ═══════════════════════════════════════════════════════════════════
 // v2-fixed
+// ── Reusable photo strip — surfaces request/GRN photos inline on cards ──
+// Parses photo_urls JSON column and renders a thumbnail row + lightbox.
+// Used by every MR card (approval / flow / warehouse) so admins can see
+// what the site actually uploaded before approving.
+function PhotoStrip({ photos, accent = "#2563EB" }) {
+  const [zoom, setZoom] = useState(null);
+  const list = (() => {
+    if (!photos) return [];
+    if (Array.isArray(photos)) return photos;
+    try { const v = JSON.parse(photos); return Array.isArray(v) ? v : []; } catch { return []; }
+  })();
+  if (list.length === 0) return null;
+  return (
+    <>
+      <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:6}}>
+        <span style={{fontSize:9.5,fontWeight:700,color:accent,padding:"2px 7px",borderRadius:10,background:accent+"15",alignSelf:"center"}}>
+          📷 {list.length} photo{list.length>1?"s":""}
+        </span>
+        {list.map((url,i)=>(
+          <img key={i} src={url} alt="" onClick={()=>setZoom(url)}
+            onError={e=>{e.target.style.display="none";}}
+            style={{width:42,height:42,objectFit:"cover",borderRadius:5,border:"1px solid "+T.b1,cursor:"zoom-in"}}/>
+        ))}
+      </div>
+      {zoom && (
+        <div onClick={()=>setZoom(null)}
+          style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
+          <img src={zoom} alt="" style={{maxWidth:"92vw",maxHeight:"92vh",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
+        </div>
+      )}
+    </>
+  );
+}
+
 function MRApprovalCard({mr, onApprove, onReject}){
   const [editQty,setEditQty]=useState(String(mr.quantity||""));
   const [showQtyEdit,setShowQtyEdit]=useState(false);
@@ -923,6 +957,8 @@ function MRApprovalCard({mr, onApprove, onReject}){
         </div>
         {mr.approx_amount>0&&<span style={{fontSize:12,fontWeight:700,color:T.amb,flexShrink:0}}>{fmtAmt(mr.approx_amount)}</span>}
       </div>
+      {/* Photos attached at request time — admin can view before approving */}
+      <PhotoStrip photos={mr.photo_urls} accent={T.amb}/>
       {/* Qty edit */}
       <div style={{display:"flex",alignItems:"center",gap:6,margin:"8px 0 4px"}}>
         <span style={{fontSize:10.5,color:T.t3}}>Approve Qty:</span>
@@ -1003,6 +1039,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
         </div>
         {mr.notes&&<div style={{fontSize:11,color:T.t3,fontStyle:"italic",marginTop:2}}>"{mr.notes}"</div>}
         {mr.mr_number&&<div style={{fontSize:10,color:T.t4,marginTop:3}}>{mr.mr_number}</div>}
+        <PhotoStrip photos={mr.photo_urls} accent={sc.c}/>
       </div>
       {/* Action row */}
       <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>
@@ -1215,6 +1252,7 @@ function WHMRCard({mr, acting, onApprove, onReject, rejectId, setRejectId, rejec
           </div>
         )}
         <Credit label="Requested by" name={mr.requested_by_name||"Site Team"} time={mr.date||mr.created_at}/>
+        <PhotoStrip photos={mr.photo_urls} accent={sc.c}/>
       </div>
       {(mr.status==="Pending"||!mr.status)&&(
         <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>
