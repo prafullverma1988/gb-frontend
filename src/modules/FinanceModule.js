@@ -436,6 +436,105 @@ function SearchSelect({options,value,onChange,placeholder,accent,compact,onAfter
   );
 }
 
+// ─── BILL CONFLICT WARNING MODAL ─────────────────────────────────
+// Pops up before the bill modal when /finance/check-bill-conflict reports
+// the same GRN has already been billed OR the same vendor+challan combo
+// already exists. User has 3 paths: Cancel / View Existing / Force New
+// (with compulsory reason — admin gets a notification when forced).
+function BillConflictModal({data, onCancel, onViewExisting, onForceNew}){
+  const [showForce,setShowForce]=useState(false);
+  const [reason,setReason]=useState("");
+  const [submitting,setSubmitting]=useState(false);
+  const conflicts=data.challan_conflicts||[];
+  const grnLocked=!!data.grn_already_billed;
+  const grnTxnId =data.grn_billed_txn_id||null;
+  return (
+    <>
+      <div onClick={onCancel} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.55)",zIndex:3000,backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(520px,92vw)",background:"white",borderRadius:12,zIndex:3001,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{background:"#FEE2E2",borderBottom:"2px solid #FCA5A5",padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
+          <span style={{fontSize:22}}>⚠️</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:800,color:"#991B1B"}}>Duplicate Bill Warning</div>
+            <div style={{fontSize:11.5,color:"#7F1D1D",marginTop:1}}>
+              {grnLocked && conflicts.length>0 ? "Ye GRN aur vendor+challan dono pehle bill ho chuke hain"
+              : grnLocked                       ? "Ye GRN pehle se bill ho chuka hai"
+              :                                   "Same vendor + challan pehle bill ho chuka hai"}
+            </div>
+          </div>
+        </div>
+        {/* Body */}
+        <div style={{padding:"14px 18px",maxHeight:"60vh",overflowY:"auto"}}>
+          {grnLocked && (
+            <div style={{padding:"10px 12px",background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:8,marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#92400E",marginBottom:3}}>GRN already locked</div>
+              <div style={{fontSize:12.5,color:"#78350F"}}>
+                Linked transaction: <strong>TXN-{grnTxnId||"?"}</strong>
+              </div>
+            </div>
+          )}
+          {conflicts.length>0 && (
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10.5,fontWeight:700,color:"#6B7280",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
+                Existing bills with same vendor + challan ({conflicts.length})
+              </div>
+              {conflicts.map(c=>(
+                <div key={c.id} style={{padding:"8px 11px",background:"#F8F9FB",border:"1px solid #E5E7EB",borderRadius:7,marginBottom:5,display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:"#111827"}}>TXN-{c.id} · {c.party_name||"—"}</div>
+                    <div style={{fontSize:10.5,color:"#6B7280"}}>{c.date?new Date(c.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—"} · ₹{Number(c.amount).toLocaleString("en-IN")}</div>
+                  </div>
+                  <button onClick={()=>onViewExisting(c.id)} style={{padding:"4px 10px",borderRadius:5,background:"white",border:"1px solid #BFDBFE",color:"#2563EB",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>View</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!showForce ? (
+            <div style={{display:"flex",gap:8}}>
+              <button onClick={onCancel}
+                style={{flex:1,padding:"10px",borderRadius:7,background:"white",border:"1px solid #E5E7EB",color:"#374151",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                Cancel
+              </button>
+              {grnLocked && grnTxnId && (
+                <button onClick={()=>onViewExisting(grnTxnId)}
+                  style={{flex:1.5,padding:"10px",borderRadius:7,background:"#EFF6FF",border:"1px solid #BFDBFE",color:"#2563EB",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                  View Existing Bill
+                </button>
+              )}
+              <button onClick={()=>setShowForce(true)}
+                style={{flex:1.5,padding:"10px",borderRadius:7,background:"#FEE2E2",border:"1px solid #FCA5A5",color:"#991B1B",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                Force New Bill
+              </button>
+            </div>
+          ) : (
+            <div style={{padding:"11px",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8}}>
+              <div style={{fontSize:11,fontWeight:700,color:"#991B1B",marginBottom:6}}>
+                Force karne ke liye reason batao * <span style={{fontWeight:500}}>(admin ko notification jayega)</span>
+              </div>
+              <textarea value={reason} onChange={e=>setReason(e.target.value)} autoFocus rows={3}
+                placeholder="e.g. Vendor ne 2nd partial delivery alag challan se bheji thi, dono ka payment alag karna hai"
+                style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid #FCA5A5",fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical",marginBottom:8,background:"white"}}/>
+              <div style={{display:"flex",gap:7}}>
+                <button onClick={()=>{setShowForce(false);setReason("");}} disabled={submitting}
+                  style={{flex:1,padding:"8px",borderRadius:6,background:"white",border:"1px solid #E5E7EB",color:"#6B7280",fontSize:11.5,fontWeight:600,cursor:submitting?"not-allowed":"pointer"}}>
+                  Back
+                </button>
+                <button onClick={()=>{setSubmitting(true);onForceNew(reason.trim());}}
+                  disabled={submitting||!reason.trim()}
+                  style={{flex:2,padding:"8px",borderRadius:6,background:submitting||!reason.trim()?"#9CA3AF":"#DC2626",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:submitting||!reason.trim()?"not-allowed":"pointer"}}>
+                  {submitting?"Opening bill...":"⚠ Force New Bill"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ─── CREATE TRANSACTION MODAL ─────────────────────────────────
 function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN}){
   const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
@@ -628,6 +727,55 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const grandTotal=rows.reduce((s,r)=>s+(r.total||0),0);
   const subTotal=subMode==="boq"?subBoqTotal:grandTotal;
 
+  // ── GRN auto-suggest for non-prefill Material Bill flow ───────
+  // P1 fix: when user opens Material Bill modal from Party Ledger / Create
+  // Transaction (no prefillGRN), auto-detect unbilled GRNs for the selected
+  // vendor and suggest linking. Without this, bills save with grn_id=null →
+  // GRN stays in Unbilled list + opens door to silent duplicate billing.
+  const [availableGRNs,setAvailableGRNs]=useState([]);
+  const [selectedGRNId,setSelectedGRNId]=useState(null); // when user picks from dropdown
+  useEffect(()=>{
+    // Skip — this flow only matters for fresh material bill (no prefill)
+    if(!isMaterial||isFromGRN||!party){ setAvailableGRNs([]); return; }
+    let cancelled=false;
+    api.get("/procurement/grns?unbilled=1").then(res=>{
+      if(cancelled||!res?.success) return;
+      const partyL=String(party).toLowerCase().trim();
+      const matches=(res.data||[]).filter(g=>(g.vendor_name||"").toLowerCase().trim()===partyL);
+      setAvailableGRNs(matches);
+    }).catch(()=>{});
+    return ()=>{ cancelled=true; };
+  },[party,isMaterial,isFromGRN]);
+
+  // Pick a GRN from the dropdown — replaces current rows with GRN items + locks them
+  const pickGRN=(grnId)=>{
+    if(!grnId){
+      // user chose "None — direct purchase"
+      setSelectedGRNId(null);
+      // restore one blank row if all current rows are GRN-locked
+      setRows(p=>p.some(r=>!r.fromGRN)?p.filter(r=>!r.fromGRN):[blankRow()]);
+      return;
+    }
+    const grn=availableGRNs.find(g=>g.id===grnId);
+    if(!grn) return;
+    setSelectedGRNId(grnId);
+    if(grn.received_date){
+      try{ setDelivDate(grn.received_date.split("T")[0]); }catch(_){}
+    }
+    if(grn.project_name) setProject(grn.project_name);
+    setRows((grn.items||[]).map((it,i)=>({
+      id:Date.now()+i+Math.random(),
+      material:it.description||"",
+      head:MAT_HEADS[0],
+      desc:"",
+      qty:String(it.received_qty||""),
+      unit:it.unit||UNITS[0],
+      rate:"",
+      total:0,
+      fromGRN:true,
+    })));
+  };
+
   // ── helpers ──────────────────────────────────────────────────
   const typeColor={"Material Purchase Bill":T.blu,"Sub-Con Bill":T.slt,"Payment Received":T.grn,"Payment Made":T.red,"Bank Transfer":T.blu,"Petty Cash Expense":T.amb,"Advance Payment":T.pur,"Sales Invoice":T.grn,"Journal Entry":T.slt,"Credit Note":T.pur};
   const tc=typeColor[type]||T.slt;
@@ -691,7 +839,17 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       // Material bill — payment due date (from party credit days, user-overridable)
       if(isMaterial){
         if(payDueDate) payload.due_date = payDueDate;
-        if(prefillGRN?.grnId) payload.grn_id = prefillGRN.grnId;
+        // grn_id source: prefill (Unbilled tab → "+Bill"), or dropdown selection (Path B)
+        if(prefillGRN?.grnId)       payload.grn_id = prefillGRN.grnId;
+        else if(selectedGRNId)      payload.grn_id = selectedGRNId;
+        // challan_no — backend uses this for the duplicate guard
+        if(prefillGRN?.challan)     payload.challan_no = prefillGRN.challan;
+        // Force-duplicate path — set when user clicked "Force New Bill" on
+        // the conflict warning modal. Backend requires force_reason too.
+        if(prefillGRN?.forceDuplicate) {
+          payload.force_duplicate = true;
+          payload.force_reason    = prefillGRN.forceReason || "";
+        }
       }
 
       // Line items for material/subcon/invoice
@@ -728,9 +886,19 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
       // Check server response explicitly
       if(res&&res.success===false){
-        const errMsg=res.message||res.error||"Server rejected the entry.";
-        console.error("[FinanceModule] Server error:", errMsg, res);
-        setSaveErr(`Save failed: ${errMsg}`);
+        // Map specific backend error codes to friendlier messages (P0 fix)
+        let errMsg=res.message||res.error||"Server rejected the entry.";
+        if(res.code==="QTY_EXCEEDS_GRN"){
+          errMsg=`⚠ Quantity zyaada hai\n\n${res.message}`;
+        } else if(res.code==="GRN_ALREADY_BILLED"){
+          errMsg=`⚠ Yeh GRN already bill ho chuka hai\n\n${res.message}\n\nTXN-${res.existing_txn_id||"?"} me bill exist karta hai. Fin Activity tab me check karein.`;
+        } else if(res.code==="ITEM_NOT_IN_GRN"){
+          errMsg=`⚠ Item GRN me match nahi hua\n\n${res.message}`;
+        } else if(res.code==="GRN_NOT_FOUND"){
+          errMsg=`⚠ GRN nahi mila\n\n${res.message}`;
+        }
+        console.error("[FinanceModule] Server error:", res.code||"NO_CODE", errMsg, res);
+        setSaveErr(errMsg);
         savingRef.current=false; setSavingTxn(false);   // ← release lock so user can retry
         return; // ← DO NOT close modal on failure
       }
@@ -743,8 +911,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
     }catch(e){
       console.error("[FinanceModule] Save exception:", e);
-      const msg=e?.message||e?.response?.data?.message||"Network error. Check connection.";
-      setSaveErr(`Error: ${msg}`);
+      // Backend may throw 4xx with a response body containing code+message
+      const respData=e?.response?.data||{};
+      const code=respData.code||"";
+      let msg=respData.message||e?.message||"Network error. Check connection.";
+      if(code==="QTY_EXCEEDS_GRN")        msg=`⚠ Quantity zyaada hai\n\n${msg}`;
+      else if(code==="GRN_ALREADY_BILLED") msg=`⚠ Yeh GRN already bill ho chuka hai\n\n${msg}`;
+      else if(code==="ITEM_NOT_IN_GRN")    msg=`⚠ Item GRN me match nahi hua\n\n${msg}`;
+      else if(code==="GRN_NOT_FOUND")      msg=`⚠ GRN nahi mila\n\n${msg}`;
+      setSaveErr(msg);
       savingRef.current=false; setSavingTxn(false);     // ← release lock so user can retry
       // ← Modal stays open so user can retry
     }
@@ -1109,6 +1284,28 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               {prefillGRN&&<div style={{padding:"7px 12px",background:T.grnL,borderBottom:"1px solid "+T.grnM,fontSize:11.5,color:T.grn,display:"flex",gap:6,alignItems:"center"}}>
                 <span style={{fontWeight:700}}>GRN se linked</span> — Material, Qty locked. Rate aur Notes enter karo.
               </div>}
+              {/* P1: GRN auto-suggest dropdown (only when modal opened WITHOUT prefill + vendor has unbilled GRNs) */}
+              {!prefillGRN&&availableGRNs.length>0&&(
+                <div style={{padding:"9px 12px",background:T.ambL,borderBottom:`1px solid ${T.ambM}`,display:"flex",gap:9,alignItems:"center",flexWrap:"wrap"}}>
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.amb} strokeWidth="2.2" strokeLinecap="round" style={{flexShrink:0}}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+                  <div style={{flex:1,minWidth:200}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.amb}}>{party} ke {availableGRNs.length} unbilled GRN hai</div>
+                    <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>Bill ko GRN se link karne se duplicate billing avoid hoti hai</div>
+                  </div>
+                  <select value={selectedGRNId||""} onChange={e=>pickGRN(e.target.value?parseInt(e.target.value):null)}
+                    style={{height:32,padding:"0 9px",borderRadius:6,border:`1.5px solid ${selectedGRNId?T.grn:T.amb}`,background:selectedGRNId?T.grnL:T.surface,fontSize:12,fontWeight:600,color:selectedGRNId?T.grn:T.amb,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:200}}>
+                    <option value="">— Direct purchase (no GRN) —</option>
+                    {availableGRNs.map(g=>{
+                      const dt=g.received_date?new Date(g.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+                      const itemCount=(g.items||[]).length;
+                      return <option key={g.id} value={g.id}>{g.grn_number} · {dt} · {itemCount} item{itemCount!==1?"s":""}</option>;
+                    })}
+                  </select>
+                  {selectedGRNId&&(
+                    <span style={{fontSize:10.5,fontWeight:700,color:T.grn,padding:"3px 8px",background:T.grnL,borderRadius:12,border:`1px solid ${T.grnM}`}}>✓ Linked</span>
+                  )}
+                </div>
+              )}
               <div style={{display:"grid",gridTemplateColumns:colTpl,padding:"7px 12px",background:T.sb,gap:7}}>
                 {["#","Material Name","Head","Description","Qty","Unit","Rate","Total",""].map((h,i)=>(
                   <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
@@ -1435,12 +1632,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             {isPayment&&payAmt&&<span style={{color:tc}}>Rs.{Number(payAmt).toLocaleString("en-IN")}{type==="Payment Received"?" received":type==="Payment Made"?" paid out":""}</span>}
             {isBankTransfer&&payAmt&&<span style={{color:T.blu}}>Rs.{Number(payAmt).toLocaleString("en-IN")} — {account} → {toAccount}</span>}
           </div>
-          {/* Error message */}
+          {/* Error message — supports multi-line for backend code-based errors */}
           {saveErr&&(
-            <div style={{flex:1,padding:"7px 12px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,display:"flex",alignItems:"center",gap:6}}>
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
-              {saveErr}
-              <span onClick={()=>setSaveErr("")} style={{marginLeft:"auto",cursor:"pointer",opacity:0.6,fontSize:13}}>✕</span>
+            <div style={{flex:1,padding:"7px 12px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,display:"flex",alignItems:"flex-start",gap:6,whiteSpace:"pre-line",lineHeight:1.45}}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" style={{flexShrink:0,marginTop:2}}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+              <span style={{flex:1}}>{saveErr}</span>
+              <span onClick={()=>setSaveErr("")} style={{cursor:"pointer",opacity:0.6,fontSize:13,flexShrink:0}}>✕</span>
             </div>
           )}
           <button onClick={onClose} style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
@@ -1700,6 +1897,9 @@ function FinanceModule(){
   const [grnLoading,setGrnLoading]=useState(false);
   const [grnFilter,setGrnFilter]=useState({project:"All",material:"",head:"All"});
   const [prefillGRNData,setPrefillGRNData]=useState(null);
+  // Bill-conflict warning state — populated by the +Bill pre-flight check
+  // when the same GRN or same vendor+challan has been billed already.
+  const [conflictData,setConflictData]=useState(null);
   // Transaction detail drawer (used from Fin Activity + Party Ledger)
   const [selTxn,setSelTxn]=useState(null);
 
@@ -3261,8 +3461,16 @@ function FinanceModule(){
 
                 {filtered.map(grn=>{
                   const delivDate=grn.received_date?new Date(grn.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—";
+                  // P2: orphan-bill warning — backend flags vendors that have unlinked bills
+                  const hasOrphanWarning=!!grn.has_orphan_vendor_bills;
                   return(
-                    <div key={grn.id} style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+                    <div key={grn.id} style={{background:T.surface,borderRadius:8,border:`1px solid ${hasOrphanWarning?T.ambM:T.b1}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+                      {hasOrphanWarning&&(
+                        <div style={{padding:"5px 14px",background:T.ambL,borderBottom:`1px solid ${T.ambM}`,fontSize:10.5,color:T.amb,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
+                          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
+                          <span>⚠ {grn.orphan_bills_count||"Kuch"} bill{(grn.orphan_bills_count||0)!==1?"s":""} {grn.vendor_name} ke against bina GRN-link ke pehle se hain — Fin Activity me check karo, duplicate na ban jaaye</span>
+                        </div>
+                      )}
                       <div style={{display:"grid",gridTemplateColumns:"110px 1fr 140px 100px 90px 110px",padding:"11px 14px",alignItems:"center",cursor:"pointer",transition:"background 0.1s"}}
                         onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                         onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
@@ -3280,13 +3488,14 @@ function FinanceModule(){
                         {/* GRN type */}
                         <span style={{display:"inline-block",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600,background:grn.grn_type==="Full"?T.grnL:T.ambL,color:grn.grn_type==="Full"?T.grn:T.amb,border:`1px solid ${grn.grn_type==="Full"?T.grnM:T.ambM}`}}>{grn.grn_type||"Full"}</span>
                         {/* Action */}
-                        <button onClick={()=>{
+                        <button onClick={async ()=>{
                           // Build prefill data for Material Purchase Bill
                           const prefill={
                             grnNumber:   grn.grn_number,
                             grnId:       grn.id,
                             receivedDate:grn.received_date,
                             vendor:      grn.vendor_name||"",
+                            challan:     grn.challan_no||"",
                             deliveryDate:grn.received_date?grn.received_date.split("T")[0]:"",
                             project:     grn.project_name||"",
                             items:(grn.items||[]).map(it=>({
@@ -3298,6 +3507,22 @@ function FinanceModule(){
                               desc:  "",
                             })),
                           };
+                          // Pre-flight conflict check — block the bill modal if
+                          // the same challan+vendor or the same GRN was already
+                          // billed. User has to explicitly Force New Bill with reason.
+                          try {
+                            const params = new URLSearchParams({
+                              vendor:    grn.vendor_name||"",
+                              challan:   grn.challan_no||"",
+                              grn_id:    grn.id,
+                              project_id:grn.project_id||"",
+                            });
+                            const cf = await api.get("/finance/check-bill-conflict?"+params.toString());
+                            if (cf?.success && cf.data?.has_conflict) {
+                              setConflictData({...cf.data, prefill, vendorName: grn.vendor_name||""});
+                              return;
+                            }
+                          } catch(e) { console.warn("conflict check failed:", e.message); }
                           openTxn("Material Purchase Bill", grn.vendor_name||"", prefill);
                         }}
                           style={{padding:"5px 11px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
@@ -3499,6 +3724,26 @@ function FinanceModule(){
         onClose={()=>setSelTxn(null)}
         onChanged={async()=>{ await refreshTxns(); await refreshPendPmts(); await refreshParties(); }}
       />
+
+      {/* ══ Bill Conflict Warning Modal ══ */}
+      {conflictData && (
+        <BillConflictModal
+          data={conflictData}
+          onCancel={()=>setConflictData(null)}
+          onViewExisting={(txnId)=>{
+            // Find txn in activeTxns and open detail drawer
+            const t = activeTxns.find(x=>x.id===txnId);
+            if (t) setSelTxn(t);
+            setConflictData(null);
+          }}
+          onForceNew={(reason)=>{
+            const prefill = { ...conflictData.prefill, forceDuplicate: true, forceReason: reason };
+            const vendor = conflictData.vendorName || "";
+            setConflictData(null);
+            openTxn("Material Purchase Bill", vendor, prefill);
+          }}
+        />
+      )}
 
       {/* Shimmer CSS */}
       <style>{`
