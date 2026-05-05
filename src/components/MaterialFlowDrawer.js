@@ -21,6 +21,7 @@
 
 import React, { useState, useEffect } from "react";
 import api from "../config/api";
+import LibrarySelect from "./LibrarySelect";
 
 const T = {
   surface: "#FFFFFF", surfaceB: "#F8F9FB",
@@ -408,15 +409,22 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
                         style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: `1.5px solid #FDE68A`, fontSize: 12, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", background: "#fff" }}/>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-                      <FInput label="Vendor" value={grnForm.vendor_name} onChange={v => setGrnForm(p => ({ ...p, vendor_name: v }))}/>
+                      <div>
+                        <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>Material Vendor</div>
+                        <LibrarySelect type="supplier" value={grnForm.vendor_name}
+                          onChange={v => setGrnForm(p => ({ ...p, vendor_name: v }))}/>
+                      </div>
                       <FInput label="Challan No." value={grnForm.challan_no} onChange={v => setGrnForm(p => ({ ...p, challan_no: v }))}/>
                       <FInput label="Received On" type="date" value={grnForm.received_date} onChange={v => setGrnForm(p => ({ ...p, received_date: v }))}/>
                       <FInput label="Received By" value={grnForm.received_by} onChange={v => setGrnForm(p => ({ ...p, received_by: v }))}/>
                     </div>
                     {(grnForm.items || []).map((it, idx) => (
                       <div key={it.id || idx} style={{ display: "grid", gridTemplateColumns: "1.6fr 80px 70px", gap: 6, marginBottom: 6 }}>
-                        <FInput label={idx === 0 ? "Material" : ""} value={it.description}
-                          onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, description: v } : x) }))}/>
+                        <div>
+                          {idx === 0 && <div style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 3 }}>Material</div>}
+                          <LibrarySelect type="material" value={it.description}
+                            onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, description: v } : x) }))}/>
+                        </div>
                         <FInput label={idx === 0 ? "Qty" : ""} type="number" value={it.received_qty}
                           onChange={v => setGrnForm(p => ({ ...p, items: p.items.map((x, i) => i === idx ? { ...x, received_qty: v } : x) }))}/>
                         <FInput label={idx === 0 ? "Unit" : ""} value={it.unit}

@@ -39,12 +39,12 @@ const _cache = {
 
 const TYPE_CONFIG = {
   supplier: {
-    label: "vendor",
-    addTitle: "Add new vendor (saved to Party Master)",
+    label: "material vendor",
+    addTitle: "Add new Material Vendor (saved to Party Master)",
     fields: [
-      { key: "name",  label: "Vendor name *", flex: 2, autoFocus: true, required: true },
-      { key: "phone", label: "Phone",         flex: 1 },
-      { key: "city",  label: "City",          flex: 1 },
+      { key: "name",  label: "Material Vendor name *", flex: 2, autoFocus: true, required: true },
+      { key: "phone", label: "Phone",                  flex: 1 },
+      { key: "city",  label: "City",                   flex: 1 },
     ],
     fetch: async () => {
       const r = await api.get("/finance/parties");
@@ -52,13 +52,19 @@ const TYPE_CONFIG = {
       return r.data
         .filter(p => {
           const t = String(p.type || "").toLowerCase();
-          return t === "material supplier" || t === "supplier" || t === "other vendor" || t === "material_supplier" || t === "vendor";
+          // Accept all legacy + canonical labels for vendor-like parties
+          return t === "material vendor" || t === "material supplier" ||
+                 t === "supplier" || t === "other vendor" ||
+                 t === "material_supplier" || t === "vendor";
         })
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
     save: async (form) => {
+      // New parties saved as "Material Vendor" — the canonical UI label.
+      // Legacy "Material Supplier" / "Supplier" rows continue to work via
+      // the loose filter above.
       const r = await api.post("/finance/parties", {
-        name: form.name, type: "Material Supplier",
+        name: form.name, type: "Material Vendor",
         phone: form.phone || null, city: form.city || null,
         credit_days: 7,
       });

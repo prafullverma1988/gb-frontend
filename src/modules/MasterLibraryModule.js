@@ -908,22 +908,30 @@ function PartyMasterSection() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const emptyForm = { name: "", type: "Supplier", gstin: "", pan: "", phone: "", email: "", address: "", city: "Raipur", opening_balance: 0 };
+  const emptyForm = { name: "", type: "Material Vendor", gstin: "", pan: "", phone: "", email: "", address: "", city: "Raipur", opening_balance: 0 };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
-  const types = ["All", "Supplier", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant"];
-  const typeColors = { Supplier: { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft } };
+  // "Material Vendor" is the canonical UI label. We still recognise legacy
+  // values ("Supplier" / "Material Supplier") so existing parties show up
+  // under the same chip without needing a DB migration.
+  const types = ["All", "Material Vendor", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant"];
+  const typeColors = { "Material Vendor": { c: T.blue, bg: T.blueSoft }, Supplier: { c: T.blue, bg: T.blueSoft }, "Material Supplier": { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft } };
+  // Map any legacy supplier-like value to the new canonical chip
+  const SUPPLIER_LIKE = new Set(["supplier", "material supplier", "material vendor", "vendor", "other vendor"]);
 
   const filtered = parties.filter(p => {
-    if (filterType !== "All" && p.type?.toLowerCase() !== filterType.toLowerCase()) return false;
+    const ptype = (p.type || "").toLowerCase();
+    if (filterType === "Material Vendor") {
+      if (!SUPPLIER_LIKE.has(ptype)) return false;
+    } else if (filterType !== "All" && ptype !== filterType.toLowerCase()) return false;
     const s = search.toLowerCase();
     if (s && !p.name?.toLowerCase().includes(s) && !(p.phone||"").includes(s) && !(p.city||"").toLowerCase().includes(s)) return false;
     return true;
   });
 
   const openCreate = () => { setEditing(null); setForm({ ...emptyForm }); setShowModal(true); };
-  const openEdit = (p) => { setEditing(p); setForm({ name: p.name||"", type: p.type||"Supplier", gstin: p.gstin||"", pan: p.pan||"", phone: p.phone||"", email: p.email||"", address: p.address||"", city: p.city||"", opening_balance: p.opening_balance||0 }); setShowModal(true); };
+  const openEdit = (p) => { setEditing(p); setForm({ name: p.name||"", type: p.type||"Material Vendor", gstin: p.gstin||"", pan: p.pan||"", phone: p.phone||"", email: p.email||"", address: p.address||"", city: p.city||"", opening_balance: p.opening_balance||0 }); setShowModal(true); };
 
   const save = async () => {
     if (!form.name.trim()) return;
