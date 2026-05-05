@@ -13,7 +13,7 @@
 //   />
 
 import { useState, useEffect, useCallback } from "react";
-import api from "../config/api";
+import api, { getUser } from "../config/api";
 import SearchSelect from "./SearchSelect";
 import { Credit, fmtTimeAgo } from "./Credit";
 
@@ -92,6 +92,7 @@ export default function PaymentRequestDrawer({
   const [purpose, setPurpose] = useState("");
   const [note, setNote] = useState("");
   const [priority, setPriority] = useState("Medium");
+  const [neededBy, setNeededBy] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -188,6 +189,7 @@ export default function PaymentRequestDrawer({
         purpose: `[${typeMeta?.label || type}] ${purpose}`,
         description: purpose + (note ? " — " + note : ""),
         priority,
+        needed_by: neededBy || null,
         note: note || null,
         request_type: type,
       });
@@ -200,7 +202,7 @@ export default function PaymentRequestDrawer({
       onSaved && onSaved();
       // Switch back to list mode + refresh, instead of closing — user can see their submission
       setMode("list");
-      setAmount(""); setPurpose(""); setNote(""); setErr("");
+      setAmount(""); setPurpose(""); setNote(""); setNeededBy(""); setErr("");
       loadRequests();
     } catch (e) {
       setErr(e?.message || "Network error");
@@ -310,6 +312,28 @@ export default function PaymentRequestDrawer({
                     </div>
                   );
                 }
+                const me = getUser();
+                const canDelete = (r) => {
+                  if (!me) return false;
+                  const role = (me.role || "").toLowerCase();
+                  if (role === "admin" || role === "super_admin") return true;
+                  return String(r.requested_by) === String(me.id);
+                };
+                const onDelete = async (r) => {
+                  if (!window.confirm(`Delete payment request PR-${r.id}?\n\nAmount: ${fmtAmount(r.amount)}\nThis cannot be undone.`)) return;
+                  try {
+                    const res = await api.del("/finance/payment-requests/" + r.id);
+                    if (res?.success === false) {
+                      window.alert(res.message || "Delete failed");
+                      return;
+                    }
+                    if (window.toast) window.toast.success("Payment request deleted");
+                    loadRequests();
+                    onSaved && onSaved();
+                  } catch (e) {
+                    window.alert(e?.message || "Network error");
+                  }
+                };
                 return filtered.map(r => {
                   // Detect type from request_type or purpose prefix [Type]
                   const detectedType = r.request_type
@@ -369,6 +393,16 @@ export default function PaymentRequestDrawer({
                               <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 7px", borderRadius: 10, textTransform: "uppercase", letterSpacing: ".4px", color: PRIORITIES.find(p => p.id === r.priority)?.c || T.t3, background: PRIORITIES.find(p => p.id === r.priority)?.bg || T.surfaceB, border: `1px solid ${PRIORITIES.find(p => p.id === r.priority)?.brd || T.b1}` }}>
                                 {r.priority}
                               </span>
+                            )}
+                            {canDelete(r) && (
+                              <button onClick={(e) => { e.stopPropagation(); onDelete(r); }}
+                                style={{ marginLeft: "auto", padding: "5px 10px", borderRadius: 6, border: `1px solid ${T.redM}`, background: T.redL, color: T.red, fontSize: 11, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 5, fontFamily: "inherit" }}
+                                title="Delete this payment request">
+                                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
+                                  <polyline points="3 6 5 6 21 6"/><path d="M19 6l-2 14a2 2 0 01-2 2H9a2 2 0 01-2-2L5 6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/>
+                                </svg>
+                                Delete
+                              </button>
                             )}
                           </div>
                         </div>
@@ -501,6 +535,15 @@ export default function PaymentRequestDrawer({
             <input value={purpose} onChange={e => setPurpose(e.target.value)}
               placeholder={type === "subcon" ? "e.g. Brickwork bill — Block A" : type === "labour" ? "e.g. Mason wages — week of 21 Apr" : "e.g. Cement transport"}
               style={inp} onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
+          </div>
+
+          {/* Needed By (kab tak chahiye) */}
+          <div style={{ marginBottom: 14 }}>
+            <label style={lbl}>Payment Needed By</label>
+            <input type="date" value={neededBy} onChange={e => setNeededBy(e.target.value)}
+              min={new Date().toISOString().slice(0, 10)}
+              style={inp} onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
+            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>Approver ko bata do kab tak fund chahiye</div>
           </div>
 
           {/* Note */}
