@@ -157,7 +157,7 @@ const D = {
 const STAGES = ["Requested","Approved","Ordered","Received","Used"];
 const STAGE_S = {"Requested":{c:T.slt,bg:T.sltL},"Approved":{c:T.pur,bg:T.purL},"Ordered":{c:T.amb,bg:T.ambL},"Received":{c:T.blu,bg:T.bluL},"Used":{c:T.grn,bg:T.grnL}};
 
-function TabOverview({proj}) {
+function TabOverview({proj, onRequestPayment}) {
   const margin = proj.boq - proj.expense;
   const expTotal = D.expBreakdown.reduce((s,e)=>s+e.amt,0);
 
@@ -170,6 +170,17 @@ function TabOverview({proj}) {
 
   return (
     <div style={{padding:"16px 18px", display:"flex", flexDirection:"column", gap:14}}>
+
+      {/* ── QUICK ACTIONS — site team raise a payment request ── */}
+      {onRequestPayment && (
+        <div style={{display:"flex", gap:10, alignItems:"center", justifyContent:"flex-end"}}>
+          <button onClick={onRequestPayment}
+            style={{padding:"8px 16px", borderRadius:8, border:"none", background:T.blu, color:"#fff", fontSize:12.5, fontWeight:700, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7, fontFamily:"inherit", boxShadow:`0 2px 8px ${T.blu}40`}}>
+            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+            Request Payment
+          </button>
+        </div>
+      )}
 
       {/* ── ROW 1 — KPI STATS ── */}
       <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
@@ -12082,7 +12093,7 @@ function ProjectDetailPage({project=PROJ, onBack}) {
 
   const tabContent = {
     // ── Construction tabs (unchanged) ──
-    overview:    <TabOverview    proj={project}/>,
+    overview:    <TabOverview    proj={project} onRequestPayment={()=>setPaymentReq({})}/>,
     design:      <TabDesign project={project} isAdmin={isAdmin}/>,
     estimate:    <TabEstimate/>,
     party:       <TabParty/>,
