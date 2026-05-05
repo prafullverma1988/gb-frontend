@@ -929,32 +929,100 @@ function BackDateControl() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// BANK DETAILS — With edit modal
+// BANK DETAILS — Persisted via /finance/accounts. Each account is
+// debited/credited by Payment Made / Payment Received transactions.
 // ═══════════════════════════════════════════════════════════════════════
+const BANK_SUBTYPES = ["Current", "Savings", "Escrow", "OD (Overdraft)", "CC (Cash Credit)"];
+// Map from DB row → form shape
+const rowToForm = (a) => ({
+  id: a.id,
+  bankName: a.bank_name || (String(a.type||"").toLowerCase() === "cash" ? a.name : ""),
+  category: (a.type || "").toLowerCase() === "cash" ? "Cash" : "Bank",
+  // Sub-type lives in either `sub_type` (post-migration) or legacy `type` field
+  type: BANK_SUBTYPES.includes(a.sub_type) ? a.sub_type
+      : BANK_SUBTYPES.includes(a.type) ? a.type
+      : "Current",
+  accNo: a.account_number || "",
+  accHolder: a.account_holder || "",
+  ifsc: a.ifsc || "",
+  branch: a.branch || "",
+  upi: a.upi_id || "",
+  swiftCode: a.swift_code || "",
+  isPrimary: !!a.is_primary,
+  openingBalance: parseFloat(a.opening_balance) || 0,
+  currentBalance: parseFloat(a.current_balance) || 0,
+  label: a.name || "",
+});
+
 function BankDetails() {
   const [banks, setBanks] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
 
   const [showModal, setShowModal] = useState(false);
   const [editBank, setEditBank] = useState(null);
-  const emptyBank = { bankName: "", label: "", accNo: "", accHolder: "", ifsc: "", branch: "", type: "Current", isPrimary: false, upi: "", swiftCode: "" };
+  const emptyBank = { bankName: "", category: "Bank", type: "Current", accNo: "", accHolder: "", ifsc: "", branch: "", isPrimary: false, upi: "", swiftCode: "", openingBalance: 0 };
   const [bankForm, setBankForm] = useState(emptyBank);
 
-  const openCreate = () => { setEditBank(null); setBankForm(emptyBank); setShowModal(true); };
-  const openEdit = (b) => { setEditBank(b); setBankForm({ ...b }); setShowModal(true); };
-  const saveBank = () => {
-    if (!bankForm.bankName.trim() || !bankForm.accNo.trim()) return;
-    const label = `${bankForm.bankName} - ${bankForm.type} Account`;
-    if (editBank) {
-      setBanks(prev => prev.map(b => b.id === editBank.id ? { ...bankForm, id: b.id, label } : (bankForm.isPrimary ? { ...b, isPrimary: false } : b)));
-    } else {
-      setBanks(prev => {
-        const updated = bankForm.isPrimary ? prev.map(b => ({ ...b, isPrimary: false })) : prev;
-        return [...updated, { ...bankForm, id: Date.now(), label }];
-      });
-    }
-    setShowModal(false);
+  const load = async () => {
+    setLoading(true);
+    try {
+      const r = await api.get("/finance/accounts");
+      if (r?.success && Array.isArray(r.data)) setBanks(r.data.map(rowToForm));
+    } catch (e) { setErr(e?.message || "Failed to load accounts"); }
+    setLoading(false);
   };
-  const deleteBank = (id) => setBanks(prev => prev.filter(b => b.id !== id));
+  useEffect(() => { load(); }, []);
+
+  const openCreate = () => { setEditBank(null); setBankForm(emptyBank); setErr(""); setShowModal(true); };
+  const openEdit = (b) => { setEditBank(b); setBankForm({ ...b }); setErr(""); setShowModal(true); };
+
+  const saveBank = async () => {
+    const isCash = bankForm.category === "Cash";
+    if (!isCash && !bankForm.bankName.trim()) { setErr("Bank name is required"); return; }
+    if (!isCash && !bankForm.accNo.trim())    { setErr("Account number is required"); return; }
+    setSaving(true); setErr("");
+    const labelName = isCash
+      ? (bankForm.bankName.trim() || "Cash on Hand")
+      : `${bankForm.bankName.trim()} · ${bankForm.type}`;
+    const payload = {
+      name: labelName,
+      type: isCash ? "Cash" : "Bank",          // top-level enum bucket
+      sub_type: isCash ? null : bankForm.type, // Current/Savings/...
+      bank_name: isCash ? null : bankForm.bankName.trim(),
+      account_number: bankForm.accNo.trim() || null,
+      ifsc: bankForm.ifsc.trim() || null,
+      account_holder: bankForm.accHolder.trim() || null,
+      branch: bankForm.branch.trim() || null,
+      upi_id: bankForm.upi.trim() || null,
+      swift_code: bankForm.swiftCode.trim() || null,
+      is_primary: !!bankForm.isPrimary,
+      opening_balance: parseFloat(bankForm.openingBalance) || 0,
+    };
+    try {
+      const res = editBank
+        ? await api.put("/finance/accounts/" + editBank.id, payload)
+        : await api.post("/finance/accounts", payload);
+      if (res?.success === false) {
+        setErr(res.message || "Save failed");
+        setSaving(false);
+        return;
+      }
+      setShowModal(false);
+      await load();
+    } catch (e) { setErr(e?.message || "Network error"); }
+    setSaving(false);
+  };
+
+  const deleteBank = async (id) => {
+    if (!window.confirm("Remove this account? Transactions already posted to it stay intact.")) return;
+    try {
+      const res = await api.del("/finance/accounts/" + id);
+      if (res?.success === false) { window.alert(res.message || "Delete failed"); return; }
+      await load();
+    } catch (e) { window.alert(e?.message || "Network error"); }
+  };
   const updF = (k, v) => setBankForm(p => ({ ...p, [k]: v }));
 
   return (
@@ -1012,23 +1080,41 @@ function BankDetails() {
       </SectionCard>
 
       {/* ── Edit / Create Bank Modal ── */}
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editBank ? "Edit Bank Account" : "Add Bank Account"} desc="Enter bank account details" width={580}>
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Bank Name" value={bankForm.bankName} onChange={v => updF("bankName", v)} placeholder="e.g. HDFC Bank" half />
-          <FormSelect label="Account Type" value={bankForm.type} onChange={v => updF("type", v)} options={["Current", "Savings", "Escrow", "OD (Overdraft)", "CC (Cash Credit)"]} half />
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editBank ? "Edit Account" : "Add Account"} desc="Bank or Cash account — used for Payment Made / Received" width={580}>
+        {/* Category — Bank vs Cash */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: T.textMid, marginBottom: 7, textTransform: "uppercase", letterSpacing: ".4px" }}>Account Category</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {["Bank", "Cash"].map(c => (
+              <button key={c} type="button" onClick={() => updF("category", c)}
+                style={{ flex: 1, padding: "10px 14px", borderRadius: 8, border: `1.5px solid ${bankForm.category === c ? T.blue : T.border}`,
+                  background: bankForm.category === c ? T.blueSoft : "white", color: bankForm.category === c ? T.blue : T.textMid,
+                  fontSize: 13, fontWeight: 700, cursor: "pointer" }}>{c}</button>
+            ))}
+          </div>
         </div>
-        <FormField label="Account Holder Name" value={bankForm.accHolder} onChange={v => updF("accHolder", v)} placeholder="As per bank records" />
-        <div style={{ height: 14 }} />
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Account Number" value={bankForm.accNo} onChange={v => updF("accNo", v)} placeholder="Account number" half />
-          <FormField label="IFSC Code" value={bankForm.ifsc} onChange={v => updF("ifsc", v)} placeholder="e.g. HDFC0001234" half />
-        </div>
-        <FormField label="Branch" value={bankForm.branch} onChange={v => updF("branch", v)} placeholder="Branch name and city" />
-        <div style={{ height: 14 }} />
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="UPI ID (optional)" value={bankForm.upi} onChange={v => updF("upi", v)} placeholder="e.g. company@upi" half />
-          <FormField label="SWIFT Code (optional)" value={bankForm.swiftCode} onChange={v => updF("swiftCode", v)} placeholder="For international" half />
-        </div>
+        {bankForm.category === "Bank" ? (<>
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+            <FormField label="Bank Name" value={bankForm.bankName} onChange={v => updF("bankName", v)} placeholder="e.g. HDFC Bank" half />
+            <FormSelect label="Account Type" value={bankForm.type} onChange={v => updF("type", v)} options={BANK_SUBTYPES} half />
+          </div>
+          <FormField label="Account Holder Name" value={bankForm.accHolder} onChange={v => updF("accHolder", v)} placeholder="As per bank records" />
+          <div style={{ height: 14 }} />
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+            <FormField label="Account Number" value={bankForm.accNo} onChange={v => updF("accNo", v)} placeholder="Account number" half />
+            <FormField label="IFSC Code" value={bankForm.ifsc} onChange={v => updF("ifsc", v)} placeholder="e.g. HDFC0001234" half />
+          </div>
+          <FormField label="Branch" value={bankForm.branch} onChange={v => updF("branch", v)} placeholder="Branch name and city" />
+          <div style={{ height: 14 }} />
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+            <FormField label="UPI ID (optional)" value={bankForm.upi} onChange={v => updF("upi", v)} placeholder="e.g. company@upi" half />
+            <FormField label="SWIFT Code (optional)" value={bankForm.swiftCode} onChange={v => updF("swiftCode", v)} placeholder="For international" half />
+          </div>
+        </>) : (<>
+          <FormField label="Cash Account Label" value={bankForm.bankName} onChange={v => updF("bankName", v)} placeholder="e.g. Petty Cash, Site Cash" />
+          <div style={{ height: 14 }} />
+        </>)}
+        <FormField label="Opening Balance (₹)" value={bankForm.openingBalance} onChange={v => updF("openingBalance", v)} placeholder="0" />
         <div style={{ padding: "12px 0", display: "flex", alignItems: "center", gap: 12 }}>
           <Toggle value={bankForm.isPrimary} onChange={v => updF("isPrimary", v)} />
           <div>
@@ -1036,11 +1122,11 @@ function BankDetails() {
             <div style={{ fontSize: 11.5, color: T.textLight }}>Used as default for payments and receipts</div>
           </div>
         </div>
-        <div style={{ height: 16 }} />
+        {err && <div style={{ padding: "8px 12px", background: T.redSoft, border: `1px solid ${T.red}33`, borderRadius: 7, color: T.red, fontSize: 12.5, fontWeight: 500, marginBottom: 10 }}>{err}</div>}
         <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
-          <button onClick={() => setShowModal(false)} style={{ padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>Cancel</button>
-          <button onClick={saveBank} style={{ padding: "10px 24px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer" }}>
-            {editBank ? "Update Account" : "Add Account"}
+          <button onClick={() => setShowModal(false)} disabled={saving} style={{ padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>Cancel</button>
+          <button onClick={saveBank} disabled={saving} style={{ padding: "10px 24px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+            {saving ? "Saving..." : editBank ? "Update Account" : "Add Account"}
           </button>
         </div>
       </Modal>
