@@ -70,7 +70,11 @@ const isoDate = (d) => {
   } catch { return ""; }
 };
 
-export default function TransactionDetailDrawer({ txn, onClose, onChanged }) {
+// `highlightItem` — when caller clicked a specific line item (e.g. on the
+// Billed Material tab where each row maps to one txn.items[i]), pass an
+// identifier { item_name, amount } and the drawer will highlight + auto-
+// scroll to that row so the user knows which one they clicked.
+export default function TransactionDetailDrawer({ txn, onClose, onChanged, highlightItem = null }) {
   const open = !!txn;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
@@ -241,15 +245,36 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged }) {
                     <span key={i} style={{ fontSize: 9, fontWeight: 700, color: T.t4, textTransform: "uppercase", textAlign: i >= 1 ? "right" : "left" }}>{h}</span>
                   ))}
                 </div>
-                {items.map((it, i) => (
-                  <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 70px 60px 80px 90px", padding: "7px 10px", borderBottom: i < items.length - 1 ? `1px solid ${T.b1}` : "none", gap: 5, alignItems: "center" }}>
-                    <span style={{ fontSize: 12, color: T.t1, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{it.item_name || it.item || it.name || it.description || "—"}</span>
-                    <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>{it.qty || it.quantity || "—"}</span>
-                    <span style={{ fontSize: 11, color: T.t3, textAlign: "right" }}>{it.unit || "—"}</span>
-                    <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>₹{fmtN(it.rate)}</span>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>₹{fmtN(it.amount)}</span>
-                  </div>
-                ))}
+                {items.map((it, i) => {
+                  const itemName = it.item_name || it.item || it.name || it.description || "";
+                  const itAmt = parseFloat(it.amount) || 0;
+                  const hAmt = highlightItem ? (parseFloat(highlightItem.amount) || 0) : -1;
+                  const isHighlighted = highlightItem &&
+                    (itemName.toLowerCase().trim() === String(highlightItem.item_name || "").toLowerCase().trim()) &&
+                    Math.abs(itAmt - hAmt) < 0.01;
+                  return (
+                    <div key={i}
+                      ref={el => { if (el && isHighlighted) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 100); }}
+                      style={{
+                        display: "grid", gridTemplateColumns: "1fr 70px 60px 80px 90px",
+                        padding: "7px 10px",
+                        borderBottom: i < items.length - 1 ? `1px solid ${T.b1}` : "none",
+                        gap: 5, alignItems: "center",
+                        background: isHighlighted ? T.ambL : "transparent",
+                        borderLeft: isHighlighted ? `3px solid ${T.amb}` : "3px solid transparent",
+                        animation: isHighlighted ? "highlightPulse 1.6s ease-out" : "none",
+                      }}>
+                      <span style={{ fontSize: 12, color: T.t1, fontWeight: isHighlighted ? 700 : 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {isHighlighted && <span style={{ fontSize: 9, fontWeight: 700, color: T.amb, marginRight: 5 }}>👈 YOU CLICKED</span>}
+                        {itemName || "—"}
+                      </span>
+                      <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>{it.qty || it.quantity || "—"}</span>
+                      <span style={{ fontSize: 11, color: T.t3, textAlign: "right" }}>{it.unit || "—"}</span>
+                      <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>₹{fmtN(it.rate)}</span>
+                      <span style={{ fontSize: 12, fontWeight: 700, color: T.t1, textAlign: "right" }}>₹{fmtN(it.amount)}</span>
+                    </div>
+                  );
+                })}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 70px 60px 80px 90px", padding: "8px 10px", background: T.bluL, borderTop: `2px solid ${T.bluM}`, gap: 5 }}>
                   <span style={{ gridColumn: "1 / 5", fontSize: 12, fontWeight: 700, color: T.t1 }}>TOTAL</span>
                   <span style={{ fontSize: 13, fontWeight: 800, color: T.blu, textAlign: "right" }}>₹{fmtN(txn.amount)}</span>
@@ -296,6 +321,11 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged }) {
       </div>
       <style>{`
         @keyframes txnSlideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+        @keyframes highlightPulse {
+          0%   { background: #FDE68A; }
+          60%  { background: #FFFBEB; }
+          100% { background: #FFFBEB; }
+        }
       `}</style>
     </>
   );

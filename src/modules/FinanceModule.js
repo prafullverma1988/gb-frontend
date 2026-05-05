@@ -1900,6 +1900,10 @@ function FinanceModule(){
   // Bill-conflict warning state — populated by the +Bill pre-flight check
   // when the same GRN or same vendor+challan has been billed already.
   const [conflictData,setConflictData]=useState(null);
+  // When user clicks a row in the Billed Material tab (each row = one
+  // line item of a parent bill), we pass this hint to TransactionDetailDrawer
+  // so the matching line gets highlighted + scrolled-to. Cleared on close.
+  const [selTxnHighlight,setSelTxnHighlight]=useState(null);
   // Transaction detail drawer (used from Fin Activity + Party Ledger)
   const [selTxn,setSelTxn]=useState(null);
 
@@ -3443,6 +3447,23 @@ function FinanceModule(){
               style={{height:30,padding:"0 12px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",marginRight:5}}>
               🧹 Clean Duplicates
             </button>
+            {/* Sync Inventory — recovers Add-Item rows from past bills that
+                missed Phase 5 (creates Auto-Bill GRNs for items present in
+                transaction_items but absent from any project grn_items). */}
+            <button onClick={async()=>{
+                if(!window.confirm("Sync inventory from past bills?\n\nFor every material_purchase bill, line items NOT yet present in any GRN for the same project will be added via an Auto-Bill GRN. Safe to run multiple times — only missing items get added."))return;
+                try{
+                  const r=await api.post("/finance/admin/sync-bill-inventory",{});
+                  if(r.success){
+                    alert(`✓ ${r.message}\n\nBills scanned: ${r.bills_scanned||0}\nItems recovered: ${r.items_recovered||0}\nAuto-Bill GRNs created: ${r.auto_grns_created||0}`);
+                  } else {
+                    alert("Failed: "+(r.message||"Unknown error"));
+                  }
+                }catch(e){alert("Network error: "+e.message);}
+              }}
+              style={{height:30,padding:"0 12px",borderRadius:6,background:T.ambL,color:T.amb,border:`1px solid ${T.ambM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",marginRight:5}}>
+              📦 Sync Inventory
+            </button>
             <button onClick={loadUnbilledGRNs}
               style={{height:30,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               ↻ Refresh
@@ -3624,7 +3645,13 @@ function FinanceModule(){
                     <div style={{flex:1,overflowY:"auto"}}>
                       {filtered.length===0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No billed materials yet</div>}
                       {filtered.map((r,i) => (
-                        <div key={r.key} onClick={()=>setSelTxn(r._txn)}
+                        <div key={r.key} onClick={()=>{
+                          // Pass which line item was clicked so the drawer
+                          // can highlight + scroll to that exact row instead
+                          // of letting the user wonder why both items appear.
+                          setSelTxnHighlight({ item_name: r.material, amount: r.amount });
+                          setSelTxn(r._txn);
+                        }}
                           style={{display:"grid",gridTemplateColumns:"80px 1.4fr 1.2fr 1.2fr 70px 60px 80px 100px",padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"pointer"}}
                           onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
                           onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
@@ -3739,8 +3766,9 @@ function FinanceModule(){
       {/* ══ Transaction Detail Drawer (Fin Activity + Party Ledger row click) ══ */}
       <TransactionDetailDrawer
         txn={selTxn}
-        onClose={()=>setSelTxn(null)}
+        onClose={()=>{ setSelTxn(null); setSelTxnHighlight(null); }}
         onChanged={async()=>{ await refreshTxns(); await refreshPendPmts(); await refreshParties(); }}
+        highlightItem={selTxnHighlight}
       />
 
       {/* ══ Bill Conflict Warning Modal ══ */}
