@@ -536,7 +536,7 @@ function BillConflictModal({data, onCancel, onViewExisting, onForceNew}){
 }
 
 // ─── CREATE TRANSACTION MODAL ─────────────────────────────────
-function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN}){
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN,settlesRef}){
   const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
   const UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"];
   const INV_UNITS=["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"];
@@ -614,7 +614,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [toAccount,setToAccount]=useState(ACCOUNTS_LIST[1]);
   const [mop,setMop]=useState(MOPS_LIST[0]);
   const [note,setNote]=useState("");
-  const [payAmt,setPayAmt]=useState("");
+  // Pre-fill amount from settlesRef (e.g. "Pay" button on Pending Payments)
+  const [payAmt,setPayAmt]=useState(settlesRef?.amount?String(settlesRef.amount):"");
   const [saved,setSaved]=useState(false);
 
   // ── invoice state ────────────────────────────────────────────
@@ -847,6 +848,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         // in Pending Payments per due_date until user records a settlement.
         // Direct money movements (payments, transfers, receipts) are 'paid'.
         status:(isMaterial||isSubcon)?"unpaid":"paid",
+        // When this txn settles a Pending Payment row, link the source so
+        // the backend can mark it paid in the same request.
+        settles_bill_id: settlesRef?.kind==="bill"?settlesRef.id:null,
+        settles_pr_id:   settlesRef?.kind==="pr"  ?settlesRef.id:null,
         // DR = money going OUT (expense), CR = money coming IN (receipt)
         dr: ["material_purchase","subcon_expense","site_expense","party_payment","bank_transfer","payment"].includes(backType),
         // Bank Transfer: destination account (always include, null for non-transfer)
@@ -906,7 +911,29 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       }
       console.log("[FinanceModule] Saving transaction:", JSON.stringify(payload,null,2));
 
-      const res=await api.post("/finance/transactions",payload);
+      let res=await api.post("/finance/transactions",payload);
+
+      // Soft duplicate prompt — same vendor + same amount within ±N days.
+      // Show user a confirm; on OK, retry with force_duplicate so backend
+      // bypasses the guard.
+      if(res&&res.success===false&&res.code==="DUPLICATE_PAYMENT"){
+        const prevDate=res.existing_date?String(res.existing_date).slice(0,10):"earlier";
+        const ok=window.confirm(
+          `⚠ Possible duplicate payment\n\n`+
+          `Same vendor ko ₹${Number(res.existing_amount||amt).toLocaleString("en-IN")} ka payment ${prevDate} ko TXN-${res.existing_txn_id} me already entry ho chuka hai.\n`+
+          `Window: ±${res.window_days||4} days\n\n`+
+          `Phir bhi save karna hai?`
+        );
+        if(!ok){
+          savingRef.current=false; setSavingTxn(false);
+          return;
+        }
+        res=await api.post("/finance/transactions",{
+          ...payload,
+          force_duplicate:true,
+          force_reason:"User confirmed possible duplicate payment",
+        });
+      }
 
       // Check server response explicitly
       if(res&&res.success===false){
@@ -1285,6 +1312,17 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Transfer ref, reason..."
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Settling banner — when "Pay" was clicked on a Pending Payment row.
+              Shows which bill / PR will be marked paid by this transaction. */}
+          {settlesRef&&isPayment&&(
+            <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderLeft:`3px solid ${T.blu}`,borderRadius:7,padding:"9px 12px",marginBottom:10,display:"flex",alignItems:"center",gap:9}}>
+              <IcSend size={13} color={T.blu}/>
+              <div style={{flex:1,fontSize:11.5,color:T.t2}}>
+                Settling <b style={{color:T.blu}}>{settlesRef.label}</b> — on save, the source {settlesRef.kind==="pr"?"payment request":"bill"} will be marked paid.
               </div>
             </div>
           )}
@@ -1952,14 +1990,19 @@ function FinanceModule(){
   // eslint-disable-next-line
   },[tab]);
 
-  const openTxn=(type,party="",grnPrefill=null)=>{
+  // settlesRef = { kind: 'bill'|'pr', id, amount, label }
+  // Set when "Pay" is clicked on a Pending Payments row so the resulting
+  // payment txn links back to its source and marks it paid.
+  const [settlesRef,setSettlesRef]=useState(null);
+  const openTxn=(type,party="",grnPrefill=null,settlesRefObj=null)=>{
     if(grnPrefill) setPrefillGRNData(grnPrefill);
     else setPrefillGRNData(null);
+    setSettlesRef(settlesRefObj);
     setCreateTxnType(type);
     setCreateTxnParty(party);
   };
   const closeTxn=()=>{
-    setCreateTxnType(null);setCreateTxnParty("");setPrefillGRNData(null);
+    setCreateTxnType(null);setCreateTxnParty("");setPrefillGRNData(null);setSettlesRef(null);
   };
   const handleTxnSaved=async()=>{
     // Capture prefill BEFORE closeTxn clears it
@@ -3430,7 +3473,12 @@ function FinanceModule(){
                       {/* Priority */}
                       <span style={{fontSize:10,fontWeight:700,color:pm.c,background:pm.bg,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{pri}</span>
                       {/* Action */}
-                      <button onClick={()=>openTxn("Payment Made",pmt.party)}
+                      <button onClick={()=>openTxn("Payment Made",pmt.party,null,{
+                        kind: pmt.type==="pr"?"pr":"bill",
+                        id: pmt.id,
+                        amount: pmt.amount,
+                        label: pmt.no,
+                      })}
                         style={{padding:"6px 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:3,boxShadow:`0 2px 6px ${T.blu}44`}}>
                         <IcSend size={10} color="white"/> Pay
                       </button>
@@ -3818,6 +3866,7 @@ function FinanceModule(){
           dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
           onSaved={handleTxnSaved}
           prefillGRN={prefillGRNData}
+          settlesRef={settlesRef}
         />
       )}
       {showNewPR&&(
