@@ -430,8 +430,9 @@ function TitleDropdown({ value, titles, onSelect, onChange }) {
 }
 
 function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSave, saving, dbTitles=[], dbCats=[], dbTypes=[] }) {
-  const CATS  = Array.from(new Set(dbCats.length  > 0 ? dbCats.map(c=>c.name)  : ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"]));
-  const TYPES = Array.from(new Set(dbTypes.length > 0 ? dbTypes.map(t=>t.name) : ["Plan","Elevation","Section","Detail","3D","Diagram"]));
+  // Fallbacks mirror the seeded taxonomy in case /design/categories hasn't loaded yet
+  const CATS  = Array.from(new Set(dbCats.length  > 0 ? dbCats.map(c=>c.name)  : ["Architectural","Structural","Electrical","Plumbing","Interior","HVAC","Landscape","Approval"]));
+  const TYPES = Array.from(new Set(dbTypes.length > 0 ? dbTypes.map(t=>t.name) : ["Plan","Elevation","Section","Detail","Schedule","Diagram","3D"]));
   if (!show) return null;
   return (
     <>
@@ -447,11 +448,23 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
         <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
           <div style={{marginBottom:12,position:"relative"}}>
             <label style={{fontSize:10,fontWeight:700,color:"#6B7280",textTransform:"uppercase",display:"block",marginBottom:4}}>Kya drawing chahiye? *</label>
-            <TitleDropdown
+            <SearchSelect
               value={reqForm.title}
-              titles={dbTitles}
-              onSelect={t => setReqForm(p=>({...p, title:t.title, category:t.category||p.category, drawing_type:t.type||p.drawing_type}))}
-              onChange={v => setReqForm(p=>({...p, title:v}))}
+              options={(Array.isArray(dbTitles) ? dbTitles : []).map(t => ({
+                key:   t.title,
+                label: t.category ? `${t.title}  ·  ${t.category}${t.type?" / "+t.type:""}` : t.title,
+              }))}
+              onChange={v => {
+                // Pull the rich row to auto-fill Category + Type when picking from library
+                const found = (dbTitles || []).find(t => t.title === v);
+                setReqForm(p => ({
+                  ...p,
+                  title: v,
+                  category:     found?.category || p.category,
+                  drawing_type: found?.type     || p.drawing_type,
+                }));
+              }}
+              placeholder="Type or select from library..."
             />
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
@@ -502,9 +515,9 @@ function TabDesign({ project, isAdmin }) {
   const projectName = project?.name || "Project";
   const CLOUD_NAME  = "dd632nqfm";
   const UPLOAD_PRESET = "gb_buildcon_drawings";
-  // State
-  const CATS_DEFAULT = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
-  const TYPES_DEFAULT = ["2D","3D","Detail","Section","Elevation","Site Plan","Working Drawing"];
+  // State — fallbacks match seeded taxonomy (8 cats / 7 types)
+  const CATS_DEFAULT = ["Architectural","Structural","Electrical","Plumbing","Interior","HVAC","Landscape","Approval"];
+  const TYPES_DEFAULT = ["Plan","Elevation","Section","Detail","Schedule","Diagram","3D"];
 
   const [mainTab,  setMainTab]      = useState("drawings"); // "drawings" | "requests"
   const [drawings, setDrawings]     = useState([]);
@@ -4235,6 +4248,12 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const photosRef=useRef(null);
   const issuesRef=useRef(null);
 
+  // Current user (for owner-only delete on used entries)
+  const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const meId = Number(meUser?.id) || null;
+  const meIsPriv = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
+  const canDeleteUsed = (createdById) => meIsPriv || (createdById != null && Number(createdById) === meId);
+
   const [prog,setProg]=useState(task.progress||0);
   const [saving,setSaving]=useState(false);
 
@@ -4627,12 +4646,30 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           {usedLog.length>0&&matTab!=="usedlog"&&(
             <div style={{marginBottom:10}}>
               <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Recent Usage</div>
-              {usedLog.slice(0,3).map((u,i)=>(
-                <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 11px",background:"#F0FDF4",borderRadius:7,marginBottom:5,border:"1px solid #BBF7D0"}}>
-                  <span style={{fontSize:12,fontWeight:600,color:"#065F46"}}>{u.material_name}</span>
+              {usedLog.slice(0,3).map((u,i)=>{
+                const showDel = u.id && canDeleteUsed(u.created_by);
+                return (
+                <div key={u.id||i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 11px",background:"#F0FDF4",borderRadius:7,marginBottom:5,border:"1px solid #BBF7D0",gap:8}}>
+                  <span style={{fontSize:12,fontWeight:600,color:"#065F46",flex:1,minWidth:0,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{u.material_name}</span>
                   <span style={{fontSize:12,fontWeight:700,color:"#16A34A"}}>{u.used_qty} {u.unit}</span>
+                  {showDel?(
+                    <button title="Delete this used entry"
+                      onClick={async()=>{
+                        if(!window.confirm("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
+                        const r=await api.del("/tasks/"+task.id+"/used-log/"+u.id);
+                        if(r.success){
+                          setUsedLog(p=>p.filter(x=>x.id!==u.id));
+                        } else {
+                          alert(r.message||"Delete fail ho gaya");
+                        }
+                      }}
+                      style={{background:"none",border:"none",cursor:"pointer",padding:3,borderRadius:4,color:"#DC2626",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6"/></svg>
+                    </button>
+                  ):null}
                 </div>
-              ))}
+                );
+              })}
               {usedLog.length>3&&<div style={{textAlign:"center",fontSize:11,color:"#64748B",padding:"4px 0"}}>+{usedLog.length-3} more</div>}
             </div>
           )}
@@ -7273,6 +7310,12 @@ function TabMaterial({ project }) {
   const projectId   = project?.id || 1;
   const projectName = project?.name || "Project";
 
+  // Current logged-in user (for owner-only delete on used entries)
+  const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const meId = Number(meUser?.id) || null;
+  const meIsPriv = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
+  const canDeleteUsed = (createdById) => meIsPriv || (createdById != null && Number(createdById) === meId);
+
   // ── Tab state ──────────────────────────────────────────────
   const [activeTab, setActiveTab] = useState("requests"); // requests | ledger | inventory
 
@@ -7818,13 +7861,15 @@ function TabMaterial({ project }) {
                   </div>
                 ):(
                   <div>
-                    <div style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr",background:"#1E293B",padding:"7px 16px",gap:8}}>
-                      {["Date","Material","Qty","Used By","Remark/Task"].map(h=>(
-                        <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
+                    <div style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr 32px",background:"#1E293B",padding:"7px 16px",gap:8}}>
+                      {["Date","Material","Qty","Used By","Remark/Task",""].map((h,hi)=>(
+                        <div key={hi} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</div>
                       ))}
                     </div>
-                    {filtered.map((u,i)=>(
-                      <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr",padding:"9px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
+                    {filtered.map((u,i)=>{
+                      const showDel = u.id && u.task_id && canDeleteUsed(u.created_by_id ?? u.created_by);
+                      return (
+                      <div key={u.id||i} style={{display:"grid",gridTemplateColumns:"85px 1fr 75px 90px 1fr 32px",padding:"9px 16px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:i%2===0?T.surface:"white"}}>
                         <div style={{fontSize:11.5,color:T.t3}}>{u.used_date?new Date(u.used_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</div>
                         <div>
                           <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{u.material_name}</div>
@@ -7837,8 +7882,29 @@ function TabMaterial({ project }) {
                           {u.remark&&<div>{u.remark}</div>}
                           {!u.task_name&&!u.remark&&"—"}
                         </div>
+                        <div style={{display:"flex",justifyContent:"center"}}>
+                          {showDel?(
+                            <button title="Delete this usage entry"
+                              onClick={async()=>{
+                                if(!window.confirm("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
+                                const r=await api.del("/tasks/"+u.task_id+"/used-log/"+u.id);
+                                if(r.success){
+                                  setUsedLog(prev=>prev.filter(x=>x.id!==u.id));
+                                  setLedgerLoaded(false);
+                                } else {
+                                  alert(r.message||"Delete fail ho gaya");
+                                }
+                              }}
+                              style={{background:"none",border:"none",cursor:"pointer",padding:4,borderRadius:4,color:T.red,display:"flex",alignItems:"center",justifyContent:"center"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.redL}
+                              onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6"/></svg>
+                            </button>
+                          ):null}
+                        </div>
                       </div>
-                    ))}
+                      );
+                    })}
                     {/* Summary footer */}
                     <div style={{padding:"8px 16px",background:"#0F172A",borderTop:"2px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <span style={{fontSize:11,color:"rgba(255,255,255,.5)"}}>{filtered.length} entries shown</span>
@@ -8189,9 +8255,9 @@ function TabMaterial({ project }) {
                     {isOpen&&(
                       <div style={{overflowX:"auto"}}>
                         {/* Column headers */}
-                        <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",background:"#1E293B",padding:"7px 14px",gap:8,minWidth:900}}>
-                          {["Date","Vendor","Challan","Remark / Task","Ref#","Cr (In)","Dr (Out)","Balance","By"].map((h,hi)=>(
-                            <div key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".5px",textAlign:hi>=5&&hi<=7?"right":"left"}}>{h}</div>
+                        <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px 36px",background:"#1E293B",padding:"7px 14px",gap:8,minWidth:936}}>
+                          {["Date","Vendor","Challan","Remark / Task","Ref#","Cr (In)","Dr (Out)","Balance","By",""].map((h,hi)=>(
+                            <div key={hi} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".5px",textAlign:hi>=5&&hi<=7?"right":"left"}}>{h}</div>
                           ))}
                         </div>
 
@@ -8205,10 +8271,11 @@ function TabMaterial({ project }) {
                           const balLow=row.runBal>=0&&row.runBal<mat.total_received*0.2;
                           const balColor=balNeg?T.red:balLow?T.amb:T.grn;
                           const dateStr=row._date?row._date.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—";
+                          const showDel = !isGRN && row.used_log_id && row.task_id && canDeleteUsed(row.created_by_id);
                           return(
                             <div key={ri}
                               onClick={()=>{ if(isGRN && row.grn_id) setFlowGrnId(row.grn_id); }}
-                              style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:900,borderLeft:"3px solid "+(isGRN?T.grn:T.amb),cursor:isGRN&&row.grn_id?"pointer":"default",transition:"background .1s"}}
+                              style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px 36px",padding:"9px 14px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:ri%2===0?T.surface:"#F8FAFC",minWidth:936,borderLeft:"3px solid "+(isGRN?T.grn:T.amb),cursor:isGRN&&row.grn_id?"pointer":"default",transition:"background .1s"}}
                               onMouseEnter={e=>{ if(isGRN && row.grn_id) e.currentTarget.style.background=T.bluL+"66"; }}
                               onMouseLeave={e=>{ e.currentTarget.style.background=ri%2===0?T.surface:"#F8FAFC"; }}>
                               {/* Date */}
@@ -8234,16 +8301,39 @@ function TabMaterial({ project }) {
                               <div style={{fontSize:13,fontWeight:800,color:balColor,textAlign:"right",background:balNeg?T.redL:"transparent",borderRadius:4,padding:"1px 4px"}}>{row.runBal}</div>
                               {/* By */}
                               <div style={{fontSize:11.5,color:T.t2}}>{isGRN?(row.received_by||"—"):(row.used_by||row.user_name||"—")}</div>
+                              {/* Delete (only owner can delete a usage entry) */}
+                              <div style={{display:"flex",justifyContent:"center"}}>
+                                {showDel?(
+                                  <button title="Delete this usage entry"
+                                    onClick={async(e)=>{
+                                      e.stopPropagation();
+                                      if(!window.confirm("Is used entry ko delete kar dein? ("+row.qty+" "+(row.unit||mat.unit||"")+" — "+(row.task_name||"Project level")+")")) return;
+                                      const r=await api.del("/tasks/"+row.task_id+"/used-log/"+row.used_log_id);
+                                      if(r.success){
+                                        const rr=await api.get("/tasks/project/"+projectId+"/material-ledger");
+                                        if(rr.success) setLedger(rr.data||[]);
+                                      } else {
+                                        alert(r.message||"Delete fail ho gaya");
+                                      }
+                                    }}
+                                    style={{background:"none",border:"none",cursor:"pointer",padding:4,borderRadius:4,color:T.red,display:"flex",alignItems:"center",justifyContent:"center"}}
+                                    onMouseEnter={e=>e.currentTarget.style.background=T.redL}
+                                    onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6M10 11v6M14 11v6"/></svg>
+                                  </button>
+                                ):null}
+                              </div>
                             </div>
                           );
                         })}
 
                         {/* Footer summary */}
-                        <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px",padding:"8px 14px",gap:8,background:"#0F172A",minWidth:900,borderTop:"2px solid "+T.b1}}>
+                        <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px 36px",padding:"8px 14px",gap:8,background:"#0F172A",minWidth:936,borderTop:"2px solid "+T.b1}}>
                           <div style={{gridColumn:"1/6",fontSize:10.5,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".4px"}}>Total</div>
                           <div style={{fontSize:13,fontWeight:800,color:"#4ADE80",textAlign:"right"}}>{mat.total_received}</div>
                           <div style={{fontSize:13,fontWeight:800,color:"#F87171",textAlign:"right"}}>{mat.total_used}</div>
                           <div style={{fontSize:13,fontWeight:800,color:mat.balance<=0?"#F87171":"#4ADE80",textAlign:"right"}}>{mat.balance}</div>
+                          <div/>
                           <div/>
                         </div>
                       </div>
