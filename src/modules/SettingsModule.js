@@ -1736,6 +1736,68 @@ function UIPreferences() {
 // ═══════════════════════════════════════════════════════════════════════
 // MAIN SETTINGS MODULE
 // ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// OTHER SETTINGS — duplicate-detection toggles, misc finance guards
+// ═══════════════════════════════════════════════════════════════════════
+function OtherSettings() {
+  const [enabled, setEnabled] = useState(true);
+  const [days, setDays] = useState(4);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+
+  useEffect(() => {
+    api.get("/settings/company").then(r => {
+      if (r?.success && r.data) {
+        setEnabled(r.data.dup_payment_check_enabled !== 0);
+        setDays(parseInt(r.data.dup_payment_window_days) || 4);
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      await api.put("/settings/company", {
+        dup_payment_check_enabled: enabled,
+        dup_payment_window_days: parseInt(days) || 4,
+      });
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1800);
+    } catch (e) { window.alert(e?.message || "Save failed"); }
+    setSaving(false);
+  };
+
+  if (loading) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>Loading…</div>;
+
+  return (
+    <div>
+      <SectionCard title="Duplicate Payment Detection"
+        desc="Same vendor + same amount within the chosen window pe save karne se pehle confirm prompt aata hai. Genuine duplicate entries roakta hai."
+        action={
+          <button onClick={save} disabled={saving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+            {savedTick ? "✓ Saved" : saving ? "Saving..." : "Save"}
+          </button>
+        }>
+        <ToggleRow icon={<IcShield size={17} color={T.blue} />}
+          label="Enable duplicate detection on payment entries"
+          desc="On save, agar same vendor ko same amount ka payment hal hi me record hua hai to system warning dega"
+          value={enabled} onChange={setEnabled} />
+        <div style={{ paddingTop: 6 }}>
+          <FormField label="Look-back window (days, ± from entry date)"
+            value={days}
+            onChange={v => setDays(v.replace(/[^0-9]/g, ""))}
+            placeholder="e.g. 4" />
+          <div style={{ fontSize: 11, color: T.textLight, marginTop: 6 }}>
+            Default: 4 days. Set 0 to effectively disable (or use the toggle above).
+          </div>
+        </div>
+      </SectionCard>
+    </div>
+  );
+}
+
 const settingsSections = [
   { id: "company",       label: "Company Profile",      Icon: IcBuilding,  Comp: CompanySettings,        section: "GENERAL" },
   { id: "roles",         label: "Roles & Access",       Icon: IcShield,    Comp: RolesAccess,            section: null },
@@ -1746,6 +1808,7 @@ const settingsSections = [
   { id: "bank",          label: "Bank Details",         Icon: IcBank,      Comp: BankDetails,            section: "FINANCE & MATERIAL" },
   { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,       section: null },
   { id: "finance",       label: "Finance Settings",     Icon: IcDollar,    Comp: FinanceSettings,        section: null },
+  { id: "other",         label: "Other Settings",       Icon: IcCheck,     Comp: OtherSettings,          section: null },
   { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings,   section: "SYSTEM" },
   { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,        section: null },
   { id: "audit",         label: "Audit Trail",          Icon: IcClipboard, Comp: AuditSettings,          section: null },
@@ -1762,7 +1825,9 @@ export default function SettingsModule() {
     attendance: "Configure attendance mode and payment cycle for each labour type",
     appearance: "Choose layout style and other visual preferences",
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
-    finance: "Tax, invoicing, and financial controls", notifications: "Email, Push & WhatsApp notification settings",
+    finance: "Tax, invoicing, and financial controls",
+    other: "Duplicate-entry guards and other workflow controls",
+    notifications: "Email, Push & WhatsApp notification settings",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
     features: "Request new features and track their status",
   };
