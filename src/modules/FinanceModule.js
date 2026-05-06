@@ -3472,16 +3472,49 @@ function FinanceModule(){
                       </div>
                       {/* Priority */}
                       <span style={{fontSize:10,fontWeight:700,color:pm.c,background:pm.bg,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{pri}</span>
-                      {/* Action */}
-                      <button onClick={()=>openTxn("Payment Made",pmt.party,null,{
-                        kind: pmt.type==="pr"?"pr":"bill",
-                        id: pmt.id,
-                        amount: pmt.amount,
-                        label: pmt.no,
-                      })}
-                        style={{padding:"6px 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:600,display:"flex",alignItems:"center",gap:3,boxShadow:`0 2px 6px ${T.blu}44`}}>
-                        <IcSend size={10} color="white"/> Pay
-                      </button>
+                      {/* Action — Pay + Extend + Close */}
+                      {(()=>{
+                        const sourceKind = pmt.type==="pr"?"pr":"bill";
+                        const sourceId = pmt.type==="pr"
+                          ? parseInt(String(pmt.id).replace(/^pr-/,""))
+                          : pmt.id;
+                        const refresh = ()=>{ refreshPayReqs(); refreshPendPmts(); };
+                        const onExtend = async ()=>{
+                          const cur = pmt.dueDateRaw ? new Date(pmt.dueDateRaw).toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
+                          const newDate = window.prompt(`Extend ${pmt.no} due date — enter new YYYY-MM-DD`, cur);
+                          if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return;
+                          try {
+                            const r = await api.post(`/finance/pending-payments/${sourceKind}/${sourceId}/extend`, { new_date:newDate });
+                            if (r?.success===false) { window.alert(r.message||"Extend failed"); return; }
+                            refresh();
+                          } catch(e) { window.alert(e?.message||"Network error"); }
+                        };
+                        const onClose = async ()=>{
+                          if (!window.confirm(`Close ${pmt.no} without paying?\n\nThis removes it from Pending Payments. The original ${sourceKind==="pr"?"request":"bill"} record stays in history.`)) return;
+                          try {
+                            const r = await api.post(`/finance/pending-payments/${sourceKind}/${sourceId}/close`, {});
+                            if (r?.success===false) { window.alert(r.message||"Close failed"); return; }
+                            refresh();
+                          } catch(e) { window.alert(e?.message||"Network error"); }
+                        };
+                        return (
+                          <div style={{display:"flex",gap:4,alignItems:"center"}}>
+                            <button onClick={()=>openTxn("Payment Made",pmt.party,null,{kind:sourceKind,id:sourceId,amount:pmt.amount,label:pmt.no})}
+                              title="Record payment"
+                              style={{padding:"5px 9px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
+                              <IcSend size={9} color="white"/> Pay
+                            </button>
+                            <button onClick={onExtend} title="Extend due date"
+                              style={{padding:"5px 7px",borderRadius:5,background:T.ambL,color:T.amb,border:`1px solid ${T.ambM}`,cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center"}}>
+                              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round"><path d="M19 4H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V6a2 2 0 00-2-2zM16 2v4M8 2v4M3 10h18M12 14v4M10 16h4"/></svg>
+                            </button>
+                            <button onClick={onClose} title="Close without paying"
+                              style={{padding:"5px 7px",borderRadius:5,background:T.surfaceB,color:T.t3,border:`1px solid ${T.b1}`,cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center"}}>
+                              <IcX size={11} color={T.t3}/>
+                            </button>
+                          </div>
+                        );
+                      })()}
                     </div>
                   );
                 })}
