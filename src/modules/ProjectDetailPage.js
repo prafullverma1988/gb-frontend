@@ -597,9 +597,12 @@ function TabDesign({ project, isAdmin }) {
 
   // Dedupe helper — collapse rows with same case-insensitive name (keep first)
   const dedupeByName = (arr) => {
+    // Falls back to `title` for drawing_titles rows (which don't have a
+    // `name` field). Without this fallback, every title row was being
+    // dropped — Design Request dropdown showed "No options yet".
     const seen = new Set();
     return (arr||[]).filter(item => {
-      const k = String(item.name||"").trim().toLowerCase();
+      const k = String(item.name||item.title||"").trim().toLowerCase();
       if (!k || seen.has(k)) return false;
       seen.add(k);
       return true;
