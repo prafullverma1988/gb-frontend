@@ -3,7 +3,7 @@ import api from "../config/api";
 import uploadManager from "../utils/uploadManager";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
-import { Avatar, Credit } from "../components/Credit";
+import { Avatar, Credit, fmtTimeAgo } from "../components/Credit";
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -219,7 +219,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
             </div>
           </div>
           {/* Approval Required */}
-          <div style={{marginBottom:12,padding:"9px 11px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{marginBottom:8,padding:"9px 11px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
             <input type="checkbox" id="approvalReq" checked={!!form.approval_required}
               onChange={e=>setForm(p=>({...p,approval_required:e.target.checked}))}
               style={{width:15,height:15,cursor:"pointer"}}/>
@@ -227,6 +227,16 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
               <b>Approval Required</b> — drawing client / consultant approval ke liye send hogi
             </label>
           </div>
+          {form.approval_required && (
+            <div style={{marginBottom:12,padding:"9px 11px",background:T.bluL,border:`1px solid ${T.bluM}`,borderLeft:`3px solid ${T.blu}`,borderRadius:7,display:"flex",alignItems:"flex-start",gap:9}}>
+              <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0,marginTop:1}}>
+                <path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/>
+              </svg>
+              <div style={{fontSize:11,color:T.t2,lineHeight:1.5}}>
+                Upload ke baad drawing <b>"Client Approval"</b> tab me jayegi. Site team WhatsApp se share karega, fir client ka approval lekar admin approval ke liye forward hogi.
+              </div>
+            </div>
+          )}
           {/* Title — searchable from library */}
           <div style={{marginBottom:12}}>
             <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Drawing Title *</label>
@@ -679,6 +689,218 @@ export default function DesignModule() {
     </div>
   );
 
+  // ── TAB: CLIENT APPROVAL ────────────────────────────────────────
+  // Pre-stage for drawings flagged Approval Required. Site team shares
+  // via WhatsApp, then captures the client's verbal/text response here.
+  // Once Approved, the drawing rolls into the admin Approval tab.
+  const ClientApprovalTab = () => {
+    const [chip, setChip] = useState("PendingShare"); // PendingShare | SharedWithClient
+    const [acting, setActing] = useState({});
+    const [shareFor, setShareFor] = useState(null); // drawing currently in WhatsApp share dialog
+
+    const list = drawings.filter(d => d.client_status === chip);
+    const pendingShareCt = drawings.filter(d => d.client_status === "PendingShare").length;
+    const sharedCt       = drawings.filter(d => d.client_status === "SharedWithClient").length;
+
+    const setStatusLocal = (id, patch) =>
+      setDrawings(p => p.map(d => d.id === id ? { ...d, ...patch } : d));
+
+    const markShared = async (d) => {
+      setActing(p => ({ ...p, [d.id]: "marking" }));
+      try {
+        const res = await api.patch(`/design/drawings/${d.id}/mark-shared`, {});
+        if (res?.success) setStatusLocal(d.id, { client_status: "SharedWithClient", client_shared_at: new Date().toISOString() });
+      } catch(e) {}
+      setActing(p => ({ ...p, [d.id]: null }));
+    };
+
+    const setClientStatus = async (d, status) => {
+      let note = null;
+      if (status === "Revision") {
+        note = window.prompt("Client kya badalna chahta hai? (revision note)");
+        if (!note || !note.trim()) return;
+      } else if (status === "Rejected") {
+        note = window.prompt("Reject reason — client ne kya kaha?");
+        if (!note || !note.trim()) return;
+      }
+      setActing(p => ({ ...p, [d.id]: status }));
+      try {
+        const res = await api.patch(`/design/drawings/${d.id}/client-status`, { client_status: status, client_note: note });
+        if (res?.success) {
+          if (status === "Approved") setStatusLocal(d.id, { client_status: "Approved", client_approved_at: new Date().toISOString() });
+          else if (status === "Revision") setStatusLocal(d.id, { client_status: null, status: "Revision", note });
+          else if (status === "Rejected") setStatusLocal(d.id, { client_status: "Rejected" });
+        }
+      } catch(e) {}
+      setActing(p => ({ ...p, [d.id]: null }));
+    };
+
+    return (
+      <div>
+        {/* Sub-chips */}
+        <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+          {[
+            { id: "PendingShare",     label: "🟡 Awaiting Share",       count: pendingShareCt, c: T.amb, bg: T.ambL, brd: T.ambM },
+            { id: "SharedWithClient", label: "🔵 Shared, awaiting reply", count: sharedCt,      c: T.blu, bg: T.bluL, brd: T.bluM },
+          ].map(c => (
+            <button key={c.id} onClick={()=>setChip(c.id)}
+              style={{padding:"7px 14px",borderRadius:8,border:`1.5px solid ${chip===c.id?c.c:T.b1}`,
+                background:chip===c.id?c.bg:T.surface,color:chip===c.id?c.c:T.t3,
+                fontSize:12,fontWeight:chip===c.id?700:500,cursor:"pointer",fontFamily:"inherit",
+                display:"inline-flex",alignItems:"center",gap:7}}>
+              {c.label}
+              <span style={{background:chip===c.id?c.c:T.b1,color:chip===c.id?"white":T.t3,
+                fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:10,minWidth:16,textAlign:"center"}}>{c.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {list.length===0 && (
+          <div style={{textAlign:"center",padding:"60px",color:T.t4}}>
+            <div style={{fontSize:32,marginBottom:8}}>{chip==="PendingShare"?"📤":"⏳"}</div>
+            <div style={{fontSize:14,fontWeight:600,color:T.t2}}>
+              {chip==="PendingShare"?"Sab share ho gaye!":"Koi drawing client se reply ka wait nahi kar rahi"}
+            </div>
+          </div>
+        )}
+
+        {list.map(d => (
+          <div key={d.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.b1,padding:"13px 14px",marginBottom:8,
+            borderLeft:`3px solid ${chip==="PendingShare"?T.amb:T.blu}`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:8}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
+                <div style={{fontSize:11,color:T.t4,marginTop:2}}>
+                  {d.project_name||"—"} · {d.category}{d.drawing_type?` / ${d.drawing_type}`:""} · {d.current_version||"v1"} · by {d.uploaded_by_name||"—"}
+                </div>
+                {chip==="SharedWithClient" && d.client_shared_at && (
+                  <div style={{fontSize:10.5,color:T.blu,marginTop:3}}>
+                    📤 Shared {fmtTimeAgo(d.client_shared_at)}{d.client_note?` · ${d.client_note}`:""}
+                  </div>
+                )}
+              </div>
+              {d.file_url && (
+                <a href={d.file_url} target="_blank" rel="noreferrer"
+                  style={{fontSize:11,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"3px 9px",borderRadius:6,textDecoration:"none",fontWeight:600,whiteSpace:"nowrap",flexShrink:0}}>
+                  👁 View
+                </a>
+              )}
+            </div>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              {chip==="PendingShare" && (<>
+                <button onClick={()=>setShareFor(d)}
+                  style={{padding:"6px 12px",borderRadius:6,background:"#25D366",border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                  💬 Share on WhatsApp
+                </button>
+                <button onClick={()=>markShared(d)} disabled={acting[d.id]==="marking"}
+                  style={{padding:"6px 12px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                  {acting[d.id]==="marking"?"…":"✓ Mark as Shared"}
+                </button>
+              </>)}
+              {chip==="SharedWithClient" && (<>
+                <button onClick={()=>setClientStatus(d,"Approved")} disabled={!!acting[d.id]}
+                  style={{padding:"6px 12px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                  {acting[d.id]==="Approved"?"…":"✓ Client Approved"}
+                </button>
+                <button onClick={()=>setClientStatus(d,"Revision")} disabled={!!acting[d.id]}
+                  style={{padding:"6px 12px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                  ↻ Revision Requested
+                </button>
+                <button onClick={()=>setClientStatus(d,"Rejected")} disabled={!!acting[d.id]}
+                  style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                  ✗ Rejected
+                </button>
+                <button onClick={()=>setShareFor(d)}
+                  style={{padding:"6px 12px",borderRadius:6,background:T.surface,border:`1px solid ${T.b2}`,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5}}>
+                  💬 Re-share
+                </button>
+              </>)}
+            </div>
+          </div>
+        ))}
+
+        {shareFor && <WhatsAppShareModal drawing={shareFor} onClose={()=>setShareFor(null)} onShared={()=>{markShared(shareFor); setShareFor(null);}}/>}
+      </div>
+    );
+  };
+
+  // ── WhatsApp Share Dialog — phone (auto-fill from project/party) + editable msg
+  const WhatsAppShareModal = ({ drawing, onClose, onShared }) => {
+    const [phone, setPhone] = useState("");
+    const [msg, setMsg]     = useState("");
+    const [loadingContact, setLoadingContact] = useState(true);
+    useEffect(() => {
+      api.get(`/design/drawings/${drawing.id}/client-contact`).then(r => {
+        const d = r?.data || {};
+        setPhone((d.client_phone || "").replace(/[^\d+]/g, ""));
+        const proj = d.project_name || drawing.project_name || "";
+        const ttl  = d.title || drawing.title || "";
+        const ver  = d.version || drawing.current_version || "v1";
+        const link = d.file_url || drawing.file_url || "";
+        setMsg(
+          `Namaste${d.client_name?` ${d.client_name} ji`:""},\n\n`+
+          `${proj} ke liye "${ttl}" (${ver}) drawing ready hai. Kripya review karke approval/changes batayein:\n\n`+
+          `${link}\n\nThanks,\nGB Buildcon team`
+        );
+        setLoadingContact(false);
+      }).catch(()=>setLoadingContact(false));
+    }, []);
+    const openWhatsApp = () => {
+      const cleaned = (phone || "").replace(/[^\d]/g, "");
+      const url = cleaned
+        ? `https://wa.me/${cleaned}?text=${encodeURIComponent(msg)}`
+        : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+      window.open(url, "_blank", "noopener");
+    };
+    return (
+      <>
+        <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
+          background:T.surface,borderRadius:12,zIndex:601,width:520,maxWidth:"92vw",maxHeight:"90vh",
+          display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.22)"}}>
+          <div style={{background:"#075E54",padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",borderTopLeftRadius:12,borderTopRightRadius:12}}>
+            <div style={{fontSize:14,fontWeight:700,color:"white",display:"flex",alignItems:"center",gap:8}}>
+              💬 Share on WhatsApp
+            </div>
+            <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:18}}>×</button>
+          </div>
+          <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>
+                Client Phone {phone?"(auto-filled)":"(enter manually)"}
+              </label>
+              <input value={phone} onChange={e=>setPhone(e.target.value)}
+                placeholder={loadingContact?"Loading…":"e.g. 919981641230 (with country code)"}
+                style={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>Country code zaroori (e.g. 91 for India). Khali rakho to WhatsApp web me contact pick kar sakte ho.</div>
+            </div>
+            <div>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>
+                Message (editable)
+              </label>
+              <textarea value={msg} onChange={e=>setMsg(e.target.value)} rows={8}
+                style={{width:"100%",padding:"10px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical",lineHeight:1.5}}/>
+            </div>
+          </div>
+          <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
+            <button onClick={onClose}
+              style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
+              Cancel
+            </button>
+            <button onClick={openWhatsApp} disabled={!msg.trim()}
+              style={{flex:1,padding:"9px",borderRadius:7,background:"#25D366",border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:msg.trim()?"pointer":"not-allowed",opacity:msg.trim()?1:0.6}}>
+              💬 Open WhatsApp
+            </button>
+            <button onClick={onShared}
+              style={{flex:1.4,padding:"9px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+              ✓ Sent — Mark Shared
+            </button>
+          </div>
+        </div>
+      </>
+    );
+  };
+
   // ── TAB: APPROVAL ───────────────────────────────────────────────
   const ApprovalTab = () => {
     const [aprvSearch, setAprvSearch] = useState("");
@@ -686,8 +908,11 @@ export default function DesignModule() {
     const [aprvCat, setAprvCat] = useState("All");
     const [aprvActing, setAprvActing] = useState({});
 
+    // Skip drawings still in client review — they live in the Client
+    // Approval tab and shouldn't show up here until the client signs off.
     const pendingDrawings = drawings.filter(d => {
       if (d.status !== "Pending") return false;
+      if (d.client_status === "PendingShare" || d.client_status === "SharedWithClient") return false;
       if (aprvProject !== "All" && (d.project_name||"") !== aprvProject) return false;
       if (aprvCat !== "All" && d.category !== aprvCat) return false;
       if (aprvSearch && !d.title.toLowerCase().includes(aprvSearch.toLowerCase())) return false;
@@ -1016,6 +1241,7 @@ export default function DesignModule() {
     {id:"site_req",     label:"Site Drawings",  Icon:IcReq,    count:sitePendingCt,                                  badge:sitePendingCt>0?"amber":null},
     {id:"house_req",    label:"House Plans",    Icon:IcReq,    count:housePendingCt,                                 badge:housePendingCt>0?"amber":null},
     {id:"revision",     label:"Revision Queue", Icon:IcRevise, count:drawings.filter(d=>d.status==="Revision").length, badge:"amber"},
+    {id:"client_aprv",  label:"Client Approval",Icon:IcReq,    count:drawings.filter(d=>d.client_status==="PendingShare"||d.client_status==="SharedWithClient").length, badge:"amber"},
     {id:"approval",     label:"Approval",       Icon:IcCheck,  count:pendingApprovalCt,                              badge:pendingApprovalCt>0?"amber":null},
     {id:"history",      label:"History",        Icon:IcHist,   count:null,                                           badge:null},
     {id:"duedate",      label:"Due Dates",      Icon:IcCal,    count:overdueCt,                                      badge:overdueCt>0?"red":null},
@@ -1066,8 +1292,9 @@ export default function DesignModule() {
         {activeTab==="site_req"  && <RequestsTab mode="site"/>}
         {activeTab==="house_req" && <RequestsTab mode="house"/>}
         {activeTab==="requests"  && <RequestsTab mode="site"/>}{/* legacy fallback */}
-        {activeTab==="revision"  && <RevisionTab/>}
-        {activeTab==="approval"  && <ApprovalTab/>}
+        {activeTab==="revision"   && <RevisionTab/>}
+        {activeTab==="client_aprv" && <ClientApprovalTab/>}
+        {activeTab==="approval"   && <ApprovalTab/>}
         {activeTab==="history"   && <HistoryTab/>}
         {activeTab==="duedate"   && <DueDatesTab/>}
       </div>
