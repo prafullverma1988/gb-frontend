@@ -62,14 +62,16 @@ const PRIO_META = {
   "Low":   {c:T.t4, bg:"#F3F4F6"},
 };
 
-const CATS  = ["Architectural","Structural","Electrical","Plumbing","Interior","Landscape","MEP"];
-const TYPES = ["Plan","Elevation","Section","Detail","3D","Diagram","Schedule","Site Plan"];
+const CATS   = ["Architectural","Structural","Electrical","Plumbing","Interior","HVAC","Landscape","Approval"];
+const TYPES  = ["Plan","Elevation","Section","Detail","3D","Diagram","Schedule","Site Plan"];
+const STAGES = ["Concept","Schematic","Working","GFC","As-Built"];
+const FLOORS = ["Ground","First","Second","Third","Roof","Basement","All Floors"];
 
 // ── UPLOAD MODAL (standalone) ─────────────────────────────────────────
 function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefill, onUploaded }) {
   const CLOUD_NAME = "dd632nqfm";
   const PRESET     = "gb_buildcon_drawings";
-  const [form,     setForm]     = useState({ project_id:"", title:"", category:"Architectural", drawing_type:"2D", note:"" });
+  const [form,     setForm]     = useState({ project_id:"", title:"", category:"Architectural", drawing_type:"Plan", stage:"Working", floor:"", approval_required:false, note:"" });
   const [file,     setFile]     = useState(null);
   const [uploading,setUploading]= useState(false);
   const [pct,      setPct]      = useState(0);
@@ -103,7 +105,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
     // ── CLOSE MODAL IMMEDIATELY — upload runs in background ──
     onClose();
     setFile(null);
-    setForm({ project_id: "", title: "", category: "Architectural", drawing_type: "2D", note: "" });
+    setForm({ project_id: "", title: "", category: "Architectural", drawing_type: "Plan", stage: "Working", floor: "", approval_required: false, note: "" });
     setPct(0);
 
     // ── BACKGROUND UPLOAD via uploadManager ──
@@ -119,6 +121,9 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
             title:        capturedForm.title,
             category:     capturedForm.category,
             drawing_type: capturedForm.drawing_type,
+            stage:        capturedForm.stage || null,
+            floor:        capturedForm.floor || null,
+            approval_required: !!capturedForm.approval_required,
             note:         capturedForm.note || null,
             file_url:     url,
             file_size:    fileSize,
@@ -181,6 +186,32 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
                 onChange={v=>setForm(p=>({...p,drawing_type:v}))}
                 placeholder="Select type..."/>
             </div>
+          </div>
+          {/* Stage + Floor */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Stage</label>
+              <SearchSelect value={form.stage}
+                options={STAGES}
+                onChange={v=>setForm(p=>({...p,stage:v}))}
+                placeholder="Concept / Schematic / Working / GFC / As-Built"/>
+            </div>
+            <div>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Floor</label>
+              <SearchSelect value={form.floor}
+                options={FLOORS}
+                onChange={v=>setForm(p=>({...p,floor:v}))}
+                placeholder="Floor / level..."/>
+            </div>
+          </div>
+          {/* Approval Required */}
+          <div style={{marginBottom:12,padding:"9px 11px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,display:"flex",alignItems:"center",gap:10}}>
+            <input type="checkbox" id="approvalReq" checked={!!form.approval_required}
+              onChange={e=>setForm(p=>({...p,approval_required:e.target.checked}))}
+              style={{width:15,height:15,cursor:"pointer"}}/>
+            <label htmlFor="approvalReq" style={{flex:1,fontSize:12,color:T.t2,cursor:"pointer"}}>
+              <b>Approval Required</b> — drawing client / consultant approval ke liye send hogi
+            </label>
           </div>
           {/* Title — searchable from library */}
           <div style={{marginBottom:12}}>
