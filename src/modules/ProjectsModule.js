@@ -1563,6 +1563,27 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
             </div>
             <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{item.title}</div>
             <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name}{!src?" · L"+item.current_level+"/"+item.max_level:""}</div>
+            {/* Design — show drawing-status pill, view link, and last revision comment */}
+            {src==="design"&&(
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6,alignItems:"center"}}>
+                {item.drawing_status==="Revision" && (
+                  <span style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"1px 7px",borderRadius:10,textTransform:"uppercase",letterSpacing:".3px"}}>↻ Revised</span>
+                )}
+                {item.file_url && (
+                  <a href={item.file_url} target="_blank" rel="noreferrer"
+                    style={{fontSize:11,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"3px 9px",borderRadius:6,textDecoration:"none",display:"inline-flex",alignItems:"center",gap:4}}>
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                    View Drawing{item.file_size ? ` (${item.file_size})` : ""}
+                  </a>
+                )}
+              </div>
+            )}
+            {src==="design"&&item.last_revision_comment && (
+              <div style={{marginTop:6,padding:"6px 10px",background:T.ambL,border:`1px solid ${T.ambM}`,borderLeft:`3px solid ${T.amb}`,borderRadius:6,fontSize:11,color:T.t2,lineHeight:1.5}}>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.amb,letterSpacing:".3px",textTransform:"uppercase",display:"block",marginBottom:2}}>Last revision note</span>
+                "{item.last_revision_comment}"
+              </div>
+            )}
             {src==="labour_rate"&&(
               <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:T.bluL,borderRadius:6,border:"1px solid "+T.bluM}}>
                 <span style={{fontSize:11,color:T.t3}}>Current: <b style={{color:T.t2}}>₹{item.current_rate||0}/day</b></span>
@@ -2076,11 +2097,13 @@ function ProjectsPage({onSelectProject}){
       const [mrRes,prRes,drRes]=await Promise.all([
         api.get("/procurement/mrs?mr_status=Pending"),
         api.get("/finance/payment-requests"),
-        api.get("/design/drawings?status=Pending").catch(()=>({success:false})),
+        // Fetch all drawings then filter — the ?status=Pending query param
+        // won't catch Revision-state drawings, which also need admin action.
+        api.get("/design/drawings").catch(()=>({success:false})),
       ]);
       const mrCount=(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested").length;
       const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
-      const designCount=(drRes.success?drRes.data:[]).length;
+      const designCount=(drRes.success?drRes.data:[]).filter(d=>d.status==="Pending"||d.status==="Revision").length;
       const total=mrCount+prCount+designCount;
       apiCache.set("approval-counts",{mrCount,prCount,total},30000);
       setMrPendingCount(mrCount);
