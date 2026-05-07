@@ -2335,9 +2335,16 @@ function FinanceModule(){
   const pendOverdue=pendPmts.filter(p=>p.overdue).reduce((s,p)=>s+p.amount,0);
 
   // ── Cash Book computed ──────────────────────────────────────
+  // Cash Book = ACTUAL money movements only. Bills (material_purchase,
+  // subcon_expense, sales_invoice, material_return) are liabilities /
+  // invoices, not cash events — they live in Pending Payments / Billed
+  // Material until a Payment Out / Receipt is posted against them.
+  const CASH_TXN_TYPES_RAW = ["receipt","payment","party_payment","site_expense","bank_transfer","wallet_payment","wallet_topup"];
+  const isCashEvent = (t) => CASH_TXN_TYPES_RAW.includes(t.txnType||"") ||
+    ["Payment In","Payment Out","Party Payment","Site Expense","Bank Transfer","Wallet Payment","Wallet Top-up"].includes(t.type);
   const cbTxnsBase=activeTxns.length>0
-    ? activeTxns.filter(t=>t.type==="Payment In"||t.type==="Payment Out")
-    : TRANSACTIONS_DATA.filter(t=>t.type==="Payment In"||t.type==="Payment Out");
+    ? activeTxns.filter(isCashEvent)
+    : TRANSACTIONS_DATA.filter(isCashEvent);
   const cbTxns=cbTxnsBase.filter(t=>{
     if(chipCB==="Receipts") return !t.dr;
     if(chipCB==="Payments") return t.dr;
@@ -3104,9 +3111,11 @@ function FinanceModule(){
                   "Wallet Top-up":  {label:"Wallet Top-up",   color:T.slt, bg:T.sltL, dir:"internal"},
                   "Material Return":{label:"Material Return", color:T.grn, bg:T.grnL, dir:"in"},
                 };
-                // Cash book — chronological with running balance
+                // Cash book table uses the same whitelist as the tiles
+                // (isCashEvent above) — keeps tiles + table in sync.
                 let runBal=totalBal;
                 const cbAll=[...activeTxns].filter(t=>{
+                  if (!isCashEvent(t)) return false;
                   if(chipCB==="Receipts") return !t.dr;
                   if(chipCB==="Payments") return t.dr;
                   return true;
