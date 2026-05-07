@@ -1109,7 +1109,25 @@ function TabDesign({ project, isAdmin }) {
           </button>
         </div>}
 
-        {d.status!=="Approved"&&(
+        {/* Drawing is in client review — admin actions are gated until the
+            client signs off. Show a status pill instead of Approve/Reject. */}
+        {d.status!=="Approved" && (d.client_status==="PendingShare" || d.client_status==="SharedWithClient") && (
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            <span style={{display:"inline-flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:14,
+              border:`1px solid ${d.client_status==="PendingShare"?T.ambM:T.bluM}`,
+              background:d.client_status==="PendingShare"?T.ambL:T.bluL,
+              color:d.client_status==="PendingShare"?T.amb:T.blu,
+              fontSize:10.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              {d.client_status==="PendingShare" ? "Pending Client Share" : "Pending Client Approval"}
+            </span>
+            <span style={{fontSize:11,color:T.t4}}>
+              Client se approval ke baad admin review available hoga — Design module &gt; Client Approval tab.
+            </span>
+          </div>
+        )}
+
+        {d.status!=="Approved" && d.client_status!=="PendingShare" && d.client_status!=="SharedWithClient" && (
           <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
             {/* Approve */}
             <button onClick={()=>handleStatus(d.id,"Approved",null)} disabled={!!acting[d.id]}
@@ -1298,7 +1316,16 @@ function TabDesign({ project, isAdmin }) {
         <Panel>
           <THead cols="2fr 80px 120px 55px 100px 90px 60px" headers={["Title","Type","Category","Ver.","Status","Uploaded","Size"]}/>
           {filtered.map(d=>{
-            const sm = statusMeta[d.status] || statusMeta["Pending"];
+            // When the drawing is still routing through client review, show
+            // a client-flavoured pill instead of the generic admin status.
+            const inClientFlow = d.client_status === "PendingShare" || d.client_status === "SharedWithClient";
+            const sm = inClientFlow
+              ? { c: d.client_status === "PendingShare" ? T.amb : T.blu,
+                  bg: d.client_status === "PendingShare" ? T.ambL : T.bluL }
+              : (statusMeta[d.status] || statusMeta["Pending"]);
+            const statusLabel = inClientFlow
+              ? (d.client_status === "PendingShare" ? "Pending Client Share" : "Pending Client Approval")
+              : d.status;
             const isS = sel?.id===d.id;
             return(
               <div key={d.id}>
@@ -1315,7 +1342,7 @@ function TabDesign({ project, isAdmin }) {
                   <Pill label={d.drawing_type||d.type||"2D"} c={d.drawing_type==="3D"?T.pur:T.slt} bg={d.drawing_type==="3D"?T.purL:T.sltL}/>
                   <span style={{fontSize:11.5,color:T.t2}}>{d.category}</span>
                   <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{d.current_version||"v1"}</span>
-                  <Pill label={d.status} c={sm.c} bg={sm.bg}/>
+                  <Pill label={statusLabel} c={sm.c} bg={sm.bg}/>
                   <span style={{fontSize:11,color:T.t3}}>{d.uploaded_by_name||"—"}</span>
                   <span style={{fontSize:11,color:T.t4}}>{d.file_size||"—"}</span>
                 </div>
