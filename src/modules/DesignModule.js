@@ -1231,20 +1231,26 @@ export default function DesignModule() {
     );
   };
 
-  const pendingApprovalCt = drawings.filter(d=>d.status==="Pending").length;
-
-  const sitePendingCt  = requests.filter(r=>isSiteRequest(r)  && r.status==="Pending").length;
-  const housePendingCt = requests.filter(r=>isHouseRequest(r) && r.status==="Pending").length;
+  // Tab counts — every tab shows a badge (even at zero) so user knows the
+  // workload at a glance. Pending/queue counts skip already-completed rows;
+  // History shows total approved+rejected (closed work).
+  const pendingApprovalCt = drawings.filter(d=>d.status==="Pending"
+    && (!d.client_status || d.client_status==="NotRequired" || d.client_status==="Approved")).length;
+  const revisionCt        = drawings.filter(d=>d.status==="Revision").length;
+  const clientAprvCt      = drawings.filter(d=>d.client_status==="PendingShare"||d.client_status==="SharedWithClient").length;
+  const historyCt         = drawings.filter(d=>d.status==="Approved"||d.status==="Rejected").length;
+  const siteOpenCt        = requests.filter(r=>isSiteRequest(r)  && r.status!=="Uploaded" && r.status!=="Rejected").length;
+  const houseOpenCt       = requests.filter(r=>isHouseRequest(r) && r.status!=="Uploaded" && r.status!=="Rejected").length;
 
   const TABS = [
-    {id:"drawings",     label:"All Drawings",   Icon:IcDraw,   count:drawings.length,                                badge:null},
-    {id:"site_req",     label:"Site Drawings",  Icon:IcReq,    count:sitePendingCt,                                  badge:sitePendingCt>0?"amber":null},
-    {id:"house_req",    label:"House Plans",    Icon:IcReq,    count:housePendingCt,                                 badge:housePendingCt>0?"amber":null},
-    {id:"revision",     label:"Revision Queue", Icon:IcRevise, count:drawings.filter(d=>d.status==="Revision").length, badge:"amber"},
-    {id:"client_aprv",  label:"Client Approval",Icon:IcReq,    count:drawings.filter(d=>d.client_status==="PendingShare"||d.client_status==="SharedWithClient").length, badge:"amber"},
-    {id:"approval",     label:"Approval",       Icon:IcCheck,  count:pendingApprovalCt,                              badge:pendingApprovalCt>0?"amber":null},
-    {id:"history",      label:"History",        Icon:IcHist,   count:null,                                           badge:null},
-    {id:"duedate",      label:"Due Dates",      Icon:IcCal,    count:overdueCt,                                      badge:overdueCt>0?"red":null},
+    {id:"drawings",     label:"All Drawings",   Icon:IcDraw,   count:drawings.length,         badge:drawings.length>0?"blue":null},
+    {id:"site_req",     label:"Site Drawings",  Icon:IcReq,    count:siteOpenCt,              badge:siteOpenCt>0?"amber":null},
+    {id:"house_req",    label:"House Plans",    Icon:IcReq,    count:houseOpenCt,             badge:houseOpenCt>0?"amber":null},
+    {id:"revision",     label:"Revision Queue", Icon:IcRevise, count:revisionCt,              badge:revisionCt>0?"amber":null},
+    {id:"client_aprv",  label:"Client Approval",Icon:IcReq,    count:clientAprvCt,            badge:clientAprvCt>0?"amber":null},
+    {id:"approval",     label:"Approval",       Icon:IcCheck,  count:pendingApprovalCt,       badge:pendingApprovalCt>0?"amber":null},
+    {id:"history",      label:"History",        Icon:IcHist,   count:historyCt,               badge:null},
+    {id:"duedate",      label:"Due Dates",      Icon:IcCal,    count:overdueCt,               badge:overdueCt>0?"red":null},
   ];
 
   return (
@@ -1276,12 +1282,21 @@ export default function DesignModule() {
               marginBottom:"-2px",whiteSpace:"nowrap"}}>
             <tab.Icon size={15} color="currentColor"/>
             {tab.label}
-            {tab.count>0&&<span style={{
-              background:activeTab===tab.id?T.blu:tab.badge==="red"?T.red:tab.badge==="amber"?T.amb:T.b1,
-              color:activeTab===tab.id||tab.badge?"white":T.t4,
-              fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:10}}>
-              {tab.count}
-            </span>}
+            {tab.count != null && (
+              <span style={{
+                background: activeTab===tab.id ? T.blu
+                  : tab.count === 0 ? T.b1
+                  : tab.badge === "red"   ? T.red
+                  : tab.badge === "amber" ? T.amb
+                  : tab.badge === "blue"  ? T.blu
+                  : T.b1,
+                color: activeTab===tab.id ? "white"
+                  : tab.count === 0 ? T.t4
+                  : tab.badge ? "white" : T.t4,
+                fontSize:10, fontWeight:700, padding:"1px 6px", borderRadius:10, minWidth:14, textAlign:"center"}}>
+                {tab.count}
+              </span>
+            )}
           </button>
         ))}
       </div>
