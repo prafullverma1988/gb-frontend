@@ -479,8 +479,8 @@ function NewMRModal({stock,projects,onClose,onSaved}){
 }
 
 // ── NEW TRANSFER MODAL ────────────────────────────────────────────
-function NewTransferModal({stock,onClose,onSaved}){
-  const [f,setF]=useState({date:today(),from_location:"Main Godown",to_location:""});
+function NewTransferModal({stock,projects,onClose,onSaved}){
+  const [f,setF]=useState({date:today(),from_project_id:null,to_project_id:null});
   const [items,setItems]=useState([{material_id:null,name:"",unit:"Nos",qty:""}]);
   const [saving,setSaving]=useState(false);
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
@@ -488,17 +488,24 @@ function NewTransferModal({stock,onClose,onSaved}){
   const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
   const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:""}]);
 
-  const valid=f.from_location.trim()&&f.to_location.trim()&&items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
+  const sameProj=f.from_project_id&&f.to_project_id&&Number(f.from_project_id)===Number(f.to_project_id);
+  const valid=f.from_project_id&&f.to_project_id&&!sameProj&&items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
 
   const submit=async()=>{
     setSaving(true);
     try{
       const cleanItems=items.filter(it=>(it.name||it.material_id)&&Number(it.qty)>0).map(it=>({
+        material_id:it.material_id||null,
         name:it.name||(stock.find(s=>s.id===it.material_id)?.name)||"Item",
         unit:it.unit||"Nos",
         qty:Number(it.qty),
       }));
-      const res=await api.post("/warehouse/transfers",{...f,items:cleanItems});
+      const res=await api.post("/warehouse/transfers",{
+        date:f.date,
+        from_project_id:f.from_project_id,
+        to_project_id:f.to_project_id,
+        items:cleanItems,
+      });
       if(res.success){onSaved&&onSaved(res.data);onClose();}
       else alert(res.message||"Transfer save failed");
     }catch(e){alert(e.message);}
@@ -506,17 +513,33 @@ function NewTransferModal({stock,onClose,onSaved}){
   };
 
   return (
-    <ModalShell title="New Transfer" sub="Site se site ya godown se godown me material bhejo"
-      onClose={onClose} width={680}
+    <ModalShell title="New Project-to-Project Transfer" sub="Ek project se dusre project me material bhejo"
+      onClose={onClose} width={720}
       footer={<>
         <GhostBtn onClick={onClose}>Cancel</GhostBtn>
         <Btn onClick={submit} disabled={!valid||saving} c={T.cyn} icon={IcTrns}>{saving?"Saving...":"Save Transfer"}</Btn>
       </>}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:14}}>
+      <div style={{display:"grid",gridTemplateColumns:"120px 1fr 1fr",gap:11,marginBottom:11}}>
         <Field label="Date"><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
-        <Field label="From location *"><Input value={f.from_location} onChange={e=>upd("from_location",e.target.value)} placeholder="Main Godown"/></Field>
-        <Field label="To location *"><Input value={f.to_location} onChange={e=>upd("to_location",e.target.value)} placeholder="Site A / Sub-warehouse"/></Field>
+        <Field label="From project *">
+          <SearchSelect compact value={f.from_project_id} options={projects}
+            onChange={v=>upd("from_project_id",v)} placeholder="Source project select karo"/>
+        </Field>
+        <Field label="To project *">
+          <SearchSelect compact value={f.to_project_id} options={projects}
+            onChange={v=>upd("to_project_id",v)} placeholder="Destination project select karo"/>
+        </Field>
       </div>
+      {sameProj&&(
+        <div style={{padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600,marginBottom:11}}>
+          ⚠ From aur To project alag hone chahiye
+        </div>
+      )}
+      {projects.length===0&&(
+        <div style={{padding:"7px 11px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:11.5,color:T.amb,fontWeight:600,marginBottom:11}}>
+          ⚠ Koi project nahi mila — pehle Projects me ja ke ek project banao
+        </div>
+      )}
 
       <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Items</div>
       <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 30px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
@@ -1104,13 +1127,13 @@ function TransfersTab({transfers,onNew}){
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
-        <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{transfers.length} Transfers</span>
+        <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{transfers.length} Project-to-Project Transfers</span>
         <Btn onClick={onNew} c={T.cyn} icon={IcTrns} size="sm">New Transfer</Btn>
       </div>
-      {transfers.length===0?<Empty label="Koi transfer nahi" sub="Site se site material bhejne ke liye New Transfer click karein"/>:(
+      {transfers.length===0?<Empty label="Koi transfer nahi" sub="Ek project se dusre project me material bhejne ke liye New Transfer click karein"/>:(
         <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"110px 90px 1fr 1fr 110px 90px",padding:"7px 14px",background:T.sb,gap:8}}>
-            {["Transfer No","Date","From","To","By","Status"].map((h,i)=>(
+            {["Transfer No","Date","From Project","To Project","By","Status"].map((h,i)=>(
               <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
             ))}
           </div>
@@ -1122,10 +1145,10 @@ function TransfersTab({transfers,onNew}){
               <span style={{fontSize:11.5,fontWeight:700,color:T.cyn,fontFamily:"monospace"}}>{t.id}</span>
               <span style={{fontSize:11.5,color:T.t3}}>{t.date}</span>
               <div style={{minWidth:0}}>
-                <div style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.from}</div>
-                <div style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(t.items||[]).map(i=>`${i.material_name||i.name} ×${fmtN(i.qty)}`).join(", ")}</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.from}</div>
+                <div style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(t.items||[]).map(i=>`${i.material_name||i.name} ×${fmtN(i.qty)} ${i.unit||""}`).join(", ")}</div>
               </div>
-              <span style={{fontSize:12,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.to}</span>
+              <span style={{fontSize:12,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.to}</span>
               <span style={{fontSize:11.5,color:T.t3}}>{t.by}</span>
               <Pill label={t.status} c={T.grn} bg={T.grnL} brd={T.grnM}/>
             </div>
@@ -1174,7 +1197,7 @@ function WarehouseModule(){
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
       if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||"—",requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
-      if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_location||"—",to:t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[]})));
+      if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_project_name||t.from_location||"—",to:t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[]})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
     }catch(e){console.error("Warehouse load error:",e);}
@@ -1311,7 +1334,7 @@ function WarehouseModule(){
           onClose={()=>setMrNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {transferNewOpen&&(
-        <NewTransferModal stock={stock}
+        <NewTransferModal stock={stock} projects={projects}
           onClose={()=>setTransferNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {issueFromMR&&(
