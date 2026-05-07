@@ -162,13 +162,27 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
           {!uploading&&<button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>}
         </div>
         <div style={{flex:1,overflowY:"auto",padding:"16px"}}>
-          {/* Project */}
+          {/* Project — locked when this upload is satisfying a Site Drawing
+              Request from a specific project (linked_request_id is set).
+              The drawing must belong to the requesting project. */}
           <div style={{marginBottom:12}}>
             <label style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Project *</label>
-            <SearchSelect value={form.project_id}
-              options={projects.map(p=>({value:p.id,label:p.name}))}
-              onChange={v=>setForm(p=>({...p,project_id:v}))}
-              placeholder="Select project..."/>
+            {prefill?.linked_request_id ? (
+              <div style={{display:"flex",alignItems:"center",gap:8,padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.grnM}`,background:T.grnL}}>
+                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                </svg>
+                <span style={{flex:1,fontSize:13,fontWeight:700,color:T.grn,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {projects.find(p => String(p.id) === String(form.project_id))?.name || "—"}
+                </span>
+                <span style={{fontSize:10,color:T.grn,fontWeight:600}}>locked from request</span>
+              </div>
+            ) : (
+              <SearchSelect value={form.project_id}
+                options={projects.map(p=>({value:p.id,label:p.name}))}
+                onChange={v=>setForm(p=>({...p,project_id:v}))}
+                placeholder="Select project..."/>
+            )}
           </div>
           {/* Category + Type */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>

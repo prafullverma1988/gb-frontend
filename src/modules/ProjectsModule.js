@@ -1521,12 +1521,29 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     const srcAction=async(actionType)=>{
       const key="c"+item.id;
       const isRej=actionType==="reject"||actionType==="Rejected";
+      // Revision (and reject) on design must capture a reason — designer
+      // and history both rely on it. Cancel if user clears the prompt.
+      let revisionNote=null, rejectNote=null;
+      if(src==="design"&&actionType==="Revision"){
+        revisionNote=window.prompt("Revision note (compulsory) — designer ko kya badalna hai?\n\nExample: \"Footing depth 1.2m karein, parapet height 4ft tak badhaaye\"");
+        if(!revisionNote||!revisionNote.trim()){
+          if(revisionNote!==null) window.alert("Revision note required.");
+          return;
+        }
+      } else if(src==="design"&&isRej){
+        rejectNote=window.prompt("Rejection reason — drawing kyu reject ho rahi hai?");
+        if(!rejectNote||!rejectNote.trim()){
+          if(rejectNote!==null) window.alert("Rejection reason required.");
+          return;
+        }
+      }
       setSaveErr("");setActing(p=>({...p,[key]:isRej?"rejecting":"approving"}));
       try{
         let res;
         if(src==="design"){
           const status=actionType==="Revision"?"Revision":isRej?"Rejected":"Approved";
-          res=await api.patch("/design/drawings/"+item._source_id+"/status",{status,note:status==="Revision"?"Revision requested":undefined});
+          const note=status==="Revision"?revisionNote.trim():(status==="Rejected"?rejectNote.trim():undefined);
+          res=await api.patch("/design/drawings/"+item._source_id+"/status",{status,note});
         } else if(src==="material_request"){
           res=await api.patch("/procurement/mrs/"+item._source_id+"/approve",{action:isRej?"Rejected":"Approved",approved_qty:item.quantity||null});
         } else if(src==="payment_request"){
