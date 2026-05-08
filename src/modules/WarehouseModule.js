@@ -1123,7 +1123,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject}){
 }
 
 // ── TRANSFERS TAB ──────────────────────────────────────────────────
-function TransfersTab({transfers,onNew}){
+function TransfersTab({transfers,onNew,onSelect}){
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -1138,9 +1138,9 @@ function TransfersTab({transfers,onNew}){
             ))}
           </div>
           {transfers.map(t=>(
-            <div key={t.id}
+            <div key={t.id} onClick={()=>onSelect(t)}
               style={{display:"grid",gridTemplateColumns:"110px 90px 1fr 1fr 110px 90px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background .1s",cursor:"pointer",gap:8}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+              onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"77"}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
               <span style={{fontSize:11.5,fontWeight:700,color:T.cyn,fontFamily:"monospace"}}>{t.id}</span>
               <span style={{fontSize:11.5,color:T.t3}}>{t.date}</span>
@@ -1156,6 +1156,137 @@ function TransfersTab({transfers,onNew}){
         </div>
       )}
     </div>
+  );
+}
+
+// ── TRANSFER DETAIL DRAWER ────────────────────────────────────────
+function TransferDetailDrawer({transfer,onClose,canDelete,onDeleted}){
+  const [detail,setDetail]=useState(transfer);
+  const [loading,setLoading]=useState(true);
+  const [deleting,setDeleting]=useState(false);
+
+  useEffect(()=>{
+    if(!transfer?.dbId)return;
+    setLoading(true);
+    api.get(`/warehouse/transfers/${transfer.dbId}`).then(r=>{
+      if(r.success) setDetail({...r.data,id:r.data.transfer_no,dbId:r.data.id,date:fmtDate(r.data.date),from:r.data.from_project_name||r.data.from_location,to:r.data.to_project_name||r.data.to_location,by:r.data.transferred_by_name});
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  },[transfer?.dbId]);
+
+  const handleDelete=async()=>{
+    if(!window.confirm(`${detail.id} ko delete karein? Source aur dest projects ke material ledger entries bhi reverse ho jayenge — yeh undo nahi ho sakta.`)) return;
+    setDeleting(true);
+    const r=await api.del(`/warehouse/transfers/${detail.dbId}`);
+    setDeleting(false);
+    if(r.success){onDeleted&&onDeleted();onClose();}
+    else alert(r.message||"Delete failed");
+  };
+
+  const items=detail?.items||[];
+  const totalQty=items.reduce((s,i)=>s+Number(i.qty||0),0);
+
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(540px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
+        <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:34,height:34,borderRadius:8,background:T.cyn+"33",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <IcTrns size={15} color="#fff"/>
+            </div>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:"white",fontFamily:"monospace"}}>{detail?.id||transfer?.id}</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>Project-to-Project Transfer · {detail?.date||transfer?.date}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
+        </div>
+
+        {loading?(
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:13}}>Loading...</div>
+        ):(
+          <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+            {/* Route card */}
+            <div style={{padding:"14px 16px",background:`linear-gradient(135deg, ${T.bluL} 0%, ${T.cynL} 100%)`,borderRadius:10,border:`1px solid ${T.cynM}`,marginBottom:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>From Project</div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{detail?.from||"—"}</div>
+                  <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>− DEBIT (used)</div>
+                </div>
+                <div style={{color:T.cyn,fontSize:24,fontWeight:800}}>→</div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>To Project</div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{detail?.to||"—"}</div>
+                  <div style={{fontSize:10.5,color:T.grn,marginTop:3,fontWeight:600}}>+ CREDIT (received)</div>
+                </div>
+              </div>
+            </div>
+
+            {/* Meta grid */}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+              <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Status</div>
+                <Pill label={detail?.status||"Completed"} c={T.grn} bg={T.grnL} brd={T.grnM}/>
+              </div>
+              <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Transferred By</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail?.by||"—"}</div>
+              </div>
+              <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Created</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail?.created_at?fmtDate(detail.created_at):"—"}</div>
+              </div>
+            </div>
+
+            {/* Items table */}
+            <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
+              <span>Items ({items.length})</span>
+              <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>Total: {fmtN(totalQty)}</span>
+            </div>
+            <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 60px 80px",padding:"7px 11px",background:T.sb,gap:8}}>
+                {["Material","Unit","Qty"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i===2?"right":"left"}}>{h}</span>
+                ))}
+              </div>
+              {items.map((it,i)=>(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 60px 80px",padding:"9px 11px",gap:8,borderBottom:i<items.length-1?`1px solid ${T.b1}`:"none",background:i%2?"#fff":T.surfaceB}}>
+                  <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.material_name||it.name}</span>
+                  <span style={{fontSize:11,color:T.t3}}>{it.unit||"—"}</span>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.cyn,textAlign:"right"}}>{fmtN(it.qty)}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Ledger effect note */}
+            {detail?.from_project_id&&detail?.to_project_id&&(
+              <div style={{padding:"10px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:8}}>
+                <div style={{fontWeight:700,marginBottom:3}}>📊 Material Ledger pe asar:</div>
+                <div style={{fontSize:11,lineHeight:1.5}}>
+                  • <b>{detail.from}</b> ke ledger me ye items "Used" me dikhenge (debit)<br/>
+                  • <b>{detail.to}</b> ke ledger me <b>{detail.id}</b> ek GRN ki tarah dikhega (credit)
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Footer actions */}
+        <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10.5,color:T.t4}}>{canDelete?"Admin/PM only":"View only"}</span>
+          <div style={{display:"flex",gap:8}}>
+            <GhostBtn onClick={onClose}>Close</GhostBtn>
+            {canDelete&&(
+              <Btn onClick={handleDelete} disabled={deleting} c={T.red} icon={IcTrash} size="sm">
+                {deleting?"Deleting...":"Delete & Reverse"}
+              </Btn>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1181,6 +1312,11 @@ function WarehouseModule(){
   const [transferNewOpen,setTransferNewOpen]=useState(false);
   const [issueFromMR,setIssueFromMR]=useState(null);    // {mr} when issuing against MR
   const [matDetail,setMatDetail]=useState(null);
+  const [transferDetail,setTransferDetail]=useState(null);
+
+  // Current user (for admin-only actions)
+  const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const isAdmin = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
 
   const loadAll=useCallback(async()=>{
     try{
@@ -1300,7 +1436,7 @@ function WarehouseModule(){
         {tab==="grn"&&<GrnTab grns={grns} onNew={()=>setGrnNewOpen(true)} onVerify={handleVerifyGRN}/>}
         {tab==="issue"&&<IssueTab issues={issues} projects={projects} onNew={()=>setIssueNewOpen(true)}/>}
         {tab==="mr"&&<MRTab mrs={mrs} onNew={()=>setMrNewOpen(true)} onIssue={mr=>setIssueFromMR(mr)} onApprove={handleApproveMR} onReject={handleRejectMR}/>}
-        {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)}/>}
+        {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
       {matDetail&&(
@@ -1336,6 +1472,11 @@ function WarehouseModule(){
       {transferNewOpen&&(
         <NewTransferModal stock={stock} projects={projects}
           onClose={()=>setTransferNewOpen(false)} onSaved={()=>loadAll()}/>
+      )}
+      {transferDetail&&(
+        <TransferDetailDrawer transfer={transferDetail} canDelete={isAdmin}
+          onClose={()=>setTransferDetail(null)}
+          onDeleted={()=>loadAll()}/>
       )}
       {issueFromMR&&(
         <NewIssueModal stock={stock} projects={projects} users={users}
