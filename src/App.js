@@ -1000,7 +1000,11 @@ function DashboardModule(){
 // ── PROJECTS WRAPPER ──────────────────────────────────────────────────
 function ProjectsWrapper(){
   const [selectedProject,setSelectedProject]=useState(null);
-  if(selectedProject) return <ProjectDetailPage project={selectedProject} onBack={()=>setSelectedProject(null)}/>;
+  // Project switcher inside ProjectDetailPage calls this — we just swap the
+  // project object. ProjectDetailPage's `tab` state survives the prop change
+  // so the user lands on the same module of the new project.
+  const switchProject = (p) => setSelectedProject(p);
+  if(selectedProject) return <ProjectDetailPage project={selectedProject} onBack={()=>setSelectedProject(null)} onSwitchProject={switchProject}/>;
   return <ProjectsPage onSelectProject={setSelectedProject}/>;
 }
 

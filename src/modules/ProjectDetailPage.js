@@ -12120,7 +12120,116 @@ function TabSolarSubsidy({ projectId }) {
 }
 
 
-function ProjectDetailPage({project=PROJ, onBack}) {
+// ── ProjectSwitcher — clickable project name in the top breadcrumb ──
+// Dropdown lists every active project (except the current one). Picking
+// one calls onSwitch(project) — the parent swaps `selectedProject` and
+// the inner `tab` state survives the prop change, so the user stays in
+// the same module (Material → Material) of the new project.
+function ProjectSwitcher({ current, onSwitch }) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState([]);
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(false);
+  const wrapRef = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onDocClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    document.addEventListener("mousedown", onDocClick);
+    return () => document.removeEventListener("mousedown", onDocClick);
+  }, [open]);
+
+  const loadProjects = async () => {
+    if (list.length) return; // already cached for this mount
+    setLoading(true);
+    try {
+      const r = await api.get("/projects");
+      const arr = Array.isArray(r?.data) ? r.data : [];
+      setList(arr);
+    } catch (_) {}
+    setLoading(false);
+  };
+
+  const filtered = list
+    .filter(p => String(p.id) !== String(current?.id))
+    .filter(p => !search || String(p.name||"").toLowerCase().includes(search.toLowerCase())
+                          || String(p.client||p.client_name||"").toLowerCase().includes(search.toLowerCase()));
+
+  const onPick = (p) => {
+    if (typeof onSwitch === "function") onSwitch(p);
+    setOpen(false);
+    setSearch("");
+  };
+
+  return (
+    <div ref={wrapRef} style={{position:"relative", flexShrink:0, maxWidth:280}}>
+      <button
+        onClick={() => { if (!open) loadProjects(); setOpen(o => !o); }}
+        title="Switch project"
+        style={{
+          display:"inline-flex", alignItems:"center", gap:5,
+          padding:"4px 9px 4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,.12)",
+          background: open ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.04)",
+          color:"#fff", cursor:"pointer", fontFamily:"inherit", maxWidth:260,
+          transition:"background .12s",
+        }}
+        onMouseEnter={e => { if (!open) e.currentTarget.style.background = "rgba(255,255,255,.1)"; }}
+        onMouseLeave={e => { if (!open) e.currentTarget.style.background = "rgba(255,255,255,.04)"; }}>
+        <span title={current?.name} style={{fontSize:13.5, fontWeight:700, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:200}}>{current?.name}</span>
+        <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{opacity:.7, transform: open ? "rotate(180deg)" : "none", transition:"transform .15s"}}>
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      {open && (
+        <div style={{
+          position:"absolute", top:"calc(100% + 6px)", left:0, zIndex:200,
+          minWidth:300, maxWidth:360, maxHeight:420, overflowY:"auto",
+          background:"#fff", borderRadius:9, boxShadow:"0 14px 36px rgba(0,0,0,.18)",
+          border:"1px solid #E5E7EB", display:"flex", flexDirection:"column",
+        }}>
+          <div style={{padding:"9px 11px", borderBottom:"1px solid #F1F5F9", position:"sticky", top:0, background:"#fff"}}>
+            <input
+              autoFocus
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search project or client..."
+              style={{width:"100%", padding:"7px 10px", borderRadius:6, border:"1.5px solid #E5E7EB", fontSize:12.5, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}/>
+          </div>
+          {loading && <div style={{padding:"18px 14px", textAlign:"center", fontSize:12, color:"#94A3B8"}}>Loading projects...</div>}
+          {!loading && filtered.length === 0 && (
+            <div style={{padding:"22px 14px", textAlign:"center", fontSize:12.5, color:"#64748B"}}>
+              {search ? "No projects match." : "No other projects."}
+            </div>
+          )}
+          {!loading && filtered.map(p => (
+            <button key={p.id} onClick={() => onPick(p)}
+              style={{
+                display:"flex", alignItems:"center", gap:10, padding:"9px 12px",
+                border:"none", borderTop:"1px solid #F1F5F9", background:"#fff", cursor:"pointer",
+                textAlign:"left", fontFamily:"inherit", transition:"background .1s",
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "#F0F9FF"}
+              onMouseLeave={e => e.currentTarget.style.background = "#fff"}>
+              <div style={{width:30, height:30, borderRadius:7, background:"#EEF2FF", color:"#4338CA", display:"flex", alignItems:"center", justifyContent:"center", fontSize:13, fontWeight:800, flexShrink:0}}>
+                {String(p.name||"?").charAt(0).toUpperCase()}
+              </div>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{fontSize:13, fontWeight:700, color:"#0F172A", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p.name}</div>
+                <div style={{fontSize:10.5, color:"#94A3B8", marginTop:1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>
+                  {p.client_name || p.client || "—"}{p.city ? ` · ${p.city}` : ""}{p.status ? ` · ${p.status}` : ""}
+                </div>
+              </div>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#94A3B8" strokeWidth={2.4} strokeLinecap="round"><polyline points="9 18 15 12 9 6"/></svg>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
   if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
@@ -12318,9 +12427,9 @@ function ProjectDetailPage({project=PROJ, onBack}) {
       <div style={{flex:1, display:"flex", flexDirection:"column", minWidth:0, overflow:"hidden", background:T.bg}}>
         {/* Dark top bar — floating card with rounded edges */}
         <div style={{margin:"10px 12px 0", padding:"8px 14px", background:"#1E293B", borderRadius:10, boxShadow:"0 2px 10px rgba(15,23,42,0.18)", display:"flex", alignItems:"center", gap:12, flexShrink:0, minHeight:48}}>
-          {/* Left: breadcrumb */}
+          {/* Left: breadcrumb — project name is a switcher dropdown */}
           <div style={{flex:1, minWidth:0, display:"flex", alignItems:"center", gap:8, overflow:"hidden"}}>
-            <span title={project.name} style={{fontSize:13.5, fontWeight:700, color:"#fff", whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", maxWidth:240}}>{project.name}</span>
+            <ProjectSwitcher current={project} onSwitch={onSwitchProject}/>
             <span style={{fontSize:12, color:"rgba(255,255,255,.35)", fontWeight:400}}>/</span>
             <span style={{fontSize:12.5, fontWeight:600, color:"rgba(255,255,255,.85)", whiteSpace:"nowrap"}}>{currentTabLabel}</span>
             <Pill label={project.status} c={sm.c} bg="rgba(255,255,255,.1)"/>
