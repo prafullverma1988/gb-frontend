@@ -52,19 +52,21 @@ const getCategoryEmoji=(cat)=>{
 
 // ── UNIT LOCK ─────────────────────────────────────────────────────
 // Unit is locked (read-only chip) when material comes from library/master.
-// Only Material Library can change a material's unit.
+// Unit name CLEARLY visible — only change is disabled. Only Material Library
+// can change a material's unit (same material has only one unit, prevents hazzy).
 const UnitLock=({unit,locked,onChange,fallbackUnits=UNITS,compact})=>{
   if(locked){
     return (
-      <div title="Unit Material Library se aata hai — change karne ke liye Library me edit karein"
-        style={{height:compact?28:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,fontWeight:600,color:T.t2,fontFamily:"inherit",cursor:"not-allowed"}}>
-        <span style={{fontSize:9,opacity:.6}}>🔒</span>{unit||"—"}
+      <div title="Unit Material Library se aata hai — change karne ke liye Library → Materials me edit karein"
+        style={{height:compact?32:38,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",justifyContent:"center",gap:5,fontSize:12.5,fontWeight:700,color:T.t1,fontFamily:"inherit",cursor:"not-allowed",boxSizing:"border-box"}}>
+        <span style={{fontSize:9,opacity:.55}}>🔒</span>
+        <span>{unit||"—"}</span>
       </div>
     );
   }
   return (
     <select value={unit||"Nos"} onChange={e=>onChange(e.target.value)}
-      style={{height:compact?28:32,padding:"0 6px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,background:T.surface,fontFamily:"inherit",outline:"none"}}>
+      style={{height:compact?32:38,padding:"0 6px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,background:T.surface,fontFamily:"inherit",outline:"none"}}>
       {fallbackUnits.map(u=><option key={u}>{u}</option>)}
     </select>
   );
@@ -241,14 +243,16 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
 
 // ── LINE-ITEM ROW (used by GRN, Issue, MR, Transfer modals) ───────
 function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove}){
-  const matSel=stock.find(m=>m.id===row.material_id);
+  // SearchSelect returns string keys; stock may have number ids — compare loosely
+  const findStock=(id)=>stock.find(m=>String(m.id)===String(id));
+  const matSel=findStock(row.material_id);
   const avail=matSel?Number(matSel.qty)||0:0;
   const overStock=mode==="issue"&&row.qty&&Number(row.qty)>avail;
   const stockOpts=stock.map(m=>({id:m.id,name:`${m.name} (${m.qty} ${m.unit} avail)`}));
 
   // Pick material — auto-fills unit + rate
   const onPickMaterial=(v)=>{
-    const m=stock.find(x=>x.id===v);
+    const m=findStock(v);
     // material_id should only be a real wh_materials.id (number).
     // If srcInv item explicitly has material_id field, prefer that (handles unmatched names).
     const matId = m && Object.prototype.hasOwnProperty.call(m,'material_id')
@@ -468,15 +472,17 @@ function NewMRModal({library,onClose,onSaved}){
 
   const valid=items.some(it=>it.lib_id&&Number(it.qty)>0);
   const libOpts=library.map(m=>({id:m.id,name:`${m.name}${m.unit?` · ${m.unit}`:""}`}));
+  // SearchSelect normalizes keys to strings, so compare loosely
+  const findLib=(id)=>library.find(l=>String(l.id)===String(id));
 
   const submit=async()=>{
     setSaving(true);
     try{
       const cleanItems=items.filter(it=>it.lib_id&&Number(it.qty)>0).map(it=>{
-        const lib=library.find(l=>l.id===it.lib_id);
+        const lib=findLib(it.lib_id);
         return {
           name:lib?.name||it.name||"Item",
-          unit:lib?.unit||"Nos",
+          unit:lib?.unit||it.unit||"Nos",
           qty:Number(it.qty),
           note:it.note||null,
         };
@@ -530,11 +536,11 @@ function NewMRModal({library,onClose,onSaved}){
         <span>Material (from library)</span><span>Unit</span><span>Qty</span><span>Note</span><span/>
       </div>
       {items.map((row,i)=>{
-        const lib=library.find(l=>l.id===row.lib_id);
+        const lib=findLib(row.lib_id);
         return (
           <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 1.5fr 30px",gap:6,alignItems:"center",marginBottom:6}}>
             <SearchSelect compact value={row.lib_id} options={libOpts}
-              onChange={v=>{const m=library.find(x=>x.id===v);updItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||""});}}
+              onChange={v=>{const m=findLib(v);updItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||""});}}
               placeholder="Library se material pick karein"/>
             <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
             <input type="number" value={row.qty||""} onChange={e=>updItem(i,{qty:e.target.value})} placeholder="Qty"
@@ -618,7 +624,7 @@ function NewTransferModal({stock,projects,onClose,onSaved}){
   // Over-stock warning: any item qty > source's available qty for that material
   const overStockRow=items.find(it=>{
     if(!it.qty)return false;
-    const inv=srcInv.find(s=>s.id===it.material_id||s.name===it.name);
+    const inv=srcInv.find(s=>String(s.id)===String(it.material_id)||s.name===it.name);
     return inv && Number(it.qty)>Number(inv.qty);
   });
   const valid=f.from_project_id&&f.to_project_id&&!sameProj&&!overStockRow&&items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
