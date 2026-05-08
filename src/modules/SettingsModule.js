@@ -1742,6 +1742,7 @@ function UIPreferences() {
 function OtherSettings() {
   const [enabled, setEnabled] = useState(true);
   const [days, setDays] = useState(4);
+  const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -1751,6 +1752,7 @@ function OtherSettings() {
       if (r?.success && r.data) {
         setEnabled(r.data.dup_payment_check_enabled !== 0);
         setDays(parseInt(r.data.dup_payment_window_days) || 4);
+        setWhProcMode(r.data.warehouse_procurement_mode || "direct");
       }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -1761,6 +1763,7 @@ function OtherSettings() {
       await api.put("/settings/company", {
         dup_payment_check_enabled: enabled,
         dup_payment_window_days: parseInt(days) || 4,
+        warehouse_procurement_mode: whProcMode,
       });
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1800);
@@ -1792,6 +1795,27 @@ function OtherSettings() {
           <div style={{ fontSize: 11, color: T.textLight, marginTop: 6 }}>
             Default: 4 days. Set 0 to effectively disable (or use the toggle above).
           </div>
+        </div>
+      </SectionCard>
+
+      <SectionCard title="Warehouse Procurement Mode"
+        desc="Warehouse MR admin se Approve hone ke baad order kaise place hoga — warehouse khud kare ya procurement team ke through.">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+          {[
+            { v: "direct",          label: "Direct — Warehouse khud orders place karta hai",
+              sub: "Approved → Warehouse module me 'Place Order' button → Ordered → Receive (GRN) → stock update. Procurement team involve nahi hoti." },
+            { v: "via_procurement", label: "Via Procurement Team",
+              sub: "Approved → 'Send to Procurement' button → procurement queue me MR aata hai → procurement PO place karti hai → vendor delivery par procurement Mark Received karta hai → warehouse stock automatically update ho jaata hai." },
+          ].map(opt => (
+            <label key={opt.v} style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 9, border: `1.5px solid ${whProcMode===opt.v ? "#2563EB" : "#E5E7EB"}`, background: whProcMode===opt.v ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
+              <input type="radio" checked={whProcMode===opt.v} onChange={() => setWhProcMode(opt.v)}
+                style={{ marginTop: 3, accentColor: "#2563EB" }}/>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: whProcMode===opt.v ? "#1D4ED8" : "#111827" }}>{opt.label}</div>
+                <div style={{ fontSize: 11.5, color: "#6B7280", marginTop: 3, lineHeight: 1.5 }}>{opt.sub}</div>
+              </div>
+            </label>
+          ))}
         </div>
       </SectionCard>
     </div>

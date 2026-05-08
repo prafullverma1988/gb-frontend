@@ -1784,7 +1784,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 //                Approved → Ordered (vendor) → Received (GRN, stock+).
 //   "project":   Tab 2 — procurement-driven MRs for projects. Lifecycle:
 //                Pending → Approved → Issued (from existing stock).
-function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,mode="project"}){
+function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,mode="project",procMode="direct"}){
   const [fStatus,setFStatus]=useState("All");
   const STATUS_S={
     "Pending":        {c:T.amb,bg:T.ambL,brd:T.ambM},
@@ -1869,11 +1869,20 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,mode="project
                   )}
 
                   {/* WAREHOUSE MODE — only Order + GRN after approval */}
-                  {mode==="warehouse"&&mr.status==="Approved"&&onOrder&&(
+                  {mode==="warehouse"&&mr.status==="Approved"&&procMode==="direct"&&onOrder&&(
                     <Btn onClick={()=>onOrder(mr)} c={T.pur} size="sm" icon={IcMR}>Place Order</Btn>
                   )}
-                  {mode==="warehouse"&&mr.status==="Ordered"&&onGrn&&(
+                  {mode==="warehouse"&&mr.status==="Approved"&&procMode==="via_procurement"&&onSendToProc&&(
+                    <Btn onClick={()=>onSendToProc(mr)} c={T.pur} size="sm" icon={IcOut}>Send to Procurement</Btn>
+                  )}
+                  {mode==="warehouse"&&mr.status==="Ordered"&&!mr.sent_to_procurement_at&&onGrn&&(
                     <Btn onClick={()=>onGrn(mr)} c={T.grn} size="sm" icon={IcIn}>Receive (GRN)</Btn>
+                  )}
+                  {mode==="warehouse"&&mr.status==="Ordered"&&mr.sent_to_procurement_at&&(
+                    <div style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:7,background:T.purL,border:`1px solid ${T.purM}`,whiteSpace:"nowrap"}}>
+                      <span style={{fontSize:13}}>📦</span>
+                      <span style={{fontSize:11,color:T.pur,fontWeight:600}}>With Procurement Team</span>
+                    </div>
                   )}
                   {mode==="warehouse"&&mr.status==="PartialReceived"&&onGrn&&(
                     <Btn onClick={()=>onGrn(mr)} c={T.grn} size="sm" icon={IcIn}>Receive Rest</Btn>
@@ -1912,7 +1921,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,mode="project
 }
 
 // ── REQUESTS WRAPPER — splits Tab 1 (Warehouse MR) and Tab 2 (Project) ─
-function RequestsTab({mrs,projects,users,library,onSubMR}){
+function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR}){
   const [sub,setSub]=useState("warehouse");
   const whMrs = mrs.filter(m=>!m.project_id);
   const projMrs = mrs.filter(m=>!!m.project_id);
@@ -1934,11 +1943,18 @@ function RequestsTab({mrs,projects,users,library,onSubMR}){
       </div>
       {/* Approval flow note — same for both sub-tabs */}
       <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
-        <b>Flow:</b> Request {sub==="warehouse"?"(yahin se ya site se)":"(procurement se aati)"} → Admin <b>Material Approvals</b> drawer me approve karega → wahan se aapko {sub==="warehouse"?"\"Place Order\" + \"Receive (GRN)\"":"\"Issue Now\""} buttons milenge.
+        <b>Flow:</b> Request {sub==="warehouse"?"(yahin se ya site se)":"(procurement se aati)"} → Admin <b>Material Approvals</b> drawer me approve karega → {sub==="warehouse"
+          ?(procMode==="via_procurement"
+            ?<><b>Send to Procurement</b> button click karein → procurement queue me MR jaayegi → vendor receive par stock auto-update.</>
+            :<>"Place Order" + "Receive (GRN)" buttons milenge.</>)
+          :<>"Issue Now" button milega.</>}
+        {sub==="warehouse"&&<span style={{marginLeft:8,padding:"1px 8px",background:procMode==="via_procurement"?T.purL:T.grnL,color:procMode==="via_procurement"?T.pur:T.grn,borderRadius:10,fontSize:10,fontWeight:700}}>Mode: {procMode==="via_procurement"?"Via Procurement":"Direct"}</span>}
       </div>
       {sub==="warehouse"
-        ? <MRTab mrs={whMrs} mode="warehouse" onNew={()=>onSubMR.openNew()}
-            onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}/>
+        ? <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
+            onNew={()=>onSubMR.openNew()}
+            onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
+            onSendToProc={onSubMR.sendToProcurement}/>
         : <MRTab mrs={projMrs} mode="project"
             onIssue={onSubMR.openIssue}/>
       }
@@ -2246,6 +2262,7 @@ function WarehouseModule(){
   const [projects,setProjects]=useState([]);
   const [users,setUsers]=useState([]);
   const [library,setLibrary]=useState([]);
+  const [procMode,setProcMode]=useState("direct"); // direct | via_procurement
   const [loading,setLoading]=useState(true);
 
   // Modal state
@@ -2269,7 +2286,7 @@ function WarehouseModule(){
 
   const loadAll=useCallback(async()=>{
     try{
-      const [sRes,gRes,iRes,mRes,tRes,pRes,uRes,libRes]=await Promise.all([
+      const [sRes,gRes,iRes,mRes,tRes,pRes,uRes,libRes,settRes]=await Promise.all([
         api.get("/warehouse/materials"),
         api.get("/warehouse/grn"),
         api.get("/warehouse/issues"),
@@ -2278,7 +2295,9 @@ function WarehouseModule(){
         api.get("/projects").catch(()=>({success:false})),
         api.get("/projects/team-members").catch(()=>({success:false})),
         api.get("/library/materials").catch(()=>({success:false})),
+        api.get("/settings/company").catch(()=>({success:false})),
       ]);
+      if(settRes.success&&settRes.data) setProcMode(settRes.data.warehouse_procurement_mode||"direct");
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0})));
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
@@ -2387,11 +2406,18 @@ function WarehouseModule(){
         {tab==="grn"&&<GrnTab grns={grns} onNew={()=>setGrnNewOpen(true)} onVerify={handleVerifyGRN}/>}
         {tab==="issue"&&<IssueTab issues={issues} projects={projects} onNew={()=>setIssueNewOpen(true)} onSelect={iss=>setIssueDetail(iss)}/>}
         {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
+          procMode={procMode}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
             openIssue:(mr)=>setIssueFromMR(mr),
             openOrder:(mr)=>setOrderMR(mr),
             openGrn:(mr)=>setGrnMR(mr),
+            sendToProcurement:async(mr)=>{
+              if(!window.confirm(`${mr.id} ko procurement team ke paas bhejna hai? Vendor PO place karne ke baad warehouse stock auto-update hoga.`)) return;
+              const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
+              if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
+              else alert(r.message||"Failed");
+            },
           }}/>}
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)} onSelect={t=>setTransferDetail(t)}/>}
       </div>
