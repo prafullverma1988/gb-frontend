@@ -379,6 +379,11 @@ function NewGRNModal({stock,projects,users,onClose,onSaved}){
 }
 
 // ── NEW ISSUE MODAL ───────────────────────────────────────────────
+// NewIssueModal mirrors the Transfer modal:
+//   FROM = Warehouse (locked)
+//   TO   = Project (picker)
+//   Issued To = person (preserved)
+// Source debit immediate, dest pending until site Receive (creates GRN at project)
 function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const [f,setF]=useState({date:today(),project_id:prefill?.project_id||null,issued_to:null,remarks:prefill?.remarks||""});
   const initial=()=> (prefill?.items&&prefill.items.length>0)
@@ -390,7 +395,18 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const [items,setItems]=useState(initial);
   const [saving,setSaving]=useState(false);
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
-  const updItem=(i,patch)=>setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
+  const updItem=(i,patch)=>{
+    setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
+    // Auto-fill rate from last-purchase when material picked
+    const pickedName=patch.name&&String(patch.name).trim();
+    if(pickedName){
+      api.get(`/warehouse/last-rate?name=${encodeURIComponent(pickedName)}`).then(r=>{
+        if(r.success&&Number(r.data?.rate)>0){
+          setItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row));
+        }
+      }).catch(()=>{});
+    }
+  };
   const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
   const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
 
@@ -399,8 +415,9 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     const m=stock.find(s=>s.id===it.material_id);
     return m&&Number(it.qty)>Number(m.qty);
   });
-  const valid=!stockErr&&items.some(it=>it.material_id&&Number(it.qty)>0);
+  const valid=!stockErr&&f.project_id&&items.some(it=>it.material_id&&Number(it.qty)>0);
   const total=items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
+  const toName=projects.find(p=>p.id===f.project_id)?.name;
 
   const submit=async()=>{
     setSaving(true);
@@ -420,38 +437,65 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
 
   return (
     <ModalShell title={fromMR?`Issue against MR ${fromMR}`:"New Issue — Material Out"}
-      sub="Stock se material project ko de rahe hain"
-      onClose={onClose} width={760}
+      sub="Warehouse → Project · Source debit turant, dest pe site team Receive karegi"
+      onClose={onClose} width={780}
       footer={<>
-        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total: <b style={{color:T.amb}}>₹{fmtN(total)}</b></span>
+        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total Value: <b style={{color:T.amb}}>₹{fmtN(total)}</b></span>
         <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!valid||saving} c={T.amb} icon={IcOut}>{saving?"Saving...":"Issue Material"}</Btn>
+        <Btn onClick={submit} disabled={!valid||saving} c={T.amb} icon={IcOut}>{saving?"Saving...":fromMR?"Issue Material":"Save Issue (Pending)"}</Btn>
       </>}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:14}}>
+      {/* Route card — From locked, To picker */}
+      <div style={{padding:"12px 14px",background:`linear-gradient(135deg, ${T.ambL} 0%, ${T.bluL} 100%)`,borderRadius:9,border:`1px solid ${T.ambM}`,marginBottom:13}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>From</div>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:6,background:T.surfaceB,border:`1.5px solid ${T.b1}`,fontFamily:"inherit"}}>
+              <span style={{fontSize:11,opacity:.55}}>🔒</span>
+              <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Warehouse</span>
+              <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>(central stock)</span>
+            </div>
+            <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>− DEBIT (immediate)</div>
+          </div>
+          <div style={{color:T.amb,fontSize:24,fontWeight:800}}>→</div>
+          <div>
+            <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>To Project *</div>
+            <SearchSelect compact value={f.project_id} options={projects}
+              onChange={v=>upd("project_id",v)} placeholder="Project select karo"/>
+            <div style={{fontSize:10.5,color:T.amb,marginTop:3,fontWeight:600}}>⏳ PENDING RECEIVE</div>
+          </div>
+        </div>
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"140px 1fr 1fr",gap:11,marginBottom:13}}>
         <Field label="Date"><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
-        <Field label="Project">
-          <SearchSelect compact value={f.project_id} options={projects} onChange={v=>upd("project_id",v)} placeholder="Select project"/>
-        </Field>
         <Field label="Issued To">
-          <SearchSelect compact value={f.issued_to} options={users} onChange={v=>upd("issued_to",v)} placeholder="Person on site"/>
+          <SearchSelect compact value={f.issued_to} options={users} onChange={v=>upd("issued_to",v)} placeholder="Person who collected"/>
+        </Field>
+        <Field label="Remarks">
+          <Input value={f.remarks} onChange={e=>upd("remarks",e.target.value)} placeholder="e.g. GF slab casting"/>
         </Field>
       </div>
-      <Field label="Remarks" style={{marginBottom:14}}>
-        <Input value={f.remarks} onChange={e=>upd("remarks",e.target.value)} placeholder="e.g. GF slab casting, Tower-A column shuttering..."/>
-      </Field>
+      {toName&&(
+        <div style={{padding:"7px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,fontSize:11.5,color:T.blu,marginBottom:13,lineHeight:1.5}}>
+          Warehouse stock turant minus hoga. <b>{toName}</b> me material physically pohonchne par site wala "Receive" karega — tab tak Pending dikhega aur dest inventory me add nahi hoga.
+        </div>
+      )}
 
-      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Items</div>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 30px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>Material (from stock)</span><span>Unit</span><span>Qty</span><span>Rate ₹</span><span/>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· warehouse stock se</span></div>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
+        <span>Material (from stock)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
       </div>
       {items.map((row,i)=>(
-        <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem} mode="issue" canRemove={items.length>1}/>
+        <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem} mode="transfer" canRemove={items.length>1}/>
       ))}
       {stockErr&&<div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>⚠ Stock se zyada qty kisi item me hai — kam karo</div>}
       <button onClick={addItem}
         style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
         <IcAdd size={11}/> Add row
       </button>
+      <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
+        💡 Material pick karte hi rate auto-fill (last purchase). Edit kar sakte ho.
+      </div>
     </ModalShell>
   );
 }
@@ -1283,75 +1327,289 @@ function GrnTab({grns,onNew,onVerify}){
 }
 
 // ── ISSUE TAB ──────────────────────────────────────────────────────
-function IssueTab({issues,projects,onNew}){
-  const [sel,setSel]=useState(null);
+function IssueTab({issues,projects,onNew,onSelect}){
+  const [fStatus,setFStatus]=useState("All");
   const [fProj,setFProj]=useState(null);
-  const filtered=fProj?issues.filter(i=>i.project_id===fProj):issues;
+  const STATUS_S={
+    "Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},
+    "Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},
+    "Received":{c:T.grn,bg:T.grnL,brd:T.grnM},
+  };
+  let filtered=issues;
+  if (fProj) filtered=filtered.filter(i=>i.project_id===fProj);
+  if (fStatus!=="All") filtered=filtered.filter(i=>(i.status||"Pending")===fStatus);
+  const pendingCount=issues.filter(i=>(i.status||"Pending")==="Pending").length;
+  const partialCount=issues.filter(i=>i.status==="Partial").length;
+
   return(
-    <div style={{display:"flex",gap:12}}>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center"}}>
-          <div style={{minWidth:200,maxWidth:260,flex:1}}>
-            <SearchSelect compact value={fProj} options={[{id:null,name:"All projects"},...projects]} onChange={v=>setFProj(v)} placeholder="Filter by project"/>
-          </div>
-          <span style={{fontSize:11,color:T.t4}}>{filtered.length} issues</span>
-          <div style={{flex:1}}/>
-          <Btn onClick={onNew} c={T.amb} icon={IcOut} size="sm">Issue Material</Btn>
+    <div>
+      {pendingCount>0&&(
+        <div style={{padding:"10px 13px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,marginBottom:11,display:"flex",alignItems:"center",gap:10}}>
+          <IcAlert size={14} color={T.amb}/>
+          <span style={{fontSize:12,color:T.amb,fontWeight:700}}>
+            {pendingCount} issue{pendingCount>1?"s":""} pending receive — destination project se acknowledge hona baki hai
+          </span>
         </div>
-        {filtered.length===0?<Empty label="Koi issue nahi" sub="Stock se material project ko bhejne ke liye Issue Material click karein"/>:(
-          <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"100px 90px 1fr 130px 110px 90px",padding:"7px 14px",background:T.sb,gap:8}}>
-              {["Issue No","Date","Project","Issued To","Total","By"].map((h,i)=>(
-                <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
-              ))}
-            </div>
-            {filtered.map(iss=>{
-              const isS=sel?.id===iss.id;
-              return(
-                <div key={iss.id} onClick={()=>setSel(isS?null:iss)}
-                  style={{display:"grid",gridTemplateColumns:"100px 90px 1fr 130px 110px 90px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",background:isS?T.ambL:"transparent",borderLeft:`3px solid ${isS?T.amb:T.amb+"33"}`,gap:8}}
-                  onMouseEnter={e=>{if(!isS)e.currentTarget.style.background=T.surfaceB;}}
-                  onMouseLeave={e=>{if(!isS)e.currentTarget.style.background="transparent";}}>
-                  <span style={{fontSize:11.5,fontWeight:700,color:T.amb,fontFamily:"monospace"}}>{iss.id}</span>
-                  <span style={{fontSize:11.5,color:T.t3}}>{iss.date}</span>
-                  <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{iss.project}</span>
-                  <span style={{fontSize:11.5,color:T.t2}}>{iss.issuedTo}</span>
-                  <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>₹{fmt(iss.total)}</span>
-                  <span style={{fontSize:11.5,color:T.t3}}>{iss.by}</span>
-                </div>
-              );
-            })}
-          </div>
-        )}
+      )}
+      <div style={{display:"flex",gap:8,marginBottom:11,alignItems:"center",flexWrap:"wrap"}}>
+        <div style={{minWidth:200,maxWidth:240,flex:1}}>
+          <SearchSelect compact value={fProj} options={[{id:null,name:"All projects"},...projects]} onChange={v=>setFProj(v)} placeholder="Filter by project"/>
+        </div>
+        {["All","Pending","Partial","Received"].map(s=>{
+          const count = s==="All" ? issues.length : issues.filter(i=>(i.status||"Pending")===s).length;
+          return (
+            <button key={s} onClick={()=>setFStatus(s)}
+              style={{padding:"5px 13px",borderRadius:20,border:`1.5px solid ${fStatus===s?(STATUS_S[s]?.brd||T.blu):T.b1}`,background:fStatus===s?(STATUS_S[s]?.bg||T.bluL):"none",color:fStatus===s?(STATUS_S[s]?.c||T.blu):T.t3,fontSize:11.5,fontWeight:fStatus===s?700:400,cursor:"pointer",fontFamily:"inherit"}}>
+              {s} {s!=="All"&&<span style={{marginLeft:3,fontWeight:800}}>{count}</span>}
+            </button>
+          );
+        })}
+        <div style={{flex:1}}/>
+        <Btn onClick={onNew} c={T.amb} icon={IcOut} size="sm">Issue Material</Btn>
       </div>
-      {sel&&(
-        <div style={{width:320,flexShrink:0,background:T.surface,borderRadius:9,border:`1px solid ${T.ambM}`,overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 220px)"}}>
-          <div style={{background:T.sb,padding:"11px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <div><div style={{fontSize:13,fontWeight:700,color:"white"}}>{sel.id}</div>
-              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:1}}>{sel.project} · {sel.date}</div></div>
-            <button onClick={()=>setSel(null)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={13}/></button>
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"11px 14px"}}>
-            {sel.remarks&&<div style={{marginBottom:10,padding:"8px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-              <div style={{fontSize:9.5,color:T.t4,marginBottom:2}}>Remarks</div>
-              <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{sel.remarks}"</div>
-            </div>}
-            <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Items Issued</div>
-            {sel.items.map((it,i)=>(
-              <div key={i} style={{padding:"8px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <div><div style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.name}</div>
-                  <div style={{fontSize:10.5,color:T.t4}}>{fmtN(it.qty)} {it.unit} @ ₹{fmtN(it.rate)}</div></div>
-                <div style={{fontSize:13,fontWeight:700,color:T.amb}}>₹{fmt(it.qty*it.rate)}</div>
-              </div>
+      {filtered.length===0?<Empty label="Koi issue nahi" sub="Stock se material project ko bhejne ke liye Issue Material click karein"/>:(
+        <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"100px 80px 1fr 110px 100px 95px 95px",padding:"7px 14px",background:T.sb,gap:8}}>
+            {["Issue No","Date","To Project","Issued To","Value","By","Status"].map((h,i)=>(
+              <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i===4?"right":"left"}}>{h}</span>
             ))}
-            <div style={{display:"flex",justifyContent:"space-between",padding:"9px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,marginTop:8}}>
-              <span style={{fontSize:12,fontWeight:700,color:T.amb}}>Total Issued</span>
-              <span style={{fontSize:14,fontWeight:800,color:T.amb}}>₹{fmtN(sel.total)}</span>
-            </div>
           </div>
+          {filtered.map(iss=>{
+            const status=iss.status||"Pending";
+            const ss=STATUS_S[status]||STATUS_S["Pending"];
+            return (
+              <div key={iss.id} onClick={()=>onSelect(iss)}
+                style={{display:"grid",gridTemplateColumns:"100px 80px 1fr 110px 100px 95px 95px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",gap:8,borderLeft:`3px solid ${ss.c}`}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"77"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:11.5,fontWeight:700,color:T.amb,fontFamily:"monospace"}}>{iss.id}</span>
+                <span style={{fontSize:11.5,color:T.t3}}>{iss.date}</span>
+                <div style={{minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{iss.project}</div>
+                  <div style={{fontSize:10,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{(iss.items||[]).map(it=>`${it.name||it.material_name} ×${fmtN(it.qty)} ${it.unit||""}`).slice(0,2).join(", ")}</div>
+                </div>
+                <span style={{fontSize:11.5,color:T.t2}}>{iss.issuedTo}</span>
+                <span style={{fontSize:12,fontWeight:700,color:T.amb,textAlign:"right"}}>₹{fmt(iss.total)}</span>
+                <span style={{fontSize:11.5,color:T.t3}}>{iss.by}</span>
+                <Pill label={status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
+  );
+}
+
+// ── ISSUE DETAIL DRAWER ──────────────────────────────────────────
+function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onReceived}){
+  const [detail,setDetail]=useState(issue);
+  const [loading,setLoading]=useState(true);
+  const [deleting,setDeleting]=useState(false);
+  const [receiveOpen,setReceiveOpen]=useState(false);
+  const [receiveItems,setReceiveItems]=useState([]);
+  const [receiving,setReceiving]=useState(false);
+
+  useEffect(()=>{
+    if(!issue?.dbId)return;
+    setLoading(true);
+    api.get(`/warehouse/issues/${issue.dbId}`).then(r=>{
+      if(r.success){
+        const d={...r.data,id:r.data.issue_no,dbId:r.data.id,date:fmtDate(r.data.date),project:r.data.project_name,issuedTo:r.data.issued_to_name,by:r.data.issued_by_name};
+        setDetail(d);
+        setReceiveItems((r.data.items||[]).map(it=>({id:it.id,name:it.name||it.material_name,unit:it.unit,qty:Number(it.qty),received_qty:Number(it.qty)})));
+      }
+      setLoading(false);
+    }).catch(()=>setLoading(false));
+  },[issue?.dbId]);
+
+  const handleDelete=async()=>{
+    if(!window.confirm(`${detail?.id} ko delete karein? Source warehouse stock restore hoga${detail?.status==="Received"||detail?.status==="Partial"?" + dest project ka GRN bhi hatega":""}. Yeh undo nahi ho sakta.`)) return;
+    setDeleting(true);
+    const r=await api.del(`/warehouse/issues/${detail.dbId}`);
+    setDeleting(false);
+    if(r.success){onDeleted&&onDeleted();onClose();}
+    else alert(r.message||"Delete failed");
+  };
+
+  const handleReceive=async()=>{
+    setReceiving(true);
+    const items=receiveItems.map(it=>({id:it.id,received_qty:Number(it.received_qty||0)}));
+    const r=await api.post(`/warehouse/issues/${detail.dbId}/receive`,{items});
+    setReceiving(false);
+    if(r.success){
+      onReceived&&onReceived();
+      api.get(`/warehouse/issues/${detail.dbId}`).then(rr=>{
+        if(rr.success){
+          const d={...rr.data,id:rr.data.issue_no,dbId:rr.data.id,date:fmtDate(rr.data.date),project:rr.data.project_name,issuedTo:rr.data.issued_to_name,by:rr.data.issued_by_name};
+          setDetail(d);
+          setReceiveOpen(false);
+        }
+      });
+    } else alert(r.message||"Receive failed");
+  };
+
+  const items=detail?.items||[];
+  const totalQty=items.reduce((s,i)=>s+Number(i.qty||0),0);
+  const totalValue=items.reduce((s,i)=>s+Number(i.qty||0)*Number(i.rate||0),0);
+  const status=detail?.status||"Pending";
+  const isPending=status==="Pending";
+  const isPartial=status==="Partial";
+  const isReceived=status==="Received";
+  const STATUS_S={"Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},"Partial":{c:T.blu,bg:T.bluL,brd:T.bluM},"Received":{c:T.grn,bg:T.grnL,brd:T.grnM}};
+  const ss=STATUS_S[status]||STATUS_S["Pending"];
+
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(560px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
+        <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:34,height:34,borderRadius:8,background:T.amb+"33",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <IcOut size={15} color="#fff"/>
+            </div>
+            <div>
+              <div style={{fontSize:14,fontWeight:700,color:"white",fontFamily:"monospace"}}>{detail?.id||issue?.id}</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>Material Out · Warehouse → {detail?.project||"—"}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
+        </div>
+
+        {loading?(
+          <div style={{flex:1,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:13}}>Loading...</div>
+        ):(
+          <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+            {isPending&&(
+              <div style={{padding:"11px 14px",background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:8,marginBottom:12,display:"flex",alignItems:"center",gap:10}}>
+                <span style={{fontSize:18}}>⏳</span>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color:T.amb}}>Pending receive at {detail.project}</div>
+                  <div style={{fontSize:11,color:T.amb,marginTop:2}}>Warehouse stock minus ho chuka hai. Site team physically receive karke "Receive" click karegi tab dest project me GRN banega.</div>
+                </div>
+              </div>
+            )}
+            {isPartial&&(
+              <div style={{padding:"11px 14px",background:T.bluL,border:`1.5px solid ${T.bluM}`,borderRadius:8,marginBottom:12}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>📦 Partially received</div>
+              </div>
+            )}
+
+            <div style={{padding:"14px 16px",background:`linear-gradient(135deg, ${T.ambL} 0%, ${T.bluL} 100%)`,borderRadius:10,border:`1px solid ${T.ambM}`,marginBottom:14}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr auto 1fr",gap:14,alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>From</div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.t1,display:"flex",alignItems:"center",gap:5}}>
+                    <span style={{fontSize:10,opacity:.6}}>🔒</span>Warehouse
+                  </div>
+                  <div style={{fontSize:10.5,color:T.red,marginTop:3,fontWeight:600}}>− DEBIT (immediate)</div>
+                </div>
+                <div style={{color:T.amb,fontSize:24,fontWeight:800}}>→</div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>To Project</div>
+                  <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{detail?.project||"—"}</div>
+                  <div style={{fontSize:10.5,color:isReceived?T.grn:isPartial?T.blu:T.amb,marginTop:3,fontWeight:600}}>
+                    {isReceived?"+ CREDITED":isPartial?"⚠ PARTIAL":"⏳ PENDING RECEIVE"}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:14}}>
+              <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Status</div>
+                <Pill label={status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+              </div>
+              <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Issued To</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{detail?.issuedTo||"—"}</div>
+                <div style={{fontSize:9.5,color:T.t4,marginTop:1}}>by {detail?.by||"—"}</div>
+              </div>
+              <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+                <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{detail?.received_at?"Received":"Created"}</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1}}>
+                  {detail?.received_at?(<>{detail.received_by_name||"—"}<div style={{fontSize:10,color:T.t4,fontWeight:400}}>{fmtDate(detail.received_at)}</div></>):fmtDate(detail?.created_at||detail?.date)}
+                </div>
+              </div>
+            </div>
+
+            <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
+              <span>Items ({items.length})</span>
+              <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>Qty: {fmtN(totalQty)} · Value: ₹{fmtN(totalValue)}</span>
+            </div>
+            <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:12}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 50px 70px 70px 80px 80px",padding:"7px 11px",background:T.sb,gap:8}}>
+                {["Material","Unit","Qty","Rate","Value","Received"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i>=2?"right":"left"}}>{h}</span>
+                ))}
+              </div>
+              {items.map((it,i)=>{
+                const recvD=it.received_qty!=null?Number(it.received_qty):null;
+                const short=recvD!=null&&recvD<Number(it.qty);
+                return(
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 50px 70px 70px 80px 80px",padding:"9px 11px",gap:8,borderBottom:i<items.length-1?`1px solid ${T.b1}`:"none",background:i%2?"#fff":T.surfaceB,alignItems:"center"}}>
+                  <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.name||it.material_name}</span>
+                  <span style={{fontSize:11,color:T.t3}}>{it.unit||"—"}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.amb,textAlign:"right"}}>{fmtN(it.qty)}</span>
+                  <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>₹{fmtN(it.rate||0)}</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.amb,textAlign:"right"}}>₹{fmt(Number(it.qty||0)*Number(it.rate||0))}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:recvD==null?T.t4:short?T.amb:T.grn,textAlign:"right"}}>
+                    {recvD==null?"—":short?`${fmtN(recvD)}/${fmtN(it.qty)}`:`✓ ${fmtN(recvD)}`}
+                  </span>
+                </div>
+                );
+              })}
+            </div>
+
+            {receiveOpen&&isPending&&(
+              <div style={{padding:"12px 14px",background:T.grnL,border:`2px solid ${T.grnM}`,borderRadius:9,marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.grn,marginBottom:8}}>📥 Receive at {detail.project}</div>
+                <div style={{fontSize:11,color:T.t3,marginBottom:10}}>Actual received qty edit kar sakte ho (kam aaya to "Partial")</div>
+                {receiveItems.map((it,i)=>(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px",gap:8,marginBottom:7,alignItems:"center"}}>
+                    <div>
+                      <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.name}</div>
+                      <div style={{fontSize:10.5,color:T.t4}}>Sent: {fmtN(it.qty)} {it.unit}</div>
+                    </div>
+                    <input type="number" value={it.received_qty} max={it.qty}
+                      onChange={e=>{const v=e.target.value;setReceiveItems(p=>p.map((x,j)=>j===i?{...x,received_qty:v}:x));}}
+                      style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
+                  </div>
+                ))}
+                <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
+                  <GhostBtn onClick={()=>setReceiveOpen(false)}>Cancel</GhostBtn>
+                  <Btn onClick={handleReceive} disabled={receiving} c={T.grn} icon={IcChk} size="sm">
+                    {receiving?"Saving...":"Confirm Receive (creates GRN)"}
+                  </Btn>
+                </div>
+              </div>
+            )}
+
+            {detail?.remarks&&(
+              <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:8}}>
+                <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>Remarks</div>
+                <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{detail.remarks}"</div>
+              </div>
+            )}
+          </div>
+        )}
+
+        <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10.5,color:T.t4}}>{isPending?"Site receive baki":isReceived?"All received":""}</span>
+          <div style={{display:"flex",gap:8}}>
+            <GhostBtn onClick={onClose}>Close</GhostBtn>
+            {isPending&&canReceive&&!receiveOpen&&detail?.project_id&&(
+              <Btn onClick={()=>setReceiveOpen(true)} c={T.grn} icon={IcIn} size="sm">Receive at {detail.project}</Btn>
+            )}
+            {canDelete&&(
+              <Btn onClick={handleDelete} disabled={deleting} c={T.red} icon={IcTrash} size="sm">
+                {deleting?"Deleting...":"Delete & Reverse"}
+              </Btn>
+            )}
+          </div>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -1838,6 +2096,7 @@ function WarehouseModule(){
   const [transferDetail,setTransferDetail]=useState(null);
   const [orderMR,setOrderMR]=useState(null);       // Tab 1: place order modal target
   const [grnMR,setGrnMR]=useState(null);           // Tab 1: receive GRN modal target
+  const [issueDetail,setIssueDetail]=useState(null);
 
   // Current user (for admin-only actions)
   const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
@@ -1857,7 +2116,7 @@ function WarehouseModule(){
       ]);
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0})));
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
-      if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
+      if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",status:i.status||"Pending",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
       if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":"Warehouse (internal)"),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
       if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_project_name||t.from_location||"—",to:t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
@@ -1961,7 +2220,7 @@ function WarehouseModule(){
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
         {tab==="stock"&&<StockTab stock={stock} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})}/>}
         {tab==="grn"&&<GrnTab grns={grns} onNew={()=>setGrnNewOpen(true)} onVerify={handleVerifyGRN}/>}
-        {tab==="issue"&&<IssueTab issues={issues} projects={projects} onNew={()=>setIssueNewOpen(true)}/>}
+        {tab==="issue"&&<IssueTab issues={issues} projects={projects} onNew={()=>setIssueNewOpen(true)} onSelect={iss=>setIssueDetail(iss)}/>}
         {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
@@ -2010,6 +2269,13 @@ function WarehouseModule(){
         <TransferDetailDrawer transfer={transferDetail}
           canDelete={isAdmin} canReceive={true}
           onClose={()=>setTransferDetail(null)}
+          onDeleted={()=>loadAll()}
+          onReceived={()=>loadAll()}/>
+      )}
+      {issueDetail&&(
+        <IssueDetailDrawer issue={issueDetail}
+          canDelete={isAdmin} canReceive={true}
+          onClose={()=>setIssueDetail(null)}
           onDeleted={()=>loadAll()}
           onReceived={()=>loadAll()}/>
       )}

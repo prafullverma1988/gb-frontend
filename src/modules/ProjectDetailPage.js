@@ -7576,17 +7576,34 @@ function TabMaterial({ project }) {
   const [trReceiveDone, setTrReceiveDone] = useState([]);
   const [trReceiveQty, setTrReceiveQty] = useState({});
   const [trReceiving, setTrReceiving] = useState(false);
+  // Pending issues from warehouse TO this project
+  const [pendingIssues, setPendingIssues] = useState([]);
+  const [issueReceiveDone, setIssueReceiveDone] = useState([]);
+  const [issueReceiveQty, setIssueReceiveQty] = useState({});
+  const [issueReceiving, setIssueReceiving] = useState(false);
 
   const loadPendingTransfers = useCallback(() => {
     if (!projectId) return;
     api.get(`/warehouse/transfers?status=Pending&to_project_id=${projectId}`).then(r => {
       if (r.success) setPendingTransfers(r.data || []);
     }).catch(()=>{});
-    // Also fetch Partial — admin may want to top-up
     api.get(`/warehouse/transfers?status=Partial&to_project_id=${projectId}`).then(r => {
       if (r.success) setPendingTransfers(prev => {
         const ids = new Set(prev.map(t=>t.id));
         return [...prev, ...(r.data||[]).filter(t=>!ids.has(t.id))];
+      });
+    }).catch(()=>{});
+  }, [projectId]);
+
+  const loadPendingIssues = useCallback(() => {
+    if (!projectId) return;
+    api.get(`/warehouse/issues?status=Pending&project_id=${projectId}`).then(r => {
+      if (r.success) setPendingIssues(r.data || []);
+    }).catch(()=>{});
+    api.get(`/warehouse/issues?status=Partial&project_id=${projectId}`).then(r => {
+      if (r.success) setPendingIssues(prev => {
+        const ids = new Set(prev.map(i=>i.id));
+        return [...prev, ...(r.data||[]).filter(i=>!ids.has(i.id))];
       });
     }).catch(()=>{});
   }, [projectId]);
@@ -7596,9 +7613,12 @@ function TabMaterial({ project }) {
     api.get("/procurement/mrs?project_id=" + projectId + "&stage=Ordered")
       .then(res => { if (res.success) setOrderedMRs(res.data||[]); }).catch(()=>{});
     loadPendingTransfers();
+    loadPendingIssues();
     setTrReceiveDone([]);
     setTrReceiveQty({});
-  }, [showGRN, projectId, loadPendingTransfers]);
+    setIssueReceiveDone([]);
+    setIssueReceiveQty({});
+  }, [showGRN, projectId, loadPendingTransfers, loadPendingIssues]);
 
   const handleReceiveTransfer = async (tr) => {
     setTrReceiving(true);
@@ -7610,7 +7630,6 @@ function TabMaterial({ project }) {
       const res = await api.post(`/warehouse/transfers/${tr.id}/receive`, { items });
       if (res.success) {
         setTrReceiveDone(p => [...p, tr.id]);
-        // Refresh ledger so newly-credited GRN appears
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
           if (r.success) { setLedger(r.data || []); setLedgerLoaded(true); }
         }).catch(()=>{});
@@ -7619,6 +7638,26 @@ function TabMaterial({ project }) {
       }
     } catch (e) { alert(e.message); }
     setTrReceiving(false);
+  };
+
+  const handleReceiveIssue = async (iss) => {
+    setIssueReceiving(true);
+    try {
+      const items = (iss.items || []).map(it => ({
+        id: it.id,
+        received_qty: Number(issueReceiveQty[`${iss.id}_${it.id}`] ?? it.qty) || 0,
+      }));
+      const res = await api.post(`/warehouse/issues/${iss.id}/receive`, { items });
+      if (res.success) {
+        setIssueReceiveDone(p => [...p, iss.id]);
+        api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
+          if (r.success) { setLedger(r.data || []); setLedgerLoaded(true); }
+        }).catch(()=>{});
+      } else {
+        alert(res.message || "Receive failed");
+      }
+    } catch (e) { alert(e.message); }
+    setIssueReceiving(false);
   };
 
   // GRN handlers
@@ -8062,13 +8101,77 @@ function TabMaterial({ project }) {
                 <button key={t.id} onClick={()=>setGrnTab(t.id)}
                   style={{flex:1,padding:"10px",border:"none",background:grnTab===t.id?T.surface:T.surfaceB,color:grnTab===t.id?T.blu:T.t3,fontSize:12.5,fontWeight:grnTab===t.id?700:400,cursor:"pointer",borderBottom:grnTab===t.id?"2px solid "+T.blu:"2px solid transparent"}}>
                   {t.label}
-                  {t.id==="ordered"&&(orderedMRs.length+pendingTransfers.length)>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,marginLeft:5}}>{orderedMRs.length+pendingTransfers.length}</span>}
+                  {t.id==="ordered"&&(orderedMRs.length+pendingTransfers.length+pendingIssues.length)>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,marginLeft:5}}>{orderedMRs.length+pendingTransfers.length+pendingIssues.length}</span>}
                 </button>
               ))}
             </div>
             <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
               {grnTab==="ordered"&&(
                 <div>
+                  {/* ── PENDING ISSUES from Warehouse ──────────────────── */}
+                  {pendingIssues.length>0&&(
+                    <div style={{marginBottom:14}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 11px",background:T.ambL,border:"1px solid "+T.ambM,borderRadius:7,marginBottom:8}}>
+                        <span style={{fontSize:14}}>📦</span>
+                        <span style={{fontSize:11.5,fontWeight:700,color:T.amb}}>Issues from Warehouse — site team receive karega ({pendingIssues.length})</span>
+                      </div>
+                      {pendingIssues.map(iss=>{
+                        const isDone=issueReceiveDone.includes(iss.id);
+                        const totalQty=(iss.items||[]).reduce((s,it)=>s+Number(it.qty||0),0);
+                        const totalValue=Number(iss.total_value||iss.total||0);
+                        return(
+                          <div key={iss.id} style={{background:isDone?T.grnL:T.surface,border:"1px solid "+(isDone?T.grnM:T.ambM),borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+(isDone?T.grn:T.amb)}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone?0:10}}>
+                              <div>
+                                <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+                                  <span style={{fontSize:12,fontWeight:700,color:T.amb,fontFamily:"monospace"}}>{iss.issue_no}</span>
+                                  <span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:600,border:"1px solid "+T.ambM}}>Material In</span>
+                                  {iss.status==="Partial"&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:600}}>Partial</span>}
+                                </div>
+                                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>From: 🔒 Warehouse</div>
+                                <div style={{fontSize:11,color:T.t4,marginTop:2}}>Qty: {totalQty.toFixed(2)} · Value: ₹{totalValue.toLocaleString("en-IN")} · issued to {iss.issued_to_name||"—"} · by {iss.issued_by_name||"—"}</div>
+                              </div>
+                              {isDone&&<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>✓ Received</span>}
+                            </div>
+                            {!isDone&&(
+                              <>
+                                <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px",marginBottom:9,border:"1px solid "+T.b1}}>
+                                  <div style={{fontSize:9.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:5}}>Items received</div>
+                                  {(iss.items||[]).map(it=>{
+                                    const key=`${iss.id}_${it.id}`;
+                                    const recvVal=issueReceiveQty[key]??it.qty;
+                                    const sent=Number(it.qty||0);
+                                    const recv=Number(recvVal||0);
+                                    const short=recv<sent;
+                                    return(
+                                      <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 70px 90px 70px",gap:7,alignItems:"center",marginBottom:5}}>
+                                        <div>
+                                          <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.name||it.material_name}</div>
+                                          <div style={{fontSize:10,color:T.t4}}>Sent: {sent.toFixed(2)} {it.unit}</div>
+                                        </div>
+                                        <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>@ ₹{Number(it.rate||0).toLocaleString("en-IN")}</div>
+                                        <input type="number" value={recvVal} max={sent}
+                                          onChange={e=>setIssueReceiveQty(p=>({...p,[key]:e.target.value}))}
+                                          style={{padding:"6px 9px",borderRadius:6,border:"1.5px solid "+(short?T.amb:T.b1),fontSize:12,textAlign:"right",fontFamily:"inherit",outline:"none",background:short?T.ambL:T.surface,color:short?T.amb:T.t1}}/>
+                                        <div style={{fontSize:10.5,color:T.t4,textAlign:"right"}}>{it.unit}</div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                                <div style={{display:"flex",justifyContent:"flex-end"}}>
+                                  <button onClick={()=>handleReceiveIssue(iss)} disabled={issueReceiving}
+                                    style={{padding:"7px 16px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:issueReceiving?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5}}>
+                                    {issueReceiving?"...":"✓ Receive — GRN bana do"}
+                                  </button>
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {(orderedMRs.length+pendingTransfers.length)>0&&<div style={{height:1,background:T.b1,margin:"14px 0 10px"}}/>}
+                    </div>
+                  )}
                   {/* ── INCOMING TRANSFERS (project-to-project) ────────── */}
                   {pendingTransfers.length>0&&(
                     <div style={{marginBottom:14}}>
@@ -8133,7 +8236,7 @@ function TabMaterial({ project }) {
                       {orderedMRs.length>0&&<div style={{height:1,background:T.b1,margin:"14px 0 10px"}}/>}
                     </div>
                   )}
-                  {orderedMRs.length===0&&pendingTransfers.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}><div style={{fontSize:13,fontWeight:600,color:T.t2,marginBottom:4}}>Koi ordered material aur incoming transfer nahi hai</div></div>}
+                  {orderedMRs.length===0&&pendingTransfers.length===0&&pendingIssues.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}><div style={{fontSize:13,fontWeight:600,color:T.t2,marginBottom:4}}>Koi ordered material, transfer, ya warehouse issue pending nahi</div></div>}
                   {orderedMRs.map(mr=>{
                     const isDone=grnDone.includes(mr.id);
                     const row=grnRows[mr.id]||{};
