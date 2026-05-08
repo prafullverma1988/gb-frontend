@@ -1412,82 +1412,168 @@ function GrnTab({grns,onNew,onVerify}){
   const [sel,setSel]=useState(null);
   const STATUS_S={"Verified":{c:T.grn,bg:T.grnL,brd:T.grnM},"Partial":{c:T.amb,bg:T.ambL,brd:T.ambM},"Pending":{c:T.slt,bg:T.sltL,brd:T.b2}};
   return(
-    <div style={{display:"flex",gap:12}}>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
-          <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{grns.length} Receipts</span>
-          <Btn onClick={onNew} c={T.blu} icon={IcAdd} size="sm">New GRN</Btn>
+    <div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{grns.length} Receipts</span>
+        <Btn onClick={onNew} c={T.blu} icon={IcAdd} size="sm">New GRN</Btn>
+      </div>
+      {grns.length===0?<Empty label="Koi GRN nahi" sub="Naya GRN bana ke material receive karein"/>:(
+        <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"100px 90px 1fr 110px 100px 90px",padding:"7px 14px",background:T.sb,gap:8}}>
+            {["GRN No","Date","Vendor","PO No","Total","Status"].map((h,i)=>(
+              <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+            ))}
+          </div>
+          {grns.map(g=>{
+            const ss=STATUS_S[g.status]||STATUS_S["Pending"];
+            const isReturn=g.source==="Return";
+            return(
+              <div key={g.id} onClick={()=>setSel(g)}
+                style={{display:"grid",gridTemplateColumns:"100px 90px 1fr 110px 100px 90px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",borderLeft:isReturn?`3px solid ${T.cyn}`:"3px solid transparent",gap:8}}
+                onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"77"}
+                onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <span style={{fontSize:11.5,fontWeight:700,color:isReturn?T.cyn:T.blu,fontFamily:"monospace"}}>{g.id}</span>
+                <span style={{fontSize:11.5,color:T.t3}}>{g.date}</span>
+                <div style={{minWidth:0,display:"flex",alignItems:"center",gap:6}}>
+                  {isReturn&&<span style={{fontSize:10,padding:"1px 7px",borderRadius:10,background:T.cynL,color:T.cyn,fontWeight:600,border:`1px solid ${T.cynM}`,whiteSpace:"nowrap"}}>Return</span>}
+                  <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.vendor}</span>
+                </div>
+                <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{g.poNo}</span>
+                <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>₹{fmt(g.total)}</span>
+                <Pill label={g.status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+              </div>
+            );
+          })}
         </div>
-        {grns.length===0?<Empty label="Koi GRN nahi" sub="Naya GRN bana ke material receive karein"/>:(
-          <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"100px 90px 1fr 110px 100px 90px",padding:"7px 14px",background:T.sb,gap:8}}>
-              {["GRN No","Date","Vendor","PO No","Total","Status"].map((h,i)=>(
-                <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+      )}
+      {sel&&<GRNDetailDrawer grn={sel} onClose={()=>setSel(null)} onVerify={onVerify}/>}
+    </div>
+  );
+}
+
+// ── GRN DETAIL DRAWER ─────────────────────────────────────────────
+function GRNDetailDrawer({grn,onClose,onVerify}){
+  const STATUS_S={"Verified":{c:T.grn,bg:T.grnL,brd:T.grnM},"Partial":{c:T.amb,bg:T.ambL,brd:T.ambM},"Pending":{c:T.slt,bg:T.sltL,brd:T.b2}};
+  const ss=STATUS_S[grn.status]||STATUS_S["Pending"];
+  const isReturn=grn.source==="Return";
+  const totalOrd=(grn.items||[]).reduce((s,it)=>s+Number(it.ordQty||0),0);
+  const totalRecv=(grn.items||[]).reduce((s,it)=>s+Number(it.recQty||0),0);
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(540px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
+        <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <div style={{width:34,height:34,borderRadius:8,background:(isReturn?T.cyn:T.grn)+"33",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <IcIn size={15} color="#fff"/>
+            </div>
+            <div>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{fontSize:14,fontWeight:700,color:"white",fontFamily:"monospace"}}>{grn.id}</span>
+                {isReturn&&<span style={{fontSize:10,padding:"1px 8px",borderRadius:10,background:"rgba(255,255,255,0.15)",color:"#fff",fontWeight:600}}>Return</span>}
+              </div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>{grn.vendor} · {grn.date}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={14}/></button>
+        </div>
+
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+          {/* Status banner */}
+          <div style={{padding:"11px 14px",background:ss.bg,border:`1.5px solid ${ss.brd}`,borderRadius:8,marginBottom:14,display:"flex",alignItems:"center",gap:10}}>
+            <span style={{fontSize:18}}>{grn.status==="Verified"?"✓":grn.status==="Partial"?"⚠":"⏳"}</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:ss.c}}>Status: {grn.status}</div>
+              <div style={{fontSize:11,color:ss.c,marginTop:2}}>
+                {isReturn?`Return GRN — material project se warehouse me wapas aaya`:`Vendor receipt — material warehouse stock me add ho gaya`}
+              </div>
+            </div>
+          </div>
+
+          {/* Meta grid */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+            <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{isReturn?"From Project":"Vendor"}</div>
+              <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{grn.vendor||"—"}</div>
+            </div>
+            <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{isReturn?"Date":"PO No"}</div>
+              <div style={{fontSize:12,fontWeight:600,color:T.t1,fontFamily:isReturn?"inherit":"monospace"}}>{isReturn?grn.date:(grn.poNo||"—")}</div>
+            </div>
+            <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Received By</div>
+              <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{grn.by||"—"}</div>
+            </div>
+            <div style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
+              <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Total Value</div>
+              <div style={{fontSize:13,fontWeight:700,color:isReturn?T.cyn:T.blu}}>₹{fmtN(grn.total)}</div>
+            </div>
+          </div>
+
+          {/* Remark */}
+          {grn.remark&&(
+            <div style={{padding:"9px 12px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:13}}>
+              <div style={{fontSize:9.5,color:T.t4,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px"}}>Remark</div>
+              <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{grn.remark}"</div>
+            </div>
+          )}
+
+          {/* Items table */}
+          <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
+            <span>Items Received ({(grn.items||[]).length})</span>
+            <span style={{textTransform:"none",letterSpacing:0,color:T.t1,fontWeight:700}}>
+              {totalOrd>0?`Ord: ${fmtN(totalOrd)} · `:""}Recv: {fmtN(totalRecv)}
+            </span>
+          </div>
+          <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:12}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 80px 90px",padding:"7px 11px",background:T.sb,gap:8}}>
+              {["Material","Unit",isReturn?"Qty":"Ordered",isReturn?"Rate":"Received","Amount"].map((h,i)=>(
+                <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i>=2?"right":"left"}}>{h}</span>
               ))}
             </div>
-            {grns.map(g=>{
-              const ss=STATUS_S[g.status]||STATUS_S["Pending"];
-              const isS=sel?.id===g.id;
-              return(
-                <div key={g.id} onClick={()=>setSel(isS?null:g)}
-                  style={{display:"grid",gridTemplateColumns:"100px 90px 1fr 110px 100px 90px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",background:isS?T.bluL:"transparent",borderLeft:isS?`3px solid ${T.blu}`:"3px solid transparent",gap:8}}
-                  onMouseEnter={e=>{if(!isS)e.currentTarget.style.background=T.surfaceB;}}
-                  onMouseLeave={e=>{if(!isS)e.currentTarget.style.background="transparent";}}>
-                  <span style={{fontSize:11.5,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{g.id}</span>
-                  <span style={{fontSize:11.5,color:T.t3}}>{g.date}</span>
-                  <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{g.vendor}</span>
-                  <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{g.poNo}</span>
-                  <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>₹{fmt(g.total)}</span>
-                  <Pill label={g.status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+            {(grn.items||[]).map((it,i)=>{
+              const short=Number(it.recQty)<Number(it.ordQty);
+              return (
+                <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 80px 90px",padding:"9px 11px",gap:8,borderBottom:i<(grn.items||[]).length-1?`1px solid ${T.b1}`:"none",background:i%2?"#fff":T.surfaceB,alignItems:"center"}}>
+                  <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.name}</span>
+                  <span style={{fontSize:11,color:T.t3}}>{it.unit||"—"}</span>
+                  {isReturn?(
+                    <>
+                      <span style={{fontSize:12,fontWeight:600,color:T.cyn,textAlign:"right"}}>{fmtN(it.recQty||it.ordQty)}</span>
+                      <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>₹{fmtN(it.rate||0)}</span>
+                    </>
+                  ):(
+                    <>
+                      <span style={{fontSize:12,color:T.t2,textAlign:"right"}}>{fmtN(it.ordQty)}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:short?T.amb:T.grn,textAlign:"right"}}>{fmtN(it.recQty)}</span>
+                    </>
+                  )}
+                  <span style={{fontSize:12,fontWeight:700,color:isReturn?T.cyn:T.blu,textAlign:"right"}}>₹{fmt(it.amount||Number(it.recQty||it.ordQty||0)*Number(it.rate||0))}</span>
                 </div>
               );
             })}
           </div>
-        )}
-      </div>
-      {sel&&(
-        <div style={{width:340,flexShrink:0,background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden",display:"flex",flexDirection:"column",maxHeight:"calc(100vh - 220px)"}}>
-          <div style={{background:T.sb,padding:"11px 14px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-            <div>
-              <div style={{fontSize:13,fontWeight:700,color:"white"}}>{sel.id}</div>
-              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:1}}>{sel.vendor} · {sel.date}</div>
+
+          {/* Short notice for partial */}
+          {(grn.items||[]).some(it=>Number(it.recQty)<Number(it.ordQty))&&!isReturn&&(
+            <div style={{padding:"8px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,fontSize:11.5,color:T.amb}}>
+              ⚠ Kuch items ordered se kam aaye hain. PartialReceived status reflect karta hai.
             </div>
-            <button onClick={()=>setSel(null)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}><IcX size={13}/></button>
-          </div>
-          <div style={{padding:"11px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0}}>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {[["PO Number",sel.poNo],["Received By",sel.by],["Total",`₹${fmtN(sel.total)}`],["Status",sel.status]].map(([l,v],i)=>(
-                <div key={i}><div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{l}</div>
-                  <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{v}</div></div>
-              ))}
-            </div>
-          </div>
-          <div style={{flex:1,overflowY:"auto",padding:"10px 14px"}}>
-            <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Items Received</div>
-            {sel.items.map((it,i)=>(
-              <div key={i} style={{padding:"9px 11px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:7}}>
-                <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:5}}>{it.name}</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4}}>
-                  {[["Ordered",`${fmtN(it.ordQty)} ${it.unit}`],["Received",`${fmtN(it.recQty)} ${it.unit}`],["Amount",`₹${fmtN(it.amount)}`]].map(([l,v],j)=>(
-                    <div key={j}><div style={{fontSize:9,color:T.t4,marginBottom:1}}>{l}</div>
-                      <div style={{fontSize:11.5,fontWeight:600,color:j===1&&it.recQty<it.ordQty?T.amb:T.t1}}>{v}</div></div>
-                  ))}
-                </div>
-                {it.recQty<it.ordQty&&<div style={{marginTop:5,fontSize:10,color:T.amb,fontWeight:600}}>⚠ Short by {fmtN(it.ordQty-it.recQty)} {it.unit}</div>}
-              </div>
-            ))}
-          </div>
-          <div style={{padding:"10px 14px",borderTop:`1px solid ${T.b1}`,flexShrink:0,display:"flex",gap:7}}>
-            {sel.status!=="Verified"&&(
-              <Btn onClick={()=>{onVerify(sel.dbId);setSel(null);}} c={T.grn} icon={IcChk} size="sm" style={{flex:1}}>Verify & Accept</Btn>
-            )}
-            {sel.status==="Verified"&&(
-              <div style={{flex:1,padding:"7px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:700,textAlign:"center"}}>✓ Verified</div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0,display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+          <span style={{fontSize:10.5,color:T.t4}}>{isReturn?"Project se return":"Vendor delivery"}</span>
+          <div style={{display:"flex",gap:8}}>
+            <GhostBtn onClick={onClose}>Close</GhostBtn>
+            {grn.status!=="Verified"&&!isReturn&&(
+              <Btn onClick={()=>{onVerify(grn.dbId);onClose();}} c={T.grn} icon={IcChk} size="sm">Verify & Accept</Btn>
             )}
           </div>
         </div>
-      )}
-    </div>
+      </div>
+    </>
   );
 }
 
