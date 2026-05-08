@@ -308,72 +308,237 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove}){
 }
 
 // ── NEW GRN MODAL ─────────────────────────────────────────────────
-function NewGRNModal({stock,projects,users,onClose,onSaved}){
-  const [f,setF]=useState({date:today(),vendor:"",po_no:"",project_id:null,received_by:null});
-  const [items,setItems]=useState([{material_id:null,name:"",unit:"Nos",ordered_qty:"",received_qty:"",rate:""}]);
-  const [saving,setSaving]=useState(false);
-  const upd=(k,v)=>setF(p=>({...p,[k]:v}));
-  const updItem=(i,patch)=>setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
-  const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
-  const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",ordered_qty:"",received_qty:"",rate:""}]);
+// New GRN modal — TABBED:
+//   Tab 1: "Requested by Procurement" → list of warehouse Ordered MRs to receive
+//   Tab 2: "Return from Project"      → record material wapas aaya project se
+function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
+  const [tab,setTab]=useState("procurement");
+  // Tab 1: ordered warehouse MRs
+  const [orderedMRs,setOrderedMRs]=useState([]);
+  const [loadingMRs,setLoadingMRs]=useState(true);
+  useEffect(()=>{
+    api.get("/warehouse/mr?type=warehouse&status=Ordered").then(r=>{
+      if(r.success) setOrderedMRs(r.data||[]);
+      setLoadingMRs(false);
+    }).catch(()=>setLoadingMRs(false));
+    // Also pull PartialReceived MRs (top up flow)
+    api.get("/warehouse/mr?type=warehouse&status=PartialReceived").then(r=>{
+      if(r.success) setOrderedMRs(prev=>{
+        const ids=new Set(prev.map(x=>x.id));
+        return [...prev,...(r.data||[]).filter(x=>!ids.has(x.id))];
+      });
+    }).catch(()=>{});
+  },[]);
 
-  const valid=items.some(it=>(it.name||it.material_id)&&Number(it.received_qty)>0);
-  const total=items.reduce((s,it)=>s+(Number(it.received_qty)||0)*(Number(it.rate)||0),0);
+  // Tab 2: return from project state
+  const [retF,setRetF]=useState({date:today(),from_project_id:null,remark:""});
+  const [retInv,setRetInv]=useState([]);
+  const [retInvLoading,setRetInvLoading]=useState(false);
+  const [retItems,setRetItems]=useState([{lib_id:null,material_id:null,name:"",unit:"",qty:"",rate:""}]);
+  const [retSaving,setRetSaving]=useState(false);
 
-  const submit=async()=>{
-    setSaving(true);
-    try{
-      const cleanItems=items
-        .filter(it=>(it.name||it.material_id)&&Number(it.received_qty)>0)
-        .map(it=>({
-          material_id:it.material_id||null,
-          name:it.name,
-          unit:it.unit,
-          ordered_qty:Number(it.ordered_qty)||Number(it.received_qty)||0,
-          received_qty:Number(it.received_qty)||0,
-          rate:Number(it.rate)||0,
-        }));
-      const res=await api.post("/warehouse/grn",{...f,items:cleanItems});
-      if(res.success){onSaved&&onSaved(res.data);onClose();}
-      else alert(res.message||"GRN save failed");
-    }catch(e){alert(e.message);}
-    setSaving(false);
+  // Load source project's available inventory when picked
+  useEffect(()=>{
+    if(!retF.from_project_id){ setRetInv([]); return; }
+    setRetInvLoading(true);
+    setRetItems([{lib_id:null,material_id:null,name:"",unit:"",qty:"",rate:""}]);
+    api.get(`/tasks/project/${retF.from_project_id}/material-ledger`).then(r=>{
+      if(r.success){
+        const inv=(r.data||[])
+          .filter(m=>Number(m.balance||0)>0)
+          .map(m=>{
+            const whMat=stock.find(s=>s.name?.toLowerCase().trim()===m.material_name?.toLowerCase().trim());
+            return {
+              id: whMat?.id ?? `name:${(m.material_name||"").toLowerCase().trim()}`,
+              name: m.material_name,
+              qty: Number(m.balance)||0,
+              unit: m.unit||"Nos",
+              rate: whMat ? Number(whMat.rate)||0 : 0,
+              material_id: whMat?.id || null,
+            };
+          });
+        setRetInv(inv);
+      } else setRetInv([]);
+      setRetInvLoading(false);
+    }).catch(()=>{ setRetInv([]); setRetInvLoading(false); });
+  },[retF.from_project_id,stock]);
+
+  const updRetItem=(i,patch)=>{
+    setRetItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
+    const pickedName = patch.name && String(patch.name).trim();
+    if(pickedName && !patch.rate){
+      api.get(`/warehouse/last-rate?name=${encodeURIComponent(pickedName)}`).then(r=>{
+        if(r.success && Number(r.data?.rate) > 0){
+          setRetItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row));
+        }
+      }).catch(()=>{});
+    }
+  };
+  const remRetItem=(i)=>setRetItems(p=>p.filter((_,j)=>j!==i));
+  const addRetItem=()=>setRetItems(p=>[...p,{lib_id:null,material_id:null,name:"",unit:"",qty:"",rate:""}]);
+
+  const overstockRow=retItems.find(it=>{
+    if(!it.qty)return false;
+    const inv=retInv.find(s=>String(s.id)===String(it.material_id)||s.name===it.name);
+    return inv && Number(it.qty)>Number(inv.qty);
+  });
+  const retValid=retF.from_project_id && !overstockRow && retItems.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
+  const retTotal=retItems.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
+  const fromName=projects.find(p=>p.id===retF.from_project_id)?.name;
+
+  const submitReturn=async()=>{
+    setRetSaving(true);
+    const cleanItems=retItems.filter(it=>(it.name||it.material_id)&&Number(it.qty)>0).map(it=>({
+      material_id:it.material_id||null,
+      name:it.name||(retInv.find(s=>String(s.id)===String(it.material_id))?.name)||"Item",
+      unit:it.unit||"Nos",
+      qty:Number(it.qty),
+      rate:Number(it.rate)||0,
+    }));
+    const res=await api.post("/warehouse/returns",{
+      date:retF.date,
+      from_project_id:retF.from_project_id,
+      items:cleanItems,
+      remark:retF.remark||null,
+    });
+    setRetSaving(false);
+    if(res.success){onSaved&&onSaved(res.data);onClose();}
+    else alert(res.message||"Return save failed");
   };
 
-  return (
-    <ModalShell title="New GRN — Material In" sub="Vendor se aaye material ko receive karein"
-      onClose={onClose} width={780}
-      footer={<>
-        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total: <b style={{color:T.blu}}>₹{fmtN(total)}</b></span>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submit} disabled={!valid||saving} c={T.grn} icon={IcChk}>{saving?"Saving...":"Save GRN"}</Btn>
-      </>}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:11,marginBottom:14}}>
-        <Field label="Date"><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
-        <Field label="Vendor"><Input value={f.vendor} onChange={e=>upd("vendor",e.target.value)} placeholder="Supplier name"/></Field>
-        <Field label="PO No"><Input value={f.po_no} onChange={e=>upd("po_no",e.target.value)} placeholder="Optional"/></Field>
-        <Field label="Project">
-          <SearchSelect compact value={f.project_id} options={projects} onChange={v=>upd("project_id",v)} placeholder="Select project"/>
-        </Field>
-      </div>
-      <Field label="Received By" style={{marginBottom:14}}>
-        <SearchSelect compact value={f.received_by} options={users} onChange={v=>upd("received_by",v)} placeholder="Site engineer / store-keeper"/>
-      </Field>
+  const tabs=[
+    {id:"procurement",l:"Requested by Procurement",c:T.pur,count:orderedMRs.length},
+    {id:"return",     l:"Return from Project",     c:T.cyn,count:null},
+  ];
 
-      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between"}}>
-        <span>Items</span>
-        <span style={{color:T.t4,textTransform:"none",letterSpacing:0,fontWeight:500}}>Stock me hai to pick karo, nahi to naam type karo</span>
+  return (
+    <ModalShell title="New GRN — Material In"
+      sub={tab==="procurement"?"Procurement-ordered material ko receive karein":"Project se wapas aaya material log karein"}
+      onClose={onClose} width={780}
+      footer={tab==="return"?<>
+        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total Value: <b style={{color:T.cyn}}>₹{fmtN(retTotal)}</b></span>
+        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
+        <Btn onClick={submitReturn} disabled={!retValid||retSaving} c={T.cyn} icon={IcIn}>{retSaving?"Saving...":"Save Return"}</Btn>
+      </>:<GhostBtn onClick={onClose}>Close</GhostBtn>}>
+
+      {/* Sub-tabs */}
+      <div style={{display:"flex",gap:6,padding:3,background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`,width:"fit-content",marginBottom:14}}>
+        {tabs.map(t=>(
+          <button key={t.id} onClick={()=>setTab(t.id)}
+            style={{padding:"7px 16px",borderRadius:6,border:"none",background:tab===t.id?t.c:"none",color:tab===t.id?"white":T.t3,fontSize:12,fontWeight:tab===t.id?700:500,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
+            {t.l}
+            {t.count>0&&<span style={{background:tab===t.id?"rgba(255,255,255,0.25)":T.b1,color:tab===t.id?"white":T.t3,fontSize:10,fontWeight:800,padding:"1px 7px",borderRadius:10}}>{t.count}</span>}
+          </button>
+        ))}
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 1fr 1fr 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>Material</span><span>Unit</span><span>Ordered</span><span>Received</span><span>Rate ₹</span><span style={{textAlign:"right"}}>Amount</span><span/>
-      </div>
-      {items.map((row,i)=>(
-        <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem} mode="grn" canRemove={items.length>1}/>
-      ))}
-      <button onClick={addItem}
-        style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-        <IcAdd size={11}/> Add row
-      </button>
+
+      {/* TAB 1: Requested by Procurement */}
+      {tab==="procurement"&&(
+        <div>
+          {loadingMRs&&<div style={{textAlign:"center",padding:"30px",color:T.t4,fontSize:12.5}}>Loading...</div>}
+          {!loadingMRs&&orderedMRs.length===0&&(
+            <div style={{padding:"24px 14px",textAlign:"center",background:T.surfaceB,borderRadius:8,border:`1.5px dashed ${T.b1}`,color:T.t4,fontSize:12.5}}>
+              <div style={{fontSize:28,opacity:.4,marginBottom:6}}>📋</div>
+              <div style={{fontSize:13,fontWeight:600,color:T.t3,marginBottom:3}}>Koi ordered MR nahi</div>
+              <div>Pehle Warehouse MR banao → admin approve karega → Place Order karo → vendor delivery par yahan receive karo</div>
+            </div>
+          )}
+          {!loadingMRs&&orderedMRs.length>0&&(
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <div style={{padding:"8px 11px",background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,fontSize:11.5,color:T.pur,fontWeight:600,marginBottom:4}}>
+                💡 Niche dikhi MR ke against vendor delivery aayi to "Receive (GRN)" click karein — challan + actual qty + rate dalo, stock auto-update hoga.
+              </div>
+              {orderedMRs.map(mr=>{
+                const totalQty=(mr.items||[]).reduce((s,it)=>s+Number(it.qty||0),0);
+                const alreadyRecv=(mr.items||[]).reduce((s,it)=>s+Number(it.received_qty||0),0);
+                const isPartial=mr.status==="PartialReceived";
+                return (
+                  <div key={mr.id} style={{background:T.surface,border:`1px solid ${T.purM}`,borderRadius:8,padding:"11px 13px",borderLeft:`3px solid ${isPartial?T.blu:T.pur}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.pur,fontFamily:"monospace"}}>{mr.mr_no}</span>
+                          <Pill label={mr.status} c={isPartial?T.blu:T.pur} bg={isPartial?T.bluL:T.purL} brd={isPartial?T.bluM:T.purM}/>
+                          {mr.priority&&<Pill label={mr.priority} c={T.amb} bg={T.ambL}/>}
+                        </div>
+                        <div style={{fontSize:11.5,color:T.t3}}>
+                          {mr.vendor&&<span>vendor: <b style={{color:T.t1}}>{mr.vendor}</b></span>}
+                          {mr.po_no&&<span style={{marginLeft:8,color:T.t4,fontFamily:"monospace"}}>{mr.po_no}</span>}
+                          {mr.expected_date&&<span style={{marginLeft:8,color:T.t4}}>· exp {fmtDate(mr.expected_date)}</span>}
+                        </div>
+                        <div style={{fontSize:11,color:T.t4,marginTop:3}}>
+                          {(mr.items||[]).slice(0,3).map(it=>`${it.material_name} ×${fmtN(it.qty)} ${it.unit}`).join(", ")}
+                          {mr.items?.length>3?` +${mr.items.length-3} more`:""}
+                        </div>
+                        {alreadyRecv>0&&<div style={{fontSize:10.5,color:T.blu,fontWeight:600,marginTop:2}}>{fmtN(alreadyRecv)} of {fmtN(totalQty)} already received</div>}
+                      </div>
+                      <Btn onClick={()=>{onPickMR&&onPickMR(mr);onClose();}} c={T.grn} icon={IcIn} size="sm">Receive (GRN)</Btn>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* TAB 2: Return from Project */}
+      {tab==="return"&&(
+        <div>
+          <div style={{padding:"9px 12px",background:T.cynL,border:`1px solid ${T.cynM}`,borderRadius:7,fontSize:11.5,color:T.cyn,marginBottom:13,lineHeight:1.5}}>
+            🔄 <b>Return flow:</b> kisi project me extra/unused material bach gaya hai aur warehouse me wapas la rahe hain. Project ke material ledger me debit + warehouse stock me credit.
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"140px 1fr",gap:11,marginBottom:11}}>
+            <Field label="Date"><Input type="date" value={retF.date} onChange={e=>setRetF(p=>({...p,date:e.target.value}))}/></Field>
+            <Field label="From project *">
+              <SearchSelect compact value={retF.from_project_id} options={projects}
+                onChange={v=>setRetF(p=>({...p,from_project_id:v}))} placeholder="Project pick karein"/>
+            </Field>
+          </div>
+          <Field label="Remark" style={{marginBottom:13}}>
+            <Input value={retF.remark} onChange={e=>setRetF(p=>({...p,remark:e.target.value}))} placeholder="e.g. Surplus from foundation work, project closed"/>
+          </Field>
+
+          {!retF.from_project_id&&(
+            <div style={{padding:"24px 14px",textAlign:"center",background:T.surfaceB,borderRadius:8,border:`1.5px dashed ${T.b1}`,color:T.t4,fontSize:12,marginBottom:8}}>
+              From project select karo — uska available material yahan dikhega
+            </div>
+          )}
+          {retF.from_project_id&&retInvLoading&&(
+            <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading inventory...</div>
+          )}
+          {retF.from_project_id&&!retInvLoading&&retInv.length===0&&(
+            <div style={{padding:"24px 14px",textAlign:"center",background:T.ambL,borderRadius:8,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,marginBottom:8,fontWeight:600}}>
+              ⚠ {fromName} me koi available material nahi (sab use ho gaya ya issue nahi hua)
+            </div>
+          )}
+          {retF.from_project_id&&retInv.length>0&&(
+            <>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
+                Items returning <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· {fromName} ke ledger se</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
+                <span>Material (avail)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+              </div>
+              {retItems.map((row,i)=>(
+                <LineItemRow key={i} row={row} idx={i} stock={retInv} onChange={updRetItem} onRemove={remRetItem} mode="transfer" canRemove={retItems.length>1}/>
+              ))}
+              <button onClick={addRetItem}
+                style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+                <IcAdd size={11}/> Add row
+              </button>
+              {overstockRow&&(
+                <div style={{marginTop:8,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>
+                  ⚠ Project me itna available nahi hai — qty kam karo
+                </div>
+              )}
+              <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
+                💡 Save par: project ledger me debit ("Returned to warehouse") + warehouse stock me credit + master rate refresh.
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </ModalShell>
   );
 }
@@ -2250,8 +2415,10 @@ function WarehouseModule(){
           onClose={()=>setIssueTarget(null)} onSaved={()=>loadAll()}/>
       )}
       {grnNewOpen&&(
-        <NewGRNModal stock={stock} projects={projects} users={users}
-          onClose={()=>setGrnNewOpen(false)} onSaved={()=>loadAll()}/>
+        <NewGRNModal stock={stock} projects={projects} users={users} library={library}
+          onClose={()=>setGrnNewOpen(false)}
+          onSaved={()=>loadAll()}
+          onPickMR={(mr)=>setGrnMR(mr)}/>
       )}
       {issueNewOpen&&(
         <NewIssueModal stock={stock} projects={projects} users={users}
