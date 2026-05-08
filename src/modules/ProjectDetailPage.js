@@ -12121,27 +12121,43 @@ function TabSolarSubsidy({ projectId }) {
 
 
 // ── ProjectSwitcher — clickable project name in the top breadcrumb ──
-// Dropdown lists every active project (except the current one). Picking
-// one calls onSwitch(project) — the parent swaps `selectedProject` and
-// the inner `tab` state survives the prop change, so the user stays in
-// the same module (Material → Material) of the new project.
+// Dropdown uses position:fixed (anchored to the trigger via getBoundingClientRect)
+// so it escapes the breadcrumb's overflow:hidden — earlier the popup got clipped
+// and the user just saw a sliver of the search input.
 function ProjectSwitcher({ current, onSwitch }) {
   const [open, setOpen] = useState(false);
   const [list, setList] = useState([]);
   const [search, setSearch] = useState("");
   const [loading, setLoading] = useState(false);
-  const wrapRef = useRef(null);
+  const [pos, setPos] = useState({ top: 0, left: 0 });
+  const btnRef = useRef(null);
+  const popRef = useRef(null);
 
-  // Close on outside click
+  // Close on outside click + recompute position on resize/scroll
   useEffect(() => {
     if (!open) return;
-    const onDocClick = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false); };
+    const onDocClick = (e) => {
+      if (btnRef.current?.contains(e.target)) return;
+      if (popRef.current?.contains(e.target)) return;
+      setOpen(false);
+    };
+    const updatePos = () => {
+      const r = btnRef.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.bottom + 6, left: r.left });
+    };
+    updatePos();
     document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
+    window.addEventListener("resize", updatePos);
+    window.addEventListener("scroll", updatePos, true);
+    return () => {
+      document.removeEventListener("mousedown", onDocClick);
+      window.removeEventListener("resize", updatePos);
+      window.removeEventListener("scroll", updatePos, true);
+    };
   }, [open]);
 
   const loadProjects = async () => {
-    if (list.length) return; // already cached for this mount
+    if (list.length) return;
     setLoading(true);
     try {
       const r = await api.get("/projects");
@@ -12162,13 +12178,20 @@ function ProjectSwitcher({ current, onSwitch }) {
     setSearch("");
   };
 
+  const onToggle = () => {
+    if (!open) {
+      loadProjects();
+      const r = btnRef.current?.getBoundingClientRect();
+      if (r) setPos({ top: r.bottom + 6, left: r.left });
+    }
+    setOpen(o => !o);
+  };
+
   return (
-    <div ref={wrapRef} style={{position:"relative", flexShrink:0, maxWidth:280}}>
-      <button
-        onClick={() => { if (!open) loadProjects(); setOpen(o => !o); }}
-        title="Switch project"
+    <>
+      <button ref={btnRef} onClick={onToggle} title="Switch project"
         style={{
-          display:"inline-flex", alignItems:"center", gap:5,
+          display:"inline-flex", alignItems:"center", gap:5, flexShrink:0,
           padding:"4px 9px 4px 10px", borderRadius:7, border:"1px solid rgba(255,255,255,.12)",
           background: open ? "rgba(255,255,255,.12)" : "rgba(255,255,255,.04)",
           color:"#fff", cursor:"pointer", fontFamily:"inherit", maxWidth:260,
@@ -12182,10 +12205,10 @@ function ProjectSwitcher({ current, onSwitch }) {
         </svg>
       </button>
       {open && (
-        <div style={{
-          position:"absolute", top:"calc(100% + 6px)", left:0, zIndex:200,
-          minWidth:300, maxWidth:360, maxHeight:420, overflowY:"auto",
-          background:"#fff", borderRadius:9, boxShadow:"0 14px 36px rgba(0,0,0,.18)",
+        <div ref={popRef} style={{
+          position:"fixed", top:pos.top, left:pos.left, zIndex:9999,
+          minWidth:320, maxWidth:380, maxHeight:440, overflowY:"auto",
+          background:"#fff", borderRadius:9, boxShadow:"0 14px 36px rgba(0,0,0,.22)",
           border:"1px solid #E5E7EB", display:"flex", flexDirection:"column",
         }}>
           <div style={{padding:"9px 11px", borderBottom:"1px solid #F1F5F9", position:"sticky", top:0, background:"#fff"}}>
@@ -12225,7 +12248,7 @@ function ProjectSwitcher({ current, onSwitch }) {
           ))}
         </div>
       )}
-    </div>
+    </>
   );
 }
 
