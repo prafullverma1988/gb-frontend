@@ -220,38 +220,143 @@ function RejectMRModal({mr,onSave,onClose}){
 }
 
 // ── BULK ORDER MODAL (Checkbox selection → order medium) ──────────────
-function BulkOrderModal({items,onSave,onClose,dbVendors=[]}){
+function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   const [medium,setMedium]=useState(""); // 'po' | 'rfq' | 'manual'
   const [vendor,setVendor]=useState("");
   const [delivery,setDelivery]=useState("");
   const [waMsg,setWaMsg]=useState("");
 
+  // Warehouse availability per item — checked on mount
+  const [whCheck,setWhCheck]=useState({});  // {itemId: {available, sufficient, found, material_id, unit, rate}}
+  const [whTake,setWhTake]=useState({});    // {itemId: qty user wants from warehouse}
+  const [issuingFromWH,setIssuingFromWH]=useState(false);
+
+  useEffect(()=>{
+    items.forEach(it=>{
+      const reqQty = Number(it.approvedQty||it.qty)||0;
+      api.get(`/warehouse/check-stock?name=${encodeURIComponent(it.item||"")}&qty=${reqQty}`).then(r=>{
+        if(r.success){
+          setWhCheck(p=>({...p,[it.id]:r.data}));
+          // Default warehouse-take = min(requested, available)
+          const def = Math.min(reqQty, Number(r.data?.available||0));
+          if(def>0) setWhTake(p=>({...p,[it.id]:def}));
+        }
+      }).catch(()=>{});
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
+  const itemsWithWH = items.filter(it=>{
+    const c = whCheck[it.id];
+    return c?.found && Number(c.available)>0;
+  });
+  const totalWHTake = items.reduce((s,it)=>s+Number(whTake[it.id]||0),0);
+  const anyWHTake = totalWHTake>0;
+
+  const handleIssueFromWarehouse = async () => {
+    if (!anyWHTake) return;
+    setIssuingFromWH(true);
+    let createdMRs = [];
+    let errors = [];
+    for (const it of items) {
+      const qty = Number(whTake[it.id]||0);
+      if (qty <= 0) continue;
+      try {
+        const res = await api.post("/warehouse/issue-from-procurement", {
+          procurement_mr_id: it.id,
+          qty,
+        });
+        if (res.success) createdMRs.push(res.data?.wh_mr_no);
+        else errors.push(`${it.item}: ${res.message||"failed"}`);
+      } catch(e) { errors.push(`${it.item}: ${e.message}`); }
+    }
+    setIssuingFromWH(false);
+    if (errors.length) {
+      alert("Kuch errors:\n"+errors.join("\n"));
+    }
+    if (createdMRs.length) {
+      onWarehouseIssued && onWarehouseIssued(createdMRs);
+      onClose();
+    }
+  };
+
   // Build WA message when manual selected
   const buildWA=()=>{
-    const lines=items.map(i=>`• ${i.item} — ${i.approvedQty||i.qty} ${i.unit} (${i.project})`).join("\n");
+    const lines=items.map(i=>{
+      const taken = Number(whTake[i.id]||0);
+      const remaining = Math.max(0, Number(i.approvedQty||i.qty) - taken);
+      return remaining>0 ? `• ${i.item} — ${remaining} ${i.unit} (${i.project})` : null;
+    }).filter(Boolean).join("\n");
     return `Order\n${lines}\nDelivery by: ${delivery||"TBD"}\nPlease confirm. — Admin`;
   };
 
   return(
-    <Modal onClose={onClose} width={500}>
+    <Modal onClose={onClose} width={560}>
       <MHead title={`Order ${items.length} item${items.length>1?"s":""}`} sub="Select order medium" onClose={onClose}/>
       <MBody>
+        {/* WAREHOUSE AVAILABILITY BANNER */}
+        {itemsWithWH.length>0&&(
+          <div style={{background:T.cynL,border:`1.5px solid ${T.cynM}`,borderRadius:8,padding:"11px 13px",marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+              <span style={{fontSize:18}}>🏬</span>
+              <div style={{flex:1}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.cyn}}>Warehouse me available — issue from stock?</div>
+                <div style={{fontSize:11,color:T.cyn,marginTop:1}}>{itemsWithWH.length} item{itemsWithWH.length>1?"s":""} ka stock available hai. PO ki jagah Warehouse se issue karke procurement bachao.</div>
+              </div>
+            </div>
+            <div style={{background:"white",borderRadius:6,padding:"6px 10px",border:`1px solid ${T.cynM}`}}>
+              {items.map((it,i)=>{
+                const c=whCheck[it.id];
+                const reqQty=Number(it.approvedQty||it.qty)||0;
+                const avail=Number(c?.available||0);
+                const taken=Number(whTake[it.id]||0);
+                const fromVendor=Math.max(0, reqQty-taken);
+                if (!c?.found || avail<=0) return null;
+                return (
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 110px 90px 90px",gap:6,alignItems:"center",padding:"5px 0",borderBottom:i<itemsWithWH.length-1?`1px solid ${T.b1}`:"none"}}>
+                    <div style={{fontSize:11.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{it.item}</div>
+                    <div style={{fontSize:10.5,color:T.t3}}>Avail: <b style={{color:avail>=reqQty?T.grn:T.amb}}>{avail}</b> {it.unit}</div>
+                    <input type="number" value={whTake[it.id]||0} max={Math.min(reqQty,avail)} min={0}
+                      onChange={e=>setWhTake(p=>({...p,[it.id]:e.target.value}))}
+                      title="Warehouse se kitna lena hai"
+                      style={{height:26,padding:"0 7px",borderRadius:5,border:`1px solid ${T.cynM}`,fontSize:11,outline:"none",fontFamily:"inherit",textAlign:"right",background:"white"}}/>
+                    <div style={{fontSize:10,color:T.t4,textAlign:"right"}}>+ vendor: {fromVendor} {it.unit}</div>
+                  </div>
+                );
+              })}
+            </div>
+            <button onClick={handleIssueFromWarehouse} disabled={!anyWHTake||issuingFromWH}
+              style={{marginTop:9,width:"100%",padding:"8px",borderRadius:6,background:anyWHTake?T.cyn:T.b1,color:anyWHTake?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:anyWHTake?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+              {issuingFromWH?"Creating warehouse MRs...":<><span>📦</span> Issue from Warehouse ({totalWHTake.toFixed(2)} units total)</>}
+            </button>
+            <div style={{fontSize:10,color:T.t4,marginTop:6,textAlign:"center"}}>
+              Warehouse → Requests me MR generate hoga · warehouse team approve+issue karegi → project ko material milega
+            </div>
+          </div>
+        )}
+
         {/* Items summary */}
         <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:16,overflow:"hidden"}}>
           <div style={{padding:"8px 12px",background:T.b1}}>
-            <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px"}}>Selected Items</span>
+            <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px"}}>{anyWHTake?"Remaining for vendor":"Selected Items"}</span>
           </div>
-          {items.map((m,i)=>(
+          {items.map((m,i)=>{
+            const taken=Number(whTake[m.id]||0);
+            const reqQty=Number(m.approvedQty||m.qty)||0;
+            const remaining=Math.max(0,reqQty-taken);
+            if (anyWHTake && remaining<=0) return null;
+            return (
             <div key={i} style={{padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
                 <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.item}</div>
-                <div style={{fontSize:11,color:T.t3}}>{m.project} · {m.id}</div>
+                <div style={{fontSize:11,color:T.t3}}>{m.project} · {m.id}{taken>0?<span style={{color:T.cyn,marginLeft:6}}>· {taken} {m.unit} from warehouse</span>:""}</div>
               </div>
               <div style={{textAlign:"right"}}>
-                <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{m.approvedQty||m.qty} <span style={{fontSize:10,color:T.t4}}>{m.unit}</span></div>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{remaining} <span style={{fontSize:10,color:T.t4}}>{m.unit}</span></div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {/* Medium selector */}
@@ -1639,7 +1744,14 @@ function ProcurementModule(){
           }catch(e){}
         }}
       />
-      {showBulkOrder&&selectedItems.length>0&&<BulkOrderModal items={selectedItems} onSave={saveBulkOrder} onClose={()=>setShowBulkOrder(false)} dbVendors={dbVendors}/>}
+      {showBulkOrder&&selectedItems.length>0&&<BulkOrderModal items={selectedItems} onSave={saveBulkOrder} onClose={()=>setShowBulkOrder(false)} dbVendors={dbVendors}
+        onWarehouseIssued={async(mrNos)=>{
+          alert(`${mrNos.length} warehouse MR(s) created — Warehouse → Requests tab me approve+issue karein:\n${mrNos.join(", ")}`);
+          setShowBulkOrder(false);
+          setSelectedIds(new Set());
+          const mRes = await api.get("/procurement/mrs");
+          if (mRes.success) setMRs(mRes.data.map(mapMR));
+        }}/>}
       {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbVendors={dbVendors} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={async(newPO)=>{
         // Save PO to backend
         const linked_mr_ids = (createPOPrefill||[]).map(m=>m.id).filter(Boolean);
