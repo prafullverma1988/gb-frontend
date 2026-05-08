@@ -1437,13 +1437,15 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,mode="project
                   {totalValue>0&&<div style={{fontSize:11,fontWeight:700,color:T.blu,marginTop:3}}>Total: ₹{fmtN(totalValue)}</div>}
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
-                  {/* WAREHOUSE MODE — Pending → Approve | Reject */}
-                  {mode==="warehouse"&&mr.status==="Pending"&&(
-                    <>
-                      <Btn onClick={()=>onApprove(mr.dbId)} c={T.blu} size="sm" icon={IcChk}>Approve</Btn>
-                      <GhostBtn onClick={()=>onReject(mr.dbId)} c={T.red} icon={IcXc}>Reject</GhostBtn>
-                    </>
+                  {/* PENDING — admin approves from Material Approvals drawer (Projects → Pending Approvals → Warehouse tab) */}
+                  {mr.status==="Pending"&&(
+                    <div style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,whiteSpace:"nowrap"}}>
+                      <span style={{fontSize:13}}>⏳</span>
+                      <span style={{fontSize:11,color:T.amb,fontWeight:600}}>Admin approval pending</span>
+                    </div>
                   )}
+
+                  {/* WAREHOUSE MODE — only Order + GRN after approval */}
                   {mode==="warehouse"&&mr.status==="Approved"&&onOrder&&(
                     <Btn onClick={()=>onOrder(mr)} c={T.pur} size="sm" icon={IcMR}>Place Order</Btn>
                   )}
@@ -1460,14 +1462,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,mode="project
                     </div>
                   )}
 
-                  {/* PROJECT MODE — Pending → Approve+Issue | Reject; Approved → Issue Now */}
-                  {mode==="project"&&mr.status==="Pending"&&(
-                    <>
-                      <Btn onClick={()=>onApprove(mr.dbId)} c={T.blu} size="sm" icon={IcChk}>Approve</Btn>
-                      <Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>Issue</Btn>
-                      <GhostBtn onClick={()=>onReject(mr.dbId)} c={T.red} icon={IcXc}>Reject</GhostBtn>
-                    </>
-                  )}
+                  {/* PROJECT MODE — only Issue after approval */}
                   {mode==="project"&&mr.status==="Approved"&&(
                     <Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>Issue Now</Btn>
                   )}
@@ -1480,7 +1475,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,mode="project
 
                   {mr.status==="Rejected"&&(
                     <div style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`}}>
-                      <span style={{fontSize:11.5,color:T.red,fontWeight:600}}>Rejected</span>
+                      <span style={{fontSize:11.5,color:T.red,fontWeight:600}}>Rejected by Admin</span>
                     </div>
                   )}
                 </div>
@@ -1494,7 +1489,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,mode="project
 }
 
 // ── REQUESTS WRAPPER — splits Tab 1 (Warehouse MR) and Tab 2 (Project) ─
-function RequestsTab({mrs,projects,users,library,onAction,onSubMR}){
+function RequestsTab({mrs,projects,users,library,onSubMR}){
   const [sub,setSub]=useState("warehouse");
   const whMrs = mrs.filter(m=>!m.project_id);
   const projMrs = mrs.filter(m=>!!m.project_id);
@@ -1514,12 +1509,14 @@ function RequestsTab({mrs,projects,users,library,onAction,onSubMR}){
           </button>
         ))}
       </div>
+      {/* Approval flow note — same for both sub-tabs */}
+      <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
+        <b>Flow:</b> Request {sub==="warehouse"?"(yahin se ya site se)":"(procurement se aati)"} → Admin <b>Material Approvals</b> drawer me approve karega → wahan se aapko {sub==="warehouse"?"\"Place Order\" + \"Receive (GRN)\"":"\"Issue Now\""} buttons milenge.
+      </div>
       {sub==="warehouse"
         ? <MRTab mrs={whMrs} mode="warehouse" onNew={()=>onSubMR.openNew()}
-            onApprove={onAction.approve} onReject={onAction.reject}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}/>
         : <MRTab mrs={projMrs} mode="project"
-            onApprove={onAction.approve} onReject={onAction.reject}
             onIssue={onSubMR.openIssue}/>
       }
     </div>
@@ -1966,7 +1963,6 @@ function WarehouseModule(){
         {tab==="grn"&&<GrnTab grns={grns} onNew={()=>setGrnNewOpen(true)} onVerify={handleVerifyGRN}/>}
         {tab==="issue"&&<IssueTab issues={issues} projects={projects} onNew={()=>setIssueNewOpen(true)}/>}
         {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
-          onAction={{approve:handleApproveMR, reject:handleRejectMR}}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
             openIssue:(mr)=>setIssueFromMR(mr),
