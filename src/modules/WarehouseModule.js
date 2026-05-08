@@ -50,6 +50,26 @@ const getCategoryEmoji=(cat)=>{
   return map[cat]||"📦";
 };
 
+// ── UNIT LOCK ─────────────────────────────────────────────────────
+// Unit is locked (read-only chip) when material comes from library/master.
+// Only Material Library can change a material's unit.
+const UnitLock=({unit,locked,onChange,fallbackUnits=UNITS,compact})=>{
+  if(locked){
+    return (
+      <div title="Unit Material Library se aata hai — change karne ke liye Library me edit karein"
+        style={{height:compact?28:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontSize:11,fontWeight:600,color:T.t2,fontFamily:"inherit",cursor:"not-allowed"}}>
+        <span style={{fontSize:9,opacity:.6}}>🔒</span>{unit||"—"}
+      </div>
+    );
+  }
+  return (
+    <select value={unit||"Nos"} onChange={e=>onChange(e.target.value)}
+      style={{height:compact?28:32,padding:"0 6px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,background:T.surface,fontFamily:"inherit",outline:"none"}}>
+      {fallbackUnits.map(u=><option key={u}>{u}</option>)}
+    </select>
+  );
+};
+
 // ── PRIMITIVES ────────────────────────────────────────────────────
 const Pill=({label,c,bg,brd})=>(
   <span style={{display:"inline-block",background:bg,color:c,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,border:`1px solid ${brd||c+"33"}`,whiteSpace:"nowrap"}}>{label}</span>
@@ -132,7 +152,9 @@ const ModalShell=({title,sub,onClose,children,width=520,footer})=>(
 );
 
 // ── ADD / EDIT MATERIAL MODAL ─────────────────────────────────────
-function MaterialFormModal({material,onClose,onSaved}){
+// Naya material → Library se pick karke add karein (unit auto-locked).
+// Edit → unit locked (Library me change karein).
+function MaterialFormModal({material,library=[],onClose,onSaved}){
   const editing=!!material?.id;
   const [f,setF]=useState({
     name:material?.name||"",
@@ -144,8 +166,14 @@ function MaterialFormModal({material,onClose,onSaved}){
     rate:material?.rate??0,
     location:material?.location||"Main Godown",
   });
+  const [libPick,setLibPick]=useState(null);
   const [saving,setSaving]=useState(false);
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
+  const onLibPick=(v)=>{
+    setLibPick(v);
+    const m=library.find(l=>l.id===v);
+    if(m) setF(p=>({...p,name:m.name,unit:m.unit||"Nos",rate:m.rate||p.rate,category:m.category||p.category}));
+  };
   const submit=async()=>{
     if(!f.name.trim()){alert("Material ka naam dalna padega");return;}
     setSaving(true);
@@ -159,29 +187,39 @@ function MaterialFormModal({material,onClose,onSaved}){
     }catch(e){alert(e.message);}
     setSaving(false);
   };
+
+  const libOpts=library.map(m=>({id:m.id,name:`${m.name} · ${m.unit||"Nos"}`}));
+  const fromLibrary=editing||!!libPick;
+
   return(
     <ModalShell title={editing?"Edit Material":"New Material"}
-      sub={editing?material.id||material.name:"Master me naya SKU add karein"}
+      sub={editing?material.id||material.name:"Library se pick karein — unit auto-locked"}
       onClose={onClose} width={500}
       footer={<>
         <GhostBtn onClick={onClose}>Cancel</GhostBtn>
         <Btn onClick={submit} disabled={!f.name.trim()||saving} c={editing?T.blu:T.grn} icon={IcChk}>{saving?"Saving...":editing?"Save Changes":"Add Material"}</Btn>
       </>}>
+      {!editing&&(
+        <Field label="Pick from Material Library *" style={{marginBottom:11}}>
+          <SearchSelect value={libPick} options={libOpts} onChange={onLibPick} placeholder="Library se material chunein"/>
+          {library.length===0&&<div style={{fontSize:10.5,color:T.amb,marginTop:3}}>⚠ Library khali hai — Library → Materials me pehle add karein</div>}
+        </Field>
+      )}
       <Field label="Material name *" style={{marginBottom:11}}>
-        <Input value={f.name} onChange={e=>upd("name",e.target.value)} placeholder="e.g. OPC 53 Grade Cement"/>
+        <Input value={f.name} onChange={e=>upd("name",e.target.value)} placeholder="e.g. OPC 53 Grade Cement"
+          disabled={fromLibrary}
+          style={{background:fromLibrary?T.surfaceB:T.surface,color:fromLibrary?T.t2:T.t1,cursor:fromLibrary?"not-allowed":"text"}}/>
       </Field>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:11}}>
         <Field label="Category">
-          <select value={f.category} onChange={e=>upd("category",e.target.value)}
-            style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+          <select value={f.category} onChange={e=>upd("category",e.target.value)} disabled={fromLibrary}
+            style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:fromLibrary?T.t2:T.t1,background:fromLibrary?T.surfaceB:T.surface,outline:"none",fontFamily:"inherit",cursor:fromLibrary?"not-allowed":"pointer"}}>
             {CATEGORIES.map(c=><option key={c}>{c}</option>)}
+            {fromLibrary&&!CATEGORIES.includes(f.category)&&<option>{f.category}</option>}
           </select>
         </Field>
-        <Field label="Unit">
-          <select value={f.unit} onChange={e=>upd("unit",e.target.value)}
-            style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit"}}>
-            {UNITS.map(u=><option key={u}>{u}</option>)}
-          </select>
+        <Field label={<span>Unit {fromLibrary?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· locked from library</span>:""}</span>}>
+          <UnitLock unit={f.unit} locked={fromLibrary} onChange={u=>upd("unit",u)}/>
         </Field>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:11}}>
@@ -234,10 +272,9 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove}){
         <SearchSelect compact value={row.material_id||row.name} options={stockOpts}
           onChange={onPickMaterial} placeholder="Material name (pick or type)"/>
       )}
-      <select value={row.unit||"Nos"} onChange={e=>onChange(idx,{unit:e.target.value})}
-        style={{height:32,padding:"0 6px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,background:T.surface,fontFamily:"inherit",outline:"none"}}>
-        {UNITS.map(u=><option key={u}>{u}</option>)}
-      </select>
+      <UnitLock unit={row.unit||"Nos"} compact
+        locked={!!(row.material_id || row._unitLocked)}
+        onChange={u=>onChange(idx,{unit:u})}/>
       {mode==="grn"&&(
         <input type="number" value={row.ordered_qty||""} onChange={e=>onChange(idx,{ordered_qty:e.target.value})} placeholder="Ord"
           style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
@@ -416,27 +453,40 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
 }
 
 // ── NEW MR MODAL ──────────────────────────────────────────────────
-function NewMRModal({stock,projects,onClose,onSaved}){
-  const [f,setF]=useState({date:today(),project_id:null,priority:"Medium"});
-  const [items,setItems]=useState([{material_id:null,name:"",unit:"Nos",qty:"",note:""}]);
+// Warehouse → Material Request: warehouse apne liye material maangta hai
+// Project = "Warehouse" (locked, not selectable)
+// Material picker = Material Library only
+// Unit = library se aata hai, locked (sirf Library me change ho sakta hai)
+function NewMRModal({library,onClose,onSaved}){
+  const [f,setF]=useState({date:today(),priority:"Medium"});
+  const [items,setItems]=useState([{lib_id:null,name:"",unit:"",qty:"",note:""}]);
   const [saving,setSaving]=useState(false);
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
   const updItem=(i,patch)=>setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
   const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
-  const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",note:""}]);
+  const addItem=()=>setItems(p=>[...p,{lib_id:null,name:"",unit:"",qty:"",note:""}]);
 
-  const valid=items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
+  const valid=items.some(it=>it.lib_id&&Number(it.qty)>0);
+  const libOpts=library.map(m=>({id:m.id,name:`${m.name}${m.unit?` · ${m.unit}`:""}`}));
 
   const submit=async()=>{
     setSaving(true);
     try{
-      const cleanItems=items.filter(it=>(it.name||it.material_id)&&Number(it.qty)>0).map(it=>({
-        name:it.name||(stock.find(s=>s.id===it.material_id)?.name)||"Item",
-        unit:it.unit||"Nos",
-        qty:Number(it.qty),
-        note:it.note||null,
-      }));
-      const res=await api.post("/warehouse/mr",{...f,items:cleanItems});
+      const cleanItems=items.filter(it=>it.lib_id&&Number(it.qty)>0).map(it=>{
+        const lib=library.find(l=>l.id===it.lib_id);
+        return {
+          name:lib?.name||it.name||"Item",
+          unit:lib?.unit||"Nos",
+          qty:Number(it.qty),
+          note:it.note||null,
+        };
+      });
+      const res=await api.post("/warehouse/mr",{
+        date:f.date,
+        priority:f.priority,
+        project_id:null, // Warehouse-internal request
+        items:cleanItems,
+      });
       if(res.success){onSaved&&onSaved(res.data);onClose();}
       else alert(res.message||"MR save failed");
     }catch(e){alert(e.message);}
@@ -444,7 +494,7 @@ function NewMRModal({stock,projects,onClose,onSaved}){
   };
 
   return (
-    <ModalShell title="New Material Request" sub="Project ke liye stock se material maango"
+    <ModalShell title="New Material Request" sub="Warehouse ke liye material maango — Library se pick karein"
       onClose={onClose} width={720}
       footer={<>
         <GhostBtn onClick={onClose}>Cancel</GhostBtn>
@@ -453,7 +503,11 @@ function NewMRModal({stock,projects,onClose,onSaved}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:11,marginBottom:14}}>
         <Field label="Date"><Input type="date" value={f.date} onChange={e=>upd("date",e.target.value)}/></Field>
         <Field label="Project">
-          <SearchSelect compact value={f.project_id} options={projects} onChange={v=>upd("project_id",v)} placeholder="Select project"/>
+          <div style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontFamily:"inherit",display:"flex",alignItems:"center",gap:6,height:38,boxSizing:"border-box"}}>
+            <span style={{fontSize:10,opacity:.6}}>🔒</span>
+            <span style={{fontWeight:600,color:T.t1}}>Warehouse</span>
+            <span style={{fontSize:10,color:T.t4}}>(internal request)</span>
+          </div>
         </Field>
         <Field label="Priority">
           <select value={f.priority} onChange={e=>upd("priority",e.target.value)}
@@ -463,17 +517,46 @@ function NewMRModal({stock,projects,onClose,onSaved}){
         </Field>
       </div>
 
-      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Items</div>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 30px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>Material</span><span>Unit</span><span>Qty</span><span/>
+      {library.length===0&&(
+        <div style={{padding:"10px 13px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:12,color:T.amb,fontWeight:600,marginBottom:11}}>
+          ⚠ Material Library khali hai — pehle Library → Materials me items add karein
+        </div>
+      )}
+
+      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
+        Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· library se pick karein</span>
       </div>
-      {items.map((row,i)=>(
-        <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem} mode="mr" canRemove={items.length>1}/>
-      ))}
-      <button onClick={addItem}
-        style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+      <div style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 1.5fr 30px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
+        <span>Material (from library)</span><span>Unit</span><span>Qty</span><span>Note</span><span/>
+      </div>
+      {items.map((row,i)=>{
+        const lib=library.find(l=>l.id===row.lib_id);
+        return (
+          <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 1.5fr 30px",gap:6,alignItems:"center",marginBottom:6}}>
+            <SearchSelect compact value={row.lib_id} options={libOpts}
+              onChange={v=>{const m=library.find(x=>x.id===v);updItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||""});}}
+              placeholder="Library se material pick karein"/>
+            <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
+            <input type="number" value={row.qty||""} onChange={e=>updItem(i,{qty:e.target.value})} placeholder="Qty"
+              style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+            <input value={row.note||""} onChange={e=>updItem(i,{note:e.target.value})} placeholder="Optional remark"
+              style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+            {items.length>1?(
+              <button onClick={()=>remItem(i)}
+                style={{width:24,height:24,border:"none",background:"none",cursor:"pointer",color:T.red,padding:0,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}>
+                <IcTrash size={12}/>
+              </button>
+            ):<span/>}
+          </div>
+        );
+      })}
+      <button onClick={addItem} disabled={library.length===0}
+        style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:library.length===0?T.t4:T.t3,fontSize:11.5,fontWeight:600,cursor:library.length===0?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
         <IcAdd size={11}/> Add row
       </button>
+      <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
+        💡 Unit Material Library se aata hai aur locked rahega — change karne ke liye Library → Materials me edit karein.
+      </div>
     </ModalShell>
   );
 }
@@ -1508,6 +1591,7 @@ function WarehouseModule(){
   const [transfers,setTransfers]=useState([]);
   const [projects,setProjects]=useState([]);
   const [users,setUsers]=useState([]);
+  const [library,setLibrary]=useState([]);
   const [loading,setLoading]=useState(true);
 
   // Modal state
@@ -1528,7 +1612,7 @@ function WarehouseModule(){
 
   const loadAll=useCallback(async()=>{
     try{
-      const [sRes,gRes,iRes,mRes,tRes,pRes,uRes]=await Promise.all([
+      const [sRes,gRes,iRes,mRes,tRes,pRes,uRes,libRes]=await Promise.all([
         api.get("/warehouse/materials"),
         api.get("/warehouse/grn"),
         api.get("/warehouse/issues"),
@@ -1536,14 +1620,16 @@ function WarehouseModule(){
         api.get("/warehouse/transfers"),
         api.get("/projects").catch(()=>({success:false})),
         api.get("/projects/team-members").catch(()=>({success:false})),
+        api.get("/library/materials").catch(()=>({success:false})),
       ]);
       if(sRes.success) setStock((sRes.data||[]).map(m=>({...m,qty:Number(m.qty)||0,min_qty:Number(m.min_qty)||0,max_qty:Number(m.max_qty)||0,rate:Number(m.rate)||0,minQty:Number(m.min_qty)||0,maxQty:Number(m.max_qty)||0})));
       if(gRes.success) setGrns((gRes.data||[]).map(g=>({...g,id:g.grn_no||`GRN-${g.id}`,dbId:g.id,date:fmtDate(g.date),poNo:g.po_no||"—",vendor:g.vendor||"—",by:g.received_by_name||"—",total:Number(g.total)||0,items:(g.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,ordQty:Number(it.ordered_qty)||0,recQty:Number(it.received_qty)||0,rate:Number(it.rate)||0,amount:Number(it.amount)||0,unit:it.unit||""}))})));
       if(iRes.success) setIssues((iRes.data||[]).map(i=>({...i,id:i.issue_no||`ISS-${i.id}`,dbId:i.id,date:fmtDate(i.date),project:i.project_name||"—",issuedTo:i.issued_to_name||"—",by:i.issued_by_name||"—",total:Number(i.total)||0,remarks:i.remarks||"",items:(i.items||[]).map(it=>({...it,name:it.material_name||it.name||"—",matId:it.material_id,qty:Number(it.qty)||0,rate:Number(it.rate)||0,unit:it.unit||""}))})));
-      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||"—",requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
+      if(mRes.success) setMrs((mRes.data||[]).map(m=>({...m,project:m.project_name||(m.project_id?"—":"Warehouse (internal)"),requestedBy:m.requested_by_name||"—",id:m.mr_no||`MR-${m.id}`,dbId:m.id,date:fmtDate(m.date),items:m.items||[]})));
       if(tRes.success) setTransfers((tRes.data||[]).map(t=>({...t,from:t.from_project_name||t.from_location||"—",to:t.to_project_name||t.to_location||"—",by:t.transferred_by_name||"—",id:t.transfer_no||`TRF-${t.id}`,dbId:t.id,date:fmtDate(t.date),items:t.items||[],total_value:Number(t.total_value)||0})));
       if(pRes.success) setProjects((pRes.data||[]).map(p=>({id:p.id,name:p.name})));
       if(uRes.success) setUsers((uRes.data||[]).map(u=>({id:u.id,name:u.name})));
+      if(libRes.success) setLibrary((libRes.data||[]).map(m=>({id:m.id,name:m.name,unit:m.unit||"Nos",category:m.category_name||"",rate:Number(m.last_rate||m.base_rate||0)})));
     }catch(e){console.error("Warehouse load error:",e);}
     setLoading(false);
   },[]);
@@ -1656,7 +1742,7 @@ function WarehouseModule(){
           onAddStock={(m)=>{setMatDetail(null);setAddStockTarget(m);}}/>
       )}
       {matModalOpen&&(
-        <MaterialFormModal material={matModalOpen.material} onClose={()=>setMatModalOpen(null)} onSaved={()=>loadAll()}/>
+        <MaterialFormModal material={matModalOpen.material} library={library} onClose={()=>setMatModalOpen(null)} onSaved={()=>loadAll()}/>
       )}
       {addStockTarget&&(
         <AddStockModal material={addStockTarget} onClose={()=>setAddStockTarget(null)} onSaved={()=>loadAll()}/>
@@ -1674,7 +1760,7 @@ function WarehouseModule(){
           onClose={()=>setIssueNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {mrNewOpen&&(
-        <NewMRModal stock={stock} projects={projects}
+        <NewMRModal library={library}
           onClose={()=>setMrNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {transferNewOpen&&(

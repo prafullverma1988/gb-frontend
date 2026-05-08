@@ -8,6 +8,16 @@ import MaterialFlowDrawer from "../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../components/MRDetailDrawer";
 import uploadManager from "../utils/uploadManager";
 
+// ── TZ-safe local date helper ────────────────────────────────────────
+// `new Date().toISOString().split("T")[0]` shifts by 1 day in early IST hours
+// (UTC midnight crosses local date boundary). Use local components instead.
+const localYMD = (d=new Date()) => {
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,"0");
+  const dd = String(d.getDate()).padStart(2,"0");
+  return `${yyyy}-${mm}-${dd}`;
+};
+
 // ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
 const T = {
   // Surfaces
@@ -4031,11 +4041,29 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
                   style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
               </div>
               <div>
-                <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Unit</label>
-                <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
-                  style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
-                  {UNITS.map(u=><option key={u}>{u}</option>)}
-                </select>
+                {(() => {
+                  const matName = form.material_name || form.item_name || "";
+                  const libMatch = grnMatLib.find(m => (m.name||"").trim().toLowerCase() === matName.trim().toLowerCase());
+                  const isLocked = !!matName;
+                  const displayUnit = libMatch?.unit || form.unit || "Nos";
+                  return (
+                    <>
+                      <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
+                        Unit{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>(from library)</span>}
+                      </label>
+                      {isLocked ? (
+                        <div title="Library me change karein" style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
+                          <span>🔒</span>{displayUnit}
+                        </div>
+                      ) : (
+                        <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
+                          style={{width:"100%",padding:"9px 11px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit",background:"white"}}>
+                          {UNITS.map(u=><option key={u}>{u}</option>)}
+                        </select>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
               <div>
                 <label style={{fontSize:9.5,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Vendor Name</label>
@@ -4303,6 +4331,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   const [showUsedLogForm,setShowUsedLogForm]=useState(false);
   const [usedLogForm,setUsedLogForm]=useState({material_name:"",used_qty:"",unit:"Nos",remark:"",used_date:new Date().toISOString().split("T")[0]});
   const [usedLogSaving,setUsedLogSaving]=useState(false);
+  const [matLib,setMatLib]=useState([]);
+  useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
 
   // Labour
   const [labours,setLabours]=useState([]);
@@ -4632,8 +4662,13 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               <div style={{display:"grid",gridTemplateColumns:"2fr 1fr",gap:8,marginBottom:10}}>
                 <div>
                   <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Material Name</label>
-                  <input value={usedLogForm.material_name} onChange={e=>setUsedLogForm(f=>({...f,material_name:e.target.value}))} placeholder="e.g. Cement"
+                  <input value={usedLogForm.material_name} onChange={e=>{
+                      const v=e.target.value;
+                      const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===v.trim().toLowerCase());
+                      setUsedLogForm(f=>({...f,material_name:v,unit:m?.unit||f.unit}));
+                    }} placeholder="e.g. Cement" list="usedlog-matlib"
                     style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  <datalist id="usedlog-matlib">{matLib.map(m=><option key={m.id} value={m.name}/>)}</datalist>
                 </div>
                 <div>
                   <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Qty</label>
@@ -4643,11 +4678,29 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               </div>
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
                 <div>
-                  <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Unit</label>
-                  <select value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
-                    style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
-                    {UNITS.map(u=><option key={u}>{u}</option>)}
-                  </select>
+                  {(() => {
+                    const matName = usedLogForm.material_name || "";
+                    const libMatch = matLib.find(m => (m.name||"").trim().toLowerCase() === matName.trim().toLowerCase());
+                    const isLocked = !!matName;
+                    const displayUnit = libMatch?.unit || usedLogForm.unit || "Nos";
+                    return (
+                      <>
+                        <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>
+                          Unit{isLocked && <span style={{marginLeft:5,fontSize:9,color:"#9CA3AF",textTransform:"none",fontWeight:500}}>(from library)</span>}
+                        </label>
+                        {isLocked ? (
+                          <div title="Library me change karein" style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,color:"#374151",background:"#F8F9FB",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:39,boxSizing:"border-box"}}>
+                            <span>🔒</span>{displayUnit}
+                          </div>
+                        ) : (
+                          <select value={usedLogForm.unit} onChange={e=>setUsedLogForm(f=>({...f,unit:e.target.value}))}
+                            style={{width:"100%",padding:"9px 10px",borderRadius:7,border:"1.5px solid #E2E8F0",fontSize:13,outline:"none",fontFamily:"inherit"}}>
+                            {UNITS.map(u=><option key={u}>{u}</option>)}
+                          </select>
+                        )}
+                      </>
+                    );
+                  })()}
                 </div>
                 <div>
                   <label style={{fontSize:10,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>Date</label>
@@ -5684,7 +5737,7 @@ function TabAttendance({ project }) {
   });
 
   // ── Core state ──────────────────────────────────────────────────
-  const todayStr = new Date().toISOString().split("T")[0];
+  const todayStr = localYMD();
   const [labType,      setLabType]      = useState("company"); // company | subcon | vendor
   const [attDate,      setAttDate]      = useState(todayStr);
   const [showWfPanel,  setShowWfPanel]  = useState(false); // collapsed by default — focus on attendance
@@ -5892,7 +5945,7 @@ function TabAttendance({ project }) {
   // ── 7-day date range ─────────────────────────────────────────────
   const days7 = Array.from({length:7},(_,i)=>{
     const d = new Date(); d.setDate(d.getDate()-(6-i));
-    return d.toISOString().split("T")[0];
+    return localYMD(d);
   });
 
   // ── Save attendance ──────────────────────────────────────────────
@@ -8022,7 +8075,11 @@ function TabMaterial({ project }) {
                       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
                         <div>
                           <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Material Name *</label>
-                          <input value={row.item_name} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,item_name:e.target.value}:r))}
+                          <input value={row.item_name} onChange={e=>{
+                              const v=e.target.value;
+                              const m=matLibReal.find(x=>(x.name||"").trim().toLowerCase()===v.trim().toLowerCase());
+                              setDirectRows(p=>p.map(r=>r.id===row.id?{...r,item_name:v,unit:m?.unit||r.unit}:r));
+                            }}
                             placeholder="e.g. Cement OPC 53" list={"mat_lib_"+row.id}
                             style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           <datalist id={"mat_lib_"+row.id}>{MAT_LIB.map(m=><option key={m} value={m}/>)}</datalist>
@@ -8041,11 +8098,28 @@ function TabMaterial({ project }) {
                             style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                         </div>
                         <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Unit</label>
-                          <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                            {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                          </select>
+                          {(() => {
+                            const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (row.item_name||"").trim().toLowerCase());
+                            const isLocked = !!row.item_name;
+                            const displayUnit = libMatch?.unit || row.unit || "Bags";
+                            return (
+                              <>
+                                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>
+                                  Unit{isLocked && <span style={{marginLeft:4,fontSize:9,color:T.t4,textTransform:"none",fontWeight:500}}>(library)</span>}
+                                </label>
+                                {isLocked ? (
+                                  <div title="Library me change karein" style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,height:33,boxSizing:"border-box"}}>
+                                    <span style={{fontSize:9}}>🔒</span>{displayUnit}
+                                  </div>
+                                ) : (
+                                  <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
+                                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                                    {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                                  </select>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                         <div>
                           <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>

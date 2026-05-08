@@ -721,8 +721,19 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
       ?prefillItems.map(m=>({desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:""}))
       :[{desc:"",hsn:"",qty:"",unit:"Bags",rate:""}]
   });
+  const [matLib,setMatLib]=useState([]);
+  useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
-  const updItem=(i,k,v)=>{const its=[...form.items];its[i]={...its[i],[k]:v};setForm(p=>({...p,items:its}));};
+  const updItem=(i,k,v)=>{
+    const its=[...form.items];
+    its[i]={...its[i],[k]:v};
+    // Auto-lock unit when material name matches library
+    if(k==="desc"){
+      const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
+      if(m?.unit) its[i].unit=m.unit;
+    }
+    setForm(p=>({...p,items:its}));
+  };
   const addItem=()=>setForm(p=>({...p,items:[...p.items,{desc:"",hsn:"",qty:"",unit:"Bags",rate:""}]}));
   const removeItem=(i)=>{if(form.items.length===1)return;const its=[...form.items];its.splice(i,1);setForm(p=>({...p,items:its}));};
   const total=form.items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
@@ -775,8 +786,14 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
               style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
               style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <SearchSelect value={it.unit} options={UNITS} compact
-              onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
+            {(()=>{
+              const lib=matLib.find(m=>(m.name||"").trim().toLowerCase()===(it.desc||"").trim().toLowerCase());
+              const isLocked=!!it.desc;
+              const u=lib?.unit||it.unit||"Bags";
+              return isLocked
+                ? <div title="Unit Library se aata hai" style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:4,boxSizing:"border-box",justifyContent:"center"}}><span style={{fontSize:9}}>🔒</span>{u}</div>
+                : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>;
+            })()}
             <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="Rate"
               style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             <button onClick={()=>removeItem(i)} style={{width:26,height:26,borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcX size={12} color={T.red}/></button>

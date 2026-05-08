@@ -735,10 +735,18 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [focusMatId,setFocusMatId]=useState(null);
   const addRow=()=>{const r=blankRow();setRows(p=>[...p,r]);setFocusMatId(r.id);};
   const removeRow=id=>rows.length>1&&setRows(p=>p.filter(r=>r.id!==id));
+  // Material library — used to auto-lock unit when material is picked
+  const [matLib,setMatLib]=useState([]);
+  useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
   const updRow=(id,k,v)=>setRows(p=>p.map(r=>{
     if(r.id!==id) return r;
     const u={...r,[k]:v};
     if(k==="qty"||k==="rate") u.total=Number(u.qty||0)*Number(u.rate||0);
+    // Auto-lock unit from material library when material is picked
+    if(k==="material" && v){
+      const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
+      if(m?.unit) u.unit=m.unit;
+    }
     return u;
   }));
   useEffect(()=>{
@@ -1398,10 +1406,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>{row.qty}</div>
                     :<input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0" style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                   }
-                  {row.fromGRN
-                    ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center"}}>{row.unit||"—"}</div>
-                    :<SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>
-                  }
+                  {(()=>{
+                    const lib=matLib.find(m=>(m.name||"").trim().toLowerCase()===(row.material||"").trim().toLowerCase());
+                    const isLocked=row.fromGRN||!!row.material;
+                    const u=lib?.unit||row.unit||"—";
+                    return isLocked
+                      ?<div title={row.fromGRN?"Locked from GRN":"Locked from Library — change in Library"} style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:11.5,color:T.t2,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"center",gap:3}}><span style={{fontSize:9}}>🔒</span>{u}</div>
+                      :<SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>;
+                  })()}
                   <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
                     style={inp({textAlign:"right",borderColor:T.amb,background:T.ambL})}
                     onFocus={e=>e.target.style.borderColor=T.amb} onBlur={e=>e.target.style.borderColor=T.amb}
