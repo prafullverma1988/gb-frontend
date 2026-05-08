@@ -243,8 +243,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
         }
       }).catch(()=>{});
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[]);
+  },[]); // run once on mount; items prop is stable for the modal lifetime
 
   const itemsWithWH = items.filter(it=>{
     const c = whCheck[it.id];
