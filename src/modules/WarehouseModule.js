@@ -599,12 +599,14 @@ function NewTransferModal({stock,projects,onClose,onSaved}){
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
   const updItem=(i,patch)=>{
     setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
-    // When picked from source inventory, copy rate (which we set from wh_materials)
-    // If still no rate and there's a wh_materials.id, fetch last-rate
-    if(patch.material_id&&!patch.rate){
-      api.get(`/warehouse/materials/${patch.material_id}/last-rate`).then(r=>{
-        if(r.success&&r.data?.rate){
-          setItems(p=>p.map((row,j)=>j===i&&!row.rate?{...row,rate:r.data.rate}:row));
+    // After material pick, fetch last-rate by name (works for procurement-only
+    // materials that don't exist in wh_materials master).
+    const pickedName = patch.name && String(patch.name).trim();
+    if(pickedName){
+      const url = `/warehouse/last-rate?name=${encodeURIComponent(pickedName)}`;
+      api.get(url).then(r=>{
+        if(r.success && Number(r.data?.rate) > 0){
+          setItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row));
         }
       }).catch(()=>{});
     }
