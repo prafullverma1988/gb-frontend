@@ -211,7 +211,12 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove}){
   // Pick material — auto-fills unit + rate
   const onPickMaterial=(v)=>{
     const m=stock.find(x=>x.id===v);
-    onChange(idx,{material_id:m?.id||null,name:m?.name||v,unit:m?.unit||row.unit||"Nos",rate:m?.rate||row.rate||0});
+    // material_id should only be a real wh_materials.id (number).
+    // If srcInv item explicitly has material_id field, prefer that (handles unmatched names).
+    const matId = m && Object.prototype.hasOwnProperty.call(m,'material_id')
+      ? m.material_id
+      : (typeof m?.id === 'number' ? m.id : null);
+    onChange(idx,{material_id:matId,name:m?.name||v,unit:m?.unit||row.unit||"Nos",rate:m?.rate||row.rate||0});
   };
 
   // Column templates per mode
@@ -478,10 +483,41 @@ function NewTransferModal({stock,projects,onClose,onSaved}){
   const [f,setF]=useState({date:today(),from_project_id:null,to_project_id:null});
   const [items,setItems]=useState([{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
   const [saving,setSaving]=useState(false);
+  const [srcInv,setSrcInv]=useState([]);   // Source project's inventory (from material-ledger)
+  const [srcLoading,setSrcLoading]=useState(false);
+
+  // Load source project's inventory when from_project_id changes
+  useEffect(()=>{
+    if(!f.from_project_id){ setSrcInv([]); return; }
+    setSrcLoading(true);
+    setItems([{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]); // reset items
+    api.get(`/tasks/project/${f.from_project_id}/material-ledger`).then(r=>{
+      if(r.success){
+        const inv=(r.data||[])
+          .filter(m=>Number(m.balance||0)>0) // only items with available qty
+          .map(m=>{
+            const whMat=stock.find(s=>s.name?.toLowerCase().trim()===m.material_name?.toLowerCase().trim());
+            return {
+              id: whMat?.id ?? `name:${(m.material_name||"").toLowerCase().trim()}`,
+              name: m.material_name,
+              qty: Number(m.balance)||0,
+              unit: m.unit||"Nos",
+              rate: whMat ? Number(whMat.rate)||0 : 0,
+              material_id: whMat?.id || null,
+              category: whMat?.category || "Other",
+            };
+          });
+        setSrcInv(inv);
+      } else setSrcInv([]);
+      setSrcLoading(false);
+    }).catch(()=>{ setSrcInv([]); setSrcLoading(false); });
+  },[f.from_project_id,stock]);
+
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
   const updItem=(i,patch)=>{
     setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
-    // When material is picked and rate is empty, auto-fill from last-rate API
+    // When picked from source inventory, copy rate (which we set from wh_materials)
+    // If still no rate and there's a wh_materials.id, fetch last-rate
     if(patch.material_id&&!patch.rate){
       api.get(`/warehouse/materials/${patch.material_id}/last-rate`).then(r=>{
         if(r.success&&r.data?.rate){
@@ -494,7 +530,13 @@ function NewTransferModal({stock,projects,onClose,onSaved}){
   const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
 
   const sameProj=f.from_project_id&&f.to_project_id&&Number(f.from_project_id)===Number(f.to_project_id);
-  const valid=f.from_project_id&&f.to_project_id&&!sameProj&&items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
+  // Over-stock warning: any item qty > source's available qty for that material
+  const overStockRow=items.find(it=>{
+    if(!it.qty)return false;
+    const inv=srcInv.find(s=>s.id===it.material_id||s.name===it.name);
+    return inv && Number(it.qty)>Number(inv.qty);
+  });
+  const valid=f.from_project_id&&f.to_project_id&&!sameProj&&!overStockRow&&items.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
 
   const totalValue=items.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
   const fromName=projects.find(p=>p.id===f.from_project_id)?.name;
@@ -558,20 +600,45 @@ function NewTransferModal({stock,projects,onClose,onSaved}){
         </div>
       )}
 
-      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>Items</div>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-        <span>Material</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span>Items {f.from_project_id?<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· from <b style={{color:T.cyn}}>{fromName}</b> inventory</span>:""}</span>
+        {srcLoading&&<span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontSize:10.5}}>Loading inventory...</span>}
       </div>
-      {items.map((row,i)=>(
-        <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem} mode="transfer" canRemove={items.length>1}/>
-      ))}
-      <button onClick={addItem}
-        style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-        <IcAdd size={11}/> Add row
-      </button>
-      <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-        💡 Material pick karte hi rate auto-fill ho jayega (last purchase rate). Edit kar sakte ho.
-      </div>
+
+      {!f.from_project_id&&(
+        <div style={{padding:"24px 14px",textAlign:"center",background:T.surfaceB,borderRadius:8,border:`1.5px dashed ${T.b1}`,color:T.t4,fontSize:12,marginBottom:8}}>
+          Source project select karo — uske available materials yahan dikhenge
+        </div>
+      )}
+
+      {f.from_project_id&&!srcLoading&&srcInv.length===0&&(
+        <div style={{padding:"24px 14px",textAlign:"center",background:T.ambL,borderRadius:8,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,marginBottom:8,fontWeight:600}}>
+          ⚠ {fromName} me koi available material nahi hai (sab use ho gaya hai ya GRN nahi mila)
+        </div>
+      )}
+
+      {f.from_project_id&&srcInv.length>0&&(
+        <>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
+            <span>Material (avail in {fromName})</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+          </div>
+          {items.map((row,i)=>(
+            <LineItemRow key={i} row={row} idx={i} stock={srcInv} onChange={updItem} onRemove={remItem} mode="transfer" canRemove={items.length>1}/>
+          ))}
+          <button onClick={addItem}
+            style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+            <IcAdd size={11}/> Add row
+          </button>
+          {overStockRow&&(
+            <div style={{marginTop:8,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>
+              ⚠ Kisi item ki qty source me available stock se zyada hai — kam karo
+            </div>
+          )}
+          <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
+            💡 Material pick karte hi rate auto-fill ho jayega. Edit kar sakte ho. Source me jitna available hai utna hi transfer karein.
+          </div>
+        </>
+      )}
     </ModalShell>
   );
 }
