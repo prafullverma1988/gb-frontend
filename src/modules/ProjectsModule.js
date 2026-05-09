@@ -1569,8 +1569,23 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     const isRaBill = src==="ra_bill";
     const isRaExpanded = isRaBill && expandedRa===item._source_id;
     const raDetail = isRaBill ? raItemsCache[item._source_id] : null;
+    const isPO = src==="purchase_order";
+    const goToProject = ()=>{
+      if (!item.project_id || !onSelectProject) return;
+      const tabFor = src==="ra_bill"||src==="wo_amendment" ? "subcon"
+                   : src==="design" ? "design"
+                   : src==="material_request"||src==="purchase_order" ? "material"
+                   : src==="payment_request" ? "transaction"
+                   : src==="labour_rate" ? "attendance"
+                   : "overview";
+      onClose();
+      onSelectProject({ id:item.project_id, name:item.project_name, initialTab:tabFor });
+    };
     return(
-      <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc}}>
+      <div onClick={isPO?goToProject:undefined}
+        style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc,cursor:isPO?"pointer":"default",transition:"box-shadow .12s"}}
+        onMouseEnter={isPO?(e)=>e.currentTarget.style.boxShadow=`0 2px 8px ${mc}33`:undefined}
+        onMouseLeave={isPO?(e)=>e.currentTarget.style.boxShadow="none":undefined}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
           <div style={{flex:1}}>
             <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3}}>
@@ -1643,24 +1658,29 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
             <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
           </div>
         )}
-        <div style={{display:"flex",gap:6,marginTop:6}}>
-          {src!=="purchase_order"&&(
+        {!isPO&&(
+          <div style={{display:"flex",gap:6,marginTop:6}}>
             <button onClick={()=>srcAction("reject")} disabled={!!act}
               style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
               {act==="rejecting"?"...":"✕ Reject"}
             </button>
-          )}
-          {src==="design"&&(
-            <button onClick={()=>srcAction("Revision")} disabled={!!act}
-              style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-              ↻ Revision
+            {src==="design"&&(
+              <button onClick={()=>srcAction("Revision")} disabled={!!act}
+                style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                ↻ Revision
+              </button>
+            )}
+            <button onClick={()=>srcAction("approve")} disabled={!!act}
+              style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+              {act==="approving"?"Approving...":"✓ Approve"}
             </button>
-          )}
-          <button onClick={()=>srcAction("approve")} disabled={!!act}
-            style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-            {act==="approving"?"Approving...":"✓ Approve"}
-          </button>
-        </div>
+          </div>
+        )}
+        {isPO&&(
+          <div style={{marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",padding:"6px 10px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:6,color:T.blu,fontSize:10.5,fontWeight:600,gap:5}}>
+            👆 Click anywhere on card to open PO details
+          </div>
+        )}
         {isRaBill&&(
           <button onClick={()=>{
               const next=isRaExpanded?null:item._source_id;
@@ -1715,26 +1735,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
             </>):null}
           </div>
         )}
-        {/* View Details / Open in Project link */}
-        {item.project_id && onSelectProject && (()=>{
-          const tabFor = src==="ra_bill"||src==="wo_amendment" ? "subcon"
-                       : src==="design" ? "design"
-                       : src==="material_request"||src==="purchase_order" ? "material"
-                       : src==="payment_request" ? "transaction"
-                       : src==="labour_rate" ? "attendance"
-                       : "overview";
-          return(
-            <button onClick={()=>{
-                onClose();
-                onSelectProject({ id:item.project_id, name:item.project_name, initialTab:tabFor });
-              }}
-              style={{marginTop:7,width:"100%",padding:"6px",borderRadius:6,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}
-              onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.color=T.blu;}}
-              onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
-              📋 Open in Project — full details →
-            </button>
-          );
-        })()}
+        {/* View Details / Open in Project link — hidden for PO (whole card is clickable) */}
+        {!isPO && item.project_id && onSelectProject && (
+          <button onClick={goToProject}
+            style={{marginTop:7,width:"100%",padding:"6px",borderRadius:6,background:"transparent",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}
+            onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.color=T.blu;}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.color=T.t3;}}>
+            📋 Open in Project — full details →
+          </button>
+        )}
       </div>
     );
   };
@@ -2094,13 +2103,17 @@ function ProjectsPage({onSelectProject}){
       setApprovalCount(cached.total);
       return;
     }
-    // Always fetch warehouse-internal pending MRs (Tab 1 — project_id NULL)
-    // separately so Material Requests tile reflects them too. Tab 2
-    // (project-linked) MRs are derived from procurement MRs and would
-    // double-count, so we exclude them with type=warehouse.
+    // Always fetch ALL pending warehouse MRs separately so Material
+    // Requests tile reflects them. Includes:
+    //   • Tab 1 (project_id NULL) — warehouse-internal stock requests
+    //   • Tab 2 (project_id NOT NULL with linked_procurement_mr_id)
+    //     — created when procurement chooses "Issue from Warehouse".
+    // No double-count with procurement: Tab 2 wh_mr is created only
+    // AFTER its parent procurement MR is mr_status=Approved, so
+    // /procurement/mrs?mr_status=Pending never includes that parent.
     let whMrCount = 0;
     try {
-      const whRes = await api.get("/warehouse/mr?type=warehouse&status=Pending");
+      const whRes = await api.get("/warehouse/mr?status=Pending");
       if (whRes.success) whMrCount = (whRes.data || []).length;
     } catch (_) {}
 
