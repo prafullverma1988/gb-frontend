@@ -997,7 +997,19 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
           <Input value={challan} onChange={e=>setChallan(e.target.value)} placeholder="CH-2026-..."/>
         </Field>
         <Field label="Vendor">
-          <Input value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Supplier (auto from MR)"/>
+          {mr?.vendor ? (
+            // Locked — vendor was set by procurement when ordering. Receiving
+            // team can't reassign; would break the PO → GRN audit chain.
+            <div style={{display:"flex",alignItems:"center",gap:8,height:32,padding:"0 11px",borderRadius:6,border:`1.5px solid ${T.grnM}`,background:T.grnL}}>
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{flexShrink:0}}>
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+              </svg>
+              <span style={{flex:1,fontSize:12.5,fontWeight:700,color:T.grn,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{vendor}</span>
+              <span style={{fontSize:9.5,color:T.grn,fontWeight:600,letterSpacing:".3px"}}>FROM ORDER</span>
+            </div>
+          ) : (
+            <Input value={vendor} onChange={e=>setVendor(e.target.value)} placeholder="Supplier (auto from MR)"/>
+          )}
         </Field>
       </div>
       <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
