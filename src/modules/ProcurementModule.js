@@ -829,7 +829,34 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
       :[{desc:"",hsn:"",qty:"",unit:"",rate:""}]
   });
   const [matLib,setMatLib]=useState([]);
-  useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
+  const reloadMatLib=()=>api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{});
+  useEffect(()=>{ reloadMatLib(); },[]);
+
+  // Inline "Add new material to library" form (collapsible)
+  const [showAddMat,setShowAddMat]=useState(false);
+  const [newMat,setNewMat]=useState({name:"",unit:"",hsn:""});
+  const [savingMat,setSavingMat]=useState(false);
+  const saveNewMaterial=async()=>{
+    const name=(newMat.name||"").trim();
+    if(!name) return;
+    if(matLib.some(m=>(m.name||"").trim().toLowerCase()===name.toLowerCase())){
+      alert("Yeh material library me already hai");
+      return;
+    }
+    setSavingMat(true);
+    const res=await api.post("/library/materials",{
+      name, unit:(newMat.unit||"Nos").trim()||"Nos",
+      hsn_code:(newMat.hsn||"").trim()||null,
+    });
+    setSavingMat(false);
+    if(res.success){
+      await reloadMatLib();
+      setShowAddMat(false);
+      setNewMat({name:"",unit:"",hsn:""});
+    } else {
+      alert(res.message||"Save failed");
+    }
+  };
 
   // Focus management: after "Add row" → cursor jumps to new row's material picker
   const matRefs = useRef({});
@@ -923,13 +950,36 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
               <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>Items</div>
               <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>Material library se pick karein · unit auto-locked</div>
             </div>
-            <button onClick={addItem}
-              style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.bluL,border:`1.5px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
-              onMouseEnter={e=>e.currentTarget.style.background=T.bluM+"66"}
-              onMouseLeave={e=>e.currentTarget.style.background=T.bluL}>
-              <IcAdd size={12} color={T.blu}/> Add row
+            <button onClick={()=>{ setShowAddMat(s=>!s); if(!showAddMat) setNewMat({name:"",unit:"",hsn:""}); }}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:showAddMat?T.purL:T.purL,border:`1.5px solid ${T.purM}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.purM+"66"}
+              onMouseLeave={e=>e.currentTarget.style.background=T.purL}>
+              <IcAdd size={12} color={T.pur}/> {showAddMat?"Cancel":"Add new material to Library"}
             </button>
           </div>
+
+          {/* Inline Add-new-material form */}
+          {showAddMat&&(
+            <div style={{padding:"11px 12px",background:T.purL,border:`1.5px solid ${T.purM}`,borderRadius:8,marginBottom:10}}>
+              <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>🆕 Add new material to Library</div>
+              <div style={{display:"grid",gridTemplateColumns:"2.5fr 90px 110px auto",gap:7,alignItems:"center"}}>
+                <input value={newMat.name} onChange={e=>setNewMat(p=>({...p,name:e.target.value}))} placeholder="Material name *" autoFocus
+                  style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                <select value={newMat.unit} onChange={e=>setNewMat(p=>({...p,unit:e.target.value}))}
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}>
+                  <option value="">Unit</option>
+                  {UNITS.map(u=><option key={u}>{u}</option>)}
+                </select>
+                <input value={newMat.hsn} onChange={e=>setNewMat(p=>({...p,hsn:e.target.value}))} placeholder="HSN (optional)"
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                <button onClick={saveNewMaterial} disabled={!newMat.name.trim()||savingMat}
+                  style={{padding:"7px 14px",borderRadius:6,background:newMat.name.trim()?T.pur:T.b1,color:newMat.name.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:newMat.name.trim()?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                  {savingMat?"...":"Save"}
+                </button>
+              </div>
+              <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.75}}>Save par item rows me bhi available hoga.</div>
+            </div>
+          )}
 
           {/* Header */}
           <div style={{display:"grid",gridTemplateColumns:"2.2fr 80px 70px 80px 80px 90px 28px",gap:7,padding:"6px 8px",background:T.sb,borderRadius:6,marginBottom:5}}>
@@ -950,7 +1000,7 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
                   inputRef={el=>{ if(el) matRefs.current[i]=el; }}
                   onChange={v=>updItem(i,"desc",v||"")}
                   placeholder="Pick material..."
-                  compact/>
+                  compact hideAddNew/>
                 <input value={it.hsn} onChange={e=>updItem(i,"hsn",e.target.value)} placeholder="HSN"
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -978,6 +1028,14 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
               </div>
             );
           })}
+
+          {/* Add row — below items list, full-width tab-friendly */}
+          <button onClick={addItem}
+            style={{marginTop:9,width:"100%",padding:"9px 12px",borderRadius:7,background:"transparent",border:`1.5px dashed ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .12s"}}
+            onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderStyle="solid";}}
+            onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderStyle="dashed";}}>
+            <IcAdd size={13} color={T.blu}/> Add row
+          </button>
         </div>
 
         {/* ── Total chip ─────────────────────────────────────────── */}

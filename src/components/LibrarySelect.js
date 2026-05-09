@@ -204,6 +204,7 @@ export default function LibrarySelect({
   disabled = false,
   filter,
   style = {},
+  hideAddNew = false,
 }) {
   const cfg = TYPE_CONFIG[type] || TYPE_CONFIG.supplier;
   const cacheEntry = _cache[type] || (_cache[type] = { items: null, loading: false, listeners: new Set() });
@@ -292,7 +293,7 @@ export default function LibrarySelect({
         inputRef={inputRef}
         disabled={disabled}
       />
-      {!showAdd ? (
+      {hideAddNew ? null : !showAdd ? (
         <button
           type="button"
           onClick={() => { setShowAdd(true); setForm({}); }}
