@@ -864,6 +864,35 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
     }
   };
 
+  // Inline "Add new material vendor to library" form (collapsible, top-right)
+  const [showAddVendor,setShowAddVendor]=useState(false);
+  const [newVendor,setNewVendor]=useState({name:"",phone:"",city:""});
+  const [savingVendor,setSavingVendor]=useState(false);
+  const saveNewVendor=async()=>{
+    const name=(newVendor.name||"").trim();
+    if(!name) return;
+    setSavingVendor(true);
+    const res=await api.post("/finance/parties",{
+      name, type:"Material Vendor",
+      phone:(newVendor.phone||"").trim()||null,
+      city:(newVendor.city||"").trim()||null,
+      credit_days:7,
+    });
+    // Best-effort: also push to procurement vendor list (legacy)
+    api.post("/procurement/vendors",{
+      name, phone:(newVendor.phone||"").trim()||null,
+      city:(newVendor.city||"").trim()||null,
+      category:"Material",
+    }).catch(()=>{});
+    setSavingVendor(false);
+    if(res?.success===false){ alert(res.message||"Save failed"); return; }
+    // Auto-select the new vendor — LibrarySelect surfaces it as synthetic
+    // option when value isn't yet in cache (cache fills on next reload).
+    setForm(p=>({...p,vendor:name}));
+    setShowAddVendor(false);
+    setNewVendor({name:"",phone:"",city:""});
+  };
+
   // Focus management: after "Add row" → cursor jumps to new row's material picker
   const matRefs = useRef({});
   const [pendingFocus, setPendingFocus] = useState(null);
@@ -918,12 +947,41 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
         sub={fromMR?`Direct PO · ${autoProjectName}`:"Direct PO — vendor library + material library"}
         onClose={onClose}/>
       <MBody>
+        {/* ── Top-right: Add new material vendor to Library ───────── */}
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:8}}>
+          <button onClick={()=>{ setShowAddVendor(s=>!s); if(!showAddVendor) setNewVendor({name:"",phone:"",city:""}); }}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.purL,border:`1.5px solid ${T.purM}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
+            onMouseEnter={e=>e.currentTarget.style.background=T.purM+"66"}
+            onMouseLeave={e=>e.currentTarget.style.background=T.purL}>
+            <IcAdd size={12} color={T.pur}/> {showAddVendor?"Cancel":"Add new material vendor to Library"}
+          </button>
+        </div>
+        {showAddVendor&&(
+          <div style={{padding:"11px 12px",background:T.purL,border:`1.5px solid ${T.purM}`,borderRadius:8,marginBottom:11}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>🆕 Add new material vendor to Library</div>
+            <div style={{display:"grid",gridTemplateColumns:"2.5fr 110px 110px auto",gap:7,alignItems:"center"}}>
+              <input value={newVendor.name} onChange={e=>setNewVendor(p=>({...p,name:e.target.value}))} placeholder="Vendor name *" autoFocus
+                style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              <input value={newVendor.phone} onChange={e=>setNewVendor(p=>({...p,phone:e.target.value}))} placeholder="Phone"
+                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              <input value={newVendor.city} onChange={e=>setNewVendor(p=>({...p,city:e.target.value}))} placeholder="City"
+                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+              <button onClick={saveNewVendor} disabled={!newVendor.name.trim()||savingVendor}
+                style={{padding:"7px 14px",borderRadius:6,background:newVendor.name.trim()?T.pur:T.b1,color:newVendor.name.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:newVendor.name.trim()?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                {savingVendor?"...":"Save"}
+              </button>
+            </div>
+            <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.75}}>Save par Vendor field me auto-select ho jayega.</div>
+          </div>
+        )}
+
         {/* ── Section 1: Vendor + Project ─────────────────────────── */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
           <Fld label="Vendor *">
             <LibrarySelect type="supplier" value={form.vendor}
               onChange={v=>upd("vendor",v||"")}
-              placeholder="Vendor library se pick / + add new"/>
+              placeholder="Vendor library se pick"
+              hideAddNew/>
           </Fld>
           <Fld label="Project *">
             {fromMR
