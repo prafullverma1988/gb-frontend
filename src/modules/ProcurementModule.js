@@ -231,6 +231,11 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   const [whCheck,setWhCheck]=useState({});  // {itemId: {available, sufficient, found, material_id, unit, rate}}
   const [whTake,setWhTake]=useState({});    // {itemId: qty user wants from warehouse}
   const [issuingFromWH,setIssuingFromWH]=useState(false);
+  // Sync ref guard — useState lags one render so a fast double-click on
+  // "Issue from Warehouse" was firing the POST twice and creating two
+  // wh_material_requests for the same procurement row. Ref flips before
+  // React sees it, so the second click bails immediately.
+  const issuingRef = useRef(false);
 
   useEffect(()=>{
     items.forEach(it=>{
@@ -255,8 +260,11 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
 
   const handleIssueFromWarehouse = async () => {
     if (!anyWHTake) return;
+    if (issuingRef.current) return; // hard double-click guard
+    issuingRef.current = true;
     setIssuingFromWH(true);
     let createdMRs = [];
+    let dedupedMRs = []; // backend returned existing MR for items already requested
     let errors = [];
     for (const it of items) {
       const qty = Number(whTake[it.id]||0);
@@ -266,16 +274,19 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
           procurement_mr_id: it.id,
           qty,
         });
-        if (res.success) createdMRs.push(res.data?.wh_mr_no);
-        else errors.push(`${it.item}: ${res.message||"failed"}`);
+        if (res.success) {
+          if (res.duplicate) dedupedMRs.push(res.data?.wh_mr_no);
+          else createdMRs.push(res.data?.wh_mr_no);
+        } else errors.push(`${it.item}: ${res.message||"failed"}`);
       } catch(e) { errors.push(`${it.item}: ${e.message}`); }
     }
     setIssuingFromWH(false);
+    issuingRef.current = false;
     if (errors.length) {
       alert("Kuch errors:\n"+errors.join("\n"));
     }
-    if (createdMRs.length) {
-      onWarehouseIssued && onWarehouseIssued(createdMRs);
+    if (createdMRs.length || dedupedMRs.length) {
+      onWarehouseIssued && onWarehouseIssued([...createdMRs, ...dedupedMRs]);
       onClose();
     }
   };
