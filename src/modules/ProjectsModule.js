@@ -2094,14 +2094,25 @@ function ProjectsPage({onSelectProject}){
       setApprovalCount(cached.total);
       return;
     }
+    // Always fetch warehouse-internal pending MRs (Tab 1 — project_id NULL)
+    // separately so Material Requests tile reflects them too. Tab 2
+    // (project-linked) MRs are derived from procurement MRs and would
+    // double-count, so we exclude them with type=warehouse.
+    let whMrCount = 0;
+    try {
+      const whRes = await api.get("/warehouse/mr?type=warehouse&status=Pending");
+      if (whRes.success) whMrCount = (whRes.data || []).length;
+    } catch (_) {}
+
     try{
       // Try centralized approval counts first
       const countRes=await api.get("/approvals/counts");
       if(countRes.success&&countRes.data){
         const byMod=countRes.data.byModule||[];
-        const mrCount=byMod.find(m=>m.module==="Material Request")?.count||0;
+        const mrCountProc=byMod.find(m=>m.module==="Material Request")?.count||0;
         const prCount=byMod.find(m=>m.module==="Payment Request")?.count||0;
-        const total=countRes.data.total||0;
+        const mrCount=mrCountProc+whMrCount;
+        const total=(countRes.data.total||0)+whMrCount;
         apiCache.set("approval-counts",{mrCount,prCount,total},30000);
         setMrPendingCount(mrCount);
         setPrPendingCount(prCount);
@@ -2118,7 +2129,8 @@ function ProjectsPage({onSelectProject}){
         // won't catch Revision-state drawings, which also need admin action.
         api.get("/design/drawings").catch(()=>({success:false})),
       ]);
-      const mrCount=(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested").length;
+      const mrCountProc=(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested").length;
+      const mrCount=mrCountProc+whMrCount;
       const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
       const designCount=(drRes.success?drRes.data:[]).filter(d=>d.status==="Pending"||d.status==="Revision").length;
       const total=mrCount+prCount+designCount;
