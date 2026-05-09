@@ -301,21 +301,40 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
     return `Order\n${lines}\nDelivery by: ${delivery||"TBD"}\nPlease confirm. — Admin`;
   };
 
+  // Items still needing a vendor order — i.e. requested qty exceeds what
+  // the user is taking from warehouse. When zero, the vendor section is
+  // hidden entirely (single-step flow: just Issue from Warehouse).
+  const remainingForVendor = items.filter(m => {
+    const taken = Number(whTake[m.id]||0);
+    const req   = Number(m.approvedQty||m.qty)||0;
+    return req - taken > 0;
+  });
+  const allCoveredByWarehouse = remainingForVendor.length === 0 && itemsWithWH.length > 0;
+
   return(
     <Modal onClose={onClose} width={560}>
-      <MHead title={`Order ${items.length} item${items.length>1?"s":""}`} sub="Select order medium" onClose={onClose}/>
+      <MHead title={`Order ${items.length} item${items.length>1?"s":""}`}
+        sub={itemsWithWH.length > 0
+          ? (allCoveredByWarehouse ? "Sab warehouse se issue ho jayenge" : "Step 1: warehouse · Step 2: vendor")
+          : "Select order medium"}
+        onClose={onClose}/>
       <MBody>
-        {/* WAREHOUSE AVAILABILITY BANNER */}
+        {/* ── STEP 1 — Warehouse issue (highlighted primary action) ── */}
         {itemsWithWH.length>0&&(
-          <div style={{background:T.cynL,border:`1.5px solid ${T.cynM}`,borderRadius:8,padding:"11px 13px",marginBottom:14}}>
-            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-              <span style={{fontSize:18}}>🏬</span>
+          <div style={{background:`linear-gradient(135deg, ${T.grnL}, ${T.cynL})`,border:`2px solid ${T.grn}`,borderRadius:10,padding:"12px 14px",marginBottom:14,boxShadow:`0 4px 14px ${T.grn}22`}}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:9,marginBottom:9}}>
+              <span style={{fontSize:22,lineHeight:1}}>🏬</span>
               <div style={{flex:1}}>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.cyn}}>Warehouse me available — issue from stock?</div>
-                <div style={{fontSize:11,color:T.cyn,marginTop:1}}>{itemsWithWH.length} item{itemsWithWH.length>1?"s":""} ka stock available hai. PO ki jagah Warehouse se issue karke procurement bachao.</div>
+                <div style={{display:"flex",alignItems:"center",gap:7,flexWrap:"wrap"}}>
+                  <span style={{fontSize:9.5,fontWeight:800,color:"white",background:T.grn,padding:"2px 8px",borderRadius:4,letterSpacing:".5px",textTransform:"uppercase"}}>Recommended</span>
+                  <span style={{fontSize:13,fontWeight:800,color:T.grn}}>Warehouse stock available</span>
+                </div>
+                <div style={{fontSize:11.5,color:T.t2,marginTop:3,lineHeight:1.4}}>
+                  {itemsWithWH.length} item{itemsWithWH.length>1?"s":""} warehouse se issue ho sakte hain — PO bachao, faster delivery, no vendor wait.
+                </div>
               </div>
             </div>
-            <div style={{background:"white",borderRadius:6,padding:"6px 10px",border:`1px solid ${T.cynM}`}}>
+            <div style={{background:"white",borderRadius:7,padding:"6px 10px",border:`1px solid ${T.cynM}`}}>
               {items.map((it,i)=>{
                 const c=whCheck[it.id];
                 const reqQty=Number(it.approvedQty||it.qty)||0;
@@ -331,24 +350,38 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
                       onChange={e=>setWhTake(p=>({...p,[it.id]:e.target.value}))}
                       title="Warehouse se kitna lena hai"
                       style={{height:26,padding:"0 7px",borderRadius:5,border:`1px solid ${T.cynM}`,fontSize:11,outline:"none",fontFamily:"inherit",textAlign:"right",background:"white"}}/>
-                    <div style={{fontSize:10,color:T.t4,textAlign:"right"}}>+ vendor: {fromVendor} {it.unit}</div>
+                    <div style={{fontSize:10,color:T.t4,textAlign:"right"}}>{fromVendor>0?`+ vendor: ${fromVendor} ${it.unit}`:<span style={{color:T.grn,fontWeight:700}}>✓ full</span>}</div>
                   </div>
                 );
               })}
             </div>
             <button onClick={handleIssueFromWarehouse} disabled={!anyWHTake||issuingFromWH}
-              style={{marginTop:9,width:"100%",padding:"8px",borderRadius:6,background:anyWHTake?T.cyn:T.b1,color:anyWHTake?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:anyWHTake?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-              {issuingFromWH?"Creating warehouse MRs...":<><span>📦</span> Issue from Warehouse ({totalWHTake.toFixed(2)} units total)</>}
+              style={{marginTop:11,width:"100%",padding:"11px",borderRadius:8,
+                background:anyWHTake?`linear-gradient(135deg, ${T.grn}, #047857)`:T.b1,
+                color:anyWHTake?"white":T.t4,border:"none",
+                fontSize:13.5,fontWeight:800,cursor:anyWHTake?"pointer":"not-allowed",
+                display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+                boxShadow:anyWHTake?`0 4px 12px ${T.grn}55`:"none",
+                letterSpacing:".3px"}}>
+              {issuingFromWH?"Creating warehouse MRs...":
+                <><span style={{fontSize:16}}>📦</span> Issue from Warehouse{totalWHTake>0?` · ${totalWHTake.toFixed(2)} units`:""}{allCoveredByWarehouse?" — Done":""}</>}
             </button>
-            <div style={{fontSize:10,color:T.t4,marginTop:6,textAlign:"center"}}>
-              Warehouse → Requests me MR generate hoga · warehouse team approve+issue karegi → project ko material milega
+            <div style={{fontSize:10.5,color:T.t3,marginTop:7,textAlign:"center",lineHeight:1.4}}>
+              Click → Warehouse Requests me MR generate · procurement MR <b style={{color:T.grn}}>"Ordered"</b> tab me move{!allCoveredByWarehouse?` · ${remainingForVendor.length} bachay item ke liye neeche vendor order karo`:""}
             </div>
           </div>
         )}
 
+        {/* If everything is being issued from warehouse, vendor section
+            is hidden — single-step flow. Otherwise show remaining items
+            + vendor order picker as Step 2. */}
+        {!allCoveredByWarehouse && (<>
         {/* Items summary */}
         <div style={{background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:16,overflow:"hidden"}}>
-          <div style={{padding:"8px 12px",background:T.b1}}>
+          <div style={{padding:"8px 12px",background:T.b1,display:"flex",alignItems:"center",gap:7}}>
+            {itemsWithWH.length>0 && (
+              <span style={{fontSize:9,fontWeight:800,color:"white",background:T.blu,padding:"2px 7px",borderRadius:4,letterSpacing:".4px",textTransform:"uppercase"}}>Step 2</span>
+            )}
             <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px"}}>{anyWHTake?"Remaining for vendor":"Selected Items"}</span>
           </div>
           {items.map((m,i)=>{
@@ -425,17 +458,24 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
             )}
           </div>
         )}
+        </>)}
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn
-          onClick={()=>onSave(medium,vendor,delivery,items)}
-          disabled={!medium||(medium==="manual"&&(!vendor||!delivery))}
-          color={medium==="po"?T.blu:medium==="rfq"?T.pur:T.grn}
-          full
-          icon={medium==="po"?<IcPO size={14} color="white"/>:medium==="rfq"?<IcRFQ size={14} color="white"/>:<IcWA size={14} color="white"/>}>
-          {medium==="po"?"Create PO":medium==="rfq"?"Create RFQ":"Mark as Ordered"}
-        </Btn>
+        {allCoveredByWarehouse ? (
+          // Single-step flow — Issue from Warehouse button up top is the
+          // entire submit. Hide the duplicate vendor CTA.
+          <span style={{flex:1}}/>
+        ) : (
+          <Btn
+            onClick={()=>onSave(medium,vendor,delivery,items)}
+            disabled={!medium||(medium==="manual"&&(!vendor||!delivery))}
+            color={medium==="po"?T.blu:medium==="rfq"?T.pur:T.grn}
+            full
+            icon={medium==="po"?<IcPO size={14} color="white"/>:medium==="rfq"?<IcRFQ size={14} color="white"/>:<IcWA size={14} color="white"/>}>
+            {medium==="po"?"Create PO":medium==="rfq"?"Create RFQ":"Mark as Ordered"}
+          </Btn>
+        )}
       </MFoot>
     </Modal>
   );
