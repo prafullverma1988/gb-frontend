@@ -169,12 +169,36 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
     rate:material?.rate??0,
     location:material?.location||"Main Godown",
   });
+  // Lazy-load the library list when the parent's `library` prop is empty
+  // (e.g. the initial /library/materials call failed during a backend
+  // restart). Without this the dropdown shows "No options yet" until the
+  // user reloads the whole page.
+  const [localLib,setLocalLib]=useState([]);
+  useEffect(()=>{
+    if (editing) return;
+    if (library.length > 0) return;
+    let cancelled = false;
+    api.get("/library/materials").then(r=>{
+      if (cancelled) return;
+      if (r?.success && Array.isArray(r.data)) {
+        setLocalLib(r.data.map(m=>({
+          id: m.id,
+          name: m.name,
+          unit: m.unit || "Nos",
+          category: m.category_name || "",
+          rate: Number(m.last_rate || m.base_rate || 0),
+        })));
+      }
+    }).catch(()=>{});
+    return () => { cancelled = true; };
+  }, [editing, library.length]);
+  const effectiveLib = library.length > 0 ? library : localLib;
   const [libPick,setLibPick]=useState(null);
   const [saving,setSaving]=useState(false);
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
   const onLibPick=(v)=>{
     setLibPick(v);
-    const m=library.find(l=>l.id===v);
+    const m=effectiveLib.find(l=>l.id===v);
     if(m) setF(p=>({...p,name:m.name,unit:m.unit||"Nos",rate:m.rate||p.rate,category:m.category||p.category}));
   };
   const submit=async()=>{
@@ -191,7 +215,7 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
     setSaving(false);
   };
 
-  const libOpts=library.map(m=>({id:m.id,name:`${m.name} · ${m.unit||"Nos"}`}));
+  const libOpts=effectiveLib.map(m=>({id:m.id,name:`${m.name} · ${m.unit||"Nos"}`}));
   const fromLibrary=editing||!!libPick;
 
   return(
@@ -205,7 +229,7 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
       {!editing&&(
         <Field label="Pick from Material Library *" style={{marginBottom:11}}>
           <SearchSelect value={libPick} options={libOpts} onChange={onLibPick} placeholder="Library se material chunein"/>
-          {library.length===0&&<div style={{fontSize:10.5,color:T.amb,marginTop:3}}>⚠ Library khali hai — Library → Materials me pehle add karein</div>}
+          {effectiveLib.length===0&&<div style={{fontSize:10.5,color:T.amb,marginTop:3}}>⚠ Library khali hai — Library → Materials me pehle add karein</div>}
         </Field>
       )}
       <Field label="Material name *" style={{marginBottom:11}}>
