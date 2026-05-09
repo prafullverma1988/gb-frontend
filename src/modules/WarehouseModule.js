@@ -406,20 +406,68 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
     else alert(res.message||"Return save failed");
   };
 
+  // Tab 3: Direct GRN state (no prior MR)
+  const [dirF,setDirF]=useState({date:today(),vendor:"",po_no:"",challan:"",remark:""});
+  const [dirItems,setDirItems]=useState([{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
+  const [dirSaving,setDirSaving]=useState(false);
+  const updDirItem=(i,patch)=>{
+    setDirItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
+    const pickedName=patch.name&&String(patch.name).trim();
+    if(pickedName&&!patch.rate){
+      api.get(`/warehouse/last-rate?name=${encodeURIComponent(pickedName)}`).then(r=>{
+        if(r.success&&Number(r.data?.rate)>0){
+          setDirItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row));
+        }
+      }).catch(()=>{});
+    }
+  };
+  const remDirItem=(i)=>setDirItems(p=>p.filter((_,j)=>j!==i));
+  const addDirItem=()=>setDirItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
+  const dirValid=dirF.vendor.trim()&&dirItems.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
+  const dirTotal=dirItems.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
+  const submitDirect=async()=>{
+    setDirSaving(true);
+    const cleanItems=dirItems.filter(it=>(it.name||it.material_id)&&Number(it.qty)>0).map(it=>({
+      material_id:it.material_id||null,
+      name:it.name||(stock.find(s=>String(s.id)===String(it.material_id))?.name)||"Material",
+      unit:it.unit||"Nos",
+      qty:Number(it.qty),
+      rate:Number(it.rate)||0,
+    }));
+    const res=await api.post("/warehouse/grn-direct",{
+      date:dirF.date,
+      vendor:dirF.vendor.trim(),
+      po_no:dirF.po_no.trim()||null,
+      challan:dirF.challan.trim()||null,
+      remark:dirF.remark.trim()||null,
+      items:cleanItems,
+    });
+    setDirSaving(false);
+    if(res.success){onSaved&&onSaved(res.data);onClose();}
+    else alert(res.message||"Direct GRN save failed");
+  };
+
   const tabs=[
     {id:"procurement",l:"Requested by Procurement",c:T.pur,count:orderedMRs.length},
+    {id:"direct",     l:"Direct GRN",              c:T.blu,count:null},
     {id:"return",     l:"Return from Project",     c:T.cyn,count:null},
   ];
 
   return (
     <ModalShell title="New GRN — Material In"
-      sub={tab==="procurement"?"Procurement-ordered material ko receive karein":"Project se wapas aaya material log karein"}
-      onClose={onClose} width={780}
-      footer={tab==="return"?<>
-        <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total Value: <b style={{color:T.cyn}}>₹{fmtN(retTotal)}</b></span>
-        <GhostBtn onClick={onClose}>Cancel</GhostBtn>
-        <Btn onClick={submitReturn} disabled={!retValid||retSaving} c={T.cyn} icon={IcIn}>{retSaving?"Saving...":"Save Return"}</Btn>
-      </>:<GhostBtn onClick={onClose}>Close</GhostBtn>}>
+      sub={tab==="procurement"?"Procurement-ordered material ko receive karein":tab==="direct"?"Vendor walk-in delivery — bina prior MR/PO ke":"Project se wapas aaya material log karein"}
+      onClose={onClose} width={820}
+      footer={
+        tab==="return"?<>
+          <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total Value: <b style={{color:T.cyn}}>₹{fmtN(retTotal)}</b></span>
+          <GhostBtn onClick={onClose}>Cancel</GhostBtn>
+          <Btn onClick={submitReturn} disabled={!retValid||retSaving} c={T.cyn} icon={IcIn}>{retSaving?"Saving...":"Save Return"}</Btn>
+        </>:tab==="direct"?<>
+          <span style={{fontSize:12,color:T.t3,marginRight:"auto"}}>Total: <b style={{color:T.blu}}>₹{fmtN(dirTotal)}</b></span>
+          <GhostBtn onClick={onClose}>Cancel</GhostBtn>
+          <Btn onClick={submitDirect} disabled={!dirValid||dirSaving} c={T.grn} icon={IcChk}>{dirSaving?"Saving...":"Save Direct GRN"}</Btn>
+        </>:<GhostBtn onClick={onClose}>Close</GhostBtn>
+      }>
 
       {/* Sub-tabs */}
       <div style={{display:"flex",gap:6,padding:3,background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`,width:"fit-content",marginBottom:14}}>
@@ -479,6 +527,43 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* TAB 3: Direct GRN — vendor walk-in, no prior MR */}
+      {tab==="direct"&&(
+        <div>
+          <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:13,lineHeight:1.5}}>
+            🚚 <b>Direct GRN:</b> bina prior MR/PO ke vendor delivery aayi hai. Save par warehouse stock me add hoga + Finance → Unbilled Materials me dikhega billing ke liye (project ke same flow).
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"140px 2fr 1fr 1fr",gap:11,marginBottom:11}}>
+            <Field label="Date"><Input type="date" value={dirF.date} onChange={e=>setDirF(p=>({...p,date:e.target.value}))}/></Field>
+            <Field label="Vendor *">
+              <Input value={dirF.vendor} onChange={e=>setDirF(p=>({...p,vendor:e.target.value}))} placeholder="Supplier name"/>
+            </Field>
+            <Field label="PO No"><Input value={dirF.po_no} onChange={e=>setDirF(p=>({...p,po_no:e.target.value}))} placeholder="Optional"/></Field>
+            <Field label="Challan No"><Input value={dirF.challan} onChange={e=>setDirF(p=>({...p,challan:e.target.value}))} placeholder="CH-..."/></Field>
+          </div>
+          <Field label="Remark" style={{marginBottom:13}}>
+            <Input value={dirF.remark} onChange={e=>setDirF(p=>({...p,remark:e.target.value}))} placeholder="Optional note"/>
+          </Field>
+
+          <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
+            Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· stock me hai to pick karo, nahi to naya naam type karo (auto-create)</span>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
+            <span>Material</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+          </div>
+          {dirItems.map((row,i)=>(
+            <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updDirItem} onRemove={remDirItem} mode="transfer" canRemove={dirItems.length>1}/>
+          ))}
+          <button onClick={addDirItem}
+            style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+            <IcAdd size={11}/> Add row
+          </button>
+          <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
+            💡 Save par: warehouse stock + (master rate refresh) + Finance Unbilled Materials list me entry.
+          </div>
         </div>
       )}
 
