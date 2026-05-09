@@ -7415,7 +7415,37 @@ function TabMaterial({ project }) {
   const [newMatSaving, setNewMatSaving] = useState(false);
   const [showGRN, setShowGRN] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"", photos: [] });
+  // Multi-item MR — each row is a separate material+qty+amount.
+  // required_date / notes / photos are shared across the whole batch.
+  const [form, setForm] = useState({
+    items: [{ item_name:"", quantity:"", unit:"Bags", approx_amount:"" }],
+    required_date:"", notes:"", photos: [],
+  });
+  const [showAddLib, setShowAddLib] = useState(false);
+  const [libNewName, setLibNewName] = useState("");
+  const [libNewUnit, setLibNewUnit] = useState("Nos");
+  const [libSaving, setLibSaving] = useState(false);
+  const addItemRow = () => setForm(p => ({ ...p, items: [...p.items, { item_name:"", quantity:"", unit:"Bags", approx_amount:"" }] }));
+  const removeItemRow = (idx) => setForm(p => ({ ...p, items: p.items.length > 1 ? p.items.filter((_,i)=>i!==idx) : p.items }));
+  const updItem = (idx, patch) => setForm(p => ({ ...p, items: p.items.map((it,i)=> i===idx ? { ...it, ...patch } : it) }));
+  const saveLibMaterial = async () => {
+    const name = (libNewName||"").trim();
+    if (!name) return;
+    setLibSaving(true);
+    try {
+      const r = await api.post("/library/materials", { name, unit: libNewUnit || "Nos" });
+      if (r?.success) {
+        const m = r.data || { id: Date.now(), name, unit: libNewUnit };
+        setMatLibReal(prev => [...prev, m].sort((a,b)=>(a.name||"").localeCompare(b.name||"")));
+        setLibNewName("");
+        setLibNewUnit("Nos");
+        setShowAddLib(false);
+      } else {
+        window.alert(r?.message || "Failed to add to library");
+      }
+    } catch (e) { window.alert(e?.message || "Network error"); }
+    setLibSaving(false);
+  };
   const [grnTab, setGrnTab] = useState("ordered");
   const [orderedMRs, setOrderedMRs] = useState([]);
   const [grnRows, setGrnRows] = useState({});
@@ -7747,35 +7777,53 @@ function TabMaterial({ project }) {
   };
 
   const handleSubmitMR = async () => {
-    if (!form.item_name || !form.quantity) return;
+    // Validate at least one filled row
+    const validItems = (form.items || []).filter(it => it.item_name?.trim() && Number(it.quantity) > 0);
+    if (validItems.length === 0) {
+      alert("At least one material with quantity is required");
+      return;
+    }
     setSaving(true);
     try {
-      const res = await api.post("/procurement/mrs", {
-        project_id: projectId, project_name: projectName,
-        item_name: form.item_name, quantity: parseFloat(form.quantity),
-        unit: form.unit, required_date: form.required_date || null,
-        approx_amount: form.approx_amount ? parseFloat(form.approx_amount) : null,
-        notes: form.notes || null,
-        photo_urls: form.photos && form.photos.length ? form.photos : null,
-        // requested_by deliberately omitted — backend defaults to the
-        // logged-in user.name so the audit trail captures the real person.
-      });
-      if (res.success) {
-        api.post("/approvals/submit", {
-          module: "Material Request",
-          ref_id: res.data.id,
-          ref_no: res.data.mr_number || "",
-          title: form.item_name + " (" + form.quantity + " " + form.unit + ")",
-          amount: Number(form.approx_amount) || 0,
-          project_id: projectId,
-          project_name: projectName || "",
-        }).catch(e => console.error("Approval submit:", e));
-        const m = res.data;
-        setMaterials(prev => [{ id:m.id, name:m.item_name, qty:m.quantity+" "+m.unit,
-          stage:"Requested", by: m.requested_by || "—",
-          date:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
-          vendor:null, amt:parseFloat(m.approx_amount)||0 }, ...prev]);
-        setForm({ item_name:"", quantity:"", unit:"Bags", required_date:"", approx_amount:"", notes:"", photos: [] });
+      // Each row creates its own MR. Sequential so we get a stable order
+      // and a single rejection doesn't lose the rest.
+      const newMaterialRows = [];
+      for (const it of validItems) {
+        const res = await api.post("/procurement/mrs", {
+          project_id: projectId, project_name: projectName,
+          item_name: it.item_name.trim(),
+          quantity: parseFloat(it.quantity),
+          unit: it.unit || "Nos",
+          required_date: form.required_date || null,
+          approx_amount: it.approx_amount ? parseFloat(it.approx_amount) : null,
+          notes: form.notes || null,
+          photo_urls: form.photos && form.photos.length ? form.photos : null,
+        });
+        if (res?.success) {
+          api.post("/approvals/submit", {
+            module: "Material Request",
+            ref_id: res.data.id,
+            ref_no: res.data.mr_number || "",
+            title: it.item_name + " (" + it.quantity + " " + (it.unit||"Nos") + ")",
+            amount: Number(it.approx_amount) || 0,
+            project_id: projectId,
+            project_name: projectName || "",
+          }).catch(e => console.error("Approval submit:", e));
+          const m = res.data;
+          newMaterialRows.push({
+            id:m.id, name:m.item_name, qty:m.quantity+" "+m.unit,
+            stage:"Requested", by: m.requested_by || "—",
+            date:new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+            vendor:null, amt:parseFloat(m.approx_amount)||0,
+          });
+        }
+      }
+      if (newMaterialRows.length > 0) {
+        setMaterials(prev => [...newMaterialRows, ...prev]);
+        setForm({
+          items: [{ item_name:"", quantity:"", unit:"Bags", approx_amount:"" }],
+          required_date:"", notes:"", photos: [],
+        });
         setShowModal(false);
       }
     } catch(e) { alert("Error: " + e.message); }
@@ -7826,73 +7874,129 @@ function TabMaterial({ project }) {
         {showModal && (<>
           <div onClick={()=>setShowModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.32)",zIndex:400,backdropFilter:"blur(2px)"}}/>
           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:10,boxShadow:"0 20px 60px rgba(0,0,0,0.18)",zIndex:401,width:440,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
-            <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div>
+            <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+              <div style={{minWidth:0}}>
                 <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>New Material Request</div>
-                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1}}>{projectName}</div>
+                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{projectName}</div>
               </div>
-              <button onClick={()=>setShowModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
+              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+                {/* Repositioned: was inline below the Material dropdown — now a
+                    highlighted top-right action so user can quickly add a
+                    new library entry without leaving the modal. */}
+                <button onClick={()=>setShowAddLib(s=>!s)} title="Add new material to Library"
+                  style={{padding:"5px 11px",borderRadius:6,background: showAddLib ? T.amb : "rgba(251,191,36,0.18)",border:"1px solid "+T.amb,color: showAddLib ? "white" : "#FBBF24",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"background .15s"}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  New Material
+                </button>
+                <button onClick={()=>setShowModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
+              </div>
             </div>
-            <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12}}>
+            <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12,maxHeight:"calc(100vh - 180px)",overflowY:"auto"}}>
               <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.amb}}>
                 Request Procurement mein jayegi — Admin approve karenge phir order hoga
               </div>
-              <div>
-                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Material Name *</label>
-                <LibrarySelect type="material" value={form.item_name}
-                  onChange={v=>{const found=matLibReal.find(m=>m.name===v);setForm(p=>({...p,item_name:v,unit:found?.unit||p.unit}));}}
-                  onAdded={(m)=>setMatLibReal(prev=>[...prev,m].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}/>
-              </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Quantity *</label>
-                  <input type="number" inputMode="decimal" min={0} step="any" value={form.quantity}
-                    onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E"||e.key==="+") e.preventDefault();}}
-                    onChange={e=>{
-                      const v=e.target.value;
-                      if(v===""){setForm(p=>({...p,quantity:""}));return;}
-                      const n=parseFloat(v);
-                      if(!isNaN(n)&&n>=0) setForm(p=>({...p,quantity:v}));
-                    }}
-                    placeholder="200"
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+
+              {/* Top-right "+ New Material" inline form (toggled) */}
+              {showAddLib && (
+                <div style={{background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:8,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:11,fontWeight:700,color:T.amb,letterSpacing:".4px",textTransform:"uppercase"}}>
+                    <span>Add New Material to Library</span>
+                    <button onClick={()=>{setShowAddLib(false);setLibNewName("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.amb,padding:0,fontSize:14,lineHeight:1}}>×</button>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"2fr 1fr auto",gap:8,alignItems:"end"}}>
+                    <input value={libNewName} onChange={e=>setLibNewName(e.target.value)} placeholder="Material name (e.g. AAC Block 4 inch)" autoFocus
+                      style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                    <select value={libNewUnit} onChange={e=>setLibNewUnit(e.target.value)}
+                      style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",background:T.surface,cursor:"pointer"}}>
+                      {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                    </select>
+                    <button onClick={saveLibMaterial} disabled={!libNewName.trim()||libSaving}
+                      style={{padding:"7px 14px",borderRadius:6,background:libNewName.trim()?T.amb:T.b1,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:libNewName.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>
+                      {libSaving?"...":"Save"}
+                    </button>
+                  </div>
                 </div>
-                <div>
-                  {(() => {
-                    // Material is library-only (SearchSelect / Add-New both write to library).
-                    // So unit ALWAYS locks once a material is picked. Display: lib-entry unit, fall back to form.unit.
-                    const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (form.item_name||"").trim().toLowerCase());
-                    const isLocked = !!form.item_name; // material picked → unit locked
-                    const displayUnit = libMatch?.unit || form.unit || "Nos";
-                    return (
-                      <>
-                        <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>
-                          Unit{isLocked && <span style={{marginLeft:5,fontSize:9.5,color:T.t4,textTransform:"none",fontWeight:500}}>(from library)</span>}
-                        </label>
-                        {isLocked ? (
-                          <div style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:6,height:38,boxSizing:"border-box"}}>
-                            <span>🔒</span>{displayUnit}
-                          </div>
-                        ) : (
-                          <select value={form.unit} onChange={e=>setForm(p=>({...p,unit:e.target.value}))}
-                            style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                            {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                          </select>
-                        )}
-                      </>
-                    );
-                  })()}
+              )}
+
+              {/* Items — multiple rows, each with material + qty + amount */}
+              <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
+                    Items <span style={{color:T.t4,fontWeight:500,marginLeft:4}}>({form.items.length})</span>
+                  </span>
                 </div>
+                {form.items.map((it,idx)=>{
+                  const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (it.item_name||"").trim().toLowerCase());
+                  const isLocked = !!it.item_name;
+                  const displayUnit = libMatch?.unit || it.unit || "Nos";
+                  return (
+                    <div key={idx} style={{padding:"10px 11px",border:`1px solid ${T.b1}`,borderRadius:8,background:T.surfaceB,display:"flex",flexDirection:"column",gap:8,position:"relative"}}>
+                      {form.items.length > 1 && (
+                        <button onClick={()=>removeItemRow(idx)} title="Remove this item"
+                          style={{position:"absolute",top:7,right:7,width:22,height:22,borderRadius:5,border:"none",background:T.redL,color:T.red,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
+                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
+                      )}
+                      <div style={{paddingRight: form.items.length>1?28:0}}>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",display:"block",marginBottom:4}}>Material *</label>
+                        <LibrarySelect type="material" value={it.item_name}
+                          hideAddNew
+                          onChange={v=>{
+                            const found = matLibReal.find(m=>m.name===v);
+                            updItem(idx, { item_name:v, unit: found?.unit || it.unit });
+                          }}/>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",display:"block",marginBottom:4}}>Qty *</label>
+                          <input type="number" inputMode="decimal" min={0} step="any" value={it.quantity}
+                            onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E"||e.key==="+") e.preventDefault();}}
+                            onChange={e=>{
+                              const v=e.target.value;
+                              if(v===""){updItem(idx,{quantity:""});return;}
+                              const n=parseFloat(v);
+                              if(!isNaN(n)&&n>=0) updItem(idx,{quantity:v});
+                            }}
+                            placeholder="200"
+                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",display:"block",marginBottom:4}}>
+                            Unit{isLocked && <span style={{marginLeft:4,fontSize:9,color:T.t4,textTransform:"none",fontWeight:500}}>(lib)</span>}
+                          </label>
+                          {isLocked ? (
+                            <div style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,height:32,boxSizing:"border-box"}}>
+                              🔒 {displayUnit}
+                            </div>
+                          ) : (
+                            <select value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
+                              style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                              {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                            </select>
+                          )}
+                        </div>
+                        <div>
+                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",display:"block",marginBottom:4}}>Approx. ₹</label>
+                          <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
+                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+                {/* Replaces the old "+ Add New Material to Library" button — this
+                    one appends another item row to the request batch. */}
+                <button onClick={addItemRow}
+                  style={{padding:"8px 12px",borderRadius:7,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,fontFamily:"inherit"}}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  Add Row
+                </button>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+
+              <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
                 <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Required By</label>
+                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Required By <span style={{color:T.t4,textTransform:"none",fontWeight:500,marginLeft:4}}>(applies to all items)</span></label>
                   <input type="date" value={form.required_date} onChange={e=>setForm(p=>({...p,required_date:e.target.value}))}
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                </div>
-                <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Approx. Amount</label>
-                  <input type="number" value={form.approx_amount} onChange={e=>setForm(p=>({...p,approx_amount:e.target.value}))} placeholder="76000"
                     style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                 </div>
               </div>
@@ -7934,10 +8038,16 @@ function TabMaterial({ project }) {
             </div>
             <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8}}>
               <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-              <button onClick={handleSubmitMR} disabled={saving||!form.item_name||!form.quantity}
-                style={{flex:2,padding:"8px",borderRadius:7,background:(saving||!form.item_name||!form.quantity)?T.b1:T.blu,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:(saving||!form.item_name||!form.quantity)?"not-allowed":"pointer"}}>
-                {saving?"Saving...":"Submit Request"}
-              </button>
+              {(() => {
+                const validCount = (form.items||[]).filter(it => it.item_name?.trim() && Number(it.quantity) > 0).length;
+                const canSubmit = !saving && validCount > 0;
+                return (
+                  <button onClick={handleSubmitMR} disabled={!canSubmit}
+                    style={{flex:2,padding:"8px",borderRadius:7,background:canSubmit?T.blu:T.b1,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:canSubmit?"pointer":"not-allowed"}}>
+                    {saving ? "Saving..." : validCount > 1 ? `Submit ${validCount} Requests` : "Submit Request"}
+                  </button>
+                );
+              })()}
             </div>
           </div>
         </>)}
