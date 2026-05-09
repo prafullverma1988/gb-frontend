@@ -1,6 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import LibrarySelect from "../components/LibrarySelect";
 
 // ── ICONS ──────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -424,7 +425,20 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
     }
   };
   const remDirItem=(i)=>setDirItems(p=>p.filter((_,j)=>j!==i));
-  const addDirItem=()=>setDirItems(p=>[...p,{lib_id:null,name:"",unit:"",qty:"",rate:""}]);
+  // Auto-focus the SearchSelect on the newly-added row so the user can
+  // type the next material name immediately without grabbing the mouse.
+  const dirRowRefs=useRef([]);
+  const addDirItem=()=>{
+    setDirItems(p=>{
+      const next=[...p,{lib_id:null,name:"",unit:"",qty:"",rate:""}];
+      // Defer focus until React paints the new row
+      setTimeout(()=>{
+        const el=dirRowRefs.current[next.length-1];
+        if(el&&typeof el.focus==="function") el.focus();
+      },0);
+      return next;
+    });
+  };
   const dirValid=dirF.vendor.trim()&&dirF.challan.trim()&&dirItems.some(it=>it.lib_id&&Number(it.qty)>0);
   const dirTotal=dirItems.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
   const submitDirect=async()=>{
@@ -545,7 +559,9 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
           <div style={{display:"grid",gridTemplateColumns:"140px 2fr 1fr 1fr",gap:11,marginBottom:11}}>
             <Field label="Date"><Input type="date" value={dirF.date} onChange={e=>setDirF(p=>({...p,date:e.target.value}))}/></Field>
             <Field label="Vendor *">
-              <Input value={dirF.vendor} onChange={e=>setDirF(p=>({...p,vendor:e.target.value}))} placeholder="Supplier name"/>
+              <LibrarySelect type="supplier" value={dirF.vendor}
+                onChange={v=>setDirF(p=>({...p,vendor:v||""}))}
+                placeholder="Vendor library se pick karein"/>
             </Field>
             <Field label="PO No"><Input value={dirF.po_no} onChange={e=>setDirF(p=>({...p,po_no:e.target.value}))} placeholder="Optional"/></Field>
             <Field label="Challan No *">
@@ -575,6 +591,7 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
             return (
               <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 100px 90px 24px",gap:6,alignItems:"center",marginBottom:6}}>
                 <SearchSelect compact value={row.lib_id} options={dirLibOpts}
+                  inputRef={el=>{ dirRowRefs.current[i]=el; }}
                   onChange={v=>{const m=findDirLib(v);updDirItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||"",rate:m?.rate?Number(m.rate):row.rate});}}
                   placeholder="Library se material pick karein"/>
                 <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
