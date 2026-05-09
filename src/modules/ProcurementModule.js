@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
+import LibrarySelect from "../components/LibrarySelect";
 import MRDetailDrawer from "../components/MRDetailDrawer";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
@@ -807,9 +808,9 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
   );
 }
 
-// ── CREATE PO MODAL ───────────────────────────────────────────────────
+// ── CREATE PO MODAL — compact (RFQ-style), library-driven ─────────────
 function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
-  // Auto-fill project from first MR item
+  // Auto-fill project from first MR item (kept hidden — shows as small chip)
   const firstMR = prefillItems?.[0];
   const autoProjectId   = firstMR?.project_id   || "";
   const autoProjectName = firstMR?.project       || "";
@@ -820,110 +821,143 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
     projectId:   String(autoProjectId),
     project:     autoProjectName,
     deliverySite:autoSite,
-    delivery:"",notes:"",
+    delivery:"",
     items:prefillItems
       ?prefillItems.map(m=>({desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:""}))
-      :[{desc:"",hsn:"",qty:"",unit:"Bags",rate:""}]
+      :[{desc:"",hsn:"",qty:"",unit:"",rate:""}]
   });
   const [matLib,setMatLib]=useState([]);
   useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
+
+  // Refs for material-picker focus management. After "Add row", focus the
+  // newly-added row's material picker so user can immediately search.
+  const matRefs = useRef({});
+  const [pendingFocus, setPendingFocus] = useState(null);
+  useEffect(() => {
+    if (pendingFocus != null && matRefs.current[pendingFocus]) {
+      matRefs.current[pendingFocus].focus();
+      setPendingFocus(null);
+    }
+  }, [pendingFocus, form.items.length]);
+
   const upd=(k,v)=>setForm(p=>({...p,[k]:v}));
   const updItem=(i,k,v)=>{
     const its=[...form.items];
     its[i]={...its[i],[k]:v};
-    // Auto-lock unit when material name matches library
     if(k==="desc"){
+      // Auto-fill unit + HSN + last-rate from library entry
       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
-      if(m?.unit) its[i].unit=m.unit;
+      if(m){
+        if(m.unit) its[i].unit=m.unit;
+        if(m.hsn_code && !its[i].hsn) its[i].hsn=m.hsn_code;
+      }
     }
     setForm(p=>({...p,items:its}));
+    // Auto-fill last-rate (warehouse helper) for picked material
+    if(k==="desc" && v && !its[i].rate){
+      api.get(`/warehouse/last-rate?name=${encodeURIComponent(v)}`).then(r=>{
+        if(r.success && Number(r.data?.rate)>0){
+          setForm(p=>({...p,items:p.items.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row)}));
+        }
+      }).catch(()=>{});
+    }
   };
-  const addItem=()=>setForm(p=>({...p,items:[...p.items,{desc:"",hsn:"",qty:"",unit:"Bags",rate:""}]}));
+  const addItem=()=>{
+    const newIdx = form.items.length;
+    setForm(p=>({...p,items:[...p.items,{desc:"",hsn:"",qty:"",unit:"",rate:""}]}));
+    setPendingFocus(newIdx); // focus jumps to new row's material picker
+  };
   const removeItem=(i)=>{if(form.items.length===1)return;const its=[...form.items];its.splice(i,1);setForm(p=>({...p,items:its}));};
   const total=form.items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
 
-  // When project dropdown changes, update both id and name
-  const handleProjectChange=(e)=>{
-    const selId=e.target.value;
-    const proj=dbProjects.find(p=>String(p.id)===selId);
-    upd("projectId",selId);
-    upd("project",proj?.name||selId);
-    if(!form.deliverySite||form.deliverySite===autoSite){
-      upd("deliverySite",proj?.name||"");
-    }
-  };
   return(
-    <Modal onClose={onClose} width={600}>
-      <MHead title="Create Purchase Order" sub="Direct PO — no RFQ required" onClose={onClose}/>
+    <Modal onClose={onClose} width={620}>
+      <MHead title="Create Purchase Order"
+        sub={autoProjectName?`For project: ${autoProjectName}`:"Direct PO — vendor library + material library"}
+        onClose={onClose}/>
       <MBody>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
-          <Fld label="Vendor" required>
-            <SearchSelect value={form.vendor}
-              options={(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS)}
-              onChange={v=>upd("vendor",v)} placeholder="Select vendor..."/>
-          </Fld>
-          <Fld label="Project" required>
-            {prefillItems&&autoProjectName
-              ?<div style={{padding:"8px 10px",borderRadius:7,border:"1.5px solid "+T.grnM,background:T.grnL,fontSize:12.5,color:T.grn,fontWeight:600}}>{autoProjectName} <span style={{fontSize:10,fontWeight:400,color:T.grn,opacity:.7}}>(from MR)</span></div>
-              :<SearchSelect value={form.projectId}
-                options={(dbProjects.length>0?dbProjects:PROJECTS.map((n,i)=>({id:i+1,name:n}))).map(p=>({key:String(p.id),label:p.name}))}
-                onChange={v=>handleProjectChange({target:{value:v}})} placeholder="Select project..."/>
-            }
-          </Fld>
-        </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
-          <Fld label="Delivery Site (auto-filled)"><Inp value={form.deliverySite} onChange={e=>upd("deliverySite",e.target.value)} placeholder="Delivery site name"/></Fld>
-          <Fld label="Expected Delivery"><Inp type="date" value={form.delivery} onChange={e=>upd("delivery",e.target.value)}/></Fld>
+          <Fld label="Vendor *">
+            <LibrarySelect type="supplier" value={form.vendor}
+              onChange={v=>upd("vendor",v||"")}
+              placeholder="Vendor library se pick / + add new"/>
+          </Fld>
+          <Fld label="Expected Delivery">
+            <Inp type="date" value={form.delivery} onChange={e=>upd("delivery",e.target.value)}/>
+          </Fld>
         </div>
+
         <div style={{marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <label style={{fontSize:10.5,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:"0.5px"}}>Items</label>
-          {!prefillItems&&<button onClick={addItem} style={{display:"flex",alignItems:"center",gap:4,padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}><IcAdd size={12} color={T.blu}/> Add</button>}
+          <label style={{fontSize:10.5,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:"0.5px"}}>Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· library se pick karein</span></label>
+          <button onClick={addItem} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+            <IcAdd size={12} color={T.blu}/> Add row
+          </button>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"2.2fr 70px 70px 70px 80px 28px",gap:6,marginBottom:6}}>
-          {["Description","HSN","Qty","Unit","Rate (₹)",""].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+          {["Material (library)","HSN","Qty","Unit","Rate (₹)",""].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
         </div>
-        {form.items.map((it,i)=>(
-          <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 70px 70px 70px 80px 28px",gap:6,marginBottom:7,alignItems:"center"}}>
-            <input value={it.desc} onChange={e=>updItem(i,"desc",e.target.value)} placeholder="Material name..."
-              style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-            <input value={it.hsn} onChange={e=>updItem(i,"hsn",e.target.value)} placeholder="HSN"
-              style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
-              style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            {(()=>{
-              const lib=matLib.find(m=>(m.name||"").trim().toLowerCase()===(it.desc||"").trim().toLowerCase());
-              const isLocked=!!it.desc;
-              const u=lib?.unit||it.unit||"Bags";
-              return isLocked
-                ? <div title="Unit Library se aata hai" style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:4,boxSizing:"border-box",justifyContent:"center"}}><span style={{fontSize:9}}>🔒</span>{u}</div>
-                : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>;
-            })()}
-            <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="Rate"
-              style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            <button onClick={()=>removeItem(i)} style={{width:26,height:26,borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcX size={12} color={T.red}/></button>
-          </div>
-        ))}
+        {form.items.map((it,i)=>{
+          const lib = matLib.find(m=>(m.name||"").trim().toLowerCase()===(it.desc||"").trim().toLowerCase());
+          const isLocked = !!it.desc;
+          const u = lib?.unit || it.unit || "—";
+          return (
+            <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 70px 70px 70px 80px 28px",gap:6,marginBottom:7,alignItems:"center"}}>
+              <LibrarySelect type="material" value={it.desc}
+                inputRef={el=>{ if(el) matRefs.current[i]=el; }}
+                onChange={v=>updItem(i,"desc",v||"")}
+                placeholder="Pick material..."
+                compact/>
+              <input value={it.hsn} onChange={e=>updItem(i,"hsn",e.target.value)} placeholder="HSN"
+                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
+                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              {isLocked
+                ? <div title="Unit Material Library se aata hai — change karne ke liye Library me edit karein" style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:4,boxSizing:"border-box",justifyContent:"center",cursor:"not-allowed"}}><span style={{fontSize:9,opacity:.55}}>🔒</span>{u}</div>
+                : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
+              }
+              <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="Rate"
+                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              <button onClick={()=>removeItem(i)} disabled={form.items.length===1}
+                style={{width:26,height:26,borderRadius:6,background:form.items.length===1?T.surfaceB:T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.5:1}}>
+                <IcX size={12} color={T.red}/>
+              </button>
+            </div>
+          );
+        })}
         {total>0&&<div style={{display:"flex",justifyContent:"flex-end",padding:"8px 10px",background:T.bluL,borderRadius:7,border:`1px solid ${T.bluM}`,marginTop:8}}><span style={{fontSize:12,fontWeight:600,color:T.t3,marginRight:12}}>PO Total</span><span style={{fontSize:15,fontWeight:700,color:T.blu}}>₹{total.toLocaleString("en-IN")}</span></div>}
-        <div style={{marginTop:12}}><Fld label="Notes"><textarea value={form.notes} onChange={e=>upd("notes",e.target.value)} rows={2} placeholder="Special instructions..." style={{width:"100%",padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/></Fld></div>
+
+        <div style={{marginTop:12,padding:"8px 11px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8,fontSize:11,color:T.t3}}>
+          <span style={{fontSize:9.5,opacity:.65}}>🔒</span>
+          {autoProjectName
+            ? <span>Project: <b style={{color:T.t1}}>{autoProjectName}</b> · Site: <b style={{color:T.t1}}>{form.deliverySite||autoSite}</b> <span style={{color:T.t4}}>(from MR)</span></span>
+            : <span>Project: <SearchSelect compact value={form.projectId}
+                options={(dbProjects.length>0?dbProjects:[]).map(p=>({key:String(p.id),label:p.name}))}
+                onChange={v=>{const proj=dbProjects.find(p=>String(p.id)===v);upd("projectId",v);upd("project",proj?.name||v);if(!form.deliverySite)upd("deliverySite",proj?.name||"");}}
+                placeholder="Select project..."/></span>
+          }
+        </div>
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn onClick={()=>{if(!form.vendor||!form.project)return;const newPO={
-  id:"PO-new",date:"Today",
-  vendor:form.vendor,
-  project:form.project,
-  projectId:form.projectId,
-  deliverySite:form.deliverySite||form.project,
-  poStatus:"Open",approval:"Draft",amount:total,
-  items:form.items.filter(it=>it.desc).map(it=>({
-    desc:it.desc,hsn:it.hsn||"—",
-    qty:Number(it.qty)||0,unit:it.unit,
-    rate:Number(it.rate)||0,
-    amount:(Number(it.qty)||0)*(Number(it.rate)||0)
-  })),
-  linkedMR:"—",delivery:form.delivery||"TBD"
-};
-onSave(newPO);}} disabled={!form.vendor||!form.project} color={T.blu} full icon={<IcPO size={14} color="white"/>}>Create PO (Draft)</Btn>
+        <Btn onClick={()=>{
+          if(!form.vendor||!form.project)return;
+          const newPO={
+            id:"PO-new",date:"Today",
+            vendor:form.vendor,
+            project:form.project,
+            projectId:form.projectId,
+            deliverySite:form.deliverySite||form.project,
+            poStatus:"Open",approval:"Draft",amount:total,
+            items:form.items.filter(it=>it.desc).map(it=>({
+              desc:it.desc,hsn:it.hsn||"—",
+              qty:Number(it.qty)||0,unit:it.unit,
+              rate:Number(it.rate)||0,
+              amount:(Number(it.qty)||0)*(Number(it.rate)||0)
+            })),
+            linkedMR:"—",delivery:form.delivery||"TBD"
+          };
+          onSave(newPO);
+        }} disabled={!form.vendor||!form.project} color={T.blu} full icon={<IcPO size={14} color="white"/>}>Create PO (Draft)</Btn>
       </MFoot>
     </Modal>
   );
