@@ -7425,7 +7425,19 @@ function TabMaterial({ project }) {
   const [libNewName, setLibNewName] = useState("");
   const [libNewUnit, setLibNewUnit] = useState("Nos");
   const [libSaving, setLibSaving] = useState(false);
-  const addItemRow = () => setForm(p => ({ ...p, items: [...p.items, { item_name:"", quantity:"", unit:"Bags", approx_amount:"" }] }));
+  // Auto-focus the LibrarySelect on the freshly-added row so user can
+  // start typing the next material name without reaching for the mouse.
+  const itemRowRefs = useRef([]);
+  const addItemRow = () => {
+    setForm(p => {
+      const next = [...p.items, { item_name:"", quantity:"", unit:"Bags", approx_amount:"" }];
+      setTimeout(() => {
+        const el = itemRowRefs.current[next.length - 1];
+        if (el && typeof el.focus === "function") el.focus();
+      }, 0);
+      return { ...p, items: next };
+    });
+  };
   const removeItemRow = (idx) => setForm(p => ({ ...p, items: p.items.length > 1 ? p.items.filter((_,i)=>i!==idx) : p.items }));
   const updItem = (idx, patch) => setForm(p => ({ ...p, items: p.items.map((it,i)=> i===idx ? { ...it, ...patch } : it) }));
   const saveLibMaterial = async () => {
@@ -7880,13 +7892,15 @@ function TabMaterial({ project }) {
                 <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{projectName}</div>
               </div>
               <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                {/* Repositioned: was inline below the Material dropdown — now a
-                    highlighted top-right action so user can quickly add a
-                    new library entry without leaving the modal. */}
+                {/* Repositioned: now a top-right action so user can quickly add
+                    a new library entry without leaving the modal. Purple theme
+                    matches the Create PO modal's "Add new material to Library". */}
                 <button onClick={()=>setShowAddLib(s=>!s)} title="Add new material to Library"
-                  style={{padding:"5px 11px",borderRadius:6,background: showAddLib ? T.amb : "rgba(251,191,36,0.18)",border:"1px solid "+T.amb,color: showAddLib ? "white" : "#FBBF24",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"background .15s"}}>
+                  style={{padding:"5px 11px",borderRadius:6,background:"rgba(168,85,247,0.18)",border:`1px solid rgba(168,85,247,0.5)`,color:"#C4B5FD",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"background .15s"}}
+                  onMouseEnter={e=>e.currentTarget.style.background="rgba(168,85,247,0.3)"}
+                  onMouseLeave={e=>e.currentTarget.style.background="rgba(168,85,247,0.18)"}>
                   <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                  New Material
+                  {showAddLib?"Cancel":"Add new material to Library"}
                 </button>
                 <button onClick={()=>setShowModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
               </div>
@@ -7896,100 +7910,99 @@ function TabMaterial({ project }) {
                 Request Procurement mein jayegi — Admin approve karenge phir order hoga
               </div>
 
-              {/* Top-right "+ New Material" inline form (toggled) */}
+              {/* Top-right "+ New Material" inline form (toggled) — purple-themed */}
               {showAddLib && (
-                <div style={{background:T.ambL,border:`1.5px solid ${T.ambM}`,borderRadius:8,padding:"10px 12px",display:"flex",flexDirection:"column",gap:8}}>
-                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",fontSize:11,fontWeight:700,color:T.amb,letterSpacing:".4px",textTransform:"uppercase"}}>
-                    <span>Add New Material to Library</span>
-                    <button onClick={()=>{setShowAddLib(false);setLibNewName("");}} style={{background:"none",border:"none",cursor:"pointer",color:T.amb,padding:0,fontSize:14,lineHeight:1}}>×</button>
-                  </div>
-                  <div style={{display:"grid",gridTemplateColumns:"2fr 1fr auto",gap:8,alignItems:"end"}}>
-                    <input value={libNewName} onChange={e=>setLibNewName(e.target.value)} placeholder="Material name (e.g. AAC Block 4 inch)" autoFocus
-                      style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit"}}/>
+                <div style={{padding:"11px 12px",background:T.purL,border:`1.5px solid ${T.purM}`,borderRadius:8}}>
+                  <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>🆕 Add new material to Library</div>
+                  <div style={{display:"grid",gridTemplateColumns:"2.5fr 1fr auto",gap:8,alignItems:"center"}}>
+                    <input value={libNewName} onChange={e=>setLibNewName(e.target.value)} placeholder="Material name *" autoFocus
+                      style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     <select value={libNewUnit} onChange={e=>setLibNewUnit(e.target.value)}
-                      style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",fontFamily:"inherit",background:T.surface,cursor:"pointer"}}>
+                      style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box",cursor:"pointer"}}>
+                      <option value="">Unit</option>
                       {UNITS_MR.map(u=><option key={u}>{u}</option>)}
                     </select>
                     <button onClick={saveLibMaterial} disabled={!libNewName.trim()||libSaving}
-                      style={{padding:"7px 14px",borderRadius:6,background:libNewName.trim()?T.amb:T.b1,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:libNewName.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>
+                      style={{padding:"7px 14px",borderRadius:6,background:libNewName.trim()?T.pur:T.b1,color:libNewName.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:libNewName.trim()?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap"}}>
                       {libSaving?"...":"Save"}
                     </button>
                   </div>
+                  <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.75}}>Save par item rows me bhi available hoga.</div>
                 </div>
               )}
 
-              {/* Items — multiple rows, each with material + qty + amount */}
-              <div style={{display:"flex",flexDirection:"column",gap:10}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                  <span style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
-                    Items <span style={{color:T.t4,fontWeight:500,marginLeft:4}}>({form.items.length})</span>
-                  </span>
+              {/* Items — clean PO-modal style: header strip, single-line rows */}
+              <div style={{padding:"11px 13px",background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+                  <div>
+                    <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>Items</div>
+                    <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>Material library se pick karein · unit auto-locked</div>
+                  </div>
                 </div>
+
+                {/* Column header strip */}
+                <div style={{display:"grid",gridTemplateColumns:"2.2fr 70px 80px 90px 28px",gap:7,padding:"6px 8px",background:"#0D1B2A",borderRadius:6,marginBottom:5}}>
+                  {["Material (Library)","Qty","Unit","Approx ₹",""].map((h,i)=>(
+                    <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.55)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
+                  ))}
+                </div>
+
+                {/* Rows */}
                 {form.items.map((it,idx)=>{
                   const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (it.item_name||"").trim().toLowerCase());
                   const isLocked = !!it.item_name;
-                  const displayUnit = libMatch?.unit || it.unit || "Nos";
+                  const displayUnit = libMatch?.unit || it.unit || "—";
                   return (
-                    <div key={idx} style={{padding:"10px 11px",border:`1px solid ${T.b1}`,borderRadius:8,background:T.surfaceB,display:"flex",flexDirection:"column",gap:8,position:"relative"}}>
-                      {form.items.length > 1 && (
-                        <button onClick={()=>removeItemRow(idx)} title="Remove this item"
-                          style={{position:"absolute",top:7,right:7,width:22,height:22,borderRadius:5,border:"none",background:T.redL,color:T.red,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"inherit"}}>
-                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                        </button>
+                    <div key={idx} style={{display:"grid",gridTemplateColumns:"2.2fr 70px 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom: idx<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
+                      <LibrarySelect type="material" value={it.item_name}
+                        hideAddNew compact
+                        inputRef={el=>{ if(el) itemRowRefs.current[idx] = el; }}
+                        onChange={v=>{
+                          const found = matLibReal.find(m=>m.name===v);
+                          updItem(idx, { item_name:v||"", unit: found?.unit || it.unit });
+                        }}
+                        placeholder="Pick material..."/>
+                      <input type="number" inputMode="decimal" min={0} step="any" value={it.quantity}
+                        onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E"||e.key==="+") e.preventDefault();}}
+                        onChange={e=>{
+                          const v=e.target.value;
+                          if(v===""){updItem(idx,{quantity:""});return;}
+                          const n=parseFloat(v);
+                          if(!isNaN(n)&&n>=0) updItem(idx,{quantity:v});
+                        }}
+                        placeholder="Qty"
+                        style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                        onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                      {isLocked ? (
+                        <div title="Unit Material Library se aata hai — change karne ke liye Library me edit karein"
+                          style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:5,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
+                          <span style={{fontSize:9,opacity:.55}}>🔒</span>{displayUnit}
+                        </div>
+                      ) : (
+                        <select value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
+                          style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                          {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                        </select>
                       )}
-                      <div style={{paddingRight: form.items.length>1?28:0}}>
-                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",display:"block",marginBottom:4}}>Material *</label>
-                        <LibrarySelect type="material" value={it.item_name}
-                          hideAddNew
-                          onChange={v=>{
-                            const found = matLibReal.find(m=>m.name===v);
-                            updItem(idx, { item_name:v, unit: found?.unit || it.unit });
-                          }}/>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",display:"block",marginBottom:4}}>Qty *</label>
-                          <input type="number" inputMode="decimal" min={0} step="any" value={it.quantity}
-                            onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E"||e.key==="+") e.preventDefault();}}
-                            onChange={e=>{
-                              const v=e.target.value;
-                              if(v===""){updItem(idx,{quantity:""});return;}
-                              const n=parseFloat(v);
-                              if(!isNaN(n)&&n>=0) updItem(idx,{quantity:v});
-                            }}
-                            placeholder="200"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",display:"block",marginBottom:4}}>
-                            Unit{isLocked && <span style={{marginLeft:4,fontSize:9,color:T.t4,textTransform:"none",fontWeight:500}}>(lib)</span>}
-                          </label>
-                          {isLocked ? (
-                            <div style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,height:32,boxSizing:"border-box"}}>
-                              🔒 {displayUnit}
-                            </div>
-                          ) : (
-                            <select value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
-                              style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                              {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                            </select>
-                          )}
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",display:"block",marginBottom:4}}>Approx. ₹</label>
-                          <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                      </div>
+                      <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
+                        style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                        onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                      <button onClick={()=>removeItemRow(idx)} disabled={form.items.length===1}
+                        title={form.items.length===1?"At least one item required":"Remove row"}
+                        style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                      </button>
                     </div>
                   );
                 })}
-                {/* Replaces the old "+ Add New Material to Library" button — this
-                    one appends another item row to the request batch. */}
+
+                {/* Add row — full-width dashed blue, matches PO modal */}
                 <button onClick={addItemRow}
-                  style={{padding:"8px 12px",borderRadius:7,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",justifyContent:"center",gap:5,fontFamily:"inherit"}}>
-                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                  Add Row
+                  style={{marginTop:9,width:"100%",padding:"9px 12px",borderRadius:7,background:"transparent",border:`1.5px dashed ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .12s"}}
+                  onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderStyle="solid";}}
+                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderStyle="dashed";}}>
+                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                  Add row
                 </button>
               </div>
 
