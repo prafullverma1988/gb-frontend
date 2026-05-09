@@ -808,13 +808,14 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
   );
 }
 
-// ── CREATE PO MODAL — compact (RFQ-style), library-driven ─────────────
+// ── CREATE PO MODAL — full layout, library-driven, polished ────────────
 function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
-  // Auto-fill project from first MR item (kept hidden — shows as small chip)
+  // Auto-fill project from first MR item
   const firstMR = prefillItems?.[0];
   const autoProjectId   = firstMR?.project_id   || "";
   const autoProjectName = firstMR?.project       || "";
   const autoSite        = firstMR?.site          || firstMR?.project || "";
+  const fromMR          = !!prefillItems && !!autoProjectName;
 
   const [form,setForm]=useState({
     vendor:"",
@@ -822,6 +823,7 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
     project:     autoProjectName,
     deliverySite:autoSite,
     delivery:"",
+    notes:"",
     items:prefillItems
       ?prefillItems.map(m=>({desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:""}))
       :[{desc:"",hsn:"",qty:"",unit:"",rate:""}]
@@ -829,8 +831,7 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
   const [matLib,setMatLib]=useState([]);
   useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
 
-  // Refs for material-picker focus management. After "Add row", focus the
-  // newly-added row's material picker so user can immediately search.
+  // Focus management: after "Add row" → cursor jumps to new row's material picker
   const matRefs = useRef({});
   const [pendingFocus, setPendingFocus] = useState(null);
   useEffect(() => {
@@ -845,7 +846,6 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
     const its=[...form.items];
     its[i]={...its[i],[k]:v};
     if(k==="desc"){
-      // Auto-fill unit + HSN + last-rate from library entry
       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
       if(m){
         if(m.unit) its[i].unit=m.unit;
@@ -853,7 +853,6 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
       }
     }
     setForm(p=>({...p,items:its}));
-    // Auto-fill last-rate (warehouse helper) for picked material
     if(k==="desc" && v && !its[i].rate){
       api.get(`/warehouse/last-rate?name=${encodeURIComponent(v)}`).then(r=>{
         if(r.success && Number(r.data?.rate)>0){
@@ -865,77 +864,143 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
   const addItem=()=>{
     const newIdx = form.items.length;
     setForm(p=>({...p,items:[...p.items,{desc:"",hsn:"",qty:"",unit:"",rate:""}]}));
-    setPendingFocus(newIdx); // focus jumps to new row's material picker
+    setPendingFocus(newIdx);
   };
   const removeItem=(i)=>{if(form.items.length===1)return;const its=[...form.items];its.splice(i,1);setForm(p=>({...p,items:its}));};
   const total=form.items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
 
+  // Project picker handler (only used when no prefillItems)
+  const handleProjectChange=(v)=>{
+    const proj=dbProjects.find(p=>String(p.id)===String(v));
+    upd("projectId",v);
+    upd("project",proj?.name||v);
+    if(!form.deliverySite||form.deliverySite===autoSite){
+      upd("deliverySite",proj?.name||"");
+    }
+  };
+
   return(
-    <Modal onClose={onClose} width={620}>
+    <Modal onClose={onClose} width={680}>
       <MHead title="Create Purchase Order"
-        sub={autoProjectName?`For project: ${autoProjectName}`:"Direct PO — vendor library + material library"}
+        sub={fromMR?`Direct PO · ${autoProjectName}`:"Direct PO — vendor library + material library"}
         onClose={onClose}/>
       <MBody>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+        {/* ── Section 1: Vendor + Project ─────────────────────────── */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
           <Fld label="Vendor *">
             <LibrarySelect type="supplier" value={form.vendor}
               onChange={v=>upd("vendor",v||"")}
               placeholder="Vendor library se pick / + add new"/>
+          </Fld>
+          <Fld label="Project *">
+            {fromMR
+              ? <div style={{padding:"8px 11px",borderRadius:7,border:`1.5px solid ${T.grnM}`,background:T.grnL,fontSize:12.5,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:6,height:36,boxSizing:"border-box"}}>
+                  <span style={{fontSize:11,opacity:.7}}>🔒</span>
+                  <span>{autoProjectName}</span>
+                  <span style={{fontSize:10,fontWeight:500,color:T.grn,opacity:.7,marginLeft:"auto"}}>from MR</span>
+                </div>
+              : <SearchSelect value={form.projectId}
+                  options={(dbProjects.length>0?dbProjects:[]).map(p=>({key:String(p.id),label:p.name}))}
+                  onChange={handleProjectChange} placeholder="Select project..."/>
+            }
+          </Fld>
+        </div>
+
+        {/* ── Section 2: Delivery Site + Expected Delivery ───────── */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:16}}>
+          <Fld label={<>Delivery Site <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500,marginLeft:4}}>(auto-filled)</span></>}>
+            <Inp value={form.deliverySite} onChange={e=>upd("deliverySite",e.target.value)} placeholder="Delivery site name"/>
           </Fld>
           <Fld label="Expected Delivery">
             <Inp type="date" value={form.delivery} onChange={e=>upd("delivery",e.target.value)}/>
           </Fld>
         </div>
 
-        <div style={{marginBottom:6,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-          <label style={{fontSize:10.5,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:"0.5px"}}>Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· library se pick karein</span></label>
-          <button onClick={addItem} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
-            <IcAdd size={12} color={T.blu}/> Add row
-          </button>
-        </div>
-        <div style={{display:"grid",gridTemplateColumns:"2.2fr 70px 70px 70px 80px 28px",gap:6,marginBottom:6}}>
-          {["Material (library)","HSN","Qty","Unit","Rate (₹)",""].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
-        </div>
-        {form.items.map((it,i)=>{
-          const lib = matLib.find(m=>(m.name||"").trim().toLowerCase()===(it.desc||"").trim().toLowerCase());
-          const isLocked = !!it.desc;
-          const u = lib?.unit || it.unit || "—";
-          return (
-            <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 70px 70px 70px 80px 28px",gap:6,marginBottom:7,alignItems:"center"}}>
-              <LibrarySelect type="material" value={it.desc}
-                inputRef={el=>{ if(el) matRefs.current[i]=el; }}
-                onChange={v=>updItem(i,"desc",v||"")}
-                placeholder="Pick material..."
-                compact/>
-              <input value={it.hsn} onChange={e=>updItem(i,"hsn",e.target.value)} placeholder="HSN"
-                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
-                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              {isLocked
-                ? <div title="Unit Material Library se aata hai — change karne ke liye Library me edit karein" style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:4,boxSizing:"border-box",justifyContent:"center",cursor:"not-allowed"}}><span style={{fontSize:9,opacity:.55}}>🔒</span>{u}</div>
-                : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
-              }
-              <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="Rate"
-                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-              <button onClick={()=>removeItem(i)} disabled={form.items.length===1}
-                style={{width:26,height:26,borderRadius:6,background:form.items.length===1?T.surfaceB:T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.5:1}}>
-                <IcX size={12} color={T.red}/>
-              </button>
+        {/* ── Section 3: Items ──────────────────────────────────────── */}
+        <div style={{padding:"11px 13px",background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`,marginBottom:12}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+            <div>
+              <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>Items</div>
+              <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>Material library se pick karein · unit auto-locked</div>
             </div>
-          );
-        })}
-        {total>0&&<div style={{display:"flex",justifyContent:"flex-end",padding:"8px 10px",background:T.bluL,borderRadius:7,border:`1px solid ${T.bluM}`,marginTop:8}}><span style={{fontSize:12,fontWeight:600,color:T.t3,marginRight:12}}>PO Total</span><span style={{fontSize:15,fontWeight:700,color:T.blu}}>₹{total.toLocaleString("en-IN")}</span></div>}
+            <button onClick={addItem}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.bluL,border:`1.5px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}
+              onMouseEnter={e=>e.currentTarget.style.background=T.bluM+"66"}
+              onMouseLeave={e=>e.currentTarget.style.background=T.bluL}>
+              <IcAdd size={12} color={T.blu}/> Add row
+            </button>
+          </div>
 
-        <div style={{marginTop:12,padding:"8px 11px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8,fontSize:11,color:T.t3}}>
-          <span style={{fontSize:9.5,opacity:.65}}>🔒</span>
-          {autoProjectName
-            ? <span>Project: <b style={{color:T.t1}}>{autoProjectName}</b> · Site: <b style={{color:T.t1}}>{form.deliverySite||autoSite}</b> <span style={{color:T.t4}}>(from MR)</span></span>
-            : <span>Project: <SearchSelect compact value={form.projectId}
-                options={(dbProjects.length>0?dbProjects:[]).map(p=>({key:String(p.id),label:p.name}))}
-                onChange={v=>{const proj=dbProjects.find(p=>String(p.id)===v);upd("projectId",v);upd("project",proj?.name||v);if(!form.deliverySite)upd("deliverySite",proj?.name||"");}}
-                placeholder="Select project..."/></span>
-          }
+          {/* Header */}
+          <div style={{display:"grid",gridTemplateColumns:"2.2fr 80px 70px 80px 80px 90px 28px",gap:7,padding:"6px 8px",background:T.sb,borderRadius:6,marginBottom:5}}>
+            {["Material (Library)","HSN","Qty","Unit","Rate ₹","Amount",""].map((h,i)=>(
+              <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.55)",textTransform:"uppercase",letterSpacing:".4px",textAlign:i>=2&&i<=5?"left":"left"}}>{h}</span>
+            ))}
+          </div>
+
+          {/* Rows */}
+          {form.items.map((it,i)=>{
+            const lib = matLib.find(m=>(m.name||"").trim().toLowerCase()===(it.desc||"").trim().toLowerCase());
+            const isLocked = !!it.desc;
+            const u = lib?.unit || it.unit || "—";
+            const lineAmt = (Number(it.qty)||0)*(Number(it.rate)||0);
+            return (
+              <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 80px 70px 80px 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom:i<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
+                <LibrarySelect type="material" value={it.desc}
+                  inputRef={el=>{ if(el) matRefs.current[i]=el; }}
+                  onChange={v=>updItem(i,"desc",v||"")}
+                  placeholder="Pick material..."
+                  compact/>
+                <input value={it.hsn} onChange={e=>updItem(i,"hsn",e.target.value)} placeholder="HSN"
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                {isLocked
+                  ? <div title="Unit Material Library se aata hai — change karne ke liye Library → Materials me edit karein"
+                      style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:5,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
+                      <span style={{fontSize:9,opacity:.55}}>🔒</span>{u}
+                    </div>
+                  : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
+                }
+                <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="Rate"
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                <div style={{padding:"7px 9px",borderRadius:6,background:lineAmt>0?T.bluL:"transparent",fontSize:12,fontWeight:700,color:lineAmt>0?T.blu:T.t4,textAlign:"right",fontFamily:"inherit",boxSizing:"border-box"}}>
+                  {lineAmt>0?`₹${lineAmt.toLocaleString("en-IN")}`:"—"}
+                </div>
+                <button onClick={()=>removeItem(i)} disabled={form.items.length===1}
+                  title={form.items.length===1?"At least one item required":"Remove row"}
+                  style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
+                  <IcX size={12} color={T.red}/>
+                </button>
+              </div>
+            );
+          })}
         </div>
+
+        {/* ── Total chip ─────────────────────────────────────────── */}
+        {total>0&&(
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",background:`linear-gradient(90deg, ${T.bluL} 0%, ${T.surface} 100%)`,borderRadius:9,border:`1.5px solid ${T.bluM}`,marginBottom:12}}>
+            <div>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>PO Total</div>
+              <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>{form.items.filter(it=>Number(it.qty)>0&&Number(it.rate)>0).length} items priced</div>
+            </div>
+            <div style={{fontSize:18,fontWeight:800,color:T.blu,letterSpacing:"-0.3px"}}>
+              ₹{total.toLocaleString("en-IN")}
+            </div>
+          </div>
+        )}
+
+        {/* ── Section 4: Notes ─────────────────────────────────────── */}
+        <Fld label={<>Notes <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500,marginLeft:4}}>(optional)</span></>}>
+          <textarea value={form.notes} onChange={e=>upd("notes",e.target.value)} rows={2}
+            placeholder="Special instructions, delivery preferences..."
+            style={{width:"100%",padding:"9px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical",lineHeight:1.45}}
+            onFocus={e=>e.target.style.borderColor=T.blu}
+            onBlur={e=>e.target.style.borderColor=T.b1}/>
+        </Fld>
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
