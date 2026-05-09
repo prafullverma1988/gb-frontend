@@ -406,10 +406,12 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
     else alert(res.message||"Return save failed");
   };
 
-  // Tab 3: Direct GRN state (no prior MR)
+  // Tab 3: Direct GRN state (no prior MR) — material from Library, challan required
   const [dirF,setDirF]=useState({date:today(),vendor:"",po_no:"",challan:"",remark:""});
-  const [dirItems,setDirItems]=useState([{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
+  const [dirItems,setDirItems]=useState([{lib_id:null,name:"",unit:"",qty:"",rate:""}]);
   const [dirSaving,setDirSaving]=useState(false);
+  const dirLibOpts=library.map(m=>({id:m.id,name:`${m.name}${m.unit?` · ${m.unit}`:""}`}));
+  const findDirLib=(id)=>library.find(l=>String(l.id)===String(id));
   const updDirItem=(i,patch)=>{
     setDirItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
     const pickedName=patch.name&&String(patch.name).trim();
@@ -422,23 +424,27 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
     }
   };
   const remDirItem=(i)=>setDirItems(p=>p.filter((_,j)=>j!==i));
-  const addDirItem=()=>setDirItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
-  const dirValid=dirF.vendor.trim()&&dirItems.some(it=>(it.name||it.material_id)&&Number(it.qty)>0);
+  const addDirItem=()=>setDirItems(p=>[...p,{lib_id:null,name:"",unit:"",qty:"",rate:""}]);
+  const dirValid=dirF.vendor.trim()&&dirF.challan.trim()&&dirItems.some(it=>it.lib_id&&Number(it.qty)>0);
   const dirTotal=dirItems.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
   const submitDirect=async()=>{
+    if(!dirF.challan.trim()){alert("Challan No required");return;}
     setDirSaving(true);
-    const cleanItems=dirItems.filter(it=>(it.name||it.material_id)&&Number(it.qty)>0).map(it=>({
-      material_id:it.material_id||null,
-      name:it.name||(stock.find(s=>String(s.id)===String(it.material_id))?.name)||"Material",
-      unit:it.unit||"Nos",
-      qty:Number(it.qty),
-      rate:Number(it.rate)||0,
-    }));
+    const cleanItems=dirItems.filter(it=>it.lib_id&&Number(it.qty)>0).map(it=>{
+      const lib=findDirLib(it.lib_id);
+      return {
+        material_id:null, // Library entries are master_material — wh_materials auto-create on backend by name
+        name:lib?.name||"Material",
+        unit:lib?.unit||"Nos",
+        qty:Number(it.qty),
+        rate:Number(it.rate)||0,
+      };
+    });
     const res=await api.post("/warehouse/grn-direct",{
       date:dirF.date,
       vendor:dirF.vendor.trim(),
       po_no:dirF.po_no.trim()||null,
-      challan:dirF.challan.trim()||null,
+      challan:dirF.challan.trim(),
       remark:dirF.remark.trim()||null,
       items:cleanItems,
     });
@@ -542,27 +548,57 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
               <Input value={dirF.vendor} onChange={e=>setDirF(p=>({...p,vendor:e.target.value}))} placeholder="Supplier name"/>
             </Field>
             <Field label="PO No"><Input value={dirF.po_no} onChange={e=>setDirF(p=>({...p,po_no:e.target.value}))} placeholder="Optional"/></Field>
-            <Field label="Challan No"><Input value={dirF.challan} onChange={e=>setDirF(p=>({...p,challan:e.target.value}))} placeholder="CH-..."/></Field>
+            <Field label="Challan No *">
+              <Input value={dirF.challan} onChange={e=>setDirF(p=>({...p,challan:e.target.value}))} placeholder="CH-..."
+                style={{borderColor:dirF.challan.trim()?T.b1:T.amb}}/>
+            </Field>
           </div>
           <Field label="Remark" style={{marginBottom:13}}>
             <Input value={dirF.remark} onChange={e=>setDirF(p=>({...p,remark:e.target.value}))} placeholder="Optional note"/>
           </Field>
 
+          {library.length===0&&(
+            <div style={{padding:"10px 13px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:12,color:T.amb,fontWeight:600,marginBottom:11}}>
+              ⚠ Material Library khali hai — pehle Library → Materials me items add karein
+            </div>
+          )}
+
           <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>
-            Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· stock me hai to pick karo, nahi to naya naam type karo (auto-create)</span>
+            Items <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· library se pick karein</span>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
-            <span>Material</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
+          <div style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
+            <span>Material (from library)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
           </div>
-          {dirItems.map((row,i)=>(
-            <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updDirItem} onRemove={remDirItem} mode="transfer" canRemove={dirItems.length>1}/>
-          ))}
-          <button onClick={addDirItem}
-            style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+          {dirItems.map((row,i)=>{
+            const lib=findDirLib(row.lib_id);
+            const value=Number(row.qty||0)*Number(row.rate||0);
+            return (
+              <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 100px 90px 24px",gap:6,alignItems:"center",marginBottom:6}}>
+                <SearchSelect compact value={row.lib_id} options={dirLibOpts}
+                  onChange={v=>{const m=findDirLib(v);updDirItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||"",rate:m?.rate?Number(m.rate):row.rate});}}
+                  placeholder="Library se material pick karein"/>
+                <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
+                <input type="number" value={row.qty||""} onChange={e=>updDirItem(i,{qty:e.target.value})} placeholder="Qty"
+                  style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+                <input type="number" value={row.rate||""} onChange={e=>updDirItem(i,{rate:e.target.value})} placeholder="Rate (auto)"
+                  title="Last purchase rate auto-fills on material pick"
+                  style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",background:row.rate?T.bluL+"66":T.surface}}/>
+                <span style={{fontSize:11,color:T.blu,fontWeight:700,textAlign:"right"}}>₹{fmt(value)}</span>
+                {dirItems.length>1?(
+                  <button onClick={()=>remDirItem(i)}
+                    style={{width:24,height:24,border:"none",background:"none",cursor:"pointer",color:T.red,padding:0,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}>
+                    <IcTrash size={12}/>
+                  </button>
+                ):<span/>}
+              </div>
+            );
+          })}
+          <button onClick={addDirItem} disabled={library.length===0}
+            style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:library.length===0?T.t4:T.t3,fontSize:11.5,fontWeight:600,cursor:library.length===0?"not-allowed":"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
             <IcAdd size={11}/> Add row
           </button>
           <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-            💡 Save par: warehouse stock + (master rate refresh) + Finance Unbilled Materials list me entry.
+            💡 Material library se aata hai aur unit locked rahega — change karne ke liye Library → Materials me edit karein. Rate auto-fill last purchase se.
           </div>
         </div>
       )}
