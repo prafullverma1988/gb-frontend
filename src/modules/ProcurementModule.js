@@ -378,8 +378,19 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
           </div>
         </div>
 
-        {/* PO/Manual extra fields */}
-        {(medium==="po"||medium==="manual")&&(
+        {/* Info banners — minimal, no inline fields. Vendor + delivery
+            fill hone ka step next modal me hota hai. */}
+        {medium==="po"&&(
+          <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",fontSize:11.5,color:T.blu}}>
+            Next step: vendor, delivery date aur items rate Create PO modal me bharo.
+          </div>
+        )}
+        {medium==="rfq"&&(
+          <div style={{background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,padding:"9px 12px",fontSize:11.5,color:T.pur}}>
+            RFQ will be created as Draft. Add vendors and publish to collect quotes.
+          </div>
+        )}
+        {medium==="manual"&&(
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
             <Fld label="Vendor" required>
               <SearchSelect value={vendor}
@@ -389,7 +400,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
             <Fld label="Expected Delivery" required>
               <Inp type="date" value={delivery} onChange={e=>setDelivery(e.target.value)}/>
             </Fld>
-            {medium==="manual"&&vendor&&delivery&&(
+            {vendor&&delivery&&(
               <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7,padding:"10px 12px"}}>
                 <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
                   <span style={{fontSize:11,fontWeight:600,color:T.grn}}>WhatsApp Template</span>
@@ -403,17 +414,12 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
             )}
           </div>
         )}
-        {medium==="rfq"&&(
-          <div style={{background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,padding:"9px 12px",fontSize:11.5,color:T.pur}}>
-            RFQ will be created as Draft. Add vendors and publish to collect quotes.
-          </div>
-        )}
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
         <Btn
           onClick={()=>onSave(medium,vendor,delivery,items)}
-          disabled={!medium||(medium!=="rfq"&&(!vendor||!delivery))}
+          disabled={!medium||(medium==="manual"&&(!vendor||!delivery))}
           color={medium==="po"?T.blu:medium==="rfq"?T.pur:T.grn}
           full
           icon={medium==="po"?<IcPO size={14} color="white"/>:medium==="rfq"?<IcRFQ size={14} color="white"/>:<IcWA size={14} color="white"/>}>
