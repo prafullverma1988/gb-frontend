@@ -1968,7 +1968,9 @@ function ProcurementModule(){
         onWarehouseIssued={async(mrNos)=>{
           alert(`${mrNos.length} warehouse MR(s) created — Warehouse → Requests tab me approve+issue karein:\n${mrNos.join(", ")}`);
           setShowBulkOrder(false);
-          setSelectedIds(new Set());
+          // Selection state is `selected` (object map), not `selectedIds` —
+          // earlier reference threw: "setSelectedIds is not defined".
+          setSelected({});
           const mRes = await api.get("/procurement/mrs");
           if (mRes.success) setMRs(mRes.data.map(mapMR));
         }}/>}
