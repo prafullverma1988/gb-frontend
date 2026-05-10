@@ -3722,6 +3722,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
     notes:"",
   });
   const [saving,setSaving]=useState(false);
+  const submittingRef=useRef(false);
   const [matLib,setMatLib]=useState([]);
   const [showAddMat,setShowAddMat]=useState(false);
   const [newMatName,setNewMatName]=useState("");
@@ -3822,7 +3823,9 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
         <div style={{display:"flex",gap:8}}>
           <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#64748B",border:"none",cursor:"pointer",fontSize:13,fontWeight:600}}>Cancel</button>
           <button onClick={async()=>{
+            if(submittingRef.current) return; // hard guard
             if(!form.item_name.trim()||!form.quantity) return alert("Material name and quantity required");
+            submittingRef.current=true;
             setSaving(true);
             const res=await api.post("/procurement/mrs",{
               project_id: projectId,
@@ -3836,6 +3839,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
               task_name: task.name,
             });
             setSaving(false);
+            submittingRef.current=false;
             if(res.success){
               api.post("/approvals/submit", {
                 module: "Material Request",
@@ -7415,6 +7419,7 @@ function TabMaterial({ project }) {
   const [newMatSaving, setNewMatSaving] = useState(false);
   const [showGRN, setShowGRN] = useState(false);
   const [saving, setSaving] = useState(false);
+  const mrSubmitRef = useRef(false);
   // Multi-item MR — each row is a separate material+qty+amount.
   // required_date / notes / photos are shared across the whole batch.
   const [form, setForm] = useState({
@@ -7789,12 +7794,14 @@ function TabMaterial({ project }) {
   };
 
   const handleSubmitMR = async () => {
+    if (mrSubmitRef.current) return; // hard guard against double-fire
     // Validate at least one filled row
     const validItems = (form.items || []).filter(it => it.item_name?.trim() && Number(it.quantity) > 0);
     if (validItems.length === 0) {
       alert("At least one material with quantity is required");
       return;
     }
+    mrSubmitRef.current = true;
     setSaving(true);
     try {
       // Each row creates its own MR. Sequential so we get a stable order
@@ -7839,7 +7846,7 @@ function TabMaterial({ project }) {
         setShowModal(false);
       }
     } catch(e) { alert("Error: " + e.message); }
-    finally { setSaving(false); }
+    finally { setSaving(false); mrSubmitRef.current = false; }
   };
 
   const MATERIAL_NAMES = ["All", ...[...new Set(materials.map(m => m.name))]];
@@ -8962,6 +8969,7 @@ function TabSubcon({ projectId }) {
   const [showNewBill, setShowNewBill] = useState(false);
   const [showPayModal, setShowPayModal] = useState(false);
   const [saving, setSaving] = useState(false);
+  const billSubmitRef = useRef(false);
   const [showEditWO, setShowEditWO] = useState(false);
   const [amendments, setAmendments] = useState([]);
   const [expandedBill, setExpandedBill] = useState(null);
@@ -9020,7 +9028,9 @@ function TabSubcon({ projectId }) {
 
   // ── NEW RA BILL SUBMIT ──
   const submitBill = async () => {
+    if(billSubmitRef.current) return; // hard guard against double-fire
     if(!selWo) return;
+    billSubmitRef.current = true;
     setSaving(true);
     const woDetail = await api.get("/subcon/work-orders/"+selWo.id).catch(()=>({success:false}));
     // Flatten all items from sections
@@ -9043,6 +9053,7 @@ function TabSubcon({ projectId }) {
       })),
     }).catch(()=>({success:false}));
     setSaving(false);
+    billSubmitRef.current = false;
     if(res.success){
       api.post("/approvals/submit", {
         module: "RA Bill",

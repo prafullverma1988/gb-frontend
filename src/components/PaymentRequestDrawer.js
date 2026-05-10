@@ -12,7 +12,7 @@
 //     onSaved={()=>refresh()}
 //   />
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import api, { getUser } from "../config/api";
 import SearchSelect from "./SearchSelect";
 import { Credit, fmtTimeAgo } from "./Credit";
@@ -165,7 +165,10 @@ export default function PaymentRequestDrawer({
     return filtered.map(p => ({ value: String(p.id), label: p.name + (p.type ? ` (${p.type})` : "") }));
   })();
 
+  const submittingRef = useRef(false);
   const handleSave = async () => {
+    // Hard guard against double-submit (network delay → double-click → duplicate request)
+    if (submittingRef.current) return;
     // Resolve a usable name even if user only has partyId (looking up parties list)
     const resolvedName = (partyName || "").trim()
       || parties.find(p => String(p.id) === String(partyId))?.name
@@ -176,6 +179,7 @@ export default function PaymentRequestDrawer({
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) { setErr("Enter a valid amount"); return; }
 
+    submittingRef.current = true;
     setSaving(true);
     setErr("");
     try {

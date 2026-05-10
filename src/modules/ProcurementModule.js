@@ -67,8 +67,22 @@ const PO_STATUS={
   Cancelled:{c:T.red,bg:T.redL, brd:T.redM},
 };
 const APPR_STATUS={
-  Approved:{c:T.grn,bg:T.grnL,brd:T.grnM},
-  Draft:   {c:T.amb,bg:T.ambL,brd:T.ambM},
+  Approved:           {c:T.grn,bg:T.grnL,brd:T.grnM},
+  Draft:              {c:T.amb,bg:T.ambL,brd:T.ambM},
+  Revision:           {c:"#1D4ED8",bg:"#DBEAFE",brd:"#93C5FD"},
+  Rejected:           {c:T.red,bg:T.redL,brd:T.redM},
+  Ordered:            {c:"#7C3AED",bg:"#F5F3FF",brd:"#DDD6FE"},
+  PartiallyReceived:  {c:"#0891B2",bg:"#ECFEFF",brd:"#A5F3FC"},
+  Received:           {c:T.grn,bg:T.grnL,brd:T.grnM},
+};
+const PO_PILL_LABEL={ PartiallyReceived:"Partial Rcvd" };
+// Combine approval + order status into single display label
+const displayPOStatus = (po) => {
+  if (po.approval !== "Approved") return po.approval;
+  if (po.orderStatus === "Ordered") return "Ordered";
+  if (po.orderStatus === "PartiallyReceived") return "PartiallyReceived";
+  if (po.orderStatus === "Received") return "Received";
+  return "Approved";
 };
 const RFQ_STATUS={
   Published:{c:T.blu,bg:T.bluL,brd:T.bluM},
@@ -585,9 +599,10 @@ function GRNModal({po,onClose,onSave}){
 }
 
 // ── PO DETAIL DRAWER ──────────────────────────────────────────────────
-function PODetailDrawer({po,onClose,onApprove,onShare,onGRN}){
+function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSendToVendor}){
   const [detail, setDetail] = useState(po);
   const [fetching, setFetching] = useState(true);
+  const [cancelling, setCancelling] = useState(false);
 
   // Fetch fresh PO with items from backend
   useEffect(()=>{
@@ -604,9 +619,13 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN}){
               project: fresh.project_name||po.project,
               deliverySite: fresh.delivery_site||po.deliverySite,
               delivery: fresh.expected_delivery||po.delivery,
+              deliveryRaw: fresh.expected_delivery?String(fresh.expected_delivery).split("T")[0]:po.deliveryRaw,
               amount:  parseFloat(fresh.total_amount)||0,
               poStatus:fresh.po_status||po.poStatus,
               approval:fresh.approval_status||po.approval,
+              orderStatus:fresh.order_status||po.orderStatus||"NotOrdered",
+              sentAt:fresh.sent_to_vendor_at||po.sentAt,
+              sentVia:fresh.sent_via||po.sentVia,
               date: fresh.created_at?new Date(fresh.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):po.date,
               items:(fresh.items||[]).map(it=>({
                 id:it.id, desc:it.description, hsn:it.hsn_code||"—",
@@ -626,7 +645,8 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN}){
 
   const d=detail;
   const ps=PO_STATUS[d.poStatus]||PO_STATUS.Open;
-  const as=APPR_STATUS[d.approval]||APPR_STATUS.Draft;
+  const dispLbl=displayPOStatus(d);
+  const as=APPR_STATUS[dispLbl]||APPR_STATUS.Draft;
   const totalAmt=d.items?.reduce((s,it)=>s+(it.amount||0),0)||d.amount||0;
 
   return(<>
@@ -644,7 +664,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN}){
         </div>
         <div style={{display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
           <Pill label={d.poStatus} c={ps.c} bg={ps.bg} brd={ps.brd}/>
-          <Pill label={d.approval} c={as.c} bg={as.bg} brd={as.brd}/>
+          <Pill label={PO_PILL_LABEL[dispLbl]||dispLbl} c={as.c} bg={as.bg} brd={as.brd}/>
           <span style={{background:"rgba(255,255,255,0.12)",color:"white",fontSize:11,fontWeight:700,padding:"3px 10px",borderRadius:20}}>₹{fmtN(totalAmt)}</span>
           {fetching&&<span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>loading...</span>}
         </div>
@@ -652,22 +672,27 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN}){
 
       <div style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12}}>
 
-        {/* Project + Vendor card */}
+        {/* Compact PO details — 2-column grid (saves vertical space for items) */}
         <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
-          <div style={{padding:"9px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>PO Details</div>
-          {[
-            ["PO Number",   d.poNum||("PO-"+d.id)],
-            ["Project",     d.project],
-            ["Vendor",      d.vendor],
-            ["Delivery Site",d.deliverySite||d.project||"—"],
-            ["Exp. Delivery",d.delivery||"—"],
-            ["PO Date",     d.date||"—"],
-          ].map(([k,v])=>(
-            <div key={k} style={{display:"flex",padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
-              <span style={{width:130,fontSize:11.5,color:T.t4,flexShrink:0,fontWeight:500}}>{k}</span>
-              <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{v||"—"}</span>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
+            {[
+              ["Project",     d.project],
+              ["Vendor",      d.vendor],
+              ["Site",        d.deliverySite||d.project||"—"],
+              ["Exp. Delivery",d.delivery||"—"],
+            ].map(([k,v],i)=>(
+              <div key={k} style={{padding:"7px 11px",borderBottom:i<2?"1px solid "+T.b1:"none",borderRight:i%2===0?"1px solid "+T.b1:"none",minWidth:0}}>
+                <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>{k}</div>
+                <div style={{fontSize:12,fontWeight:600,color:T.t1,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={v||"—"}>{v||"—"}</div>
+              </div>
+            ))}
+          </div>
+          {d.reviewNote&&(d.approval==="Revision"||d.approval==="Rejected")&&(
+            <div style={{padding:"7px 11px",borderTop:"1px solid "+T.b1,background:d.approval==="Rejected"?T.redL:"#EFF6FF"}}>
+              <span style={{fontSize:9.5,fontWeight:700,color:d.approval==="Rejected"?T.red:"#1D4ED8",textTransform:"uppercase",letterSpacing:".3px"}}>{d.approval==="Rejected"?"❌ Rejected":"↻ Revision requested"}</span>
+              <div style={{fontSize:11.5,color:T.t2,fontStyle:"italic",marginTop:2}}>"{d.reviewNote}"</div>
             </div>
-          ))}
+          )}
         </div>
 
         {/* Items table */}
@@ -727,11 +752,44 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN}){
         )}
       </div>
 
-      {/* Action footer */}
-      <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
-        {d.approval==="Draft"&&<button onClick={()=>onApprove(d.id)} style={{flex:1,padding:"9px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcApprv size={13} color={T.grn}/> Approve PO</button>}
-        <button onClick={()=>onShare(d)} style={{flex:1,padding:"9px",borderRadius:7,background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcShare size={13} color={T.blu}/> Share</button>
-        {d.poStatus==="Open"&&d.approval==="Approved"&&<button onClick={()=>onGRN(d)} style={{flex:1,padding:"9px",borderRadius:7,background:T.ambL,color:T.amb,border:"1px solid "+T.ambM,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcGRN size={13} color={T.amb}/> Record GRN</button>}
+      {/* Action footer — context-aware: Approve / Edit / SendToVendor / GRN / Close */}
+      <div style={{padding:"10px 14px",borderTop:"1px solid "+T.b1,background:T.surface,display:"flex",gap:6,flexShrink:0,flexWrap:"wrap"}}>
+        {d.approval==="Draft"&&<button onClick={()=>onApprove(d.id)} style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:T.grnL,color:T.grn,border:"1px solid "+T.grnM,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}><IcApprv size={12} color={T.grn}/> Approve</button>}
+        {/* Edit — for Draft / Revision / Rejected (not after sent) */}
+        {d.poStatus!=="Cancelled"&&d.orderStatus!=="Ordered"&&d.orderStatus!=="Received"&&onEdit&&(
+          <button onClick={()=>onEdit(d)} title="Edit PO — change vendor, items, rates"
+            style={{flex:"1 1 100px",padding:"8px",borderRadius:7,background:d.approval==="Revision"?"#DBEAFE":T.surfaceB,color:d.approval==="Revision"?"#1D4ED8":T.t2,border:`1px solid ${d.approval==="Revision"?"#93C5FD":T.b1}`,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+            ✏️ {d.approval==="Revision"?"Edit & Resubmit":"Edit"}
+          </button>
+        )}
+        {/* Send to Vendor — Approved & not yet ordered */}
+        {d.approval==="Approved"&&d.orderStatus==="NotOrdered"&&d.poStatus!=="Cancelled"&&onSendToVendor&&(
+          <button onClick={()=>onSendToVendor(d)} style={{flex:"1 1 130px",padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:"1.5px solid "+T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+            📤 Send to Vendor
+          </button>
+        )}
+        {/* Record GRN — only after ordered */}
+        {d.poStatus==="Open"&&d.approval==="Approved"&&d.orderStatus==="Ordered"&&(
+          <button onClick={()=>onGRN(d)} style={{flex:"1 1 110px",padding:"8px",borderRadius:7,background:T.ambL,color:T.amb,border:"1.5px solid "+T.amb,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+            <IcGRN size={12} color={T.amb}/> Record GRN
+          </button>
+        )}
+        {/* Share — secondary, available anytime for sharing PO copy */}
+        <button onClick={()=>onShare(d)} title="Share PO link" style={{flex:"0 0 38px",padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t3,border:"1px solid "+T.b1,fontSize:11.5,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcShare size={13} color={T.t3}/></button>
+        {/* Close PO — cancel for any non-cancelled status */}
+        {d.poStatus!=="Cancelled"&&onCancel&&(
+          <button onClick={async()=>{
+              if(cancelling) return;
+              if(!await window.confirmAsync(`Close PO ${d.poNum||d.id}? This cancels the PO and cannot be undone.`)) return;
+              setCancelling(true);
+              await onCancel(d);
+              setCancelling(false);
+            }}
+            disabled={cancelling}
+            style={{flex:"0 0 38px",padding:"8px",borderRadius:7,background:T.redL,color:T.red,border:"1px solid "+T.redM,fontSize:11.5,fontWeight:700,cursor:cancelling?"wait":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:cancelling?.6:1}} title="Close (Cancel) PO">
+            ✕
+          </button>
+        )}
       </div>
     </div>
   </>);
@@ -866,24 +924,31 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
 }
 
 // ── CREATE PO MODAL — full layout, library-driven, polished ────────────
-function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
-  // Auto-fill project from first MR item
+function CreatePOModal({onClose,onSave,prefillItems,editPo,dbProjects,dbVendors=[]}){
+  // Edit-mode prefill from existing PO
+  const isEdit = !!editPo;
+  // Auto-fill project from first MR item OR edit PO
   const firstMR = prefillItems?.[0];
-  const autoProjectId   = firstMR?.project_id   || "";
-  const autoProjectName = firstMR?.project       || "";
-  const autoSite        = firstMR?.site          || firstMR?.project || "";
+  const autoProjectId   = editPo?.project_id || firstMR?.project_id   || "";
+  const autoProjectName = editPo?.project    || firstMR?.project       || "";
+  const autoSite        = editPo?.deliverySite || firstMR?.site || firstMR?.project || "";
   const fromMR          = !!prefillItems && !!autoProjectName;
+  // Guard against double-submit (network delay → user double-click → duplicate PO)
+  const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const [form,setForm]=useState({
-    vendor:"",
+    vendor:      editPo?.vendor || "",
     projectId:   String(autoProjectId),
     project:     autoProjectName,
     deliverySite:autoSite,
-    delivery:"",
-    notes:"",
-    items:prefillItems
-      ?prefillItems.map(m=>({desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:""}))
-      :[{desc:"",hsn:"",qty:"",unit:"",rate:""}]
+    delivery:    editPo?.deliveryRaw || (editPo?.delivery && /^\d{4}-\d{2}-\d{2}/.test(String(editPo.delivery)) ? String(editPo.delivery).split("T")[0] : ""),
+    notes:       editPo?.notes || "",
+    items: editPo?.items?.length
+      ? editPo.items.map(it=>({desc:it.desc||it.description||"",hsn:it.hsn||"",qty:String(it.qty||it.quantity||""),unit:it.unit||"",rate:String(it.rate||"")}))
+      : prefillItems
+        ?prefillItems.map(m=>({desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:""}))
+        :[{desc:"",hsn:"",qty:"",unit:"",rate:""}]
   });
   const [matLib,setMatLib]=useState([]);
   const reloadMatLib=()=>api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{});
@@ -994,8 +1059,8 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
 
   return(
     <Modal onClose={onClose} width={680}>
-      <MHead title="Create Purchase Order"
-        sub={fromMR?`Direct PO · ${autoProjectName}`:"Direct PO — vendor library + material library"}
+      <MHead title={isEdit?`Edit PO ${editPo?.poNum||""}`:"Create Purchase Order"}
+        sub={isEdit?`${editPo?.approval==="Revision"?"Revision requested — change & resubmit":"Edit PO details"}`:(fromMR?`Direct PO · ${autoProjectName}`:"Direct PO — vendor library + material library")}
         onClose={onClose}/>
       <MBody>
         {/* ── Top-right: Add new material vendor to Library ───────── */}
@@ -1177,10 +1242,16 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
       </MBody>
       <MFoot>
         <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
-        <Btn onClick={()=>{
+        <Btn onClick={async()=>{
           if(!form.vendor||!form.project)return;
+          // Hard guard — prevents double-fire even before re-render
+          if(submittingRef.current) return;
+          submittingRef.current = true;
+          setSubmitting(true);
           const newPO={
-            id:"PO-new",date:"Today",
+            id: isEdit ? editPo.id : "PO-new",
+            editPoId: isEdit ? editPo.id : null,
+            date:"Today",
             vendor:form.vendor,
             project:form.project,
             projectId:form.projectId,
@@ -1192,16 +1263,106 @@ function CreatePOModal({onClose,onSave,prefillItems,dbProjects,dbVendors=[]}){
               rate:Number(it.rate)||0,
               amount:(Number(it.qty)||0)*(Number(it.rate)||0)
             })),
-            linkedMR:"—",delivery:form.delivery||"TBD"
+            linkedMR:"—",delivery:form.delivery||"TBD",
+            notes:form.notes||"",
           };
-          onSave(newPO);
-        }} disabled={!form.vendor||!form.project} color={T.blu} full icon={<IcPO size={14} color="white"/>}>Create PO (Draft)</Btn>
+          try { await onSave(newPO); }
+          finally { submittingRef.current = false; setSubmitting(false); }
+        }} disabled={!form.vendor||!form.project||submitting} color={T.blu} full icon={<IcPO size={14} color="white"/>}>{submitting?(isEdit?"Saving…":"Creating…"):(isEdit?"💾 Save & Resubmit":"Create PO (Draft)")}</Btn>
       </MFoot>
     </Modal>
   );
 }
 
 // ── SHARE MODAL ───────────────────────────────────────────────────────
+// ── SEND TO VENDOR MODAL ─────────────────────────────────────────────
+// PO ko vendor tak bhejne ke options (PDF / WhatsApp / Email / Copy)
+// Confirm karne par PO order_status='Ordered' ban jata hai
+function SendToVendorModal({po,onClose,onSent}){
+  const [copied,setCopied]=useState(false);
+  const [sending,setSending]=useState(false);
+  const [sentVia,setSentVia]=useState(null);
+  const sendingRef = useRef(false);
+  // Public PO link (vendor view)
+  const baseUrl = (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
+    ? "http://localhost:3000" : "https://gbuildcon.in";
+  const poLink = `${baseUrl}/po-view/${po.id}`;
+  const itemSummary = (po.items||[]).map(it=>`${it.desc||"Item"} - ${it.qty}${it.unit?` ${it.unit}`:""} @ ₹${it.rate}`).join("\n");
+  const waMsg = `*Purchase Order ${po.poNum||"PO-"+po.id}*\nFrom: GB Buildcon\nProject: ${po.project}\nDelivery: ${po.deliverySite||po.project}\nExp Date: ${po.delivery||"TBD"}\n\nItems:\n${itemSummary}\n\nTotal: ₹${(po.amount||0).toLocaleString("en-IN")}\n\nView/confirm: ${poLink}`;
+  const emailSubj = `Purchase Order ${po.poNum||"PO-"+po.id} — GB Buildcon`;
+  const emailBody = waMsg.replace(/\*/g,"");
+
+  const open = (url, via) => { window.open(url, "_blank", "noopener"); setSentVia(via); };
+  const copyLink = () => { navigator.clipboard?.writeText(poLink); setCopied(true); setSentVia("copy_link"); setTimeout(()=>setCopied(false),1800); };
+
+  const markSent = async () => {
+    if (sendingRef.current) return;
+    sendingRef.current = true;
+    setSending(true);
+    try {
+      const r = await api.patch(`/procurement/pos/${po.id}/mark-ordered`, { sent_via: sentVia || "manual" });
+      if (r.success) { onSent?.(); onClose(); }
+      else alert(r.message || "Mark as sent failed");
+    } catch(e) { alert(e.message); }
+    sendingRef.current = false;
+    setSending(false);
+  };
+
+  const channels = [
+    {label:"WhatsApp",  via:"whatsapp", c:"#25D366", bg:"#E8FDF1", Icon:IcWA,
+      action:()=>open(`https://wa.me/?text=${encodeURIComponent(waMsg)}`,"whatsapp")},
+    {label:"Email",     via:"email",    c:T.blu, bg:T.bluL, Icon:IcMail,
+      action:()=>open(`mailto:?subject=${encodeURIComponent(emailSubj)}&body=${encodeURIComponent(emailBody)}`,"email")},
+    {label:"Print/PDF", via:"pdf",      c:T.pur, bg:T.purL, Icon:IcShare,
+      action:()=>{ window.print(); setSentVia("pdf"); }},
+    {label:copied?"Copied!":"Copy Link", via:"copy_link", c:T.slt, bg:T.sltL, Icon:IcCopy, action:copyLink},
+  ];
+
+  return(
+    <Modal onClose={onClose} width={460}>
+      <MHead title="Send PO to Vendor" sub={`${po.poNum||"PO-"+po.id} · ${po.vendor||"Vendor"}`} onClose={onClose}/>
+      <MBody>
+        <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,padding:"9px 12px",marginBottom:12,fontSize:11.5,color:T.blu,lineHeight:1.5}}>
+          PO ko WhatsApp / Email / PDF se vendor tak bhejo. Send hone ke baad <b>"Mark as Sent"</b> click karo — PO Order Stage me chala jaayega aur GRN record kar sakte ho.
+        </div>
+        {/* PO summary card */}
+        <div style={{background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+          <div style={{fontSize:11,color:T.t4,fontWeight:600,marginBottom:3}}>VENDOR</div>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:8}}>{po.vendor||"—"}</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,fontSize:11}}>
+            <div><span style={{color:T.t4}}>Items: </span><b style={{color:T.t1}}>{(po.items||[]).length}</b></div>
+            <div><span style={{color:T.t4}}>Total: </span><b style={{color:T.t1}}>₹{(po.amount||0).toLocaleString("en-IN")}</b></div>
+            <div style={{gridColumn:"1 / 3"}}><span style={{color:T.t4}}>Delivery: </span><b style={{color:T.t1}}>{po.deliverySite}</b> · <span style={{color:T.t4}}>by</span> <b style={{color:T.t1}}>{po.delivery||"TBD"}</b></div>
+          </div>
+        </div>
+        {/* Channel buttons */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
+          {channels.map((c,i)=>{
+            const isSelected = sentVia===c.via;
+            return(
+              <button key={i} onClick={c.action}
+                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:6,padding:"10px 12px",borderRadius:7,background:isSelected?c.c:c.bg,border:`1.5px solid ${c.c}`,color:isSelected?"white":c.c,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                <c.Icon size={13} color={isSelected?"white":c.c}/> {c.label}
+              </button>
+            );
+          })}
+        </div>
+        {sentVia&&(
+          <div style={{padding:"7px 11px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:6,fontSize:11.5,color:T.grn,marginBottom:10}}>
+            ✓ Sent via <b>{channels.find(c=>c.via===sentVia)?.label}</b> — ab "Mark as Sent" click karo
+          </div>
+        )}
+      </MBody>
+      <MFoot>
+        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
+        <Btn onClick={markSent} disabled={sending} color={T.grn} full icon={<IcApprv size={14} color="white"/>}>
+          {sending?"Marking…":"Mark as Sent → Order Stage"}
+        </Btn>
+      </MFoot>
+    </Modal>
+  );
+}
+
 function ShareModal({rfq,onClose}){
   const [copied,setCopied]=useState(null);
   const fakeLink=`https://gbuildcon.in/rfq/${rfq.id}?token=xK9mP`;
@@ -1266,8 +1427,14 @@ function ProcurementModule(){
     project_id:p.project_id||null,
     deliverySite:p.delivery_site||p.project_name||"—",
     poStatus:p.po_status, approval:p.approval_status,
+    orderStatus:p.order_status||"NotOrdered",
+    sentAt:p.sent_to_vendor_at||null,
+    sentVia:p.sent_via||null,
+    reviewNote:p.review_note||null,
+    reviewedBy:p.reviewed_by||null,
     amount:parseFloat(p.total_amount)||0,
     delivery:p.expected_delivery?fmtDate(p.expected_delivery):"—",
+    deliveryRaw:p.expected_delivery?String(p.expected_delivery).split("T")[0]:"",
     linked_mr_ids:p.linked_mr_ids?JSON.parse(p.linked_mr_ids||"[]"):[],
     items:(p.items||[]).map(it=>({
       id:it.id, desc:it.description, hsn:it.hsn_code||"—",
@@ -1337,9 +1504,11 @@ function ProcurementModule(){
   const [poApprovalF,setPoApprovalF]=useState("All");
   const [selPO,setSelPO]=useState(null);
   const [shareTarget,setShareTarget]=useState(null);
+  const [sendToVendorTarget,setSendToVendorTarget]=useState(null);
   const [grnTarget,setGrnTarget]=useState(null);
   const [showCreatePO,setShowCreatePO]=useState(false);
   const [createPOPrefill,setCreatePOPrefill]=useState(null);
+  const [editPo,setEditPo]=useState(null);
 
   // RFQ state
   const [selRFQ,setSelRFQ]=useState(null);
@@ -1429,6 +1598,27 @@ function ProcurementModule(){
       // Now fetch fresh MR list — backend already updated linked MRs to Ordered
       const mRes = await api.get("/procurement/mrs");
       if(mRes.success) setMRs(mRes.data.map(mapMR));
+    }
+  };
+  const resubmitPO=async(po)=>{
+    if(!await window.confirmAsync(`PO ${po.poNum} ko revise karke fir approval ke liye bhejein?`)) return;
+    const res = await api.patch("/procurement/pos/"+po.id+"/resubmit",{});
+    if(res.success){
+      setPOs(p=>p.map(x=>x.id===po.id?{...x,approval:"Draft",reviewNote:null,reviewedBy:null}:x));
+      // Re-create centralized approval entry so admin sees it again
+      try{
+        await api.post("/approvals/submit",{
+          module:"Purchase Order",
+          ref_id:po.id,
+          ref_no:po.poNum||"",
+          title:po.vendor+" - "+(po.items||[]).length+" items (revised)",
+          amount:po.amount||0,
+          project_id:po.project_id||null,
+          project_name:po.project||"",
+        });
+      }catch(_){}
+    } else {
+      alert(res.message||"Resubmit failed");
     }
   };
   const lockRFQ=async(rfqId,vendorName)=>{
@@ -1531,7 +1721,7 @@ function ProcurementModule(){
     ],
     po:[
       {l:"Total POs",    v:pos.length,sub:`${pos.filter(p=>p.poStatus==="Open").length} open`,c:T.blu},
-      {l:"Pending Appr.",v:pos.filter(p=>p.approval==="Draft").length,sub:"Need sign-off",c:T.amb},
+      {l:"Pending Appr.",v:pos.filter(p=>p.approval==="Draft"||p.approval==="Revision").length,sub:"Need sign-off / revise",c:T.amb},
       {l:"PO Value",     v:`₹${fmt(pos.reduce((s,p)=>s+p.amount,0))}`,sub:"Combined",c:T.grn},
       {l:"Open MRs",     v:pendingMRs,sub:"Need ordering",c:T.red},
     ],
@@ -1939,20 +2129,33 @@ function ProcurementModule(){
                 {["PO#","Vendor","Project","Site","Status","Approval","Amount","Actions"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
               </div>
               {filteredPOs.map(po=>{
-                const ps=PO_STATUS[po.poStatus]||PO_STATUS.Open;const as=APPR_STATUS[po.approval];
-                return(<div key={po.id} onClick={()=>setSelPO(po)} style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 80px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",borderLeft:po.approval==="Draft"?`3px solid ${T.amb}`:"3px solid transparent",transition:"background 0.1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-                  <span style={{fontSize:12,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{po.poNum||("PO-"+po.id)}</span>
-                  <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.vendor}</span>
-                  <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.project}</span>
-                  <span style={{fontSize:11.5,color:T.t3}}>{po.deliverySite}</span>
-                  <Pill label={po.poStatus} c={ps.c} bg={ps.bg} brd={ps.brd}/>
-                  <Pill label={po.approval} c={as.c} bg={as.bg} brd={as.brd}/>
-                  <span style={{fontSize:13,fontWeight:600,color:T.t1}}>₹{fmtN(po.amount)}</span>
-                  <div style={{display:"flex",gap:4}}>
-                    {po.approval==="Draft"&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title="Approve PO" style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
-                    {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title="GRN" style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
+                const ps=PO_STATUS[po.poStatus]||PO_STATUS.Open;
+                const dispLbl=displayPOStatus(po);
+                const as=APPR_STATUS[dispLbl]||APPR_STATUS.Draft;
+                const borderC=po.approval==="Revision"?"#1D4ED8":po.approval==="Rejected"?T.red:po.approval==="Draft"?T.amb:dispLbl==="Ordered"?"#7C3AED":dispLbl==="PartiallyReceived"?"#0891B2":dispLbl==="Received"?T.grn:"transparent";
+                return(<div key={po.id}>
+                  <div onClick={()=>setSelPO(po)} style={{display:"grid",gridTemplateColumns:"90px 160px 1fr 130px 90px 100px 110px 80px",padding:"10px 14px",borderBottom:po.reviewNote?"none":`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",borderLeft:`3px solid ${borderC}`,transition:"background 0.1s"}}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                    <span style={{fontSize:12,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{po.poNum||("PO-"+po.id)}</span>
+                    <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.vendor}</span>
+                    <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{po.project}</span>
+                    <span style={{fontSize:11.5,color:T.t3}}>{po.deliverySite}</span>
+                    <Pill label={po.poStatus} c={ps.c} bg={ps.bg} brd={ps.brd}/>
+                    <Pill label={PO_PILL_LABEL[dispLbl]||dispLbl} c={as.c} bg={as.bg} brd={as.brd}/>
+                    <span style={{fontSize:13,fontWeight:600,color:T.t1}}>₹{fmtN(po.amount)}</span>
+                    <div style={{display:"flex",gap:4}}>
+                      {po.approval==="Draft"&&<button onClick={e=>{e.stopPropagation();approvePO(po.id);}} title="Approve PO" style={{width:26,height:26,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={13} color={T.grn}/></button>}
+                      {po.approval==="Revision"&&<button onClick={e=>{e.stopPropagation();setEditPo(po);setShowCreatePO(true);}} title="Edit PO and Resubmit for Approval" style={{height:26,padding:"0 9px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:3,color:"#1D4ED8",fontSize:10.5,fontWeight:700}}>✏️ Edit & Resubmit</button>}
+                      {po.poStatus==="Open"&&po.approval==="Approved"&&<button onClick={e=>{e.stopPropagation();setGrnTarget(po);}} title="GRN" style={{width:26,height:26,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}><IcGRN size={13} color={T.amb}/></button>}
+                    </div>
                   </div>
+                  {po.reviewNote&&(po.approval==="Revision"||po.approval==="Rejected")&&(
+                    <div style={{padding:"6px 14px 10px",borderBottom:`1px solid ${T.b1}`,borderLeft:`3px solid ${borderC}`,background:po.approval==="Rejected"?T.redL:"#EFF6FF"}}>
+                      <span style={{fontSize:9.5,fontWeight:700,color:po.approval==="Rejected"?T.red:"#1D4ED8",textTransform:"uppercase",letterSpacing:".3px",marginRight:6}}>{po.approval==="Rejected"?"❌ Rejected":"↻ Revision requested"}</span>
+                      <span style={{fontSize:11,color:T.t2,fontStyle:"italic"}}>"{po.reviewNote}"</span>
+                      {po.reviewedBy&&<span style={{fontSize:10,color:T.t4,marginLeft:6}}>— by {po.reviewedBy}</span>}
+                    </div>
+                  )}
                 </div>);
               })}
               {filteredPOs.length===0&&<div style={{textAlign:"center",padding:"48px",color:T.t4}}><IcPO size={32} color={T.b2}/><div style={{marginTop:10,fontSize:13,color:T.t3}}>No POs match filters</div></div>}
@@ -1995,8 +2198,24 @@ function ProcurementModule(){
       </div>
 
       {/* ═══ MODALS ═══ */}
-      {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={(po)=>{setGrnTarget(po);setSelPO(null);}}/>}
+      {selPO&&<PODetailDrawer po={selPO} onClose={()=>setSelPO(null)} onApprove={(id)=>{approvePO(id);setSelPO(p=>p?{...p,approval:"Approved"}:p);}} onShare={(po)=>{setShareTarget(po);setSelPO(null);}} onGRN={(po)=>{setGrnTarget(po);setSelPO(null);}}
+        onSendToVendor={(po)=>{setSendToVendorTarget(po);}}
+        onEdit={(po)=>{setEditPo(po);setShowCreatePO(true);setSelPO(null);}}
+        onCancel={async(po)=>{
+          const res=await api.patch("/procurement/pos/"+po.id+"/cancel",{});
+          if(res.success){
+            setPOs(p=>p.map(x=>x.id===po.id?{...x,poStatus:"Cancelled"}:x));
+            setSelPO(p=>p?{...p,poStatus:"Cancelled"}:p);
+          } else alert(res.message||"Cancel failed");
+        }}/>}
       {shareTarget&&<ShareModal rfq={{id:shareTarget.id,project:shareTarget.project,vendors:VENDORS.slice(0,3).map(n=>({name:n,status:"Pending",rates:[]}))}} onClose={()=>setShareTarget(null)}/>}
+      {sendToVendorTarget&&<SendToVendorModal po={sendToVendorTarget}
+        onClose={()=>setSendToVendorTarget(null)}
+        onSent={()=>{
+          // Update local state — flip orderStatus to Ordered
+          setPOs(p=>p.map(x=>x.id===sendToVendorTarget.id?{...x,orderStatus:"Ordered",sentAt:new Date().toISOString()}:x));
+          setSelPO(p=>p&&p.id===sendToVendorTarget.id?{...p,orderStatus:"Ordered"}:p);
+        }}/>}
       {grnTarget&&<GRNModal po={grnTarget} onClose={()=>setGrnTarget(null)} onSave={saveGRN}/>}
       {selRFQ&&<RFQDetailDrawer rfq={selRFQ} onClose={()=>setSelRFQ(null)} onPunch={(vi)=>{setPunchTarget(selRFQ);setPunchVendorIdx(vi);setSelRFQ(null);}} onLock={(vName)=>{lockRFQ(selRFQ.id,vName);setSelRFQ(r=>r?{...r,locked:vName}:r);}} onPublish={(id)=>{publishRFQ(id);setSelRFQ(r=>r?{...r,status:"Published",bidStart:"Today",bidEnd:"+5 days"}:r);}}/>}
       {punchTarget&&punchVendorIdx!=null&&<PunchQuoteModal rfq={punchTarget} vendorIndex={punchVendorIdx} onSave={(vi,rates)=>savePunch(punchTarget.id,vi,rates)} onClose={()=>{setPunchTarget(null);setPunchVendorIdx(null);}}/>}
@@ -2025,15 +2244,50 @@ function ProcurementModule(){
           const mRes = await api.get("/procurement/mrs");
           if (mRes.success) setMRs(mRes.data.map(mapMR));
         }}/>}
-      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbVendors={dbVendors} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);}} onSave={async(newPO)=>{
-        // Save PO to backend
+      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbVendors={dbVendors} editPo={editPo} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);setEditPo(null);}} onSave={async(newPO)=>{
+        // EDIT mode — PUT existing PO + flip back to Draft + create fresh approval entry
+        // Sanitize date: only valid YYYY-MM-DD reaches backend (no "TBD" / empty / formatted strings)
+        const validDate = (d) => d && /^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? d : null;
+        if (newPO.editPoId) {
+          const res = await api.put("/procurement/pos/"+newPO.editPoId,{
+            vendor_name: newPO.vendor,
+            project_id: newPO.projectId || 1,
+            project_name: newPO.project,
+            delivery_site: newPO.deliverySite,
+            expected_delivery: validDate(newPO.delivery),
+            items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate})),
+            notes: newPO.notes||"",
+          });
+          if (!res.success) { alert(res.message||"Update failed"); return; }
+          // If was in Revision, flip to Draft + re-submit for approval
+          const wasRevision = editPo?.approval === "Revision";
+          if (wasRevision) {
+            await api.patch("/procurement/pos/"+newPO.editPoId+"/resubmit",{});
+            try {
+              await api.post("/approvals/submit",{
+                module:"Purchase Order",
+                ref_id: newPO.editPoId,
+                ref_no: editPo?.poNum||"",
+                title: newPO.vendor + " - " + (newPO.items||[]).length + " items (revised)",
+                amount: res.data.total_amount || 0,
+                project_id: newPO.projectId || 1,
+                project_name: newPO.project || "",
+              });
+            } catch(_){}
+          }
+          setPOs(prev=>prev.map(x=>x.id===newPO.editPoId?{...mapPO(res.data),approval: wasRevision?"Draft":x.approval}:x));
+          setShowCreatePO(false);
+          setEditPo(null);
+          return;
+        }
+        // CREATE mode — POST new PO
         const linked_mr_ids = (createPOPrefill||[]).map(m=>m.id).filter(Boolean);
         const res = await api.post("/procurement/pos",{
           vendor_name: newPO.vendor,
           project_id: newPO.projectId || (createPOPrefill||[])[0]?.project_id || 1,
           project_name: newPO.project,
           delivery_site: newPO.deliverySite,
-          expected_delivery: newPO.delivery,
+          expected_delivery: validDate(newPO.delivery),
           linked_mr_ids,
           items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate})),
           notes: newPO.notes||"",

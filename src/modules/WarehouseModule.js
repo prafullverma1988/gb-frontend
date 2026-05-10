@@ -465,8 +465,11 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
   };
   const dirValid=dirF.vendor.trim()&&dirF.challan.trim()&&dirItems.some(it=>it.lib_id&&Number(it.qty)>0);
   const dirTotal=dirItems.reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
+  const submitDirectRef=useRef(false);
   const submitDirect=async()=>{
+    if(submitDirectRef.current) return; // hard guard against double-fire
     if(!dirF.challan.trim()){alert("Challan No required");return;}
+    submitDirectRef.current=true;
     setDirSaving(true);
     const cleanItems=dirItems.filter(it=>it.lib_id&&Number(it.qty)>0).map(it=>{
       const lib=findDirLib(it.lib_id);
@@ -487,6 +490,7 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
       items:cleanItems,
     });
     setDirSaving(false);
+    submitDirectRef.current=false;
     if(res.success){onSaved&&onSaved(res.data);onClose();}
     else alert(res.message||"Direct GRN save failed");
   };

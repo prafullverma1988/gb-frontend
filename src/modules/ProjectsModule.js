@@ -1339,6 +1339,19 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     }catch(_){/* ignore */}
     setRaItemsLoading(null);
   };
+  // PO inline expand (same pattern as RA Bill)
+  const [expandedPo,setExpandedPo]=useState(null);
+  const [poCache,setPoCache]=useState({});
+  const [poLoading,setPoLoading]=useState(null);
+  const loadPoDetail=async(poId)=>{
+    if(poCache[poId]) return;
+    setPoLoading(poId);
+    try{
+      const r=await api.get("/procurement/pos/"+poId);
+      if(r.success) setPoCache(p=>({...p,[poId]:r.data}));
+    }catch(_){}
+    setPoLoading(null);
+  };
 
   const load=async()=>{
     setLoading(true);
@@ -1521,27 +1534,34 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     const srcAction=async(actionType)=>{
       const key="c"+item.id;
       const isRej=actionType==="reject"||actionType==="Rejected";
-      // Revision (and reject) on design must capture a reason — designer
-      // and history both rely on it. Cancel if user clears the prompt.
+      const isRevise=actionType==="Revision"||actionType==="revise";
+      // Revision (and reject) must capture a reason — sender and history both rely on it.
+      // Cancel if user clears the prompt.
       let revisionNote=null, rejectNote=null;
-      if(src==="design"&&actionType==="Revision"){
-        revisionNote=window.prompt("Revision note (compulsory) — designer ko kya badalna hai?\n\nExample: \"Footing depth 1.2m karein, parapet height 4ft tak badhaaye\"");
+      if((src==="design"||src==="purchase_order")&&isRevise){
+        const promptMsg=src==="purchase_order"
+          ? "Revision note (compulsory) — procurement team ko kya badalna hai?\n\nExample: \"Vendor change karo — better rate available\""
+          : "Revision note (compulsory) — designer ko kya badalna hai?\n\nExample: \"Footing depth 1.2m karein, parapet height 4ft tak badhaaye\"";
+        revisionNote=window.prompt(promptMsg);
         if(!revisionNote||!revisionNote.trim()){
           if(revisionNote!==null) window.alert("Revision note required.");
           return;
         }
-      } else if(src==="design"&&isRej){
-        rejectNote=window.prompt("Rejection reason — drawing kyu reject ho rahi hai?");
+      } else if((src==="design"||src==="purchase_order")&&isRej){
+        const promptMsg=src==="purchase_order"
+          ? "Rejection reason (compulsory) — PO kyu reject ho rahi hai?"
+          : "Rejection reason — drawing kyu reject ho rahi hai?";
+        rejectNote=window.prompt(promptMsg);
         if(!rejectNote||!rejectNote.trim()){
           if(rejectNote!==null) window.alert("Rejection reason required.");
           return;
         }
       }
-      setSaveErr("");setActing(p=>({...p,[key]:isRej?"rejecting":"approving"}));
+      setSaveErr("");setActing(p=>({...p,[key]:isRej?"rejecting":isRevise?"revising":"approving"}));
       try{
         let res;
         if(src==="design"){
-          const status=actionType==="Revision"?"Revision":isRej?"Rejected":"Approved";
+          const status=isRevise?"Revision":isRej?"Rejected":"Approved";
           const note=status==="Revision"?revisionNote.trim():(status==="Rejected"?rejectNote.trim():undefined);
           res=await api.patch("/design/drawings/"+item._source_id+"/status",{status,note});
         } else if(src==="material_request"){
@@ -1549,7 +1569,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
         } else if(src==="payment_request"){
           res=await api.put("/finance/payment-requests/"+item._source_id+"/approve",{action:isRej?"reject":"approve"});
         } else if(src==="purchase_order"){
-          res=await api.patch("/procurement/pos/"+item._source_id+"/approve",{approved_by:""});
+          if (isRej) res=await api.patch("/procurement/pos/"+item._source_id+"/reject",{note:rejectNote.trim()});
+          else if (isRevise) res=await api.patch("/procurement/pos/"+item._source_id+"/revise",{note:revisionNote.trim()});
+          else res=await api.patch("/procurement/pos/"+item._source_id+"/approve",{approved_by:""});
         } else if(src==="ra_bill"){
           res=await api.patch("/subcon/ra-bills/"+item._source_id+"/status",{status:isRej?"Rejected":"Approved"});
         } else if(src==="wo_amendment"){
@@ -1570,6 +1592,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     const isRaExpanded = isRaBill && expandedRa===item._source_id;
     const raDetail = isRaBill ? raItemsCache[item._source_id] : null;
     const isPO = src==="purchase_order";
+    const isPoExpanded = isPO && expandedPo===item._source_id;
+    const poDetail = isPO ? poCache[item._source_id] : null;
+    const togglePoExpand = ()=>{
+      const next = isPoExpanded ? null : item._source_id;
+      setExpandedPo(next);
+      if (next) loadPoDetail(next);
+    };
     const goToProject = ()=>{
       if (!item.project_id || !onSelectProject) return;
       const tabFor = src==="ra_bill"||src==="wo_amendment" ? "subcon"
@@ -1582,7 +1611,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
       onSelectProject({ id:item.project_id, name:item.project_name, initialTab:tabFor });
     };
     return(
-      <div onClick={isPO?goToProject:undefined}
+      <div onClick={isPO ? (e)=>{ if(e.target===e.currentTarget||!e.target.closest("button")) togglePoExpand(); } : undefined}
         style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+mc,cursor:isPO?"pointer":"default",transition:"box-shadow .12s"}}
         onMouseEnter={isPO?(e)=>e.currentTarget.style.boxShadow=`0 2px 8px ${mc}33`:undefined}
         onMouseLeave={isPO?(e)=>e.currentTarget.style.boxShadow="none":undefined}>
@@ -1658,29 +1687,75 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
             <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
           </div>
         )}
-        {!isPO&&(
-          <div style={{display:"flex",gap:6,marginTop:6}}>
-            <button onClick={()=>srcAction("reject")} disabled={!!act}
-              style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-              {act==="rejecting"?"...":"✕ Reject"}
-            </button>
-            {src==="design"&&(
-              <button onClick={()=>srcAction("Revision")} disabled={!!act}
-                style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-                ↻ Revision
-              </button>
-            )}
-            <button onClick={()=>srcAction("approve")} disabled={!!act}
-              style={{flex:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-              {act==="approving"?"Approving...":"✓ Approve"}
-            </button>
+        {/* Inline PO detail panel — expand on card click */}
+        {isPO&&isPoExpanded&&(
+          <div style={{marginTop:8,paddingTop:9,borderTop:`1px solid ${T.b1}`}} onClick={e=>e.stopPropagation()}>
+            {poLoading===item._source_id&&!poDetail?(
+              <div style={{textAlign:"center",padding:"14px 0",color:T.t4,fontSize:11.5}}>
+                <div style={{width:16,height:16,border:`2px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 5px"}}/>
+                Loading PO…
+              </div>
+            ):poDetail?(<>
+              {/* PO header row */}
+              <div style={{display:"flex",gap:8,fontSize:10.5,color:T.t3,marginBottom:6,flexWrap:"wrap"}}>
+                {poDetail.expected_delivery&&<span>📅 Delivery: <b style={{color:T.t1}}>{String(poDetail.expected_delivery).split("T")[0]}</b></span>}
+                {poDetail.delivery_site&&<span>📍 {poDetail.delivery_site}</span>}
+                {poDetail.notes&&<span style={{fontStyle:"italic",color:T.t4}}>"{poDetail.notes}"</span>}
+              </div>
+              {/* Items list */}
+              <div style={{border:`1px solid ${T.b1}`,borderRadius:6,overflow:"hidden",fontSize:10.5,background:T.surfaceB}}>
+                <div style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",background:"#1E293B",padding:"5px 8px",gap:4}}>
+                  {["Description","Unit","Qty","Rate","Amount"].map((h,i)=>(
+                    <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
+                  ))}
+                </div>
+                {(poDetail.items||[]).length===0&&<div style={{padding:"12px 0",textAlign:"center",color:T.t4}}>No items</div>}
+                {(poDetail.items||[]).map(it=>{
+                  const amt = (Number(it.quantity)||0)*(Number(it.rate)||0);
+                  return(
+                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",padding:"5px 8px",gap:4,borderTop:`1px solid ${T.b1}`,alignItems:"center",background:T.surface}}>
+                      <div style={{color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
+                      <div style={{color:T.t3}}>{it.unit}</div>
+                      <div style={{color:T.t1,textAlign:"right",fontWeight:600}}>{Number(it.quantity)||0}</div>
+                      <div style={{color:T.blu,textAlign:"right"}}>₹{Number(it.rate||0).toLocaleString("en-IN")}</div>
+                      <div style={{color:T.grn,textAlign:"right",fontWeight:700}}>₹{amt.toLocaleString("en-IN")}</div>
+                    </div>
+                  );
+                })}
+                <div style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",padding:"6px 8px",gap:4,borderTop:`2px solid ${T.b1}`,background:T.bluL,alignItems:"center"}}>
+                  <div style={{gridColumn:"1 / 5",textAlign:"right",fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase"}}>Total</div>
+                  <div style={{textAlign:"right",fontSize:11,fontWeight:800,color:T.blu}}>₹{Number(poDetail.total_amount||0).toLocaleString("en-IN")}</div>
+                </div>
+              </div>
+            </>):null}
           </div>
         )}
+
+        {/* Inline View detail toggle for PO — sits above action row */}
         {isPO&&(
-          <div style={{marginTop:8,display:"flex",alignItems:"center",justifyContent:"center",padding:"6px 10px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:6,color:T.blu,fontSize:10.5,fontWeight:600,gap:5}}>
-            👆 Click anywhere on card to open PO details
-          </div>
+          <button onClick={togglePoExpand}
+            style={{marginTop:7,width:"100%",padding:"5px",borderRadius:6,background:isPoExpanded?T.bluL:"transparent",border:`1px solid ${isPoExpanded?T.bluM:T.b2}`,color:isPoExpanded?T.blu:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+            <span style={{fontSize:8}}>{isPoExpanded?"▲":"▼"}</span>
+            {isPoExpanded?"Hide detail":"View detail"}
+          </button>
         )}
+        {/* Action buttons — Reject / Revision / Approve */}
+        <div style={{display:"flex",gap:6,marginTop:8}} onClick={e=>e.stopPropagation()}>
+          <button onClick={()=>srcAction("reject")} disabled={!!act}
+            style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+            {act==="rejecting"?"...":"✕ Reject"}
+          </button>
+          {(src==="design"||isPO)&&(
+            <button onClick={()=>srcAction("Revision")} disabled={!!act}
+              style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+              {act==="revising"?"...":"↻ Revise"}
+            </button>
+          )}
+          <button onClick={()=>srcAction("approve")} disabled={!!act}
+            style={{flex:isPO?1:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+            {act==="approving"?"Approving...":"✓ Approve"}
+          </button>
+        </div>
         {isRaBill&&(
           <button onClick={()=>{
               const next=isRaExpanded?null:item._source_id;

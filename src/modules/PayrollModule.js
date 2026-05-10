@@ -388,10 +388,255 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
   </>);
 }
 
+// ── EDIT ATTENDANCE MODAL ─────────────────────────────────────────
+function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
+  const [stage,setStage]=useState("range"); // range → grid
+  const ymd=(d,m,y)=>`${y}-${String(m+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+  const [from,setFrom]=useState(ymd(1,month,year));
+  const lastDay=new Date(year,month+1,0).getDate();
+  const [to,setTo]=useState(ymd(Math.min(10,lastDay),month,year));
+  const [edits,setEdits]=useState({}); // {wid:{day:{status,ot}}}
+  const [reason,setReason]=useState("");
+  const [submitting,setSubmitting]=useState(false);
+  const [err,setErr]=useState("");
+
+  const fromD=Number(from.split("-")[2]||1);
+  const toD=Number(to.split("-")[2]||1);
+  const days=Array.from({length:Math.max(0,toD-fromD+1)},(_,i)=>fromD+i);
+
+  const cur=(wid,d)=>edits[wid]?.[d]?.status ?? (att[wid]?.[d]?.status || "");
+  const orig=(wid,d)=>att[wid]?.[d]?.status || "";
+  const setCell=(wid,d,val)=>{
+    setEdits(p=>{
+      const cp={...p,[wid]:{...(p[wid]||{}),[d]:{...(p[wid]?.[d]||{}),status:val}}};
+      // Drop cell if matches original (no edit needed)
+      if (val === orig(wid,d)) { delete cp[wid][d]; if (!Object.keys(cp[wid]).length) delete cp[wid]; }
+      return cp;
+    });
+  };
+
+  const collectChanges=()=>{
+    const out=[];
+    for (const wid of Object.keys(edits)) {
+      const w=workers.find(x=>String(x.id)===String(wid));
+      if (!w) continue;
+      for (const d of Object.keys(edits[wid])) {
+        const ns=edits[wid][d].status;
+        const os=att[wid]?.[d]?.status || "";
+        if (ns===os) continue;
+        out.push({
+          worker_id:Number(wid),
+          worker_name:w.name,
+          date:ymd(Number(d),month,year),
+          old_status:os||null,
+          new_status:ns,
+          old_ot:Number(att[wid]?.[d]?.ot)||0,
+          new_ot:0,
+        });
+      }
+    }
+    return out;
+  };
+
+  const submit=async()=>{
+    setErr("");
+    const changes=collectChanges();
+    if (!changes.length) { setErr("Koi change nahi mila"); return; }
+    if (!reason.trim()) { setErr("Reason zaroori hai"); return; }
+    setSubmitting(true);
+    try{
+      const r=await api.post("/payroll/attendance-edit-requests",{date_from:from,date_to:to,changes,reason:reason.trim()});
+      if (r.success) { onSubmitted?.(); onClose(); }
+      else setErr(r.message||"Submit failed");
+    }catch(e){ setErr(e.message); }
+    setSubmitting(false);
+  };
+
+  const STATUSES=[["P","Present",T.grn],["A","Absent",T.red],["H","Half",T.amb]];
+  const changeCount=collectChanges().length;
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(900px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{padding:"14px 18px",background:"#0D1B2A",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:14,fontWeight:700}}>✏️ Edit Attendance — Bulk Request</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>Changes go to admin for approval</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:18,cursor:"pointer"}}>×</button>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+        {stage==="range"&&(
+          <div>
+            <div style={{fontSize:12,color:T.t3,marginBottom:10}}>Step 1 — Date range select karo (us range ke worker × day cells edit hone ke liye open honge)</div>
+            <div style={{display:"flex",gap:10,alignItems:"center",marginBottom:14}}>
+              <label style={{fontSize:12,color:T.t2,fontWeight:600}}>From</label>
+              <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{padding:"6px 10px",border:`1.5px solid ${T.b1}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+              <label style={{fontSize:12,color:T.t2,fontWeight:600}}>To</label>
+              <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{padding:"6px 10px",border:`1.5px solid ${T.b1}`,borderRadius:6,fontSize:12,fontFamily:"inherit"}}/>
+              <button onClick={()=>{ if (fromD>toD) { setErr("From date To date se pehle honi chahiye"); return; } setErr(""); setStage("grid"); }}
+                style={{marginLeft:"auto",padding:"7px 16px",borderRadius:7,background:T.blu,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                Next → Edit Cells
+              </button>
+            </div>
+            {err&&<div style={{fontSize:12,color:T.red,fontWeight:600}}>{err}</div>}
+          </div>
+        )}
+
+        {stage==="grid"&&(
+          <div>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <div style={{fontSize:12,color:T.t3}}>Step 2 — Cells me dropdown se status badlo. {changeCount>0&&<span style={{color:T.amb,fontWeight:700}}>{changeCount} changes</span>}</div>
+              <button onClick={()=>setStage("range")} style={{padding:"5px 11px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t3,cursor:"pointer"}}>← Back</button>
+            </div>
+            <div style={{overflowX:"auto",border:`1px solid ${T.b1}`,borderRadius:7,maxHeight:300}}>
+              <table style={{borderCollapse:"collapse",fontSize:11.5,width:"100%"}}>
+                <thead style={{background:T.surfaceB,position:"sticky",top:0}}>
+                  <tr>
+                    <th style={{padding:"7px 10px",textAlign:"left",borderBottom:`1px solid ${T.b1}`,minWidth:160}}>Worker</th>
+                    {days.map(d=><th key={d} style={{padding:"7px 4px",textAlign:"center",borderBottom:`1px solid ${T.b1}`,minWidth:62}}>{d}</th>)}
+                  </tr>
+                </thead>
+                <tbody>
+                  {workers.map(w=>(
+                    <tr key={w.id} style={{borderBottom:`1px solid ${T.b1}`}}>
+                      <td style={{padding:"5px 10px",fontWeight:600,color:T.t1}}>{w.name}<div style={{fontSize:9.5,color:T.t4,fontWeight:400}}>{w.trade}</div></td>
+                      {days.map(d=>{
+                        const c=cur(w.id,d), o=orig(w.id,d), changed=c!==o;
+                        return(
+                          <td key={d} style={{padding:"3px 2px",textAlign:"center",background:changed?T.ambL:"transparent"}}>
+                            <select value={c} onChange={e=>setCell(w.id,d,e.target.value)}
+                              style={{padding:"3px 4px",fontSize:11,border:`1px solid ${changed?T.amb:T.b1}`,borderRadius:4,background:"white",cursor:"pointer",fontFamily:"inherit",width:54}}>
+                              <option value="">—</option>
+                              {STATUSES.map(([s,l])=><option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{marginTop:14}}>
+              <label style={{fontSize:12,color:T.t2,fontWeight:600,display:"block",marginBottom:5}}>Reason for change (admin ko dikhega)</label>
+              <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="Eg: Site visit verified — Dinesh was actually present"
+                style={{width:"100%",padding:"7px 10px",border:`1.5px solid ${T.b1}`,borderRadius:6,fontSize:12,fontFamily:"inherit",resize:"vertical"}}/>
+            </div>
+            {err&&<div style={{fontSize:12,color:T.red,fontWeight:600,marginTop:6}}>{err}</div>}
+          </div>
+        )}
+      </div>
+
+      {stage==="grid"&&(
+        <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,justifyContent:"flex-end"}}>
+          <button onClick={onClose} style={{padding:"8px 16px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+          <button onClick={submit} disabled={submitting||changeCount===0}
+            style={{padding:"8px 18px",borderRadius:6,background:changeCount>0?T.blu:T.b2,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:changeCount>0?"pointer":"not-allowed"}}>
+            {submitting?"Sending…":`Send for Approval (${changeCount})`}
+          </button>
+        </div>
+      )}
+    </div>
+  </>);
+}
+
+// ── PENDING APPROVALS DRAWER (admin) ──────────────────────────────
+function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
+  const [items,setItems]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [actingId,setActingId]=useState(null);
+  const [notes,setNotes]=useState({});
+  const load=async()=>{
+    setLoading(true);
+    try{ const r=await api.get("/payroll/attendance-edit-requests?status=pending"); if(r.success) setItems(r.data||[]); }catch(_){}
+    setLoading(false);
+  };
+  useEffect(()=>{load();},[]);
+  const act=async(id,status)=>{
+    setActingId(id);
+    try{
+      const r=await api.patch(`/payroll/attendance-edit-requests/${id}`,{status,approval_notes:notes[id]||null});
+      if(r.success){ setItems(p=>p.filter(x=>x.id!==id)); onProcessed?.(); }
+    }catch(_){}
+    setActingId(null);
+  };
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(800px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{padding:"14px 18px",background:"#0D1B2A",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontSize:14,fontWeight:700}}>📋 Attendance Edit Approvals ({items.length} pending)</div>
+        <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.7)",fontSize:18,cursor:"pointer"}}>×</button>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+        {loading&&<div style={{textAlign:"center",color:T.t4,padding:30}}>Loading…</div>}
+        {!loading&&items.length===0&&<div style={{textAlign:"center",color:T.t4,padding:30}}>Koi pending request nahi</div>}
+        {items.map(req=>(
+          <div key={req.id} style={{border:`1px solid ${T.b1}`,borderRadius:8,padding:12,marginBottom:12,background:T.surfaceB}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+              <div>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>Request #{req.id} · {req.changes?.length||0} changes</div>
+                <div style={{fontSize:11,color:T.t4}}>By {req.requester_name||"User"} · {new Date(req.requested_at).toLocaleString("en-IN")}</div>
+                <div style={{fontSize:11,color:T.t3,marginTop:3}}>Range: {String(req.date_from).split("T")[0]} → {String(req.date_to).split("T")[0]}</div>
+              </div>
+            </div>
+            {req.reason&&<div style={{fontSize:11.5,color:T.t2,padding:"6px 10px",background:T.surface,borderLeft:`3px solid ${T.amb}`,borderRadius:4,marginBottom:8}}><b>Reason:</b> {req.reason}</div>}
+            <div style={{maxHeight:140,overflowY:"auto",border:`1px solid ${T.b1}`,borderRadius:6,background:T.surface,marginBottom:8}}>
+              <table style={{width:"100%",fontSize:11,borderCollapse:"collapse"}}>
+                <thead><tr style={{background:T.surfaceB}}><th style={{padding:"5px 8px",textAlign:"left"}}>Worker</th><th style={{padding:"5px 8px"}}>Date</th><th style={{padding:"5px 8px"}}>Old → New</th></tr></thead>
+                <tbody>
+                  {(req.changes||[]).map((c,i)=>(
+                    <tr key={i} style={{borderTop:`1px solid ${T.b1}`}}>
+                      <td style={{padding:"4px 8px",color:T.t1}}>{c.worker_name}</td>
+                      <td style={{padding:"4px 8px",textAlign:"center",color:T.t3}}>{String(c.date).split("T")[0]}</td>
+                      <td style={{padding:"4px 8px",textAlign:"center"}}><span style={{color:T.t4}}>{c.old_status||"—"}</span> → <span style={{color:T.grn,fontWeight:700}}>{c.new_status}</span></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {isAdmin&&(<>
+              <input value={notes[req.id]||""} onChange={e=>setNotes(p=>({...p,[req.id]:e.target.value}))} placeholder="Note (optional)"
+                style={{width:"100%",padding:"6px 10px",border:`1px solid ${T.b1}`,borderRadius:5,fontSize:11.5,marginBottom:6,fontFamily:"inherit"}}/>
+              <div style={{display:"flex",gap:6,justifyContent:"flex-end"}}>
+                <button disabled={actingId===req.id} onClick={()=>act(req.id,"rejected")} style={{padding:"6px 14px",borderRadius:6,background:T.redL,border:`1px solid ${T.red}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
+                <button disabled={actingId===req.id} onClick={()=>act(req.id,"approved")} style={{padding:"6px 14px",borderRadius:6,background:T.grn,border:"none",color:"white",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>{actingId===req.id?"…":"✓ Approve"}</button>
+              </div>
+            </>)}
+            {!isAdmin&&<div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>Awaiting admin approval</div>}
+          </div>
+        ))}
+      </div>
+    </div>
+  </>);
+}
+
 // ── DAILY WAGES SECTION ───────────────────────────────────────────
-function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,onDailyAttChange,isAdmin}){
+function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,onDailyAttChange,isAdmin,onResync}){
   const [selWorker,setSelWorker]=useState(null);
   const [view,setView]=useState("grid");
+  const [syncing,setSyncing]=useState(false);
+  const [syncMsg,setSyncMsg]=useState("");
+  const [showEditModal,setShowEditModal]=useState(false);
+  const [showApprovalModal,setShowApprovalModal]=useState(false);
+  const [pendingCount,setPendingCount]=useState(0);
+  const loadPendingCount=useCallback(async()=>{
+    try{ const r=await api.get("/payroll/attendance-edit-requests?status=pending"); if(r.success) setPendingCount((r.data||[]).length); }catch(_){}
+  },[]);
+  useEffect(()=>{loadPendingCount();},[loadPendingCount]);
+  const doResync=async()=>{
+    setSyncing(true);setSyncMsg("");
+    try{
+      const r=await api.post("/projects/sync-attendance-to-payroll",{});
+      if(r.success){
+        setSyncMsg(`✓ Synced ${r.data?.synced||0} entries`);
+        if(onResync) await onResync();
+      } else setSyncMsg("Sync failed: "+(r.message||"unknown"));
+    }catch(e){setSyncMsg("Sync error: "+e.message);}
+    setSyncing(false);
+    setTimeout(()=>setSyncMsg(""),4000);
+  };
   const now=new Date();const today=(now.getMonth()===month&&now.getFullYear()===year)?now.getDate():month<now.getMonth()||year<now.getFullYear()?new Date(year,month+1,0).getDate():0;
 
   const filteredWorkers=selProject==="All"?workers:workers.filter(w=>w.project===selProject||w.project==="Multiple"||w.project===null);
@@ -453,6 +698,20 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             <IcDown size={12} color={T.t2}/> Export
           </button>
+          <button onClick={doResync} disabled={syncing} title="Re-sync from project attendance"
+            style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:syncing?T.sltL:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:600,cursor:syncing?"wait":"pointer"}}>
+            {syncing?"⏳ Syncing…":"🔄 Re-sync"}
+          </button>
+          <button onClick={()=>setShowEditModal(true)} title="Bulk edit attendance — sends to admin for approval"
+            style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,color:T.amb,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            ✏️ Edit Attendance
+          </button>
+          <button onClick={()=>setShowApprovalModal(true)} title="View pending approvals"
+            style={{position:"relative",display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+            📋 Approvals
+            {pendingCount>0&&<span style={{position:"absolute",top:-5,right:-5,background:T.red,color:"white",fontSize:9.5,fontWeight:700,padding:"1px 5px",borderRadius:9,minWidth:14,textAlign:"center"}}>{pendingCount}</span>}
+          </button>
+          {syncMsg&&<span style={{fontSize:11,color:syncMsg.startsWith("✓")?T.grn:T.red,fontWeight:600}}>{syncMsg}</span>}
           <div style={{padding:"6px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7}}>
             <span style={{fontSize:11,color:T.grn,fontWeight:600}}>Total Payable (till today): </span>
             <span style={{fontSize:14,fontWeight:800,color:T.grn}}>₹{fmtN(totalPayable)}</span>
@@ -463,13 +722,34 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
       {filteredWorkers.length===0&&<EmptyState icon={<IcTeam size={32} color={T.b2}/>} message="No daily workers found" sub={selProject!=="All"?`No workers for project "${selProject}"`:"Add daily wage workers to track attendance"}/>}
 
       {/* GRID VIEW — calendar grid for each worker */}
-      {view==="grid"&&(
+      {view==="grid"&&(()=>{
+        const daysInMonth=new Date(year,month+1,0).getDate();
+        const dowOf=(d)=>new Date(year,month,d).getDay(); // 0=Sun, 6=Sat
+        const cellMargin=(d)=>dowOf(d)===0 && d!==1 ? "0 0.5px 0 10px" : "0 0.5px"; // wider gap before each Sunday
+        const cellTint=(d)=>{const dow=dowOf(d);return dow===0?T.redL:dow===6?T.surfaceB:"transparent";};
+        return(
         <div style={{overflowX:"auto"}}>
+          {/* Week markers */}
+          <div style={{display:"flex",paddingLeft:180,marginBottom:1,fontSize:8.5,color:T.t4,fontWeight:600}}>
+            {Array.from({length:daysInMonth},(_,i)=>i+1).map(d=>{
+              const dow=dowOf(d);
+              const isSunStart=dow===0||d===1;
+              return <div key={d} style={{width:32,flexShrink:0,textAlign:"center",margin:cellMargin(d)}}>{isSunStart?`Wk${Math.ceil((d+dowOf(1))/7)}`:""}</div>;
+            })}
+          </div>
           {/* Days header */}
           <div style={{display:"flex",marginBottom:3,paddingLeft:180}}>
-            {Array.from({length:new Date(year,month+1,0).getDate()},(_,i)=>i+1).map(d=>(
-              <div key={d} style={{width:32,flexShrink:0,textAlign:"center",fontSize:9.5,fontWeight:400,color:d===today?T.blu:T.t4}}>{d}</div>
-            ))}
+            {Array.from({length:daysInMonth},(_,i)=>i+1).map(d=>{
+              const dow=dowOf(d);
+              const dowLetter=["S","M","T","W","T","F","S"][dow];
+              const isWeekend=dow===0||dow===6;
+              return(
+                <div key={d} style={{width:32,flexShrink:0,textAlign:"center",fontSize:9.5,fontWeight:d===today?700:isWeekend?600:400,color:d===today?T.blu:dow===0?T.red:isWeekend?T.t3:T.t4,margin:cellMargin(d),background:cellTint(d),borderRadius:3,padding:"1px 0"}}>
+                  <div>{d}</div>
+                  <div style={{fontSize:7.5,opacity:.7,marginTop:-1}}>{dowLetter}</div>
+                </div>
+              );
+            })}
             <div style={{width:70,textAlign:"center",fontSize:9.5,color:T.t4,paddingLeft:4}}>Days</div>
             <div style={{width:50,textAlign:"center",fontSize:9.5,color:T.t4}}>OT Hrs</div>
             <div style={{width:80,textAlign:"right",fontSize:9.5,color:T.t4,paddingRight:4}}>Pay (₹)</div>
@@ -486,15 +766,14 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
                 </div>
 
                 {/* Day cells */}
-                {Array.from({length:new Date(year,month+1,0).getDate()},(_,i)=>i+1).map(d=>{
+                {Array.from({length:daysInMonth},(_,i)=>i+1).map(d=>{
                   const dayAtt=att[w.id]?.[d];
                   const status=dayAtt?.status||"A";
                   const sc=ATT_C[status]||ATT_C["A"];
                   return(
                     <div key={d}
-                      onClick={()=>cycleDayStatus(w.id,d)}
-                      style={{width:32,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:sc.bg,borderRadius:4,cursor:"pointer",fontSize:9.5,fontWeight:700,color:sc.c,border:`1px solid transparent`,margin:"0 0.5px",transition:"all .1s"}}
-                      title={`${w.name} Day ${d}: ${status}`}>
+                      style={{width:32,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:sc.bg,borderRadius:4,fontSize:9.5,fontWeight:700,color:sc.c,border:`1px solid transparent`,margin:cellMargin(d)}}
+                      title={`${w.name} Day ${d}: ${status} — Use ✏️ Edit Attendance to change`}>
                       {status}
                     </div>
                   );
@@ -510,12 +789,12 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
             );
           })}
 
-          {/* OT Editor hint */}
+          {/* Hint */}
           <div style={{marginTop:8,fontSize:10.5,color:T.t4,padding:"5px 10px",background:T.surfaceB,borderRadius:5,display:"inline-block"}}>
-            Click cell to toggle P/H/A · To add OT hours → click worker name → expand OT
+            Sun-Sat weekly grouping · Direct edit disabled — Click ✏️ Edit Attendance for bulk edit (admin approval) · OT → click worker name
           </div>
         </div>
-      )}
+        );})()}
 
       {/* WORKER VIEW — detailed per worker */}
       {view==="worker"&&(
@@ -580,6 +859,13 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
           })}
         </div>
       )}
+
+      {showEditModal&&<EditAttendanceModal workers={filteredWorkers} att={att} month={month} year={year}
+        onClose={()=>setShowEditModal(false)}
+        onSubmitted={()=>{loadPendingCount();setSyncMsg("✓ Request sent for approval");setTimeout(()=>setSyncMsg(""),4000);}}/>}
+      {showApprovalModal&&<ApprovalQueueModal isAdmin={isAdmin}
+        onClose={()=>setShowApprovalModal(false)}
+        onProcessed={()=>{loadPendingCount(); if(onResync) onResync();}}/>}
     </div>
   );
 }
@@ -1966,13 +2252,162 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
 // ══════════════════════════════════════════════════════════════════
 // ── DAILY WAGES LABOUR: Payments Tab (Phase 3) ───────────────────
 // ══════════════════════════════════════════════════════════════════
-function DailyPaymentsTab({workers,isAdmin}){
+// ── WORKER PAYMENT DRAWER (right slide) ──────────────────────────
+function WorkerPaymentDrawer({worker,attMonth,month,year,onClose,onMarkPaid,paymentsForWorker,isAdmin}){
+  const today=new Date();
+  const iso=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  const lastSunday=(()=>{const x=new Date(today);x.setDate(x.getDate()-x.getDay());return x;})();
+  const [from,setFrom]=useState(iso(lastSunday));
+  const [to,setTo]=useState(iso(today));
+
+  // Stats: parse from attMonth (current month attendance)
+  const stats=useMemo(()=>{
+    const fromD=new Date(from), toD=new Date(to);
+    let P=0,H=0,A=0,OT=0,total=0;
+    const breakdown=[];
+    for (let dt=new Date(fromD); dt<=toD; dt.setDate(dt.getDate()+1)) {
+      const d=dt.getDate(), m=dt.getMonth(), y=dt.getFullYear();
+      let entry=null;
+      if (m===month && y===year) {
+        entry=attMonth[worker.id]?.[d]||null;
+      }
+      const status=entry?.status||"";
+      const ot=Number(entry?.ot)||0;
+      let dayPay=0;
+      if (status==="P") { P++; dayPay=Number(worker.ratePerDay)+ot*Number(worker.rateOT||0); OT+=ot; }
+      else if (status==="H") { H++; dayPay=Number(worker.ratePerDay)/2; }
+      else if (status==="A") A++;
+      total+=dayPay;
+      breakdown.push({date:iso(dt),status:status||"—",ot,pay:dayPay,dow:dt.getDay()});
+    }
+    return {P,H,A,OT,total,breakdown};
+  },[from,to,attMonth,worker,month,year]);
+
+  // Existing payments for this worker in range
+  const matchingPayments=(paymentsForWorker||[]).filter(p=>{
+    const ps=String(p.period_start||"").split("T")[0];
+    const pe=String(p.period_end||"").split("T")[0];
+    return ps>=from || pe<=to || (ps<=to && pe>=from);
+  });
+  const alreadyPaid=matchingPayments.filter(p=>p.status==="paid").reduce((s,p)=>s+Number(p.net_amount||0),0);
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+    <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(540px,95vw)",background:T.surface,boxShadow:"-12px 0 32px rgba(0,0,0,0.18)",zIndex:401,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
+      {/* Header */}
+      <div style={{padding:"15px 20px",background:"linear-gradient(135deg,#0D1B2A 0%,#1B2C3F 100%)",color:"white",display:"flex",alignItems:"center",gap:12}}>
+        <Avatar name={worker.name} size={42} color={T.amb}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:15,fontWeight:700}}>{worker.name}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>{worker.trade} · ₹{fmtN(worker.ratePerDay)}/day · OT ₹{fmtN(worker.rateOT||0)}/hr</div>
+        </div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:6,color:"white",fontSize:18,width:30,height:30,cursor:"pointer"}}>×</button>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"14px 20px"}}>
+        {/* Date range */}
+        <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+          <div style={{fontSize:11,color:T.t3,fontWeight:600}}>Period:</div>
+          <input type="date" value={from} onChange={e=>setFrom(e.target.value)} style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,fontFamily:"inherit"}}/>
+          <span style={{fontSize:11,color:T.t4}}>to</span>
+          <input type="date" value={to} onChange={e=>setTo(e.target.value)} style={{padding:"5px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,fontFamily:"inherit"}}/>
+          <button onClick={()=>{setFrom(iso(lastSunday));setTo(iso(today));}} style={{padding:"4px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>Last Sun → today</button>
+        </div>
+
+        {/* Stats grid */}
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:14}}>
+          {[
+            {l:"Present",v:stats.P,c:T.grn,bg:T.grnL},
+            {l:"Half Day",v:stats.H,c:T.amb,bg:T.ambL},
+            {l:"Absent",v:stats.A,c:T.red,bg:T.redL},
+            {l:"OT hrs",v:stats.OT,c:T.pur,bg:T.purL},
+          ].map((s,i)=>(
+            <div key={i} style={{padding:"10px 8px",background:s.bg,borderRadius:7,border:`1px solid ${s.c}33`,textAlign:"center"}}>
+              <div style={{fontSize:18,fontWeight:800,color:s.c}}>{s.v}</div>
+              <div style={{fontSize:9.5,color:s.c,fontWeight:600,marginTop:1,textTransform:"uppercase"}}>{s.l}</div>
+            </div>
+          ))}
+        </div>
+
+        {/* Total + Already paid */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+          <div style={{padding:"12px 14px",background:`linear-gradient(135deg,${T.blu}12,${T.blu}06)`,borderRadius:8,border:`1.5px solid ${T.bluM}`}}>
+            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>Period Payable</div>
+            <div style={{fontSize:22,fontWeight:800,color:T.blu,marginTop:3}}>₹{fmtN(stats.total)}</div>
+          </div>
+          <div style={{padding:"12px 14px",background:`linear-gradient(135deg,${T.grn}12,${T.grn}06)`,borderRadius:8,border:`1.5px solid ${T.grnM}`}}>
+            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase"}}>Already Paid</div>
+            <div style={{fontSize:22,fontWeight:800,color:T.grn,marginTop:3}}>₹{fmtN(alreadyPaid)}</div>
+          </div>
+        </div>
+
+        {/* Daily breakdown */}
+        <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:6}}>Daily breakdown</div>
+        <div style={{maxHeight:240,overflowY:"auto",border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:14}}>
+          <table style={{width:"100%",fontSize:11.5,borderCollapse:"collapse"}}>
+            <thead style={{background:T.surfaceB,position:"sticky",top:0}}>
+              <tr><th style={{padding:"6px 10px",textAlign:"left",fontSize:10,color:T.t4,fontWeight:600}}>DATE</th><th style={{padding:"6px 8px",textAlign:"center",fontSize:10,color:T.t4,fontWeight:600}}>DAY</th><th style={{padding:"6px 8px",textAlign:"center",fontSize:10,color:T.t4,fontWeight:600}}>STATUS</th><th style={{padding:"6px 8px",textAlign:"center",fontSize:10,color:T.t4,fontWeight:600}}>OT</th><th style={{padding:"6px 10px",textAlign:"right",fontSize:10,color:T.t4,fontWeight:600}}>PAY</th></tr>
+            </thead>
+            <tbody>
+              {stats.breakdown.map((b,i)=>{
+                const sColor=b.status==="P"?T.grn:b.status==="H"?T.amb:b.status==="A"?T.red:T.t4;
+                const dayName=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][b.dow];
+                return(
+                  <tr key={i} style={{borderTop:`1px solid ${T.b1}`,background:b.dow===0?T.redL+"55":"transparent"}}>
+                    <td style={{padding:"5px 10px",color:T.t1}}>{b.date}</td>
+                    <td style={{padding:"5px 8px",textAlign:"center",color:b.dow===0?T.red:T.t3}}>{dayName}</td>
+                    <td style={{padding:"5px 8px",textAlign:"center"}}><span style={{fontWeight:700,color:sColor}}>{b.status}</span></td>
+                    <td style={{padding:"5px 8px",textAlign:"center",color:T.t3}}>{b.ot||"—"}</td>
+                    <td style={{padding:"5px 10px",textAlign:"right",fontWeight:600,color:b.pay>0?T.t1:T.t4}}>{b.pay>0?`₹${fmtN(b.pay)}`:"—"}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Existing payment records */}
+        {matchingPayments.length>0&&(<>
+          <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:6}}>Payment records ({matchingPayments.length})</div>
+          <div style={{border:`1px solid ${T.b1}`,borderRadius:7,marginBottom:14}}>
+            {matchingPayments.map((p,i)=>{
+              const stColor=p.status==="paid"?T.grn:p.status==="cancelled"?T.slt:T.amb;
+              const stBg=p.status==="paid"?T.grnL:p.status==="cancelled"?T.sltL:T.ambL;
+              return(
+                <div key={p.id} style={{padding:"9px 12px",borderTop:i>0?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>₹{fmtN(p.net_amount)} <span style={{color:T.t4,fontWeight:400}}>({Number(p.days_worked||0)}d, {Number(p.ot_hours||0)}h OT)</span></div>
+                    <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{String(p.period_start).split("T")[0]} → {String(p.period_end).split("T")[0]}</div>
+                  </div>
+                  <span style={{padding:"3px 9px",borderRadius:11,background:stBg,color:stColor,fontSize:10,fontWeight:700,textTransform:"capitalize",border:`1px solid ${stColor}33`}}>{p.status}</span>
+                  {p.status==="pending"&&isAdmin&&<button onClick={()=>onMarkPaid(p,"cash")} style={{padding:"4px 10px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>✓ Mark Paid</button>}
+                </div>
+              );
+            })}
+          </div>
+        </>)}
+
+        {matchingPayments.length===0&&stats.total>0&&(
+          <div style={{padding:12,background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,fontSize:11.5,color:T.amb}}>
+            ⚡ Is period ke liye payment generate nahi hua. Payments tab pe "Generate Payments" button click karo.
+          </div>
+        )}
+      </div>
+    </div>
+    <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+  </>);
+}
+
+function DailyPaymentsTab({workers,isAdmin,attMonth,month,year}){
   // Cycle presets
   const today=new Date();
-  const iso=(d)=>d.toISOString().split("T")[0];
-  const startOfWeek=(d)=>{const x=new Date(d); const day=x.getDay(); x.setDate(x.getDate()-((day+6)%7)); return x;};
+  // TZ-safe local date string
+  const iso=(d)=>`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+  // Sunday-start week (matches user's mental model)
+  const startOfWeek=(d)=>{const x=new Date(d); x.setDate(x.getDate()-x.getDay()); return x;};
   const startOfMonth=(d)=>new Date(d.getFullYear(),d.getMonth(),1);
   const endOfMonth=(d)=>new Date(d.getFullYear(),d.getMonth()+1,0);
+  const [drawerWorker,setDrawerWorker]=useState(null);
 
   const [cycle,setCycle]=useState("weekly"); // weekly | monthly | custom
   const [from,setFrom]=useState(iso(startOfWeek(today)));
@@ -2102,11 +2537,14 @@ function DailyPaymentsTab({workers,isAdmin}){
             const stColor=st==="paid"?T.grn:st==="cancelled"?T.slt:T.amb;
             const stBg=st==="paid"?T.grnL:st==="cancelled"?T.sltL:T.ambL;
             return(
-              <div key={p.id} style={{display:"grid",gridTemplateColumns:"2fr 1.3fr 0.8fr 0.8fr 1.1fr 1.1fr 1fr 140px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?"transparent":T.surfaceB}}>
+              <div key={p.id} style={{display:"grid",gridTemplateColumns:"2fr 1.3fr 0.8fr 0.8fr 1.1fr 1.1fr 1fr 140px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?"transparent":T.surfaceB,cursor:"pointer",transition:"background .1s"}}
+                   onClick={()=>{const w=workers.find(x=>String(x.id)===String(p.worker_id)||x.name===p.worker_name); if(w)setDrawerWorker(w);}}
+                   onMouseEnter={el=>el.currentTarget.style.background=T.bluL}
+                   onMouseLeave={el=>el.currentTarget.style.background=i%2===0?"transparent":T.surfaceB}>
                 <div style={{display:"flex",alignItems:"center",gap:8}}>
                   <Avatar name={p.worker_name||"?"} size={28} color={T.amb}/>
                   <div>
-                    <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{p.worker_name}</div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{p.worker_name} <span style={{fontSize:10,color:T.blu,fontWeight:500}}>›</span></div>
                     {p.project&&<div style={{fontSize:10,color:T.t4}}>{p.project}</div>}
                   </div>
                 </div>
@@ -2118,7 +2556,7 @@ function DailyPaymentsTab({workers,isAdmin}){
                 <span style={{fontSize:12,color:T.t2}}>₹{fmtN(p.gross_amount)}</span>
                 <span style={{fontSize:13,fontWeight:800,color:st==="paid"?T.grn:T.t1}}>₹{fmtN(p.net_amount)}</span>
                 <span style={{display:"inline-flex",padding:"3px 9px",borderRadius:12,background:stBg,color:stColor,fontSize:10.5,fontWeight:700,border:`1px solid ${stColor}44`,textTransform:"capitalize",alignSelf:"flex-start"}}>{st}</span>
-                <div style={{display:"flex",gap:5}}>
+                <div style={{display:"flex",gap:5}} onClick={e=>e.stopPropagation()}>
                   {st==="pending"&&isAdmin&&<>
                     <button onClick={()=>markPaid(p,"cash")} title="Mark Paid (Cash)"
                       style={{padding:"4px 9px",borderRadius:6,background:T.grn,color:"white",fontSize:10.5,fontWeight:700,border:"none",cursor:"pointer"}}>
@@ -2135,6 +2573,29 @@ function DailyPaymentsTab({workers,isAdmin}){
           })}
         </div>
       }
+
+      {/* Worker quick-pick — view drawer for any worker even if no payment row yet */}
+      {workers.length>0&&(
+        <div style={{marginTop:14,padding:"10px 14px",background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9}}>
+          <div style={{fontSize:11,color:T.t3,fontWeight:600,marginBottom:6}}>Quick view — click any worker for full breakdown</div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {workers.slice(0,20).map(w=>(
+              <button key={w.id} onClick={()=>setDrawerWorker(w)}
+                style={{padding:"5px 11px",borderRadius:14,background:T.surface,border:`1px solid ${T.b1}`,fontSize:11,color:T.t2,cursor:"pointer",fontFamily:"inherit",transition:"all .1s"}}
+                onMouseEnter={el=>{el.currentTarget.style.background=T.bluL;el.currentTarget.style.borderColor=T.blu;el.currentTarget.style.color=T.blu;}}
+                onMouseLeave={el=>{el.currentTarget.style.background=T.surface;el.currentTarget.style.borderColor=T.b1;el.currentTarget.style.color=T.t2;}}>
+                {w.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {drawerWorker&&<WorkerPaymentDrawer worker={drawerWorker} attMonth={attMonth||{}} month={month} year={year}
+        onClose={()=>setDrawerWorker(null)}
+        onMarkPaid={(p,m)=>{markPaid(p,m);setDrawerWorker(null);}}
+        paymentsForWorker={payments.filter(p=>String(p.worker_id)===String(drawerWorker.id)||p.worker_name===drawerWorker.name)}
+        isAdmin={isAdmin}/>}
     </div>
   );
 }
@@ -2142,6 +2603,112 @@ function DailyPaymentsTab({workers,isAdmin}){
 // ══════════════════════════════════════════════════════════════════
 // ── DAILY WAGES LABOUR: Settings Tab (Phase 3) ───────────────────
 // ══════════════════════════════════════════════════════════════════
+// ── RATE HISTORY DRAWER (right slide) ──────────────────────────────
+// Shows full audit trail for a skill's rate changes — who requested, who approved
+function RateHistoryDrawer({skill,onClose}){
+  const [data,setData]=useState(null);
+  const [loading,setLoading]=useState(true);
+  useEffect(()=>{
+    setLoading(true);
+    api.get(`/library/labour-rates/${skill.id}/history`)
+      .then(r=>{ if(r.success) setData(r.data); })
+      .finally(()=>setLoading(false));
+  },[skill.id]);
+
+  const STATUS_C={
+    Pending:{c:T.amb,bg:T.ambL,brd:T.ambM,icon:"⏳"},
+    Approved:{c:T.grn,bg:T.grnL,brd:T.grnM,icon:"✓"},
+    Rejected:{c:T.red,bg:T.redL,brd:T.redM,icon:"✕"},
+  };
+  const fmtDate=(d)=>{ if(!d) return "—"; try{ return new Date(d).toLocaleString("en-IN",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}); }catch{return String(d).split("T")[0];} };
+  const items = data?.history || [];
+
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+    <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(560px,95vw)",background:T.surface,boxShadow:"-12px 0 32px rgba(0,0,0,0.18)",zIndex:401,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+      {/* Header */}
+      <div style={{padding:"15px 20px",background:"linear-gradient(135deg,#0D1B2A 0%,#1B2C3F 100%)",color:"white",display:"flex",alignItems:"center",gap:12}}>
+        <div style={{width:42,height:42,borderRadius:10,background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>👷</div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:15,fontWeight:700}}>{skill.role}</div>
+          <div style={{fontSize:11,color:"rgba(255,255,255,0.6)",marginTop:2}}>
+            {skill.category||"—"} · Current: <b style={{color:"white"}}>₹{Number(skill.rate||0).toLocaleString("en-IN")}/day</b>
+          </div>
+        </div>
+        <button onClick={onClose} style={{background:"rgba(255,255,255,0.12)",border:"1px solid rgba(255,255,255,0.18)",borderRadius:6,color:"white",fontSize:18,width:30,height:30,cursor:"pointer"}}>×</button>
+      </div>
+
+      <div style={{flex:1,overflowY:"auto",padding:"14px 20px"}}>
+        <div style={{fontSize:12,fontWeight:700,color:T.t2,marginBottom:8,letterSpacing:".3px",textTransform:"uppercase"}}>Rate Change History</div>
+        {loading&&<div style={{textAlign:"center",padding:40,color:T.t4}}><div style={{width:24,height:24,border:`2.5px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin .8s linear infinite",margin:"0 auto 8px"}}/>Loading history…</div>}
+        {!loading&&items.length===0&&(
+          <div style={{textAlign:"center",padding:36,color:T.t4,fontSize:12.5,background:T.surfaceB,borderRadius:8,border:`1px dashed ${T.b1}`}}>
+            <div style={{fontSize:30,marginBottom:8}}>📋</div>
+            Abhi tak koi rate change request nahi hua hai
+          </div>
+        )}
+        {!loading&&items.map((h,i)=>{
+          const st=STATUS_C[h.status]||STATUS_C.Pending;
+          const delta=Number(h.requested_rate||0)-Number(h.current_rate||0);
+          const isFirst=i===0;
+          return(
+            <div key={h.id} style={{position:"relative",marginBottom:12,background:T.surface,borderRadius:9,border:`1.5px solid ${st.brd}`,boxShadow:isFirst?`0 2px 8px ${st.c}22`:"none"}}>
+              {/* Top status badge */}
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 13px",background:st.bg,borderBottom:`1px solid ${st.brd}`,borderRadius:"7.5px 7.5px 0 0"}}>
+                <span style={{fontSize:11,fontWeight:700,color:st.c,textTransform:"uppercase",letterSpacing:".4px",display:"flex",alignItems:"center",gap:5}}>
+                  <span>{st.icon}</span> {h.status}
+                  {isFirst&&<span style={{marginLeft:5,fontSize:9,padding:"1px 6px",borderRadius:8,background:st.c,color:"white",letterSpacing:".3px"}}>LATEST</span>}
+                </span>
+                <span style={{fontSize:10.5,color:T.t3}}>{fmtDate(h.created_at)}</span>
+              </div>
+              {/* Rate change diff */}
+              <div style={{padding:"10px 13px"}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:12,color:T.t3}}>From</span>
+                  <span style={{fontSize:14,fontWeight:700,color:T.t1,padding:"3px 10px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`}}>₹{Number(h.current_rate||0).toLocaleString("en-IN")}</span>
+                  <span style={{fontSize:14,color:T.blu,fontWeight:700}}>→</span>
+                  <span style={{fontSize:14,fontWeight:700,color:T.t1,padding:"3px 10px",background:T.bluL,borderRadius:6,border:`1px solid ${T.bluM}`}}>₹{Number(h.requested_rate||0).toLocaleString("en-IN")}</span>
+                  <span style={{fontSize:11,fontWeight:700,color:delta>0?T.amb:T.grn,marginLeft:"auto"}}>{delta>0?"+":""}{delta.toLocaleString("en-IN")}</span>
+                </div>
+                {h.apply_scope&&(
+                  <div style={{fontSize:10.5,color:h.apply_scope==="all"?T.amb:T.t3,fontWeight:600,marginBottom:6,padding:"3px 8px",background:h.apply_scope==="all"?T.ambL:T.surfaceB,borderRadius:5,display:"inline-block",border:`1px solid ${h.apply_scope==="all"?T.ambM:T.b1}`}}>
+                    {h.apply_scope==="all"?"🔄 Applied to ALL existing workers":"📋 Applied to new appointments only"}
+                  </div>
+                )}
+                {h.reason&&(
+                  <div style={{fontSize:11.5,color:T.t2,fontStyle:"italic",padding:"6px 10px",background:T.surfaceB,borderLeft:`3px solid ${T.amb}`,borderRadius:4,marginBottom:8}}>
+                    "{h.reason}"
+                  </div>
+                )}
+                {/* Audit trail — requested by + approver */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,paddingTop:8,borderTop:`1px solid ${T.b1}`}}>
+                  <div>
+                    <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>Requested by</div>
+                    <div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{h.requested_by_name||"—"}</div>
+                  </div>
+                  <div>
+                    <div style={{fontSize:9,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px",marginBottom:2}}>{h.status==="Approved"?"Approved by":h.status==="Rejected"?"Rejected by":"Awaiting"}</div>
+                    <div style={{fontSize:11.5,fontWeight:600,color:h.status==="Approved"?T.grn:h.status==="Rejected"?T.red:T.t4}}>
+                      {h.approved_by_name||(h.status==="Pending"?"admin approval":"—")}
+                    </div>
+                    {h.acted_at&&<div style={{fontSize:10,color:T.t4,marginTop:1}}>{fmtDate(h.acted_at)}</div>}
+                  </div>
+                </div>
+                {h.action_remarks&&(
+                  <div style={{marginTop:8,fontSize:11,color:T.t3,padding:"5px 9px",background:T.surfaceB,borderRadius:5}}>
+                    <span style={{fontWeight:700,color:T.t4}}>Note: </span>{h.action_remarks}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+    <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
+  </>);
+}
+
 function DailyWagesSettingsTab(){
   // Sync with Library → Labour Rate Card (single source of truth)
   const [rates,setRates]=useState([]);  // Array of {id, role, rate, ot_rate, category, description}
@@ -2161,6 +2728,7 @@ function DailyWagesSettingsTab(){
   useEffect(()=>{ loadRates(); },[]);
 
   const [scopeModal, setScopeModal] = useState(null); // {item, newRate}
+  const [historySkill, setHistorySkill] = useState(null);
   const submitRateChange = async (item, newRate, scope, reason) => {
     setSavingRow(item.id);
     try{
@@ -2221,8 +2789,11 @@ function DailyWagesSettingsTab(){
             : <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {rates.map(r=>(
                   <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"6px 0",borderBottom:`1px dashed ${T.b1}`}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12.5,color:T.t1,fontWeight:600}}>{r.role}</div>
+                    <div onClick={()=>setHistorySkill(r)} title="Click to see rate change history"
+                      style={{flex:1,cursor:"pointer",padding:"3px 6px",borderRadius:5,transition:"background .12s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bluL}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                      <div style={{fontSize:12.5,color:T.t1,fontWeight:600,display:"flex",alignItems:"center",gap:4}}>{r.role}<span style={{fontSize:9.5,color:T.blu,fontWeight:500,marginLeft:2}}>›</span></div>
                       {r.category&&<div style={{fontSize:10,color:T.t4}}>{r.category}</div>}
                     </div>
                     <div style={{display:"flex",alignItems:"center",gap:4}}>
@@ -2304,6 +2875,9 @@ function DailyWagesSettingsTab(){
           </div>
         </div>
       </>)}
+
+      {/* Rate change history drawer (right slide) */}
+      {historySkill&&<RateHistoryDrawer skill={historySkill} onClose={()=>setHistorySkill(null)}/>}
     </div>
   );
 }
@@ -2600,10 +3174,10 @@ function PayrollModule(){
           <DailyWorkersTab workers={workers} setWorkers={setWorkers} isAdmin={isAdmin}/>
         )}
         {mode==="daily" && tab==="daily-att" && (
-          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange} isAdmin={isAdmin}/>
+          <DailyWagesTab workers={workers} att={dailyAtt} setAtt={setDailyAtt} selProject={selProject} setSelProject={setSelProject} month={month} year={year} onDailyAttChange={onDailyAttChange} isAdmin={isAdmin} onResync={loadAttendance}/>
         )}
         {mode==="daily" && tab==="daily-payments" && (
-          <DailyPaymentsTab workers={workers} isAdmin={isAdmin}/>
+          <DailyPaymentsTab workers={workers} isAdmin={isAdmin} attMonth={dailyAtt} month={month} year={year}/>
         )}
         {mode==="daily" && tab==="daily-settings" && (
           isAdmin
