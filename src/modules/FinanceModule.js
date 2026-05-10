@@ -1865,8 +1865,11 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
     "High":  {c:T.red, bg:T.redL, brd:T.redM},
     "Urgent":{c:"#7C3AED",bg:"#F5F3FF",brd:"#DDD6FE"},
   };
+  const savingRef=useRef(false);
   const handleSave=async()=>{
+    if(savingRef.current) return; // hard guard against double-fire
     if(!party||!purpose||!amount){setErr("Party, Purpose & Amount are required");return;}
+    savingRef.current=true;
     setSaving(true);setErr("");
     try{
       const res=await api.post("/finance/payment-requests",{
@@ -1879,10 +1882,11 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
         priority,
         note:note||null,
       });
-      if(res?.success===false){setErr(res.message||"Save failed");setSaving(false);return;}
+      if(res?.success===false){setErr(res.message||"Save failed");setSaving(false);savingRef.current=false;return;}
       onSave&&onSave();
       onClose();
     }catch(e){setErr(e?.message||"Network error");setSaving(false);}
+    savingRef.current=false;
   };
   const inp={height:34,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,width:"100%"};
   return(
@@ -1980,6 +1984,10 @@ function FinanceModule(){
   const [grnLoading,setGrnLoading]=useState(false);
   const [grnFilter,setGrnFilter]=useState({project:"All",material:"",head:"All"});
   const [prefillGRNData,setPrefillGRNData]=useState(null);
+  // Unbilled UI: which vendor card is expanded, and which items are ticked.
+  // selectedUBItems is a Set of stable keys "grnId-itemIdx".
+  const [expandedVendor,setExpandedVendor]=useState(null);
+  const [selectedUBItems,setSelectedUBItems]=useState(()=>new Set());
   // Bill-conflict warning state — populated by the +Bill pre-flight check
   // when the same GRN or same vendor+challan has been billed already.
   const [conflictData,setConflictData]=useState(null);
@@ -3650,105 +3658,207 @@ function FinanceModule(){
           {!grnLoading&&grnList.length>0&&(()=>{
             const filtered=grnList.filter(g=>{
               if(grnFilter.project!=="All"&&g.project_name!==grnFilter.project) return false;
-              if(grnFilter.material&&!g.vendor_name?.toLowerCase().includes(grnFilter.material.toLowerCase())) return false;
+              if(grnFilter.material){
+                const q=grnFilter.material.toLowerCase();
+                const inVendor=(g.vendor_name||"").toLowerCase().includes(q);
+                const inItems=(g.items||[]).some(it=>(it.description||"").toLowerCase().includes(q));
+                if(!inVendor&&!inItems) return false;
+              }
               return true;
             });
 
             if(filtered.length===0) return <div style={{textAlign:"center",padding:"40px",color:T.t4}}>No GRN matches filters</div>;
 
+            // Vendor-wise grouping: collect every GRN under its vendor name,
+            // flatten items with their parent-GRN ref for checkbox-driven billing.
+            const groups={};
+            filtered.forEach(g=>{
+              const v=(g.vendor_name||"— Unknown Vendor —").trim()||"— Unknown Vendor —";
+              if(!groups[v]) groups[v]={vendor:v,grns:[],items:[],hasOrphan:false};
+              groups[v].grns.push(g);
+              if(g.has_orphan_vendor_bills) groups[v].hasOrphan=true;
+              (g.items||[]).forEach((it,idx)=>{
+                groups[v].items.push({
+                  key:`${g.id}-${idx}`,
+                  grn:g,
+                  name:it.description||"—",
+                  qty:parseFloat(it.received_qty)||0,
+                  unit:it.unit||"",
+                  recvDate:g.received_date,
+                  project:g.project_name||"—",
+                  challan:g.challan_no||"",
+                  grnNumber:g.grn_number,
+                });
+              });
+            });
+            const groupArr=Object.values(groups).sort((a,b)=>a.vendor.localeCompare(b.vendor));
+
+            const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—";
+
+            // When user clicks "Create Bill" we merge all ticked items into one
+            // Material Purchase prefill. Metadata (challan/date/project/grnId)
+            // is taken from the FIRST ticked item's parent GRN; if items span
+            // multiple GRNs we surface that as an info banner inside the modal
+            // (forceMultiGRN). Conflict check still runs against the first GRN.
+            const buildPrefillFromSelected=(vendorName)=>{
+              const grp=groups[vendorName];
+              if(!grp) return null;
+              const picked=grp.items.filter(it=>selectedUBItems.has(it.key));
+              if(picked.length===0) return null;
+              const primary=picked[0].grn;
+              const uniqueGrnIds=[...new Set(picked.map(p=>p.grn.id))];
+              const uniqueChallans=[...new Set(picked.map(p=>p.challan).filter(Boolean))];
+              return {
+                grnNumber:primary.grn_number,
+                grnId:primary.id,
+                grnIds:uniqueGrnIds,
+                receivedDate:primary.received_date,
+                vendor:primary.vendor_name||"",
+                challan:uniqueChallans.join(", ")||primary.challan_no||"",
+                deliveryDate:primary.received_date?primary.received_date.split("T")[0]:"",
+                project:primary.project_name||"",
+                items:picked.map(p=>({
+                  name:p.name,
+                  qty:p.qty,
+                  unit:p.unit||"Bag",
+                  rate:"",
+                  head:"Civil",
+                  desc:p.grnNumber?`From ${p.grnNumber}`:"",
+                })),
+              };
+            };
+
+            const handleCreateBill=async(vendorName)=>{
+              const prefill=buildPrefillFromSelected(vendorName);
+              if(!prefill){alert("Pehle kuch items tick karo");return;}
+              const primary=groups[vendorName].items.find(it=>selectedUBItems.has(it.key))?.grn;
+              try{
+                const params=new URLSearchParams({
+                  vendor:vendorName,
+                  challan:primary?.challan_no||"",
+                  grn_id:primary?.id||"",
+                  project_id:primary?.project_id||"",
+                });
+                const cf=await api.get("/finance/check-bill-conflict?"+params.toString());
+                if(cf?.success&&cf.data?.has_conflict){
+                  setConflictData({...cf.data,prefill,vendorName});
+                  return;
+                }
+              }catch(e){console.warn("conflict check failed:",e.message);}
+              openTxn("Material Purchase Bill",vendorName,prefill);
+              setSelectedUBItems(new Set());
+            };
+
+            const totalSelected=selectedUBItems.size;
+            const totalItems=groupArr.reduce((s,g)=>s+g.items.length,0);
+
             return(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {/* Header */}
-                <div style={{display:"grid",gridTemplateColumns:"110px 1fr 140px 100px 90px 110px",padding:"6px 14px",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`}}>
-                  {["GRN #","Vendor","Project","Delivery","Type","Action"].map((h,i)=>(
-                    <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
-                  ))}
+                {/* Section header */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:T.purL,border:`1px solid ${T.pur}33`,borderRadius:7}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:13,fontWeight:700,color:T.pur,letterSpacing:".2px"}}>UNBILLED MATERIAL — Vendor wise</span>
+                    <span style={{fontSize:11,color:T.t3}}>· {groupArr.length} vendor{groupArr.length===1?"":"s"} · {totalItems} item{totalItems===1?"":"s"}</span>
+                  </div>
+                  {totalSelected>0&&(
+                    <span style={{fontSize:11,color:T.pur,fontWeight:700,background:"white",padding:"3px 10px",borderRadius:20,border:`1px solid ${T.pur}55`}}>
+                      {totalSelected} item{totalSelected===1?"":"s"} selected
+                    </span>
+                  )}
                 </div>
 
-                {filtered.map(grn=>{
-                  const delivDate=grn.received_date?new Date(grn.received_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—";
-                  // P2: orphan-bill warning — backend flags vendors that have unlinked bills
-                  const hasOrphanWarning=!!grn.has_orphan_vendor_bills;
+                {groupArr.map(grp=>{
+                  const isOpen=expandedVendor===grp.vendor;
+                  const selectedInGrp=grp.items.filter(it=>selectedUBItems.has(it.key)).length;
+                  const allTicked=selectedInGrp===grp.items.length&&grp.items.length>0;
+                  const someTicked=selectedInGrp>0&&!allTicked;
                   return(
-                    <div key={grn.id} style={{background:T.surface,borderRadius:8,border:`1px solid ${hasOrphanWarning?T.ambM:T.b1}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-                      {hasOrphanWarning&&(
+                    <div key={grp.vendor} style={{background:T.surface,borderRadius:8,border:`1px solid ${grp.hasOrphan?T.ambM:T.b1}`,overflow:"hidden",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+                      {grp.hasOrphan&&(
                         <div style={{padding:"5px 14px",background:T.ambL,borderBottom:`1px solid ${T.ambM}`,fontSize:10.5,color:T.amb,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
                           <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
-                          <span>⚠ {grn.orphan_bills_count||"Kuch"} bill{(grn.orphan_bills_count||0)!==1?"s":""} {grn.vendor_name} ke against bina GRN-link ke pehle se hain — Fin Activity me check karo, duplicate na ban jaaye</span>
+                          <span>⚠ Is vendor ke kuch bills already bina GRN-link ke hain — Fin Activity me check karo, duplicate na ban jaaye</span>
                         </div>
                       )}
-                      <div style={{display:"grid",gridTemplateColumns:"110px 1fr 140px 100px 90px 110px",padding:"11px 14px",alignItems:"center",cursor:"pointer",transition:"background 0.1s"}}
+                      {/* Vendor row */}
+                      <div onClick={()=>setExpandedVendor(isOpen?null:grp.vendor)}
+                        style={{padding:"12px 14px",display:"flex",alignItems:"center",gap:12,cursor:"pointer",transition:"background 0.1s"}}
                         onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                         onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
-                        {/* GRN # */}
-                        <span style={{fontSize:11.5,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{grn.grn_number}</span>
-                        {/* Vendor */}
-                        <div>
-                          <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{grn.vendor_name||"—"}</div>
-                          <div style={{fontSize:10.5,color:T.t4}}>Challan: {grn.challan_no||"—"}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:13.5,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{grp.vendor}</div>
+                          <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>
+                            {grp.grns.length} GRN{grp.grns.length===1?"":"s"}
+                            {" · "}
+                            {[...new Set(grp.grns.map(g=>g.project_name).filter(Boolean))].slice(0,2).join(", ")||"—"}
+                            {[...new Set(grp.grns.map(g=>g.project_name).filter(Boolean))].length>2?", …":""}
+                          </div>
                         </div>
-                        {/* Project */}
-                        <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{grn.project_name||"—"}</span>
-                        {/* Delivery date */}
-                        <span style={{fontSize:11.5,color:T.t3}}>{delivDate}</span>
-                        {/* GRN type */}
-                        <span style={{display:"inline-block",padding:"2px 8px",borderRadius:20,fontSize:10,fontWeight:600,background:grn.grn_type==="Full"?T.grnL:T.ambL,color:grn.grn_type==="Full"?T.grn:T.amb,border:`1px solid ${grn.grn_type==="Full"?T.grnM:T.ambM}`}}>{grn.grn_type||"Full"}</span>
-                        {/* Action */}
-                        <button onClick={async ()=>{
-                          // Build prefill data for Material Purchase Bill
-                          const prefill={
-                            grnNumber:   grn.grn_number,
-                            grnId:       grn.id,
-                            receivedDate:grn.received_date,
-                            vendor:      grn.vendor_name||"",
-                            challan:     grn.challan_no||"",
-                            deliveryDate:grn.received_date?grn.received_date.split("T")[0]:"",
-                            project:     grn.project_name||"",
-                            items:(grn.items||[]).map(it=>({
-                              name:  it.description||"",
-                              qty:   it.received_qty||0,
-                              unit:  it.unit||"Bag",
-                              rate:  "",
-                              head:  "Civil",
-                              desc:  "",
-                            })),
-                          };
-                          // Pre-flight conflict check — block the bill modal if
-                          // the same challan+vendor or the same GRN was already
-                          // billed. User has to explicitly Force New Bill with reason.
-                          try {
-                            const params = new URLSearchParams({
-                              vendor:    grn.vendor_name||"",
-                              challan:   grn.challan_no||"",
-                              grn_id:    grn.id,
-                              project_id:grn.project_id||"",
-                            });
-                            const cf = await api.get("/finance/check-bill-conflict?"+params.toString());
-                            if (cf?.success && cf.data?.has_conflict) {
-                              setConflictData({...cf.data, prefill, vendorName: grn.vendor_name||""});
-                              return;
-                            }
-                          } catch(e) { console.warn("conflict check failed:", e.message); }
-                          openTxn("Material Purchase Bill", grn.vendor_name||"", prefill);
-                        }}
-                          style={{padding:"5px 11px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
-                          + Bill
-                        </button>
+                        {selectedInGrp>0&&(
+                          <span style={{fontSize:10.5,color:T.blu,fontWeight:700,background:T.bluL,padding:"3px 9px",borderRadius:20,border:`1px solid ${T.bluM}`}}>
+                            ✓ {selectedInGrp} ticked
+                          </span>
+                        )}
+                        <span style={{background:T.purL,color:T.pur,fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:20,border:`1px solid ${T.pur}22`,whiteSpace:"nowrap"}}>
+                          {grp.items.length} item{grp.items.length===1?"":"s"}
+                        </span>
+                        <span style={{color:T.t4,fontSize:14,transform:isOpen?"rotate(180deg)":"rotate(0deg)",transition:"transform 0.15s",display:"inline-block"}}>⌄</span>
                       </div>
 
-                      {/* GRN items preview */}
-                      {grn.items&&grn.items.length>0&&(
-                        <div style={{borderTop:`1px solid ${T.b1}`,background:T.surfaceB,padding:"8px 14px"}}>
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 80px 60px",gap:4,marginBottom:4}}>
-                            {["Item","Qty Received","Unit"].map((h,i)=><span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                      {/* Expanded — checkbox list of items */}
+                      {isOpen&&(
+                        <div style={{borderTop:`1px solid ${T.b1}`,background:T.surfaceB,padding:"10px 14px"}}>
+                          <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>
+                            SELECT MATERIAL RECEIVED — {grp.vendor}
                           </div>
-                          {grn.items.map((it,ii)=>(
-                            <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 80px 60px",gap:4,padding:"4px 0",borderTop:`1px solid ${T.b1}`}}>
-                              <span style={{fontSize:12,color:T.t1}}>{it.description||"—"}</span>
-                              <span style={{fontSize:11.5,color:T.t2,fontWeight:600}}>{it.received_qty}</span>
-                              <span style={{fontSize:11.5,color:T.t3}}>{it.unit||"—"}</span>
-                            </div>
-                          ))}
+                          {/* Header w/ master checkbox */}
+                          <div style={{display:"grid",gridTemplateColumns:"26px 1fr 90px 70px 60px 110px 100px",gap:6,padding:"6px 8px",background:T.surface,borderRadius:6,border:`1px solid ${T.b1}`,alignItems:"center"}}>
+                            <input type="checkbox" checked={allTicked}
+                              ref={el=>{if(el) el.indeterminate=someTicked;}}
+                              onChange={e=>{
+                                const next=new Set(selectedUBItems);
+                                if(e.target.checked){grp.items.forEach(it=>next.add(it.key));}
+                                else{grp.items.forEach(it=>next.delete(it.key));}
+                                setSelectedUBItems(next);
+                              }}
+                              style={{cursor:"pointer",width:14,height:14,accentColor:T.blu}}/>
+                            {["Material","Project","GRN #","Qty","Unit","Received"].map((h,i)=>(
+                              <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",textAlign:i===3?"right":"left"}}>{h}</span>
+                            ))}
+                          </div>
+                          {/* Item rows */}
+                          {grp.items.map(it=>{
+                            const ticked=selectedUBItems.has(it.key);
+                            return(
+                              <label key={it.key}
+                                style={{display:"grid",gridTemplateColumns:"26px 1fr 90px 70px 60px 110px 100px",gap:6,padding:"7px 8px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:ticked?T.bluL+"55":"transparent",transition:"background 0.1s"}}>
+                                <input type="checkbox" checked={ticked}
+                                  onChange={()=>{
+                                    const next=new Set(selectedUBItems);
+                                    if(ticked) next.delete(it.key); else next.add(it.key);
+                                    setSelectedUBItems(next);
+                                  }}
+                                  style={{cursor:"pointer",width:14,height:14,accentColor:T.blu}}/>
+                                <span style={{fontSize:12,color:T.t1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.name}</span>
+                                <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.project}</span>
+                                <span style={{fontSize:11,color:T.blu,fontFamily:"monospace",fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.grnNumber}</span>
+                                <span style={{fontSize:11.5,color:T.t2,fontWeight:700,textAlign:"right"}}>{it.qty}</span>
+                                <span style={{fontSize:11,color:T.t3}}>{it.unit||"—"}</span>
+                                <span style={{fontSize:10.5,color:T.t4}}>{fmtDate(it.recvDate)}</span>
+                              </label>
+                            );
+                          })}
+                          {/* Footer — Create Bill */}
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:10,borderTop:`1.5px solid ${T.b1}`}}>
+                            <span style={{fontSize:11.5,color:T.t3}}>
+                              {selectedInGrp>0?`${selectedInGrp} item${selectedInGrp===1?"":"s"} ticked — bill banayenge`:"Select items above to bill them"}
+                            </span>
+                            <button disabled={selectedInGrp===0}
+                              onClick={()=>handleCreateBill(grp.vendor)}
+                              style={{padding:"7px 16px",borderRadius:7,background:selectedInGrp>0?T.blu:T.t4,color:"white",border:"none",cursor:selectedInGrp>0?"pointer":"not-allowed",fontSize:12,fontWeight:700,opacity:selectedInGrp>0?1:0.55,display:"flex",alignItems:"center",gap:5,whiteSpace:"nowrap"}}>
+                              + Create Bill
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
