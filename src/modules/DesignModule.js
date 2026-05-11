@@ -281,10 +281,19 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
         </div>
         <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
           <button onClick={onClose} disabled={uploading} style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-          <button onClick={upload} disabled={uploading||!file||!form.title||!form.project_id}
-            style={{flex:2,padding:"9px",borderRadius:7,background:uploading||!file||!form.title||!form.project_id?T.b1:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:uploading?"not-allowed":"pointer"}}>
-            {uploading?"Uploading...":"⬆ Upload Drawing"}
-          </button>
+          {(() => {
+            // Project_id optional when this upload is satisfying a Site
+            // Drawing Request — the request itself carries the link (often
+            // lead-only, before a project even exists).
+            const needProject = !prefill?.linked_request_id;
+            const blocked = uploading || !file || !form.title || (needProject && !form.project_id);
+            return (
+              <button onClick={upload} disabled={blocked}
+                style={{flex:2,padding:"9px",borderRadius:7,background:blocked?T.b1:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:uploading?"not-allowed":"pointer"}}>
+                {uploading?"Uploading...":"⬆ Upload Drawing"}
+              </button>
+            );
+          })()}
         </div>
       </div>
     </>
