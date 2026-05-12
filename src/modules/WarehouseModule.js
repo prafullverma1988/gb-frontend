@@ -267,7 +267,7 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
 }
 
 // ── LINE-ITEM ROW (used by GRN, Issue, MR, Transfer modals) ───────
-function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove}){
+function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove,lockMaterial}){
   // SearchSelect returns string keys; stock may have number ids — compare loosely
   const findStock=(id)=>stock.find(m=>String(m.id)===String(id));
   const matSel=findStock(row.material_id);
@@ -294,7 +294,18 @@ function LineItemRow({row,idx,stock,onChange,onRemove,mode,canRemove}){
 
   return (
     <div style={{display:"grid",gridTemplateColumns:cols,gap:6,alignItems:"center",marginBottom:6}}>
-      {mode==="issue"?(
+      {lockMaterial?(
+        // MR-driven flow: material is decided by the parent MR — no change allowed.
+        // Show as a non-interactive locked chip so the user sees what's being issued.
+        <div title="MR me yahi material approve hua hai — change nahi ho sakta"
+          style={{display:"flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:6,background:T.surfaceB,border:`1.5px solid ${T.b1}`,fontFamily:"inherit",minHeight:32}}>
+          <span style={{fontSize:11,opacity:.55}}>🔒</span>
+          <span style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+            {row.name||"—"}
+          </span>
+          {matSel&&<span style={{fontSize:10,color:T.t4,marginLeft:"auto",whiteSpace:"nowrap"}}>{matSel.qty} avail</span>}
+        </div>
+      ):mode==="issue"?(
         <SearchSelect compact value={row.material_id} options={stockOpts}
           onChange={onPickMaterial} placeholder="Pick material from stock..."/>
       ):(
@@ -790,8 +801,20 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
           <div style={{color:T.amb,fontSize:24,fontWeight:800}}>→</div>
           <div>
             <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>To Project *</div>
-            <SearchSelect compact value={f.project_id} options={projects}
-              onChange={v=>upd("project_id",v)} placeholder="Project select karo"/>
+            {fromMR?(
+              // MR-driven flow: project is fixed by the parent MR
+              <div title="MR me yahi project decide ho chuka hai — change nahi ho sakta"
+                style={{display:"flex",alignItems:"center",gap:6,padding:"7px 11px",borderRadius:6,background:T.surfaceB,border:`1.5px solid ${T.b1}`,fontFamily:"inherit"}}>
+                <span style={{fontSize:11,opacity:.55}}>🔒</span>
+                <span style={{fontSize:13,fontWeight:700,color:T.t1}}>
+                  {projects.find(p=>String(p.id)===String(f.project_id))?.name||"—"}
+                </span>
+                <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>(from MR)</span>
+              </div>
+            ):(
+              <SearchSelect compact value={f.project_id} options={projects}
+                onChange={v=>upd("project_id",v)} placeholder="Project select karo"/>
+            )}
             <div style={{fontSize:10.5,color:T.amb,marginTop:3,fontWeight:600}}>⏳ PENDING RECEIVE</div>
           </div>
         </div>
@@ -817,15 +840,22 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
         <span>Material (from stock)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
       </div>
       {items.map((row,i)=>(
-        <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem} mode="transfer" canRemove={items.length>1}/>
+        <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem}
+          mode="transfer"
+          canRemove={!fromMR && items.length>1}
+          lockMaterial={!!fromMR}/>
       ))}
       {stockErr&&<div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>⚠ Stock se zyada qty kisi item me hai — kam karo</div>}
-      <button onClick={addItem}
-        style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
-        <IcAdd size={11}/> Add row
-      </button>
+      {!fromMR&&(
+        <button onClick={addItem}
+          style={{marginTop:6,padding:"7px 12px",borderRadius:6,border:`1.5px dashed ${T.b2}`,background:"none",color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit"}}>
+          <IcAdd size={11}/> Add row
+        </button>
+      )}
       <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
-        💡 Material pick karte hi rate auto-fill (last purchase). Edit kar sakte ho.
+        {fromMR
+          ? "💡 Project + Material MR me decide ho chuka hai (locked). Sirf Qty (stock/quality ke hisaab se) aur Rate (auto-fill, editable) badal sakte ho."
+          : "💡 Material pick karte hi rate auto-fill (last purchase). Edit kar sakte ho."}
       </div>
     </ModalShell>
   );
