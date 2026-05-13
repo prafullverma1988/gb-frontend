@@ -1053,23 +1053,29 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
     setSelected(p=>p.includes(batchId)?p.filter(id=>id!==batchId):[...p,batchId]);
   };
 
-  // Greedy fill: walk selected batches in order, take min(remaining, avail) from each
-  let remaining=requestedQty, totalCost=0;
-  const breakdown=[];
-  for(const bid of selected){
-    if(remaining<=0)break;
-    const b=batches.find(x=>x.batch_id===bid);
-    if(!b)continue;
-    const take=Math.min(remaining,b.available_qty);
-    totalCost+=take*b.rate;
-    breakdown.push({...b,take,cost:take*b.rate});
-    remaining-=take;
+  // Compute the active consumption plan:
+  //   - selected.length > 0 → manual order (whatever user ticked)
+  //   - else                → default FIFO (already date-sorted from backend)
+  // Walk the order, greedily take min(remaining, avail) from each batch.
+  const isManual = selected.length > 0;
+  const consumeOrder = isManual
+    ? selected.map(id => batches.find(b => b.batch_id === id)).filter(Boolean)
+    : [...batches]; // FIFO default
+  let remaining = requestedQty, totalCost = 0;
+  const planMap = {}; // batch_id → { take, rate, cost, order }
+  let posCounter = 0;
+  for (const b of consumeOrder) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, b.available_qty);
+    if (take <= 0) continue;
+    posCounter += 1;
+    planMap[b.batch_id] = { take, rate: b.rate, cost: take * b.rate, order: posCounter };
+    totalCost += take * b.rate;
+    remaining -= take;
   }
-  const weightedRate=requestedQty>0?totalCost/requestedQty:0;
-  const totalAvailable=selected.reduce((s,bid)=>{
-    const b=batches.find(x=>x.batch_id===bid);return s+(b?b.available_qty:0);
-  },0);
-  const insufficient=requestedQty>0&&totalAvailable<requestedQty;
+  const weightedRate = requestedQty > 0 ? totalCost / requestedQty : 0;
+  const totalConsumed = requestedQty - Math.max(remaining, 0);
+  const insufficient = requestedQty > 0 && remaining > 0.0001;
 
   return (
     <>
@@ -1088,16 +1094,24 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
           :batches.length===0?<div style={{textAlign:"center",padding:30,color:T.t4,fontSize:12.5}}>Koi batch nahi mila — material legacy (add-stock without GRN) ho sakta hai. FIFO master rate use karega.</div>
           :(
             <>
-              <div style={{display:"grid",gridTemplateColumns:"30px 90px 100px 1fr 80px 80px 80px",gap:6,padding:"6px 10px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,marginBottom:6}}>
-                {["#","GRN","Date","Vendor / Source","Avail","Rate","Order"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>)}
+              <div style={{display:"grid",gridTemplateColumns:"30px 90px 100px 1fr 70px 75px 75px 100px",gap:6,padding:"6px 10px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,marginBottom:6}}>
+                {["#","GRN","Date","Vendor / Source","Avail","Rate","Order","FIFO Take"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>)}
               </div>
               {batches.map(b=>{
-                const order=selected.indexOf(b.batch_id);
-                const isPicked=order>=0;
+                const manualOrder=selected.indexOf(b.batch_id);
+                const isManualPicked=manualOrder>=0;
+                const plan=planMap[b.batch_id]; // active plan (manual or FIFO default)
+                const isInPlan=!!plan;
+                // Visual states:
+                //   isManualPicked → bold purple border (user explicitly ticked)
+                //   isInPlan + !isManual → cyan tint (default FIFO will use this)
+                //   neither → plain
+                const borderC=isManualPicked?T.pur:(isInPlan?T.cyn:T.b1);
+                const bgC=isManualPicked?T.purL+"66":(isInPlan?T.cynL+"55":T.surface);
                 return(
                   <label key={b.batch_id}
-                    style={{display:"grid",gridTemplateColumns:"30px 90px 100px 1fr 80px 80px 80px",gap:6,padding:"8px 10px",borderRadius:6,border:`1.5px solid ${isPicked?T.pur:T.b1}`,background:isPicked?T.purL+"66":T.surface,marginBottom:5,alignItems:"center",cursor:"pointer",transition:"background .1s"}}>
-                    <input type="checkbox" checked={isPicked} onChange={()=>toggle(b.batch_id)}
+                    style={{display:"grid",gridTemplateColumns:"30px 90px 100px 1fr 70px 75px 75px 100px",gap:6,padding:"8px 10px",borderRadius:6,border:`1.5px solid ${borderC}`,background:bgC,marginBottom:5,alignItems:"center",cursor:"pointer",transition:"background .1s"}}>
+                    <input type="checkbox" checked={isManualPicked} onChange={()=>toggle(b.batch_id)}
                       style={{width:14,height:14,cursor:"pointer",accentColor:T.pur}}/>
                     <span style={{fontSize:11,color:T.blu,fontWeight:700,fontFamily:"monospace"}}>{b.grn_no}</span>
                     <span style={{fontSize:11,color:T.t3}}>{b.date?new Date(b.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</span>
@@ -1107,7 +1121,12 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
                     </div>
                     <span style={{fontSize:12,color:T.t1,fontWeight:600,textAlign:"right"}}>{b.available_qty} {b.unit}</span>
                     <span style={{fontSize:12,color:T.cyn,fontWeight:700,textAlign:"right"}}>₹{fmtN(b.rate)}</span>
-                    {isPicked?<span style={{fontSize:11,fontWeight:700,color:T.pur,background:"white",border:`1px solid ${T.pur}55`,borderRadius:20,padding:"2px 6px",textAlign:"center"}}>#{order+1}</span>:<span/>}
+                    {isManualPicked
+                      ? <span style={{fontSize:11,fontWeight:700,color:T.pur,background:"white",border:`1px solid ${T.pur}55`,borderRadius:20,padding:"2px 6px",textAlign:"center"}}>#{manualOrder+1}</span>
+                      : <span/>}
+                    {isInPlan
+                      ? <span style={{fontSize:11,fontWeight:700,color:isManualPicked?T.pur:T.cyn,textAlign:"right"}}>{plan.take} {b.unit} <span style={{fontSize:9.5,color:T.t4,fontWeight:500}}>= ₹{fmtN(plan.cost)}</span></span>
+                      : <span style={{fontSize:10.5,color:T.t4,textAlign:"right",fontStyle:"italic"}}>{requestedQty>0?"not used":"—"}</span>}
                   </label>
                 );
               })}
@@ -1117,22 +1136,20 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
         {/* Summary footer */}
         <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",gap:10}}>
           <div style={{flex:1,fontSize:11.5}}>
-            {selected.length===0?(
-              <span style={{color:T.t4}}>Koi batch select nahi — Apply karoge to default FIFO use hoga.</span>
-            ):(
-              <>
-                <div style={{color:T.t2}}>
-                  <b>{selected.length}</b> batch picked · Req: <b>{requestedQty||"—"}</b> · Avail selected: <b>{totalAvailable}</b> · Cost: <b>₹{fmtN(totalCost)}</b>
-                </div>
-                <div style={{color:weightedRate>0?T.cyn:T.t4,fontSize:11,marginTop:2}}>
-                  Weighted rate: <b>₹{fmtN(weightedRate)}</b>{insufficient?<span style={{color:T.red,marginLeft:8}}>⚠ {requestedQty-totalAvailable} short — backend FIFO fallback se cover hoga</span>:null}
-                </div>
-              </>
-            )}
+            <div style={{color:T.t2}}>
+              <span style={{padding:"1px 8px",borderRadius:10,background:isManual?T.purL:T.cynL,color:isManual?T.pur:T.cyn,fontSize:10,fontWeight:700,marginRight:6}}>
+                {isManual?"MANUAL ORDER":"DEFAULT FIFO"}
+              </span>
+              Req: <b>{requestedQty||"—"}</b> · Will consume: <b>{totalConsumed} {data.unit||""}</b> · Cost: <b>₹{fmtN(totalCost)}</b>
+            </div>
+            <div style={{color:weightedRate>0?T.cyn:T.t4,fontSize:11,marginTop:3}}>
+              Weighted rate: <b>₹{fmtN(weightedRate)}/{data.unit||""}</b>
+              {insufficient?<span style={{color:T.amb,marginLeft:8,fontWeight:600}}>⚠ {(requestedQty-totalConsumed).toFixed(2)} {data.unit||""} short — backend master rate se cover hoga</span>:null}
+            </div>
           </div>
           <GhostBtn onClick={onClose}>Cancel</GhostBtn>
           <Btn onClick={()=>onApply(selected,weightedRate)} c={T.pur}>
-            {selected.length===0?"Reset to FIFO":"Apply Selection"}
+            {isManual?"Apply Selection":"Use Default FIFO"}
           </Btn>
         </div>
       </div>
