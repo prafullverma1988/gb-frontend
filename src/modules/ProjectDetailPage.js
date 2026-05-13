@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api, { API_BASE } from "../config/api";
 import { Avatar, Credit } from "../components/Credit";
 import PaymentRequestDrawer from "../components/PaymentRequestDrawer";
@@ -7426,6 +7426,22 @@ function TabMaterial({ project }) {
     items: [{ item_name:"", quantity:"", unit:"Bags", approx_amount:"" }],
     required_date:"", notes:"", photos: [],
   });
+  // Duplicate-MR pipeline check — when user picks a material, query if the
+  // same item is already in-flight for THIS project (Pending / Approved /
+  // Ordered / Partial). Warning UI sits under the row; submit requires an
+  // explicit force-confirm if hits exist.
+  const [mrPipelineByIdx, setMrPipelineByIdx] = useState({});
+  const checkMrPipeline = async (idx, matName) => {
+    if (!matName) {
+      setMrPipelineByIdx(p => { const n = {...p}; delete n[idx]; return n; });
+      return;
+    }
+    try {
+      const r = await api.get(`/warehouse/mr-pipeline-check?type=project&project_id=${projectId}&name=${encodeURIComponent(matName)}`);
+      if (r?.success && r.data?.in_pipeline) setMrPipelineByIdx(p => ({...p,[idx]:r.data}));
+      else setMrPipelineByIdx(p => { const n = {...p}; delete n[idx]; return n; });
+    } catch (_) {}
+  };
   const [showAddLib, setShowAddLib] = useState(false);
   const [libNewName, setLibNewName] = useState("");
   const [libNewUnit, setLibNewUnit] = useState("Nos");
@@ -7801,6 +7817,17 @@ function TabMaterial({ project }) {
       alert("At least one material with quantity is required");
       return;
     }
+    // Pipeline-duplicate force confirm — if any picked material is
+    // already in-flight for this project, list them and require an
+    // explicit Continue. Cancel = abort.
+    const pipeHits = Object.values(mrPipelineByIdx).filter(p => p && p.in_pipeline);
+    if (pipeHits.length > 0) {
+      const lines = pipeHits.flatMap(h => h.entries.map(e => `  • ${e.mr_no} — ${e.status} — ${e.pending_qty} ${e.unit||""}`));
+      const ok = window.confirm(
+        `⚠ Iss project me ye material(s) already pipeline me hai:\n\n${lines.join("\n")}\n\nFir bhi naya MR raise karna hai? (Continue = force, Cancel = wait)`
+      );
+      if (!ok) return;
+    }
     mrSubmitRef.current = true;
     setSaving(true);
     try {
@@ -7959,14 +7986,17 @@ function TabMaterial({ project }) {
                   const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (it.item_name||"").trim().toLowerCase());
                   const isLocked = !!it.item_name;
                   const displayUnit = libMatch?.unit || it.unit || "—";
+                  const pipe = mrPipelineByIdx[idx];
                   return (
-                    <div key={idx} style={{display:"grid",gridTemplateColumns:"2.2fr 70px 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom: idx<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
+                    <React.Fragment key={idx}>
+                    <div style={{display:"grid",gridTemplateColumns:"2.2fr 70px 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom: !pipe && idx<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
                       <LibrarySelect type="material" value={it.item_name}
                         hideAddNew compact
                         inputRef={el=>{ if(el) itemRowRefs.current[idx] = el; }}
                         onChange={v=>{
                           const found = matLibReal.find(m=>m.name===v);
                           updItem(idx, { item_name:v||"", unit: found?.unit || it.unit });
+                          checkMrPipeline(idx, v||"");
                         }}
                         placeholder="Pick material..."/>
                       <input type="number" inputMode="decimal" min={0} step="any" value={it.quantity}
@@ -7994,12 +8024,34 @@ function TabMaterial({ project }) {
                       <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
                         style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                         onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                      <button onClick={()=>removeItemRow(idx)} disabled={form.items.length===1}
+                      <button onClick={()=>{removeItemRow(idx); setMrPipelineByIdx(p=>{const n={...p};delete n[idx];return n;});}} disabled={form.items.length===1}
                         title={form.items.length===1?"At least one item required":"Remove row"}
                         style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
                         <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
                       </button>
                     </div>
+                    {pipe && pipe.in_pipeline && (
+                      <div style={{margin:"4px 8px 8px",padding:"7px 11px",borderRadius:6,background:"#FFFBEB",border:`1.5px solid #FDE68A`,fontSize:11.5,color:"#92400E",lineHeight:1.5,borderBottom: idx<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
+                        <div style={{fontWeight:700,marginBottom:3,display:"flex",alignItems:"center",gap:5}}>
+                          ⚠ Iss project me ye material already pipeline me hai · Total pending: <b>{pipe.total_pending_qty} {pipe.unit||""}</b>
+                        </div>
+                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:3}}>
+                          {pipe.entries.map((e,k)=>(
+                            <span key={k} style={{background:"white",border:`1px solid #FDE68A`,borderRadius:20,padding:"2px 9px",fontSize:10.5,color:T.t2,fontWeight:600}}>
+                              <span style={{color:T.blu,fontFamily:"monospace"}}>{e.mr_no}</span>
+                              <span style={{color:T.t4,margin:"0 4px"}}>·</span>
+                              <span>{e.status}</span>
+                              <span style={{color:T.t4,margin:"0 4px"}}>·</span>
+                              <b>{e.pending_qty} {e.unit||""}</b>
+                            </span>
+                          ))}
+                        </div>
+                        <div style={{fontSize:10.5,color:T.t3,marginTop:4,fontStyle:"italic"}}>
+                          Aur chahiye? Submit pe confirm dialog aayega. Ya wait karke pehle wala MR receive kar lo.
+                        </div>
+                      </div>
+                    )}
+                    </React.Fragment>
                   );
                 })}
 

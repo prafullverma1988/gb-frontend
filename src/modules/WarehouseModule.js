@@ -870,9 +870,14 @@ function NewMRModal({library,onClose,onSaved}){
   const [f,setF]=useState({date:today(),priority:"Medium"});
   const [items,setItems]=useState([{lib_id:null,name:"",unit:"",qty:"",note:""}]);
   const [saving,setSaving]=useState(false);
+  // pipelineByIdx[i] = { entries:[], total_pending_qty, unit } | null
+  const [pipelineByIdx,setPipelineByIdx]=useState({});
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
   const updItem=(i,patch)=>setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
-  const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
+  const remItem=(i)=>{
+    setItems(p=>p.filter((_,j)=>j!==i));
+    setPipelineByIdx(p=>{const n={...p};delete n[i];return n;});
+  };
   const addItem=()=>setItems(p=>[...p,{lib_id:null,name:"",unit:"",qty:"",note:""}]);
 
   const valid=items.some(it=>it.lib_id&&Number(it.qty)>0);
@@ -880,7 +885,29 @@ function NewMRModal({library,onClose,onSaved}){
   // SearchSelect normalizes keys to strings, so compare loosely
   const findLib=(id)=>library.find(l=>String(l.id)===String(id));
 
+  // Pipeline check — warn if same material already in-flight for warehouse
+  const checkPipeline=async(idx,matName)=>{
+    if(!matName){setPipelineByIdx(p=>{const n={...p};delete n[idx];return n;});return;}
+    try{
+      const r=await api.get(`/warehouse/mr-pipeline-check?type=warehouse&name=${encodeURIComponent(matName)}`);
+      if(r.success&&r.data?.in_pipeline){
+        setPipelineByIdx(p=>({...p,[idx]:r.data}));
+      }else{
+        setPipelineByIdx(p=>{const n={...p};delete n[idx];return n;});
+      }
+    }catch(_){}
+  };
+
   const submit=async()=>{
+    // If any picked material is already in pipeline, require explicit confirm
+    const hits=Object.values(pipelineByIdx).filter(p=>p&&p.in_pipeline);
+    if(hits.length>0){
+      const lines=hits.flatMap(h=>h.entries.map(e=>`  • ${e.mr_no} — ${e.status} — ${e.pending_qty} ${e.unit||""}`));
+      const ok=window.confirm(
+        `⚠ Ye material(s) already pipeline me hai:\n\n${lines.join("\n")}\n\nFir bhi naya MR raise karna hai? (Continue = force, Cancel = wait)`
+      );
+      if(!ok) return;
+    }
     setSaving(true);
     try{
       const cleanItems=items.filter(it=>it.lib_id&&Number(it.qty)>0).map(it=>{
@@ -942,22 +969,50 @@ function NewMRModal({library,onClose,onSaved}){
       </div>
       {items.map((row,i)=>{
         const lib=findLib(row.lib_id);
+        const pipe=pipelineByIdx[i];
         return (
-          <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 1.5fr 30px",gap:6,alignItems:"center",marginBottom:6}}>
-            <SearchSelect compact value={row.lib_id} options={libOpts}
-              onChange={v=>{const m=findLib(v);updItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||""});}}
-              placeholder="Library se material pick karein"/>
-            <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
-            <input type="number" value={row.qty||""} onChange={e=>updItem(i,{qty:e.target.value})} placeholder="Qty"
-              style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-            <input value={row.note||""} onChange={e=>updItem(i,{note:e.target.value})} placeholder="Optional remark"
-              style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
-            {items.length>1?(
-              <button onClick={()=>remItem(i)}
-                style={{width:24,height:24,border:"none",background:"none",cursor:"pointer",color:T.red,padding:0,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}>
-                <IcTrash size={12}/>
-              </button>
-            ):<span/>}
+          <div key={i} style={{marginBottom:6}}>
+            <div style={{display:"grid",gridTemplateColumns:"2fr 70px 1fr 1.5fr 30px",gap:6,alignItems:"center"}}>
+              <SearchSelect compact value={row.lib_id} options={libOpts}
+                onChange={v=>{
+                  const m=findLib(v);
+                  updItem(i,{lib_id:v,name:m?.name||"",unit:m?.unit||""});
+                  checkPipeline(i,m?.name||"");
+                }}
+                placeholder="Library se material pick karein"/>
+              <UnitLock unit={lib?.unit||row.unit||"—"} locked={true} compact/>
+              <input type="number" value={row.qty||""} onChange={e=>updItem(i,{qty:e.target.value})} placeholder="Qty"
+                style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+              <input value={row.note||""} onChange={e=>updItem(i,{note:e.target.value})} placeholder="Optional remark"
+                style={{height:32,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+              {items.length>1?(
+                <button onClick={()=>remItem(i)}
+                  style={{width:24,height:24,border:"none",background:"none",cursor:"pointer",color:T.red,padding:0,display:"flex",alignItems:"center",justifyContent:"center",borderRadius:5}}>
+                  <IcTrash size={12}/>
+                </button>
+              ):<span/>}
+            </div>
+            {pipe&&pipe.in_pipeline&&(
+              <div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.ambL,border:`1.5px solid ${T.ambM}`,fontSize:11.5,color:T.amb,lineHeight:1.5}}>
+                <div style={{fontWeight:700,marginBottom:3,display:"flex",alignItems:"center",gap:5}}>
+                  ⚠ Ye material already pipeline me hai · Total pending: <b>{pipe.total_pending_qty} {pipe.unit||""}</b>
+                </div>
+                <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:3}}>
+                  {pipe.entries.map((e,k)=>(
+                    <span key={k} style={{background:"white",border:`1px solid ${T.ambM}`,borderRadius:20,padding:"2px 9px",fontSize:10.5,color:T.t2,fontWeight:600}}>
+                      <span style={{color:T.pur,fontFamily:"monospace"}}>{e.mr_no}</span>
+                      <span style={{color:T.t4,margin:"0 4px"}}>·</span>
+                      <span>{e.status}</span>
+                      <span style={{color:T.t4,margin:"0 4px"}}>·</span>
+                      <b>{e.pending_qty} {e.unit||""}</b>
+                    </span>
+                  ))}
+                </div>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:4,fontStyle:"italic"}}>
+                  Force karoge to Submit ke samay confirm dialog aayega. Stock receive hone tak wait karna behtar hai.
+                </div>
+              </div>
+            )}
           </div>
         );
       })}
