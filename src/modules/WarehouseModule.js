@@ -820,7 +820,9 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
       });
       return changed?next:prev;
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // deps are derived from items[] + batchesByIdx — using a serialized
+    // signature keeps the effect simple without referencing computeFifoPreview
+    // (which itself closes over items + batchesByIdx, would loop forever).
   },[items.map(r=>`${r.material_id}|${r.qty}|${(r.selected_batches||[]).join(",")}`).join("~"),batchesByIdx]);
 
   // Open batch picker for row idx
