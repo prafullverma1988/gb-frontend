@@ -3035,28 +3035,17 @@ function WarehouseModule(){
   const canApproveMR = ["admin","super_admin"].includes((meUser?.role || "").toLowerCase());
 
   // Approve / Reject — inline buttons on Pending MR rows (shown when canApproveMR).
-  // Procurement-side MRs (project_id != NULL) use /procurement/mrs/:id/approve.
-  // Warehouse-internal MRs (project_id IS NULL) use /warehouse/mr/:id with status.
+  // BOTH warehouse-internal (project_id=NULL) AND procurement-linked (project_id
+  // is set) wh_material_requests rows live in wh_material_requests — their id
+  // is mr.dbId. The procurement MR (when linked) was already approved by admin
+  // earlier; what we're approving here is the warehouse-side dispatch.
+  // → use PATCH /warehouse/mr/:id with status field in BOTH cases.
   const approveMR = async (mr) => {
     if (!mr?.dbId) return;
     try {
-      // Mode hint comes from the MR shape: linked_procurement_mr_id present
-      // OR project_id present → procurement-side; else warehouse-internal
-      const isProcurementSide = !!mr.project_id;
-      const url = isProcurementSide
-        ? `/procurement/mrs/${mr.dbId}/approve`
-        : `/warehouse/mr/${mr.dbId}`;
-      const body = isProcurementSide
-        ? { action: "Approved", approved_qty: mr.items?.[0]?.qty || mr.quantity || null }
-        : { status: "Approved" };
-      const res = isProcurementSide
-        ? await api.patch(url, body)
-        : await api.patch(url, body);
-      if (res.success) {
-        await loadAll();
-      } else {
-        alert(res.message || "Approve failed");
-      }
+      const res = await api.patch(`/warehouse/mr/${mr.dbId}`, { status: "Approved" });
+      if (res.success) await loadAll();
+      else alert(res.message || "Approve failed");
     } catch (e) { alert(e.message); }
   };
   const rejectMR = async (mr) => {
@@ -3064,19 +3053,12 @@ function WarehouseModule(){
     const reason = window.prompt("Reject reason (optional):", "");
     if (reason === null) return; // user cancelled
     try {
-      const isProcurementSide = !!mr.project_id;
-      if (isProcurementSide) {
-        const res = await api.patch(`/procurement/mrs/${mr.dbId}/approve`, {
-          action: "Rejected",
-          rejected_reason: reason || "Rejected by admin",
-        });
-        if (res.success) await loadAll();
-        else alert(res.message || "Reject failed");
-      } else {
-        const res = await api.patch(`/warehouse/mr/${mr.dbId}`, { status: "Rejected" });
-        if (res.success) await loadAll();
-        else alert(res.message || "Reject failed");
-      }
+      const res = await api.patch(`/warehouse/mr/${mr.dbId}`, {
+        status: "Rejected",
+        rejected_reason: reason || "Rejected by admin",
+      });
+      if (res.success) await loadAll();
+      else alert(res.message || "Reject failed");
     } catch (e) { alert(e.message); }
   };
 
