@@ -7482,6 +7482,13 @@ function TabMaterial({ project }) {
   const [grnTab, setGrnTab] = useState("ordered");
   const [orderedMRs, setOrderedMRs] = useState([]);
   const [grnRows, setGrnRows] = useState({});
+  // Vendor-grouped receive — shared challan/date/received_by per vendor
+  // card so user enters them ONCE per delivery instead of per material.
+  // Shape: { [vendor_name]: { challan, date, received_by } }
+  const [vendorReceive, setVendorReceive] = useState({});
+  // Direct Receive — vendor + challan + date moved to global (one per
+  // submission) since a single delivery is always from ONE vendor.
+  const [directGlobal, setDirectGlobal] = useState({ vendor: "", challan: "", date: "", received_by: "" });
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
   const [grnPhotos, setGrnPhotos] = useState([]);
   // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
@@ -7758,21 +7765,73 @@ function TabMaterial({ project }) {
     setGrnSaving(false);
   };
 
+  // Vendor-grouped receive — one delivery from a vendor can carry multiple
+  // MRs (TMT 12mm + 8mm + 10mm in one truck). Loops mark-received per MR
+  // with the shared challan + date so the user only enters info once.
+  // Skips rows where received_qty is 0/blank → those stay pending for
+  // the next delivery.
+  const handleReceiveVendor = async (vendor) => {
+    const meta = vendorReceive[vendor] || {};
+    if (!meta.challan || !meta.challan.trim()) { alert("Challan number required"); return; }
+    const targetMRs = orderedMRs.filter(mr =>
+      (mr.linked_vendor || "— Unassigned —") === vendor &&
+      !grnDone.includes(mr.id) &&
+      Number((grnRows[mr.id] || {}).received_qty || 0) > 0
+    );
+    if (targetMRs.length === 0) { alert("Kam se kam ek material ka received qty fill karo"); return; }
+    setGrnSaving(true);
+    let okCount = 0, failures = [];
+    for (const mr of targetMRs) {
+      const recvQty = parseFloat((grnRows[mr.id] || {}).received_qty) || 0;
+      try {
+        const res = await api.patch("/procurement/mrs/" + mr.id + "/mark-received", {
+          challan_no: meta.challan,
+          received_qty: recvQty,
+          received_date: meta.date || undefined,
+          received_by: meta.received_by || undefined,
+        });
+        if (res.success) { setGrnDone(p => [...p, mr.id]); okCount += 1; }
+        else failures.push(`${mr.item_name}: ${res.message||"failed"}`);
+      } catch (e) { failures.push(`${mr.item_name}: ${e.message}`); }
+    }
+    // Single reload after the whole vendor batch
+    api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
+      if (r.success) { setLedger(r.data || []); setLedgerLoaded(true); }
+    }).catch(() => {});
+    api.get("/procurement/mrs?project_id=" + projectId).then(res2 => {
+      if (res2.success && Array.isArray(res2.data)) {
+        setMaterials(res2.data.map(m => ({
+          id: m.id, name: m.item_name,
+          qty: (parseFloat(m.quantity)||0) + " " + (m.unit||""),
+          stage: m.stage || "Requested",
+          by: m.requested_by || "Site Team",
+          date: m.created_at ? new Date(m.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}) : "—",
+          vendor: m.linked_vendor || null, amt: parseFloat(m.approx_amount) || 0,
+        })));
+      }
+    }).catch(() => {});
+    setGrnSaving(false);
+    if (failures.length > 0) {
+      alert(`Received ${okCount}/${targetMRs.length}. Errors:\n${failures.join("\n")}`);
+    }
+  };
+
   const handleDirectReceive = async () => {
-    const validRows = directRows.filter(r => r.item_name && r.qty && r.challan && r.vendor);
-    if (!validRows.length) { alert("Material name, qty, vendor aur challan — sab required hain"); return; }
-    const missingVendor = directRows.find(r => (r.item_name || r.qty || r.challan) && !r.vendor);
-    if (missingVendor) { alert("Vendor name compulsory hai — har row me set karo"); return; }
+    // Global vendor/challan/date — Direct Receive is single-vendor.
+    if (!directGlobal.vendor) { alert("Vendor select karo"); return; }
+    if (!directGlobal.challan) { alert("Challan number daalo"); return; }
+    const validRows = directRows.filter(r => r.item_name && Number(r.qty) > 0);
+    if (!validRows.length) { alert("Kam se kam ek material + qty required hai"); return; }
     setGrnSaving(true);
     try {
       const res = await api.post("/procurement/grns", {
         po_id: null,
-        vendor_name: validRows[0].vendor || null,
+        vendor_name: directGlobal.vendor,
         project_id: projectId,
         project_name: projectName,
-        challan_no: validRows[0].challan,
-        received_by: validRows[0].received_by || null,
-        received_date: new Date().toISOString().split("T")[0],
+        challan_no: directGlobal.challan,
+        received_by: directGlobal.received_by || null,
+        received_date: directGlobal.date || new Date().toISOString().split("T")[0],
         photo_urls: grnPhotos.length ? grnPhotos : null,
         items: validRows.map(r => ({
           po_item_id: null,
@@ -7784,7 +7843,8 @@ function TabMaterial({ project }) {
       });
       if (res.success) {
         setShowGRN(false);
-        setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
+        setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags"}]);
+        setDirectGlobal({vendor:"", challan:"", date:"", received_by:""});
         setGrnPhotos([]);
         // Reload MRs + direct GRNs + ledger + inventory
         loadMRs();
@@ -8419,55 +8479,152 @@ function TabMaterial({ project }) {
                     </div>
                   )}
                   {orderedMRs.length===0&&pendingTransfers.length===0&&pendingIssues.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4}}><div style={{fontSize:13,fontWeight:600,color:T.t2,marginBottom:4}}>Koi ordered material, transfer, ya warehouse issue pending nahi</div></div>}
-                  {orderedMRs.map(mr=>{
-                    const isDone=grnDone.includes(mr.id);
-                    const row=grnRows[mr.id]||{};
-                    return(
-                      <div key={mr.id} style={{background:isDone?T.grnL:T.surface,border:"1px solid "+(isDone?T.grnM:T.b1),borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+(isDone?T.grn:T.amb)}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:isDone?0:10}}>
-                          <div>
-                            <div style={{fontSize:13,fontWeight:700,color:isDone?T.grn:T.t1}}>{mr.item_name}</div>
-                            <div style={{fontSize:11,color:T.t4,marginTop:2}}>Ordered: {mr.quantity} {mr.unit}{mr.linked_vendor&&<span style={{marginLeft:8,color:T.blu}}>· {mr.linked_vendor}</span>}</div>
-                          </div>
-                          {isDone&&<span style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 10px",borderRadius:20,border:"1px solid "+T.grnM}}>✓ Received</span>}
-                        </div>
-                        {!isDone&&(
-                          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr auto",gap:8,alignItems:"flex-end"}}>
-                            <div>
-                              <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
-                              <input value={row.challan||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],challan:e.target.value}}))} placeholder="e.g. CH-445"
-                                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  {/* Vendor-grouped receive — one delivery from a vendor
+                      typically carries multiple materials (TMT 12mm + 8mm
+                      + 10mm in one truck). Group by linked_vendor, share
+                      challan + date inputs across all materials from same
+                      vendor, single "Receive" button processes the batch. */}
+                  {(() => {
+                    // Group active (not-yet-done) MRs by linked_vendor
+                    const groups = {};
+                    orderedMRs.forEach(mr => {
+                      if (grnDone.includes(mr.id)) return;
+                      const v = mr.linked_vendor || "— Unassigned —";
+                      if (!groups[v]) groups[v] = [];
+                      groups[v].push(mr);
+                    });
+                    const vendorList = Object.keys(groups).sort();
+                    const doneMRs = orderedMRs.filter(mr => grnDone.includes(mr.id));
+                    return (
+                      <>
+                        {vendorList.map(vendor => {
+                          const mrs = groups[vendor];
+                          const meta = vendorReceive[vendor] || {};
+                          const filledCount = mrs.filter(mr => Number((grnRows[mr.id]||{}).received_qty||0) > 0).length;
+                          return (
+                            <div key={vendor} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,borderLeft:"3px solid "+T.blu,overflow:"hidden"}}>
+                              {/* Vendor header */}
+                              <div style={{padding:"10px 14px",background:T.bluL+"66",borderBottom:"1px solid "+T.b1,display:"flex",alignItems:"center",gap:8}}>
+                                <span style={{fontSize:14}}>🏭</span>
+                                <div style={{flex:1}}>
+                                  <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{vendor}</div>
+                                  <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{mrs.length} pending material{mrs.length>1?"s":""}</div>
+                                </div>
+                                {filledCount>0&&<span style={{fontSize:10.5,fontWeight:700,color:T.grn,background:T.grnL,border:"1px solid "+T.grnM,padding:"2px 9px",borderRadius:20}}>{filledCount} qty filled</span>}
+                              </div>
+                              {/* Shared challan + date + received_by */}
+                              <div style={{padding:"10px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                                <div>
+                                  <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Challan No. *</label>
+                                  <input value={meta.challan||""} onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],challan:e.target.value}}))}
+                                    placeholder="e.g. CH-445"
+                                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                                </div>
+                                <div>
+                                  <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Delivery Date</label>
+                                  <input type="date" value={meta.date||""} onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],date:e.target.value}}))}
+                                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                                </div>
+                                <div>
+                                  <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Received By</label>
+                                  <input value={meta.received_by||""} onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],received_by:e.target.value}}))}
+                                    placeholder="Site person"
+                                    style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                                </div>
+                              </div>
+                              {/* Per-material rows */}
+                              <div style={{padding:"4px 14px 10px"}}>
+                                <div style={{display:"grid",gridTemplateColumns:"100px 1fr 90px 110px 70px",gap:7,padding:"6px 0",fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>
+                                  <span>MR No</span><span>Material</span><span style={{textAlign:"right"}}>Ordered</span><span style={{textAlign:"right"}}>Received Qty</span><span></span>
+                                </div>
+                                {mrs.map(mr => {
+                                  const row = grnRows[mr.id] || {};
+                                  const recv = Number(row.received_qty||0);
+                                  const over = recv > Number(mr.quantity||0);
+                                  return (
+                                    <div key={mr.id} style={{display:"grid",gridTemplateColumns:"100px 1fr 90px 110px 70px",gap:7,padding:"7px 0",borderTop:"1px dashed "+T.b1,alignItems:"center"}}>
+                                      <span style={{fontSize:11,color:T.amb,fontWeight:700,fontFamily:"monospace"}}>{mr.mr_number||`MR-${mr.id}`}</span>
+                                      <div style={{minWidth:0}}>
+                                        <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{mr.item_name}</div>
+                                        {mr.approx_amount>0&&<div style={{fontSize:10,color:T.t4}}>@ ₹{Math.round(Number(mr.approx_amount)/Number(mr.quantity||1)).toLocaleString("en-IN")}/{mr.unit}</div>}
+                                      </div>
+                                      <span style={{fontSize:11.5,color:T.t2,fontWeight:600,textAlign:"right"}}>{mr.quantity} {mr.unit}</span>
+                                      <input type="number" value={row.received_qty||""}
+                                        onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))}
+                                        placeholder="0"
+                                        style={{padding:"6px 8px",borderRadius:5,border:"1.5px solid "+(over?T.red:T.b1),fontSize:11.5,textAlign:"right",fontFamily:"inherit",outline:"none",background:over?T.redL:T.surface,color:over?T.red:T.t1}}/>
+                                      <span style={{fontSize:10.5,color:T.t4}}>{mr.unit}</span>
+                                    </div>
+                                  );
+                                })}
+                                {/* Single Receive button — vendor batch */}
+                                <div style={{display:"flex",justifyContent:"flex-end",marginTop:10,paddingTop:8,borderTop:"1.5px solid "+T.b1}}>
+                                  <button onClick={()=>handleReceiveVendor(vendor)} disabled={grnSaving||!meta.challan||filledCount===0}
+                                    title={!meta.challan?"Challan no daalo":filledCount===0?"Kam se kam ek material ka qty fill karo":""}
+                                    style={{padding:"8px 18px",borderRadius:6,background:(meta.challan&&filledCount>0)?T.grn:T.b1,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:(meta.challan&&filledCount>0)?"pointer":"not-allowed",whiteSpace:"nowrap",display:"flex",alignItems:"center",gap:5}}>
+                                    {grnSaving?"...":`✓ Receive (${filledCount} item${filledCount===1?"":"s"})`}
+                                  </button>
+                                </div>
+                              </div>
                             </div>
-                            <div>
-                              <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received Qty</label>
-                              <input type="number" value={row.received_qty||""} onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))} placeholder={String(mr.quantity)}
-                                style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                            </div>
-                            <button onClick={()=>handleReceiveMR(mr.id)} disabled={!row.challan||grnSaving}
-                              style={{padding:"7px 14px",borderRadius:6,background:row.challan?T.grn:T.b1,border:"none",color:"white",fontSize:12,fontWeight:700,cursor:row.challan?"pointer":"not-allowed",whiteSpace:"nowrap"}}>
-                              {grnSaving?"...":"✓ Receive"}
-                            </button>
+                          );
+                        })}
+                        {/* Completed (received) MRs — collapsed summary */}
+                        {doneMRs.length>0&&(
+                          <div style={{marginTop:10,padding:"8px 12px",background:T.grnL,border:"1px solid "+T.grnM,borderRadius:7,fontSize:11.5,color:T.grn,fontWeight:600,display:"flex",alignItems:"center",gap:8}}>
+                            <span style={{fontSize:13}}>✓</span>
+                            <span>{doneMRs.length} material{doneMRs.length>1?"s":""} received this session — {doneMRs.map(m=>m.item_name).join(", ")}</span>
                           </div>
                         )}
-                      </div>
+                      </>
                     );
-                  })}
+                  })()}
                 </div>
               )}
               {grnTab==="direct"&&(
                 <div>
                   <div style={{background:T.bluL,border:"1px solid "+T.bluM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.blu,marginBottom:12}}>
-                    Bina PO ke directly site pe aaya material — challan se receive karo
+                    Bina PO ke directly site pe aaya material — ek vendor ka multiple items ek hi GRN me receive karo
                   </div>
-                  {directRows.map((row,i)=>(
-                    <div key={row.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px",marginBottom:8}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
-                        <span style={{fontSize:11,fontWeight:600,color:T.t3}}>Item {i+1}</span>
-                        {directRows.length>1&&<button onClick={()=>setDirectRows(p=>p.filter(r=>r.id!==row.id))} style={{background:"none",border:"none",cursor:"pointer",color:T.red,fontSize:18,lineHeight:1}}>×</button>}
+                  {/* Global vendor + challan + date — one per submission */}
+                  <div style={{background:T.surface,border:"1.5px solid "+T.bluM,borderRadius:8,padding:"12px",marginBottom:12,borderLeft:"3px solid "+T.blu}}>
+                    <div style={{fontSize:10.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>🏭 Delivery details (single vendor, one challan)</div>
+                    <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 1fr 1fr",gap:8}}>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor *</label>
+                        <LibrarySelect type="supplier" value={directGlobal.vendor}
+                          onChange={v=>setDirectGlobal(p=>({...p,vendor:v||""}))}
+                          onAdded={(v)=>setVendorList(prev=>[...prev,v].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}/>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
+                        <input value={directGlobal.challan} onChange={e=>setDirectGlobal(p=>({...p,challan:e.target.value}))} placeholder="e.g. CH-445"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Date</label>
+                        <input type="date" value={directGlobal.date} onChange={e=>setDirectGlobal(p=>({...p,date:e.target.value}))}
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
+                      <div>
+                        <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received By</label>
+                        <input value={directGlobal.received_by} onChange={e=>setDirectGlobal(p=>({...p,received_by:e.target.value}))} placeholder="Site person"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Items table — multiple materials in one delivery */}
+                  <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:7}}>📦 Items received <span style={{textTransform:"none",letterSpacing:0,color:T.t4,fontWeight:500}}>· same vendor / same challan</span></div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 80px 90px 28px",gap:7,padding:"5px 8px",background:T.surfaceB,borderRadius:6,border:"1px solid "+T.b1,marginBottom:5}}>
+                    {["Material Name *","Qty *","Unit","",].map((h,i)=>(<span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>))}
+                  </div>
+                  {directRows.map((row,i)=>{
+                    const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (row.item_name||"").trim().toLowerCase());
+                    const isLocked = !!row.item_name;
+                    const displayUnit = libMatch?.unit || row.unit || "Bags";
+                    return (
+                      <div key={row.id} style={{display:"grid",gridTemplateColumns:"1fr 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom:i<directRows.length-1?"1px dashed "+T.b1:"none"}}>
                         <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Material Name *</label>
                           <input value={row.item_name} onChange={e=>{
                               const v=e.target.value;
                               const m=matLibReal.find(x=>(x.name||"").trim().toLowerCase()===v.trim().toLowerCase());
@@ -8477,58 +8634,29 @@ function TabMaterial({ project }) {
                             style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                           <datalist id={"mat_lib_"+row.id}>{MAT_LIB.map(m=><option key={m} value={m}/>)}</datalist>
                         </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Vendor *</label>
-                          <LibrarySelect type="supplier" value={row.vendor}
-                            onChange={v=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,vendor:v||""}:r))}
-                            onAdded={(v)=>setVendorList(prev=>[...prev,v].sort((a,b)=>(a.name||"").localeCompare(b.name||"")))}/>
-                        </div>
+                        <input type="number" value={row.qty} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,qty:e.target.value}:r))} placeholder="0"
+                          style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                        {isLocked ? (
+                          <div title="Library me change karein" style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,height:33,boxSizing:"border-box",justifyContent:"center"}}>
+                            <span style={{fontSize:9}}>🔒</span>{displayUnit}
+                          </div>
+                        ) : (
+                          <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
+                            style={{padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
+                            {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                          </select>
+                        )}
+                        {directRows.length>1?(
+                          <button onClick={()=>setDirectRows(p=>p.filter(r=>r.id!==row.id))} title="Remove row"
+                            style={{width:26,height:26,borderRadius:6,background:T.redL,border:"1px solid "+T.redM,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                            <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                          </button>
+                        ):<span/>}
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"80px 1fr 1fr 1fr",gap:8,marginBottom:8}}>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Qty *</label>
-                          <input type="number" value={row.qty} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,qty:e.target.value}:r))} placeholder="0"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                        <div>
-                          {(() => {
-                            const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (row.item_name||"").trim().toLowerCase());
-                            const isLocked = !!row.item_name;
-                            const displayUnit = libMatch?.unit || row.unit || "Bags";
-                            return (
-                              <>
-                                <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>
-                                  Unit{isLocked && <span style={{marginLeft:4,fontSize:9,color:T.t4,textTransform:"none",fontWeight:500}}>(library)</span>}
-                                </label>
-                                {isLocked ? (
-                                  <div title="Library me change karein" style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t2,background:T.surfaceB,fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:5,height:33,boxSizing:"border-box"}}>
-                                    <span style={{fontSize:9}}>🔒</span>{displayUnit}
-                                  </div>
-                                ) : (
-                                  <select value={row.unit} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,unit:e.target.value}:r))}
-                                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                                    {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                                  </select>
-                                )}
-                              </>
-                            );
-                          })()}
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Challan No. *</label>
-                          <input value={row.challan} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,challan:e.target.value}:r))} placeholder="e.g. CH-445"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                        <div>
-                          <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received By</label>
-                          <input value={row.received_by||""} onChange={e=>setDirectRows(p=>p.map(r=>r.id===row.id?{...r,received_by:e.target.value}:r))} placeholder="Site person"
-                            style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                  <button onClick={()=>setDirectRows(p=>[...p,{id:Date.now(),item_name:"",qty:"",unit:"Bags",vendor:"",challan:"",received_by:""}])}
-                    style={{width:"100%",padding:"8px",borderRadius:7,border:"1.5px dashed "+T.b2,background:"none",color:T.t4,fontSize:12,cursor:"pointer",marginTop:4}}>
+                    );
+                  })}
+                  <button onClick={()=>setDirectRows(p=>[...p,{id:Date.now(),item_name:"",qty:"",unit:"Bags"}])}
+                    style={{width:"100%",padding:"9px",borderRadius:7,border:"1.5px dashed "+T.bluM,background:"transparent",color:T.blu,fontSize:12,cursor:"pointer",marginTop:6,fontWeight:600,fontFamily:"inherit"}}>
                     + Add Another Item
                   </button>
                 </div>
