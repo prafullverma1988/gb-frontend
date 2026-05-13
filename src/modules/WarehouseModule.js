@@ -731,34 +731,97 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const initial=()=> (prefill?.items&&prefill.items.length>0)
     ?prefill.items.map(it=>{
       const m=stock.find(s=>s.name?.toLowerCase()===String(it.material_name||it.name||"").toLowerCase());
-      return {material_id:m?.id||null,name:m?.name||it.name||it.material_name,unit:m?.unit||it.unit||"Nos",qty:Number(it.qty)||0,rate:m?.rate||0,selected_batches:null};
+      return {material_id:m?.id||null,name:m?.name||it.name||it.material_name,unit:m?.unit||it.unit||"Nos",qty:Number(it.qty)||0,rate:m?.rate||0,selected_batches:null,_rateDirty:false};
     })
-    :[{material_id:null,name:"",unit:"Nos",qty:"",rate:"",selected_batches:null}];
+    :[{material_id:null,name:"",unit:"Nos",qty:"",rate:"",selected_batches:null,_rateDirty:false}];
   const [items,setItems]=useState(initial);
   const [saving,setSaving]=useState(false);
   // Batch picker — when user clicks "Choose batches" under rate field
   const [batchPickerIdx,setBatchPickerIdx]=useState(null);
   const [batchData,setBatchData]=useState(null); // {batches, fifo_rate, unit}
+  // Per-row cached batch data + master fallback for weighted-rate breakdown.
+  // Shape: { [rowIdx]: { batches:[...], fifo_rate, master_rate, unit } }
+  const [batchesByIdx,setBatchesByIdx]=useState({});
+
+  // Greedy FIFO consumption preview from cached batches.
+  // Walks `selected` order if provided, else FIFO. Falls back to master
+  // rate for any shortfall. Returns breakdown lines + weighted rate.
+  const computeFifoPreview=(rowIdx,qty)=>{
+    const want=Number(qty)||0;
+    const cache=batchesByIdx[rowIdx];
+    if(want<=0||!cache) return null;
+    const selected=items[rowIdx]?.selected_batches;
+    const orderedBatches = Array.isArray(selected) && selected.length>0
+      ? selected.map(id=>cache.batches.find(b=>b.batch_id===id)).filter(Boolean)
+      : [...cache.batches]; // already FIFO-ordered from backend
+    let remaining=want, totalCost=0;
+    const breakdown=[];
+    for(const b of orderedBatches){
+      if(remaining<=0.0001) break;
+      const take=Math.min(remaining,Number(b.available_qty));
+      if(take<=0) continue;
+      totalCost += take * Number(b.rate||0);
+      breakdown.push({grn_no:b.grn_no,take,rate:Number(b.rate||0),cost:take*Number(b.rate||0)});
+      remaining -= take;
+    }
+    let shortfall=0;
+    if(remaining>0.0001){
+      shortfall=remaining;
+      const fb=Number(cache.master_rate||0);
+      totalCost += remaining * fb;
+      breakdown.push({grn_no:"FALLBACK",take:remaining,rate:fb,cost:remaining*fb});
+    }
+    return { breakdown, totalCost, weightedRate: want>0?totalCost/want:0, shortfall };
+  };
+
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
   const updItem=(i,patch)=>{
+    // If user typed in the rate field manually, mark _rateDirty so the
+    // auto-recomputation doesn't overwrite their value.
+    if(Object.prototype.hasOwnProperty.call(patch,"rate")) patch._rateDirty=true;
     setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
-    // Auto-fill rate from FIFO (oldest batch) when material picked
+    // Material picked? Fetch all batches into cache so weighted-rate
+    // preview works without further round-trips on qty changes.
     const pickedName=patch.name&&String(patch.name).trim();
     if(pickedName){
       api.get(`/warehouse/material-batches?name=${encodeURIComponent(pickedName)}`).then(r=>{
-        if(r.success&&Number(r.data?.fifo_rate)>0){
-          setItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.fifo_rate}:row));
+        if(r.success){
+          setBatchesByIdx(p=>({...p,[i]:r.data}));
+          // Auto-fill rate from oldest batch if user hasn't typed one
+          if(Number(r.data?.fifo_rate)>0){
+            setItems(p=>p.map((row,j)=>j===i&&!row._rateDirty?{...row,rate:r.data.fifo_rate}:row));
+          }
         }
       }).catch(()=>{
-        // Fallback to last-purchase rate if batches endpoint fails
+        // Fallback to last-purchase if batches endpoint fails
         api.get(`/warehouse/last-rate?name=${encodeURIComponent(pickedName)}`).then(r=>{
           if(r.success&&Number(r.data?.rate)>0){
-            setItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row));
+            setItems(p=>p.map((row,j)=>j===i&&!row._rateDirty?{...row,rate:r.data.rate}:row));
           }
         }).catch(()=>{});
       });
     }
   };
+
+  // Auto-recompute weighted rate whenever qty or batch-cache changes for
+  // any row (unless user has manually overridden the rate field).
+  useEffect(()=>{
+    setItems(prev=>{
+      let changed=false;
+      const next=prev.map((row,i)=>{
+        if(row._rateDirty) return row;
+        const cache=batchesByIdx[i];
+        if(!cache||!Number(row.qty)) return row;
+        const preview=computeFifoPreview(i,row.qty);
+        if(!preview||preview.weightedRate<=0) return row;
+        if(Math.abs(Number(row.rate||0)-preview.weightedRate)<0.01) return row;
+        changed=true;
+        return {...row,rate:Number(preview.weightedRate.toFixed(2))};
+      });
+      return changed?next:prev;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[items.map(r=>`${r.material_id}|${r.qty}|${(r.selected_batches||[]).join(",")}`).join("~"),batchesByIdx]);
 
   // Open batch picker for row idx
   const openBatchPicker=async(idx)=>{
@@ -876,14 +939,17 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
       <div style={{display:"grid",gridTemplateColumns:"2fr 60px 1fr 100px 90px 24px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 4px"}}>
         <span>Material (from stock)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
       </div>
-      {items.map((row,i)=>(
+      {items.map((row,i)=>{
+        const preview=row.name&&Number(row.qty)>0?computeFifoPreview(i,row.qty):null;
+        const usingFifo=preview&&preview.breakdown.length>1;
+        return (
         <div key={i}>
           <LineItemRow row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem}
             mode="transfer"
             canRemove={!fromMR && items.length>1}
             lockMaterial={!!fromMR}/>
           {row.name && (
-            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-2,marginBottom:6,paddingLeft:"calc(40% + 60px + 1fr + 6px)",fontSize:10.5}}>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-2,marginBottom:preview?2:6,paddingLeft:"calc(40% + 60px + 1fr + 6px)",fontSize:10.5,flexWrap:"wrap"}}>
               <button onClick={()=>openBatchPicker(i)}
                 title="Manual stock-batch selection (override FIFO)"
                 style={{background:row.selected_batches?T.purL:"none",color:row.selected_batches?T.pur:T.blu,border:`1px solid ${row.selected_batches?T.pur+"66":T.bluM}`,padding:"2px 9px",borderRadius:14,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:4}}>
@@ -895,10 +961,39 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
                   reset to FIFO
                 </button>
               )}
+              {row._rateDirty&&preview&&(
+                <button onClick={()=>setItems(p=>p.map((r,j)=>j===i?{...r,_rateDirty:false,rate:Number(preview.weightedRate.toFixed(2))}:r))}
+                  title="User-edited rate ko clear karke FIFO weighted rate par wapas le aao"
+                  style={{background:"none",color:T.amb,border:`1px solid ${T.ambM}`,padding:"2px 8px",borderRadius:14,fontSize:10,cursor:"pointer",fontFamily:"inherit",fontWeight:600}}>
+                  ↻ Reset to FIFO rate
+                </button>
+              )}
+            </div>
+          )}
+          {/* FIFO breakdown — surfaces when qty spans multiple batches so
+              the user sees exactly how the weighted rate was derived. */}
+          {usingFifo&&(
+            <div style={{margin:"2px 0 8px",marginLeft:"calc(40% + 60px + 1fr + 6px)",padding:"7px 10px",borderRadius:6,background:T.cynL+"55",border:`1px solid ${T.cynM||"#A7F3D0"}`,fontSize:10.5,color:T.t2,lineHeight:1.6}}>
+              <div style={{fontWeight:700,color:T.cyn,marginBottom:3}}>
+                ⓘ FIFO breakdown — qty {row.qty} {row.unit} spans {preview.breakdown.length} batch{preview.breakdown.length>1?"es":""}
+              </div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:3}}>
+                {preview.breakdown.map((b,k)=>(
+                  <span key={k} style={{background:"white",border:`1px solid ${b.grn_no==="FALLBACK"?T.ambM:T.b1}`,borderRadius:14,padding:"2px 9px",fontSize:10.5,fontWeight:600,color:b.grn_no==="FALLBACK"?T.amb:T.t2}}>
+                    {b.grn_no==="FALLBACK"?"⚠ Master fallback":<span style={{color:T.blu,fontFamily:"monospace"}}>{b.grn_no}</span>} · {b.take} @ ₹{fmtN(b.rate)} = ₹{fmtN(b.cost)}
+                  </span>
+                ))}
+              </div>
+              <div style={{fontSize:10.5,color:T.t3}}>
+                Weighted avg: <b style={{color:T.cyn}}>₹{fmtN(preview.weightedRate)}/{row.unit}</b>
+                {" · "}Total cost: <b style={{color:T.cyn}}>₹{fmtN(preview.totalCost)}</b>
+                {preview.shortfall>0&&<span style={{color:T.amb,marginLeft:8,fontWeight:600}}>⚠ {preview.shortfall} {row.unit} master rate se cover (batches kam pad gaye)</span>}
+              </div>
             </div>
           )}
         </div>
-      ))}
+        );
+      })}
       {stockErr&&<div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>⚠ Stock se zyada qty kisi item me hai — kam karo</div>}
       {!fromMR&&(
         <button onClick={addItem}
