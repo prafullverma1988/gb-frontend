@@ -198,7 +198,8 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
   const onLibPick=(v)=>{
     setLibPick(v);
-    const m=effectiveLib.find(l=>l.id===v);
+    // SearchSelect normalizes keys to strings; library id is number — compare loosely
+    const m=effectiveLib.find(l=>String(l.id)===String(v));
     if(m) setF(p=>({...p,name:m.name,unit:m.unit||"Nos",rate:m.rate||p.rate,category:m.category||p.category}));
   };
   const submit=async()=>{
@@ -230,13 +231,22 @@ function MaterialFormModal({material,library=[],onClose,onSaved}){
         <Field label="Pick from Material Library *" style={{marginBottom:11}}>
           <SearchSelect value={libPick} options={libOpts} onChange={onLibPick} placeholder="Library se material chunein"/>
           {effectiveLib.length===0&&<div style={{fontSize:10.5,color:T.amb,marginTop:3}}>⚠ Library khali hai — Library → Materials me pehle add karein</div>}
+          {fromLibrary&&(
+            <div style={{marginTop:6,padding:"6px 10px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:6,fontSize:11.5,color:T.grn,display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:11}}>🔒</span>
+              <span style={{fontWeight:700}}>{f.name}</span>
+              <span style={{color:T.t4,fontWeight:500,marginLeft:"auto"}}>· name + unit locked from library</span>
+            </div>
+          )}
         </Field>
       )}
-      <Field label="Material name *" style={{marginBottom:11}}>
-        <Input value={f.name} onChange={e=>upd("name",e.target.value)} placeholder="e.g. OPC 53 Grade Cement"
-          disabled={fromLibrary}
-          style={{background:fromLibrary?T.surfaceB:T.surface,color:fromLibrary?T.t2:T.t1,cursor:fromLibrary?"not-allowed":"text"}}/>
-      </Field>
+      {/* Edit mode: name is fixed (came from existing wh_materials row) */}
+      {editing&&(
+        <Field label="Material name" style={{marginBottom:11}}>
+          <Input value={f.name} disabled
+            style={{background:T.surfaceB,color:T.t2,cursor:"not-allowed"}}/>
+        </Field>
+      )}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:11,marginBottom:11}}>
         <Field label="Category">
           <select value={f.category} onChange={e=>upd("category",e.target.value)} disabled={fromLibrary}
