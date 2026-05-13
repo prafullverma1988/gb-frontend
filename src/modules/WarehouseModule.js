@@ -2215,7 +2215,41 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,
 }
 
 // ── REQUESTS WRAPPER — splits Tab 1 (Warehouse MR) and Tab 2 (Project) ─
-// ── SubTab bar — reused by Material In + Material Out ──────────────
+// ── REQUESTS TAB ────────────────────────────────────────────────────
+// Standalone Requests mother tab — gives a unified view of all pending
+// MRs in one place. Same data is ALSO accessible inside Material In
+// (Warehouse MR sub-tab) + Material Out (Project Requests sub-tab) for
+// lifecycle-grouped browsing. Two access paths, same source of truth.
+function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR}){
+  const [sub,setSub]=useState("warehouse");
+  const whMrs   = mrs.filter(m=>!m.project_id);
+  const projMrs = mrs.filter(m=>!!m.project_id);
+  return (
+    <div>
+      <SubTabBar active={sub} onSelect={setSub} tabs={[
+        {id:"warehouse",l:"Warehouse MR",     count:whMrs.length,  c:T.pur},
+        {id:"project",  l:"Project Requests", count:projMrs.length,c:T.cyn},
+      ]}/>
+      <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
+        <b>Flow:</b> Request {sub==="warehouse"?"(yahin se ya site se)":"(procurement se aati)"} → Admin <b>Material Approvals</b> drawer me approve karega → {sub==="warehouse"
+          ?(procMode==="via_procurement"
+            ?<><b>Send to Procurement</b> button click karein → procurement queue me MR jaayegi → vendor receive par stock auto-update.</>
+            :<>"Place Order" + "Receive (GRN)" buttons milenge.</>)
+          :<>"Issue Now" button milega.</>}
+        {sub==="warehouse"&&<span style={{marginLeft:8,padding:"1px 8px",background:procMode==="via_procurement"?T.purL:T.grnL,color:procMode==="via_procurement"?T.pur:T.grn,borderRadius:10,fontSize:10,fontWeight:700}}>Mode: {procMode==="via_procurement"?"Via Procurement":"Direct"}</span>}
+      </div>
+      {sub==="warehouse"
+        ? <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
+            onNew={()=>onSubMR.openNew()}
+            onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
+            onSendToProc={onSubMR.sendToProcurement}/>
+        : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}/>
+      }
+    </div>
+  );
+}
+
+// ── SubTab bar — reused by Material In + Material Out + Requests ────
 function SubTabBar({tabs,active,onSelect}){
   return (
     <div style={{display:"flex",gap:8,marginBottom:12,padding:3,background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`,width:"fit-content"}}>
@@ -2675,6 +2709,7 @@ function WarehouseModule(){
     {id:"stock",  l:"Stock",         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
     {id:"grn",    l:"Material In",   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
     {id:"issue",  l:"Material Out",  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
+    {id:"mr",     l:"Requests",      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
     {id:"transfer",l:"Transfers",    I:IcTrns, badge:null},
   ];
 
@@ -2749,6 +2784,20 @@ function WarehouseModule(){
         {tab==="issue"&&<MaterialOutTab issues={issues} mrs={mrs} projects={projects}
           onNewIssue={()=>setIssueNewOpen(true)} onSelectIssue={iss=>setIssueDetail(iss)}
           onSubMR={{ openIssue:(mr)=>setIssueFromMR(mr) }}/>}
+        {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
+          procMode={procMode}
+          onSubMR={{
+            openNew:()=>setMrNewOpen(true),
+            openIssue:(mr)=>setIssueFromMR(mr),
+            openOrder:(mr)=>setOrderMR(mr),
+            openGrn:(mr)=>setGrnMR(mr),
+            sendToProcurement:async(mr)=>{
+              if(!window.confirm(`${mr.id} ko procurement team ke paas bhejna hai? Vendor PO place karne ke baad warehouse stock auto-update hoga.`)) return;
+              const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
+              if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
+              else alert(r.message||"Failed");
+            },
+          }}/>}
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
