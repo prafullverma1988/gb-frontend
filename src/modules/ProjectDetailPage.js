@@ -7812,7 +7812,7 @@ function TabMaterial({ project }) {
           challan_no: meta.challan,
           received_qty: recvQty,
           received_date: meta.date || undefined,
-          received_by: meta.received_by || undefined,
+          received_by: meta.received_by || meUser?.name || undefined,
           photo_urls: grnPhotos.length ? grnPhotos : null,
         });
         if (res.success) { setGrnDone(p => [...p, mr.id]); okCount += 1; }
@@ -7859,7 +7859,7 @@ function TabMaterial({ project }) {
         project_id: projectId,
         project_name: projectName,
         challan_no: directGlobal.challan,
-        received_by: directGlobal.received_by || null,
+        received_by: directGlobal.received_by || meUser?.name || null,
         received_date: directGlobal.date || new Date().toISOString().split("T")[0],
         photo_urls: grnPhotos.length ? grnPhotos : null,
         items: validRows.map(r => ({
@@ -8556,8 +8556,11 @@ function TabMaterial({ project }) {
                                 </div>
                                 <div>
                                   <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Received By</label>
-                                  <input value={meta.received_by||""} onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],received_by:e.target.value}}))}
-                                    placeholder="Site person"
+                                  <input
+                                    value={meta.received_by !== undefined ? meta.received_by : (meUser?.name || "")}
+                                    onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],received_by:e.target.value}}))}
+                                    placeholder={meUser?.name || "Site person"}
+                                    title="Default: logged-in user. Override karne ke liye type karein."
                                     style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                                 </div>
                               </div>
@@ -8637,7 +8640,11 @@ function TabMaterial({ project }) {
                       </div>
                       <div>
                         <label style={{fontSize:10,fontWeight:600,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:4}}>Received By</label>
-                        <input value={directGlobal.received_by} onChange={e=>setDirectGlobal(p=>({...p,received_by:e.target.value}))} placeholder="Site person"
+                        <input
+                          value={directGlobal.received_by !== undefined && directGlobal.received_by !== "" ? directGlobal.received_by : (meUser?.name || "")}
+                          onChange={e=>setDirectGlobal(p=>({...p,received_by:e.target.value}))}
+                          placeholder={meUser?.name || "Site person"}
+                          title="Default: logged-in user. Override karne ke liye type karein."
                           style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                       </div>
                     </div>
