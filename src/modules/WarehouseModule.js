@@ -2215,42 +2215,75 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,
 }
 
 // ── REQUESTS WRAPPER — splits Tab 1 (Warehouse MR) and Tab 2 (Project) ─
-function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR}){
-  const [sub,setSub]=useState("warehouse");
+// ── SubTab bar — reused by Material In + Material Out ──────────────
+function SubTabBar({tabs,active,onSelect}){
+  return (
+    <div style={{display:"flex",gap:8,marginBottom:12,padding:3,background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`,width:"fit-content"}}>
+      {tabs.map(t=>(
+        <button key={t.id} onClick={()=>onSelect(t.id)}
+          style={{padding:"7px 16px",borderRadius:6,border:"none",background:active===t.id?t.c:"none",color:active===t.id?"white":T.t3,fontSize:12,fontWeight:active===t.id?700:500,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
+          {t.l}
+          <span style={{background:active===t.id?"rgba(255,255,255,0.25)":T.b1,color:active===t.id?"white":T.t3,fontSize:10,fontWeight:800,padding:"1px 7px",borderRadius:10}}>{t.count}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ── MATERIAL IN TAB ─────────────────────────────────────────────────
+// Lifecycle view of incoming material:
+//   - Received: confirmed GRNs (history)
+//   - Warehouse MR: requests warehouse raised that will become GRNs
+function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewGRN,onVerifyGRN,onSubMR}){
+  const [sub,setSub]=useState("received");
   const whMrs = mrs.filter(m=>!m.project_id);
-  const projMrs = mrs.filter(m=>!!m.project_id);
-  const subTabs = [
-    {id:"warehouse",l:"Warehouse MR",  count:whMrs.length,c:T.pur,sub:"Apne stock ke liye"},
-    {id:"project",  l:"Project Requests",count:projMrs.length,c:T.cyn,sub:"Procurement se aaye"},
-  ];
-  const list = sub==="warehouse"?whMrs:projMrs;
+  const pendingCount = whMrs.filter(m=>["Pending","Approved","Ordered"].includes(m.status)).length;
   return (
     <div>
-      <div style={{display:"flex",gap:8,marginBottom:12,padding:3,background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`,width:"fit-content"}}>
-        {subTabs.map(t=>(
-          <button key={t.id} onClick={()=>setSub(t.id)}
-            style={{padding:"7px 16px",borderRadius:6,border:"none",background:sub===t.id?t.c:"none",color:sub===t.id?"white":T.t3,fontSize:12,fontWeight:sub===t.id?700:500,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:6}}>
-            {t.l}
-            <span style={{background:sub===t.id?"rgba(255,255,255,0.25)":T.b1,color:sub===t.id?"white":T.t3,fontSize:10,fontWeight:800,padding:"1px 7px",borderRadius:10}}>{t.count}</span>
-          </button>
-        ))}
-      </div>
-      {/* Approval flow note — same for both sub-tabs */}
-      <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
-        <b>Flow:</b> Request {sub==="warehouse"?"(yahin se ya site se)":"(procurement se aati)"} → Admin <b>Material Approvals</b> drawer me approve karega → {sub==="warehouse"
-          ?(procMode==="via_procurement"
+      <SubTabBar active={sub} onSelect={setSub} tabs={[
+        {id:"received",l:"Received GRN",  count:grns.length,c:T.grn},
+        {id:"requests",l:"Warehouse MR",  count:whMrs.length,c:T.pur},
+      ]}/>
+      {sub==="requests"&&(
+        <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
+          <b>Flow:</b> Request (yahin se ya site se) → Admin <b>Material Approvals</b> drawer me approve karega → {procMode==="via_procurement"
             ?<><b>Send to Procurement</b> button click karein → procurement queue me MR jaayegi → vendor receive par stock auto-update.</>
-            :<>"Place Order" + "Receive (GRN)" buttons milenge.</>)
-          :<>"Issue Now" button milega.</>}
-        {sub==="warehouse"&&<span style={{marginLeft:8,padding:"1px 8px",background:procMode==="via_procurement"?T.purL:T.grnL,color:procMode==="via_procurement"?T.pur:T.grn,borderRadius:10,fontSize:10,fontWeight:700}}>Mode: {procMode==="via_procurement"?"Via Procurement":"Direct"}</span>}
-      </div>
-      {sub==="warehouse"
-        ? <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
+            :<>"Place Order" + "Receive (GRN)" buttons milenge.</>}
+          <span style={{marginLeft:8,padding:"1px 8px",background:procMode==="via_procurement"?T.purL:T.grnL,color:procMode==="via_procurement"?T.pur:T.grn,borderRadius:10,fontSize:10,fontWeight:700}}>Mode: {procMode==="via_procurement"?"Via Procurement":"Direct"}</span>
+        </div>
+      )}
+      {sub==="received"
+        ? <GrnTab grns={grns} onNew={onNewGRN} onVerify={onVerifyGRN}/>
+        : <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
             onNew={()=>onSubMR.openNew()}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
             onSendToProc={onSubMR.sendToProcurement}/>
-        : <MRTab mrs={projMrs} mode="project"
-            onIssue={onSubMR.openIssue}/>
+      }
+    </div>
+  );
+}
+
+// ── MATERIAL OUT TAB ────────────────────────────────────────────────
+// Lifecycle view of outgoing material:
+//   - Issued: physical Issue events (history)
+//   - Project Requests: requests projects raised that will become Issues
+function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR}){
+  const [sub,setSub]=useState("issued");
+  const projMrs = mrs.filter(m=>!!m.project_id);
+  return (
+    <div>
+      <SubTabBar active={sub} onSelect={setSub} tabs={[
+        {id:"issued",  l:"Issued",          count:issues.length,c:T.amb},
+        {id:"requests",l:"Project Requests",count:projMrs.length,c:T.cyn},
+      ]}/>
+      {sub==="requests"&&(
+        <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
+          <b>Flow:</b> Request procurement se aati → Admin <b>Material Approvals</b> drawer me approve karega → "Issue Now" button milega.
+        </div>
+      )}
+      {sub==="issued"
+        ? <IssueTab issues={issues} projects={projects} onNew={onNewIssue} onSelect={onSelectIssue}/>
+        : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}/>
       }
     </div>
   );
@@ -2634,12 +2667,14 @@ function WarehouseModule(){
   const totalValue=stock.reduce((s,m)=>s+m.qty*m.rate,0);
   const totalItems=stock.length;
   const pendingMRs=mrs.filter(m=>m.status==="Pending").length;
+  // Per-tab pending counts so the badge sits on the right mother tab
+  const pendingInMRs = mrs.filter(m=>!m.project_id && ["Pending","Approved","Ordered"].includes(m.status)).length;
+  const pendingOutMRs= mrs.filter(m=>!!m.project_id && ["Pending","Approved"].includes(m.status)).length;
 
   const TABS=[
     {id:"stock",  l:"Stock",         I:IcBox,  badge:lowStock.length>0?lowStock.length:null, bc:T.red},
-    {id:"grn",    l:"Material In",   I:IcIn,   badge:null},
-    {id:"issue",  l:"Material Out",  I:IcOut,  badge:null},
-    {id:"mr",     l:"Requests",      I:IcMR,   badge:pendingMRs>0?pendingMRs:null, bc:T.amb},
+    {id:"grn",    l:"Material In",   I:IcIn,   badge:pendingInMRs>0?pendingInMRs:null, bc:T.pur},
+    {id:"issue",  l:"Material Out",  I:IcOut,  badge:pendingOutMRs>0?pendingOutMRs:null, bc:T.cyn},
     {id:"transfer",l:"Transfers",    I:IcTrns, badge:null},
   ];
 
@@ -2697,13 +2732,11 @@ function WarehouseModule(){
 
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
         {tab==="stock"&&<StockTab stock={stock} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})}/>}
-        {tab==="grn"&&<GrnTab grns={grns} onNew={()=>setGrnNewOpen(true)} onVerify={handleVerifyGRN}/>}
-        {tab==="issue"&&<IssueTab issues={issues} projects={projects} onNew={()=>setIssueNewOpen(true)} onSelect={iss=>setIssueDetail(iss)}/>}
-        {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
+        {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
+          onNewGRN={()=>setGrnNewOpen(true)} onVerifyGRN={handleVerifyGRN}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
-            openIssue:(mr)=>setIssueFromMR(mr),
             openOrder:(mr)=>setOrderMR(mr),
             openGrn:(mr)=>setGrnMR(mr),
             sendToProcurement:async(mr)=>{
@@ -2713,6 +2746,9 @@ function WarehouseModule(){
               else alert(r.message||"Failed");
             },
           }}/>}
+        {tab==="issue"&&<MaterialOutTab issues={issues} mrs={mrs} projects={projects}
+          onNewIssue={()=>setIssueNewOpen(true)} onSelectIssue={iss=>setIssueDetail(iss)}
+          onSubMR={{ openIssue:(mr)=>setIssueFromMR(mr) }}/>}
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)} onSelect={t=>setTransferDetail(t)}/>}
       </div>
 
