@@ -1743,6 +1743,7 @@ function OtherSettings() {
   const [enabled, setEnabled] = useState(true);
   const [days, setDays] = useState(4);
   const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
+  const [grnPhotoReq, setGrnPhotoReq] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -1753,6 +1754,7 @@ function OtherSettings() {
         setEnabled(r.data.dup_payment_check_enabled !== 0);
         setDays(parseInt(r.data.dup_payment_window_days) || 4);
         setWhProcMode(r.data.warehouse_procurement_mode || "direct");
+        setGrnPhotoReq(r.data.grn_photo_required === 1 || r.data.grn_photo_required === true);
       }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -1764,6 +1766,7 @@ function OtherSettings() {
         dup_payment_check_enabled: enabled,
         dup_payment_window_days: parseInt(days) || 4,
         warehouse_procurement_mode: whProcMode,
+        grn_photo_required: grnPhotoReq,
       });
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1800);
@@ -1817,6 +1820,14 @@ function OtherSettings() {
             </label>
           ))}
         </div>
+      </SectionCard>
+
+      <SectionCard title="GRN Photo Policy"
+        desc="GRN (material receive) ke time challan / material / quality ki photo attach karna compulsory rakhna hai ya optional.">
+        <ToggleRow icon={<IcBox size={17} color={T.blue} />}
+          label="📷 Photo compulsory at GRN time"
+          desc="ON: User ko kam se kam ek photo (challan ya material) attach karni hogi, warna Submit GRN block. OFF: Photo optional — attach kar sakte ho par enforcement nahi."
+          value={grnPhotoReq} onChange={setGrnPhotoReq} />
       </SectionCard>
     </div>
   );

@@ -7491,6 +7491,13 @@ function TabMaterial({ project }) {
   const [directGlobal, setDirectGlobal] = useState({ vendor: "", challan: "", date: "", received_by: "" });
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
   const [grnPhotos, setGrnPhotos] = useState([]);
+  // Company-level GRN photo policy — true = at least one photo mandatory
+  const [grnPhotoRequired, setGrnPhotoRequired] = useState(false);
+  useEffect(() => {
+    api.get("/settings/company").then(r => {
+      if (r?.success && r.data) setGrnPhotoRequired(Number(r.data.grn_photo_required) === 1);
+    }).catch(() => {});
+  }, []);
   // (Add-new-vendor flow now handled inside <LibrarySelect type="supplier"/>)
   const [grnSaving, setGrnSaving] = useState(false);
   const [grnDone, setGrnDone] = useState([]);
@@ -7691,13 +7698,17 @@ function TabMaterial({ project }) {
   }, [showGRN, projectId, loadPendingTransfers, loadPendingIssues]);
 
   const handleReceiveTransfer = async (tr) => {
+    if (grnPhotoRequired && grnPhotos.length === 0) {
+      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
+      return;
+    }
     setTrReceiving(true);
     try {
       const items = (tr.items || []).map(it => ({
         id: it.id,
         received_qty: Number(trReceiveQty[`${tr.id}_${it.id}`] ?? it.qty) || 0,
       }));
-      const res = await api.post(`/warehouse/transfers/${tr.id}/receive`, { items });
+      const res = await api.post(`/warehouse/transfers/${tr.id}/receive`, { items, photo_urls: grnPhotos.length ? grnPhotos : null });
       if (res.success) {
         setTrReceiveDone(p => [...p, tr.id]);
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
@@ -7711,13 +7722,17 @@ function TabMaterial({ project }) {
   };
 
   const handleReceiveIssue = async (iss) => {
+    if (grnPhotoRequired && grnPhotos.length === 0) {
+      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
+      return;
+    }
     setIssueReceiving(true);
     try {
       const items = (iss.items || []).map(it => ({
         id: it.id,
         received_qty: Number(issueReceiveQty[`${iss.id}_${it.id}`] ?? it.qty) || 0,
       }));
-      const res = await api.post(`/warehouse/issues/${iss.id}/receive`, { items });
+      const res = await api.post(`/warehouse/issues/${iss.id}/receive`, { items, photo_urls: grnPhotos.length ? grnPhotos : null });
       if (res.success) {
         setIssueReceiveDone(p => [...p, iss.id]);
         api.get("/tasks/project/" + projectId + "/material-ledger").then(r => {
@@ -7734,12 +7749,17 @@ function TabMaterial({ project }) {
   const handleReceiveMR = async (mrId) => {
     const row = grnRows[mrId] || {};
     if (!row.challan) { alert("Challan number required"); return; }
+    if (grnPhotoRequired && grnPhotos.length === 0) {
+      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
+      return;
+    }
     setGrnSaving(true);
     try {
       const mr = orderedMRs.find(m => m.id === mrId);
       const res = await api.patch("/procurement/mrs/" + mrId + "/mark-received", {
         challan_no: row.challan,
         received_qty: parseFloat(row.received_qty) || parseFloat(mr?.quantity) || 0,
+        photo_urls: grnPhotos.length ? grnPhotos : null,
       });
       if (res.success) {
         setGrnDone(p => [...p, mrId]);
@@ -7773,6 +7793,10 @@ function TabMaterial({ project }) {
   const handleReceiveVendor = async (vendor) => {
     const meta = vendorReceive[vendor] || {};
     if (!meta.challan || !meta.challan.trim()) { alert("Challan number required"); return; }
+    if (grnPhotoRequired && grnPhotos.length === 0) {
+      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
+      return;
+    }
     const targetMRs = orderedMRs.filter(mr =>
       (mr.linked_vendor || "— Unassigned —") === vendor &&
       !grnDone.includes(mr.id) &&
@@ -7789,6 +7813,7 @@ function TabMaterial({ project }) {
           received_qty: recvQty,
           received_date: meta.date || undefined,
           received_by: meta.received_by || undefined,
+          photo_urls: grnPhotos.length ? grnPhotos : null,
         });
         if (res.success) { setGrnDone(p => [...p, mr.id]); okCount += 1; }
         else failures.push(`${mr.item_name}: ${res.message||"failed"}`);
@@ -7822,6 +7847,10 @@ function TabMaterial({ project }) {
     if (!directGlobal.challan) { alert("Challan number daalo"); return; }
     const validRows = directRows.filter(r => r.item_name && Number(r.qty) > 0);
     if (!validRows.length) { alert("Kam se kam ek material + qty required hai"); return; }
+    if (grnPhotoRequired && grnPhotos.length === 0) {
+      alert("Company policy: GRN ke saath kam se kam ek photo attach karo (challan / material).");
+      return;
+    }
     setGrnSaving(true);
     try {
       const res = await api.post("/procurement/grns", {
@@ -8662,10 +8691,16 @@ function TabMaterial({ project }) {
                 </div>
               )}
             </div>
-            {/* Photos — Direct Receive ke liye attached photos (challan, qty, quality) */}
-            {grnTab==="direct"&&(
-              <div style={{padding:"10px 16px",borderTop:"1px solid "+T.b1,background:"white",flexShrink:0}}>
-                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6}}>GRN Photos (challan / material / quality issue)</div>
+            {/* Photos — shared across all GRN tabs (challan / material / quality).
+                When grn_photo_required is ON (company policy), at least one is mandatory. */}
+            <div style={{padding:"10px 16px",borderTop:"1px solid "+T.b1,background:"white",flexShrink:0}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:grnPhotoRequired&&grnPhotos.length===0?T.amb:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+                  📷 GRN Photos
+                  <span style={{textTransform:"none",fontSize:10,fontWeight:500,color:T.t4}}>(challan / material / quality)</span>
+                  {grnPhotoRequired&&<span style={{textTransform:"none",fontSize:9.5,fontWeight:700,color:grnPhotos.length===0?T.red:T.grn,background:grnPhotos.length===0?T.redL:T.grnL,padding:"1px 7px",borderRadius:10,border:`1px solid ${grnPhotos.length===0?T.redM:T.grnM}`}}>
+                    {grnPhotos.length===0?"⚠ Required":"✓ Attached"}
+                  </span>}
+                </div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {grnPhotos.map((url,idx)=>(
                     <div key={idx} style={{position:"relative",width:60,height:60,borderRadius:6,overflow:"hidden",border:"1px solid "+T.b1}}>
@@ -8692,7 +8727,6 @@ function TabMaterial({ project }) {
                   </label>
                 </div>
               </div>
-            )}
             <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
               <button onClick={()=>setShowGRN(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
               {grnTab==="direct"&&(
