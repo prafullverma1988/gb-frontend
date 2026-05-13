@@ -2439,7 +2439,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 //                Approved → Ordered (vendor) → Received (GRN, stock+).
 //   "project":   Tab 2 — procurement-driven MRs for projects. Lifecycle:
 //                Pending → Approved → Issued (from existing stock).
-function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,onPassToProc,mode="project",procMode="direct"}){
+function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSendToProc,onPassToProc,mode="project",procMode="direct"}){
   const [fStatus,setFStatus]=useState("All");
   const STATUS_S={
     "Pending":        {c:T.amb,bg:T.ambL,brd:T.ambM},
@@ -2450,11 +2450,12 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,
     "Issued":         {c:T.grn,bg:T.grnL,brd:T.grnM},
     "Partial":        {c:T.blu,bg:T.bluL,brd:T.bluM},
     "Rejected":       {c:T.red,bg:T.redL,brd:T.redM},
+    "Closed":         {c:T.slt||T.t3,bg:T.sltL||"#F3F4F6",brd:T.b2},
   };
   const PRIO_S={"High":{c:T.red,bg:T.redL},"Medium":{c:T.amb,bg:T.ambL},"Low":{c:T.slt,bg:T.sltL}};
   const statusFilters = mode==="warehouse"
-    ? ["All","Pending","Approved","Ordered","Received","Rejected"]
-    : ["All","Pending","Approved","Issued","Rejected"];
+    ? ["All","Pending","Approved","Ordered","Received","Rejected","Closed"]
+    : ["All","Pending","Approved","Issued","Rejected","Closed"];
   const filtered=mrs.filter(m=>fStatus==="All"||m.status===fStatus||(fStatus==="Received"&&m.status==="PartialReceived"));
   return(
     <div>
@@ -2585,6 +2586,27 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,
                       <span style={{fontSize:11.5,color:T.red,fontWeight:600}}>Rejected by Admin</span>
                     </div>
                   )}
+                  {mr.status==="Closed"&&(
+                    <div title={mr.remark||""}
+                      style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b2}`}}>
+                      <span style={{fontSize:13}}>🔒</span>
+                      <span style={{fontSize:11.5,color:T.t3,fontWeight:600}}>Closed</span>
+                    </div>
+                  )}
+
+                  {/* Manual close — visible on any non-terminal state.
+                      Useful when site doesn't need the material anymore
+                      (project on hold, design change, etc.). Requires a
+                      mandatory closure reason. */}
+                  {onClose && ["Pending","Approved","Ordered","PartialReceived"].includes(mr.status) && (
+                    <button onClick={()=>onClose(mr)}
+                      title="Manually close this MR (compulsory reason)"
+                      style={{padding:"5px 10px",borderRadius:7,background:"none",border:`1px dashed ${T.b2}`,color:T.t3,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}
+                      onMouseEnter={e=>{e.currentTarget.style.background=T.surfaceB;e.currentTarget.style.color=T.red;e.currentTarget.style.borderColor=T.redM;}}
+                      onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color=T.t3;e.currentTarget.style.borderColor=T.b2;}}>
+                      🔒 Close
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -2601,7 +2623,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,
 // MRs in one place. Same data is ALSO accessible inside Material In
 // (Warehouse MR sub-tab) + Material Out (Project Requests sub-tab) for
 // lifecycle-grouped browsing. Two access paths, same source of truth.
-function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApprove,onReject}){
+function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApprove,onReject,onClose}){
   const [sub,setSub]=useState("warehouse");
   const whMrs   = mrs.filter(m=>!m.project_id);
   const projMrs = mrs.filter(m=>!!m.project_id);
@@ -2624,10 +2646,10 @@ function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApp
             onNew={()=>onSubMR.openNew()}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
             onSendToProc={onSubMR.sendToProcurement}
-            onApprove={onApprove} onReject={onReject}/>
+            onApprove={onApprove} onReject={onReject} onClose={onClose}/>
         : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}
             onPassToProc={onSubMR.passToProcurement}
-            onApprove={onApprove} onReject={onReject}/>
+            onApprove={onApprove} onReject={onReject} onClose={onClose}/>
       }
     </div>
   );
@@ -2652,7 +2674,7 @@ function SubTabBar({tabs,active,onSelect}){
 // Lifecycle view of incoming material:
 //   - Received: confirmed GRNs (history)
 //   - Warehouse MR: requests warehouse raised that will become GRNs
-function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewGRN,onVerifyGRN,onSubMR,onApprove,onReject}){
+function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewGRN,onVerifyGRN,onSubMR,onApprove,onReject,onClose}){
   const [sub,setSub]=useState("received");
   const whMrs = mrs.filter(m=>!m.project_id);
   const pendingCount = whMrs.filter(m=>["Pending","Approved","Ordered"].includes(m.status)).length;
@@ -2676,7 +2698,7 @@ function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewG
             onNew={()=>onSubMR.openNew()}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
             onSendToProc={onSubMR.sendToProcurement}
-            onApprove={onApprove} onReject={onReject}/>
+            onApprove={onApprove} onReject={onReject} onClose={onClose}/>
       }
     </div>
   );
@@ -2686,7 +2708,7 @@ function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewG
 // Lifecycle view of outgoing material:
 //   - Issued: physical Issue events (history)
 //   - Project Requests: requests projects raised that will become Issues
-function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,onApprove,onReject}){
+function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,onApprove,onReject,onClose}){
   const [sub,setSub]=useState("issued");
   const projMrs = mrs.filter(m=>!!m.project_id);
   return (
@@ -2704,7 +2726,7 @@ function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,on
         ? <IssueTab issues={issues} projects={projects} onNew={onNewIssue} onSelect={onSelectIssue}/>
         : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}
             onPassToProc={onSubMR.passToProcurement}
-            onApprove={onApprove} onReject={onReject}/>
+            onApprove={onApprove} onReject={onReject} onClose={onClose}/>
       }
     </div>
   );
@@ -3061,6 +3083,26 @@ function WarehouseModule(){
       else alert(res.message || "Reject failed");
     } catch (e) { alert(e.message); }
   };
+  // Manual close — any non-terminal MR (Pending / Approved / Ordered).
+  // Reason is mandatory. Linked procurement MR also gets closed by backend.
+  const closeMR = async (mr) => {
+    if (!mr?.dbId) return;
+    const reason = window.prompt(
+      `${mr.id || `MR-${mr.dbId}`} close karne ka reason (mandatory):\n` +
+      "(e.g. site need cancel, design change, project on hold)",
+      ""
+    );
+    if (reason === null) return; // user cancelled
+    if (!reason.trim()) { alert("Closure reason zaroori hai"); return; }
+    try {
+      const res = await api.patch(`/warehouse/mr/${mr.dbId}`, {
+        status: "Closed",
+        closure_reason: reason.trim(),
+      });
+      if (res.success) await loadAll();
+      else alert(res.message || "Close failed");
+    } catch (e) { alert(e.message); }
+  };
 
   const loadAll=useCallback(async()=>{
     try{
@@ -3187,7 +3229,7 @@ function WarehouseModule(){
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onNewGRN={()=>setGrnNewOpen(true)} onVerifyGRN={handleVerifyGRN}
-          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={closeMR}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
             openOrder:(mr)=>setOrderMR(mr),
@@ -3208,11 +3250,11 @@ function WarehouseModule(){
           }}/>}
         {tab==="issue"&&<MaterialOutTab issues={issues} mrs={mrs} projects={projects}
           onNewIssue={()=>setIssueNewOpen(true)} onSelectIssue={iss=>setIssueDetail(iss)}
-          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={closeMR}
           onSubMR={{ openIssue:(mr)=>setIssueFromMR(mr) }}/>}
         {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
-          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={closeMR}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
             openIssue:(mr)=>setIssueFromMR(mr),
