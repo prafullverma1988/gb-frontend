@@ -2505,8 +2505,18 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,
                   {totalValue>0&&<div style={{fontSize:11,fontWeight:700,color:T.blu,marginTop:3}}>Total: ₹{fmtN(totalValue)}</div>}
                 </div>
                 <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
-                  {/* PENDING — admin approves from Material Approvals drawer (Projects → Pending Approvals → Warehouse tab) */}
-                  {mr.status==="Pending"&&(
+                  {/* PENDING — admin/super_admin can act inline; everyone else
+                      sees the "approval pending" badge as before. */}
+                  {mr.status==="Pending"&&onApprove&&onReject&&(
+                    <>
+                      <Btn onClick={()=>onApprove(mr)} c={T.grn} size="sm" icon={IcChk}>Approve</Btn>
+                      <button onClick={()=>onReject(mr)}
+                        style={{padding:"6px 11px",borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+                        ✕ Reject
+                      </button>
+                    </>
+                  )}
+                  {mr.status==="Pending"&&!(onApprove&&onReject)&&(
                     <div style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,whiteSpace:"nowrap"}}>
                       <span style={{fontSize:13}}>⏳</span>
                       <span style={{fontSize:11,color:T.amb,fontWeight:600}}>Admin approval pending</span>
@@ -2571,7 +2581,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,
 // MRs in one place. Same data is ALSO accessible inside Material In
 // (Warehouse MR sub-tab) + Material Out (Project Requests sub-tab) for
 // lifecycle-grouped browsing. Two access paths, same source of truth.
-function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR}){
+function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApprove,onReject}){
   const [sub,setSub]=useState("warehouse");
   const whMrs   = mrs.filter(m=>!m.project_id);
   const projMrs = mrs.filter(m=>!!m.project_id);
@@ -2593,8 +2603,10 @@ function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR}){
         ? <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
             onNew={()=>onSubMR.openNew()}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
-            onSendToProc={onSubMR.sendToProcurement}/>
-        : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}/>
+            onSendToProc={onSubMR.sendToProcurement}
+            onApprove={onApprove} onReject={onReject}/>
+        : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}
+            onApprove={onApprove} onReject={onReject}/>
       }
     </div>
   );
@@ -2619,7 +2631,7 @@ function SubTabBar({tabs,active,onSelect}){
 // Lifecycle view of incoming material:
 //   - Received: confirmed GRNs (history)
 //   - Warehouse MR: requests warehouse raised that will become GRNs
-function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewGRN,onVerifyGRN,onSubMR}){
+function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewGRN,onVerifyGRN,onSubMR,onApprove,onReject}){
   const [sub,setSub]=useState("received");
   const whMrs = mrs.filter(m=>!m.project_id);
   const pendingCount = whMrs.filter(m=>["Pending","Approved","Ordered"].includes(m.status)).length;
@@ -2642,7 +2654,8 @@ function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewG
         : <MRTab mrs={whMrs} mode="warehouse" procMode={procMode}
             onNew={()=>onSubMR.openNew()}
             onOrder={onSubMR.openOrder} onGrn={onSubMR.openGrn}
-            onSendToProc={onSubMR.sendToProcurement}/>
+            onSendToProc={onSubMR.sendToProcurement}
+            onApprove={onApprove} onReject={onReject}/>
       }
     </div>
   );
@@ -2652,7 +2665,7 @@ function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewG
 // Lifecycle view of outgoing material:
 //   - Issued: physical Issue events (history)
 //   - Project Requests: requests projects raised that will become Issues
-function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR}){
+function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,onApprove,onReject}){
   const [sub,setSub]=useState("issued");
   const projMrs = mrs.filter(m=>!!m.project_id);
   return (
@@ -2668,7 +2681,8 @@ function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR}){
       )}
       {sub==="issued"
         ? <IssueTab issues={issues} projects={projects} onNew={onNewIssue} onSelect={onSelectIssue}/>
-        : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}/>
+        : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}
+            onApprove={onApprove} onReject={onReject}/>
       }
     </div>
   );
@@ -2995,6 +3009,54 @@ function WarehouseModule(){
   // Current user (for admin-only actions)
   const meUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
   const isAdmin = ["admin","super_admin","project_manager"].includes((meUser?.role || "").toLowerCase());
+  // Only super_admin / admin can approve MRs (PM excluded from approval-grant authority)
+  const canApproveMR = ["admin","super_admin"].includes((meUser?.role || "").toLowerCase());
+
+  // Approve / Reject — inline buttons on Pending MR rows (shown when canApproveMR).
+  // Procurement-side MRs (project_id != NULL) use /procurement/mrs/:id/approve.
+  // Warehouse-internal MRs (project_id IS NULL) use /warehouse/mr/:id with status.
+  const approveMR = async (mr) => {
+    if (!mr?.dbId) return;
+    try {
+      // Mode hint comes from the MR shape: linked_procurement_mr_id present
+      // OR project_id present → procurement-side; else warehouse-internal
+      const isProcurementSide = !!mr.project_id;
+      const url = isProcurementSide
+        ? `/procurement/mrs/${mr.dbId}/approve`
+        : `/warehouse/mr/${mr.dbId}`;
+      const body = isProcurementSide
+        ? { action: "Approved", approved_qty: mr.items?.[0]?.qty || mr.quantity || null }
+        : { status: "Approved" };
+      const res = isProcurementSide
+        ? await api.patch(url, body)
+        : await api.patch(url, body);
+      if (res.success) {
+        await loadAll();
+      } else {
+        alert(res.message || "Approve failed");
+      }
+    } catch (e) { alert(e.message); }
+  };
+  const rejectMR = async (mr) => {
+    if (!mr?.dbId) return;
+    const reason = window.prompt("Reject reason (optional):", "");
+    if (reason === null) return; // user cancelled
+    try {
+      const isProcurementSide = !!mr.project_id;
+      if (isProcurementSide) {
+        const res = await api.patch(`/procurement/mrs/${mr.dbId}/approve`, {
+          action: "Rejected",
+          rejected_reason: reason || "Rejected by admin",
+        });
+        if (res.success) await loadAll();
+        else alert(res.message || "Reject failed");
+      } else {
+        const res = await api.patch(`/warehouse/mr/${mr.dbId}`, { status: "Rejected" });
+        if (res.success) await loadAll();
+        else alert(res.message || "Reject failed");
+      }
+    } catch (e) { alert(e.message); }
+  };
 
   const loadAll=useCallback(async()=>{
     try{
@@ -3121,6 +3183,7 @@ function WarehouseModule(){
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onNewGRN={()=>setGrnNewOpen(true)} onVerifyGRN={handleVerifyGRN}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
             openOrder:(mr)=>setOrderMR(mr),
@@ -3134,9 +3197,11 @@ function WarehouseModule(){
           }}/>}
         {tab==="issue"&&<MaterialOutTab issues={issues} mrs={mrs} projects={projects}
           onNewIssue={()=>setIssueNewOpen(true)} onSelectIssue={iss=>setIssueDetail(iss)}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined}
           onSubMR={{ openIssue:(mr)=>setIssueFromMR(mr) }}/>}
         {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
+          onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
             openIssue:(mr)=>setIssueFromMR(mr),
