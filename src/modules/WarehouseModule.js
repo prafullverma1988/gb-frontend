@@ -731,23 +731,56 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
   const initial=()=> (prefill?.items&&prefill.items.length>0)
     ?prefill.items.map(it=>{
       const m=stock.find(s=>s.name?.toLowerCase()===String(it.material_name||it.name||"").toLowerCase());
-      return {material_id:m?.id||null,name:m?.name||it.name||it.material_name,unit:m?.unit||it.unit||"Nos",qty:Number(it.qty)||0,rate:m?.rate||0};
+      return {material_id:m?.id||null,name:m?.name||it.name||it.material_name,unit:m?.unit||it.unit||"Nos",qty:Number(it.qty)||0,rate:m?.rate||0,selected_batches:null};
     })
-    :[{material_id:null,name:"",unit:"Nos",qty:"",rate:""}];
+    :[{material_id:null,name:"",unit:"Nos",qty:"",rate:"",selected_batches:null}];
   const [items,setItems]=useState(initial);
   const [saving,setSaving]=useState(false);
+  // Batch picker — when user clicks "Choose batches" under rate field
+  const [batchPickerIdx,setBatchPickerIdx]=useState(null);
+  const [batchData,setBatchData]=useState(null); // {batches, fifo_rate, unit}
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
   const updItem=(i,patch)=>{
     setItems(p=>p.map((r,j)=>j===i?{...r,...patch}:r));
-    // Auto-fill rate from last-purchase when material picked
+    // Auto-fill rate from FIFO (oldest batch) when material picked
     const pickedName=patch.name&&String(patch.name).trim();
     if(pickedName){
-      api.get(`/warehouse/last-rate?name=${encodeURIComponent(pickedName)}`).then(r=>{
-        if(r.success&&Number(r.data?.rate)>0){
-          setItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row));
+      api.get(`/warehouse/material-batches?name=${encodeURIComponent(pickedName)}`).then(r=>{
+        if(r.success&&Number(r.data?.fifo_rate)>0){
+          setItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.fifo_rate}:row));
         }
-      }).catch(()=>{});
+      }).catch(()=>{
+        // Fallback to last-purchase rate if batches endpoint fails
+        api.get(`/warehouse/last-rate?name=${encodeURIComponent(pickedName)}`).then(r=>{
+          if(r.success&&Number(r.data?.rate)>0){
+            setItems(p=>p.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row));
+          }
+        }).catch(()=>{});
+      });
     }
+  };
+
+  // Open batch picker for row idx
+  const openBatchPicker=async(idx)=>{
+    const row=items[idx];
+    if(!row?.name) return;
+    setBatchPickerIdx(idx);
+    setBatchData({loading:true});
+    try{
+      const r=await api.get(`/warehouse/material-batches?name=${encodeURIComponent(row.name)}`);
+      if(r.success) setBatchData({...r.data,loading:false,selected:row.selected_batches||[]});
+      else setBatchData({error:r.message||"Failed",loading:false});
+    }catch(e){setBatchData({error:e.message,loading:false});}
+  };
+  const closeBatchPicker=()=>{setBatchPickerIdx(null);setBatchData(null);};
+  const applyBatchSelection=(selectedIds,weightedRate)=>{
+    if(batchPickerIdx==null) return;
+    setItems(p=>p.map((row,j)=>j===batchPickerIdx?{
+      ...row,
+      selected_batches:selectedIds.length>0?selectedIds:null,
+      rate:weightedRate>0?weightedRate:row.rate,
+    }:row));
+    closeBatchPicker();
   };
   const remItem=(i)=>setItems(p=>p.filter((_,j)=>j!==i));
   const addItem=()=>setItems(p=>[...p,{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
@@ -768,6 +801,10 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
         material_id:it.material_id,
         qty:Number(it.qty),
         rate:Number(it.rate)||0,
+        // selected_batches: if user manually picked specific batches via
+        // the batch picker, send them so backend consumes in that order
+        // instead of strict FIFO. null/undefined = default FIFO.
+        selected_batches:Array.isArray(it.selected_batches)&&it.selected_batches.length>0?it.selected_batches:undefined,
       }));
       const url=fromMR?`/warehouse/mr/${fromMR}/issue`:"/warehouse/issues";
       const res=await api.post(url,{...f,items:cleanItems});
@@ -840,10 +877,27 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
         <span>Material (from stock)</span><span>Unit</span><span>Qty</span><span>Rate ₹/u</span><span style={{textAlign:"right"}}>Value</span><span/>
       </div>
       {items.map((row,i)=>(
-        <LineItemRow key={i} row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem}
-          mode="transfer"
-          canRemove={!fromMR && items.length>1}
-          lockMaterial={!!fromMR}/>
+        <div key={i}>
+          <LineItemRow row={row} idx={i} stock={stock} onChange={updItem} onRemove={remItem}
+            mode="transfer"
+            canRemove={!fromMR && items.length>1}
+            lockMaterial={!!fromMR}/>
+          {row.name && (
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:-2,marginBottom:6,paddingLeft:"calc(40% + 60px + 1fr + 6px)",fontSize:10.5}}>
+              <button onClick={()=>openBatchPicker(i)}
+                title="Manual stock-batch selection (override FIFO)"
+                style={{background:row.selected_batches?T.purL:"none",color:row.selected_batches?T.pur:T.blu,border:`1px solid ${row.selected_batches?T.pur+"66":T.bluM}`,padding:"2px 9px",borderRadius:14,fontSize:10.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"inline-flex",alignItems:"center",gap:4}}>
+                🗂 {row.selected_batches?`${row.selected_batches.length} batch picked`:"Choose batches"}
+              </button>
+              {row.selected_batches&&(
+                <button onClick={()=>updItem(i,{selected_batches:null})}
+                  style={{background:"none",color:T.t4,border:"none",fontSize:10,cursor:"pointer",fontFamily:"inherit",textDecoration:"underline"}}>
+                  reset to FIFO
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       ))}
       {stockErr&&<div style={{marginTop:5,padding:"7px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,fontSize:11.5,color:T.red,fontWeight:600}}>⚠ Stock se zyada qty kisi item me hai — kam karo</div>}
       {!fromMR&&(
@@ -855,9 +909,118 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
       <div style={{marginTop:8,fontSize:10.5,color:T.t4,fontStyle:"italic"}}>
         {fromMR
           ? "💡 Project + Material MR me decide ho chuka hai (locked). Sirf Qty (stock/quality ke hisaab se) aur Rate (auto-fill, editable) badal sakte ho."
-          : "💡 Material pick karte hi rate auto-fill (last purchase). Edit kar sakte ho."}
+          : "💡 Rate auto-fill FIFO (oldest batch ka rate). Custom batch select karne ke liye row me 🗂 Choose batches click karein."}
       </div>
+      {batchPickerIdx!=null&&(
+        <BatchPickerPanel data={batchData} onClose={closeBatchPicker} onApply={applyBatchSelection}
+          requestedQty={Number(items[batchPickerIdx]?.qty)||0}
+          materialName={items[batchPickerIdx]?.name||""}/>
+      )}
     </ModalShell>
+  );
+}
+
+// ── BATCH PICKER PANEL ────────────────────────────────────────────
+// Manual override of FIFO — shows all available wh_grn_items batches
+// for a material, lets the user tick which ones to consume (and in
+// what order). Computes weighted rate based on selection.
+function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
+  const [selected,setSelected]=useState([]); // ordered list of batch_ids
+  useEffect(()=>{
+    if(data&&!data.loading&&!data.error&&data.selected) setSelected(data.selected);
+  },[data]);
+
+  if(!data) return null;
+  const batches=data.batches||[];
+
+  const toggle=(batchId)=>{
+    setSelected(p=>p.includes(batchId)?p.filter(id=>id!==batchId):[...p,batchId]);
+  };
+
+  // Greedy fill: walk selected batches in order, take min(remaining, avail) from each
+  let remaining=requestedQty, totalCost=0;
+  const breakdown=[];
+  for(const bid of selected){
+    if(remaining<=0)break;
+    const b=batches.find(x=>x.batch_id===bid);
+    if(!b)continue;
+    const take=Math.min(remaining,b.available_qty);
+    totalCost+=take*b.rate;
+    breakdown.push({...b,take,cost:take*b.rate});
+    remaining-=take;
+  }
+  const weightedRate=requestedQty>0?totalCost/requestedQty:0;
+  const totalAvailable=selected.reduce((s,bid)=>{
+    const b=batches.find(x=>x.batch_id===bid);return s+(b?b.available_qty:0);
+  },0);
+  const insufficient=requestedQty>0&&totalAvailable<requestedQty;
+
+  return (
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600,backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:11,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:601,width:680,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"inherit"}}>
+        <div style={{padding:"12px 16px",background:T.sb,color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <div>
+            <div style={{fontSize:13.5,fontWeight:700}}>Choose Stock Batches — {materialName}</div>
+            <div style={{fontSize:10.5,opacity:.7,marginTop:1}}>Manual override of FIFO. Tick in the order you want consumed.</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,.6)",fontSize:20,lineHeight:1}}>×</button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"12px 16px"}}>
+          {data.loading?<div style={{textAlign:"center",padding:30,color:T.t4,fontSize:13}}>Loading batches...</div>
+          :data.error?<div style={{padding:"9px 12px",background:T.redL,color:T.red,borderRadius:6,fontSize:12}}>{data.error}</div>
+          :batches.length===0?<div style={{textAlign:"center",padding:30,color:T.t4,fontSize:12.5}}>Koi batch nahi mila — material legacy (add-stock without GRN) ho sakta hai. FIFO master rate use karega.</div>
+          :(
+            <>
+              <div style={{display:"grid",gridTemplateColumns:"30px 90px 100px 1fr 80px 80px 80px",gap:6,padding:"6px 10px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,marginBottom:6}}>
+                {["#","GRN","Date","Vendor / Source","Avail","Rate","Order"].map((h,i)=><span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>)}
+              </div>
+              {batches.map(b=>{
+                const order=selected.indexOf(b.batch_id);
+                const isPicked=order>=0;
+                return(
+                  <label key={b.batch_id}
+                    style={{display:"grid",gridTemplateColumns:"30px 90px 100px 1fr 80px 80px 80px",gap:6,padding:"8px 10px",borderRadius:6,border:`1.5px solid ${isPicked?T.pur:T.b1}`,background:isPicked?T.purL+"66":T.surface,marginBottom:5,alignItems:"center",cursor:"pointer",transition:"background .1s"}}>
+                    <input type="checkbox" checked={isPicked} onChange={()=>toggle(b.batch_id)}
+                      style={{width:14,height:14,cursor:"pointer",accentColor:T.pur}}/>
+                    <span style={{fontSize:11,color:T.blu,fontWeight:700,fontFamily:"monospace"}}>{b.grn_no}</span>
+                    <span style={{fontSize:11,color:T.t3}}>{b.date?new Date(b.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"—"}</span>
+                    <div style={{minWidth:0}}>
+                      <div style={{fontSize:11.5,color:T.t1,fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{b.vendor}</div>
+                      <div style={{fontSize:10,color:T.t4}}>{b.source}{b.remark?" · "+b.remark.substring(0,30):""}</div>
+                    </div>
+                    <span style={{fontSize:12,color:T.t1,fontWeight:600,textAlign:"right"}}>{b.available_qty} {b.unit}</span>
+                    <span style={{fontSize:12,color:T.cyn,fontWeight:700,textAlign:"right"}}>₹{fmtN(b.rate)}</span>
+                    {isPicked?<span style={{fontSize:11,fontWeight:700,color:T.pur,background:"white",border:`1px solid ${T.pur}55`,borderRadius:20,padding:"2px 6px",textAlign:"center"}}>#{order+1}</span>:<span/>}
+                  </label>
+                );
+              })}
+            </>
+          )}
+        </div>
+        {/* Summary footer */}
+        <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,fontSize:11.5}}>
+            {selected.length===0?(
+              <span style={{color:T.t4}}>Koi batch select nahi — Apply karoge to default FIFO use hoga.</span>
+            ):(
+              <>
+                <div style={{color:T.t2}}>
+                  <b>{selected.length}</b> batch picked · Req: <b>{requestedQty||"—"}</b> · Avail selected: <b>{totalAvailable}</b> · Cost: <b>₹{fmtN(totalCost)}</b>
+                </div>
+                <div style={{color:weightedRate>0?T.cyn:T.t4,fontSize:11,marginTop:2}}>
+                  Weighted rate: <b>₹{fmtN(weightedRate)}</b>{insufficient?<span style={{color:T.red,marginLeft:8}}>⚠ {requestedQty-totalAvailable} short — backend FIFO fallback se cover hoga</span>:null}
+                </div>
+              </>
+            )}
+          </div>
+          <GhostBtn onClick={onClose}>Cancel</GhostBtn>
+          <Btn onClick={()=>onApply(selected,weightedRate)} c={T.pur}>
+            {selected.length===0?"Reset to FIFO":"Apply Selection"}
+          </Btn>
+        </div>
+      </div>
+    </>
   );
 }
 
