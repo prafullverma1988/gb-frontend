@@ -2429,7 +2429,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 //                Approved → Ordered (vendor) → Received (GRN, stock+).
 //   "project":   Tab 2 — procurement-driven MRs for projects. Lifecycle:
 //                Pending → Approved → Issued (from existing stock).
-function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,mode="project",procMode="direct"}){
+function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,onPassToProc,mode="project",procMode="direct"}){
   const [fStatus,setFStatus]=useState("All");
   const STATUS_S={
     "Pending":        {c:T.amb,bg:T.ambL,brd:T.ambM},
@@ -2549,9 +2549,19 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onOrder,onGrn,onSendToProc,
                     </div>
                   )}
 
-                  {/* PROJECT MODE — only Issue after approval */}
+                  {/* PROJECT MODE — Issue after approval. In warehouse_driven
+                      mode, also show "Pass to Procurement" as escape hatch. */}
                   {mode==="project"&&mr.status==="Approved"&&(
-                    <Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>Issue Now</Btn>
+                    <>
+                      <Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>Issue from Stock</Btn>
+                      {mr.created_in_mode==="warehouse_driven"&&onPassToProc&&(
+                        <button onClick={()=>onPassToProc(mr)}
+                          title="Stock kam hai / fulfill nahi ho sakta — wapas procurement ko bhejo"
+                          style={{padding:"6px 11px",borderRadius:7,background:T.surface,border:`1.5px solid ${T.purM||"#DDD6FE"}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
+                          ↩ Pass to Procurement
+                        </button>
+                      )}
+                    </>
                   )}
                   {mode==="project"&&mr.status==="Issued"&&(
                     <div style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`}}>
@@ -2606,6 +2616,7 @@ function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApp
             onSendToProc={onSubMR.sendToProcurement}
             onApprove={onApprove} onReject={onReject}/>
         : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}
+            onPassToProc={onSubMR.passToProcurement}
             onApprove={onApprove} onReject={onReject}/>
       }
     </div>
@@ -2676,12 +2687,13 @@ function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,on
       ]}/>
       {sub==="requests"&&(
         <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,fontSize:11.5,color:T.blu,marginBottom:12,lineHeight:1.55}}>
-          <b>Flow:</b> Request procurement se aati → Admin <b>Material Approvals</b> drawer me approve karega → "Issue Now" button milega.
+          <b>Flow:</b> Request procurement se aati → Admin <b>Material Approvals</b> drawer me approve karega → "Issue from Stock" button. Warehouse-driven MRs me alternate "Pass to Procurement" bhi available.
         </div>
       )}
       {sub==="issued"
         ? <IssueTab issues={issues} projects={projects} onNew={onNewIssue} onSelect={onSelectIssue}/>
         : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}
+            onPassToProc={onSubMR.passToProcurement}
             onApprove={onApprove} onReject={onReject}/>
       }
     </div>
@@ -3194,6 +3206,13 @@ function WarehouseModule(){
               if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
               else alert(r.message||"Failed");
             },
+            passToProcurement:async(mr)=>{
+              const reason = window.prompt(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              if(reason===null) return;
+              const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
+              if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }
+              else alert(r.message||"Pass-to-procurement failed");
+            },
           }}/>}
         {tab==="issue"&&<MaterialOutTab issues={issues} mrs={mrs} projects={projects}
           onNewIssue={()=>setIssueNewOpen(true)} onSelectIssue={iss=>setIssueDetail(iss)}
@@ -3212,6 +3231,13 @@ function WarehouseModule(){
               const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
               if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
               else alert(r.message||"Failed");
+            },
+            passToProcurement:async(mr)=>{
+              const reason = window.prompt(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              if(reason===null) return;
+              const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
+              if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }
+              else alert(r.message||"Pass-to-procurement failed");
             },
           }}/>}
         {tab==="transfer"&&<TransfersTab transfers={transfers} onNew={()=>setTransferNewOpen(true)} onSelect={t=>setTransferDetail(t)}/>}

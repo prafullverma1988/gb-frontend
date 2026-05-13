@@ -1744,6 +1744,8 @@ function OtherSettings() {
   const [days, setDays] = useState(4);
   const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
   const [grnPhotoReq, setGrnPhotoReq] = useState(false);
+  const [mrFlow, setMrFlow] = useState("procurement_driven"); // procurement_driven | warehouse_driven
+  const [holdTtl, setHoldTtl] = useState(2);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
@@ -1755,6 +1757,8 @@ function OtherSettings() {
         setDays(parseInt(r.data.dup_payment_window_days) || 4);
         setWhProcMode(r.data.warehouse_procurement_mode || "direct");
         setGrnPhotoReq(r.data.grn_photo_required === 1 || r.data.grn_photo_required === true);
+        setMrFlow(r.data.mr_fulfillment_mode || "procurement_driven");
+        setHoldTtl(Number(r.data.mr_soft_hold_ttl_days) || 2);
       }
     }).catch(() => {}).finally(() => setLoading(false));
   }, []);
@@ -1767,6 +1771,8 @@ function OtherSettings() {
         dup_payment_window_days: parseInt(days) || 4,
         warehouse_procurement_mode: whProcMode,
         grn_photo_required: grnPhotoReq,
+        mr_fulfillment_mode: mrFlow,
+        mr_soft_hold_ttl_days: holdTtl,
       });
       setSavedTick(true);
       setTimeout(() => setSavedTick(false), 1800);
@@ -1828,6 +1834,46 @@ function OtherSettings() {
           label="📷 Photo compulsory at GRN time"
           desc="ON: User ko kam se kam ek photo (challan ya material) attach karni hogi, warna Submit GRN block. OFF: Photo optional — attach kar sakte ho par enforcement nahi."
           value={grnPhotoReq} onChange={setGrnPhotoReq} />
+      </SectionCard>
+
+      <SectionCard title="MR Fulfillment Flow"
+        desc="Project se aaye MRs ko warehouse se fulfill karne ka decision kaun lega — procurement team ya warehouse staff.">
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
+          {[
+            { v: "procurement_driven",
+              label: "Procurement-driven — Procurement team decide karti hai (default)",
+              sub: "Approved MR → Procurement deklhti hai warehouse stock available hai ya nahi → 'Issue from Warehouse' click karke wh_mr banata hai → warehouse issue karta hai. Net-available check + soft-hold TTL same stock ko double-allocate hone se rokte hain." },
+            { v: "warehouse_driven",
+              label: "Warehouse-driven — Warehouse staff decide karta hai (recommended for central godown setups)",
+              sub: "Approved MR auto-route ho ke warehouse queue me aata hai → warehouse staff [Issue from Stock] OR [Pass to Procurement] decide karta hai. Single decision-maker = race conditions structurally impossible." },
+          ].map(opt => (
+            <label key={opt.v} style={{ display: "flex", gap: 10, padding: "12px 14px", borderRadius: 9, border: `1.5px solid ${mrFlow===opt.v ? "#2563EB" : "#E5E7EB"}`, background: mrFlow===opt.v ? "#EFF6FF" : "white", cursor: "pointer", alignItems: "flex-start" }}>
+              <input type="radio" checked={mrFlow===opt.v} onChange={() => setMrFlow(opt.v)}
+                style={{ marginTop: 3, accentColor: "#2563EB" }}/>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, color: mrFlow===opt.v ? "#1D4ED8" : "#111827" }}>{opt.label}</div>
+                <div style={{ fontSize: 11.5, color: "#6B7280", marginTop: 3, lineHeight: 1.5 }}>{opt.sub}</div>
+              </div>
+            </label>
+          ))}
+        </div>
+        {mrFlow === "procurement_driven" && (
+          <div style={{ marginTop: 12, padding: "10px 13px", background: "#F8FAFC", border: "1px solid #E2E8F0", borderRadius: 7 }}>
+            <div style={{ fontSize: 11.5, fontWeight: 700, color: "#374151", marginBottom: 6 }}>Soft-Hold TTL (days)</div>
+            <div style={{ fontSize: 11, color: "#6B7280", marginBottom: 8 }}>Procurement ne warehouse pe stock reserve kiya — kitne din me warehouse use issue karna chahiye? TTL expire hone par reservation auto-release, stock wapas open ho jata hai.</div>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {[1, 2, 3, 5, 7].map(d => (
+                <button key={d} onClick={() => setHoldTtl(d)}
+                  style={{ padding: "6px 14px", borderRadius: 6, border: `1.5px solid ${holdTtl===d ? "#2563EB" : "#E2E8F0"}`, background: holdTtl===d ? "#EFF6FF" : "white", fontSize: 12, fontWeight: holdTtl===d ? 700 : 500, color: holdTtl===d ? "#1D4ED8" : "#6B7280", cursor: "pointer", fontFamily: "inherit" }}>
+                  {d} day{d>1?"s":""}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <div style={{ marginTop: 12, padding: "9px 12px", background: "#FFFBEB", border: "1px solid #FDE68A", borderRadius: 7, fontSize: 11, color: "#92400E", lineHeight: 1.5 }}>
+          <b>⚠ Note:</b> Mode flip karne par <b>in-flight MRs apne original mode me hi complete</b> honge (har MR pe creation-time mode snapshot hota hai). Naye MRs current mode follow karenge. Drastic break-changes nahi honge.
+        </div>
       </SectionCard>
     </div>
   );
