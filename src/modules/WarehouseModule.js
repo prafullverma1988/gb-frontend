@@ -803,8 +803,27 @@ function NewIssueModal({stock,projects,users,onClose,onSaved,prefill,fromMR}){
     }
   };
 
+  // Prefetch batch data for any row that already has a name but no
+  // cached batches yet (covers prefill flows — Issue-against-MR opens
+  // with material already populated, but updItem(.name) is never called,
+  // so batchesByIdx stays empty and weighted-rate recompute can't run).
+  useEffect(()=>{
+    items.forEach((row,i)=>{
+      const n=String(row.name||"").trim();
+      if(!n) return;
+      if(batchesByIdx[i]) return;
+      api.get(`/warehouse/material-batches?name=${encodeURIComponent(n)}`).then(r=>{
+        if(r.success) setBatchesByIdx(p=>({...p,[i]:r.data}));
+      }).catch(()=>{});
+    });
+    // intentionally watching only the material names — fetching once per
+    // (idx,name) is enough; further qty edits don't need re-fetches.
+  },[items.map(r=>String(r.name||"").trim()).join("~")]);
+
   // Auto-recompute weighted rate whenever qty or batch-cache changes for
   // any row (unless user has manually overridden the rate field).
+  // Prefill rows arrive with rate=master_rate from stock; we clear that
+  // and let FIFO compute take over UNLESS the user has touched the field.
   useEffect(()=>{
     setItems(prev=>{
       let changed=false;
