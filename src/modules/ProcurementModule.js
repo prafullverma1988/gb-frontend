@@ -1415,7 +1415,11 @@ function ProcurementModule(){
     item:m.item_name, qty:parseFloat(m.quantity)||0, approvedQty:parseFloat(m.quantity)||0,
     unit:m.unit, requestedBy:m.requested_by||"—",
     mrStatus:m.mr_status, matStatus:m.mat_status, stage:m.stage||"Requested",
-    vendor:m.linked_vendor||null,
+    // When the MR was fulfilled via "Issue from Warehouse", procurement
+    // never assigns a vendor — show "Warehouse" so the user sees the
+    // actual source instead of an empty field.
+    vendor: m.warehouse_mr_id ? "Warehouse" : (m.linked_vendor || null),
+    isFromWarehouse: !!m.warehouse_mr_id,
     expectedDelivery:m.expected_delivery?fmtDate(m.expected_delivery):null,
     challan:m.challan_no||null, rejectedReason:m.rejected_reason||null,
     receivedQty:parseFloat(m.received_qty)||null, inStock:0, approxAmount:m.approx_amount||0,
@@ -1971,8 +1975,10 @@ function ProcurementModule(){
                       <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{m.approvedQty||m.qty}</div>
                       <div style={{fontSize:12,color:T.t3}}>{m.unit}</div>
                       <div>
-                        <div style={{fontSize:12,fontWeight:500,color:T.pur}}>{m.vendor||"—"}</div>
-                        <div style={{fontSize:10.5,color:T.t4}}>ETA: {m.expectedDelivery||"TBD"}</div>
+                        <div style={{fontSize:12,fontWeight:500,color:m.isFromWarehouse?T.cyn:T.pur,display:"flex",alignItems:"center",gap:4}}>
+                          {m.isFromWarehouse&&<span style={{fontSize:10}}>🏭</span>}{m.vendor||"—"}
+                        </div>
+                        <div style={{fontSize:10.5,color:T.t4}}>{m.isFromWarehouse?"From warehouse stock":`ETA: ${m.expectedDelivery||"TBD"}`}</div>
                       </div>
                       <button onClick={()=>setMarkRecvTgt(m)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
                         <IcChk size={12} color={T.grn}/> Mark Received
