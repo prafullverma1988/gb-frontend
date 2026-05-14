@@ -117,6 +117,308 @@ function Avatar({name,size=32,color=T.blu}){
 
 
 // ── MONTHLY ATTENDANCE GRID ───────────────────────────────────────
+// ── LEAVE TAB (Payroll v2 — Phase 3) ─────────────────────────────
+// Sub-tabs: Apply / My Leaves / Pending Approvals / Balance
+function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
+  const [subTab,setSubTab]=useState("apply");
+  const [types,setTypes]=useState([]);
+  const [apps,setApps]=useState([]);
+  const [balances,setBalances]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const currentUser=(()=>{ try{return JSON.parse(localStorage.getItem("gb_user")||"{}");}catch{return{};} })();
+
+  const reload=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const [tRes,aRes,bRes]=await Promise.all([
+        api.get("/payroll/leave-types"),
+        api.get(`/payroll/leave-applications?year=${year}`),
+        api.get(`/payroll/leave-balances?year=${year}`),
+      ]);
+      if(tRes.success) setTypes(tRes.data||[]);
+      if(aRes.success) setApps(aRes.data||[]);
+      if(bRes.success) setBalances(bRes.data||[]);
+    }catch(e){ /* silent */ }
+    setLoading(false);
+  },[year]);
+  useEffect(()=>{ reload(); },[reload]);
+
+  const pendingApps=apps.filter(a=>a.status==="Pending");
+  const myApps=apps; // For admin: all apps; for non-admin tu apne hi dikh sakte (no staff_id link yet — show all)
+  const myBalances=balances; // same
+
+  // ─── Apply form ────────────────────────────────────────
+  const [form,setForm]=useState({
+    staff_id:"", leave_type_id:"",
+    from_date:"", to_date:"",
+    is_half_day:false, half_day_part:"first",
+    reason:"",
+  });
+  const [preview,setPreview]=useState({days:0,loading:false});
+  const [submitting,setSubmitting]=useState(false);
+  const [err,setErr]=useState("");
+
+  useEffect(()=>{
+    if(!form.from_date||!form.to_date){ setPreview({days:0,loading:false}); return; }
+    let cancelled=false;
+    setPreview(p=>({...p,loading:true}));
+    api.get(`/payroll/leave-applications/preview?from_date=${form.from_date}&to_date=${form.to_date}&is_half_day=${form.is_half_day?"true":"false"}`)
+      .then(r=>{ if(!cancelled&&r.success) setPreview({days:r.data.days,loading:false}); })
+      .catch(()=>{ if(!cancelled) setPreview({days:0,loading:false}); });
+    return ()=>{ cancelled=true; };
+  },[form.from_date,form.to_date,form.is_half_day]);
+
+  const submit=async()=>{
+    setErr("");
+    if(!form.staff_id||!form.leave_type_id||!form.from_date||!form.to_date){
+      setErr("Sab fields zaroori hain"); return;
+    }
+    setSubmitting(true);
+    try{
+      const r=await api.post("/payroll/leave-applications",{
+        staff_id:Number(form.staff_id),
+        leave_type_id:Number(form.leave_type_id),
+        from_date:form.from_date, to_date:form.to_date,
+        is_half_day:form.is_half_day, half_day_part:form.half_day_part,
+        reason:form.reason||null,
+      });
+      if(r.success){
+        setForm({staff_id:"",leave_type_id:"",from_date:"",to_date:"",is_half_day:false,half_day_part:"first",reason:""});
+        setPreview({days:0,loading:false});
+        await reload();
+        setSubTab("my");
+      }else setErr(r.message||"Apply failed");
+    }catch(e){ setErr(e.message||"Network error"); }
+    setSubmitting(false);
+  };
+
+  const review=async(id,action,note)=>{
+    try{
+      const r=await api.patch(`/payroll/leave-applications/${id}/review`,{action,note:note||null});
+      if(r.success){ await reload(); if(action==="approve"&&onAttendanceChanged) onAttendanceChanged(); }
+      else alert(r.message||"Review failed");
+    }catch(e){ alert(e.message); }
+  };
+  const cancel=async(id)=>{
+    if(!window.confirm("Cancel this leave application?")) return;
+    try{
+      const r=await api.patch(`/payroll/leave-applications/${id}/cancel`,{});
+      if(r.success) await reload();
+      else alert(r.message);
+    }catch(e){ alert(e.message); }
+  };
+
+  const inp={width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+
+  // ─── Sub-tabs strip ────────────────────────────────────
+  const SUB_TABS=[
+    {id:"apply", l:"Apply", c:T.grn},
+    {id:"my",    l:"My Leaves", c:T.blu, badge:apps.length},
+    {id:"pending", l:"Pending Approvals", c:T.amb, badge:pendingApps.length, adminOnly:true},
+    {id:"balance", l:"Balance", c:T.pur, badge:balances.length},
+  ];
+
+  return(
+    <div>
+      {/* Sub-tabs */}
+      <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6}}>
+        {SUB_TABS.filter(s=>!s.adminOnly||isAdmin).map(s=>{
+          const active=subTab===s.id;
+          return(
+            <button key={s.id} onClick={()=>setSubTab(s.id)}
+              style={{padding:"6px 13px",borderRadius:7,border:"none",background:active?s.c:"transparent",color:active?"white":T.t3,fontSize:12,fontWeight:active?700:500,cursor:"pointer",display:"flex",alignItems:"center",gap:5,transition:"all .15s"}}>
+              {s.l}
+              {s.badge>0&&<span style={{background:active?"rgba(255,255,255,.25)":s.c+"22",color:active?"white":s.c,fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{s.badge}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {loading && <div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>Loading…</div>}
+
+      {/* ─── APPLY ─── */}
+      {!loading && subTab==="apply" && (
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:16,maxWidth:640}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>Apply for Leave</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Staff Member</div>
+              <select value={form.staff_id} onChange={e=>setForm(p=>({...p,staff_id:e.target.value}))} style={inp}>
+                <option value="">— Select —</option>
+                {staff.map(s=><option key={s.id} value={s.id}>{s.name} ({s.role})</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Leave Type</div>
+              <select value={form.leave_type_id} onChange={e=>setForm(p=>({...p,leave_type_id:e.target.value}))} style={inp}>
+                <option value="">— Select —</option>
+                {types.map(t=><option key={t.id} value={t.id}>{t.code} — {t.name}{t.is_unpaid?" (Unpaid)":""}</option>)}
+              </select>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>From</div>
+              <input type="date" value={form.from_date} onChange={e=>setForm(p=>({...p,from_date:e.target.value,to_date:form.is_half_day?e.target.value:p.to_date}))} style={inp}/>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>To</div>
+              <input type="date" value={form.to_date} onChange={e=>setForm(p=>({...p,to_date:e.target.value}))} disabled={form.is_half_day} style={{...inp,opacity:form.is_half_day?0.5:1}}/>
+            </div>
+          </div>
+          <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.t2,marginBottom:10,cursor:"pointer"}}>
+            <input type="checkbox" checked={form.is_half_day} onChange={e=>setForm(p=>({...p,is_half_day:e.target.checked,to_date:e.target.checked?p.from_date:p.to_date}))}/>
+            Half-day leave (single date)
+          </label>
+          {form.is_half_day && (
+            <div style={{marginBottom:10}}>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Half-day Part</div>
+              <select value={form.half_day_part} onChange={e=>setForm(p=>({...p,half_day_part:e.target.value}))} style={{...inp,maxWidth:200}}>
+                <option value="first">First half (morning)</option>
+                <option value="second">Second half (afternoon)</option>
+              </select>
+            </div>
+          )}
+          <div style={{marginBottom:10}}>
+            <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Reason</div>
+            <textarea value={form.reason} onChange={e=>setForm(p=>({...p,reason:e.target.value}))} rows={2}
+              placeholder="Brief reason (optional)"
+              style={{...inp,resize:"vertical"}}/>
+          </div>
+
+          {/* Preview */}
+          {form.from_date && form.to_date && (
+            <div style={{padding:"9px 12px",background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:7,marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
+              <span style={{fontSize:11.5,color:T.t3}}>Computed working days:</span>
+              <span style={{fontSize:14,fontWeight:800,color:T.blu}}>{preview.loading?"…":preview.days}</span>
+              <span style={{fontSize:10.5,color:T.t4,marginLeft:"auto"}}>Sundays + non-optional holidays auto-excluded</span>
+            </div>
+          )}
+
+          {err && <div style={{padding:"8px 11px",background:T.redL,color:T.red,borderRadius:6,fontSize:11.5,marginBottom:10}}>{err}</div>}
+          <button onClick={submit} disabled={submitting||!form.staff_id||!form.leave_type_id||!form.from_date||!form.to_date}
+            style={{padding:"9px 22px",borderRadius:7,background:submitting||!form.staff_id||!form.leave_type_id||!form.from_date||!form.to_date?T.t4:T.grn,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:submitting?"not-allowed":"pointer"}}>
+            {submitting?"Submitting…":"Submit Application"}
+          </button>
+        </div>
+      )}
+
+      {/* ─── MY LEAVES / ALL LEAVES list ─── */}
+      {!loading && subTab==="my" && (
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"160px 140px 90px 110px 110px 90px 100px",padding:"8px 14px",background:T.sb,color:"rgba(255,255,255,.55)",fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px"}}>
+            {["Staff","Type","Days","From","To","Status","Actions"].map((h,i)=><span key={i}>{h}</span>)}
+          </div>
+          {myApps.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>No leave applications yet</div>}
+          {myApps.map((a,i)=>{
+            const stC={"Pending":T.amb,"Approved":T.grn,"Rejected":T.red,"Cancelled":T.t4}[a.status]||T.t4;
+            const bg={"Pending":T.ambL,"Approved":T.grnL,"Rejected":T.redL,"Cancelled":T.sltL}[a.status]||T.sltL;
+            return(
+              <div key={a.id} style={{display:"grid",gridTemplateColumns:"160px 140px 90px 110px 110px 90px 100px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",fontSize:11.5,background:i%2===0?"transparent":T.surfaceB}}>
+                <div>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{a.staff_name}</div>
+                  <div style={{fontSize:10,color:T.t4}}>{a.staff_role}</div>
+                </div>
+                <div>
+                  <span style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700}}>{a.leave_code}</span>
+                  <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{a.leave_name}{a.is_unpaid?" (LOP)":""}</div>
+                </div>
+                <span style={{fontSize:13,fontWeight:800,color:T.t1}}>{Number(a.days)}d{a.is_half_day?" ½":""}</span>
+                <span style={{color:T.t2}}>{fmtDate(a.from_date)}</span>
+                <span style={{color:T.t2}}>{fmtDate(a.to_date)}</span>
+                <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:bg,color:stC,fontWeight:700,justifySelf:"start"}}>{a.status}</span>
+                <div style={{display:"flex",gap:4,justifyContent:"flex-end"}}>
+                  {a.status==="Pending"&&(a.applied_by===currentUser.id||isAdmin)&&(
+                    <button onClick={()=>cancel(a.id)} style={{padding:"3px 8px",borderRadius:5,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ─── PENDING APPROVALS (admin) ─── */}
+      {!loading && subTab==="pending" && isAdmin && (
+        <div>
+          {pendingApps.length===0?(
+            <div style={{background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:9,padding:30,textAlign:"center"}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.grn,marginBottom:4}}>All caught up</div>
+              <div style={{fontSize:11.5,color:T.t3}}>No pending leave applications</div>
+            </div>
+          ):pendingApps.map(a=>(
+            <div key={a.id} style={{background:T.surface,border:`1px solid ${T.ambM}`,borderRadius:9,padding:13,marginBottom:9,borderLeft:`4px solid ${T.amb}`}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{a.staff_name} <span style={{fontSize:10.5,color:T.t4,fontWeight:500}}>· {a.staff_role}</span></div>
+                  <div style={{fontSize:11.5,color:T.t2,marginTop:3}}>
+                    <span style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,marginRight:6}}>{a.leave_code}</span>
+                    {a.leave_name}{a.is_unpaid?" (LOP)":""} · <b>{Number(a.days)} day{Number(a.days)===1?"":"s"}</b>{a.is_half_day?" (half-day)":""}
+                  </div>
+                  <div style={{fontSize:11,color:T.t3,marginTop:3}}>{fmtDate(a.from_date)} → {fmtDate(a.to_date)}</div>
+                  {a.reason&&<div style={{fontSize:11,color:T.t3,fontStyle:"italic",marginTop:5}}>"{a.reason}"</div>}
+                </div>
+                <div style={{display:"flex",gap:6,flexShrink:0}}>
+                  <button onClick={()=>review(a.id,"reject",window.prompt("Reject reason (optional):")||null)}
+                    style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                    ✕ Reject
+                  </button>
+                  <button onClick={()=>review(a.id,"approve")}
+                    style={{padding:"6px 14px",borderRadius:6,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
+                    ✓ Approve
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ─── BALANCE ─── */}
+      {!loading && subTab==="balance" && (
+        <div>
+          {isAdmin && (
+            <div style={{marginBottom:10,display:"flex",gap:8}}>
+              <button onClick={async()=>{
+                  if(!window.confirm(`Allocate ${year} balances for all staff × leave types (idempotent)?`)) return;
+                  try{
+                    const r=await api.post("/payroll/leave-balances/allocate-year",{year});
+                    if(r.success){ alert(`${r.added} balance row(s) added`); await reload(); }
+                  }catch(e){ alert(e.message); }
+                }}
+                style={{padding:"6px 12px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                Allocate {year} Balances
+              </button>
+            </div>
+          )}
+          <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"180px 80px 1fr 70px 70px 70px 80px",padding:"8px 14px",background:T.sb,color:"rgba(255,255,255,.55)",fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px"}}>
+              {["Staff","Type","Name","Allocated","Used","Carried","Balance"].map((h,i)=><span key={i}>{h}</span>)}
+            </div>
+            {myBalances.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>No balances allocated yet</div>}
+            {myBalances.map((b,i)=>{
+              const bal=Number(b.balance);
+              const balColor=bal<=0?T.red:bal<3?T.amb:T.grn;
+              return(
+                <div key={b.id} style={{display:"grid",gridTemplateColumns:"180px 80px 1fr 70px 70px 70px 80px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",fontSize:11.5,background:i%2===0?"transparent":T.surfaceB}}>
+                  <div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{b.staff_name}</div>
+                    <div style={{fontSize:10,color:T.t4}}>{b.staff_role}</div>
+                  </div>
+                  <span style={{fontSize:10,padding:"2px 7px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700,justifySelf:"start"}}>{b.code}</span>
+                  <span style={{color:T.t3}}>{b.leave_name}{b.is_unpaid?" (LOP)":""}</span>
+                  <span style={{color:T.t2,fontWeight:600}}>{Number(b.allocated)}</span>
+                  <span style={{color:T.red,fontWeight:600}}>-{Number(b.used)}</span>
+                  <span style={{color:T.t3}}>{Number(b.carried_fwd)}</span>
+                  <span style={{color:balColor,fontWeight:800,fontSize:13}}>{bal}</span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── HOLIDAY CALENDAR TAB (Payroll v2 — Phase 4) ──────────────────
 // Month view with holidays + leaves marked. Admin can add / edit /
 // delete holidays + bulk-seed 2026 defaults.
@@ -1307,6 +1609,33 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
       }
     }catch(e){ /* endpoint comes online with Phase 2 backend — silent */ }
   };
+
+  // ─── LOP day-set per staff for this month (Phase 3) ──────
+  // Approved leave applications with is_unpaid=1 → mark those dates as
+  // "L but unpaid" so calcNet treats them like A (no salary).
+  const [lopDays,setLopDays]=useState({});  // {staffId: Set<dayNum>}
+  const loadLopDays=async()=>{
+    try{
+      const yfmt=year, mfmt=String(month+1).padStart(2,"0");
+      const monthStart=`${yfmt}-${mfmt}-01`;
+      const lastDay=new Date(year,month+1,0).getDate();
+      const monthEnd=`${yfmt}-${mfmt}-${String(lastDay).padStart(2,"0")}`;
+      const r=await api.get(`/payroll/leave-applications?status=Approved&from=${monthStart}&to=${monthEnd}`);
+      if(!r.success) return;
+      const lopOnly=(r.data||[]).filter(a=>a.is_unpaid);
+      const map={};
+      lopOnly.forEach(a=>{
+        if(!map[a.staff_id]) map[a.staff_id]=new Set();
+        const f=new Date(a.from_date), t=new Date(a.to_date);
+        const cur=new Date(f);
+        while(cur<=t){
+          if(cur.getFullYear()===year && cur.getMonth()===month) map[a.staff_id].add(cur.getDate());
+          cur.setDate(cur.getDate()+1);
+        }
+      });
+      setLopDays(map);
+    }catch(e){ /* silent */ }
+  };
   const saveTds=async(staffId,amount)=>{
     setTdsByEmpMonth(p=>({...p,[staffId]:Number(amount)||0}));
     try{
@@ -1320,7 +1649,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
       if(r.success) setEditReqs(r.data||[]);
     }catch(e){ /* table might not exist yet — silent */ }
   };
-  useEffect(()=>{ loadRequests(); loadTds(); /* eslint-disable-next-line */ },[month,year]);
+  useEffect(()=>{ loadRequests(); loadTds(); loadLopDays(); /* eslint-disable-next-line */ },[month,year]);
 
   // Get latest request for a staff member (approved takes priority, else pending, else rejected)
   const reqFor=(sid)=>{
@@ -1375,7 +1704,12 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
     const P=Object.values(days).filter(v=>v==="P").length;
     const H=Object.values(days).filter(v=>v==="H").length;
     const A=Object.values(days).filter(v=>v==="A").length;
-    const effective=P+(H*0.5);
+    // Paid leave counts as present; LOP (unpaid) leave does NOT.
+    // lopDays[emp.id] holds the set of day-numbers approved as LOP this month.
+    const lopSet=lopDays[emp.id]||new Set();
+    let L_paid=0, L_unpaid=0;
+    Object.entries(days).forEach(([d,v])=>{ if(v==="L"){ if(lopSet.has(Number(d))) L_unpaid++; else L_paid++; } });
+    const effective=P+(H*0.5)+L_paid;
     // Petrol + Special allowance added as part of gross (Phase 2 fields,
     // default 0 when not set so legacy rows keep working)
     const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone+(emp.petrolAllowance||0)+(emp.specialAllowance||0);
@@ -3521,7 +3855,12 @@ function PayrollModule(){
     const days=monthlyAtt[emp.id]||{};
     const P=Object.values(days).filter(v=>v==="P").length;
     const H=Object.values(days).filter(v=>v==="H").length;
-    const eff=P+(H*0.5);
+    // Paid leave (L not in LOP) counts as present at company level too.
+    // We don't have LOP day-set at parent scope yet — approximate by
+    // counting ALL L as paid. The MonthlySalaryTab tab itself shows the
+    // precise number; this tile is a summary.
+    const L=Object.values(days).filter(v=>v==="L").length;
+    const eff=P+(H*0.5)+L;
     const WD=WORKING_DAYS||26;
     const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone+(emp.petrolAllowance||0)+(emp.specialAllowance||0);
     const pType=emp.paymentType||"fixed";
@@ -3556,12 +3895,13 @@ function PayrollModule(){
 
   const pendingAdvances=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
 
-  // Office Staff mode — 6 tabs
+  // Office Staff mode — 7 tabs
   const TABS_OFFICE=[
     {id:"office-att",      l:"Attendance",        sub:"From Mobile Punch"},
     {id:"office-salary",   l:"Monthly Salary",    sub:"Auto-calculated"},
     {id:"office-ledger",   l:"Salary Ledger",     sub:"Payment history"},
     {id:"office-advances", l:"Advances",          sub:"Advance tracking"},
+    {id:"office-leave",    l:"Leave",             sub:"Apply & approve"},
     {id:"office-calendar", l:"Calendar",          sub:"Holidays & leaves"},
     {id:"office-settings", l:"Settings",          sub:"Payroll config"},
   ];
@@ -3681,6 +4021,9 @@ function PayrollModule(){
         {/* ─── OFFICE STAFF MODE ─── */}
         {mode==="office" && tab==="office-att" && (
           <MonthlyAttGrid staff={staff} att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays}/>
+        )}
+        {mode==="office" && tab==="office-leave" && (
+          <LeaveTab staff={staff} month={month} year={year} isAdmin={isAdmin} onAttendanceChanged={loadAttendance}/>
         )}
         {mode==="office" && tab==="office-calendar" && (
           <HolidayCalendarTab holidays={holidays} setHolidays={setHolidays} month={month} year={year} isAdmin={isAdmin}/>
