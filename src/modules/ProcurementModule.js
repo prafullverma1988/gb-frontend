@@ -657,6 +657,11 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
   },[po.id]);
 
   const d=detail;
+  // Distinct project_names across line items — used to render "Multiple
+  // (N sites)" in the header when the PO spans more than one project.
+  const uniqueProjects = Array.from(new Set((d.items||[])
+    .map(it => (it.delivery_site || it.project_name || "").trim())
+    .filter(Boolean)));
   const ps=PO_STATUS[d.poStatus]||PO_STATUS.Open;
   const dispLbl=displayPOStatus(d);
   const as=APPR_STATUS[dispLbl]||APPR_STATUS.Draft;
@@ -685,13 +690,15 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
 
       <div style={{flex:1,overflowY:"auto",padding:"14px 16px",display:"flex",flexDirection:"column",gap:12}}>
 
-        {/* Compact PO details — 2-column grid (saves vertical space for items) */}
+        {/* Compact PO details — 2-column grid (saves vertical space for items)
+            Multi-site POs show "Multiple (N sites)" since project_name on
+            the PO row reflects only the first MR's project. */}
         <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:0}}>
             {[
-              ["Project",     d.project],
+              ["Project",     uniqueProjects.length > 1 ? `Multiple (${uniqueProjects.length} sites)` : d.project],
               ["Vendor",      d.vendor],
-              ["Site",        d.deliverySite||d.project||"—"],
+              ["Site",        uniqueProjects.length > 1 ? uniqueProjects.join(" · ") : (d.deliverySite||d.project||"—")],
               ["Exp. Delivery",d.delivery||"—"],
             ].map(([k,v],i)=>(
               <div key={k} style={{padding:"7px 11px",borderBottom:i<2?"1px solid "+T.b1:"none",borderRight:i%2===0?"1px solid "+T.b1:"none",minWidth:0}}>
@@ -719,11 +726,23 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
               {fetching?"Loading items...":"No items found — enter rate while creating PO"}
             </div>
           )}
-          {(d.items||[]).map((it,i)=>(
+          {(d.items||[]).map((it,i)=>{
+            // Surface per-item site only when it differs from PO header or
+            // when the PO spans multiple projects — keeps single-site POs
+            // visually unchanged.
+            const lineSite = it.delivery_site || it.project_name || "";
+            const showLineSite = lineSite && (uniqueProjects.length > 1 || lineSite !== d.project);
+            return (
             <div key={i} style={{padding:"12px 14px",borderBottom:"1px solid "+T.b1,background:i%2===0?T.surface:T.surfaceB}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:6}}>
                 <div style={{flex:1}}>
                   <div style={{fontSize:13,fontWeight:600,color:T.t1}}>{it.desc}</div>
+                  {showLineSite && (
+                    <div style={{fontSize:10.5,fontWeight:600,color:T.blu,marginTop:3,display:"inline-flex",alignItems:"center",gap:4,background:T.bluL,padding:"2px 8px",borderRadius:10,border:`1px solid ${T.bluM}`}}>
+                      <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                      {lineSite}
+                    </div>
+                  )}
                   {it.hsn&&it.hsn!=="—"&&<div style={{fontSize:10.5,color:T.t4,marginTop:2}}>HSN: {it.hsn}</div>}
                 </div>
                 <div style={{textAlign:"right",flexShrink:0,marginLeft:12}}>
@@ -749,7 +768,8 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
                 )}
               </div>
             </div>
-          ))}
+            );
+          })}
           {/* Total row */}
           <div style={{padding:"12px 14px",background:"#0D1B2A",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <span style={{fontSize:12,fontWeight:600,color:"rgba(255,255,255,0.6)"}}>PO Total</span>
@@ -958,10 +978,25 @@ function CreatePOModal({onClose,onSave,prefillItems,editPo,dbProjects,dbVendors=
     delivery:    editPo?.deliveryRaw || (editPo?.delivery && /^\d{4}-\d{2}-\d{2}/.test(String(editPo.delivery)) ? String(editPo.delivery).split("T")[0] : ""),
     notes:       editPo?.notes || "",
     items: editPo?.items?.length
-      ? editPo.items.map(it=>({desc:it.desc||it.description||"",hsn:it.hsn||"",qty:String(it.qty||it.quantity||""),unit:it.unit||"",rate:String(it.rate||"")}))
+      ? editPo.items.map(it=>({
+          desc:it.desc||it.description||"",hsn:it.hsn||"",qty:String(it.qty||it.quantity||""),
+          unit:it.unit||"",rate:String(it.rate||""),
+          // preserve per-item project info round-trip
+          project_id: it.project_id||null, project_name: it.project_name||"",
+          delivery_site: it.delivery_site||"", linked_mr_id: it.linked_mr_id||null,
+        }))
       : prefillItems
-        ?prefillItems.map(m=>({desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:""}))
-        :[{desc:"",hsn:"",qty:"",unit:"",rate:""}]
+        ?prefillItems.map(m=>({
+            desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:"",
+            // Each prefill row is a source MR — carry its project so the
+            // PO can render per-line site even when items span multiple
+            // projects (multi-site bulk order).
+            project_id: m.project_id||null,
+            project_name: m.project||m.project_name||"",
+            delivery_site: m.delivery_site||m.project||"",
+            linked_mr_id: m.id||null,
+          }))
+        :[{desc:"",hsn:"",qty:"",unit:"",rate:"",project_id:null,project_name:"",delivery_site:"",linked_mr_id:null}]
   });
   const [matLib,setMatLib]=useState([]);
   const reloadMatLib=()=>api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{});
@@ -1428,18 +1463,28 @@ function ProcurementModule(){
     item:m.item_name, qty:parseFloat(m.quantity)||0, approvedQty:parseFloat(m.quantity)||0,
     unit:m.unit, requestedBy:m.requested_by||"—",
     mrStatus:m.mr_status, matStatus:m.mat_status, stage:m.stage||"Requested",
-    // When the MR was fulfilled via "Issue from Warehouse", procurement
-    // never assigns a vendor — show "Warehouse" so the user sees the
-    // actual source instead of an empty field.
-    vendor: m.warehouse_mr_id ? "Warehouse" : (m.linked_vendor || null),
-    isFromWarehouse: !!m.warehouse_mr_id,
+    // Vendor display priority:
+    //   1. PO vendor (when MR is linked to a vendor PO — most accurate)
+    //   2. linked_vendor (legacy column, set on some Direct-PO flows)
+    //   3. "Warehouse" — only when warehouse_mr_id IS set AND no PO is
+    //      linked (i.e. fulfilled from warehouse stock, not via vendor)
+    //   4. null → "—"
+    // Note: when a warehouse PR is sent to procurement and procurement
+    // places a PO with a vendor, BOTH warehouse_mr_id and po_id are set.
+    // In that case we want the PO vendor, NOT "Warehouse".
+    vendor: m.po_vendor_name
+            || m.linked_vendor
+            || (m.warehouse_mr_id && !m.po_id ? "Warehouse" : null),
+    isFromWarehouse: !!m.warehouse_mr_id && !m.po_id,
     // True when the MR was *originated* by the warehouse team to restock
     // their own stock (project_id NULL + warehouse_mr_id set). The bulk-
     // order modal must NOT suggest "Issue from Warehouse" for these —
     // warehouse asked for the stock, can't fulfill itself.
     isWarehouseRestock: (!m.project_id && !!m.warehouse_mr_id)
       || (m.project_name === "Warehouse (internal)"),
-    expectedDelivery:m.expected_delivery?fmtDate(m.expected_delivery):null,
+    expectedDelivery: m.po_expected_delivery
+            ? fmtDate(m.po_expected_delivery)
+            : (m.expected_delivery ? fmtDate(m.expected_delivery) : null),
     challan:m.challan_no||null, rejectedReason:m.rejected_reason||null,
     receivedQty:parseFloat(m.received_qty)||null, inStock:0, approxAmount:m.approx_amount||0,
   });
@@ -1465,6 +1510,11 @@ function ProcurementModule(){
       rate:parseFloat(it.rate)||0,
       amount:(parseFloat(it.quantity)||0)*(parseFloat(it.rate)||0),
       receivedQty:parseFloat(it.received_qty)||0,
+      // Per-line project info for multi-site POs (added in po_items migration)
+      project_id:    it.project_id   || null,
+      project_name:  it.project_name || "",
+      delivery_site: it.delivery_site|| "",
+      linked_mr_id:  it.linked_mr_id || null,
     })),
   });
   const mapRFQ=r=>({
@@ -2280,7 +2330,14 @@ function ProcurementModule(){
             project_name: newPO.project,
             delivery_site: newPO.deliverySite,
             expected_delivery: validDate(newPO.delivery),
-            items: newPO.items.map(it=>({description:it.desc,hsn_code:it.hsn,quantity:it.qty,unit:it.unit,rate:it.rate})),
+            items: newPO.items.map(it=>({
+              description:it.desc, hsn_code:it.hsn,
+              quantity:it.qty, unit:it.unit, rate:it.rate,
+              project_id: it.project_id||null,
+              project_name: it.project_name||null,
+              delivery_site: it.delivery_site||null,
+              linked_mr_id: it.linked_mr_id||null,
+            })),
             notes: newPO.notes||"",
           });
           if (!res.success) { alert(res.message||"Update failed"); return; }
