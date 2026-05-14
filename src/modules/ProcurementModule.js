@@ -241,6 +241,18 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   const [delivery,setDelivery]=useState("");
   const [waMsg,setWaMsg]=useState("");
 
+  // Company fulfillment mode — when set to 'warehouse_driven' the
+  // procurement side should NOT suggest warehouse routing here: every
+  // approved MR auto-routes to warehouse on approval, and warehouse
+  // staff (not procurement) decides Issue-from-Stock vs Pass-to-Procurement.
+  const [companyMode, setCompanyMode] = useState("procurement_driven");
+  useEffect(() => {
+    api.get("/settings/company").then(r => {
+      if (r?.success && r.data?.mr_fulfillment_mode) setCompanyMode(r.data.mr_fulfillment_mode);
+    }).catch(()=>{});
+  }, []);
+  const showWarehouseStep = companyMode !== "warehouse_driven";
+
   // Warehouse availability per item — checked on mount
   const [whCheck,setWhCheck]=useState({});  // {itemId: {available, sufficient, found, material_id, unit, rate}}
   const [whTake,setWhTake]=useState({});    // {itemId: qty user wants from warehouse}
@@ -252,22 +264,24 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   const issuingRef = useRef(false);
 
   useEffect(()=>{
+    // In warehouse-driven mode, MRs auto-route to warehouse on approval
+    // — procurement doesn't decide. Skip the entire stock-check probe so
+    // the "Warehouse stock available" recommended block stays hidden.
+    if (!showWarehouseStep) return;
     items.forEach(it=>{
-      // Skip the stock check entirely for warehouse-restock MRs. Even if
-      // wh_materials shows some stock, it's the warehouse asking for MORE —
-      // we can't loop back and "fulfill from warehouse".
+      // Skip the stock check for warehouse-restock MRs too — even if
+      // wh_materials shows some stock, the warehouse asked for MORE.
       if (it.isWarehouseRestock) return;
       const reqQty = Number(it.approvedQty||it.qty)||0;
       api.get(`/warehouse/check-stock?name=${encodeURIComponent(it.item||"")}&qty=${reqQty}`).then(r=>{
         if(r.success){
           setWhCheck(p=>({...p,[it.id]:r.data}));
-          // Default warehouse-take = min(requested, available)
           const def = Math.min(reqQty, Number(r.data?.available||0));
           if(def>0) setWhTake(p=>({...p,[it.id]:def}));
         }
       }).catch(()=>{});
     });
-  },[]); // run once on mount; items prop is stable for the modal lifetime
+  },[showWarehouseStep]); // refetch if mode flips mid-session
 
   const itemsWithWH = items.filter(it=>{
     if (it.isWarehouseRestock) return false; // warehouse can't fulfill itself
