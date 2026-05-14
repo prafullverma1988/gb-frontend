@@ -37,7 +37,7 @@ const T={
 };
 const fmtN=(n)=>n==null?"-":Number(n).toLocaleString("en-IN",{maximumFractionDigits:2});
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:String(n||0);
-const today=()=>new Date().toISOString().split("T")[0];
+const today=()=>new Date().toLocaleDateString('en-CA');
 const fmtDate=(d)=>{if(!d)return"—";const dt=new Date(d);return isNaN(dt)?"—":dt.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"});};
 
 // ── CATALOG ───────────────────────────────────────────────────────
@@ -362,6 +362,9 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
   // Tab 1: ordered warehouse MRs
   const [orderedMRs,setOrderedMRs]=useState([]);
   const [loadingMRs,setLoadingMRs]=useState(true);
+  // Inline GRN drafts per MR — { [mr.id]: { challan, date, items: { [item.id]: { received_qty, rate } } } }
+  const [drafts,setDrafts]=useState({});
+  const [savingMR,setSavingMR]=useState({}); // { [mr.id]: bool }
   useEffect(()=>{
     api.get("/warehouse/mr?type=warehouse&status=Ordered").then(r=>{
       if(r.success) setOrderedMRs(r.data||[]);
@@ -375,6 +378,41 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
       });
     }).catch(()=>{});
   },[]);
+
+  // Get-or-init draft for an MR. Pending qty + existing rate pre-filled.
+  const getDraft=(mr)=>{
+    if(drafts[mr.id]) return drafts[mr.id];
+    const items={};
+    (mr.items||[]).forEach(it=>{
+      const pending=Math.max(0,Number(it.qty||0)-Number(it.received_qty||0));
+      items[it.id]={received_qty:pending,rate:Number(it.rate||0)};
+    });
+    return {challan:"",date:today(),items};
+  };
+  const updDraft=(mr,patch)=>setDrafts(p=>({...p,[mr.id]:{...getDraft(mr),...patch}}));
+  const updItem=(mr,itemId,patch)=>{
+    const d=getDraft(mr);
+    setDrafts(p=>({...p,[mr.id]:{...d,items:{...d.items,[itemId]:{...d.items[itemId],...patch}}}}));
+  };
+  const submitMR=async(mr)=>{
+    const d=getDraft(mr);
+    if(!d.challan.trim()){alert("Challan number required");return;}
+    const items=(mr.items||[]).map(it=>{
+      const dit=d.items[it.id]||{};
+      return {id:it.id,name:it.material_name,unit:it.unit,
+              received_qty:Number(dit.received_qty)||0,rate:Number(dit.rate)||0};
+    }).filter(x=>x.received_qty>0);
+    if(items.length===0){alert("Kam se kam ek item ka received qty fill karo");return;}
+    setSavingMR(p=>({...p,[mr.id]:true}));
+    const res=await api.post(`/warehouse/mr/${mr.id}/grn`,{
+      challan:d.challan.trim(),vendor:mr.vendor||null,items,
+    });
+    setSavingMR(p=>({...p,[mr.id]:false}));
+    if(res.success){
+      setOrderedMRs(prev=>prev.filter(x=>x.id!==mr.id));
+      onSaved&&onSaved(res.data);
+    } else alert(res.message||"Failed");
+  };
 
   // Tab 2: return from project state
   const [retF,setRetF]=useState({date:today(),from_project_id:null,remark:""});
@@ -563,33 +601,75 @@ function NewGRNModal({stock,projects,users,library,onClose,onSaved,onPickMR}){
           {!loadingMRs&&orderedMRs.length>0&&(
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
               <div style={{padding:"8px 11px",background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,fontSize:11.5,color:T.pur,fontWeight:600,marginBottom:4}}>
-                💡 Niche dikhi MR ke against vendor delivery aayi to "Receive (GRN)" click karein — challan + actual qty + rate dalo, stock auto-update hoga.
+                💡 Niche dikhi MR ke against vendor delivery aayi — challan + actual qty + rate fill karke "Record GRN" click karein, stock auto-update hoga.
               </div>
               {orderedMRs.map(mr=>{
                 const totalQty=(mr.items||[]).reduce((s,it)=>s+Number(it.qty||0),0);
                 const alreadyRecv=(mr.items||[]).reduce((s,it)=>s+Number(it.received_qty||0),0);
                 const isPartial=mr.status==="PartialReceived";
+                const d=getDraft(mr);
+                const draftTotal=(mr.items||[]).reduce((s,it)=>{
+                  const dit=d.items[it.id]||{};
+                  return s+Number(dit.received_qty||0)*Number(dit.rate||0);
+                },0);
+                const isSaving=savingMR[mr.id];
                 return (
-                  <div key={mr.id} style={{background:T.surface,border:`1px solid ${T.purM}`,borderRadius:8,padding:"11px 13px",borderLeft:`3px solid ${isPartial?T.blu:T.pur}`}}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:10,marginBottom:8}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
-                          <span style={{fontSize:12.5,fontWeight:700,color:T.pur,fontFamily:"monospace"}}>{mr.mr_no}</span>
-                          <Pill label={mr.status} c={isPartial?T.blu:T.pur} bg={isPartial?T.bluL:T.purL} brd={isPartial?T.bluM:T.purM}/>
-                          {mr.priority&&<Pill label={mr.priority} c={T.amb} bg={T.ambL}/>}
-                        </div>
-                        <div style={{fontSize:11.5,color:T.t3}}>
-                          {mr.vendor&&<span>vendor: <b style={{color:T.t1}}>{mr.vendor}</b></span>}
-                          {mr.po_no&&<span style={{marginLeft:8,color:T.t4,fontFamily:"monospace"}}>{mr.po_no}</span>}
-                          {mr.expected_date&&<span style={{marginLeft:8,color:T.t4}}>· exp {fmtDate(mr.expected_date)}</span>}
-                        </div>
-                        <div style={{fontSize:11,color:T.t4,marginTop:3}}>
-                          {(mr.items||[]).slice(0,3).map(it=>`${it.material_name} ×${fmtN(it.qty)} ${it.unit}`).join(", ")}
-                          {mr.items?.length>3?` +${mr.items.length-3} more`:""}
-                        </div>
-                        {alreadyRecv>0&&<div style={{fontSize:10.5,color:T.blu,fontWeight:600,marginTop:2}}>{fmtN(alreadyRecv)} of {fmtN(totalQty)} already received</div>}
+                  <div key={mr.id} style={{background:T.surface,border:`1px solid ${T.purM}`,borderRadius:8,borderLeft:`3px solid ${isPartial?T.blu:T.pur}`,overflow:"hidden"}}>
+                    {/* Header */}
+                    <div style={{padding:"11px 13px"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:3,flexWrap:"wrap"}}>
+                        <span style={{fontSize:12.5,fontWeight:700,color:T.pur,fontFamily:"monospace"}}>{mr.mr_no}</span>
+                        <Pill label={mr.status} c={isPartial?T.blu:T.pur} bg={isPartial?T.bluL:T.purL} brd={isPartial?T.bluM:T.purM}/>
+                        {mr.priority&&<Pill label={mr.priority} c={T.amb} bg={T.ambL}/>}
                       </div>
-                      <Btn onClick={()=>{onPickMR&&onPickMR(mr);onClose();}} c={T.grn} icon={IcIn} size="sm">Receive (GRN)</Btn>
+                      <div style={{fontSize:11.5,color:T.t3}}>
+                        {mr.vendor&&<span>vendor: <b style={{color:T.t1}}>{mr.vendor}</b></span>}
+                        {mr.po_no&&<span style={{marginLeft:8,color:T.t4,fontFamily:"monospace"}}>{mr.po_no}</span>}
+                        {mr.expected_date&&<span style={{marginLeft:8,color:T.t4}}>· exp {fmtDate(mr.expected_date)}</span>}
+                      </div>
+                      {alreadyRecv>0&&<div style={{fontSize:10.5,color:T.blu,fontWeight:600,marginTop:2}}>{fmtN(alreadyRecv)} of {fmtN(totalQty)} already received</div>}
+                    </div>
+                    {/* Inline GRN form — challan + date + per-item qty/rate */}
+                    <div style={{padding:"10px 13px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 140px",gap:10,marginBottom:9}}>
+                        <Field label="Challan No *">
+                          <Input value={d.challan} onChange={e=>updDraft(mr,{challan:e.target.value})} placeholder="CH-2026-..."/>
+                        </Field>
+                        <Field label="Date">
+                          <Input type="date" value={d.date} onChange={e=>updDraft(mr,{date:e.target.value})}/>
+                        </Field>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"2fr 50px 60px 60px 95px 85px 80px",gap:6,marginBottom:5,fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",padding:"0 2px"}}>
+                        <span>Material</span><span>Unit</span><span style={{textAlign:"right"}}>Ord</span><span style={{textAlign:"right"}}>Already</span><span style={{textAlign:"center",color:T.grn,fontSize:10,fontWeight:800}}>RECEIVE QTY *</span><span style={{textAlign:"right"}}>Rate ₹</span><span style={{textAlign:"right"}}>Value</span>
+                      </div>
+                      {(mr.items||[]).map(it=>{
+                        const dit=d.items[it.id]||{received_qty:0,rate:0};
+                        const pending=Math.max(0,Number(it.qty||0)-Number(it.received_qty||0));
+                        const empty=!Number(dit.received_qty);
+                        const short=!empty&&Number(dit.received_qty)<pending;
+                        return (
+                          <div key={it.id} style={{display:"grid",gridTemplateColumns:"2fr 50px 60px 60px 95px 85px 80px",gap:6,alignItems:"center",marginBottom:5}}>
+                            <span style={{fontSize:11.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{it.material_name}</span>
+                            <span style={{fontSize:10.5,color:T.t3}}>{it.unit}</span>
+                            <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>{fmtN(it.qty)}</span>
+                            <span style={{fontSize:11,color:Number(it.received_qty)>0?T.blu:T.t4,textAlign:"right",fontWeight:Number(it.received_qty)>0?700:400}}>{fmtN(it.received_qty||0)}</span>
+                            <input type="number" value={dit.received_qty} max={pending} placeholder="Qty *"
+                              onChange={e=>updItem(mr,it.id,{received_qty:e.target.value})}
+                              style={{height:34,padding:"0 8px",borderRadius:6,border:`2px solid ${empty?T.amb:short?T.blu:T.grn}`,fontSize:13,fontWeight:700,outline:"none",fontFamily:"inherit",textAlign:"right",background:empty?T.ambL:short?T.bluL:T.grnL,color:empty?T.amb:T.t1}}/>
+                            <input type="number" value={dit.rate} placeholder="Rate"
+                              onChange={e=>updItem(mr,it.id,{rate:e.target.value})}
+                              style={{height:34,padding:"0 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
+                            <span style={{fontSize:11.5,fontWeight:700,color:T.grn,textAlign:"right"}}>₹{fmt(Number(dit.received_qty||0)*Number(dit.rate||0))}</span>
+                          </div>
+                        );
+                      })}
+                      <div style={{fontSize:10.5,color:T.amb,fontWeight:600,marginTop:6,padding:"5px 8px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:5}}>
+                        ⚠️ Receive Qty mandatory hai — vendor ne kitna actual diya wo fill karo (full delivery par ordered qty pre-filled hai)
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:9,borderTop:`1px dashed ${T.b1}`}}>
+                        <span style={{fontSize:12,color:T.t3}}>Total: <b style={{color:T.grn,fontSize:13}}>₹{fmtN(draftTotal)}</b></span>
+                        <Btn onClick={()=>submitMR(mr)} disabled={isSaving} c={T.grn} icon={IcIn} size="sm">{isSaving?"Saving...":"Record GRN & Update Stock"}</Btn>
+                      </div>
                     </div>
                   </div>
                 );
@@ -2439,7 +2519,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 //                Approved → Ordered (vendor) → Received (GRN, stock+).
 //   "project":   Tab 2 — procurement-driven MRs for projects. Lifecycle:
 //                Pending → Approved → Issued (from existing stock).
-function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSendToProc,onPassToProc,mode="project",procMode="direct"}){
+function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSendToProc,onPassToProc,onCheckStock,mode="project",procMode="direct"}){
   const [fStatus,setFStatus]=useState("All");
   const STATUS_S={
     "Pending":        {c:T.amb,bg:T.ambL,brd:T.ambM},
@@ -2560,16 +2640,29 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
                     </div>
                   )}
 
-                  {/* PROJECT MODE — Issue after approval. In warehouse_driven
-                      mode, also show "Pass to Procurement" as escape hatch. */}
+                  {/* PROJECT MODE — Approved row gets 3 actions + a
+                      passive stock-check probe so warehouse staff can
+                      make an informed decision:
+                        1. Issue from Stock — fulfill directly
+                        2. Send to Procurement — escape hatch, wapas
+                           vendor PO route khol do
+                        3. Stock check (🔍) — small probe, shows current
+                           warehouse availability for this material */}
                   {mode==="project"&&mr.status==="Approved"&&(
                     <>
+                      {onCheckStock&&(
+                        <button onClick={()=>onCheckStock(mr)}
+                          title="Warehouse me is material ka current stock dekho"
+                          style={{padding:"5px 9px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:3,whiteSpace:"nowrap"}}>
+                          🔍 Stock
+                        </button>
+                      )}
                       <Btn onClick={()=>onIssue(mr)} c={T.amb} size="sm" icon={IcOut}>Issue from Stock</Btn>
-                      {mr.created_in_mode==="warehouse_driven"&&onPassToProc&&(
+                      {onPassToProc&&(
                         <button onClick={()=>onPassToProc(mr)}
-                          title="Stock kam hai / fulfill nahi ho sakta — wapas procurement ko bhejo"
+                          title="Stock kam hai / fulfill nahi ho sakta — wapas procurement ko bhejo (vendor PO route)"
                           style={{padding:"6px 11px",borderRadius:7,background:T.surface,border:`1.5px solid ${T.purM||"#DDD6FE"}`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:4,whiteSpace:"nowrap"}}>
-                          ↩ Pass to Procurement
+                          ↩ Send to Procurement
                         </button>
                       )}
                     </>
@@ -2623,7 +2716,7 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
 // MRs in one place. Same data is ALSO accessible inside Material In
 // (Warehouse MR sub-tab) + Material Out (Project Requests sub-tab) for
 // lifecycle-grouped browsing. Two access paths, same source of truth.
-function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApprove,onReject,onClose}){
+function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApprove,onReject,onClose,onCheckStock}){
   const [sub,setSub]=useState("warehouse");
   const whMrs   = mrs.filter(m=>!m.project_id);
   const projMrs = mrs.filter(m=>!!m.project_id);
@@ -2649,7 +2742,8 @@ function RequestsTab({mrs,projects,users,library,procMode="direct",onSubMR,onApp
             onApprove={onApprove} onReject={onReject} onClose={onClose}/>
         : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}
             onPassToProc={onSubMR.passToProcurement}
-            onApprove={onApprove} onReject={onReject} onClose={onClose}/>
+            onApprove={onApprove} onReject={onReject} onClose={onClose}
+            onCheckStock={onCheckStock}/>
       }
     </div>
   );
@@ -2708,7 +2802,7 @@ function MaterialInTab({grns,mrs,projects,users,library,procMode="direct",onNewG
 // Lifecycle view of outgoing material:
 //   - Issued: physical Issue events (history)
 //   - Project Requests: requests projects raised that will become Issues
-function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,onApprove,onReject,onClose}){
+function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,onApprove,onReject,onClose,onCheckStock}){
   const [sub,setSub]=useState("issued");
   const projMrs = mrs.filter(m=>!!m.project_id);
   return (
@@ -2726,7 +2820,8 @@ function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,on
         ? <IssueTab issues={issues} projects={projects} onNew={onNewIssue} onSelect={onSelectIssue}/>
         : <MRTab mrs={projMrs} mode="project" onIssue={onSubMR.openIssue}
             onPassToProc={onSubMR.passToProcurement}
-            onApprove={onApprove} onReject={onReject} onClose={onClose}/>
+            onApprove={onApprove} onReject={onReject} onClose={onClose}
+            onCheckStock={onCheckStock}/>
       }
     </div>
   );
@@ -3083,6 +3178,44 @@ function WarehouseModule(){
       else alert(res.message || "Reject failed");
     } catch (e) { alert(e.message); }
   };
+  // Stock check probe — quick lookup so warehouse staff can decide
+  // whether to issue from stock OR pass back to procurement BEFORE
+  // committing. Shows current available qty (master) + pending pipeline.
+  const checkStockMR = async (mr) => {
+    const matName = mr.items?.[0]?.material_name || mr.items?.[0]?.name || mr.item_name;
+    if (!matName) { alert("Material name nahi mila"); return; }
+    const need = Number(mr.items?.[0]?.qty || mr.quantity || 0);
+    try {
+      const [stockRes, pipeRes] = await Promise.all([
+        api.get(`/warehouse/check-stock?name=${encodeURIComponent(matName)}&qty=${need}`),
+        api.get(`/warehouse/mr-pipeline-check?type=warehouse&name=${encodeURIComponent(matName)}`),
+      ]);
+      const s = stockRes?.data || {};
+      const p = pipeRes?.data || {};
+      const lines = [];
+      lines.push(`📦 ${matName} — stock check`);
+      lines.push("");
+      lines.push(`   This MR needs:    ${need} ${s.unit || mr.items?.[0]?.unit || ""}`);
+      lines.push(`   Warehouse stock:  ${s.available || 0} ${s.unit || ""}`);
+      if (Number(s.rate) > 0) lines.push(`   Master rate:      ₹${Number(s.rate).toFixed(2)} / ${s.unit || ""}`);
+      lines.push("");
+      if (p.in_pipeline && p.entries?.length > 0) {
+        lines.push(`⚠ Pending pipeline (other wh_mrs not yet issued):`);
+        p.entries.forEach(e => lines.push(`     • ${e.mr_no} — ${e.status} — ${e.pending_qty} ${e.unit || ""}`));
+        lines.push(`   Total pending: ${p.total_pending_qty} ${p.unit || ""}`);
+        const free = Math.max(0, Number(s.available || 0) - Number(p.total_pending_qty || 0));
+        lines.push(`   Net free to allocate: ${free} ${s.unit || ""}`);
+      } else {
+        lines.push(`✓ No other pending wh_mrs — full stock is free.`);
+      }
+      lines.push("");
+      lines.push(s.sufficient
+        ? "✅ Stock sufficient — Issue from Stock pe click karo."
+        : "❌ Stock insufficient — Send to Procurement consider karo.");
+      alert(lines.join("\n"));
+    } catch (e) { alert("Stock check failed: " + e.message); }
+  };
+
   // Manual close — any non-terminal MR (Pending / Approved / Ordered).
   // Reason is mandatory. Linked procurement MR also gets closed by backend.
   const closeMR = async (mr) => {
@@ -3251,10 +3384,21 @@ function WarehouseModule(){
         {tab==="issue"&&<MaterialOutTab issues={issues} mrs={mrs} projects={projects}
           onNewIssue={()=>setIssueNewOpen(true)} onSelectIssue={iss=>setIssueDetail(iss)}
           onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={closeMR}
-          onSubMR={{ openIssue:(mr)=>setIssueFromMR(mr) }}/>}
+          onCheckStock={checkStockMR}
+          onSubMR={{
+            openIssue:(mr)=>setIssueFromMR(mr),
+            passToProcurement:async(mr)=>{
+              const reason = window.prompt(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              if(reason===null) return;
+              const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
+              if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }
+              else alert(r.message||"Pass-to-procurement failed");
+            },
+          }}/>}
         {tab==="mr"&&<RequestsTab mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onApprove={canApproveMR?approveMR:undefined} onReject={canApproveMR?rejectMR:undefined} onClose={closeMR}
+          onCheckStock={checkStockMR}
           onSubMR={{
             openNew:()=>setMrNewOpen(true),
             openIssue:(mr)=>setIssueFromMR(mr),
