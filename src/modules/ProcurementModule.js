@@ -253,6 +253,10 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
 
   useEffect(()=>{
     items.forEach(it=>{
+      // Skip the stock check entirely for warehouse-restock MRs. Even if
+      // wh_materials shows some stock, it's the warehouse asking for MORE —
+      // we can't loop back and "fulfill from warehouse".
+      if (it.isWarehouseRestock) return;
       const reqQty = Number(it.approvedQty||it.qty)||0;
       api.get(`/warehouse/check-stock?name=${encodeURIComponent(it.item||"")}&qty=${reqQty}`).then(r=>{
         if(r.success){
@@ -266,6 +270,7 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   },[]); // run once on mount; items prop is stable for the modal lifetime
 
   const itemsWithWH = items.filter(it=>{
+    if (it.isWarehouseRestock) return false; // warehouse can't fulfill itself
     const c = whCheck[it.id];
     return c?.found && Number(c.available)>0;
   });
@@ -406,7 +411,15 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
             return (
             <div key={i} style={{padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
-                <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{m.item}</div>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.t1,display:"flex",alignItems:"center",gap:7}}>
+                  {m.item}
+                  {m.isWarehouseRestock && (
+                    <span title="Warehouse team ne yeh stock restock ke liye request kiya — warehouse se issue nahi ho sakta, vendor se hi order karna hoga"
+                      style={{fontSize:9,fontWeight:800,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"1px 7px",borderRadius:10,textTransform:"uppercase",letterSpacing:".3px"}}>
+                      🏬 Warehouse Restock
+                    </span>
+                  )}
+                </div>
                 <div style={{fontSize:11,color:T.t3}}>{m.project} · {m.id}{taken>0?<span style={{color:T.cyn,marginLeft:6}}>· {taken} {m.unit} from warehouse</span>:""}</div>
               </div>
               <div style={{textAlign:"right"}}>
@@ -1420,6 +1433,12 @@ function ProcurementModule(){
     // actual source instead of an empty field.
     vendor: m.warehouse_mr_id ? "Warehouse" : (m.linked_vendor || null),
     isFromWarehouse: !!m.warehouse_mr_id,
+    // True when the MR was *originated* by the warehouse team to restock
+    // their own stock (project_id NULL + warehouse_mr_id set). The bulk-
+    // order modal must NOT suggest "Issue from Warehouse" for these —
+    // warehouse asked for the stock, can't fulfill itself.
+    isWarehouseRestock: (!m.project_id && !!m.warehouse_mr_id)
+      || (m.project_name === "Warehouse (internal)"),
     expectedDelivery:m.expected_delivery?fmtDate(m.expected_delivery):null,
     challan:m.challan_no||null, rejectedReason:m.rejected_reason||null,
     receivedQty:parseFloat(m.received_qty)||null, inStock:0, approxAmount:m.approx_amount||0,
