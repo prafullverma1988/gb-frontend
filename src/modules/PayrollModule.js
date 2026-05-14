@@ -117,13 +117,267 @@ function Avatar({name,size=32,color=T.blu}){
 
 
 // ── MONTHLY ATTENDANCE GRID ───────────────────────────────────────
-function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange}){
+// ── HOLIDAY CALENDAR TAB (Payroll v2 — Phase 4) ──────────────────
+// Month view with holidays + leaves marked. Admin can add / edit /
+// delete holidays + bulk-seed 2026 defaults.
+function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
+  const [addOpen,setAddOpen]=useState(false);
+  const [editId,setEditId]=useState(null);
+  const [form,setForm]=useState({holiday_date:"",name:"",type:"Custom",is_optional:false,region:"All-India",notes:""});
+  const [saving,setSaving]=useState(false);
+
+  const reload=async()=>{
+    try{
+      const r=await api.get(`/payroll/holidays?year=${year}`);
+      if(r.success) setHolidays(r.data||[]);
+    }catch(e){ /* silent */ }
+  };
+
+  const openAdd=(date)=>{
+    setEditId(null);
+    setForm({holiday_date:date||"",name:"",type:"Custom",is_optional:false,region:"All-India",notes:""});
+    setAddOpen(true);
+  };
+  const openEdit=(h)=>{
+    setEditId(h.id);
+    setForm({
+      holiday_date:h.holiday_date?h.holiday_date.split("T")[0]:"",
+      name:h.name||"", type:h.type||"Custom",
+      is_optional:!!h.is_optional, region:h.region||"All-India", notes:h.notes||"",
+    });
+    setAddOpen(true);
+  };
+  const save=async()=>{
+    if(!form.holiday_date||!form.name.trim()){ alert("Date and name required"); return; }
+    setSaving(true);
+    try{
+      if(editId){
+        await api.patch(`/payroll/holidays/${editId}`,form);
+      }else{
+        await api.post("/payroll/holidays",form);
+      }
+      await reload();
+      setAddOpen(false);
+    }catch(e){ alert(e.message||"Save failed"); }
+    setSaving(false);
+  };
+  const del=async(id)=>{
+    if(!window.confirm("Delete this holiday?")) return;
+    try{ await api.del(`/payroll/holidays/${id}`); await reload(); }
+    catch(e){ alert(e.message); }
+  };
+  const bulkSeed=async()=>{
+    if(!window.confirm(`Seed CG + National 2026 holidays? Will skip dates already present.`)) return;
+    try{
+      const r=await api.post(`/payroll/holidays/bulk-seed?year=${year}`,{});
+      if(r.success){ alert(`${r.added} holiday(s) seeded`); await reload(); }
+    }catch(e){ alert(e.message); }
+  };
+
+  // Build month view
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  const firstDow=new Date(year,month,1).getDay();
+  const holidayByDay={};
+  holidays.forEach(h=>{
+    const d=new Date(h.holiday_date);
+    if(d.getMonth()===month&&d.getFullYear()===year){ holidayByDay[d.getDate()]=h; }
+  });
+  // Aggregate stats
+  const monthHolidays=holidays.filter(h=>{
+    const d=new Date(h.holiday_date);
+    return d.getMonth()===month&&d.getFullYear()===year;
+  });
+  const monthConfirmed=monthHolidays.filter(h=>!h.is_optional).length;
+  const monthOptional=monthHolidays.filter(h=>h.is_optional).length;
+  // Count working days = total - sundays - confirmed holidays (not optional)
+  let sundays=0, workingDays=0;
+  for(let d=1;d<=daysInMonth;d++){
+    const dow=new Date(year,month,d).getDay();
+    if(dow===0) sundays++;
+    else if(holidayByDay[d]&&!holidayByDay[d].is_optional) {/* count separately */}
+    else workingDays++;
+  }
+  workingDays-=monthConfirmed;
+  workingDays=Math.max(0,workingDays);
+
+  const yearList=holidays.filter(h=>new Date(h.holiday_date).getFullYear()===year)
+    .sort((a,b)=>new Date(a.holiday_date)-new Date(b.holiday_date));
+
+  return(
+    <div>
+      {/* KPI strip */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:12}}>
+        {[
+          {l:"Working Days",  v:workingDays,           sub:`${MONTHS[month]} ${year}`, c:T.grn},
+          {l:"Sundays",       v:sundays,               sub:"Weekly off",                c:T.t3},
+          {l:"Holidays",      v:monthConfirmed,        sub:"Confirmed off",             c:T.red},
+          {l:"Optional",      v:monthOptional,         sub:"Admin discretion",          c:T.amb},
+        ].map((s,i)=>(
+          <div key={i} style={{background:T.surface,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`,borderRadius:8,padding:"11px 13px"}}>
+            <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{s.l}</div>
+            <div style={{fontSize:20,fontWeight:800,color:T.t1,lineHeight:1}}>{s.v}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:3}}>{s.sub}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Toolbar */}
+      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center"}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.t1}}>Month view — {MONTHS[month]} {year}</div>
+        <div style={{flex:1}}/>
+        {isAdmin&&(
+          <button onClick={bulkSeed}
+            style={{padding:"6px 12px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+            Seed 2026 Defaults
+          </button>
+        )}
+        {isAdmin&&(
+          <button onClick={()=>openAdd("")}
+            style={{padding:"6px 12px",borderRadius:7,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
+            + Add Holiday
+          </button>
+        )}
+      </div>
+
+      {/* Month grid */}
+      <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:12,marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4,marginBottom:5}}>
+          {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map((d,i)=>(
+            <div key={d} style={{fontSize:10.5,fontWeight:700,color:i===0?T.red:T.t3,textAlign:"center",padding:"4px 0"}}>{d}</div>
+          ))}
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:4}}>
+          {Array.from({length:firstDow},(_,i)=><div key={`b${i}`}/>)}
+          {Array.from({length:daysInMonth},(_,i)=>i+1).map(d=>{
+            const dow=new Date(year,month,d).getDay();
+            const isSun=dow===0;
+            const hol=holidayByDay[d];
+            const bg=hol&&!hol.is_optional?"#FEE2E2":hol&&hol.is_optional?T.ambL:isSun?T.sltL:T.surface;
+            const border=hol&&!hol.is_optional?"#FCA5A5":hol?T.ambM:isSun?T.b1:T.b1;
+            return(
+              <div key={d} onClick={()=>{
+                  if(hol&&isAdmin) openEdit(hol);
+                  else if(!hol&&isAdmin){
+                    const ds=`${year}-${String(month+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
+                    openAdd(ds);
+                  }
+                }}
+                style={{background:bg,border:`1px solid ${border}`,borderRadius:7,padding:"7px 8px",minHeight:60,cursor:isAdmin?"pointer":"default",transition:"all .15s"}}
+                onMouseEnter={e=>{if(isAdmin) e.currentTarget.style.boxShadow=`0 0 0 2px ${T.bluM}`;}}
+                onMouseLeave={e=>{e.currentTarget.style.boxShadow="none";}}>
+                <div style={{fontSize:13,fontWeight:700,color:isSun?T.red:hol&&!hol.is_optional?T.red:T.t1}}>{d}</div>
+                {hol&&(
+                  <div style={{fontSize:9.5,color:hol.is_optional?T.amb:T.red,fontWeight:600,marginTop:3,lineHeight:1.2}}>
+                    {hol.name}
+                    {hol.is_optional&&<div style={{fontSize:8.5,fontWeight:500,color:T.amb,opacity:0.9}}>Optional</div>}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Year list */}
+      <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
+        <div style={{padding:"10px 14px",background:T.sb,color:"white",fontSize:12.5,fontWeight:700}}>
+          All Holidays — {year} ({yearList.length})
+        </div>
+        {yearList.length===0&&<div style={{padding:"30px 14px",textAlign:"center",color:T.t4,fontSize:12.5}}>No holidays added yet. Click "Seed 2026 Defaults" to bulk-load CG + National holidays.</div>}
+        {yearList.map(h=>{
+          const d=new Date(h.holiday_date);
+          const dow=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][d.getDay()];
+          return(
+            <div key={h.id} style={{display:"grid",gridTemplateColumns:"110px 1fr 100px 100px 90px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",fontSize:12}}>
+              <div style={{color:T.t1,fontWeight:600}}>{d.toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}<span style={{fontSize:10,color:T.t4,marginLeft:4}}>{dow}</span></div>
+              <div style={{color:T.t1,fontWeight:600}}>{h.name}</div>
+              <span style={{fontSize:10.5,padding:"2px 8px",borderRadius:12,background:T.bluL,color:T.blu,fontWeight:600,justifySelf:"start"}}>{h.type}</span>
+              <span style={{fontSize:10.5,color:T.t3}}>{h.region}</span>
+              <div style={{display:"flex",gap:5,justifyContent:"flex-end"}}>
+                {h.is_optional&&<span style={{fontSize:9,padding:"1px 6px",borderRadius:10,background:T.ambL,color:T.amb,fontWeight:700}}>OPT</span>}
+                {isAdmin&&<>
+                  <button onClick={()=>openEdit(h)} style={{padding:"3px 8px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Edit</button>
+                  <button onClick={()=>del(h.id)} style={{padding:"3px 8px",borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>×</button>
+                </>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Add/Edit modal */}
+      {addOpen && (
+        <div onClick={()=>!saving&&setAddOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+          <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,width:420,maxWidth:"100%",padding:20,boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+            <div style={{fontSize:15,fontWeight:800,color:T.t1,marginBottom:14}}>{editId?"Edit Holiday":"Add Holiday"}</div>
+            <div style={{display:"grid",gap:9}}>
+              <div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Date</div>
+                <input type="date" value={form.holiday_date} onChange={e=>setForm(p=>({...p,holiday_date:e.target.value}))}
+                  style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Name</div>
+                <input value={form.name} onChange={e=>setForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Diwali"
+                  style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9}}>
+                <div>
+                  <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Type</div>
+                  <select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))}
+                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                    {["National","Festival","Regional","Optional","Custom"].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Region</div>
+                  <select value={form.region} onChange={e=>setForm(p=>({...p,region:e.target.value}))}
+                    style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                    {["All-India","Chhattisgarh","Other"].map(o=><option key={o}>{o}</option>)}
+                  </select>
+                </div>
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.t2,cursor:"pointer"}}>
+                <input type="checkbox" checked={form.is_optional} onChange={e=>setForm(p=>({...p,is_optional:e.target.checked}))}/>
+                Optional holiday (admin can still mark attendance)
+              </label>
+              <div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Notes</div>
+                <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2}
+                  style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",resize:"vertical",fontFamily:"inherit"}}/>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:7,marginTop:14}}>
+              <button onClick={()=>!saving&&setAddOpen(false)} disabled={saving}
+                style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>Cancel</button>
+              <button onClick={save} disabled={saving}
+                style={{flex:2,padding:"8px",borderRadius:7,background:saving?T.t4:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
+                {saving?"Saving…":(editId?"Save Changes":"Add Holiday")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[]}){
   const daysInMonth=new Date(year,month+1,0).getDate();
   const now=new Date();const today=(now.getMonth()===month&&now.getFullYear()===year)?now.getDate():month<now.getMonth()||year<now.getFullYear()?daysInMonth:0;
   const ATT_COLORS={"P":{bg:"#ECFDF5",c:"#059669",label:"P"},"A":{bg:"#FEF2F2",c:"#DC2626",label:"A"},"H":{bg:"#FFFBEB",c:"#D97706",label:"H"},"L":{bg:"#EFF6FF",c:"#2563EB",label:"L"},null:{bg:T.surfaceB,c:T.t4,label:"·"}};
 
+  // Build a day → holiday lookup for current month/year
+  const holidayByDay={};
+  holidays.forEach(h=>{
+    const d=new Date(h.holiday_date);
+    if(d.getMonth()===month&&d.getFullYear()===year){ holidayByDay[d.getDate()]=h; }
+  });
+  const isHolidayCell=(day)=>!!holidayByDay[day]&&!holidayByDay[day].is_optional;
+
   const toggleAtt=(empId,day)=>{
     if(day>today) return;
+    if(isHolidayCell(day)) return;  // block toggle on confirmed holidays
     const cur=att[empId]?.[day];
     const cycle=["P","A","H","L"];
     const next=cur===null||!cycle.includes(cur)?"P":cycle[(cycle.indexOf(cur)+1)%cycle.length];
@@ -149,10 +403,13 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange}){
           const isFuture=d>today;
           const dow=new Date(year,month,d).getDay();
           const isSun=dow===0;
+          const hol=holidayByDay[d];
           return(
-            <div key={d} style={{width:28,flexShrink:0,textAlign:"center",fontSize:9.5,fontWeight:isToday?800:isSun?600:400,color:isToday?T.blu:isSun?T.red:isFuture?T.b2:T.t4,padding:"3px 0"}}>
+            <div key={d} title={hol?hol.name+(hol.is_optional?" (Optional)":""):""}
+              style={{width:28,flexShrink:0,textAlign:"center",fontSize:9.5,fontWeight:isToday?800:isSun||hol?600:400,color:isToday?T.blu:hol&&!hol.is_optional?T.red:hol?T.amb:isSun?T.red:isFuture?T.b2:T.t4,padding:"3px 0"}}>
               {d}
-              {isSun&&<div style={{width:4,height:4,borderRadius:"50%",background:isFuture?T.b2:T.red,margin:"1px auto 0"}}/>}
+              {isSun&&!hol&&<div style={{width:4,height:4,borderRadius:"50%",background:isFuture?T.b2:T.red,margin:"1px auto 0"}}/>}
+              {hol&&<div style={{width:4,height:4,borderRadius:"50%",background:hol.is_optional?T.amb:T.red,margin:"1px auto 0"}}/>}
             </div>
           );
         })}
@@ -178,12 +435,16 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange}){
               const status=att[emp.id]?.[d];
               const sc=ATT_COLORS[status]||ATT_COLORS[null];
               const isFuture=d>today;
+              const hol=holidayByDay[d];
+              const isHolBlock=isHolidayCell(d);
+              const cellBg=isHolBlock?"#FEE2E2":isFuture?"transparent":sc.bg;
+              const cellColor=isHolBlock?T.red:isFuture?T.b2:sc.c;
               return(
                 <div key={d}
-                  onClick={()=>!isFuture&&toggleAtt(emp.id,d)}
-                  style={{width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:isFuture?"transparent":sc.bg,borderRadius:4,cursor:isFuture?"default":"pointer",fontSize:9.5,fontWeight:700,color:isFuture?T.b2:sc.c,border:`1px solid ${isFuture?"transparent":sc.bg}`,transition:"all .1s",margin:"0 1px"}}
-                  title={`${emp.name} - Day ${d}`}>
-                  {isFuture?"":sc.label}
+                  onClick={()=>!isFuture&&!isHolBlock&&toggleAtt(emp.id,d)}
+                  style={{width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:cellBg,borderRadius:4,cursor:isFuture||isHolBlock?"default":"pointer",fontSize:9.5,fontWeight:700,color:cellColor,border:`1px solid ${isHolBlock?"#FCA5A5":isFuture?"transparent":sc.bg}`,transition:"all .1s",margin:"0 1px"}}
+                  title={hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:`${emp.name} - Day ${d}`}>
+                  {isHolBlock?"H":isFuture?"":sc.label}
                 </div>
               );
             })}
@@ -870,8 +1131,150 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
   );
 }
 
+// ── EDIT STAFF MASTER MODAL (Payroll v2 — Phase 2) ──────────────
+// Admin can edit personal, salary structure, PF/ESIC config from here.
+// All fields map to columns on payroll_staff. Saves via PATCH /payroll/staff/:id.
+function EditStaffModal({emp,onClose,onSaved}){
+  const [form,setForm]=useState({
+    name:        emp.name||"",
+    phone:       emp.mobile||"",
+    email:       emp.email||"",
+    aadhaar:     emp.aadhaar||"",
+    role:        emp.role||"",
+    dept:        emp.dept||"",
+    payment_type:emp.paymentType||"fixed",
+    basic_salary:    emp.basicSalary||0,
+    hra:             emp.hra||0,
+    conveyance:      emp.conveyance||0,
+    medical:         emp.medical||0,
+    phone_allowance: emp.phoneAllowance||emp.phone||0,
+    petrol_allowance: emp.petrolAllowance||0,
+    special_allowance:emp.specialAllowance||0,
+    pf_applicable:    emp.pfApplicable!==false,
+    pf_method:        emp.pfMethod||"capped_15k",
+    pf_custom_amount: emp.pfCustomAmount||0,
+    pf_uan:           emp.pfUan||"",
+    esic_applicable:  emp.esicApplicable!==false,
+    esic_number:      emp.esicNumber||"",
+    bank_acc:         emp.bankAcc||"",
+    ifsc:             emp.ifsc||"",
+    pan:              emp.pan||"",
+  });
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const save=async()=>{
+    setSaving(true); setErr("");
+    try{
+      const r=await api.patch(`/payroll/staff/${emp.id}`,form);
+      if(r.success){ onSaved&&onSaved(r.data); onClose(); }
+      else setErr(r.message||"Save failed");
+    }catch(e){ setErr(e.message||"Network error"); }
+    setSaving(false);
+  };
+  const Sect=({title,children})=>(
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${T.b1}`}}>{title}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{children}</div>
+    </div>
+  );
+  const F=({label,children,full})=>(
+    <div style={full?{gridColumn:"1 / -1"}:{}}>
+      <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{label}</div>
+      {children}
+    </div>
+  );
+  const inp={width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface};
+  return(
+    <div onClick={()=>!saving&&onClose()}
+      style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{background:T.surface,borderRadius:12,width:560,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:800,color:T.t1}}>Edit Staff Master</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:2}}>{emp.name} · ID {emp.id}</div>
+          </div>
+          <button onClick={()=>!saving&&onClose()} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}>
+            <IcX size={18}/>
+          </button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+          <Sect title="Personal">
+            <F label="Name"><input style={inp} value={form.name} onChange={e=>set("name",e.target.value)}/></F>
+            <F label="Mobile"><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="10-digit"/></F>
+            <F label="Email"><input style={inp} value={form.email} onChange={e=>set("email",e.target.value)}/></F>
+            <F label="Aadhaar"><input style={inp} value={form.aadhaar} onChange={e=>set("aadhaar",e.target.value)} placeholder="12-digit"/></F>
+            <F label="Role / Designation"><input style={inp} value={form.role} onChange={e=>set("role",e.target.value)}/></F>
+            <F label="Department"><input style={inp} value={form.dept} onChange={e=>set("dept",e.target.value)}/></F>
+          </Sect>
+          <Sect title="Salary — Earnings (₹/month)">
+            <F label="Basic"><input style={inp} type="number" value={form.basic_salary} onChange={e=>set("basic_salary",Number(e.target.value)||0)}/></F>
+            <F label="HRA"><input style={inp} type="number" value={form.hra} onChange={e=>set("hra",Number(e.target.value)||0)}/></F>
+            <F label="Conveyance"><input style={inp} type="number" value={form.conveyance} onChange={e=>set("conveyance",Number(e.target.value)||0)}/></F>
+            <F label="Medical"><input style={inp} type="number" value={form.medical} onChange={e=>set("medical",Number(e.target.value)||0)}/></F>
+            <F label="Phone Allowance"><input style={inp} type="number" value={form.phone_allowance} onChange={e=>set("phone_allowance",Number(e.target.value)||0)}/></F>
+            <F label="Petrol Allowance"><input style={inp} type="number" value={form.petrol_allowance} onChange={e=>set("petrol_allowance",Number(e.target.value)||0)}/></F>
+            <F label="Special Allowance" full><input style={inp} type="number" value={form.special_allowance} onChange={e=>set("special_allowance",Number(e.target.value)||0)}/></F>
+          </Sect>
+          <Sect title="PF Configuration">
+            <F label="PF Applicable">
+              <select style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
+                <option value="yes">Yes</option><option value="no">No</option>
+              </select>
+            </F>
+            <F label="Calculation Method">
+              <select style={inp} value={form.pf_method} onChange={e=>set("pf_method",e.target.value)} disabled={!form.pf_applicable}>
+                <option value="none">None (₹0)</option>
+                <option value="capped_15k">Capped at ₹15,000 — 12% of min(basic, 15k)</option>
+                <option value="full_basic">Full Basic — 12% of full basic</option>
+                <option value="custom">Custom fixed amount</option>
+              </select>
+            </F>
+            {form.pf_method==="custom"&&form.pf_applicable&&(
+              <F label="Custom PF Amount (₹)"><input style={inp} type="number" value={form.pf_custom_amount} onChange={e=>set("pf_custom_amount",Number(e.target.value)||0)}/></F>
+            )}
+            <F label="UAN" full={form.pf_method!=="custom"}><input style={inp} value={form.pf_uan} onChange={e=>set("pf_uan",e.target.value)}/></F>
+          </Sect>
+          <Sect title="ESIC Configuration">
+            <F label="ESIC Applicable">
+              <select style={inp} value={form.esic_applicable?"yes":"no"} onChange={e=>set("esic_applicable",e.target.value==="yes")}>
+                <option value="yes">Yes (auto if gross ≤ ₹21k)</option><option value="no">No</option>
+              </select>
+            </F>
+            <F label="ESIC Number"><input style={inp} value={form.esic_number} onChange={e=>set("esic_number",e.target.value)}/></F>
+          </Sect>
+          <Sect title="Bank Details">
+            <F label="Bank Account Number"><input style={inp} value={form.bank_acc} onChange={e=>set("bank_acc",e.target.value)}/></F>
+            <F label="IFSC"><input style={inp} value={form.ifsc} onChange={e=>set("ifsc",e.target.value)}/></F>
+            <F label="PAN" full><input style={inp} value={form.pan} onChange={e=>set("pan",e.target.value)}/></F>
+          </Sect>
+          <Sect title="Payment Mode">
+            <F label="Type" full>
+              <select style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
+                <option value="fixed">Fixed (full month salary regardless of attendance)</option>
+                <option value="attendance">Attendance-based (pro-rated by P/H days)</option>
+              </select>
+            </F>
+          </Sect>
+        </div>
+        <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          {err&&<span style={{flex:1,fontSize:11.5,color:T.red}}>{err}</span>}
+          {!err&&<span style={{flex:1}}/>}
+          <button onClick={()=>!saving&&onClose()} disabled={saving}
+            style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>Cancel</button>
+          <button onClick={save} disabled={saving}
+            style={{padding:"7px 18px",borderRadius:7,background:saving?T.t4:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
+            {saving?"Saving…":"Save Changes"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── MONTHLY SALARY TAB ────────────────────────────────────────────
-function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,isAdmin}){
+function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,isAdmin,onStaffUpdate}){
   const [search,setSearch]=useState("");
   const [payStatus,setPayStatus]=useState({});
   // local paymentType overrides — can be toggled per employee
@@ -889,13 +1292,35 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
   const [editSubmitting,setEditSubmitting]=useState(false);
   const [reqErr,setReqErr]=useState("");
 
+  // ─── Edit Staff Master (Payroll v2 — Phase 2) ────────────
+  const [editStaffEmp,setEditStaffEmp]=useState(null);  // emp object or null
+
+  // ─── Manual TDS per staff/month (Payroll v2 — Phase 2) ───
+  const [tdsByEmpMonth,setTdsByEmpMonth]=useState({});  // {staffId: amount}
+  const loadTds=async()=>{
+    try{
+      const r=await api.get(`/payroll/tds?month=${month}&year=${year}`);
+      if(r.success){
+        const m={};
+        (r.data||[]).forEach(t=>{m[t.staff_id]=Number(t.tds_amount)||0;});
+        setTdsByEmpMonth(m);
+      }
+    }catch(e){ /* endpoint comes online with Phase 2 backend — silent */ }
+  };
+  const saveTds=async(staffId,amount)=>{
+    setTdsByEmpMonth(p=>({...p,[staffId]:Number(amount)||0}));
+    try{
+      await api.post("/payroll/tds",{staff_id:staffId,month_num:month,year_num:year,tds_amount:Number(amount)||0});
+    }catch(e){ /* best-effort; UI already updated */ }
+  };
+
   const loadRequests=async()=>{
     try{
       const r=await api.get(`/payroll/salary-edit-requests?month=${month}&year=${year}`);
       if(r.success) setEditReqs(r.data||[]);
     }catch(e){ /* table might not exist yet — silent */ }
   };
-  useEffect(()=>{ loadRequests(); /* eslint-disable-next-line */ },[month,year]);
+  useEffect(()=>{ loadRequests(); loadTds(); /* eslint-disable-next-line */ },[month,year]);
 
   // Get latest request for a staff member (approved takes priority, else pending, else rejected)
   const reqFor=(sid)=>{
@@ -951,15 +1376,34 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
     const H=Object.values(days).filter(v=>v==="H").length;
     const A=Object.values(days).filter(v=>v==="A").length;
     const effective=P+(H*0.5);
-    const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone;
+    // Petrol + Special allowance added as part of gross (Phase 2 fields,
+    // default 0 when not set so legacy rows keep working)
+    const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone+(emp.petrolAllowance||0)+(emp.specialAllowance||0);
     const pType=paymentTypes[emp.id]||emp.paymentType||"fixed";
     const gross=pType==="fixed"
       ? fullGross
       : Math.round((fullGross/WD)*effective);
-    const pf=Math.round(emp.basicSalary*0.12);
-    const esi=emp.basicSalary<=21000?Math.round(gross*0.0075):0;
+    // PF — method-aware (Phase 2); fall back to legacy capped_15k when unset
+    const pfMethod=emp.pfMethod||"capped_15k";
+    const pfApplicable=emp.pfApplicable===undefined?true:!!emp.pfApplicable;
+    let pfFull=0;
+    if(pfApplicable){
+      if(pfMethod==="none") pfFull=0;
+      else if(pfMethod==="full_basic") pfFull=Math.round(emp.basicSalary*0.12);
+      else if(pfMethod==="custom") pfFull=Math.round(emp.pfCustomAmount||0);
+      else pfFull=Math.round(Math.min(emp.basicSalary,15000)*0.12); // capped_15k
+    }
+    const esicApplicable=emp.esicApplicable===undefined?true:!!emp.esicApplicable;
+    const esiFull=(esicApplicable&&gross<=21000)?Math.round(gross*0.0075):0;
+    // Prorate deductions for attendance-paid staff (else cap at full
+    // gross days). For 'fixed' staff, PF/ESI is full month value.
+    const pf=pType==="fixed"?pfFull:Math.round((pfFull/WD)*effective);
+    const esi=pType==="fixed"?esiFull:Math.round((esiFull/WD)*effective);
     const adv=(advances||[]).find(a=>a.empId===emp.id&&a.status==="Pending deduction")?.amount||0;
-    return{gross,net:gross-pf-esi-adv,effective,pf,esi,pType,P,H,A,fullGross};
+    // Manual TDS for this month (looked up from `tdsByEmpMonth` if set)
+    const tds=Math.round((tdsByEmpMonth&&tdsByEmpMonth[emp.id])||0);
+    const net=Math.max(0,gross-pf-esi-adv-tds);
+    return{gross,net,effective,pf,esi,tds,pType,P,H,A,fullGross};
   };
 
   const totalNet=filtered.reduce((s,e)=>s+calcNet(e).net,0);
@@ -993,8 +1437,8 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
             <IcChk size={13} color="white"/> Mark All Paid
           </button>}
           <button onClick={()=>{
-            const headers=["Employee","ID","Dept","Pay Type","Basic","Gross","PF","ESI","Net Pay"];
-            const rows=filtered.map(emp=>{const c=calcNet(emp);return[emp.name,emp.id,emp.dept,c.pType,emp.basicSalary,c.gross,c.pf,c.esi,c.net];});
+            const headers=["Employee","ID","Dept","Pay Type","Basic","Gross","PF","ESI","TDS","Net Pay"];
+            const rows=filtered.map(emp=>{const c=calcNet(emp);return[emp.name,emp.id,emp.dept,c.pType,emp.basicSalary,c.gross,c.pf,c.esi,c.tds||0,c.net];});
             exportCSV(headers,rows,`Monthly_Salary_${MONTHS[month]}_${year}.csv`);
           }} style={{display:"flex",alignItems:"center",gap:4,padding:"6px 12px",borderRadius:7,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>
             <IcDown size={12} color={T.t2}/> Export
@@ -1035,8 +1479,8 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
       {/* Table */}
       <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-        <div style={{display:"grid",gridTemplateColumns:"210px 100px 90px 110px 80px 80px 100px 120px 100px",padding:"7px 14px",background:"#0D1B2A"}}>
-          {["Employee","Pay Type","Basic","Gross","PF","ESI","Net Pay","Status","Actions"].map((h,i)=>(
+        <div style={{display:"grid",gridTemplateColumns:"210px 100px 90px 110px 70px 70px 80px 100px 110px 110px",padding:"7px 14px",background:"#0D1B2A"}}>
+          {["Employee","Pay Type","Basic","Gross","PF","ESI","TDS","Net Pay","Status","Actions"].map((h,i)=>(
             <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
           ))}
         </div>
@@ -1047,7 +1491,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
           const deptColor=emp.dept==="Management"?T.pur:emp.dept==="Civil"?T.blu:emp.dept==="Design"?T.grn:emp.dept==="Electrical"?T.amb:T.slt;
           const isAttBased=pType==="attendance";
           return(
-            <div key={emp.id} style={{display:"grid",gridTemplateColumns:"210px 100px 90px 110px 80px 80px 100px 120px 100px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:ei%2===0?"transparent":T.surfaceB,borderLeft:`3px solid ${isAttBased?T.pur:T.grn}33`,transition:"background .1s"}}
+            <div key={emp.id} style={{display:"grid",gridTemplateColumns:"210px 100px 90px 110px 70px 70px 80px 100px 110px 110px",padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:ei%2===0?"transparent":T.surfaceB,borderLeft:`3px solid ${isAttBased?T.pur:T.grn}33`,transition:"background .1s"}}
               onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"55"}
               onMouseLeave={e=>e.currentTarget.style.background=ei%2===0?"transparent":T.surfaceB}>
 
@@ -1094,6 +1538,21 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
               <span style={{fontSize:12,color:T.red}}>-₹{fmtN(pf)}</span>
               <span style={{fontSize:12,color:esi>0?T.red:T.t4}}>{esi>0?`-₹${fmtN(esi)}`:"—"}</span>
+
+              {/* TDS — inline editable for admins, read-only otherwise */}
+              {isAdmin ? (
+                <input
+                  type="number" min="0"
+                  value={tdsByEmpMonth[emp.id]||""}
+                  onChange={e=>setTdsByEmpMonth(p=>({...p,[emp.id]:Number(e.target.value)||0}))}
+                  onBlur={e=>saveTds(emp.id,Number(e.target.value)||0)}
+                  placeholder="0"
+                  style={{width:70,padding:"3px 6px",borderRadius:5,border:`1.5px solid ${(tdsByEmpMonth[emp.id]||0)>0?T.redM:T.b1}`,fontSize:11.5,color:(tdsByEmpMonth[emp.id]||0)>0?T.red:T.t2,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:(tdsByEmpMonth[emp.id]||0)>0?T.redL:T.surface,textAlign:"right"}}
+                  title="Manual TDS for this month (saves on blur)"
+                />
+              ) : (
+                <span style={{fontSize:12,color:(tdsByEmpMonth[emp.id]||0)>0?T.red:T.t4}}>{(tdsByEmpMonth[emp.id]||0)>0?`-₹${fmtN(tdsByEmpMonth[emp.id])}`:"—"}</span>
+              )}
 
               <div>
                 {(() => {
@@ -1142,11 +1601,26 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
                     <IcEdit size={11} color={T.amb}/>
                   </button>
                 )}
+                {isAdmin && (
+                  <button onClick={()=>setEditStaffEmp(emp)} title="Edit staff master (PF method, allowances, contact)"
+                    style={{display:"flex",alignItems:"center",gap:3,padding:"4px 7px",borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,color:T.pur,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                    <IcSet size={11} color={T.pur}/>
+                  </button>
+                )}
               </div>
             </div>
           );
         })}
       </div>
+
+      {/* ─── Staff Master Edit Modal (Phase 2) ─── */}
+      {editStaffEmp && (
+        <EditStaffModal
+          emp={editStaffEmp}
+          onClose={()=>setEditStaffEmp(null)}
+          onSaved={()=>{ if(onStaffUpdate) onStaffUpdate(); }}
+        />
+      )}
 
       {/* ─── Salary Edit Request Modal ─── */}
       {editModalEmp && (
@@ -2913,6 +3387,8 @@ function PayrollModule(){
   const [salaryRecords,setSalaryRecords]=useState([]);
   const [defaultDueDays,setDefaultDueDays]=useState(10);
   const [workingDays,setWorkingDays]=useState(26);
+  // Payroll v2 — Phase 4: holidays for current year
+  const [holidays,setHolidays]=useState([]);
 
   // Map API staff row to frontend format
   const mapStaff=s=>({
@@ -2920,9 +3396,28 @@ function PayrollModule(){
     paymentType:s.payment_type||"fixed",
     basicSalary:Number(s.basic_salary)||0,hra:Number(s.hra)||0,
     conveyance:Number(s.conveyance)||0,medical:Number(s.medical)||0,
-    phone:Number(s.phone_allowance)||0,
+    phone:Number(s.phone_allowance)||0,         // legacy: phone *allowance* amount (used in calcNet)
+    phoneAllowance:Number(s.phone_allowance)||0,// alias for clarity
+    // Phase 2 — additional allowances
+    petrolAllowance:Number(s.petrol_allowance)||0,
+    specialAllowance:Number(s.special_allowance)||0,
+    // Phase 1 — contact + identity
+    mobile:s.phone||"",                          // contact mobile (DB column `phone`)
+    email:s.email||"",
+    aadhaar:s.aadhaar||"",
+    // Phase 2 — PF configuration
+    pfApplicable:s.pf_applicable===undefined?true:!!s.pf_applicable,
+    pfMethod:s.pf_method||"capped_15k",
+    pfCustomAmount:Number(s.pf_custom_amount)||0,
+    pfUan:s.pf_uan||"",
+    // Phase 2 — ESIC configuration
+    esicApplicable:s.esic_applicable===undefined?true:!!s.esic_applicable,
+    esicNumber:s.esic_number||"",
+    // Bank + legacy
     bankAcc:s.bank_acc||"",ifsc:s.ifsc||"",pan:s.pan||"",
     joinDate:s.join_date?s.join_date.split("T")[0]:"",project:s.project||"",photo:s.photo||"",
+    // Phase 5 forward-compat
+    shiftTemplateId:s.shift_template_id||null,
   });
   const mapWorker=w=>({
     id:w.id,name:w.name,trade:w.trade||"",
@@ -2986,8 +3481,17 @@ function PayrollModule(){
     }catch(err){console.error("Load attendance:",err);}
   },[month,year]);
 
+  // Payroll v2 — Phase 4: load holidays for current year
+  const loadHolidays=useCallback(async()=>{
+    try{
+      const r=await api.get(`/payroll/holidays?year=${year}`);
+      if(r.success) setHolidays(r.data||[]);
+    }catch(e){ /* table may not exist yet — silent */ }
+  },[year]);
+
   useEffect(()=>{loadAll();},[loadAll]);
   useEffect(()=>{loadAttendance();},[loadAttendance]);
+  useEffect(()=>{loadHolidays();},[loadHolidays]);
 
   // Attendance API callbacks
   const onMonthlyAttChange=(empId,day,status)=>{
@@ -3018,10 +3522,26 @@ function PayrollModule(){
     const P=Object.values(days).filter(v=>v==="P").length;
     const H=Object.values(days).filter(v=>v==="H").length;
     const eff=P+(H*0.5);
-    const perDay=(emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone)/(WORKING_DAYS||26);
-    const gross=Math.round(perDay*eff);
-    const pf=Math.round(emp.basicSalary*0.12);
-    return s+(gross-pf);
+    const WD=WORKING_DAYS||26;
+    const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone+(emp.petrolAllowance||0)+(emp.specialAllowance||0);
+    const pType=emp.paymentType||"fixed";
+    const gross=pType==="fixed"?fullGross:Math.round((fullGross/WD)*eff);
+    // PF — method-aware
+    const pfMethod=emp.pfMethod||"capped_15k";
+    const pfApplicable=emp.pfApplicable===undefined?true:!!emp.pfApplicable;
+    let pfFull=0;
+    if(pfApplicable){
+      if(pfMethod==="none") pfFull=0;
+      else if(pfMethod==="full_basic") pfFull=Math.round(emp.basicSalary*0.12);
+      else if(pfMethod==="custom") pfFull=Math.round(emp.pfCustomAmount||0);
+      else pfFull=Math.round(Math.min(emp.basicSalary,15000)*0.12);
+    }
+    const esicApplicable=emp.esicApplicable===undefined?true:!!emp.esicApplicable;
+    const esiFull=(esicApplicable&&gross<=21000)?Math.round(gross*0.0075):0;
+    const pf=pType==="fixed"?pfFull:Math.round((pfFull/WD)*eff);
+    const esi=pType==="fixed"?esiFull:Math.round((esiFull/WD)*eff);
+    // Clamp net at 0 — never display negative payroll
+    return s+Math.max(0,gross-pf-esi);
   },0);
 
   const totalDailyPayable=workers.reduce((s,w)=>{
@@ -3036,12 +3556,13 @@ function PayrollModule(){
 
   const pendingAdvances=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
 
-  // Office Staff mode — 5 tabs
+  // Office Staff mode — 6 tabs
   const TABS_OFFICE=[
     {id:"office-att",      l:"Attendance",        sub:"From Mobile Punch"},
     {id:"office-salary",   l:"Monthly Salary",    sub:"Auto-calculated"},
     {id:"office-ledger",   l:"Salary Ledger",     sub:"Payment history"},
     {id:"office-advances", l:"Advances",          sub:"Advance tracking"},
+    {id:"office-calendar", l:"Calendar",          sub:"Holidays & leaves"},
     {id:"office-settings", l:"Settings",          sub:"Payroll config"},
   ];
   // Daily Wages Labour mode — 4 tabs
@@ -3053,13 +3574,20 @@ function PayrollModule(){
   ];
   const TABS = mode==="office" ? TABS_OFFICE : TABS_DAILY;
 
-  const manualPending=salaryRecords.filter(r=>r.status==="Pending").reduce((s,r)=>s+r.amount,0);
+  // Pending payroll for the CURRENT month/year (real number):
+  //   pending = max(0, totalMonthlyNet − paid for this month)
+  //   pendingCount = staff who have no Paid record for this month
+  const paidThisMonthRecs=salaryRecords.filter(r=>r.status==="Paid"&&r.month===month&&r.year===year);
+  const paidThisMonthAmt=paidThisMonthRecs.reduce((s,r)=>s+(r.amount||0),0);
+  const manualPending=Math.max(0,totalMonthlyNet-paidThisMonthAmt);
+  const paidEmpIds=new Set(paidThisMonthRecs.map(r=>r.id));
+  const pendingCount=Math.max(0,staff.length-paidEmpIds.size);
 
   const TILES_OFFICE=[
     {l:"Office Staff",         v:staff.length,        sub:"Permanent employees",               c:T.blu},
     {l:"Monthly Net Payroll",  v:`₹${fmt(totalMonthlyNet)}`,  sub:`${MONTHS[month]} ${year}`,          c:T.grn},
     {l:"Pending Advances",     v:`₹${fmt(pendingAdvances)}`,  sub:`${advances.filter(a=>a.status==="Pending deduction").length} to deduct`, c:T.pur},
-    {l:"Salary Pending",       v:`₹${fmt(manualPending)}`,    sub:`${salaryRecords.filter(r=>r.status==="Pending").length} entries unpaid`, c:manualPending>0?T.amb:T.grn},
+    {l:"Salary Pending",       v:`₹${fmt(manualPending)}`,    sub:`${pendingCount} ${pendingCount===1?"employee":"employees"} unpaid`, c:manualPending>0?T.amb:T.grn},
   ];
   const TILES_DAILY=[
     {l:"Daily Workers",        v:workers.length,              sub:"Active labour",                     c:T.blu},
@@ -3152,10 +3680,13 @@ function PayrollModule(){
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
         {/* ─── OFFICE STAFF MODE ─── */}
         {mode==="office" && tab==="office-att" && (
-          <MonthlyAttGrid staff={staff} att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange}/>
+          <MonthlyAttGrid staff={staff} att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays}/>
+        )}
+        {mode==="office" && tab==="office-calendar" && (
+          <HolidayCalendarTab holidays={holidays} setHolidays={setHolidays} month={month} year={year} isAdmin={isAdmin}/>
         )}
         {mode==="office" && tab==="office-salary" && (
-          <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin}/>
+          <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin} onStaffUpdate={loadAll}/>
         )}
         {mode==="office" && tab==="office-ledger" && (
           <SalaryLedgerTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} month={month} year={year}/>
