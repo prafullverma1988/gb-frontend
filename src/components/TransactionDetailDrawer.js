@@ -124,11 +124,24 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
       };
       const res = await api.put("/finance/transactions/" + txn.id, payload);
       if (res?.success === false) {
+        // Ghost row (deleted in another tab/session) — refresh + close
+        if (/not found/i.test(res.message || "")) {
+          setErr("Yeh transaction ab exist nahi karti (kisi aur tab me delete ho gayi). List refresh ho rahi hai.");
+          setSaving(false);
+          setTimeout(() => { onChanged && onChanged(); onClose && onClose(); }, 1400);
+          return;
+        }
         setErr(res.message || "Save failed"); setSaving(false); return;
       }
       setEditing(false);
       onChanged && onChanged();
     } catch (e) {
+      if (/404|not found/i.test(e?.message || "")) {
+        setErr("Yeh transaction ab exist nahi karti — list refresh ho rahi hai.");
+        setSaving(false);
+        setTimeout(() => { onChanged && onChanged(); onClose && onClose(); }, 1400);
+        return;
+      }
       setErr(e?.message || "Network error");
     }
     setSaving(false);
@@ -141,11 +154,27 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
     try {
       const res = await api.del("/finance/transactions/" + txn.id);
       if (res?.success === false) {
+        // "Transaction not found" → it's a ghost row (never persisted, or
+        // already deleted elsewhere). Treat as success: refresh the list
+        // so the stale entry disappears instead of leaving the user stuck.
+        const notFound = /not found/i.test(res.message || "")
+          || res.code === "TXN_NOT_FOUND";
+        if (notFound) {
+          onChanged && onChanged();
+          onClose && onClose();
+          return;
+        }
         setErr(res.message || "Delete failed"); setDeleting(false); return;
       }
       onChanged && onChanged();
       onClose && onClose();
     } catch (e) {
+      // 404 from the network layer = ghost row; refresh + close
+      if (/404|not found/i.test(e?.message || "")) {
+        onChanged && onChanged();
+        onClose && onClose();
+        return;
+      }
       setErr(e?.message || "Network error");
       setDeleting(false);
     }
