@@ -283,12 +283,22 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
     });
   },[showWarehouseStep]); // refetch if mode flips mid-session
 
-  const itemsWithWH = items.filter(it=>{
-    if (it.isWarehouseRestock) return false; // warehouse can't fulfill itself
-    const c = whCheck[it.id];
-    return c?.found && Number(c.available)>0;
-  });
-  const totalWHTake = items.reduce((s,it)=>s+Number(whTake[it.id]||0),0);
+  // In warehouse-driven mode procurement doesn't decide stock routing —
+  // the whole "Warehouse stock available" section is suppressed. We still
+  // compute itemsWithWH for the procurement-driven flow, but force-empty
+  // it here so the recommendation card + Issue-from-Warehouse button
+  // disappear regardless of any earlier whCheck populates that may have
+  // happened due to the mount-time race with the mode fetch.
+  const itemsWithWH = showWarehouseStep
+    ? items.filter(it=>{
+        if (it.isWarehouseRestock) return false; // warehouse can't fulfill itself
+        const c = whCheck[it.id];
+        return c?.found && Number(c.available)>0;
+      })
+    : [];
+  const totalWHTake = showWarehouseStep
+    ? items.reduce((s,it)=>s+Number(whTake[it.id]||0),0)
+    : 0;
   const anyWHTake = totalWHTake>0;
 
   const handleIssueFromWarehouse = async () => {
