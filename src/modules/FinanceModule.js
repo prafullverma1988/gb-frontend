@@ -72,6 +72,22 @@ const C={
 };
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:`${(n/1000).toFixed(0)}K`;
 const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
+
+// ── Party-type classifier ───────────────────────────────────────────
+// Single source of truth for "is this party a vendor (we pay them) or a
+// client (they pay us)". Earlier this was hardcoded in 3 places with an
+// incomplete list — plain "Supplier" and "Labour Vendor" were missing,
+// so those parties were misclassified as clients: their purchase bills
+// landed in the DR column and the header showed "Advance Received"
+// instead of "To Pay". Substring match covers every naming variant.
+const isVendorType=(type)=>{
+  const t=String(type||"").trim().toLowerCase();
+  if(!t) return false;
+  if(t==="client"||t==="customer") return false;
+  return t.includes("supplier")||t.includes("vendor")
+       ||t.includes("labour")||t.includes("labor")
+       ||t.includes("contractor")||t.includes("sub-con")||t.includes("subcon");
+};
 const T={
   bg:"#F4F6F9",surface:"#FFFFFF",surfaceB:"#F8F9FB",
   t1:"#111827",t2:"#374151",t3:"#6B7280",t4:"#9CA3AF",
@@ -2113,7 +2129,7 @@ function FinanceModule(){
     // Clients: positive balance means they OWE us (To Receive)
     let balType=p.balance_type||"";
     if(!balType){
-      const isVendor=["Material Supplier","Sub-Con","Labour","Other Vendor","contractor","subcontractor"].includes(pType);
+      const isVendor=isVendorType(pType);
       if(isVendor) balType=rawBal<=0?"To Pay":"Advance Paid";
       else balType=rawBal>=0?"To Receive":"Advance Received";
     }
@@ -2292,7 +2308,7 @@ function FinanceModule(){
   const computePartyBalance=(partyId,partyName,partyType)=>{
     const txns=apiLedger[partyId]||activeTxns.filter(t=>t.party===partyName);
     if(txns.length===0) return null;
-    const isVendorP=["Material Supplier","Sub-Con","Labour","Other Vendor","contractor"].includes(partyType);
+    const isVendorP=isVendorType(partyType);
     const VENDOR_BILLS=["material_purchase","subcon_expense","site_expense","Material Purchase","Sub-Con Expense","Site Expense"];
     const VENDOR_PAYS=["payment","party_payment","Payment Made","Payment Out"];
     const CLIENT_RCPTS=["receipt","Payment Received","Payment In"];
@@ -2429,7 +2445,7 @@ function FinanceModule(){
       }));
     }
 
-    const isVendor=["Material Supplier","Sub-Con","Labour","Other Vendor","contractor","subcontractor"].includes(party.type);
+    const isVendor=isVendorType(party.type);
     const VENDOR_BILL_TYPES=["material_purchase","subcon_expense","site_expense","Material Purchase","Sub-Con Expense","Site Expense"];
     const VENDOR_PAY_TYPES=["payment","party_payment","Payment Made","Payment Out","wallet_payment"];
     const CLIENT_RECEIPT_TYPES=["receipt","payment","Payment Received","Payment In"];
@@ -2825,16 +2841,22 @@ function FinanceModule(){
               const totalDR=ledgerRows.reduce((s,r)=>s+(r.dr?r.amount:0),0);
               // Compute balance from ledger rows (more accurate than opening_balance)
               const ledgerClosing=totalCR-totalDR; // positive = we owe them (vendor) or they owe us (client)
-              const isVendorPty=["Material Supplier","Sub-Con","Labour","Other Vendor","contractor"].includes(selParty.type);
+              const isVendorPty=isVendorType(selParty.type);
               const computedBalType=isVendorPty
-                ?(ledgerClosing>0?"To Pay":"Advance Paid")
-                :(ledgerClosing>0?"To Receive":"Advance Received");
+                ?(ledgerClosing>0?"To Pay":ledgerClosing<0?"Advance Paid":"Settled")
+                :(ledgerClosing>0?"To Receive":ledgerClosing<0?"Advance Received":"Settled");
               const computedBal=Math.abs(ledgerClosing);
+              // Chip colour by meaning: "To Pay" = our outstanding obligation
+              // (red); "To Receive" = money due to us (amber); settled /
+              // advance = green.
+              const chipC=computedBalType==="To Pay"?{bg:T.redL,fg:T.red,br:T.redM}
+                         :computedBalType==="To Receive"?{bg:T.ambL,fg:T.amb,br:T.ambM}
+                         :{bg:T.grnL,fg:T.grn,br:T.grnM};
               return(
                 <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
                   <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
                     <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:T.t1}}>{selParty.name}</div><div style={{fontSize:10.5,color:T.t4}}>{selParty.type}</div></div>
-                    <span style={{background:ledgerClosing>0?T.ambL:T.grnL,color:ledgerClosing>0?T.amb:T.grn,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${ledgerClosing>0?T.ambM:T.grnM}`}}>₹{fmtN(computedBal)} · {computedBalType}</span>
+                    <span style={{background:chipC.bg,color:chipC.fg,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {computedBalType}</span>
                     <span style={{background:T.grnL,color:T.grn,fontSize:10,fontWeight:600,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.grnM}`}}>CR ₹{fmtN(totalCR)}</span>
                     <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:600,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.redM}`}}>DR ₹{fmtN(totalDR)}</span>
                     <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:27,padding:"0 9px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
@@ -2882,8 +2904,12 @@ function FinanceModule(){
                             <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{!txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
                             {/* 6. Payment DR */}
                             <span style={{fontSize:12.5,fontWeight:700,color:T.red,textAlign:"right"}}>{txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
-                            {/* 7. Balance */}
-                            <span style={{fontSize:12,fontWeight:700,color:txn.runBal>=0?T.grn:T.red,textAlign:"right",whiteSpace:"nowrap"}}>₹{fmtN(Math.abs(txn.runBal))} <span style={{fontSize:9}}>{txn.runBal>=0?"CR":"DR"}</span></span>
+                            {/* 7. Balance — CR/DR label stays accounting-accurate.
+                                Colour is meaning-based: for a vendor a CR
+                                running balance means WE OWE → red. For a
+                                client a CR balance is money in our favour →
+                                green. */}
+                            <span style={{fontSize:12,fontWeight:700,color:(isVendorPty?(txn.runBal>0?T.red:T.grn):(txn.runBal>=0?T.grn:T.red)),textAlign:"right",whiteSpace:"nowrap"}}>₹{fmtN(Math.abs(txn.runBal))} <span style={{fontSize:9}}>{txn.runBal>=0?"CR":"DR"}</span></span>
                             {/* 8. Status */}
                             <div style={{display:"flex",justifyContent:"center"}}>
                               {txn.status&&<span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:10,background:txn.status==="paid"?T.grnL:txn.status==="approved"?T.bluL:T.ambL,color:txn.status==="paid"?T.grn:txn.status==="approved"?T.blu:T.amb,border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="approved"?T.bluM:T.ambM}`,whiteSpace:"nowrap"}}>{txn.status}</span>}
@@ -2959,7 +2985,16 @@ function FinanceModule(){
                       style={{flex:1,padding:"7px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
                       <IcSend size={13} color={T.red}/> + Payment Made
                     </button>
-                    <button onClick={()=>openTxn(selParty.type==="Material Supplier"||selParty.type==="Other Vendor"?"Material Purchase Bill":selParty.type==="Sub-Con"||selParty.type==="Labour Contractor"?"Sub-Con Bill":"Sales Invoice",selParty.name)}
+                    <button onClick={()=>{
+                      // Bill type by party class: subcon/labour → Sub-Con Bill,
+                      // any other vendor (incl. plain "Supplier") → Material
+                      // Purchase Bill, client → Sales Invoice.
+                      const pt=String(selParty.type||"").toLowerCase();
+                      const billType=(pt.includes("sub-con")||pt.includes("subcon")||pt.includes("contractor")||pt.includes("labour")||pt.includes("labor"))
+                        ?"Sub-Con Bill"
+                        :isVendorType(selParty.type)?"Material Purchase Bill":"Sales Invoice";
+                      openTxn(billType,selParty.name);
+                    }}
                       style={{flex:1,padding:"7px",borderRadius:6,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
                       <IcBillDue size={13} color={T.blu}/> + New Bill
                     </button>
