@@ -117,6 +117,264 @@ function Avatar({name,size=32,color=T.blu}){
 
 
 // ── MONTHLY ATTENDANCE GRID ───────────────────────────────────────
+// ── GEOFENCE ADMIN TAB (Payroll v2 — Phase 5) ────────────────────
+// Lets admin add / edit / delete site geofences. Each geofence is a
+// (lat, lng, radius_m) tied to a project; mobile punch checks these
+// to determine inside/outside-fence state.
+function GeofenceAdminTab({isAdmin}){
+  const [fences,setFences]=useState([]);
+  const [projects,setProjects]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [editId,setEditId]=useState(null);
+  const [form,setForm]=useState({project_id:"",label:"",center_lat:"",center_lng:"",radius_m:80});
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+
+  const reload=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const [fRes,pRes]=await Promise.all([
+        api.get("/geofences?include_inactive=1"),
+        api.get("/team-schedule/sites"),
+      ]);
+      if(fRes.success) setFences(fRes.data||[]);
+      if(pRes.success) setProjects(pRes.data||[]);
+    }catch(e){ /* silent */ }
+    setLoading(false);
+  },[]);
+  useEffect(()=>{ reload(); },[reload]);
+
+  const openAdd=()=>{
+    setEditId(null);
+    setForm({project_id:"",label:"",center_lat:"",center_lng:"",radius_m:80});
+    setErr("");
+  };
+  const openEdit=(f)=>{
+    setEditId(f.id);
+    setForm({
+      project_id:f.project_id||"",
+      label:f.label||"",
+      center_lat:f.center_lat||"",
+      center_lng:f.center_lng||"",
+      radius_m:f.radius_m||80,
+    });
+    setErr("");
+  };
+  const useMyLocation=()=>{
+    if(!navigator.geolocation){ setErr("Browser GPS not supported"); return; }
+    navigator.geolocation.getCurrentPosition(
+      pos=>setForm(p=>({...p,center_lat:pos.coords.latitude.toFixed(7),center_lng:pos.coords.longitude.toFixed(7)})),
+      e=>setErr("GPS failed: "+e.message),
+      { enableHighAccuracy:true,timeout:15000 }
+    );
+  };
+  const save=async()=>{
+    if(!form.label.trim()||!form.center_lat||!form.center_lng){
+      setErr("Label + latitude + longitude required"); return;
+    }
+    setSaving(true); setErr("");
+    try{
+      const body={
+        project_id:form.project_id||null,
+        label:form.label.trim(),
+        center_lat:Number(form.center_lat),
+        center_lng:Number(form.center_lng),
+        radius_m:Number(form.radius_m)||80,
+      };
+      const r=editId
+        ? await api.put(`/geofences/${editId}`,body)
+        : await api.post("/geofences",body);
+      if(r.success){ await reload(); openAdd(); }
+      else setErr(r.message||"Save failed");
+    }catch(e){ setErr(e.message||"Network error"); }
+    setSaving(false);
+  };
+  const remove=async(id)=>{
+    if(!window.confirm("Soft-delete this geofence? (Will not affect past punches)")) return;
+    try{ await api.del(`/geofences/${id}`); await reload(); }
+    catch(e){ alert(e.message); }
+  };
+  const toggleActive=async(f)=>{
+    try{ await api.put(`/geofences/${f.id}`,{active:!f.active?1:0}); await reload(); }
+    catch(e){ alert(e.message); }
+  };
+
+  const inp={width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+
+  if(!isAdmin){
+    return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Geofence config is admin-only.</div>;
+  }
+
+  return(
+    <div>
+      <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"10px 14px",marginBottom:14,fontSize:11.5,color:T.t2,lineHeight:1.5}}>
+        Mobile app checks each punch against active geofences. <b>Inside</b> → auto-attendance.
+        <b style={{color:T.amb,marginLeft:5}}>Outside</b> → admin review queue (Pending Approvals tab).
+      </div>
+
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+        {/* ─── Form ─── */}
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:14}}>
+          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>
+            {editId?"Edit Geofence":"Add New Geofence"}
+          </div>
+          <div style={{display:"grid",gap:9}}>
+            <div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Label *</div>
+              <input style={inp} value={form.label} onChange={e=>setForm(p=>({...p,label:e.target.value}))} placeholder="e.g. Raganee House Site"/>
+            </div>
+            <div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Project (optional)</div>
+              <select style={inp} value={form.project_id} onChange={e=>setForm(p=>({...p,project_id:e.target.value}))}>
+                <option value="">— Generic (not project-linked) —</option>
+                {projects.map(p=><option key={p.id} value={p.id}>{p.name}{p.city?` · ${p.city}`:""}</option>)}
+              </select>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Latitude *</div>
+                <input style={inp} value={form.center_lat} onChange={e=>setForm(p=>({...p,center_lat:e.target.value}))} placeholder="21.2497"/>
+              </div>
+              <div>
+                <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Longitude *</div>
+                <input style={inp} value={form.center_lng} onChange={e=>setForm(p=>({...p,center_lng:e.target.value}))} placeholder="81.6324"/>
+              </div>
+            </div>
+            <button onClick={useMyLocation}
+              style={{padding:"6px 10px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+              📍 Use my current GPS location
+            </button>
+            <div>
+              <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Radius: <b style={{color:T.t1}}>{form.radius_m}m</b></div>
+              <input type="range" min="30" max="500" step="10" value={form.radius_m}
+                onChange={e=>setForm(p=>({...p,radius_m:Number(e.target.value)}))}
+                style={{width:"100%"}}/>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:T.t4,marginTop:2}}>
+                <span>30m</span><span>80m default</span><span>500m</span>
+              </div>
+            </div>
+            {err && <div style={{padding:"7px 10px",background:T.redL,color:T.red,borderRadius:6,fontSize:11}}>{err}</div>}
+            <div style={{display:"flex",gap:7}}>
+              {editId && (
+                <button onClick={openAdd} style={{flex:1,padding:"8px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+              )}
+              <button onClick={save} disabled={saving}
+                style={{flex:2,padding:"8px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
+                {saving?"Saving…":(editId?"Save Changes":"Add Geofence")}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* ─── List ─── */}
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden",minHeight:280}}>
+          <div style={{padding:"10px 14px",background:T.sb,color:"white",fontSize:12.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span>Active Geofences <span style={{color:"rgba(255,255,255,.5)",marginLeft:4,fontSize:11}}>({fences.length})</span></span>
+          </div>
+          {loading && <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12}}>Loading…</div>}
+          {!loading && fences.length===0 && (
+            <div style={{padding:"35px 14px",textAlign:"center",color:T.t4,fontSize:12.5,lineHeight:1.5}}>
+              No geofences yet.<br/>
+              <span style={{fontSize:11}}>Until you add at least one site, all punches will be accepted without review.</span>
+            </div>
+          )}
+          {!loading && fences.map(f=>(
+            <div key={f.id} style={{padding:"11px 14px",borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <span style={{fontSize:12.5,fontWeight:700,color:f.active?T.t1:T.t4,textDecoration:f.active?"none":"line-through"}}>{f.label}</span>
+                  {f.project_name && <span style={{fontSize:9.5,padding:"1px 6px",borderRadius:9,background:T.bluL,color:T.blu,fontWeight:700}}>{f.project_name}</span>}
+                  {f.source==="auto_learned" && <span style={{fontSize:9,padding:"1px 6px",borderRadius:9,background:T.purL,color:T.pur,fontWeight:700}}>AUTO</span>}
+                </div>
+                <div style={{fontSize:10.5,color:T.t4,marginTop:2,fontFamily:"monospace"}}>
+                  {Number(f.center_lat).toFixed(5)}, {Number(f.center_lng).toFixed(5)} · {f.radius_m}m
+                </div>
+              </div>
+              <button onClick={()=>toggleActive(f)} title={f.active?"Deactivate":"Activate"}
+                style={{padding:"4px 9px",borderRadius:5,background:f.active?T.grnL:T.sltL,border:`1px solid ${f.active?T.grnM:T.b1}`,color:f.active?T.grn:T.t3,fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                {f.active?"ON":"OFF"}
+              </button>
+              <button onClick={()=>openEdit(f)}
+                style={{padding:"4px 9px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10,fontWeight:600,cursor:"pointer"}}>
+                Edit
+              </button>
+              <button onClick={()=>remove(f.id)}
+                style={{padding:"4px 8px",borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10,fontWeight:700,cursor:"pointer"}}>
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Pending review queue */}
+      <PendingReviewQueue onChanged={reload}/>
+    </div>
+  );
+}
+
+// ── PENDING REVIEW QUEUE (Phase 5) ───────────────────────────────
+// Sessions where staff punched in outside every active geofence.
+function PendingReviewQueue({onChanged}){
+  const [items,setItems]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [acting,setActing]=useState(null);
+  const reload=async()=>{
+    setLoading(true);
+    try{
+      const r=await api.get("/attendance/pending-review");
+      if(r.success) setItems(r.data||[]);
+    }catch(e){ /* silent */ }
+    setLoading(false);
+  };
+  useEffect(()=>{ reload(); },[]);
+  const review=async(id,action)=>{
+    setActing(id);
+    try{
+      const r=await api.patch(`/attendance/sessions/${id}/review`,{action});
+      if(r.success){ await reload(); if(onChanged) onChanged(); }
+      else alert(r.message);
+    }catch(e){ alert(e.message); }
+    setActing(null);
+  };
+  return(
+    <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
+      <div style={{padding:"10px 14px",background:T.amb,color:"white",fontSize:12.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <span>Outside-Geofence Punches — Pending Review <span style={{color:"rgba(255,255,255,.6)",marginLeft:4,fontSize:11}}>({items.length})</span></span>
+        <button onClick={reload} style={{background:"rgba(255,255,255,.18)",border:"none",color:"white",padding:"3px 9px",borderRadius:5,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>↻ Refresh</button>
+      </div>
+      {loading && <div style={{padding:"25px",textAlign:"center",color:T.t4,fontSize:12}}>Loading…</div>}
+      {!loading && items.length===0 && (
+        <div style={{padding:"25px 14px",textAlign:"center",color:T.grn,fontSize:12.5,fontWeight:600}}>✓ All clean — no outside-geofence punches pending</div>
+      )}
+      {!loading && items.map(s=>(
+        <div key={s.id} style={{padding:"11px 14px",borderTop:`1px solid ${T.b1}`,display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{s.user_name} <span style={{fontSize:10,color:T.t4,fontWeight:500}}>· {s.user_phone||""}</span></div>
+            <div style={{fontSize:11,color:T.t3,marginTop:3}}>
+              Punched in at <b>{new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"})}</b>
+              {s.project_name && <> · {s.project_name}</>}
+            </div>
+            <div style={{fontSize:10,color:T.t4,marginTop:2,fontFamily:"monospace"}}>
+              GPS: {s.punch_in_lat?Number(s.punch_in_lat).toFixed(5):"—"}, {s.punch_in_lng?Number(s.punch_in_lng).toFixed(5):"—"}
+            </div>
+          </div>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={()=>review(s.id,"reject")} disabled={acting===s.id}
+              style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+              ✕ Reject
+            </button>
+            <button onClick={()=>review(s.id,"approve")} disabled={acting===s.id}
+              style={{padding:"6px 14px",borderRadius:6,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
+              ✓ Approve
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── LEAVE TAB (Payroll v2 — Phase 3) ─────────────────────────────
 // Sub-tabs: Apply / My Leaves / Pending Approvals / Balance
 function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
@@ -3895,7 +4153,7 @@ function PayrollModule(){
 
   const pendingAdvances=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
 
-  // Office Staff mode — 7 tabs
+  // Office Staff mode — 8 tabs
   const TABS_OFFICE=[
     {id:"office-att",      l:"Attendance",        sub:"From Mobile Punch"},
     {id:"office-salary",   l:"Monthly Salary",    sub:"Auto-calculated"},
@@ -3903,6 +4161,7 @@ function PayrollModule(){
     {id:"office-advances", l:"Advances",          sub:"Advance tracking"},
     {id:"office-leave",    l:"Leave",             sub:"Apply & approve"},
     {id:"office-calendar", l:"Calendar",          sub:"Holidays & leaves"},
+    {id:"office-sites",    l:"Sites",             sub:"Geofences & review"},
     {id:"office-settings", l:"Settings",          sub:"Payroll config"},
   ];
   // Daily Wages Labour mode — 4 tabs
@@ -4027,6 +4286,9 @@ function PayrollModule(){
         )}
         {mode==="office" && tab==="office-calendar" && (
           <HolidayCalendarTab holidays={holidays} setHolidays={setHolidays} month={month} year={year} isAdmin={isAdmin}/>
+        )}
+        {mode==="office" && tab==="office-sites" && (
+          <GeofenceAdminTab isAdmin={isAdmin}/>
         )}
         {mode==="office" && tab==="office-salary" && (
           <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin} onStaffUpdate={loadAll}/>
