@@ -72,6 +72,9 @@ const C={
 };
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:`${(n/1000).toFixed(0)}K`;
 const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
+// Signed currency — keeps the minus sign so a negative balance isn't
+// shown as a positive number (fmtN strips the sign via Math.abs).
+const fmtS=(n)=>`${Number(n)<0?"-₹":"₹"}${fmtN(n)}`;
 
 // ── Party-type classifier ───────────────────────────────────────────
 // Single source of truth for "is this party a vendor (we pay them) or a
@@ -2229,7 +2232,9 @@ function FinanceModule(){
   const mapAccount=a=>({
     id:a.id,name:a.name||a.account_name||"",
     no:a.account_number?("••"+String(a.account_number).slice(-4)):null,
-    balance:parseFloat(a.current_balance||a.opening_balance||a.balance)||0,
+    // live_balance is backend-computed from transactions (drift-proof).
+    // ?? not || so a genuine 0 / negative balance isn't discarded.
+    balance:parseFloat(a.live_balance ?? a.current_balance ?? a.balance ?? 0)||0,
     color:a.type==="bank"||a.account_type==="bank"?C.p:
           a.type==="cash"||a.account_type==="cash"?C.g:C.teal,
   });
@@ -2424,12 +2429,21 @@ function FinanceModule(){
       {l:"Unpaid Bills",v:`₹${fmt(unpaidBills)}`,sub:"Pending payment",Icon:IcCalDue,c:T.amb,bg:T.ambL,brd:T.ambM},
       {l:"Net Cash Flow",v:`₹${fmt(Math.abs(netFlow))}`,sub:netFlow>=0?"Surplus":"Deficit",Icon:IcPulse,c:netFlow>=0?T.grn:T.red,bg:netFlow>=0?T.grnL:T.redL,brd:netFlow>=0?T.grnM:T.redM},
     ],
-    cashbook:[
-      {l:"Opening Balance",v:`₹${fmt(totalBal)}`,sub:"Company accounts",Icon:IcBank,c:T.blu,bg:T.bluL,brd:T.bluM},
-      {l:"Total Receipts",v:`₹${fmt(cbIn)}`,sub:`${cbTxns.filter(t=>!t.dr).length} entries`,Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
-      {l:"Total Payments",v:`₹${fmt(cbOut)}`,sub:`${cbTxns.filter(t=>t.dr).length} entries`,Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
-      {l:"Closing Balance",v:`₹${fmt(totalBal+cbIn-cbOut)}`,sub:(totalBal+cbIn-cbOut)>=0?"Surplus":"Deficit",Icon:IcWallet,c:(totalBal+cbIn-cbOut)>=0?T.blu:T.red,bg:(totalBal+cbIn-cbOut)>=0?T.bluL:T.redL,brd:(totalBal+cbIn-cbOut)>=0?T.bluM:T.redM},
-    ],
+    cashbook:(()=>{
+      // Closing Balance = THE actual cash-in-hand right now = live sum of
+      // every account + every staff wallet. Opening is back-calculated
+      // (Closing − Receipts + Payments) so the row stays internally
+      // consistent (Opening + In − Out = Closing) without double-counting.
+      const cashInHand=totalBal+totalWalletBal;        // bank + cash + wallets
+      const openingBal=cashInHand-cbIn+cbOut;
+      const sgn=(n)=>`${n<0?"-₹":"₹"}${fmt(Math.abs(n))}`;
+      return [
+        {l:"Opening Balance",v:sgn(openingBal),sub:"Before period · all accounts",Icon:IcBank,c:openingBal>=0?T.blu:T.red,bg:openingBal>=0?T.bluL:T.redL,brd:openingBal>=0?T.bluM:T.redM},
+        {l:"Total Receipts",v:`₹${fmt(cbIn)}`,sub:`${cbTxns.filter(t=>!t.dr).length} entries`,Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
+        {l:"Total Payments",v:`₹${fmt(cbOut)}`,sub:`${cbTxns.filter(t=>t.dr).length} entries`,Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
+        {l:"Cash in Hand",v:sgn(cashInHand),sub:cashInHand>=0?"Bank + Cash + Wallets":"Deficit",Icon:IcWallet,c:cashInHand>=0?T.blu:T.red,bg:cashInHand>=0?T.bluL:T.redL,brd:cashInHand>=0?T.bluM:T.redM},
+      ];
+    })(),
     payreq:[
       {l:"Pending Approval",v:`${pendPR} PRs`,sub:`₹${fmt(prPendAmt)} awaiting`,Icon:IcPendClk,c:T.amb,bg:T.ambL,brd:T.ambM},
       {l:"Approved",v:`₹${fmt(prApprovedAmt)}`,sub:"Ready to pay",Icon:IcThumbUp,c:T.grn,bg:T.grnL,brd:T.grnM},
@@ -2633,17 +2647,17 @@ function FinanceModule(){
                           <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 10px",borderRadius:7,marginBottom:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderLeft:`3px solid ${a.color}`}}>
                             <IcBank size={14} color={a.color}/>
                             <div style={{flex:1}}><div style={{fontSize:12,fontWeight:600,color:T.t1}}>{a.name}</div><div style={{fontSize:10,color:T.t4}}>{a.no||"Cash"}</div></div>
-                            <div style={{fontSize:12.5,fontWeight:700,color:a.balance<0?T.red:T.grn}}>₹{fmtN(a.balance)}</div>
+                            <div style={{fontSize:12.5,fontWeight:700,color:a.balance<0?T.red:T.grn}}>{fmtS(a.balance)}</div>
                           </div>
                         ))}
                         <div style={{height:1,background:T.b1,margin:"6px 0"}}/>
-                        <div style={{display:"flex",justifyContent:"space-between",padding:"5px 10px 3px"}}><span style={{fontSize:10.5,color:T.t4}}>Bank + Cash Total</span><span style={{fontSize:12,fontWeight:700,color:T.blu}}>₹{fmtN(totalBal)}</span></div>
+                        <div style={{display:"flex",justifyContent:"space-between",padding:"5px 10px 3px"}}><span style={{fontSize:10.5,color:T.t4}}>Bank + Cash Total</span><span style={{fontSize:12,fontWeight:700,color:totalBal<0?T.red:T.blu}}>{fmtS(totalBal)}</span></div>
                         <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,marginTop:3,background:T.grnL,border:`1px solid ${T.grnM}`,borderLeft:`3px solid ${T.grn}`}}>
                           <IcWallet size={14} color={T.grn}/>
                           <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.grn}}>Total Staff Wallets</div><div style={{fontSize:10,color:T.t4}}>{WALLETS.length} members</div></div>
                           <div style={{fontSize:12.5,fontWeight:700,color:T.grn}}>₹{fmtN(totalWalletBal)}</div>
                         </div>
-                        <div style={{display:"flex",justifyContent:"space-between",padding:"7px 10px 2px",borderTop:`1px solid ${T.b1}`,marginTop:5}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>Grand Total</span><span style={{fontSize:12.5,fontWeight:800,color:T.blu}}>₹{fmtN(totalBal+totalWalletBal)}</span></div>
+                        <div style={{display:"flex",justifyContent:"space-between",padding:"7px 10px 2px",borderTop:`1px solid ${T.b1}`,marginTop:5}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>Grand Total</span><span style={{fontSize:12.5,fontWeight:800,color:(totalBal+totalWalletBal)<0?T.red:T.blu}}>{fmtS(totalBal+totalWalletBal)}</span></div>
                       </>
                     ):(
                       WALLETS.map(w=>{const pct=Math.round(w.balance/w.limit*100);return(
