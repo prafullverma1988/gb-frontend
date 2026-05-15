@@ -126,6 +126,7 @@ function Avatar({name,size=32,color=T.blu}){
 // to determine inside/outside-fence state.
 function GeofenceAdminTab({isAdmin}){
   const [fences,setFences]=useState([]);
+  const [suggestions,setSuggestions]=useState([]);
   const [projects,setProjects]=useState([]);
   const [loading,setLoading]=useState(true);
   const [editId,setEditId]=useState(null);
@@ -136,16 +137,32 @@ function GeofenceAdminTab({isAdmin}){
   const reload=useCallback(async()=>{
     setLoading(true);
     try{
-      const [fRes,pRes]=await Promise.all([
+      const [fRes,sRes,pRes]=await Promise.all([
         api.get("/geofences?include_inactive=1"),
+        api.get("/geofences/suggestions"),
         api.get("/team-schedule/sites"),
       ]);
       if(fRes.success) setFences(fRes.data||[]);
+      if(sRes.success) setSuggestions(sRes.data||[]);
       if(pRes.success) setProjects(pRes.data||[]);
     }catch(e){ /* silent */ }
     setLoading(false);
   },[]);
   useEffect(()=>{ reload(); },[reload]);
+
+  const confirmSuggestion=async(id)=>{
+    try{
+      const r=await api.put(`/geofences/${id}/confirm`,{});
+      if(r.success) await reload();
+    }catch(e){ alert(e.message); }
+  };
+  const rejectSuggestion=async(id)=>{
+    if(!window.confirm("Reject this auto-detected location? It will not appear again until 3+ new photo uploads accumulate near these coords.")) return;
+    try{
+      const r=await api.del(`/geofences/${id}?hard=1`);
+      if(r.success) await reload();
+    }catch(e){ alert(e.message); }
+  };
 
   const openAdd=()=>{
     setEditId(null);
@@ -213,7 +230,50 @@ function GeofenceAdminTab({isAdmin}){
       <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"10px 14px",marginBottom:14,fontSize:11.5,color:T.t2,lineHeight:1.5}}>
         Mobile app checks each punch against active geofences. <b>Inside</b> → auto-attendance.
         <b style={{color:T.amb,marginLeft:5}}>Outside</b> → admin review queue (Pending Approvals tab).
+        <br/>
+        <span style={{color:T.t3,fontSize:11}}>💡 Tip: 3+ live-camera photo uploads from the same site auto-suggest a location below.</span>
       </div>
+
+      {/* ─── AUTO-LEARNED SUGGESTIONS ─── */}
+      {suggestions.length > 0 && (
+        <div style={{background:T.purL,border:`2px dashed ${T.pur}`,borderRadius:10,padding:"12px 14px",marginBottom:14}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <span style={{fontSize:18}}>🔮</span>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13,fontWeight:700,color:T.pur}}>Auto-Detected Locations — {suggestions.length} new</div>
+              <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>Team ne in coordinates pe regular photos upload kiye — site location lagti hai</div>
+            </div>
+          </div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {suggestions.map(s=>(
+              <div key={s.id} style={{background:T.surface,border:`1px solid ${T.purM}`,borderRadius:8,padding:"10px 12px",display:"grid",gridTemplateColumns:"1fr auto",gap:10,alignItems:"center"}}>
+                <div>
+                  <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>
+                    {s.project_name || "Generic site"}
+                    <span style={{marginLeft:8,fontSize:9.5,padding:"1px 7px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700}}>
+                      {s.confidence||0}% confident
+                    </span>
+                  </div>
+                  <div style={{fontSize:10.5,color:T.t3,marginTop:3,fontFamily:"monospace"}}>
+                    {Number(s.center_lat).toFixed(5)}, {Number(s.center_lng).toFixed(5)} · {s.radius_m}m radius
+                  </div>
+                  <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{s.label}</div>
+                </div>
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={()=>rejectSuggestion(s.id)}
+                    style={{padding:"6px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    ✕ Reject
+                  </button>
+                  <button onClick={()=>confirmSuggestion(s.id)}
+                    style={{padding:"6px 14px",borderRadius:6,background:T.pur,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
+                    ✓ Confirm Site
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
         {/* ─── Form ─── */}

@@ -125,6 +125,44 @@ api.switchCompany = async (companyId) => {
 };
 api.logout = () => { clearAuth(); window.location.reload(); };
 
+// ── Site presence — photo-driven auto-learn (Phase 5+) ─────
+// Call after a live-camera photo is uploaded for a project. 3+
+// presence events from the same coords trigger an auto-suggested
+// geofence that admin can confirm from the Sites tab.
+api.presence = {
+  record: ({ project_id, lat, lng, accuracy, source, photo_url }) =>
+    api.post("/geofences/presence", {
+      project_id, lat, lng,
+      accuracy: accuracy || null,
+      source:   source   || "photo",
+      photo_url: photo_url || null,
+      captured_at: new Date().toISOString(),
+    }),
+};
+
+// Convenience: capture browser GPS then ping presence. Silently
+// no-ops if permission denied — auto-learn is best-effort.
+api.recordPhotoPresence = async ({ project_id, photo_url, source }) => {
+  if (!project_id) return null;
+  try {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return null;
+    const coords = await new Promise((resolve, reject) =>
+      navigator.geolocation.getCurrentPosition(
+        (p) => resolve(p.coords), reject,
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+      )
+    );
+    return await api.presence.record({
+      project_id,
+      lat: coords.latitude,
+      lng: coords.longitude,
+      accuracy: coords.accuracy ? Math.round(coords.accuracy) : null,
+      source: source || "photo",
+      photo_url,
+    });
+  } catch (_) { return null; }
+};
+
 // ── Project task templates ───────────────────────────────────
 api.taskTemplates = {
   list:  ()                  => api.get("/project-task-templates"),

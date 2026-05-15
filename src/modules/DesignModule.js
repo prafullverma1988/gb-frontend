@@ -4,6 +4,7 @@ import uploadManager from "../utils/uploadManager";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
 import { Avatar, Credit, fmtTimeAgo } from "../components/Credit";
+import RevisionNoteModal from "../components/RevisionNoteModal";
 
 // ── ICONS ────────────────────────────────────────────────────────────
 const Ic = ({d,d2,size=18,color="currentColor",sw=1.8,fill="none"}) => (
@@ -139,6 +140,16 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
               project_id: capturedForm.project_id || res.data.project_id,
               project_name: proj?.name || res.data.project_name || "",
             }).catch(e => console.error("Approval submit:", e));
+            // Auto-learn site location from live-camera presence
+            // (best-effort, silently no-ops if GPS denied)
+            const pid = capturedForm.project_id || res.data.project_id;
+            if (pid) {
+              api.recordPhotoPresence({
+                project_id: pid,
+                photo_url: res.data.file_url || res.data.url || null,
+                source: "drawing_photo",
+              }).catch(() => {});
+            }
             onUploaded(res.data);
           }
         } catch (e) {
@@ -672,16 +683,45 @@ export default function DesignModule() {
       </div>
       <div style={{fontSize:11,color:T.t4,marginBottom:8}}>{revQueue.length} drawings in revision</div>
       {revQueue.length===0&&<div style={{textAlign:"center",padding:"50px",color:T.t4}}><div style={{fontSize:32,marginBottom:8}}>✅</div><div style={{fontSize:13,color:T.t2}}>Koi revision pending nahi</div></div>}
-      {revQueue.map(d=>(
+      {revQueue.map(d=>{
+        const latestRev = d.last_revision_comment || "";
+        const isClientRev = latestRev.startsWith("[Client]") || latestRev.startsWith("[Client Feedback]");
+        const revAtt = Array.isArray(d.last_revision_attachments) ? d.last_revision_attachments : [];
+        return(
         <div key={d.id} style={{background:T.surface,borderRadius:9,border:"1px solid "+T.ambM,padding:"13px 14px",marginBottom:10,borderLeft:"3px solid "+T.amb}}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8,marginBottom:10}}>
-            <div>
+            <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{d.title}</div>
               <div style={{fontSize:11,color:T.t4,marginTop:2}}>{d.project_name||"—"} · {d.category} · {d.current_version}</div>
-              {d.note&&<div style={{fontSize:11.5,color:T.amb,marginTop:5,padding:"5px 8px",background:T.ambL,borderRadius:5}}>📝 {d.note}</div>}
+              {/* Client revision note (from CRM/Design Approval flow) */}
+              {(d.client_note || latestRev) && (
+                <div style={{marginTop:8,padding:"7px 11px",background:isClientRev?T.bluL:T.ambL,border:`1px solid ${isClientRev?T.bluM:T.ambM}`,borderLeft:`3px solid ${isClientRev?T.blu:T.amb}`,borderRadius:6}}>
+                  <div style={{fontSize:9.5,fontWeight:700,color:isClientRev?T.blu:T.amb,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>
+                    {isClientRev?"📩 Client Revision Note":"📝 Admin Note"}
+                  </div>
+                  <div style={{fontSize:12,color:T.t2,fontStyle:"italic"}}>"{(d.client_note || latestRev.replace(/^\[Client(?: Feedback)?\]\s*/,"")).trim()}"</div>
+                  {revAtt.length>0&&(
+                    <div style={{marginTop:7,display:"flex",gap:6,flexWrap:"wrap"}}>
+                      {revAtt.map((url,i)=>{
+                        const isImg = /\.(jpe?g|png|gif|webp|svg)(\?|$)/i.test(url);
+                        return isImg ? (
+                          <a key={i} href={url} target="_blank" rel="noreferrer"
+                            style={{display:"block",width:60,height:60,borderRadius:5,background:`url(${url}) center/cover`,border:`1px solid ${T.b1}`,cursor:"pointer"}}/>
+                        ) : (
+                          <a key={i} href={url} target="_blank" rel="noreferrer"
+                            style={{display:"inline-flex",alignItems:"center",gap:4,padding:"5px 9px",borderRadius:5,background:T.surface,border:`1px solid ${T.b1}`,color:T.blu,fontSize:11,textDecoration:"none"}}>
+                            📎 Attachment {i+1}
+                          </a>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+              {d.note&&!d.client_note&&!latestRev&&<div style={{fontSize:11.5,color:T.amb,marginTop:5,padding:"5px 8px",background:T.ambL,borderRadius:5}}>📝 {d.note}</div>}
               {d.pin_count>0&&<div style={{fontSize:11,color:T.t3,marginTop:4}}>📍 {d.pin_count} revision pin(s)</div>}
             </div>
-            <div style={{display:"flex",gap:6}}>
+            <div style={{display:"flex",gap:6,flexShrink:0}}>
               {d.file_url&&<a href={d.file_url} target="_blank" rel="noreferrer" style={{padding:"4px 9px",borderRadius:6,background:T.bluL,border:"1px solid "+T.bluM,color:T.blu,fontSize:11,fontWeight:600,textDecoration:"none"}}>👁 View Current</a>}
             </div>
           </div>
@@ -694,7 +734,7 @@ export default function DesignModule() {
             </label>
           </div>
         </div>
-      ))}
+      );})}
     </div>
   );
 
@@ -706,6 +746,7 @@ export default function DesignModule() {
     const [chip, setChip] = useState("PendingShare"); // PendingShare | SharedWithClient
     const [acting, setActing] = useState({});
     const [shareFor, setShareFor] = useState(null); // drawing currently in WhatsApp share dialog
+    const [revModalFor, setRevModalFor] = useState(null); // {drawing, status:'Revision'|'Rejected'}
 
     const list = drawings.filter(d => d.client_status === chip);
     const pendingShareCt = drawings.filter(d => d.client_status === "PendingShare").length;
@@ -723,25 +764,30 @@ export default function DesignModule() {
       setActing(p => ({ ...p, [d.id]: null }));
     };
 
-    const setClientStatus = async (d, status) => {
-      let note = null;
-      if (status === "Revision") {
-        note = window.prompt("Client kya badalna chahta hai? (revision note)");
-        if (!note || !note.trim()) return;
-      } else if (status === "Rejected") {
-        note = window.prompt("Reject reason — client ne kya kaha?");
-        if (!note || !note.trim()) return;
-      }
+    // Send client status PATCH. For Revision/Rejected, note + attachments come from modal.
+    const sendClientStatus = async (d, status, payload = {}) => {
       setActing(p => ({ ...p, [d.id]: status }));
       try {
-        const res = await api.patch(`/design/drawings/${d.id}/client-status`, { client_status: status, client_note: note });
+        const res = await api.patch(`/design/drawings/${d.id}/client-status`, {
+          client_status: status,
+          client_note: payload.note || null,
+          attachments: payload.attachments || [],
+        });
         if (res?.success) {
           if (status === "Approved") setStatusLocal(d.id, { client_status: "Approved", client_approved_at: new Date().toISOString() });
-          else if (status === "Revision") setStatusLocal(d.id, { client_status: null, status: "Revision", note });
-          else if (status === "Rejected") setStatusLocal(d.id, { client_status: "Rejected" });
+          else if (status === "Revision") setStatusLocal(d.id, { client_status: null, status: "Revision", note: payload.note });
+          else if (status === "Rejected") setStatusLocal(d.id, { client_status: "Rejected", client_note: payload.note });
         }
       } catch(e) {}
       setActing(p => ({ ...p, [d.id]: null }));
+      setRevModalFor(null);
+    };
+
+    const setClientStatus = (d, status) => {
+      // Approved → no prompt needed
+      if (status === "Approved") return sendClientStatus(d, status);
+      // Revision / Rejected → open rich modal (note required, attachments optional)
+      setRevModalFor({ drawing: d, status });
     };
 
     return (
@@ -829,6 +875,11 @@ export default function DesignModule() {
         ))}
 
         {shareFor && <WhatsAppShareModal drawing={shareFor} onClose={()=>setShareFor(null)} onShared={()=>{markShared(shareFor); setShareFor(null);}}/>}
+        {revModalFor && <RevisionNoteModal
+          mode={revModalFor.status}
+          drawingTitle={revModalFor.drawing.title}
+          onCancel={()=>setRevModalFor(null)}
+          onSubmit={({note, attachments})=>sendClientStatus(revModalFor.drawing, revModalFor.status, {note, attachments})}/>}
       </div>
     );
   };
@@ -837,6 +888,9 @@ export default function DesignModule() {
   const WhatsAppShareModal = ({ drawing, onClose, onShared }) => {
     const [phone, setPhone] = useState("");
     const [msg, setMsg]     = useState("");
+    const [fileUrl, setFileUrl] = useState("");
+    const [downloading, setDownloading] = useState(false);
+    const [shareMode, setShareMode] = useState("link"); // 'link' | 'pdf'
     const [loadingContact, setLoadingContact] = useState(true);
     useEffect(() => {
       api.get(`/design/drawings/${drawing.id}/client-contact`).then(r => {
@@ -846,6 +900,7 @@ export default function DesignModule() {
         const ttl  = d.title || drawing.title || "";
         const ver  = d.version || drawing.current_version || "v1";
         const link = d.file_url || drawing.file_url || "";
+        setFileUrl(link);
         setMsg(
           `Namaste${d.client_name?` ${d.client_name} ji`:""},\n\n`+
           `${proj} ke liye "${ttl}" (${ver}) drawing ready hai. Kripya review karke approval/changes batayein:\n\n`+
@@ -854,12 +909,33 @@ export default function DesignModule() {
         setLoadingContact(false);
       }).catch(()=>setLoadingContact(false));
     }, []);
+    // Both modes send the link in the message; PDF mode additionally lets user download the file
     const openWhatsApp = () => {
       const cleaned = (phone || "").replace(/[^\d]/g, "");
       const url = cleaned
         ? `https://wa.me/${cleaned}?text=${encodeURIComponent(msg)}`
         : `https://wa.me/?text=${encodeURIComponent(msg)}`;
       window.open(url, "_blank", "noopener");
+    };
+    const downloadPdf = async () => {
+      if (!fileUrl) { alert("PDF link not available"); return; }
+      setDownloading(true);
+      try {
+        const r = await fetch(fileUrl);
+        const blob = await r.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        const ttl = drawing.title || "drawing";
+        const ver = drawing.current_version || "v1";
+        a.download = `${ttl} ${ver}.pdf`.replace(/[^\w\s.-]/g, "_");
+        document.body.appendChild(a); a.click(); document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      } catch (e) {
+        // Fallback if CORS/fetch fails — open in new tab
+        window.open(fileUrl, "_blank", "noopener");
+      }
+      setDownloading(false);
     };
     return (
       <>
@@ -874,6 +950,30 @@ export default function DesignModule() {
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:18}}>×</button>
           </div>
           <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+            {/* Share Mode toggle — Link vs PDF */}
+            <div style={{marginBottom:12}}>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:6}}>Share As</label>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {[
+                  {v:"link",l:"🔗 Link",sub:"Cloudinary URL in message"},
+                  {v:"pdf", l:"📄 PDF + Link",sub:"Download PDF + send link"},
+                ].map(o=>{
+                  const sel=shareMode===o.v;
+                  return(
+                    <button key={o.v} type="button" onClick={()=>setShareMode(o.v)}
+                      style={{padding:"9px 11px",borderRadius:8,border:`1.5px solid ${sel?"#075E54":T.b1}`,background:sel?"#E8FDF1":T.surface,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:sel?"#075E54":T.t1}}>{o.l}</div>
+                      <div style={{fontSize:10,color:T.t4,marginTop:2}}>{o.sub}</div>
+                    </button>
+                  );
+                })}
+              </div>
+              {shareMode==="pdf"&&(
+                <div style={{marginTop:7,padding:"6px 10px",fontSize:10.5,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:6,lineHeight:1.4}}>
+                  ⚠️ Link message me already hai. PDF download karke WhatsApp window me drag-drop ya 📎 attach button se file bhi lagao (WhatsApp Web auto-attach nahi karta).
+                </div>
+              )}
+            </div>
             <div style={{marginBottom:12}}>
               <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:5}}>
                 Client Phone {phone?"(auto-filled)":"(enter manually)"}
@@ -891,17 +991,23 @@ export default function DesignModule() {
                 style={{width:"100%",padding:"10px 11px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical",lineHeight:1.5}}/>
             </div>
           </div>
-          <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
+          <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0,flexWrap:"wrap"}}>
             <button onClick={onClose}
-              style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
+              style={{flex:"1 1 80px",padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>
               Cancel
             </button>
+            {shareMode==="pdf"&&(
+              <button onClick={downloadPdf} disabled={downloading||!fileUrl}
+                style={{flex:"1 1 130px",padding:"9px",borderRadius:7,background:"#7C3AED",border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:(downloading||!fileUrl)?"not-allowed":"pointer",opacity:(downloading||!fileUrl)?0.6:1}}>
+                {downloading?"⏳ Downloading…":"📄 Download PDF"}
+              </button>
+            )}
             <button onClick={openWhatsApp} disabled={!msg.trim()}
-              style={{flex:1,padding:"9px",borderRadius:7,background:"#25D366",border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:msg.trim()?"pointer":"not-allowed",opacity:msg.trim()?1:0.6}}>
+              style={{flex:"1 1 130px",padding:"9px",borderRadius:7,background:"#25D366",border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:msg.trim()?"pointer":"not-allowed",opacity:msg.trim()?1:0.6}}>
               💬 Open WhatsApp
             </button>
             <button onClick={onShared}
-              style={{flex:1.4,padding:"9px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+              style={{flex:"1.4 1 140px",padding:"9px",borderRadius:7,background:T.blu,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
               ✓ Sent — Mark Shared
             </button>
           </div>
