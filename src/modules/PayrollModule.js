@@ -46,6 +46,9 @@ const T={
 };
 const fmtN=(n)=>n==null?"—":Number(n).toLocaleString("en-IN");
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:n>=1000?`${(n/1000).toFixed(0)}K`:String(n||0);
+// Module-level date formatter (also re-defined inside PayrollModule
+// with same shape — kept here so Leave/Geofence sub-components can use it)
+const fmtDate=(d)=>{ if(!d) return "—"; try{ return new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}); }catch{return String(d).split("T")[0];} };
 
 // ── SPIN CSS ──────────────────────────────────────────────────────
 if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent="@keyframes spin{to{transform:rotate(360deg)}}";document.head.appendChild(s);}
