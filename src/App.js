@@ -27,6 +27,7 @@ const TeamScheduleModule = lazyWithPreload("team",         () => import("./modul
 const MOMModule          = lazyWithPreload("mom",          () => import("./modules/MOMModule"));
 const MasterLibraryModule= lazyWithPreload("library",     () => import("./modules/MasterLibraryModule"));
 const WarehouseModule    = lazyWithPreload("warehouse",    () => import("./modules/WarehouseModule"));
+const TownshipCRMModule  = lazyWithPreload("township",     () => import("./modules/TownshipCRMModule"));
 const ReportsModule      = lazyWithPreload("reports",      () => import("./modules/ReportsModule"));
 const ProjectDetailPage  = lazyWithPreload("projectDetail",() => import("./modules/ProjectDetailPage"));
 const ProjectsPage       = lazyWithPreload("projects",     () => import("./modules/ProjectsModule"));
@@ -51,6 +52,7 @@ function prefetchAllModules(){
     MOMModule.preload();
     MasterLibraryModule.preload();
     WarehouseModule.preload();
+    TownshipCRMModule.preload();
     ReportsModule.preload();
     SaaSModule.preload();
   }, 2000);
@@ -67,6 +69,7 @@ const IcDes   =(p)=><Ic {...p} d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5
 const IcRep   =(p)=><Ic {...p} d="M9 17v-2m3 2v-4m3 4v-6M5 21h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z"/>;
 const IcSet   =(p)=><Ic {...p} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065zM15 12a3 3 0 11-6 0 3 3 0 016 0"/>;
 const IcWH    =(p)=><Ic {...p} d="M3 21V8l9-5 9 5v13M9 21v-6h6v6"/>;
+const IcTown  =(p)=><Ic {...p} d="M3 21h18M5 21V7l6-4v18M19 21V11l-6-4M9 9v.01M9 13v.01M9 17v.01"/>;
 const IcProc  =(p)=><Ic {...p} d="M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18M16 10a4 4 0 01-8 0"/>;
 const IcMenu  =(p)=><Ic {...p} d="M4 6h16M4 12h16M4 18h16"/>;
 const IcBell  =(p)=><Ic {...p} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6 6 0 10-12 0v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>;
@@ -134,6 +137,7 @@ const NAV_GROUPS=[
     {id:"finance",     label:"Finance",     Icon:IcFin,  sc:"F"},
     {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P"},
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
+    {id:"township",    label:"Township CRM",Icon:IcTown, sc:"G"},
     {id:"payroll",     label:"Payroll",     Icon:IcPay,  sc:"Y"},
   ]},
   {section:"REPORTS",items:[
@@ -431,6 +435,7 @@ const SEARCH_ITEMS=[
   {id:"finance",   label:"Finance",       icon:"M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6",  sc:"Alt+F", section:"Finance & Ops"},
   {id:"procurement",label:"Procurement",  icon:"M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18",  sc:"Alt+P", section:"Finance & Ops"},
   {id:"warehouse", label:"Warehouse",     icon:"M3 21V8l9-5 9 5v13M9 21v-6h6v6",                          sc:"Alt+W", section:"Finance & Ops"},
+  {id:"township",  label:"Township CRM",  icon:"M3 21h18M5 21V7l6-4v18M19 21V11l-6-4",                    sc:"Alt+G", section:"Finance & Ops"},
   {id:"payroll",   label:"Payroll",       icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
   {id:"crm",       label:"CRM",           icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+C", section:"Navigation"},
   {id:"design",    label:"Design",        icon:"M12 19l7-7 3 3-7 7-3-3z",                                 sc:"Alt+D", section:"Navigation"},
@@ -1164,6 +1169,7 @@ export default function App(){
     finance:{title:"Finance",sub:"Cash Book · Transactions"},
     procurement:{title:"Procurement",sub:"PO · RFQ · Materials"},
     warehouse:{title:"Warehouse",sub:"Central Stock"},
+    township:{title:"Township CRM",sub:"Real-Estate Projects & Sales"},
     payroll:{title:"Payroll",sub:"Staff Payments"},
     reports:{title:"Reports",sub:"All Reports"},
     library:{title:"Library",sub:"Master Data"},
@@ -1193,6 +1199,7 @@ export default function App(){
     mom:       guard("mom",      "MOM",            <MOMModule/>),
     library:   guard("library",  "Library",        <MasterLibraryModule/>),
     warehouse: guard("warehouse","Warehouse",      <WarehouseModule/>),
+    township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
     settings:  <SettingsModule/>,
     saas:     <SaaSModule/>,
