@@ -7488,7 +7488,7 @@ function TabMaterial({ project }) {
   const [vendorReceive, setVendorReceive] = useState({});
   // Direct Receive — vendor + challan + date moved to global (one per
   // submission) since a single delivery is always from ONE vendor.
-  const [directGlobal, setDirectGlobal] = useState({ vendor: "", challan: "", date: "", received_by: "" });
+  const [directGlobal, setDirectGlobal] = useState({ vendor: "", challan: "", date: new Date().toLocaleDateString('en-CA'), received_by: "" });
   const [directRows, setDirectRows] = useState([{id:1, item_name:"", qty:"", unit:"Bags", vendor:"", challan:"", received_by:""}]);
   const [grnPhotos, setGrnPhotos] = useState([]);
   // Company-level GRN photo policy — true = at least one photo mandatory
@@ -7811,7 +7811,7 @@ function TabMaterial({ project }) {
         const res = await api.patch("/procurement/mrs/" + mr.id + "/mark-received", {
           challan_no: meta.challan,
           received_qty: recvQty,
-          received_date: meta.date || undefined,
+          received_date: meta.date || new Date().toLocaleDateString('en-CA'),
           received_by: meta.received_by || meUser?.name || undefined,
           photo_urls: grnPhotos.length ? grnPhotos : null,
         });
@@ -7873,7 +7873,7 @@ function TabMaterial({ project }) {
       if (res.success) {
         setShowGRN(false);
         setDirectRows([{id:1, item_name:"", qty:"", unit:"Bags"}]);
-        setDirectGlobal({vendor:"", challan:"", date:"", received_by:""});
+        setDirectGlobal({vendor:"", challan:"", date: new Date().toLocaleDateString('en-CA'), received_by:""});
         setGrnPhotos([]);
         // Reload MRs + direct GRNs + ledger + inventory
         loadMRs();
@@ -8551,7 +8551,7 @@ function TabMaterial({ project }) {
                                 </div>
                                 <div>
                                   <label style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Delivery Date</label>
-                                  <input type="date" value={meta.date||""} onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],date:e.target.value}}))}
+                                  <input type="date" value={meta.date||new Date().toLocaleDateString('en-CA')} onChange={e=>setVendorReceive(p=>({...p,[vendor]:{...p[vendor],date:e.target.value}}))}
                                     style={{width:"100%",padding:"6px 9px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                                 </div>
                                 <div>

@@ -13,6 +13,7 @@ import api from "../config/api";
 import SearchSelect from "./SearchSelect";
 import { Credit, fmtTimeAgo } from "./Credit";
 import uploadManager from "../utils/uploadManager";
+import RevisionNoteModal from "./RevisionNoteModal";
 
 const T = {
   surface: "#FFFFFF",
@@ -72,6 +73,9 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
+  const [acting, setActing] = useState({}); // {request_id: "Approved"|"Revision"|"Rejected"|"marking"}
+  const [revModalFor, setRevModalFor] = useState(null); // {request, status:'Revision'|'Rejected'}
+
   const loadRequests = useCallback(async () => {
     if (!lead?.id) return;
     setLoading(true);
@@ -81,6 +85,51 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
     } catch (e) { /* graceful */ }
     setLoading(false);
   }, [lead?.id]);
+
+  // ── Drawing client-status actions (mirrors Design module) ──────────
+  // Approved → fires immediately. Revision/Rejected → opens RevisionNoteModal
+  // for compulsory note + optional file attachments.
+  const sendClientStatus = async (r, status, payload = {}) => {
+    if (!r.drawing_id) return;
+    setActing(p => ({ ...p, [r.id]: status }));
+    try {
+      const res = await api.patch(`/design/drawings/${r.drawing_id}/client-status`, {
+        client_status: status,
+        client_note: payload.note || null,
+        attachments: payload.attachments || [],
+      });
+      if (res?.success) {
+        setRequests(prev => prev.map(x => x.id === r.id ? {
+          ...x,
+          client_status: status === "Revision" ? null : status,
+          client_note: payload.note || x.client_note,
+          client_approved_at: status === "Approved" ? new Date().toISOString() : x.client_approved_at,
+          drawing_status: status === "Revision" ? "Revision" : x.drawing_status,
+        } : x));
+      }
+    } catch (e) { /* graceful */ }
+    setActing(p => ({ ...p, [r.id]: null }));
+    setRevModalFor(null);
+  };
+  const patchClientStatus = (r, status) => {
+    if (!r.drawing_id) return;
+    if (status === "Approved") return sendClientStatus(r, status);
+    setRevModalFor({ request: r, status });
+  };
+
+  const markShared = async (r) => {
+    if (!r.drawing_id) return;
+    setActing(p => ({ ...p, [r.id]: "marking" }));
+    try {
+      const res = await api.patch(`/design/drawings/${r.drawing_id}/mark-shared`, {});
+      if (res?.success) {
+        setRequests(prev => prev.map(x => x.id === r.id ? {
+          ...x, client_status: "SharedWithClient", client_shared_at: new Date().toISOString()
+        } : x));
+      }
+    } catch (e) {}
+    setActing(p => ({ ...p, [r.id]: null }));
+  };
 
   // Reset on open
   useEffect(() => {
@@ -263,30 +312,123 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
                     </div>
                   )}
 
-                  {/* Drawing if uploaded */}
-                  {hasDrawing && (
-                    <div style={{ background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 7, padding: "9px 11px", display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
-                      <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
-                        <polyline points="20 6 9 17 4 12" />
-                      </svg>
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <div style={{ fontSize: 12.5, fontWeight: 700, color: T.grn, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.drawing_title || "Drawing"}</div>
-                        <div style={{ fontSize: 10.5, color: T.t3 }}>{r.current_version || "v1"} · {r.drawing_size || ""} · {fmtTimeAgo(r.drawing_created_at)}</div>
+                  {/* Drawing if uploaded — stage strip + action buttons */}
+                  {hasDrawing && (() => {
+                    const ds = (r.drawing_status || "Pending");
+                    const cs = r.client_status;
+                    // Compute current stage (1-5)
+                    let stage = 2; // Uploaded
+                    if (ds === "Pending")  stage = 2;
+                    if (ds === "Revision") stage = 2; // back to drawing team
+                    if (ds === "Approved" && !cs)                stage = 3;
+                    if (ds === "Approved" && cs === "PendingShare")     stage = 3;
+                    if (ds === "Approved" && cs === "SharedWithClient") stage = 4;
+                    if (cs === "Approved" || cs === "Rejected")  stage = 5;
+                    const stageLbl = ["", "Requested", "Internal Review", "Ready to Share", "Awaiting Reply", "Client Decided"][stage] || "";
+                    const isAdminApproved = ds === "Approved";
+                    const isApproved  = cs === "Approved";
+                    const isRejected  = cs === "Rejected";
+                    const isShared    = cs === "SharedWithClient";
+                    const isReadyToShare = isAdminApproved && (cs === "PendingShare" || !cs);
+                    const act = acting[r.id];
+                    const cardBg = isApproved?T.grnL : isRejected?T.redL : ds==="Revision"?T.ambL : T.surfaceB;
+                    const cardBrd = isApproved?T.grnM : isRejected?T.redM : ds==="Revision"?T.ambM : T.b1;
+                    return(
+                    <div style={{ background: cardBg, border: `1px solid ${cardBrd}`, borderRadius: 7, padding: "9px 11px", marginBottom: 6 }}>
+                      {/* Stage strip — 5 dots */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
+                        {[1,2,3,4,5].map(s => (
+                          <div key={s} style={{ flex: 1, height: 4, borderRadius: 2, background: s <= stage ? (isRejected ? T.red : isApproved ? T.grn : T.blu) : T.b1 }} />
+                        ))}
+                        <span style={{ fontSize: 9.5, fontWeight: 700, color: isRejected?T.red : isApproved?T.grn : T.blu, marginLeft: 6, letterSpacing: ".3px", whiteSpace: "nowrap" }}>
+                          {stage}/5 · {stageLbl}
+                        </span>
                       </div>
-                      <div style={{ display: "flex", gap: 5, flexShrink: 0 }}>
+                      {/* Title row */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 8 }}>
+                        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={isApproved?T.grn:isRejected?T.red:T.t2} strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12.5, fontWeight: 700, color: isApproved?T.grn:isRejected?T.red:T.t1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.drawing_title || "Drawing"}</div>
+                          <div style={{ fontSize: 10.5, color: T.t3 }}>{r.current_version || "v1"} · {r.drawing_size || ""} · {fmtTimeAgo(r.drawing_created_at)}</div>
+                        </div>
                         {r.drawing_url && (
                           <a href={r.drawing_url} target="_blank" rel="noreferrer"
-                            style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b1}`, color: T.blu, fontSize: 10.5, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b1}`, color: T.blu, fontSize: 10.5, fontWeight: 600, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, flexShrink: 0 }}>
                             👁 View
                           </a>
                         )}
-                        <button onClick={() => onShareClick && onShareClick({ ...r, lead_id: lead.id, lead_name: lead.name })}
-                          style={{ padding: "5px 10px", borderRadius: 5, background: T.grn, color: "white", border: "none", fontSize: 10.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4, fontFamily: "inherit" }}>
-                          📤 Share
-                        </button>
                       </div>
+
+                      {/* Internal admin review status (stages 2-3) */}
+                      {!isAdminApproved && ds === "Pending" && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 9px", background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 5, fontSize: 10.5, color: T.t3 }}>
+                          🔒 <span><b style={{ color: T.t2 }}>Awaiting admin approval</b> — drawing uploaded, internal review pending</span>
+                        </div>
+                      )}
+                      {ds === "Revision" && (
+                        <div style={{ padding: "5px 9px", background: T.surface, borderLeft: `3px solid ${T.amb}`, borderRadius: 4, fontSize: 10.5, color: T.amb }}>
+                          ↻ <b>Revision requested by admin</b>{r.note?` — "${r.note}"`:""} — drawing team is updating
+                        </div>
+                      )}
+
+                      {/* Client status badge — only after admin approval */}
+                      {isAdminApproved && (() => {
+                        const csMeta = cs === "Approved"   ? { label: "✓ CLIENT APPROVED", c: T.grn, bg: T.grnL, brd: T.grnM }
+                                    : cs === "Rejected"   ? { label: "✗ CLIENT REJECTED",  c: T.red, bg: T.redL, brd: T.redM }
+                                    : cs === "SharedWithClient" ? { label: "📤 SHARED, AWAITING REPLY", c: T.blu, bg: T.bluL, brd: T.bluM }
+                                    : { label: "🟢 READY TO SHARE WITH CLIENT", c: T.grn, bg: T.grnL, brd: T.grnM };
+                        return <div style={{ display: "inline-flex", padding: "3px 9px", borderRadius: 11, background: csMeta.bg, color: csMeta.c, border: `1px solid ${csMeta.brd}`, fontSize: 9.5, fontWeight: 700, letterSpacing: ".3px", marginBottom: 7 }}>{csMeta.label}</div>;
+                      })()}
+
+                      {r.client_note && (cs==="Rejected" || cs==="SharedWithClient") && (
+                        <div style={{ fontSize: 10.5, color: T.t2, padding: "5px 9px", background: T.surface, borderRadius: 5, marginBottom: 7, fontStyle:"italic", borderLeft:`3px solid ${cs==="Rejected"?T.red:T.amb}` }}>
+                          "{r.client_note}"
+                        </div>
+                      )}
+
+                      {/* Action buttons — only show after admin approval */}
+                      {isAdminApproved && (
+                      <div style={{ display: "flex", gap: 5, flexWrap: "wrap", marginTop: 4 }}>
+                        {isReadyToShare && (<>
+                          <button onClick={() => onShareClick && onShareClick({ ...r, lead_id: lead.id, lead_name: lead.name })}
+                            style={{ padding: "5px 10px", borderRadius: 5, background: "#25D366", color: "white", border: "none", fontSize: 10.5, fontWeight: 700, cursor: "pointer", display: "inline-flex", alignItems: "center", gap: 4 }}>
+                            💬 Share on WhatsApp
+                          </button>
+                          <button onClick={() => markShared(r)} disabled={act==="marking"}
+                            style={{ padding: "5px 10px", borderRadius: 5, background: T.bluL, color: T.blu, border: `1px solid ${T.bluM}`, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
+                            {act==="marking"?"…":"✓ Mark as Shared"}
+                          </button>
+                        </>)}
+                        {isShared && (<>
+                          <button onClick={() => patchClientStatus(r, "Approved")} disabled={!!act}
+                            style={{ padding: "5px 10px", borderRadius: 5, background: T.grn, border: "none", color: "white", fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
+                            {act==="Approved"?"…":"✓ Client Approved"}
+                          </button>
+                          <button onClick={() => patchClientStatus(r, "Revision")} disabled={!!act}
+                            style={{ padding: "5px 10px", borderRadius: 5, background: T.ambL, border: `1px solid ${T.ambM}`, color: T.amb, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
+                            ↻ Revision Requested
+                          </button>
+                          <button onClick={() => patchClientStatus(r, "Rejected")} disabled={!!act}
+                            style={{ padding: "5px 10px", borderRadius: 5, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 10.5, fontWeight: 700, cursor: "pointer" }}>
+                            ✗ Rejected
+                          </button>
+                          <button onClick={() => onShareClick && onShareClick({ ...r, lead_id: lead.id, lead_name: lead.name })}
+                            style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b2}`, color: T.t3, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
+                            💬 Re-share
+                          </button>
+                        </>)}
+                        {(isApproved || isRejected) && (
+                          <button onClick={() => onShareClick && onShareClick({ ...r, lead_id: lead.id, lead_name: lead.name })}
+                            style={{ padding: "5px 10px", borderRadius: 5, background: T.surface, border: `1px solid ${T.b1}`, color: T.t3, fontSize: 10.5, fontWeight: 600, cursor: "pointer" }}>
+                            💬 Re-share
+                          </button>
+                        )}
+                      </div>
+                      )}
                     </div>
-                  )}
+                  );})()}
 
                   {/* Audit */}
                   <div style={{ display: "flex", gap: 14, flexWrap: "wrap", paddingTop: 6, borderTop: `1px dashed ${T.b1}` }}>
@@ -399,6 +541,11 @@ export default function LeadDesignDrawer({ lead, onClose, onShareClick }) {
           </div>
         </>)}
       </div>
+      {revModalFor && <RevisionNoteModal
+        mode={revModalFor.status}
+        drawingTitle={revModalFor.request.drawing_title || revModalFor.request.title}
+        onCancel={()=>setRevModalFor(null)}
+        onSubmit={({note, attachments})=>sendClientStatus(revModalFor.request, revModalFor.status, {note, attachments})}/>}
     </>
   );
 }

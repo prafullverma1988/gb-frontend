@@ -38,14 +38,21 @@ const PUBLIC_BASE = (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)
   ? window.location.origin
   : "https://gb-frontend-xi.vercel.app"; // production base
 
-export default function ShareDrawingDrawer({ target, onClose }) {
+export default function ShareDrawingDrawer({ target, onClose, onShared }) {
   const open = !!target;
   const [shares, setShares] = useState([]);
   const [loading, setLoading] = useState(false);
   const [generating, setGenerating] = useState(false);
+  // Share mode + message state (mirrors Design module's WhatsAppShareModal)
+  const [shareMode, setShareMode] = useState("link"); // 'link' | 'pdf'
+  const [phone, setPhone] = useState("");
+  const [msg, setMsg] = useState("");
+  const [downloading, setDownloading] = useState(false);
+  const [publicShareUrl, setPublicShareUrl] = useState("");
 
   const drawingId = target?.drawing_id;
   const leadId = target?.lead_id;
+  const fileUrl = target?.drawing_url || "";
 
   const loadShares = useCallback(async () => {
     if (!drawingId) return;
@@ -57,60 +64,96 @@ export default function ShareDrawingDrawer({ target, onClose }) {
     setLoading(false);
   }, [drawingId]);
 
+  // On open: build initial message + try to get-or-create the public share link
   useEffect(() => {
-    if (open) loadShares();
-  }, [open, loadShares]);
-
-  // Get-or-create share link for a given channel + target
-  const getOrCreateShare = async (channel, sharedTo) => {
-    setGenerating(true);
-    try {
-      const r = await api.post(`/design/drawings/${drawingId}/share`, {
-        channel, shared_to: sharedTo || null, lead_id: leadId || null,
-      });
-      setGenerating(false);
-      if (r.success && r.data) {
-        await loadShares();
-        return r.data;
-      }
-    } catch (e) {/* graceful */}
-    setGenerating(false);
-    return null;
-  };
+    if (!open) return;
+    loadShares();
+    // Auto-fill phone from lead
+    setPhone((target?.lead_phone || "").replace(/[^\d+]/g, ""));
+    // Get-or-create the public link upfront so it can be embedded in the message
+    (async () => {
+      try {
+        const r = await api.post(`/design/drawings/${drawingId}/share`, {
+          channel: "link", shared_to: null, lead_id: leadId || null,
+        });
+        if (r?.success && r.data?.share_token) {
+          const url = `${PUBLIC_BASE}/d/${r.data.share_token}`;
+          setPublicShareUrl(url);
+          const name = target?.lead_name ? ` ${target.lead_name} ji` : "";
+          const ttl  = target?.drawing_title || "Drawing";
+          const ver  = target?.current_version || "v1";
+          setMsg(
+            `Namaste${name},\n\n`+
+            `${ttl} (${ver}) drawing ready hai. Kripya review karke approval/changes batayein:\n\n`+
+            `${url}\n\nThanks,\nGB Buildcon team`
+          );
+        }
+      } catch (_) {}
+    })();
+  }, [open, drawingId, leadId, loadShares, target]);
 
   const buildPublicUrl = (token) => `${PUBLIC_BASE}/d/${token}`;
 
-  const handleCopyLink = async () => {
-    const share = await getOrCreateShare("link", null);
-    if (!share) {
-      window.toast?.error("Failed to generate link");
-      return;
-    }
-    const url = buildPublicUrl(share.share_token);
+  // Open WhatsApp with current phone + message
+  const openWhatsApp = async () => {
+    // Re-log share record (for history view)
     try {
-      await navigator.clipboard.writeText(url);
+      await api.post(`/design/drawings/${drawingId}/share`, {
+        channel: "whatsapp", shared_to: phone || null, lead_id: leadId || null,
+      });
+      loadShares();
+    } catch (_) {}
+    const cleaned = (phone || "").replace(/[^\d]/g, "");
+    const url = cleaned
+      ? `https://wa.me/${cleaned.startsWith("91")||cleaned.length>10?cleaned:"91"+cleaned}?text=${encodeURIComponent(msg)}`
+      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
+    window.open(url, "_blank", "noopener");
+  };
+
+  // Copy link to clipboard
+  const handleCopyLink = async () => {
+    if (!publicShareUrl) return;
+    try {
+      await navigator.clipboard.writeText(publicShareUrl);
       window.toast?.success("Link copied to clipboard");
     } catch {
-      // Fallback: show in prompt
-      window.prompt("Copy this link:", url);
+      window.prompt("Copy this link:", publicShareUrl);
     }
   };
 
-  const handleWhatsApp = async () => {
-    const phone = target?.lead_phone || "";
-    const share = await getOrCreateShare("whatsapp", phone || null);
-    if (!share) {
-      window.toast?.error("Failed to generate link");
-      return;
+  // Download the underlying PDF (forces download via blob)
+  const downloadPdf = async () => {
+    if (!fileUrl) { alert("PDF link not available"); return; }
+    setDownloading(true);
+    try {
+      const r = await fetch(fileUrl);
+      const blob = await r.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const ttl = target?.drawing_title || "drawing";
+      const ver = target?.current_version || "v1";
+      a.download = `${ttl} ${ver}.pdf`.replace(/[^\w\s.-]/g, "_");
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      window.open(fileUrl, "_blank", "noopener");
     }
-    const url = buildPublicUrl(share.share_token);
-    const msg = `Hi ${target?.lead_name || ""}, here's the design plan we prepared for you: ${url}`;
-    const cleanPhone = phone.replace(/[^\d]/g, "");
-    const waUrl = cleanPhone
-      ? `https://wa.me/${cleanPhone.startsWith("91") ? cleanPhone : "91" + cleanPhone}?text=${encodeURIComponent(msg)}`
-      : `https://wa.me/?text=${encodeURIComponent(msg)}`;
-    window.open(waUrl, "_blank");
-    window.toast?.success("WhatsApp opened");
+    setDownloading(false);
+  };
+
+  // Mark the drawing as shared (flip client_status='SharedWithClient')
+  const markShared = async () => {
+    setGenerating(true);
+    try {
+      const r = await api.patch(`/design/drawings/${drawingId}/mark-shared`, {});
+      if (r?.success) {
+        window.toast?.success("Marked as shared");
+        onShared?.();
+        onClose();
+      }
+    } catch (_) {}
+    setGenerating(false);
   };
 
   if (!open) return null;
@@ -145,50 +188,73 @@ export default function ShareDrawingDrawer({ target, onClose }) {
 
         {/* Body */}
         <div style={{ flex: 1, overflowY: "auto", padding: "16px 18px" }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: T.t4, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 10 }}>Share via</div>
-
-          <button onClick={handleWhatsApp} disabled={generating}
-            style={{
-              width: "100%", padding: "12px 14px", borderRadius: 9,
-              background: T.surface, border: `1.5px solid ${T.grnM}`,
-              cursor: "pointer", marginBottom: 10, display: "flex",
-              alignItems: "center", gap: 12, fontFamily: "inherit", textAlign: "left",
-              transition: "all .12s",
-            }}
-            onMouseEnter={el => { el.currentTarget.style.background = T.grnL; el.currentTarget.style.borderColor = T.wa; }}
-            onMouseLeave={el => { el.currentTarget.style.background = T.surface; el.currentTarget.style.borderColor = T.grnM; }}>
-            <div style={{ width: 38, height: 38, borderRadius: "50%", background: T.wa, display: "flex", alignItems: "center", justifyContent: "center", color: "white", flexShrink: 0 }}>
-              <svg width={20} height={20} viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" /></svg>
+          {/* Share Mode toggle — Link vs PDF + Link */}
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 6 }}>Share As</div>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+              {[
+                { v: "link", l: "🔗 Link", sub: "Public link in message" },
+                { v: "pdf",  l: "📄 PDF + Link", sub: "Download PDF + send link" },
+              ].map(o => {
+                const sel = shareMode === o.v;
+                return (
+                  <button key={o.v} type="button" onClick={() => setShareMode(o.v)}
+                    style={{ padding: "9px 11px", borderRadius: 8, border: `1.5px solid ${sel?"#075E54":T.b1}`, background: sel?"#E8FDF1":T.surface, cursor: "pointer", textAlign: "left", fontFamily: "inherit" }}>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: sel?"#075E54":T.t1 }}>{o.l}</div>
+                    <div style={{ fontSize: 10, color: T.t4, marginTop: 2 }}>{o.sub}</div>
+                  </button>
+                );
+              })}
             </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>WhatsApp</div>
-              <div style={{ fontSize: 11, color: T.t3, marginTop: 1, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {target?.lead_phone ? `Send to ${target.lead_phone}` : "Open WhatsApp with link"}
+            {shareMode === "pdf" && (
+              <div style={{ marginTop: 7, padding: "6px 10px", fontSize: 10.5, color: T.amb, background: T.ambL, border: `1px solid ${T.ambL}`, borderRadius: 6, lineHeight: 1.4 }}>
+                ⚠️ Link message me already hai. PDF download karke WhatsApp window me drag-drop ya 📎 attach button se file bhi lagao (WhatsApp Web auto-attach nahi karta).
               </div>
-            </div>
-          </button>
+            )}
+          </div>
 
-          <button onClick={handleCopyLink} disabled={generating}
-            style={{
-              width: "100%", padding: "12px 14px", borderRadius: 9,
-              background: T.surface, border: `1.5px solid ${T.bluM}`,
-              cursor: "pointer", marginBottom: 16, display: "flex",
-              alignItems: "center", gap: 12, fontFamily: "inherit", textAlign: "left",
-              transition: "all .12s",
-            }}
-            onMouseEnter={el => { el.currentTarget.style.background = T.bluL; }}
-            onMouseLeave={el => { el.currentTarget.style.background = T.surface; }}>
-            <div style={{ width: 38, height: 38, borderRadius: "50%", background: T.blu, display: "flex", alignItems: "center", justifyContent: "center", color: "white", flexShrink: 0 }}>
-              <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10 13a5 5 0 007.54.54l3-3a5 5 0 00-7.07-7.07l-1.72 1.71" />
-                <path d="M14 11a5 5 0 00-7.54-.54l-3 3a5 5 0 007.07 7.07l1.71-1.71" />
-              </svg>
-            </div>
-            <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 13, fontWeight: 700, color: T.t1 }}>Copy public link</div>
-              <div style={{ fontSize: 11, color: T.t3, marginTop: 1 }}>Share via SMS, email, or any app</div>
-            </div>
-          </button>
+          {/* Phone */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 5 }}>
+              Client Phone {target?.lead_phone ? "(auto-filled)" : "(enter manually)"}
+            </label>
+            <input value={phone} onChange={e => setPhone(e.target.value)}
+              placeholder="e.g. 919981641230 (with country code)"
+              style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 13, outline: "none", boxSizing: "border-box", fontFamily: "inherit" }} />
+            <div style={{ fontSize: 10.5, color: T.t4, marginTop: 4 }}>Country code zaroori (e.g. 91 for India). Khali rakho to WhatsApp web me contact pick kar sakte ho.</div>
+          </div>
+
+          {/* Editable message */}
+          <div style={{ marginBottom: 12 }}>
+            <label style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", display: "block", marginBottom: 5 }}>
+              Message (editable)
+            </label>
+            <textarea value={msg} onChange={e => setMsg(e.target.value)} rows={8}
+              placeholder={publicShareUrl ? "" : "Generating public link…"}
+              style={{ width: "100%", padding: "10px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`, fontSize: 12.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", resize: "vertical", lineHeight: 1.5 }} />
+          </div>
+
+          {/* Action buttons */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 14 }}>
+            {shareMode === "pdf" && (
+              <button onClick={downloadPdf} disabled={downloading || !fileUrl}
+                style={{ flex: "1 1 130px", padding: "9px", borderRadius: 7, background: "#7C3AED", border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: (downloading || !fileUrl) ? "not-allowed" : "pointer", opacity: (downloading || !fileUrl) ? 0.6 : 1 }}>
+                {downloading ? "⏳ Downloading…" : "📄 Download PDF"}
+              </button>
+            )}
+            <button onClick={openWhatsApp} disabled={!msg.trim()}
+              style={{ flex: "1 1 130px", padding: "9px", borderRadius: 7, background: T.wa, border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: msg.trim() ? "pointer" : "not-allowed", opacity: msg.trim() ? 1 : 0.6 }}>
+              💬 Open WhatsApp
+            </button>
+            <button onClick={markShared} disabled={generating}
+              style={{ flex: "1.4 1 140px", padding: "9px", borderRadius: 7, background: T.blu, border: "none", color: "white", fontSize: 12.5, fontWeight: 700, cursor: generating ? "not-allowed" : "pointer", opacity: generating ? 0.7 : 1 }}>
+              {generating ? "…" : "✓ Sent — Mark Shared"}
+            </button>
+            <button onClick={handleCopyLink} disabled={!publicShareUrl} title="Copy public link"
+              style={{ flex: "0 0 38px", padding: "9px", borderRadius: 7, background: T.surface, border: `1px solid ${T.b1}`, fontSize: 13, fontWeight: 700, cursor: publicShareUrl ? "pointer" : "not-allowed", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              🔗
+            </button>
+          </div>
 
           {/* Share history */}
           {shares.length > 0 && (
