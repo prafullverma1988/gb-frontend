@@ -727,6 +727,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         rate:String(it.rate||""),
         total:0,
         fromGRN:true, // material name + qty + unit locked, only rate / head editable
+        grn_id:it.grn_id||null,         // source GRN per row (multi-GRN bills)
+        grn_number:it.grn_number||null,
       }));
     }
     return [blankRow()];
@@ -899,7 +901,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           rate:parseFloat(r.rate)||0,
           amount:(parseFloat(r.qty)||0)*(parseFloat(r.rate)||0),
           head:r.head||"",
-          fromGRN: !!r.fromGRN,      // marker so backend can route new rows to inventory
+          fromGRN: !!r.fromGRN,       // marker so backend can route new rows to inventory
+          grn_id: r.grn_id || null,   // per-row source GRN — used by backend
+                                      // validator when bill spans multi-GRNs
         }));
       }
       if(isSubcon&&Object.keys(subBoqSel).length){
@@ -3728,6 +3732,11 @@ function FinanceModule(){
                   rate:"",
                   head:"Civil",
                   desc:p.grnNumber?`From ${p.grnNumber}`:"",
+                  // Carry the SOURCE GRN id per row so backend can validate
+                  // each line against its own GRN's balance (not the
+                  // top-level primary grn_id which only covers row 1).
+                  grn_id:p.grn?.id,
+                  grn_number:p.grnNumber,
                 })),
               };
             };
