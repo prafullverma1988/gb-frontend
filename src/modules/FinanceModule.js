@@ -2104,6 +2104,11 @@ function FinanceModule(){
   const [apiAccounts,setApiAccounts]=useState(null);
   const [apiTransactions,setApiTransactions]=useState(null);
   const [apiPartyTxns,setApiPartyTxns]=useState(null);
+  // Real projects list — drives the Project picker in Create-Transaction
+  // / Payment modals. Previously project options were derived from
+  // existing transactions, so a fresh company with no transactions had
+  // an empty Project dropdown ("No match found").
+  const [apiProjects,setApiProjects]=useState([]);
   const [loading,setLoading]=useState({parties:false,txns:false,accounts:false,payreqs:false,pendpmts:false});
   const [apiError,setApiError]=useState({});
 
@@ -2285,11 +2290,20 @@ function FinanceModule(){
     finally{setLoading(l=>({...l,accounts:false}));}
   };
 
+  const refreshProjects=async()=>{
+    try{
+      const r=await api.get("/projects");
+      if(r.success&&Array.isArray(r.data)){
+        setApiProjects(r.data.map(p=>p.name).filter(Boolean));
+      }
+    }catch(e){console.error("Refresh projects:",e);}
+  };
+
   // Refresh all at once (parallel)
   const refreshAll=async()=>{
     await Promise.allSettled([
       refreshParties(),refreshTxns(),refreshAccounts(),
-      refreshPayReqs(),refreshPendPmts(),
+      refreshPayReqs(),refreshPendPmts(),refreshProjects(),
     ]);
   };
 
@@ -4075,7 +4089,7 @@ function FinanceModule(){
           onClose={closeTxn}
           dbParties={masterParties}
           dbAccounts={activeAccounts}
-          dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
+          dbProjects={[...new Set([...apiProjects,...activeTxns.map(t=>t.project)].filter(Boolean))]}
           onSaved={handleTxnSaved}
           prefillGRN={prefillGRNData}
           settlesRef={settlesRef}
@@ -4086,7 +4100,7 @@ function FinanceModule(){
           onClose={()=>setShowNewPR(false)}
           onSave={async()=>{await refreshPayReqs();}}
           dbParties={masterParties}
-          dbProjects={activeTxns.length>0?[...new Set(activeTxns.map(t=>t.project).filter(Boolean))]:undefined}
+          dbProjects={[...new Set([...apiProjects,...activeTxns.map(t=>t.project)].filter(Boolean))]}
         />
       )}
       {/* ══ Transaction Detail Drawer (Fin Activity + Party Ledger row click) ══ */}
