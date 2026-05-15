@@ -2099,7 +2099,11 @@ function FinanceModule(){
 
   // ── MAP HELPERS ───────────────────────────────────────────────
   const mapParty=p=>{
-    const rawBal=parseFloat(p.opening_balance||p.balance)||0;
+    // Backend now computes live_balance from transactions table — it's
+    // the authoritative current balance. opening_balance is just the
+    // immutable true opening (typically 0). balance is the same as
+    // live_balance, kept for backwards-compat with older clients.
+    const rawBal=parseFloat(p.live_balance ?? p.balance ?? p.opening_balance ?? 0)||0;
     const pType=p.type||(p.party_type)||(p.category)||"Other Vendor";
     // Vendors/Labour/Sub-Con: negative balance means we OWE them (To Pay)
     // Clients: positive balance means they OWE us (To Receive)
