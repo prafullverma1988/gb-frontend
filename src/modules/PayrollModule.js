@@ -1896,6 +1896,218 @@ function EditStaffModal({emp,onClose,onSaved}){
   );
 }
 
+// ── ADD STAFF MODAL (Payroll v2 patch) ───────────────────────────
+// Adds a staff member to Monthly Salary. Fetches from the Party
+// Library — same search-existing-staff UX as Settings → Users. If a
+// library party is picked, name/designation come from it and the row
+// links via party_id. If a new name is typed (not in library), a
+// staff-party is created first, then the payroll row links to it.
+function AddStaffModal({onClose,onSaved}){
+  const [staffSearch,setStaffSearch]=useState("");
+  const [results,setResults]=useState([]);
+  const [picked,setPicked]=useState(null);   // {party_id,name,designation,...} or null
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const [form,setForm]=useState({
+    name:"", designation:"", phone:"", staff_subtype:"office",
+    payment_type:"fixed",
+    basic_salary:0, hra:0, conveyance:0, medical:0, phone_allowance:0,
+    petrol_allowance:0, special_allowance:0,
+    pf_applicable:true, pf_method:"capped_15k", pf_custom_amount:0,
+    esic_applicable:true,
+  });
+  const set=(k,v)=>setForm(p=>({...p,[k]:v}));
+
+  // Debounced library search
+  useEffect(()=>{
+    if(picked){ setResults([]); return; }
+    const q=staffSearch.trim();
+    if(!q){ setResults([]); return; }
+    let cancelled=false;
+    const t=setTimeout(async()=>{
+      try{
+        const r=await api.get("/payroll/library-staff?q="+encodeURIComponent(q));
+        if(!cancelled&&r.success) setResults(r.data||[]);
+      }catch(e){ /* silent */ }
+    },300);
+    return ()=>{ cancelled=true; clearTimeout(t); };
+  },[staffSearch,picked]);
+
+  const pickStaff=(p)=>{
+    setPicked(p);
+    setForm(f=>({...f,name:p.name,designation:p.designation||"",phone:p.phone||"",staff_subtype:p.staff_subtype||"office"}));
+    setStaffSearch(""); setResults([]);
+  };
+  const clearPick=()=>{ setPicked(null); setForm(f=>({...f,name:"",designation:""})); };
+
+  const save=async()=>{
+    if(!form.name.trim()){ setErr("Naam zaroori hai"); return; }
+    setSaving(true); setErr("");
+    try{
+      let partyId=picked?.party_id||null;
+      // No library party picked → create a staff-party first (Mode-B style)
+      if(!partyId){
+        const pRes=await api.post("/finance/parties",{
+          is_staff:true, name:form.name.trim(),
+          staff_subtype:form.staff_subtype||"office",
+          designation:form.designation||null, phone:form.phone||null,
+        });
+        if(!pRes.success){
+          setErr(pRes.code==="duplicate_staff_party"
+            ? "Is naam ka staff library me already hai — upar search karke pick karein."
+            : (pRes.message||"Party create failed"));
+          setSaving(false); return;
+        }
+        partyId=pRes.data?.id;
+      }
+      const sRes=await api.post("/payroll/staff",{
+        party_id:partyId,
+        name:form.name.trim(), designation:form.designation||null,
+        phone:form.phone||null, payment_type:form.payment_type,
+        basic_salary:Number(form.basic_salary)||0, hra:Number(form.hra)||0,
+        conveyance:Number(form.conveyance)||0, medical:Number(form.medical)||0,
+        phone_allowance:Number(form.phone_allowance)||0,
+        petrol_allowance:Number(form.petrol_allowance)||0,
+        special_allowance:Number(form.special_allowance)||0,
+        pf_applicable:form.pf_applicable?1:0, pf_method:form.pf_method,
+        pf_custom_amount:Number(form.pf_custom_amount)||0,
+        esic_applicable:form.esic_applicable?1:0,
+        join_date:new Date().toISOString().slice(0,10),
+      });
+      if(sRes.success){ onSaved&&onSaved(); }
+      else setErr(sRes.message||"Staff add failed");
+    }catch(e){ setErr(e.message||"Network error"); }
+    setSaving(false);
+  };
+
+  const Sect=({title,children})=>(
+    <div style={{marginBottom:14}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${T.b1}`}}>{title}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{children}</div>
+    </div>
+  );
+  const F=({label,children,full})=>(
+    <div style={full?{gridColumn:"1 / -1"}:{}}>
+      <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{label}</div>
+      {children}
+    </div>
+  );
+  const inp={width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface};
+
+  return(
+    <div onClick={()=>!saving&&onClose()}
+      style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{background:T.surface,borderRadius:12,width:560,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:800,color:T.t1}}>Add Staff to Payroll</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:2}}>Library se fetch karein ya naya add karein</div>
+          </div>
+          <button onClick={()=>!saving&&onClose()} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}><IcX size={18}/></button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+          {/* ── Library search ── */}
+          <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"11px 13px",marginBottom:14}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.blu,marginBottom:5}}>🔍 Existing staff library se fetch karein</div>
+            {picked ? (
+              <div style={{display:"flex",alignItems:"center",gap:8,background:T.surface,border:`1.5px solid ${T.blu}`,borderRadius:7,padding:"7px 11px"}}>
+                <div style={{flex:1,fontSize:12.5}}>
+                  <b>{picked.name}</b>{picked.designation?<span style={{color:T.t3}}> — {picked.designation}</span>:null}
+                </div>
+                <button onClick={clearPick} style={{background:"none",border:"none",cursor:"pointer",fontSize:16,color:T.t4,lineHeight:1,padding:2}}>×</button>
+              </div>
+            ) : (
+              <>
+                <input value={staffSearch} onChange={e=>setStaffSearch(e.target.value)}
+                  placeholder="Naam ya designation se search..."
+                  style={{...inp,fontSize:12.5}}/>
+                {results.length>0&&(
+                  <div style={{marginTop:6,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:7,maxHeight:150,overflowY:"auto"}}>
+                    {results.map(p=>(
+                      <div key={p.party_id} onClick={()=>pickStaff(p)}
+                        style={{padding:"7px 11px",cursor:"pointer",borderBottom:`1px solid ${T.b1}`,fontSize:12}}>
+                        <b>{p.name}</b>{p.designation?<span style={{color:T.t3}}> — {p.designation}</span>:null}
+                        <div style={{fontSize:10,color:T.t4,marginTop:1}}>
+                          {p.staff_subtype==="wages"?"Daily wages":"Office staff"} · Library
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{fontSize:10,color:T.t4,marginTop:5}}>
+                  Naam library me hai to fetch ho jayega. Naya naam type karein to nayi staff-party ban jayegi.
+                </div>
+              </>
+            )}
+          </div>
+
+          <Sect title="Personal">
+            <F label="Name"><input style={{...inp,...(picked?{background:T.surfaceB}:{})}} value={form.name} onChange={e=>set("name",e.target.value)} disabled={!!picked}/></F>
+            <F label="Mobile"><input style={inp} value={form.phone} onChange={e=>set("phone",e.target.value)} placeholder="10-digit"/></F>
+            <F label="Designation"><input style={inp} value={form.designation} onChange={e=>set("designation",e.target.value)} placeholder="e.g. Site Supervisor"/></F>
+            <F label="Subtype">
+              <select style={inp} value={form.staff_subtype} onChange={e=>set("staff_subtype",e.target.value)} disabled={!!picked}>
+                <option value="office">Office Staff</option>
+                <option value="wages">Daily Wages Labour</option>
+              </select>
+            </F>
+          </Sect>
+          <Sect title="Salary — Earnings (₹/month)">
+            <F label="Basic"><input style={inp} type="number" value={form.basic_salary} onChange={e=>set("basic_salary",e.target.value)}/></F>
+            <F label="HRA"><input style={inp} type="number" value={form.hra} onChange={e=>set("hra",e.target.value)}/></F>
+            <F label="Conveyance"><input style={inp} type="number" value={form.conveyance} onChange={e=>set("conveyance",e.target.value)}/></F>
+            <F label="Medical"><input style={inp} type="number" value={form.medical} onChange={e=>set("medical",e.target.value)}/></F>
+            <F label="Phone Allowance"><input style={inp} type="number" value={form.phone_allowance} onChange={e=>set("phone_allowance",e.target.value)}/></F>
+            <F label="Petrol Allowance"><input style={inp} type="number" value={form.petrol_allowance} onChange={e=>set("petrol_allowance",e.target.value)}/></F>
+            <F label="Special Allowance" full><input style={inp} type="number" value={form.special_allowance} onChange={e=>set("special_allowance",e.target.value)}/></F>
+          </Sect>
+          <Sect title="PF / ESIC">
+            <F label="PF Applicable">
+              <select style={inp} value={form.pf_applicable?"yes":"no"} onChange={e=>set("pf_applicable",e.target.value==="yes")}>
+                <option value="yes">Yes</option><option value="no">No</option>
+              </select>
+            </F>
+            <F label="PF Method">
+              <select style={inp} value={form.pf_method} onChange={e=>set("pf_method",e.target.value)} disabled={!form.pf_applicable}>
+                <option value="none">None</option>
+                <option value="capped_15k">Capped at ₹15,000</option>
+                <option value="full_basic">Full Basic 12%</option>
+                <option value="custom">Custom amount</option>
+              </select>
+            </F>
+            {form.pf_method==="custom"&&form.pf_applicable&&(
+              <F label="Custom PF (₹)"><input style={inp} type="number" value={form.pf_custom_amount} onChange={e=>set("pf_custom_amount",e.target.value)}/></F>
+            )}
+            <F label="ESIC Applicable" full={form.pf_method!=="custom"}>
+              <select style={inp} value={form.esic_applicable?"yes":"no"} onChange={e=>set("esic_applicable",e.target.value==="yes")}>
+                <option value="yes">Yes (auto if gross ≤ ₹21k)</option><option value="no">No</option>
+              </select>
+            </F>
+          </Sect>
+          <Sect title="Payment Mode">
+            <F label="Type" full>
+              <select style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
+                <option value="fixed">Fixed (full month salary)</option>
+                <option value="attendance">Attendance-based (pro-rated)</option>
+              </select>
+            </F>
+          </Sect>
+        </div>
+        <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+          {err?<span style={{flex:1,fontSize:11.5,color:T.red}}>{err}</span>:<span style={{flex:1}}/>}
+          <button onClick={()=>!saving&&onClose()} disabled={saving}
+            style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:saving?"not-allowed":"pointer"}}>Cancel</button>
+          <button onClick={save} disabled={saving}
+            style={{padding:"7px 18px",borderRadius:7,background:saving?T.t4:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer"}}>
+            {saving?"Saving…":"Add to Payroll"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── MONTHLY SALARY TAB ────────────────────────────────────────────
 function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,isAdmin,onStaffUpdate}){
   const [search,setSearch]=useState("");
@@ -1917,6 +2129,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
   // ─── Edit Staff Master (Payroll v2 — Phase 2) ────────────
   const [editStaffEmp,setEditStaffEmp]=useState(null);  // emp object or null
+  const [showAddStaff,setShowAddStaff]=useState(false); // Add Staff modal
 
   // ─── Manual TDS per staff/month (Payroll v2 — Phase 2) ───
   const [tdsByEmpMonth,setTdsByEmpMonth]=useState({});  // {staffId: amount}
@@ -2087,6 +2300,10 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
           <div style={{padding:"6px 13px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:7}}>
             <span style={{fontSize:11,color:T.grn}}>{paidCount}/{filtered.length} Paid</span>
           </div>
+          {isAdmin&&<button onClick={()=>setShowAddStaff(true)}
+            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+            <IcAdd size={13} color="white"/> Add Staff
+          </button>}
           {isAdmin&&<button onClick={markAllPaid}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
             <IcChk size={13} color="white"/> Mark All Paid
@@ -2274,6 +2491,14 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
           emp={editStaffEmp}
           onClose={()=>setEditStaffEmp(null)}
           onSaved={()=>{ if(onStaffUpdate) onStaffUpdate(); }}
+        />
+      )}
+
+      {/* ─── Add Staff Modal (library-fetch) ─── */}
+      {showAddStaff && (
+        <AddStaffModal
+          onClose={()=>setShowAddStaff(false)}
+          onSaved={()=>{ setShowAddStaff(false); if(onStaffUpdate) onStaffUpdate(); }}
         />
       )}
 

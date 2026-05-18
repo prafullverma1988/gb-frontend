@@ -368,7 +368,9 @@ function RolesAccess() {
 
   const [userSaving, setUserSaving] = useState(false);
   const saveUser = async () => {
-    if (!userForm.name.trim() || !userForm.email.trim()) return alert("Name and email required");
+    if (!userForm.name.trim()) return alert("Name required");
+    // Mobile is the compulsory identifier now — email is optional.
+    if (!editingUser && !String(userForm.phone || "").trim()) return alert("Mobile number required");
     setUserSaving(true);
     let res;
     if (editingUser) {
@@ -685,11 +687,11 @@ function RolesAccess() {
           </div>
         )}
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Full Name" value={userForm.name} onChange={v => setUserForm(p => ({ ...p, name: v }))} placeholder="Full name" half disabled={!!linkedParty} />
-          <FormField label="Email" value={userForm.email} onChange={v => setUserForm(p => ({ ...p, email: v }))} placeholder="email@company.com" half />
+          <FormField label="Full Name *" value={userForm.name} onChange={v => setUserForm(p => ({ ...p, name: v }))} placeholder="Full name" half disabled={!!linkedParty} />
+          <FormField label="Mobile Number *" value={userForm.phone} onChange={v => setUserForm(p => ({ ...p, phone: v }))} placeholder="10-digit mobile" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Phone" value={userForm.phone} onChange={v => setUserForm(p => ({ ...p, phone: v }))} placeholder="+91 XXXXX XXXXX" half />
+          <FormField label="Email (optional)" value={userForm.email} onChange={v => setUserForm(p => ({ ...p, email: v }))} placeholder="email@company.com — optional" half />
           <FormSelect label="Role" value={userForm.role} onChange={v => setUserForm(p => ({ ...p, role: v }))} options={roles.map(r => ({ value: r.id, label: r.name }))} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
