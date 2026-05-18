@@ -333,7 +333,7 @@ function RolesAccess() {
   const [linkedParty, setLinkedParty] = useState(null);
   const openCreateUser = () => {
     setEditingUser(null); setLinkedParty(null); setStaffSearch(""); setStaffResults([]);
-    setUserForm({ name: "", email: "", phone: "", role: selectedRole, designation: "", password: "Welcome@123", projects: [], status: "Active" });
+    setUserForm({ name: "", email: "", phone: "", role: selectedRole === "all" ? "viewer" : selectedRole, designation: "", password: "Welcome@123", projects: [], status: "Active" });
     setShowUserModal(true);
   };
   const openEditUser = (u) => {
@@ -407,14 +407,13 @@ function RolesAccess() {
     setUserForm(p => ({ ...p, projects: (p.projects||[]).includes(pid) ? (p.projects||[]).filter(x => x !== pid) : [...(p.projects||[]), pid] }));
   };
 
-  // Project Access matrix — scope toggle: "all" roles or just selected role.
+  // Project Access matrix — saves whichever users are currently shown
+  // (all users when the "All Users" card is selected, else just the role).
   const [accessSaving, setAccessSaving] = useState(false);
-  const [accessScope, setAccessScope] = useState("all"); // "all" | "role"
   const saveProjectAccess = async () => {
     setAccessSaving(true);
     try {
-      const list = accessScope === "all" ? users : roleUsers;
-      for (const u of list) {
+      for (const u of roleUsers) {
         await api.put("/settings/users/" + u.id, { projects: u.projects || [] });
       }
       await loadUsers();
@@ -454,8 +453,9 @@ function RolesAccess() {
     });
   };
 
+  const isAllUsers = selectedRole === "all";
   const activeRole = roles.find(r => r.id === selectedRole);
-  const roleUsers = users.filter(u => u.role === selectedRole);
+  const roleUsers = isAllUsers ? users : users.filter(u => u.role === selectedRole);
 
   const tabs = [
     { id: "permissions", label: "Permissions" },
@@ -467,6 +467,18 @@ function RolesAccess() {
     <div>
       {/* ── Role cards ── */}
       <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+        {/* All Users — shows every user across roles (Project Access matrix) */}
+        <button onClick={() => { setSelectedRole("all"); setTab("projects"); }}
+          style={{
+            flex: "1 1 140px", maxWidth: 200, padding: "12px 14px", borderRadius: T.radius,
+            background: isAllUsers ? T.blueSoft : T.card,
+            border: `2px solid ${isAllUsers ? T.blue : T.border}`,
+            cursor: "pointer", textAlign: "left", transition: "all 0.15s",
+            boxShadow: isAllUsers ? T.shadowMd : T.shadow,
+          }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: isAllUsers ? T.blue : T.text }}>All Users</div>
+          <div style={{ fontSize: 11, color: T.textLight, marginTop: 2 }}>{users.length} users</div>
+        </button>
         {roles.map(r => (
           <button key={r.id} onClick={() => setSelectedRole(r.id)}
             style={{
@@ -519,7 +531,14 @@ function RolesAccess() {
       </div>
 
       {/* ── TAB: Permissions ── */}
-      {tab === "permissions" && (
+      {tab === "permissions" && isAllUsers && (
+        <SectionCard title="Module Permissions" desc="Permissions har role ke liye alag hote hain">
+          <div style={{ background: T.blueSoft, borderRadius: 8, padding: "12px 14px", marginTop: 8, fontSize: 12.5, color: T.blue, display: "flex", gap: 8, alignItems: "center" }}>
+            <IcShield size={15} color={T.blue} /> Permissions ek specific role ke liye set hote hain. Upar se koi ek role card chunein.
+          </div>
+        </SectionCard>
+      )}
+      {tab === "permissions" && !isAllUsers && (
         <SectionCard title={`Module Permissions — ${activeRole?.name || ""}`} desc={activeRole?.desc}
           action={<SaveBtn label="Update Permissions" />}>
           {selectedRole === "admin" && (
@@ -565,7 +584,7 @@ function RolesAccess() {
 
       {/* ── TAB: Users ── */}
       {tab === "users" && (
-        <SectionCard title={`Users — ${activeRole?.name || ""}`} desc={`${roleUsers.length} members in this role`}
+        <SectionCard title={isAllUsers ? "Users — All Users" : `Users — ${activeRole?.name || ""}`} desc={isAllUsers ? `${roleUsers.length} total users` : `${roleUsers.length} members in this role`}
           action={
             <button onClick={openCreateUser} style={{ padding: "8px 16px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
               <IcPlus size={15} color="white" /> Add User
@@ -625,26 +644,15 @@ function RolesAccess() {
             })}
           </tr>
         );
-        // Group definitions — "all": har role ka block; "role": sirf selected.
-        const groups = accessScope === "all"
+        // "All Users" card => har role ka block; warna sirf selected role.
+        const groups = isAllUsers
           ? roles.map(r => ({ role: r, list: users.filter(u => u.role === r.id) })).filter(g => g.list.length > 0)
           : [{ role: activeRole, list: roleUsers }];
         const totalShown = groups.reduce((n, g) => n + g.list.length, 0);
         return (
-        <SectionCard title="Project Access Matrix" desc="Which user can access which project — saare roles ek hi window me"
+        <SectionCard title="Project Access Matrix"
+          desc={isAllUsers ? "Which user can access which project — saare roles ek hi window me" : ("Which user can access which project — " + (activeRole?.name || "role"))}
           action={<SaveBtn label={accessSaving ? "Saving..." : "Save Access"} onClick={saveProjectAccess} />}>
-          {/* Scope toggle — All Users / sirf selected role */}
-          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-            {[{ k: "all", label: "All Users" }, { k: "role", label: (activeRole?.name || "This Role") + " only" }].map(opt => {
-              const sel = accessScope === opt.k;
-              return (
-                <button key={opt.k} type="button" onClick={() => setAccessScope(opt.k)}
-                  style={{ padding: "6px 14px", borderRadius: 7, border: `1.5px solid ${sel ? T.blue : T.border}`, background: sel ? T.blueSoft : "white", fontSize: 12, fontWeight: 600, color: sel ? T.blue : T.textMid, cursor: "pointer", transition: "all 0.15s" }}>
-                  {opt.label}
-                </button>
-              );
-            })}
-          </div>
           <div style={{ overflowX: "auto", marginTop: 8 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
               <thead>
