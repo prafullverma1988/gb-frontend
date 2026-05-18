@@ -327,8 +327,45 @@ function RolesAccess() {
 
   // User form
   const [userForm, setUserForm] = useState({ name: "", email: "", phone: "", role: "viewer", designation: "", password: "", projects: [] });
-  const openCreateUser = () => { setEditingUser(null); setUserForm({ name: "", email: "", phone: "", role: selectedRole, designation: "", password: "Welcome@123", projects: [] }); setShowUserModal(true); };
-  const openEditUser = (u) => { setEditingUser(u); setUserForm({ name: u.name, email: u.email, phone: u.phone || "", role: u.role, designation: u.designation || "", password: "", projects: u.projects || [] }); setShowUserModal(true); };
+  // Reverse-flow: search + link an existing unlinked staff-party.
+  const [staffSearch, setStaffSearch] = useState("");
+  const [staffResults, setStaffResults] = useState([]);
+  const [linkedParty, setLinkedParty] = useState(null);
+  const openCreateUser = () => {
+    setEditingUser(null); setLinkedParty(null); setStaffSearch(""); setStaffResults([]);
+    setUserForm({ name: "", email: "", phone: "", role: selectedRole, designation: "", password: "Welcome@123", projects: [] });
+    setShowUserModal(true);
+  };
+  const openEditUser = (u) => {
+    setEditingUser(u); setLinkedParty(null); setStaffSearch(""); setStaffResults([]);
+    setUserForm({ name: u.name, email: u.email, phone: u.phone || "", role: u.role, designation: u.designation || "", password: "", projects: u.projects || [] });
+    setShowUserModal(true);
+  };
+
+  // Debounced live search for unlinked staff-parties
+  useEffect(() => {
+    if (editingUser || linkedParty) { setStaffResults([]); return; }
+    const q = staffSearch.trim();
+    if (!q) { setStaffResults([]); return; }
+    const t = setTimeout(async () => {
+      try {
+        const res = await api.get("/finance/parties/staff-unlinked?q=" + encodeURIComponent(q));
+        if (res.success) setStaffResults(res.data || []);
+      } catch (e) { /* silent */ }
+    }, 300);
+    return () => clearTimeout(t);
+  }, [staffSearch, editingUser, linkedParty]);
+
+  const selectStaffToLink = (p) => {
+    setLinkedParty(p);
+    setUserForm(f => ({ ...f, name: p.name, designation: p.designation || "" }));
+    setStaffSearch(""); setStaffResults([]);
+  };
+  const clearLinkedStaff = () => {
+    setLinkedParty(null);
+    setUserForm(f => ({ ...f, name: "", designation: "" }));
+  };
+
   const [userSaving, setUserSaving] = useState(false);
   const saveUser = async () => {
     if (!userForm.name.trim() || !userForm.email.trim()) return alert("Name and email required");
@@ -342,12 +379,15 @@ function RolesAccess() {
         is_active: userForm.status === "Active" ? 1 : 0,
       });
     } else {
-      res = await api.post("/settings/users", {
+      const body = {
         name: userForm.name, email: userForm.email,
         phone: userForm.phone, role: userForm.role,
         designation: userForm.designation || "",
         password: userForm.password || "Welcome@123",
-      });
+      };
+      // Reverse-flow — link to a pre-selected staff-party
+      if (linkedParty) body.linked_party_id = linkedParty.id;
+      res = await api.post("/settings/users", body);
     }
     setUserSaving(false);
     if (res.success) { await loadUsers(); setShowUserModal(false); }
@@ -602,8 +642,50 @@ function RolesAccess() {
 
       {/* ── Modal: Create / Edit User ── */}
       <Modal open={showUserModal} onClose={() => setShowUserModal(false)} title={editingUser ? "Edit User" : "Add New User"} desc="User details and project access" width={600}>
+        {/* ── Reverse-flow: search & link existing staff ── */}
+        {!editingUser && (
+          <div style={{ background: T.tealSoft || "#F0FDFA", border: `1px solid ${(T.teal||"#0D9488")}33`, borderRadius: 10, padding: "12px 14px", marginBottom: 16 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: T.teal || "#0D9488", marginBottom: 4 }}>
+              🔍 Existing staff se add karein? (optional)
+            </div>
+            {linkedParty ? (
+              <div style={{ display: "flex", alignItems: "center", gap: 8, background: "white", border: `1.5px solid ${(T.teal||"#0D9488")}`, borderRadius: 8, padding: "8px 12px", marginTop: 6 }}>
+                <div style={{ flex: 1, fontSize: 12.5 }}>
+                  <b>Linking to existing staff: {linkedParty.name}</b>
+                  {linkedParty.designation ? <span style={{ color: T.textMid }}> — {linkedParty.designation}</span> : null}
+                </div>
+                <button onClick={clearLinkedStaff}
+                  style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, color: T.textMid, lineHeight: 1, padding: 2 }}>×</button>
+              </div>
+            ) : (
+              <>
+                <input value={staffSearch} onChange={e => setStaffSearch(e.target.value)}
+                  placeholder="Search by name or designation..."
+                  style={{ width: "100%", padding: "8px 12px", borderRadius: 8, border: `1.5px solid ${T.border}`, fontSize: 13, boxSizing: "border-box", outline: "none", marginTop: 6 }} />
+                {staffResults.length > 0 && (
+                  <div style={{ marginTop: 6, background: "white", border: `1px solid ${T.border}`, borderRadius: 8, maxHeight: 160, overflowY: "auto" }}>
+                    {staffResults.map(p => (
+                      <div key={p.id} onClick={() => selectStaffToLink(p)}
+                        style={{ padding: "8px 12px", cursor: "pointer", borderBottom: `1px solid ${T.borderLight}`, fontSize: 12.5 }}
+                        onMouseEnter={e => e.currentTarget.style.background = T.borderLight}
+                        onMouseLeave={e => e.currentTarget.style.background = "white"}>
+                        <b>{p.name}</b>{p.designation ? <span style={{ color: T.textMid }}> — {p.designation}</span> : null}
+                        <div style={{ fontSize: 10.5, color: T.textLight, marginTop: 1 }}>
+                          {p.staff_subtype === "wages" ? "Daily wages" : "Office staff"} · Not linked yet
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <div style={{ fontSize: 10.5, color: T.textMid, marginTop: 6 }}>
+                  Agar staff Library ya Payroll me already add hai, search karke link kar dein — duplicate nahi hoga.
+                </div>
+              </>
+            )}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Full Name" value={userForm.name} onChange={v => setUserForm(p => ({ ...p, name: v }))} placeholder="Full name" half />
+          <FormField label="Full Name" value={userForm.name} onChange={v => setUserForm(p => ({ ...p, name: v }))} placeholder="Full name" half disabled={!!linkedParty} />
           <FormField label="Email" value={userForm.email} onChange={v => setUserForm(p => ({ ...p, email: v }))} placeholder="email@company.com" half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
@@ -611,7 +693,7 @@ function RolesAccess() {
           <FormSelect label="Role" value={userForm.role} onChange={v => setUserForm(p => ({ ...p, role: v }))} options={roles.map(r => ({ value: r.id, label: r.name }))} half />
         </div>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Designation" value={userForm.designation||""} onChange={v => setUserForm(p => ({ ...p, designation: v }))} placeholder="e.g. Site Engineer, PM" half />
+          <FormField label="Designation" value={userForm.designation||""} onChange={v => setUserForm(p => ({ ...p, designation: v }))} placeholder="e.g. Site Engineer, PM" half disabled={!!linkedParty} />
           {!editingUser && <FormField label="Password" value={userForm.password||""} onChange={v => setUserForm(p => ({ ...p, password: v }))} placeholder="Default: Welcome@123" half />}
         </div>
 

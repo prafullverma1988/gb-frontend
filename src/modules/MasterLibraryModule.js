@@ -67,11 +67,11 @@ function FormField({ label, value, onChange, placeholder, type = "text", half = 
   );
 }
 
-function FormSelect({ label, value, onChange, options, half = false, required = false, placeholder }) {
+function FormSelect({ label, value, onChange, options, half = false, required = false, placeholder, disabled = false }) {
   // Normalize options to {value,label} for SearchSelect
   const opts = (options || []).map(o => typeof o === "string" ? { value: o, label: o } : (o.value !== undefined ? o : { value: o.key ?? o, label: o.label ?? o }));
   return (
-    <div style={{ flex: half ? 1 : undefined, minWidth: half ? 180 : undefined }}>
+    <div style={{ flex: half ? 1 : undefined, minWidth: half ? 180 : undefined, opacity: disabled ? 0.6 : 1, pointerEvents: disabled ? "none" : "auto" }}>
       <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>
         {label}{required && <span style={{ color: T.red }}> *</span>}
       </label>
@@ -908,15 +908,18 @@ function PartyMasterSection() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const emptyForm = { name: "", type: "Material Vendor", gstin: "", pan: "", phone: "", email: "", address: "", city: "Raipur", opening_balance: 0 };
+  const emptyForm = { name: "", type: "Material Vendor", gstin: "", pan: "", phone: "", email: "", address: "", city: "Raipur", opening_balance: 0, staff_subtype: "", designation: "", wallet_limit: "", negative_limit: "" };
   const [form, setForm] = useState(emptyForm);
+  const [saveErr, setSaveErr] = useState("");
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
 
   // "Material Vendor" is the canonical UI label. We still recognise legacy
   // values ("Supplier" / "Material Supplier") so existing parties show up
-  // under the same chip without needing a DB migration.
-  const types = ["All", "Material Vendor", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant"];
-  const typeColors = { "Material Vendor": { c: T.blue, bg: T.blueSoft }, Supplier: { c: T.blue, bg: T.blueSoft }, "Material Supplier": { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft } };
+  // under the same chip without needing a DB migration. "Staff" is new —
+  // app users get a staff-party automatically; this is for off-app casual staff.
+  const types = ["All", "Material Vendor", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant", "Staff"];
+  const typeColors = { "Material Vendor": { c: T.blue, bg: T.blueSoft }, Supplier: { c: T.blue, bg: T.blueSoft }, "Material Supplier": { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft }, Staff: { c: T.teal, bg: T.tealSoft }, staff: { c: T.teal, bg: T.tealSoft } };
+  const isStaffForm = form.type === "Staff";
   // Map any legacy supplier-like value to the new canonical chip
   const SUPPLIER_LIKE = new Set(["supplier", "material supplier", "material vendor", "vendor", "other vendor"]);
 
@@ -924,34 +927,80 @@ function PartyMasterSection() {
     const ptype = (p.type || "").toLowerCase();
     if (filterType === "Material Vendor") {
       if (!SUPPLIER_LIKE.has(ptype)) return false;
+    } else if (filterType === "Staff") {
+      if (!p.is_staff) return false;
     } else if (filterType !== "All" && ptype !== filterType.toLowerCase()) return false;
     const s = search.toLowerCase();
     if (s && !p.name?.toLowerCase().includes(s) && !(p.phone||"").includes(s) && !(p.city||"").toLowerCase().includes(s)) return false;
     return true;
   });
 
-  const openCreate = () => { setEditing(null); setForm({ ...emptyForm }); setShowModal(true); };
-  const openEdit = (p) => { setEditing(p); setForm({ name: p.name||"", type: p.type||"Material Vendor", gstin: p.gstin||"", pan: p.pan||"", phone: p.phone||"", email: p.email||"", address: p.address||"", city: p.city||"", opening_balance: p.opening_balance||0 }); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setSaveErr(""); setForm({ ...emptyForm }); setShowModal(true); };
+  const openEdit = (p) => {
+    setEditing(p); setSaveErr("");
+    setForm({
+      name: p.name||"", type: p.is_staff ? "Staff" : (p.type||"Material Vendor"),
+      gstin: p.gstin||"", pan: p.pan||"", phone: p.phone||"", email: p.email||"",
+      address: p.address||"", city: p.city||"", opening_balance: p.opening_balance||0,
+      staff_subtype: p.staff_subtype||"", designation: p.designation||"",
+      wallet_limit: p.wallet_limit ?? "", negative_limit: p.negative_limit ?? "",
+    });
+    setShowModal(true);
+  };
+
+  // Linked staff = a staff-party attached to a user account. Identity
+  // fields (name/phone/email) are locked — edited via Settings → Users.
+  const editingLinkedStaff = !!(editing && editing.is_staff && editing.is_linked);
 
   const save = async () => {
     if (!form.name.trim()) return;
-    setSaving(true);
+    setSaving(true); setSaveErr("");
     try {
-      if (editing) {
-        const res = await api.put("/finance/parties/" + editing.id, form);
-        if (res.success) setParties(prev => prev.map(p => p.id === editing.id ? res.data : p));
+      // Build payload — staff parties send is_staff + staff fields.
+      let payload;
+      if (form.type === "Staff") {
+        payload = {
+          name: form.name, is_staff: true,
+          staff_subtype: form.staff_subtype || null,
+          designation: form.designation || null,
+          phone: form.phone || null, email: form.email || null,
+          address: form.address || null, city: form.city || null,
+          wallet_limit: form.wallet_limit === "" ? null : Number(form.wallet_limit),
+          negative_limit: form.negative_limit === "" ? null : Number(form.negative_limit),
+        };
       } else {
-        const res = await api.post("/finance/parties", form);
-        if (res.success) setParties(prev => [res.data, ...prev]);
-        else { alert(res.message || "Save failed"); setSaving(false); return; }
+        payload = { ...form };
+        delete payload.staff_subtype; delete payload.designation;
+        delete payload.wallet_limit; delete payload.negative_limit;
+      }
+      if (editing) {
+        const res = await api.put("/finance/parties/" + editing.id, payload);
+        if (res.success) setParties(prev => prev.map(p => p.id === editing.id ? { ...p, ...res.data } : p));
+        else { setSaveErr(res.message || "Save failed"); setSaving(false); return; }
+      } else {
+        const res = await api.post("/finance/parties", payload);
+        if (res.success) {
+          setParties(prev => [res.data, ...prev]);
+          if (res.data?.is_staff) window.alert("Staff party banayi gayi — wallet ready hai");
+        } else {
+          // Inline error — duplicate_staff_party gets a friendlier line
+          setSaveErr(res.code === "duplicate_staff_party"
+            ? "Is naam ka staff already exist karta hai. Edit karein ya alag naam dein."
+            : (res.message || "Save failed"));
+          setSaving(false); return;
+        }
       }
       setShowModal(false);
-    } catch(e) { alert("Save failed"); }
+    } catch(e) { setSaveErr("Save failed"); }
     setSaving(false);
   };
 
   const del = async (id) => {
-    await api.del("/finance/parties/" + id);
+    const res = await api.del("/finance/parties/" + id);
+    if (res && res.success === false) {
+      window.alert(res.message || "Delete nahi hua");
+      return;
+    }
     setParties(prev => prev.filter(p => p.id !== id));
   };
 
@@ -983,8 +1032,25 @@ function PartyMasterSection() {
   };
 
   const columns = [
-    { key: "name", label: "Party Name", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "type", label: "Type", minW: 100, render: r => { const tc = typeColors[r.type] || { c: T.textMid, bg: T.borderLight }; return <Badge text={r.type||"—"} color={tc.c} bg={tc.bg} />; }},
+    { key: "name", label: "Party Name", minW: 200, render: r => (
+      <span style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+        <span style={{ fontWeight: 600 }}>{r.name}</span>
+        {r.is_staff ? <Badge text="Staff" color={T.teal} bg={T.tealSoft} /> : null}
+        {r.is_staff && r.is_linked ? (
+          <span title={r.user_is_active === 0 ? "User deactivated" : "Linked to user account"}
+            style={{ fontSize: 10.5, fontWeight: 600, padding: "1px 6px", borderRadius: 10,
+              background: r.user_is_active === 0 ? T.borderLight : T.blueSoft,
+              color: r.user_is_active === 0 ? T.textLight : T.blue }}>
+            🔗 {r.user_is_active === 0 ? "User off" : "Linked"}
+          </span>
+        ) : null}
+      </span>
+    )},
+    { key: "type", label: "Type", minW: 100, render: r => {
+      const label = r.is_staff ? "Staff" : (r.type || "—");
+      const tc = typeColors[label] || typeColors[r.type] || { c: T.textMid, bg: T.borderLight };
+      return <Badge text={label} color={tc.c} bg={tc.bg} />;
+    }},
     { key: "phone", label: "Phone", minW: 130, style: { fontFamily: "monospace", fontSize: 12 } },
     { key: "city", label: "City", minW: 80 },
     { key: "gstin", label: "GSTIN", minW: 140, render: r => r.gstin ? <span style={{ fontFamily: "monospace", fontSize: 11.5 }}>{r.gstin}</span> : <span style={{ color: T.textLight }}>—</span> },
@@ -1006,11 +1072,57 @@ function PartyMasterSection() {
         filterEl={<div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder="Filter type..."/></div>}
       />
       <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Party" : "Add Party"} desc="Party / supplier / client details" width={660}>
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Party" : "Add Party"} desc="Party / supplier / client / staff details" width={660}>
+        {saveErr ? (
+          <div style={{ background: T.redSoft, border: `1px solid ${T.red}55`, color: T.red, fontSize: 12.5, padding: "8px 12px", borderRadius: 8, marginBottom: 12 }}>{saveErr}</div>
+        ) : null}
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Party Name" value={form.name} onChange={v => upd("name", v)} placeholder="Full legal name" half required />
-          <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={types.filter(t => t !== "All")} half required />
+          <FormField label="Party Name" value={form.name} onChange={v => upd("name", v)} placeholder="Full legal name" half required disabled={editingLinkedStaff} />
+          <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={types.filter(t => t !== "All")} half required disabled={!!editing} />
         </div>
+        {editingLinkedStaff ? (
+          <div style={{ fontSize: 11, color: T.textMid, marginTop: -8, marginBottom: 12 }}>
+            Naam / phone / email linked staff pe yahan se nahi badalte — <b>Settings → Users</b> me edit karein.
+          </div>
+        ) : null}
+
+        {isStaffForm ? (
+          /* ── STAFF FIELDS ── */
+          <>
+            {!editing ? (
+              <div style={{ fontSize: 11.5, color: T.textMid, background: T.tealSoft, padding: "8px 12px", borderRadius: 8, marginBottom: 14 }}>
+                App users ko staff-party automatic milti hai. Yahan sirf <b>off-app casual staff</b> add karein.
+              </div>
+            ) : null}
+            <div style={{ marginBottom: 14 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>Staff Subtype <span style={{ color: T.red }}>*</span></div>
+              <div style={{ display: "flex", gap: 10 }}>
+                {[{ v: "office", l: "Office Staff (salaried)" }, { v: "wages", l: "Daily Wages Labour" }].map(o => (
+                  <button key={o.v} type="button" onClick={() => upd("staff_subtype", o.v)}
+                    style={{ flex: 1, padding: "9px 10px", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
+                      border: `1.5px solid ${form.staff_subtype === o.v ? T.teal : T.borderLight}`,
+                      background: form.staff_subtype === o.v ? T.tealSoft : "#fff",
+                      color: form.staff_subtype === o.v ? T.teal : T.textMid }}>
+                    {o.l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+              <FormField label="Designation" value={form.designation} onChange={v => upd("designation", v)} placeholder='e.g. "Site Supervisor", "Mason", "Helper"' half />
+              <FormField label="Phone" value={form.phone} onChange={v => upd("phone", v)} placeholder="+91 XXXXX XXXXX" half disabled={editingLinkedStaff} />
+            </div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+              <FormField label="Wallet Limit (₹)" value={form.wallet_limit} onChange={v => upd("wallet_limit", v)} placeholder="e.g. 5000" half />
+              <FormField label="Negative Limit Allowed (₹)" value={form.negative_limit} onChange={v => upd("negative_limit", v)} placeholder="e.g. 2000" half />
+            </div>
+            <FormField label="Address" value={form.address || ""} onChange={v => upd("address", v)} placeholder="Full address" />
+            <div style={{ height: 14 }} />
+            <FormField label="City" value={form.city} onChange={v => upd("city", v)} />
+          </>
+        ) : (
+        /* ── NON-STAFF FIELDS (unchanged) ── */
+        <>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormField label="Contact Person" value={form.contact} onChange={v => upd("contact", v)} placeholder="Name" half />
           <FormField label="Phone" value={form.phone} onChange={v => upd("phone", v)} placeholder="+91 XXXXX XXXXX" half />
@@ -1044,7 +1156,9 @@ function PartyMasterSection() {
           <FormField label="Account No." value={form.acc_no || ""} onChange={v => upd("acc_no", v)} placeholder="Account number" half />
         </div>
         <FormField label="IFSC Code" value={form.ifsc || ""} onChange={v => upd("ifsc", v)} placeholder="e.g. SBIN0005678" />
-        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update Party" : "Add Party"} />
+        </>
+        )}
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update Party" : (isStaffForm ? "Add Staff" : "Add Party")} />
       </Modal>
     </div>
   );
