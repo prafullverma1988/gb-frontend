@@ -1342,10 +1342,59 @@ function MaterialSettings() {
 // FINANCE SETTINGS (unchanged)
 // ═══════════════════════════════════════════════════════════════════════
 function FinanceSettings() {
-  const [f, setF] = useState({ gstEnabled: true, gstRate: "18", tdsEnabled: true, tdsRate: "2", autoInvoiceNum: true, invoicePrefix: "GB-INV", retentionEnabled: true, retentionPct: "5", advanceTracking: true, budgetWarning: true, budgetThreshold: 90, duplicateCheck: true, cashLimit: 10000 });
+  const [f, setF] = useState({ gstEnabled: true, gstRate: "18", tdsEnabled: true, tdsRate: "2", autoInvoiceNum: true, invoicePrefix: "GB-INV", retentionEnabled: true, retentionPct: "5", advanceTracking: true, budgetWarning: true, budgetThreshold: 90, cashLimit: 10000 });
   const upd = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  // Duplicate Payment Detection — real, company-level setting.
+  const [dupEnabled, setDupEnabled] = useState(true);
+  const [dupDays, setDupDays] = useState(4);
+  const [dupSaving, setDupSaving] = useState(false);
+  const [dupTick, setDupTick] = useState(false);
+  useEffect(() => {
+    api.get("/settings/company").then(r => {
+      if (r?.success && r.data) {
+        setDupEnabled(r.data.dup_payment_check_enabled !== 0);
+        setDupDays(parseInt(r.data.dup_payment_window_days) || 4);
+      }
+    }).catch(() => {});
+  }, []);
+  const saveDup = async () => {
+    setDupSaving(true);
+    try {
+      await api.put("/settings/company", {
+        dup_payment_check_enabled: dupEnabled,
+        dup_payment_window_days: parseInt(dupDays) || 4,
+      });
+      setDupTick(true);
+      setTimeout(() => setDupTick(false), 1800);
+    } catch (e) { window.alert(e?.message || "Save failed"); }
+    setDupSaving(false);
+  };
+
   return (
     <div>
+      <SectionCard title="Duplicate Payment Detection"
+        desc="Same vendor + same amount within the chosen window pe save karne se pehle confirm prompt aata hai. Genuine duplicate entries roakta hai."
+        action={
+          <button onClick={saveDup} disabled={dupSaving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: dupTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: dupSaving ? "wait" : "pointer", opacity: dupSaving ? 0.7 : 1 }}>
+            {dupTick ? "✓ Saved" : dupSaving ? "Saving..." : "Save"}
+          </button>
+        }>
+        <ToggleRow icon={<IcShield size={17} color={T.blue} />}
+          label="Enable duplicate detection on payment entries"
+          desc="On save, agar same vendor ko same amount ka payment hal hi me record hua hai to system warning dega"
+          value={dupEnabled} onChange={setDupEnabled} />
+        <div style={{ paddingTop: 6 }}>
+          <FormField label="Look-back window (days, ± from entry date)"
+            value={dupDays}
+            onChange={v => setDupDays(v.replace(/[^0-9]/g, ""))}
+            placeholder="e.g. 4" />
+          <div style={{ fontSize: 11, color: T.textLight, marginTop: 6 }}>
+            Default: 4 days. Set 0 to effectively disable (or use the toggle above).
+          </div>
+        </div>
+      </SectionCard>
       <SectionCard title="Tax Configuration" desc="GST, TDS settings" action={<SaveBtn />}>
         <ToggleRow icon={<IcDollar size={17} color={T.blue} />} label="GST Enabled" desc="Apply GST on invoices and POs" value={f.gstEnabled} onChange={v => upd("gstEnabled", v)} />
         {f.gstEnabled && <div style={{ marginLeft: 50, marginBottom: 12, display: "flex", gap: 16 }}><FormSelect label="Default GST Rate" value={f.gstRate} onChange={v => upd("gstRate", v)} options={[{value:"5",label:"5%"},{value:"12",label:"12%"},{value:"18",label:"18%"},{value:"28",label:"28%"}]} half /></div>}
@@ -1362,7 +1411,6 @@ function FinanceSettings() {
         <ToggleRow icon={<IcBell size={17} color={T.blue} />} label="Budget Overrun Warning" desc="Alert when spending approaches budget" value={f.budgetWarning} onChange={v => upd("budgetWarning", v)} />
         {f.budgetWarning && <div style={{ marginLeft: 50, marginBottom: 12 }}><FormSelect label="Warn at" value={String(f.budgetThreshold)} onChange={v => upd("budgetThreshold", parseInt(v))} options={[{value:"80",label:"80%"},{value:"85",label:"85%"},{value:"90",label:"90%"},{value:"95",label:"95%"}]} half /></div>}
         <ToggleRow icon={<IcCheck size={17} color={T.blue} />} label="Advance Payment Tracking" desc="Track advances to suppliers/contractors" value={f.advanceTracking} onChange={v => upd("advanceTracking", v)} />
-        <ToggleRow icon={<IcShield size={17} color={T.blue} />} label="Duplicate Entry Detection" desc="Warn if similar transaction exists within 24h" value={f.duplicateCheck} onChange={v => upd("duplicateCheck", v)} />
       </SectionCard>
     </div>
   );
@@ -1909,11 +1957,9 @@ function UIPreferences() {
 // MAIN SETTINGS MODULE
 // ═══════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════
-// OTHER SETTINGS — duplicate-detection toggles, misc finance guards
+// WAREHOUSE SETTINGS — procurement mode, GRN photo policy, MR flow
 // ═══════════════════════════════════════════════════════════════════════
-function OtherSettings() {
-  const [enabled, setEnabled] = useState(true);
-  const [days, setDays] = useState(4);
+function WarehouseSettings() {
   const [whProcMode, setWhProcMode] = useState("direct"); // direct | via_procurement
   const [grnPhotoReq, setGrnPhotoReq] = useState(false);
   const [mrFlow, setMrFlow] = useState("procurement_driven"); // procurement_driven | warehouse_driven
@@ -1925,8 +1971,6 @@ function OtherSettings() {
   useEffect(() => {
     api.get("/settings/company").then(r => {
       if (r?.success && r.data) {
-        setEnabled(r.data.dup_payment_check_enabled !== 0);
-        setDays(parseInt(r.data.dup_payment_window_days) || 4);
         setWhProcMode(r.data.warehouse_procurement_mode || "direct");
         setGrnPhotoReq(r.data.grn_photo_required === 1 || r.data.grn_photo_required === true);
         setMrFlow(r.data.mr_fulfillment_mode || "procurement_driven");
@@ -1939,8 +1983,6 @@ function OtherSettings() {
     setSaving(true);
     try {
       await api.put("/settings/company", {
-        dup_payment_check_enabled: enabled,
-        dup_payment_window_days: parseInt(days) || 4,
         warehouse_procurement_mode: whProcMode,
         grn_photo_required: grnPhotoReq,
         mr_fulfillment_mode: mrFlow,
@@ -1956,31 +1998,14 @@ function OtherSettings() {
 
   return (
     <div>
-      <SectionCard title="Duplicate Payment Detection"
-        desc="Same vendor + same amount within the chosen window pe save karne se pehle confirm prompt aata hai. Genuine duplicate entries roakta hai."
+      <SectionCard title="Warehouse Procurement Mode"
+        desc="Warehouse MR admin se Approve hone ke baad order kaise place hoga — warehouse khud kare ya procurement team ke through."
         action={
           <button onClick={save} disabled={saving}
             style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
             {savedTick ? "✓ Saved" : saving ? "Saving..." : "Save"}
           </button>
         }>
-        <ToggleRow icon={<IcShield size={17} color={T.blue} />}
-          label="Enable duplicate detection on payment entries"
-          desc="On save, agar same vendor ko same amount ka payment hal hi me record hua hai to system warning dega"
-          value={enabled} onChange={setEnabled} />
-        <div style={{ paddingTop: 6 }}>
-          <FormField label="Look-back window (days, ± from entry date)"
-            value={days}
-            onChange={v => setDays(v.replace(/[^0-9]/g, ""))}
-            placeholder="e.g. 4" />
-          <div style={{ fontSize: 11, color: T.textLight, marginTop: 6 }}>
-            Default: 4 days. Set 0 to effectively disable (or use the toggle above).
-          </div>
-        </div>
-      </SectionCard>
-
-      <SectionCard title="Warehouse Procurement Mode"
-        desc="Warehouse MR admin se Approve hone ke baad order kaise place hoga — warehouse khud kare ya procurement team ke through.">
         <div style={{ display: "flex", flexDirection: "column", gap: 10, paddingTop: 4 }}>
           {[
             { v: "direct",          label: "Direct — Warehouse khud orders place karta hai",
@@ -2061,7 +2086,7 @@ const settingsSections = [
   { id: "bank",          label: "Bank Details",         Icon: IcBank,      Comp: BankDetails,            section: "FINANCE & MATERIAL" },
   { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,       section: null },
   { id: "finance",       label: "Finance Settings",     Icon: IcDollar,    Comp: FinanceSettings,        section: null },
-  { id: "other",         label: "Other Settings",       Icon: IcCheck,     Comp: OtherSettings,          section: null },
+  { id: "warehouse",     label: "Warehouse Settings",   Icon: IcBox,       Comp: WarehouseSettings,      section: null },
   { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings,   section: "SYSTEM" },
   { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,        section: null },
   { id: "audit",         label: "Audit Trail",          Icon: IcClipboard, Comp: AuditSettings,          section: null },
@@ -2078,8 +2103,8 @@ export default function SettingsModule() {
     attendance: "Configure attendance mode and payment cycle for each labour type",
     appearance: "Choose layout style and other visual preferences",
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
-    finance: "Tax, invoicing, and financial controls",
-    other: "Duplicate-entry guards and other workflow controls",
+    finance: "Tax, invoicing, duplicate-payment guard and financial controls",
+    warehouse: "Procurement mode, GRN photo policy and MR fulfillment flow",
     notifications: "Email, Push & WhatsApp notification settings",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
     features: "Request new features and track their status",
