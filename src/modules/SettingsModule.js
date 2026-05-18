@@ -333,12 +333,18 @@ function RolesAccess() {
   const [linkedParty, setLinkedParty] = useState(null);
   const openCreateUser = () => {
     setEditingUser(null); setLinkedParty(null); setStaffSearch(""); setStaffResults([]);
-    setUserForm({ name: "", email: "", phone: "", role: selectedRole, designation: "", password: "Welcome@123", projects: [] });
+    setUserForm({ name: "", email: "", phone: "", role: selectedRole, designation: "", password: "Welcome@123", projects: [], status: "Active" });
     setShowUserModal(true);
   };
   const openEditUser = (u) => {
     setEditingUser(u); setLinkedParty(null); setStaffSearch(""); setStaffResults([]);
-    setUserForm({ name: u.name, email: u.email, phone: u.phone || "", role: u.role, designation: u.designation || "", password: "", projects: u.projects || [] });
+    setUserForm({
+      name: u.name, email: u.email, phone: u.phone || "", role: u.role,
+      designation: u.designation || "", password: "", projects: u.projects || [],
+      // status MUST be seeded — saveUser maps it to is_active. Without this
+      // every edit silently sent is_active=0 and deactivated the user.
+      status: (u.is_active === 0 || u.is_active === false) ? "Inactive" : "Active",
+    });
     setShowUserModal(true);
   };
 
@@ -698,6 +704,30 @@ function RolesAccess() {
           <FormField label="Designation" value={userForm.designation||""} onChange={v => setUserForm(p => ({ ...p, designation: v }))} placeholder="e.g. Site Engineer, PM" half disabled={!!linkedParty} />
           {!editingUser && <FormField label="Password" value={userForm.password||""} onChange={v => setUserForm(p => ({ ...p, password: v }))} placeholder="Default: Welcome@123" half />}
         </div>
+
+        {/* Status toggle — edit mode only */}
+        {editingUser && (
+          <div style={{ marginBottom: 16, padding: "12px 14px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: T.bgSoft || "#F8FAFC" }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 8 }}>User Status</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              {["Active", "Inactive"].map(s => {
+                const sel = (userForm.status || "Active") === s;
+                const on = s === "Active";
+                const accent = on ? T.green : T.red;
+                const accentSoft = on ? T.greenSoft : (T.redSoft || "#FEE2E2");
+                return (
+                  <button key={s} type="button" onClick={() => setUserForm(p => ({ ...p, status: s }))}
+                    style={{ flex: 1, padding: "9px 12px", borderRadius: 7, border: `1.5px solid ${sel ? accent : T.border}`, background: sel ? accentSoft : "white", fontSize: 12.5, fontWeight: 600, color: sel ? accent : T.textMid, cursor: "pointer", transition: "all 0.15s" }}>
+                    {s === "Active" ? "Active" : "Inactive"}
+                  </button>
+                );
+              })}
+            </div>
+            <div style={{ fontSize: 11, color: T.textLight, marginTop: 8 }}>
+              Inactive user login nahi kar sakta. Active karne par staff wallet party bhi auto-restore ho jayegi.
+            </div>
+          </div>
+        )}
 
         {/* Project access */}
         <div style={{ marginTop: 8 }}>
