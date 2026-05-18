@@ -455,7 +455,10 @@ function RolesAccess() {
 
   const isAllUsers = selectedRole === "all";
   const activeRole = roles.find(r => r.id === selectedRole);
-  const roleUsers = isAllUsers ? users : users.filter(u => u.role === selectedRole);
+  // A super_admin user is grouped under the "Admin" role card — there
+  // is no separate Super Admin card, so without this they show nowhere.
+  const userInRole = (u, roleId) => u.role === roleId || (roleId === "admin" && u.role === "super_admin");
+  const roleUsers = isAllUsers ? users : users.filter(u => userInRole(u, selectedRole));
 
   const tabs = [
     { id: "permissions", label: "Permissions" },
@@ -491,7 +494,7 @@ function RolesAccess() {
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
               <div>
                 <div style={{ fontSize: 13, fontWeight: 700, color: selectedRole === r.id ? r.color : T.text }}>{r.name}</div>
-                <div style={{ fontSize: 11, color: T.textLight, marginTop: 2 }}>{users.filter(u => u.role === r.id).length} users</div>
+                <div style={{ fontSize: 11, color: T.textLight, marginTop: 2 }}>{users.filter(u => userInRole(u, r.id)).length} users</div>
               </div>
               {!r.isSystem && (
                 <button onClick={(e) => { e.stopPropagation(); openEditRole(r); }}
@@ -646,7 +649,7 @@ function RolesAccess() {
         );
         // "All Users" card => har role ka block; warna sirf selected role.
         const groups = isAllUsers
-          ? roles.map(r => ({ role: r, list: users.filter(u => u.role === r.id) })).filter(g => g.list.length > 0)
+          ? roles.map(r => ({ role: r, list: users.filter(u => userInRole(u, r.id)) })).filter(g => g.list.length > 0)
           : [{ role: activeRole, list: roleUsers }];
         const totalShown = groups.reduce((n, g) => n + g.list.length, 0);
         return (
