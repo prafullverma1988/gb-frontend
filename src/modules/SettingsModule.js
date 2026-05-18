@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, Fragment } from "react";
 import api from "../config/api";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
@@ -407,12 +407,14 @@ function RolesAccess() {
     setUserForm(p => ({ ...p, projects: (p.projects||[]).includes(pid) ? (p.projects||[]).filter(x => x !== pid) : [...(p.projects||[]), pid] }));
   };
 
-  // Persist the Project Access matrix — saves every user in this role.
+  // Project Access matrix — scope toggle: "all" roles or just selected role.
   const [accessSaving, setAccessSaving] = useState(false);
+  const [accessScope, setAccessScope] = useState("all"); // "all" | "role"
   const saveProjectAccess = async () => {
     setAccessSaving(true);
     try {
-      for (const u of roleUsers) {
+      const list = accessScope === "all" ? users : roleUsers;
+      for (const u of list) {
         await api.put("/settings/users/" + u.id, { projects: u.projects || [] });
       }
       await loadUsers();
@@ -596,14 +598,58 @@ function RolesAccess() {
       )}
 
       {/* ── TAB: Project Access ── */}
-      {tab === "projects" && (
-        <SectionCard title="Project Access Matrix" desc="Which user can access which project"
+      {tab === "projects" && (() => {
+        // Toggle ke hisaab se rows banao. "all" => sabhi roles ek hi
+        // window me, role-category header ke saath grouped.
+        const colSpan = 1 + allProjects.length;
+        const renderUserRow = (u, roleColor) => (
+          <tr key={u.id} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
+            <td style={{ padding: "10px 8px", fontWeight: 600, color: T.text, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <div style={{ width: 26, height: 26, borderRadius: "50%", background: `linear-gradient(135deg, ${roleColor}, ${roleColor}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "white", flexShrink: 0 }}>{u.name.charAt(0)}</div>
+                <span style={{ fontSize: 12 }}>{u.name}</span>
+              </div>
+            </td>
+            {allProjects.map(p => {
+              const has = (u.projects||[]).includes(p.id);
+              return (
+                <td key={p.id} style={{ textAlign: "center", padding: "8px 6px" }}>
+                  <button onClick={() => {
+                    setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, projects: has ? (usr.projects||[]).filter(x => x !== p.id) : [...(usr.projects||[]), p.id] } : usr));
+                  }}
+                    style={{ width: 26, height: 26, borderRadius: 6, background: has ? T.greenSoft : T.borderLight, border: `1.5px solid ${has ? T.green + "55" : "transparent"}`, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                    {has && <IcCheck size={13} color={T.green} strokeWidth={2.5} />}
+                  </button>
+                </td>
+              );
+            })}
+          </tr>
+        );
+        // Group definitions — "all": har role ka block; "role": sirf selected.
+        const groups = accessScope === "all"
+          ? roles.map(r => ({ role: r, list: users.filter(u => u.role === r.id) })).filter(g => g.list.length > 0)
+          : [{ role: activeRole, list: roleUsers }];
+        const totalShown = groups.reduce((n, g) => n + g.list.length, 0);
+        return (
+        <SectionCard title="Project Access Matrix" desc="Which user can access which project — saare roles ek hi window me"
           action={<SaveBtn label={accessSaving ? "Saving..." : "Save Access"} onClick={saveProjectAccess} />}>
+          {/* Scope toggle — All Users / sirf selected role */}
+          <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
+            {[{ k: "all", label: "All Users" }, { k: "role", label: (activeRole?.name || "This Role") + " only" }].map(opt => {
+              const sel = accessScope === opt.k;
+              return (
+                <button key={opt.k} type="button" onClick={() => setAccessScope(opt.k)}
+                  style={{ padding: "6px 14px", borderRadius: 7, border: `1.5px solid ${sel ? T.blue : T.border}`, background: sel ? T.blueSoft : "white", fontSize: 12, fontWeight: 600, color: sel ? T.blue : T.textMid, cursor: "pointer", transition: "all 0.15s" }}>
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
           <div style={{ overflowX: "auto", marginTop: 8 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
               <thead>
                 <tr>
-                  <th style={{ textAlign: "left", padding: "10px 8px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, minWidth: 140, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>User / Project</th>
+                  <th style={{ textAlign: "left", padding: "10px 8px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, minWidth: 160, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>User / Project</th>
                   {allProjects.map(p => (
                     <th key={p.id} style={{ textAlign: "center", padding: "10px 6px", fontSize: 10.5, fontWeight: 600, color: T.textMid, borderBottom: `2px solid ${T.border}`, minWidth: 90, writingMode: "vertical-rl", transform: "rotate(180deg)", height: 100 }}>
                       {p.name.length > 22 ? p.name.substring(0, 22) + ".." : p.name}
@@ -612,35 +658,29 @@ function RolesAccess() {
                 </tr>
               </thead>
               <tbody>
-                {roleUsers.map(u => (
-                  <tr key={u.id} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
-                    <td style={{ padding: "10px 8px", fontWeight: 600, color: T.text, position: "sticky", left: 0, background: T.card, zIndex: 1 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                        <div style={{ width: 26, height: 26, borderRadius: "50%", background: `linear-gradient(135deg, ${activeRole?.color || T.blue}, ${activeRole?.color || T.blue}88)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 11, fontWeight: 700, color: "white", flexShrink: 0 }}>{u.name.charAt(0)}</div>
-                        <span style={{ fontSize: 12 }}>{u.name}</span>
-                      </div>
-                    </td>
-                    {allProjects.map(p => {
-                      const has = (u.projects||[]).includes(p.id);
-                      return (
-                        <td key={p.id} style={{ textAlign: "center", padding: "8px 6px" }}>
-                          <button onClick={() => {
-                            setUsers(prev => prev.map(usr => usr.id === u.id ? { ...usr, projects: has ? (usr.projects||[]).filter(x => x !== p.id) : [...(usr.projects||[]), p.id] } : usr));
-                          }}
-                            style={{ width: 26, height: 26, borderRadius: 6, background: has ? T.greenSoft : T.borderLight, border: `1.5px solid ${has ? T.green + "55" : "transparent"}`, cursor: "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
-                            {has && <IcCheck size={13} color={T.green} strokeWidth={2.5} />}
-                          </button>
+                {groups.map(g => {
+                  const rc = g.role?.color || T.blue;
+                  return (
+                    <Fragment key={g.role?.id || "grp"}>
+                      <tr>
+                        <td colSpan={colSpan} style={{ padding: "8px 10px", background: (g.role?.colorBg || T.blueSoft), borderBottom: `1.5px solid ${T.border}`, position: "sticky", left: 0 }}>
+                          <span style={{ display: "inline-flex", alignItems: "center", gap: 7, fontSize: 11, fontWeight: 700, color: rc, textTransform: "uppercase", letterSpacing: 0.4 }}>
+                            <span style={{ width: 8, height: 8, borderRadius: "50%", background: rc }} />
+                            {g.role?.name || "Role"} — {g.list.length} {g.list.length === 1 ? "user" : "users"}
+                          </span>
                         </td>
-                      );
-                    })}
-                  </tr>
-                ))}
+                      </tr>
+                      {g.list.map(u => renderUserRow(u, rc))}
+                    </Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </div>
-          {roleUsers.length === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>No users in this role</div>}
+          {totalShown === 0 && <div style={{ padding: "30px 0", textAlign: "center", fontSize: 13, color: T.textLight }}>No users found</div>}
         </SectionCard>
-      )}
+        );
+      })()}
 
       {/* ── Modal: Create / Edit Role ── */}
       <Modal open={showRoleModal} onClose={() => setShowRoleModal(false)} title={editingRole ? "Edit Role" : "Create Custom Role"} desc="Define role name, description, and color" width={480}>
