@@ -6,6 +6,8 @@ import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import MaterialFlowDrawer from "../components/MaterialFlowDrawer";
 import MRDetailDrawer from "../components/MRDetailDrawer";
+import MaterialTransferTab from "../components/MaterialTransferTab";
+import MaterialLedgerDrawer from "../components/MaterialLedgerDrawer";
 import uploadManager from "../utils/uploadManager";
 
 // ── TZ-safe local date helper ────────────────────────────────────────
@@ -7523,6 +7525,11 @@ function TabMaterial({ project }) {
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerLoaded, setLedgerLoaded] = useState(false);
   const [expandedMat, setExpandedMat] = useState(null);
+  // Material Inventory accordion — per-material row filter + inline Mark-Used
+  const [ledgerRowFilter, setLedgerRowFilter] = useState("all"); // all | grn | used
+  const [ledgerMarkUsedFor, setLedgerMarkUsedFor] = useState(null); // material_name being marked-used
+  // Material clicked → opens the side ledger drawer (GRN / Used / MR tabs)
+  const [ledgerDrawerMat, setLedgerDrawerMat] = useState(null);
   const [ledgerSearch, setLedgerSearch] = useState("");
   // Flow drawer state — opens when user clicks a GRN row in Material Ledger
   const [flowGrnId, setFlowGrnId] = useState(null);
@@ -7628,7 +7635,20 @@ function TabMaterial({ project }) {
     loadMRs();
   }, [projectId]);
 
-  // Load ledger on tab switch
+  // Project switch — TabMaterial does NOT re-mount, it just gets a new
+  // `project` prop, so all material state stays stale. Wipe it whenever
+  // projectId changes so the load effect below re-fetches for the new
+  // project instead of showing the previous one's ledger.
+  useEffect(() => {
+    setLedger([]); setLedgerLoaded(false); setLedgerLoading(false);
+    setInventory([]); setInvLoaded(false); setInvLoading(false);
+    setExpandedMat(null); setLedgerDrawerMat(null);
+    setLedgerSearch(""); setLedgerVendor("All");
+  }, [projectId]);
+
+  // Load ledger on tab switch / project switch. projectId + the loaded
+  // flags are in the deps so a freshly-reset state (after project switch)
+  // triggers a re-fetch.
   useEffect(() => {
     if (activeTab === "ledger" && !ledgerLoaded && projectId) {
       setLedgerLoading(true);
@@ -7646,7 +7666,7 @@ function TabMaterial({ project }) {
         setInvLoading(false);
       }).catch(() => setInvLoading(false));
     }
-  }, [activeTab]);
+  }, [activeTab, projectId, ledgerLoaded, invLoaded]);
 
   // Pending incoming transfers TO this project (warehouse → site receive flow)
   const [pendingTransfers, setPendingTransfers] = useState([]);
@@ -7983,7 +8003,10 @@ function TabMaterial({ project }) {
     return true;
   });
 
-  const TABS = [{id:"requests",l:"Requests"},{id:"ledger",l:"Material Ledger"},{id:"inventory",l:"Inventory"}];
+  // Inventory tab merged into Material Inventory — the ledger accordion
+  // already shows per-material Received/Used/Balance + GRN/Used entries,
+  // plus an inline Mark-Used form. Separate Inventory tab dropped.
+  const TABS = [{id:"requests",l:"Requests"},{id:"ledger",l:"Material Inventory"},{id:"transfer",l:"Transfer"}];
 
   return (
     <div style={{padding:"14px 18px"}}>
@@ -8869,7 +8892,9 @@ function TabMaterial({ project }) {
 
               {/* Material accordion */}
               {ledgerFiltered.map((mat,mi)=>{
-                const isOpen=expandedMat===mat.material_name;
+                // Expanded inline view replaced by the side ledger drawer —
+                // isOpen pinned false so the old accordion body is dead code.
+                const isOpen=false;
                 const balColor=mat.balance<=0?T.red:mat.balance<mat.total_received*0.2?T.amb:T.grn;
 
                 // Build chronological rows with running balance
@@ -8892,8 +8917,10 @@ function TabMaterial({ project }) {
                 return(
                   <div key={mat.material_name} style={{marginBottom:10,background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden"}}>
                     {/* Accordion header */}
-                    <div onClick={()=>setExpandedMat(isOpen?null:mat.material_name)}
-                      style={{padding:"11px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",background:isOpen?"#0F172A":T.surface,transition:"background .15s"}}>
+                    <div onClick={()=>setLedgerDrawerMat(mat)}
+                      style={{padding:"11px 16px",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",background:T.surface,transition:"background .15s"}}
+                      onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"55"}
+                      onMouseLeave={e=>e.currentTarget.style.background=T.surface}>
                       <div style={{display:"flex",alignItems:"center",gap:10}}>
                         <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={isOpen?"white":T.t3} strokeWidth={2.5} style={{transition:"transform .2s",transform:isOpen?"rotate(90deg)":"rotate(0deg)"}}><path d="M9 18l6-6-6-6"/></svg>
                         <div>
@@ -8918,7 +8945,87 @@ function TabMaterial({ project }) {
                     </div>
 
                     {/* Finance-style ledger table */}
-                    {isOpen&&(
+                    {isOpen&&(()=>{
+                      // Per-material filter — show GRN-only / Used-only / All
+                      const visibleRows = allRows.filter(r =>
+                        ledgerRowFilter==="all" ? true :
+                        ledgerRowFilter==="grn" ? r._type==="grn" : r._type==="used");
+                      const markUsedOpen = ledgerMarkUsedFor===mat.material_name;
+                      const today = new Date().toISOString().split("T")[0];
+                      const uForm = invUsedForm[mat.material_name]||{qty:"",remark:"",used_date:today};
+                      return (
+                      <div>
+                        {/* Toolbar — filter chips + Mark Used */}
+                        <div style={{display:"flex",alignItems:"center",gap:6,padding:"9px 14px",background:"#0F172A",borderTop:"1px solid #1E293B"}}>
+                          {[["all","All"],["grn","GRN only"],["used","Used only"]].map(([k,l])=>(
+                            <button key={k} onClick={()=>setLedgerRowFilter(k)}
+                              style={{padding:"3px 11px",borderRadius:12,fontSize:10.5,fontWeight:700,cursor:"pointer",border:"1px solid "+(ledgerRowFilter===k?T.blu:"#334155"),background:ledgerRowFilter===k?T.blu:"transparent",color:ledgerRowFilter===k?"white":"rgba(255,255,255,.6)"}}>
+                              {l}
+                            </button>
+                          ))}
+                          <div style={{flex:1}}/>
+                          {mat.balance>0&&(
+                            <button onClick={()=>{
+                              setLedgerMarkUsedFor(markUsedOpen?null:mat.material_name);
+                              if(!markUsedOpen) setInvUsedForm(p=>({...p,[mat.material_name]:{qty:"",remark:"",used_date:today}}));
+                            }}
+                              style={{padding:"4px 12px",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",border:"1px solid "+(markUsedOpen?"#4ADE80":T.grn),background:markUsedOpen?T.grn:"transparent",color:markUsedOpen?"white":"#4ADE80"}}>
+                              {markUsedOpen?"▲ Cancel":"▼ Mark Used"}
+                            </button>
+                          )}
+                        </div>
+
+                        {/* Inline Mark-Used form */}
+                        {markUsedOpen&&mat.balance>0&&(
+                          <div style={{padding:"11px 14px",background:T.grnL,borderBottom:"1px solid "+T.grnM}}>
+                            <div style={{display:"grid",gridTemplateColumns:"110px 130px 1fr 110px",gap:8,alignItems:"end"}}>
+                              <div>
+                                <label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Qty Used *</label>
+                                <input type="number" value={uForm.qty}
+                                  onChange={e=>setInvUsedForm(p=>({...p,[mat.material_name]:{...uForm,qty:e.target.value}}))}
+                                  placeholder={"max "+mat.balance}
+                                  style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:13,fontWeight:700,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                              </div>
+                              <div>
+                                <label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Date</label>
+                                <input type="date" value={uForm.used_date}
+                                  onChange={e=>setInvUsedForm(p=>({...p,[mat.material_name]:{...uForm,used_date:e.target.value}}))}
+                                  style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                              </div>
+                              <div>
+                                <label style={{fontSize:9,fontWeight:700,color:T.t3,textTransform:"uppercase",display:"block",marginBottom:3}}>Remark</label>
+                                <input value={uForm.remark}
+                                  onChange={e=>setInvUsedForm(p=>({...p,[mat.material_name]:{...uForm,remark:e.target.value}}))}
+                                  placeholder="Optional"
+                                  style={{width:"100%",padding:"6px 8px",borderRadius:5,border:"1.5px solid "+T.grnM,fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                              </div>
+                              <button onClick={async()=>{
+                                if(!uForm.qty||parseFloat(uForm.qty)<=0) return alert("Qty required");
+                                if(parseFloat(uForm.qty)>mat.balance) return alert("Qty exceeds balance ("+mat.balance+")");
+                                setInvUsedSaving(mat.material_name);
+                                try{
+                                  const res=await api.post("/tasks/project/"+projectId+"/mark-used",{
+                                    material_name:mat.material_name,
+                                    used_qty:parseFloat(uForm.qty),
+                                    unit:mat.unit,
+                                    remark:uForm.remark||null,
+                                    used_date:uForm.used_date,
+                                  });
+                                  if(res.success){
+                                    setLedgerMarkUsedFor(null);
+                                    const rr=await api.get("/tasks/project/"+projectId+"/material-ledger");
+                                    if(rr.success) setLedger(rr.data||[]);
+                                  } else alert(res.message||"Failed");
+                                }catch(e){alert(e.message);}
+                                setInvUsedSaving(null);
+                              }} disabled={invUsedSaving===mat.material_name}
+                                style={{padding:"7px",borderRadius:6,background:invUsedSaving===mat.material_name?T.b1:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+                                {invUsedSaving===mat.material_name?"Saving...":"✓ Save Used"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
                       <div style={{overflowX:"auto"}}>
                         {/* Column headers */}
                         <div style={{display:"grid",gridTemplateColumns:"85px 130px 85px 1fr 85px 85px 85px 85px 90px 36px",background:"#1E293B",padding:"7px 14px",gap:8,minWidth:936}}>
@@ -8928,10 +9035,10 @@ function TabMaterial({ project }) {
                         </div>
 
                         {/* Rows */}
-                        {allRows.length===0&&(
-                          <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>No entries yet</div>
+                        {visibleRows.length===0&&(
+                          <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>No entries{ledgerRowFilter!=="all"?` (${ledgerRowFilter})`:""} yet</div>
                         )}
-                        {allRows.map((row,ri)=>{
+                        {visibleRows.map((row,ri)=>{
                           const isGRN=row._type==="grn";
                           const balNeg=row.runBal<0;
                           const balLow=row.runBal>=0&&row.runBal<mat.total_received*0.2;
@@ -9003,7 +9110,9 @@ function TabMaterial({ project }) {
                           <div/>
                         </div>
                       </div>
-                    )}
+                      </div>
+                      );
+                    })()}
                   </div>
                 );
               })}
@@ -9013,9 +9122,9 @@ function TabMaterial({ project }) {
       )}
 
       {/* ══════════════════════════════════════════════════════
-          TAB 3: INVENTORY (live stock)
+          TAB 3 (retired): INVENTORY — merged into Material Inventory
       ══════════════════════════════════════════════════════ */}
-      {activeTab==="inventory"&&(
+      {false&&(
         <div>
           {invLoading&&<div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>Loading inventory...</div>}
           {!invLoading&&inventory.length===0&&(
@@ -9144,6 +9253,28 @@ function TabMaterial({ project }) {
           )}
         </div>
       )}
+
+      {/* ══════════════════════════════════════════════════════
+          TAB 4: TRANSFER — site-to-site material transfer with approval
+      ══════════════════════════════════════════════════════ */}
+      {activeTab==="transfer"&&(
+        <MaterialTransferTab projectId={projectId} projectName={projectName} isAdmin={meIsPriv}/>
+      )}
+
+      {/* ── MATERIAL LEDGER DRAWER (material click → GRN/Used/MR tabs) ── */}
+      <MaterialLedgerDrawer
+        material={ledgerDrawerMat}
+        projectId={projectId}
+        onClose={()=>setLedgerDrawerMat(null)}
+        canDeleteUsed={canDeleteUsed}
+        onGrnClick={(grnId)=>{ setLedgerDrawerMat(null); setFlowGrnId(grnId); }}
+        onChanged={async()=>{
+          try {
+            const r = await api.get("/tasks/project/"+projectId+"/material-ledger");
+            if (r.success) setLedger(r.data || []);
+          } catch {}
+        }}
+      />
 
       {/* ── MATERIAL FLOW DRAWER (Material Ledger row click) ── */}
       <MaterialFlowDrawer
