@@ -1987,6 +1987,192 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+// WALLET APPROVALS PANEL (Phase 2) — admin approval queue with
+// Approve / Reject / Ask-for-info (multi-round clarification).
+// ══════════════════════════════════════════════════════════════
+const WCAT={site_exp:"Site expense",party_pay:"Party payment",salary:"Salary",petrol:"Petrol",generic:"Other"};
+const ADMIN_ROLES_W=["admin","super_admin","project_manager","accountant"];
+
+async function uploadCloudinaryW(file){
+  const fd=new FormData();
+  fd.append("file",file);
+  fd.append("upload_preset","gb_buildcon_drawings");
+  const r=await fetch("https://api.cloudinary.com/v1_1/dd632nqfm/image/upload",{method:"POST",body:fd});
+  const d=await r.json();
+  if(!d.secure_url) throw new Error("Upload failed");
+  return d.secure_url;
+}
+
+function WalletApprovalsPanel({approvals,photoPolicy,onChange}){
+  const [busy,setBusy]=useState(null);          // txn_id being acted on
+  const [reject,setReject]=useState(null);       // {txn_id}
+  const [ask,setAsk]=useState(null);             // {txn_id}
+  const [thread,setThread]=useState(null);       // {txn_id, data, clarifications}
+  const [reason,setReason]=useState("");
+  const [askMsg,setAskMsg]=useState("");
+  const [askPhoto,setAskPhoto]=useState(null);
+  const [uploading,setUploading]=useState(false);
+
+  const policyKey=(it)=>it.is_transfer?"transfer":(it.wallet_category||"generic");
+  const photoBlocked=(it)=>it.photo_pending && photoPolicy[policyKey(it)]==="required";
+
+  const doApprove=async(id)=>{
+    setBusy(id);
+    const r=await api.post("/wallets/approve/"+id,{});
+    setBusy(null);
+    if(!r||r.success===false){window.alert((r&&r.message)||"Approve fail");return;}
+    onChange();
+  };
+  const doReject=async()=>{
+    if(!reject)return;
+    setBusy(reject.txn_id);
+    const r=await api.post("/wallets/reject/"+reject.txn_id,{reason});
+    setBusy(null);setReject(null);setReason("");
+    if(!r||r.success===false){window.alert((r&&r.message)||"Reject fail");return;}
+    onChange();
+  };
+  const doAsk=async()=>{
+    if(!ask)return;
+    if(!askMsg.trim()){window.alert("Sawaal likhein");return;}
+    setBusy(ask.txn_id);
+    let photoUrl=null;
+    if(askPhoto){
+      try{setUploading(true);photoUrl=await uploadCloudinaryW(askPhoto);}catch(_){}finally{setUploading(false);}
+    }
+    const r=await api.post("/wallets/transaction/"+ask.txn_id+"/ask-clarification",{message:askMsg.trim(),photo_url:photoUrl});
+    setBusy(null);setAsk(null);setAskMsg("");setAskPhoto(null);
+    if(!r||r.success===false){window.alert((r&&r.message)||"Ask fail");return;}
+    onChange();
+  };
+  const openThread=async(id)=>{
+    const r=await api.get("/wallets/transaction/"+id+"/thread");
+    if(r&&r.success) setThread({txn_id:id,data:r.data.transaction,clarifications:r.data.clarifications||[]});
+  };
+
+  return (
+    <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+        <div>
+          <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Wallet Approval Queue</div>
+          <div style={{fontSize:11,color:T.t4}}>Staff ke wallet expense / transfer jo approval ka intezaar kar rahe hain</div>
+        </div>
+        <button onClick={onChange} style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:11.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Refresh</button>
+      </div>
+
+      {approvals.length===0&&(
+        <div style={{padding:"40px 0",textAlign:"center",fontSize:12.5,color:T.t4}}>Koi pending approval nahi — sab clear hai</div>
+      )}
+
+      {approvals.map(it=>{
+        const blocked=photoBlocked(it);
+        return (
+        <div key={it.txn_id} style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:"12px 14px",marginBottom:10}}>
+          <div style={{display:"flex",gap:12}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+                <span style={{fontSize:15,fontWeight:800,color:T.t1}}>₹{fmtN(it.amount)}</span>
+                <span style={{fontSize:10,fontWeight:700,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5}}>{WCAT[it.wallet_category]||"Other"}</span>
+                {it.is_transfer&&<span style={{fontSize:10,fontWeight:700,color:T.pur,background:T.purL,padding:"2px 7px",borderRadius:5}}>Transfer</span>}
+                {it.limit_exceeded&&<span style={{fontSize:10,fontWeight:700,color:T.red,background:T.redL,padding:"2px 7px",borderRadius:5}}>Limit breach</span>}
+              </div>
+              <div style={{fontSize:11.5,color:T.t2}}>
+                <b>{it.sender_name}</b> → {it.party_name}{it.project_name?` · ${it.project_name}`:""}
+              </div>
+              {it.note&&<div style={{fontSize:11,color:T.t4,marginTop:2}}>{it.note}</div>}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6}}>
+                {it.photo_url&&<a href={it.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu,fontWeight:600}}>Photo dekhein</a>}
+                {it.photo_pending&&<span style={{fontSize:10,fontWeight:700,color:T.amb,background:T.ambL,padding:"2px 7px",borderRadius:5}}>Photo upload pending</span>}
+                <button onClick={()=>openThread(it.txn_id)} style={{fontSize:10.5,color:T.t3,fontWeight:600,background:"none",border:"none",cursor:"pointer",padding:0,textDecoration:"underline"}}>Conversation</button>
+              </div>
+            </div>
+            <div style={{display:"flex",flexDirection:"column",gap:6,flexShrink:0}}>
+              <button disabled={busy===it.txn_id||blocked} onClick={()=>doApprove(it.txn_id)}
+                title={blocked?"Photo upload hone tak approve nahi kar sakte":""}
+                style={{padding:"7px 14px",borderRadius:7,border:"none",background:blocked?T.b1:T.grn,color:blocked?T.t4:"white",fontSize:11.5,fontWeight:700,cursor:blocked?"not-allowed":"pointer"}}>Approve</button>
+              <button disabled={busy===it.txn_id} onClick={()=>setAsk({txn_id:it.txn_id})}
+                style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.blu}`,background:T.bluL,color:T.blu,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Ask for info</button>
+              <button disabled={busy===it.txn_id} onClick={()=>setReject({txn_id:it.txn_id})}
+                style={{padding:"7px 14px",borderRadius:7,border:`1px solid ${T.redM||T.red}`,background:T.redL,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>Reject</button>
+            </div>
+          </div>
+          {blocked&&<div style={{marginTop:8,fontSize:10.5,color:T.amb,background:T.ambL,padding:"6px 9px",borderRadius:6}}>Is category me photo zaroori hai — photo sync hone tak approve disabled.</div>}
+        </div>
+        );
+      })}
+
+      {/* Reject modal */}
+      {reject&&(
+        <ModalW title="Reject request" onClose={()=>{setReject(null);setReason("");}}>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={3} placeholder="Reject ka reason (optional)"
+            style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b1}`,fontSize:12.5,fontFamily:"inherit",boxSizing:"border-box",resize:"none"}}/>
+          <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
+            <button onClick={()=>{setReject(null);setReason("");}} style={btnGhost()}>Cancel</button>
+            <button onClick={doReject} style={btnSolid(T.red)}>Reject karein</button>
+          </div>
+        </ModalW>
+      )}
+
+      {/* Ask-for-info modal */}
+      {ask&&(
+        <ModalW title="Ask for clarification" onClose={()=>{setAsk(null);setAskMsg("");setAskPhoto(null);}}>
+          <textarea value={askMsg} onChange={e=>setAskMsg(e.target.value)} rows={3} placeholder="Kya clarification chahiye?"
+            style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b1}`,fontSize:12.5,fontFamily:"inherit",boxSizing:"border-box",resize:"none"}}/>
+          <div style={{marginTop:8}}>
+            <input type="file" accept="image/*" onChange={e=>setAskPhoto(e.target.files&&e.target.files[0])}
+              style={{fontSize:11,color:T.t3}}/>
+          </div>
+          <div style={{display:"flex",gap:8,marginTop:10,justifyContent:"flex-end"}}>
+            <button onClick={()=>{setAsk(null);setAskMsg("");setAskPhoto(null);}} style={btnGhost()}>Cancel</button>
+            <button onClick={doAsk} style={btnSolid(T.blu)}>{uploading?"Photo upload...":"Send to staff"}</button>
+          </div>
+        </ModalW>
+      )}
+
+      {/* Thread modal */}
+      {thread&&(
+        <ModalW title="Conversation" onClose={()=>setThread(null)}>
+          <div style={{fontSize:12,color:T.t2,marginBottom:8}}>
+            <b>₹{fmtN(thread.data.amount)}</b> · {WCAT[thread.data.wallet_category]||"Other"} · {thread.data.sender_user_name||"Staff"}
+          </div>
+          <div style={{maxHeight:300,overflowY:"auto"}}>
+            <ThreadMsg admin={false} name="Submit kiya" message="Request bheji gayi" when={thread.data.created_at}/>
+            {thread.clarifications.length===0&&<div style={{fontSize:11,color:T.t4,padding:"8px 0"}}>Abhi koi clarification nahi.</div>}
+            {thread.clarifications.map(c=>(
+              <ThreadMsg key={c.id} admin={ADMIN_ROLES_W.includes(c.from_role)}
+                name={(c.from_name||"User")+(ADMIN_ROLES_W.includes(c.from_role)?" ne pucha":" ne jawab diya")}
+                message={c.message} photo={c.photo_url} when={c.created_at}/>
+            ))}
+          </div>
+        </ModalW>
+      )}
+    </div>
+  );
+}
+function btnGhost(){return{padding:"8px 14px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"};}
+function btnSolid(c){return{padding:"8px 16px",borderRadius:7,border:"none",background:c,color:"white",fontSize:12,fontWeight:700,cursor:"pointer"};}
+function ModalW({title,onClose,children}){
+  return createPortal(
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,padding:"16px 18px",width:380,maxWidth:"92vw",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+          <span style={{fontSize:14,fontWeight:700,color:T.t1}}>{title}</span>
+          <button onClick={onClose} style={{background:"none",border:"none",fontSize:20,color:T.t4,cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+        {children}
+      </div>
+    </div>, document.body);
+}
+function ThreadMsg({admin,name,message,photo,when}){
+  return (
+    <div style={{background:admin?"#EFF6FF":T.surfaceB,border:`1px solid ${admin?"#BFDBFE":T.b1}`,borderLeft:admin?`3px solid ${T.blu}`:`1px solid ${T.b1}`,borderRadius:8,padding:"8px 10px",marginBottom:7}}>
+      <div style={{fontSize:10.5,fontWeight:700,color:T.t2,marginBottom:2}}>{name}</div>
+      <div style={{fontSize:12,color:T.t1,lineHeight:1.45,whiteSpace:"pre-wrap"}}>{message}</div>
+      {photo&&<a href={photo} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu,fontWeight:600,display:"inline-block",marginTop:4}}>Photo dekhein</a>}
+    </div>
+  );
+}
+
 function FinanceModule(){
   const [tab,setTab]=useState("party");
   // Party tab
@@ -2020,6 +2206,31 @@ function FinanceModule(){
   const [selTxnHighlight,setSelTxnHighlight]=useState(null);
   // Transaction detail drawer (used from Fin Activity + Party Ledger)
   const [selTxn,setSelTxn]=useState(null);
+  // Staff wallets — live data (Phase 2; replaces the old mock array)
+  const [walletList,setWalletList]=useState([]);
+  const loadWallets=()=>{
+    api.get("/wallets/staff").then(res=>{
+      if(res&&res.success){
+        setWalletList((res.data||[]).map(w=>({
+          id:w.party_id, name:w.name, role:"Staff",
+          balance:Number(w.posted_balance)||0,
+          pending:Number(w.pending_amount)||0,
+          limit:Number(w.wallet_limit)||0,
+          color:"#2563EB",
+          initials:(w.name||"?").split(/\s+/).map(x=>x[0]).join("").slice(0,2).toUpperCase(),
+        })));
+      }
+    }).catch(()=>{});
+  };
+  useEffect(()=>{ loadWallets(); },[]);
+  // Wallet approval queue + photo policy (Phase 2)
+  const [walletApprovals,setWalletApprovals]=useState([]);
+  const [walletPhotoPolicy,setWalletPhotoPolicy]=useState({});
+  const loadWalletApprovals=()=>{
+    api.get("/wallets/pending-approvals").then(res=>{ if(res&&res.success) setWalletApprovals(res.data||[]); }).catch(()=>{});
+    api.get("/wallets/photo-policy").then(res=>{ if(res&&res.success) setWalletPhotoPolicy(res.data||{}); }).catch(()=>{});
+  };
+  useEffect(()=>{ loadWalletApprovals(); },[]);
 
   // Load GRN data when tab opens (or refresh requested)
   const loadUnbilledGRNs=()=>{
@@ -2376,7 +2587,7 @@ function FinanceModule(){
   const tIn=txnFiltered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
   const tOut=txnFiltered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const totalBal=activeAccounts.reduce((s,a)=>s+a.balance,0);
-  const totalWalletBal=WALLETS.reduce((s,w)=>s+w.balance,0);
+  const totalWalletBal=walletList.reduce((s,w)=>s+w.balance,0);
   const pendPR=payReqs.filter(r=>r.status==="Pending").length;
   const pendTotal=pendPmts.reduce((s,p)=>s+p.amount,0);
 
@@ -2585,7 +2796,7 @@ function FinanceModule(){
     }catch(e){console.error("Reject PR error:",e);}
   };
 
-  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"unbilled_grn",l:"Unbilled GRN"},{id:"billed_mat",l:"Billed Material"}];
+  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"wallet_approvals",l:`Wallet Approvals${walletApprovals.length>0?` (${walletApprovals.length})`:""}`},{id:"unbilled_grn",l:"Unbilled GRN"},{id:"billed_mat",l:"Billed Material"}];
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -2654,23 +2865,28 @@ function FinanceModule(){
                         <div style={{display:"flex",justifyContent:"space-between",padding:"5px 10px 3px"}}><span style={{fontSize:10.5,color:T.t4}}>Bank + Cash Total</span><span style={{fontSize:12,fontWeight:700,color:totalBal<0?T.red:T.blu}}>{fmtS(totalBal)}</span></div>
                         <div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",borderRadius:7,marginTop:3,background:T.grnL,border:`1px solid ${T.grnM}`,borderLeft:`3px solid ${T.grn}`}}>
                           <IcWallet size={14} color={T.grn}/>
-                          <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.grn}}>Total Staff Wallets</div><div style={{fontSize:10,color:T.t4}}>{WALLETS.length} members</div></div>
+                          <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.grn}}>Total Staff Wallets</div><div style={{fontSize:10,color:T.t4}}>{walletList.length} members</div></div>
                           <div style={{fontSize:12.5,fontWeight:700,color:T.grn}}>₹{fmtN(totalWalletBal)}</div>
                         </div>
                         <div style={{display:"flex",justifyContent:"space-between",padding:"7px 10px 2px",borderTop:`1px solid ${T.b1}`,marginTop:5}}><span style={{fontSize:11,fontWeight:700,color:T.t1}}>Grand Total</span><span style={{fontSize:12.5,fontWeight:800,color:(totalBal+totalWalletBal)<0?T.red:T.blu}}>{fmtS(totalBal+totalWalletBal)}</span></div>
                       </>
                     ):(
-                      WALLETS.map(w=>{const pct=Math.round(w.balance/w.limit*100);return(
+                      <>
+                      {walletList.length===0&&<div style={{padding:"14px 8px",textAlign:"center",fontSize:11,color:T.t4}}>Koi staff wallet nahi</div>}
+                      {walletList.map(w=>{const pct=w.limit>0?Math.min(100,Math.round(w.balance/w.limit*100)):0;return(
                         <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                             <div style={{width:26,height:26,borderRadius:"50%",background:w.color+"22",border:`1px solid ${w.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:w.color,flexShrink:0}}>{w.initials}</div>
-                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.role}</div></div>
-                            <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(w.balance)}</div><div style={{fontSize:9,color:T.t4}}>/ ₹{fmtN(w.limit)}</div></div>
+                            <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?`₹${fmtN(w.pending)} pending`:w.role}</div></div>
+                            <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(w.balance)}</div><div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:"No limit"}</div></div>
                           </div>
+                          {w.limit>0&&<>
                           <div style={{height:3,background:T.b1,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct>80?T.red:pct>50?T.amb:T.grn,borderRadius:2}}/></div>
                           <div style={{fontSize:9,color:pct>80?T.red:T.t4,marginTop:2}}>{pct}% used</div>
+                          </>}
                         </div>
-                      );})
+                      );})}
+                      </>
                     )}
                   </div>
                 </div>
@@ -3633,6 +3849,12 @@ function FinanceModule(){
               );
             })()}
           </div>
+        )}
+
+        {/* ══ WALLET APPROVALS TAB ══ */}
+        {tab==="wallet_approvals"&&(
+          <WalletApprovalsPanel approvals={walletApprovals} photoPolicy={walletPhotoPolicy}
+            onChange={()=>{loadWalletApprovals();loadWallets();}}/>
         )}
 
         {/* ══ UNBILLED GRN TAB ══ */}

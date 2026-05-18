@@ -2084,6 +2084,64 @@ function WarehouseSettings() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// WALLET SETTINGS — staff-wallet photo policy (per category)
+// ═══════════════════════════════════════════════════════════════════════
+function WalletSettings() {
+  const CATS = [
+    { key: "site_exp",  label: "Site expense",  desc: "Site par hua kharch — receipt / material photo" },
+    { key: "party_pay", label: "Party payment", desc: "Vendor / labour ko wallet se payment" },
+    { key: "salary",    label: "Salary",        desc: "Staff salary wallet se" },
+    { key: "petrol",    label: "Petrol",        desc: "Fuel / travel kharch" },
+    { key: "transfer",  label: "Wallet transfer", desc: "Ek staff wallet se doosre wallet me" },
+  ];
+  const [policy, setPolicy] = useState({ site_exp: "required", party_pay: "required", salary: "optional", petrol: "optional", transfer: "optional" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+
+  useEffect(() => {
+    api.get("/wallets/photo-policy").then(r => {
+      if (r?.success && r.data) setPolicy(p => ({ ...p, ...r.data }));
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const body = {};
+      CATS.forEach(c => { body[c.key] = policy[c.key] === "required" ? "required" : "optional"; });
+      await api.put("/wallets/photo-policy", body);
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1800);
+    } catch (e) { window.alert(e?.message || "Save failed"); }
+    setSaving(false);
+  };
+
+  if (loading) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>Loading…</div>;
+
+  return (
+    <div>
+      <SectionCard title="Photo required for approval"
+        desc="Kis wallet category me approve karne se pehle photo zaroori hai. ON = photo upload hone tak admin approve nahi kar sakta."
+        action={
+          <button onClick={save} disabled={saving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+            {savedTick ? "✓ Saved" : saving ? "Saving..." : "Save"}
+          </button>
+        }>
+        {CATS.map(c => (
+          <ToggleRow key={c.key} icon={<IcShield size={17} color={T.blue} />}
+            label={c.label + (policy[c.key] === "required" ? " — Photo required" : " — Photo optional")}
+            desc={c.desc}
+            value={policy[c.key] === "required"}
+            onChange={(v) => setPolicy(p => ({ ...p, [c.key]: v ? "required" : "optional" }))} />
+        ))}
+      </SectionCard>
+    </div>
+  );
+}
+
 const settingsSections = [
   { id: "company",       label: "Company Profile",      Icon: IcBuilding,  Comp: CompanySettings,        section: "GENERAL" },
   { id: "roles",         label: "Roles & Access",       Icon: IcShield,    Comp: RolesAccess,            section: null },
@@ -2095,6 +2153,7 @@ const settingsSections = [
   { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,       section: null },
   { id: "finance",       label: "Finance Settings",     Icon: IcDollar,    Comp: FinanceSettings,        section: null },
   { id: "warehouse",     label: "Warehouse Settings",   Icon: IcBox,       Comp: WarehouseSettings,      section: null },
+  { id: "wallet",        label: "Wallet Settings",      Icon: IcDollar,    Comp: WalletSettings,         section: null },
   { id: "notifications", label: "Notifications",        Icon: IcBell,      Comp: NotificationSettings,   section: "SYSTEM" },
   { id: "sequences",     label: "Number Sequences",     Icon: IcHash,      Comp: NumberSequences,        section: null },
   { id: "audit",         label: "Audit Trail",          Icon: IcClipboard, Comp: AuditSettings,          section: null },
@@ -2113,6 +2172,7 @@ export default function SettingsModule() {
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
     finance: "Tax, invoicing, duplicate-payment guard and financial controls",
     warehouse: "Procurement mode, GRN photo policy and MR fulfillment flow",
+    wallet: "Staff wallet photo policy per category",
     notifications: "Email, Push & WhatsApp notification settings",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
     features: "Request new features and track their status",
