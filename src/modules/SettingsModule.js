@@ -385,6 +385,7 @@ function RolesAccess() {
         phone: userForm.phone, role: userForm.role,
         designation: userForm.designation || "",
         is_active: userForm.status === "Active" ? 1 : 0,
+        projects: userForm.projects || [],
       });
     } else {
       const body = {
@@ -392,6 +393,7 @@ function RolesAccess() {
         phone: userForm.phone, role: userForm.role,
         designation: userForm.designation || "",
         password: userForm.password || "Welcome@123",
+        projects: userForm.projects || [],
       };
       // Reverse-flow — link to a pre-selected staff-party
       if (linkedParty) body.linked_party_id = linkedParty.id;
@@ -403,6 +405,22 @@ function RolesAccess() {
   };
   const toggleUserProject = (pid) => {
     setUserForm(p => ({ ...p, projects: (p.projects||[]).includes(pid) ? (p.projects||[]).filter(x => x !== pid) : [...(p.projects||[]), pid] }));
+  };
+
+  // Persist the Project Access matrix — saves every user in this role.
+  const [accessSaving, setAccessSaving] = useState(false);
+  const saveProjectAccess = async () => {
+    setAccessSaving(true);
+    try {
+      for (const u of roleUsers) {
+        await api.put("/settings/users/" + u.id, { projects: u.projects || [] });
+      }
+      await loadUsers();
+      alert("Project access save ho gaya");
+    } catch (e) {
+      alert("Save failed — dobara try karein");
+    }
+    setAccessSaving(false);
   };
 
   // Permission matrix
@@ -580,7 +598,7 @@ function RolesAccess() {
       {/* ── TAB: Project Access ── */}
       {tab === "projects" && (
         <SectionCard title="Project Access Matrix" desc="Which user can access which project"
-          action={<SaveBtn label="Save Access" />}>
+          action={<SaveBtn label={accessSaving ? "Saving..." : "Save Access"} onClick={saveProjectAccess} />}>
           <div style={{ overflowX: "auto", marginTop: 8 }}>
             <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12.5 }}>
               <thead>
