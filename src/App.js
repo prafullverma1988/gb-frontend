@@ -4,6 +4,7 @@ import apiCache from "./utils/apiCache";
 import UploadToast from "./components/UploadToast";
 import { ToastProvider } from "./components/Toast";
 import { ConfirmProvider } from "./components/ConfirmDialog";
+import NotificationBell from "./components/NotificationBell";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
@@ -786,7 +787,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
 
 
 // ── TOPBAR ────────────────────────────────────────────────────────────
-function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSearch,onCheatsheet}){
+function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSearch,onCheatsheet,onNotificationNav}){
   return(
     <div style={{height:60,background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",padding:"0 20px",gap:14,flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
       <button onClick={()=>setCollapsed(!collapsed)} style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}><IcMenu size={19}/></button>
@@ -805,10 +806,7 @@ function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSea
         style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,transition:"all 0.15s"}}
         onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
         onMouseLeave={e=>e.currentTarget.style.background=T.bg}>?</button>
-      <button style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,position:"relative"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
-        <IcBell size={19}/>
-        {alertCount>0&&<div style={{position:"absolute",top:4,right:4,width:16,height:16,borderRadius:"50%",background:T.red,display:"flex",alignItems:"center",justifyContent:"center",fontSize:8,fontWeight:800,color:"white",border:"2px solid white"}}>{alertCount}</div>}
-      </button>
+      <NotificationBell onNavigate={onNotificationNav}/>
       <div style={{width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"white",cursor:"pointer"}}>{(user?.name||"U")[0].toUpperCase()}</div>
     </div>
   );
@@ -1230,7 +1228,7 @@ export default function App(){
       </div>}
       {!hideAppShell && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)}/>}
+        {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={(mod)=>setNav(mod)}/>}
         <div style={{flex:1,overflowY:"auto"}}>
           <Suspense fallback={<ModuleLoader/>}>
             {MODULE_MAP[nav]||<DashboardModule/>}
