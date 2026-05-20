@@ -31,7 +31,6 @@ const IcTool       = (p) => <Icon {...p} d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 
 const IcSave       = (p) => <Icon {...p} d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2zM17 21v-8H7v8M7 3v5h8" />;
 const IcX          = (p) => <Icon {...p} d="M18 6L6 18M6 6l12 12" />;
 const IcPhone      = (p) => <Icon {...p} d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.362 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0122 16.92z" />;
-const IcMail       = (p) => <Icon {...p} d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2zM22 6l-10 7L2 6" />;
 const IcFolder     = (p) => <Icon {...p} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />;
 const IcLayout     = (p) => <Icon {...p} d="M3 3h18v18H3zM3 9h18M9 21V9" />;
 
@@ -1431,135 +1430,115 @@ function FinanceSettings() {
 // NOTIFICATIONS — With WhatsApp for DPR + all events
 // ═══════════════════════════════════════════════════════════════════════
 function NotificationSettings() {
-  const [notifs, setNotifs] = useState({
-    emailNotif: true, pushNotif: true, whatsappNotif: true, dailyDigest: false,
-    whatsappApiKey: "",
-    channels: {
-      approvalPending:    { email: true,  push: true,  whatsapp: true  },
-      taskAssigned:       { email: true,  push: true,  whatsapp: false },
-      budgetAlert:        { email: true,  push: false, whatsapp: true  },
-      materialLow:        { email: false, push: true,  whatsapp: true  },
-      paymentDue:         { email: true,  push: true,  whatsapp: true  },
-      projectMilestone:   { email: true,  push: false, whatsapp: false },
-      attendanceAbsent:   { email: false, push: true,  whatsapp: true  },
-      dprReport:          { email: true,  push: false, whatsapp: true  },
-      siteExpense:        { email: false, push: true,  whatsapp: true  },
-      poCreated:          { email: true,  push: false, whatsapp: false },
-      grnReceived:        { email: false, push: true,  whatsapp: false },
-      subconBill:         { email: true,  push: false, whatsapp: true  },
-    }
-  });
-  const channelLabels = {
-    approvalPending: "Approval Pending", taskAssigned: "Task Assigned / Updated", budgetAlert: "Budget Overrun Alert",
-    materialLow: "Low Stock Alert", paymentDue: "Payment Due / Overdue", projectMilestone: "Project Milestone",
-    attendanceAbsent: "Attendance — Absent Alert", dprReport: "DPR (Daily Progress Report)",
-    siteExpense: "Site Expense Added", poCreated: "Purchase Order Created", grnReceived: "GRN Received",
-    subconBill: "Subcontractor Bill",
-  };
-  const channelCats = {
-    "DAILY OPERATIONS": ["dprReport", "taskAssigned", "attendanceAbsent", "siteExpense"],
-    "PROCUREMENT": ["approvalPending", "poCreated", "grnReceived", "materialLow"],
-    "FINANCE": ["budgetAlert", "paymentDue", "subconBill", "projectMilestone"],
-  };
-  const updChannel = (ch, type, val) => setNotifs(p => ({ ...p, channels: { ...p.channels, [ch]: { ...p.channels[ch], [type]: val } } }));
+  const [catalog, setCatalog] = useState([]);
+  const [prefs, setPrefs] = useState({});       // notif_type -> bool
+  const [expanded, setExpanded] = useState({}); // module key -> bool
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
 
-  // WhatsApp icon SVG
-  const WaIcon = ({ size = 17 }) => (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill={T.whatsapp}>
-      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-    </svg>
-  );
+  // Catalog + this user's current on/off settings come in one call.
+  useEffect(() => {
+    api.get("/notifications/preferences")
+      .then(r => {
+        if (r && r.success) {
+          setCatalog(r.catalog || []);
+          setPrefs(r.preferences || {});
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const setType = (type, val) => setPrefs(p => ({ ...p, [type]: val }));
+  const setModule = (mod, val) => setPrefs(p => {
+    const next = { ...p };
+    (mod.events || []).forEach(e => { next[e.type] = val; });
+    return next;
+  });
+  const toggleExpand = (key) => setExpanded(e => ({ ...e, [key]: !e[key] }));
+
+  const save = async () => {
+    setSaving(true);
+    try {
+      const r = await api.put("/notifications/preferences", { preferences: prefs });
+      if (r && r.success) { setSavedTick(true); setTimeout(() => setSavedTick(false), 2000); }
+    } catch (_) {}
+    setSaving(false);
+  };
+
+  if (loading) {
+    return (
+      <SectionCard title="Notification Preferences" desc="Loading your notification settings...">
+        <div style={{ padding: 24, textAlign: "center", color: T.textLight, fontSize: 13 }}>Loading...</div>
+      </SectionCard>
+    );
+  }
+
+  const totalOn = Object.values(prefs).filter(Boolean).length;
+  const totalAll = Object.keys(prefs).length;
 
   return (
     <div>
-      <SectionCard title="Notification Channels" desc="Enable/disable notification delivery methods" action={<SaveBtn />}>
-        <ToggleRow icon={<IcMail size={17} color={T.blue} />} label="Email Notifications" desc="Receive notifications via email" value={notifs.emailNotif} onChange={v => setNotifs(p => ({ ...p, emailNotif: v }))} />
-        <ToggleRow icon={<IcBell size={17} color={T.blue} />} label="Push Notifications" desc="In-app and mobile push notifications" value={notifs.pushNotif} onChange={v => setNotifs(p => ({ ...p, pushNotif: v }))} />
-        <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "16px 0", borderBottom: `1px solid ${T.borderLight}` }}>
-          <div style={{ width: 36, height: 36, borderRadius: 8, background: T.whatsappSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-            <WaIcon size={18} />
+      <SectionCard
+        title="Notification Preferences"
+        desc="Choose which notifications you receive. Turn off anything you don't need — these settings apply to your account only."
+        action={
+          <button onClick={save} disabled={saving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+            {savedTick ? "✓ Saved" : saving ? "Saving..." : "Save"}
+          </button>
+        }>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "6px 0 2px" }}>
+          <div style={{ width: 38, height: 38, borderRadius: 9, background: T.blueSoft, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+            <IcBell size={18} color={T.blue} />
           </div>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>WhatsApp Notifications</div>
-            <div style={{ fontSize: 12, color: T.textLight, marginTop: 2 }}>Send alerts via WhatsApp (DPR, approvals, site updates)</div>
-          </div>
-          <Toggle value={notifs.whatsappNotif} onChange={v => setNotifs(p => ({ ...p, whatsappNotif: v }))} />
-        </div>
-        {notifs.whatsappNotif && (
-          <div style={{ marginLeft: 50, marginTop: 8, marginBottom: 4 }}>
-            <FormField label="WhatsApp Business API Key" value={notifs.whatsappApiKey} onChange={v => setNotifs(p => ({ ...p, whatsappApiKey: v }))} placeholder="Enter API key from WhatsApp Business" />
-            <div style={{ fontSize: 11, color: T.textLight, marginTop: 4 }}>Required for automated WhatsApp messages. Get it from your WhatsApp Business provider.</div>
-          </div>
-        )}
-        <ToggleRow icon={<IcCalendar size={17} color={T.blue} />} label="Daily Digest" desc="Daily summary email at 8 AM" value={notifs.dailyDigest} onChange={v => setNotifs(p => ({ ...p, dailyDigest: v }))} />
-      </SectionCard>
-
-      {/* Per-event channel matrix */}
-      {Object.entries(channelCats).map(([catName, keys]) => (
-        <SectionCard key={catName} title={catName.charAt(0) + catName.slice(1).toLowerCase()} desc={`${keys.length} event types`}>
-          <div style={{ overflowX: "auto", marginTop: 8 }}>
-            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: "left", padding: "10px 12px", fontSize: 12, fontWeight: 600, color: T.textLight, borderBottom: `2px solid ${T.border}` }}>Event</th>
-                  <th style={{ textAlign: "center", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, width: 70 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><IcMail size={14} color={T.textLight} /></div>
-                  </th>
-                  <th style={{ textAlign: "center", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, width: 70 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><IcBell size={14} color={T.textLight} /></div>
-                  </th>
-                  <th style={{ textAlign: "center", padding: "10px 12px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, width: 70 }}>
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 4 }}><WaIcon size={14} /></div>
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {keys.map(key => {
-                  const ch = notifs.channels[key];
-                  return (
-                    <tr key={key} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
-                      <td style={{ padding: "12px", fontWeight: 500, color: T.text }}>
-                        {channelLabels[key]}
-                        {key === "dprReport" && <Badge text="Recommended" color={T.whatsapp} bg={T.whatsappSoft} />}
-                      </td>
-                      <td style={{ textAlign: "center", padding: "10px" }}><Toggle value={ch.email} onChange={v => updChannel(key, "email", v)} /></td>
-                      <td style={{ textAlign: "center", padding: "10px" }}><Toggle value={ch.push} onChange={v => updChannel(key, "push", v)} /></td>
-                      <td style={{ textAlign: "center", padding: "10px" }}><Toggle value={ch.whatsapp} onChange={v => updChannel(key, "whatsapp", v)} /></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </SectionCard>
-      ))}
-
-      {/* WhatsApp DPR template */}
-      <SectionCard title="WhatsApp DPR Template" desc="Configure the daily progress report message sent via WhatsApp">
-        <div style={{ background: T.whatsappSoft, borderRadius: 10, padding: "16px", marginTop: 8 }}>
-          <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
-            <WaIcon size={20} />
-            <span style={{ fontSize: 13, fontWeight: 700, color: T.text }}>DPR Message Preview</span>
-          </div>
-          <div style={{ background: "white", borderRadius: 10, padding: "14px 16px", fontSize: 12.5, color: T.textMid, lineHeight: 1.7, border: `1px solid ${T.border}` }}>
-            <div style={{ fontWeight: 700, color: T.text, marginBottom: 4 }}>Daily Progress Report</div>
-            <div>Date: {"{{date}}"}</div>
-            <div>Project: {"{{project_name}}"}</div>
-            <div style={{ marginTop: 6, fontWeight: 600, color: T.text }}>Today's Progress:</div>
-            <div>- Workers present: {"{{workers_count}}"}</div>
-            <div>- Tasks completed: {"{{tasks_done}}"}</div>
-            <div>- Material used: {"{{material_summary}}"}</div>
-            <div>- Site expense: Rs.{"{{expense_total}}"}</div>
-            <div style={{ marginTop: 6, fontWeight: 600, color: T.text }}>Issues / Remarks:</div>
-            <div>{"{{remarks}}"}</div>
-            <div style={{ marginTop: 8, fontSize: 11, color: T.textLight }}>Sent from Construction Manager App</div>
-          </div>
-          <div style={{ marginTop: 10, display: "flex", gap: 12, flexWrap: "wrap" }}>
-            <FormSelect label="Send DPR At" value="18:00" onChange={() => {}} options={[{value:"17:00",label:"5:00 PM"},{value:"18:00",label:"6:00 PM"},{value:"19:00",label:"7:00 PM"},{value:"20:00",label:"8:00 PM"}]} half />
-            <FormSelect label="Send To" value="all_pm" onChange={() => {}} options={[{value:"all_pm",label:"All Project Managers"},{value:"admin",label:"Admin Only"},{value:"all",label:"All Team Members"},{value:"custom",label:"Custom List"}]} half />
+            <div style={{ fontSize: 13.5, fontWeight: 600, color: T.text }}>{totalOn} of {totalAll} notification types are on</div>
+            <div style={{ fontSize: 12, color: T.textLight, marginTop: 1 }}>Expand a module below to fine-tune individual events.</div>
           </div>
         </div>
       </SectionCard>
+
+      {catalog.map(mod => {
+        const evs = mod.events || [];
+        const onCount = evs.filter(e => prefs[e.type] !== false).length;
+        const allOn = evs.length > 0 && onCount === evs.length;
+        const isOpen = !!expanded[mod.module];
+        return (
+          <div key={mod.module} style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, marginBottom: 14 }}>
+            {/* module header — master toggle + expand */}
+            <div onClick={() => toggleExpand(mod.module)}
+              style={{ display: "flex", alignItems: "center", gap: 12, padding: "14px 20px", cursor: "pointer", borderBottom: isOpen ? `1px solid ${T.borderLight}` : "none" }}>
+              <div style={{ transform: isOpen ? "rotate(90deg)" : "none", transition: "transform 0.15s", display: "flex" }}>
+                <IcChevR size={15} color={T.textLight} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{mod.label}</div>
+                <div style={{ fontSize: 11.5, color: onCount ? T.textMid : T.textLight, marginTop: 1 }}>{onCount} of {evs.length} on</div>
+              </div>
+              <div onClick={e => e.stopPropagation()} style={{ display: "flex" }}>
+                <Toggle value={allOn} onChange={v => setModule(mod, v)} />
+              </div>
+            </div>
+            {/* per-event toggles */}
+            {isOpen && (
+              <div style={{ padding: "2px 20px 8px" }}>
+                {evs.map((ev, i) => (
+                  <div key={ev.type}
+                    style={{ display: "flex", alignItems: "center", gap: 12, padding: "11px 0", borderBottom: i < evs.length - 1 ? `1px solid ${T.borderLight}` : "none" }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>{ev.label}</div>
+                      {ev.desc && <div style={{ fontSize: 11.5, color: T.textLight, marginTop: 1 }}>{ev.desc}</div>}
+                    </div>
+                    <Toggle value={prefs[ev.type] !== false} onChange={v => setType(ev.type, v)} />
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -2176,7 +2155,7 @@ export default function SettingsModule() {
     finance: "Tax, invoicing, duplicate-payment guard and financial controls",
     warehouse: "Procurement mode, GRN photo policy and MR fulfillment flow",
     wallet: "Staff wallet photo policy per category",
-    notifications: "Email, Push & WhatsApp notification settings",
+    notifications: "Choose which in-app notifications you receive",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
     features: "Request new features and track their status",
   };
