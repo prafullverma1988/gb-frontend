@@ -10752,44 +10752,192 @@ function PaymentsTab({ woId, fmtC }) {
 }
 
 
-function TabEquipment() {
-  const [selEq, setSelEq] = useState(D.equipment[0] || null);
+// Project-level equipment deployment tracking — period (from/to dates)
+// + status (On Site / Returned). Matches the mobile EquipmentTab UX.
+// Backed by /library/project-equipment.
+function TabEquipment({ projectId }) {
+  const [rows,    setRows]    = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  // Add-form state
+  const [name,    setName]    = useState("");
+  const [vendor,  setVendor]  = useState("Self");
+  const [fromD,   setFromD]   = useState("");
+  const [toD,     setToD]     = useState("");
+  const [stat,    setStat]    = useState("On Site");
+  const [rate,    setRate]    = useState("");
+  const [saving,  setSaving]  = useState(false);
+
+  const SC = { "On Site": { c: T.grn, bg: T.grnL }, "Returned": { c: T.t3, bg: T.surfaceB } };
+  const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  const fmtD = (raw) => {
+    if (!raw) return "—";
+    const d = new Date(raw);
+    if (isNaN(d.getTime())) return String(raw);
+    return d.getDate() + " " + MONTHS[d.getMonth()] + " " + d.getFullYear();
+  };
+
+  const load = () => {
+    if (!projectId) { setRows([]); setLoading(false); return; }
+    setLoading(true);
+    api.get("/library/project-equipment?project_id=" + projectId)
+      .then(r => setRows(r && r.success && Array.isArray(r.data) ? r.data : []))
+      .catch(() => setRows([]))
+      .finally(() => setLoading(false));
+  };
+  useEffect(() => { load(); /* eslint-disable-next-line */ }, [projectId]);
+
+  const toggleStatus = async (eq) => {
+    const next = eq.status === "Returned" ? "On Site" : "Returned";
+    setRows(prev => prev.map(x => x.id === eq.id ? { ...x, status: next } : x));
+    const r = await api.patch("/library/project-equipment/" + eq.id, { status: next });
+    if (!r || r.success === false) { window.alert((r && r.message) || "Update failed"); load(); }
+  };
+  const removeEq = async (eq) => {
+    if (!window.confirm(`Remove ${eq.name}?`)) return;
+    const r = await api.del("/library/project-equipment/" + eq.id);
+    if (!r || r.success === false) { window.alert((r && r.message) || "Delete failed"); return; }
+    load();
+  };
+  const resetForm = () => { setName(""); setVendor("Self"); setFromD(""); setToD(""); setStat("On Site"); setRate(""); };
+  const saveNew = async () => {
+    if (!name.trim()) { window.alert("Equipment name required"); return; }
+    setSaving(true);
+    const r = await api.post("/library/project-equipment", {
+      project_id: projectId,
+      name: name.trim(),
+      vendor: vendor.trim() || "Self",
+      from_date: fromD || null,
+      to_date: toD || null,
+      status: stat,
+      rate_per_day: rate || null,
+    });
+    setSaving(false);
+    if (!r || r.success === false) { window.alert((r && r.message) || "Save failed"); return; }
+    resetForm();
+    setShowAdd(false);
+    load();
+  };
+
+  const inp = { width: "100%", padding: "9px 11px", borderRadius: 7, border: `1.5px solid ${T.b1}`,
+    fontSize: 13, outline: "none", fontFamily: "inherit", color: T.t1, background: T.surface, boxSizing: "border-box" };
+
+  const onSite   = rows.filter(r => r.status !== "Returned").length;
+  const returned = rows.filter(r => r.status === "Returned").length;
 
   return (
-    <div style={{padding:"16px 18px"}}>
-      <div style={{display:"flex", justifyContent:"flex-end", marginBottom:12}}><AddBtn label="Add Equipment"/></div>
-      <div style={{display:"grid", gridTemplateColumns:"290px 1fr", gap:14}}>
-        <div style={{display:"flex", flexDirection:"column", gap:10}}>
-          {D.equipment.map(eq=>(
-            <div key={eq.id} onClick={()=>setSelEq(eq)}
-              style={{background:T.surface, borderRadius:8, padding:"11px 13px", border:`1.5px solid ${selEq?.id===eq.id?T.blu:T.b1}`, cursor:"pointer", borderLeft:`4px solid ${selEq?.id===eq.id?T.blu:T.b1}`, transition:"all .15s"}}>
-              <div style={{display:"flex", justifyContent:"space-between", marginBottom:7}}>
-                <span style={{fontSize:12.5, fontWeight:600, color:selEq?.id===eq.id?T.blu:T.t1}}>{eq.name}</span>
-                <Pill label={eq.owner} c={eq.owner==="Own"?T.grn:T.amb} bg={eq.owner==="Own"?T.grnL:T.ambL}/>
-              </div>
-              <div style={{display:"flex", gap:16}}>
-                <div><div style={{fontSize:9.5, color:T.t4, textTransform:"uppercase", marginBottom:2}}>Today</div><div style={{fontSize:16, fontWeight:700, color:T.blu}}>{eq.days[0]?.hours||0}h</div></div>
-                <div><div style={{fontSize:9.5, color:T.t4, textTransform:"uppercase", marginBottom:2}}>Day Rate</div><div style={{fontSize:13, fontWeight:600, color:T.t1}}>₹{fmtN(eq.rate)}</div></div>
-                <div><div style={{fontSize:9.5, color:T.t4, textTransform:"uppercase", marginBottom:2}}>Total Cost</div><div style={{fontSize:13, fontWeight:600, color:T.grn}}>₹{fmtN(eq.days.reduce((s,d)=>s+Math.round(eq.rate/8*d.hours),0))}</div></div>
+    <div style={{ padding: "16px 18px" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 18 }}>
+          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>Total</div><div style={{ fontSize: 19, fontWeight: 700, color: T.t1 }}>{rows.length}</div></div>
+          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>On Site</div><div style={{ fontSize: 19, fontWeight: 700, color: T.grn }}>{onSite}</div></div>
+          <div><div style={{ fontSize: 10, color: T.t4, textTransform: "uppercase", fontWeight: 600 }}>Returned</div><div style={{ fontSize: 19, fontWeight: 700, color: T.t3 }}>{returned}</div></div>
+        </div>
+        <AddBtn label="Add Equipment" onClick={() => setShowAdd(true)} />
+      </div>
+
+      {showAdd && (
+        <Panel style={{ marginBottom: 14, padding: "14px 16px" }}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.t1, marginBottom: 10 }}>Add Equipment</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            <div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Name *</div>
+              <input value={name} onChange={e => setName(e.target.value)} placeholder="JCB Excavator" style={inp} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Vendor</div>
+              <input value={vendor} onChange={e => setVendor(e.target.value)} placeholder='"Self" for company-owned' style={inp} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>From</div>
+              <input type="date" value={fromD} onChange={e => setFromD(e.target.value)} style={inp} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>To</div>
+              <input type="date" value={toD} onChange={e => setToD(e.target.value)} style={inp} />
+            </div>
+            <div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Status</div>
+              <div style={{ display: "flex", gap: 6 }}>
+                {["On Site", "Returned"].map(s => {
+                  const on = stat === s;
+                  const sm = SC[s];
+                  return (
+                    <button key={s} onClick={() => setStat(s)} type="button"
+                      style={{ flex: 1, padding: "8px", borderRadius: 7,
+                        border: `1.5px solid ${on ? sm.c : T.b1}`,
+                        background: on ? sm.bg : "transparent",
+                        color: on ? sm.c : T.t3, fontSize: 12, fontWeight: on ? 700 : 500,
+                        cursor: "pointer", fontFamily: "inherit" }}>{s}</button>
+                  );
+                })}
               </div>
             </div>
-          ))}
+            <div>
+              <div style={{ fontSize: 10, color: T.t4, marginBottom: 4, fontWeight: 600 }}>Day Rate (optional)</div>
+              <input value={rate} onChange={e => setRate(e.target.value.replace(/[^0-9.]/g, ""))} placeholder="e.g. 5000" style={inp} />
+            </div>
+          </div>
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 12 }}>
+            <button onClick={() => { resetForm(); setShowAdd(false); }} type="button"
+              style={{ padding: "8px 14px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, fontSize: 12, fontWeight: 600, color: T.t3, cursor: "pointer", fontFamily: "inherit" }}>Cancel</button>
+            <button onClick={saveNew} disabled={saving || !name.trim()} type="button"
+              style={{ padding: "8px 16px", borderRadius: 7, border: "none",
+                background: (saving || !name.trim()) ? T.b1 : T.blu,
+                color: (saving || !name.trim()) ? T.t4 : "white",
+                fontSize: 12, fontWeight: 700,
+                cursor: (saving || !name.trim()) ? "not-allowed" : "pointer", fontFamily: "inherit" }}>
+              {saving ? "Saving..." : "Add Equipment"}
+            </button>
+          </div>
+        </Panel>
+      )}
+
+      {loading && <div style={{ textAlign: "center", padding: "40px 0", color: T.t4, fontSize: 13 }}>Loading...</div>}
+
+      {!loading && rows.length === 0 && (
+        <div style={{ textAlign: "center", padding: "50px 20px", color: T.t4, fontSize: 13 }}>
+          No equipment deployed yet — click "Add Equipment" to track one.
         </div>
-        {selEq&&(
-          <Panel style={{overflow:"hidden"}}>
-            <PHead title={`${selEq.name} — Usage Log`} action={<AddBtn label="Log Today"/>}/>
-            <THead cols="100px 70px 90px 1fr" headers={["Date","Hours","Cost","Note"]}/>
-            {selEq.days.map((d,i)=>(
-              <div key={i} style={{display:"grid", gridTemplateColumns:"100px 70px 90px 1fr", padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                <span style={{fontSize:12.5, color:T.t1}}>{d.date}</span>
-                <span style={{fontSize:13, fontWeight:700, color:d.hours>0?T.blu:T.t4}}>{d.hours>0?`${d.hours}h`:"—"}</span>
-                <span style={{fontSize:12.5, color:T.t1, fontVariantNumeric:"tabular-nums"}}>{d.hours>0?`₹${fmtN(Math.round(selEq.rate/8*d.hours))}`:"—"}</span>
-                <span style={{fontSize:12, color:T.t2}}>{d.note}</span>
+      )}
+
+      {!loading && rows.length > 0 && (
+        <Panel style={{ overflow: "hidden" }}>
+          <THead cols="2fr 1.4fr 1.6fr 110px 110px 60px" headers={["Equipment", "Vendor", "Period", "Day Rate", "Status", ""]} />
+          {rows.map(eq => {
+            const sm = SC[eq.status] || SC["On Site"];
+            return (
+              <div key={eq.id}
+                style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr 1.6fr 110px 110px 60px",
+                  padding: "10px 15px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 600, color: T.t1 }}>{eq.name}</div>
+                  {eq.equipment_code && <div style={{ fontSize: 10, color: T.t4, marginTop: 1 }}>{eq.equipment_code}</div>}
+                </div>
+                <span style={{ fontSize: 12, color: T.t2 }}>{eq.vendor || "Self"}</span>
+                <span style={{ fontSize: 11.5, color: T.t2 }}>
+                  {eq.from_date ? fmtD(eq.from_date) : "—"}
+                  {eq.to_date ? <> &nbsp;→&nbsp; {fmtD(eq.to_date)}</> : ""}
+                </span>
+                <span style={{ fontSize: 12.5, color: T.t1, fontVariantNumeric: "tabular-nums" }}>
+                  {eq.rate_per_day ? "₹" + fmtN(eq.rate_per_day) : "—"}
+                </span>
+                <button onClick={() => toggleStatus(eq)} type="button"
+                  style={{ fontSize: 10.5, fontWeight: 700, padding: "4px 10px", borderRadius: 8,
+                    background: sm.bg, color: sm.c, border: "none", cursor: "pointer",
+                    fontFamily: "inherit", justifySelf: "start" }}>
+                  {eq.status}
+                </button>
+                <button onClick={() => removeEq(eq)} type="button"
+                  title="Remove"
+                  style={{ background: "none", border: "none", cursor: "pointer", padding: 4, color: T.t4, fontSize: 16, fontFamily: "inherit", justifySelf: "end" }}>
+                  ×
+                </button>
               </div>
-            ))}
-          </Panel>
-        )}
-      </div>
+            );
+          })}
+        </Panel>
+      )}
     </div>
   );
 }
@@ -13126,7 +13274,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     attendance:  <TabAttendance project={project}/>,
     material:    <TabMaterial project={project}/>,
     subcon:      <TabSubcon projectId={project.id}/>,
-    equipment:   <TabEquipment/>,
+    equipment:   <TabEquipment projectId={project.id}/>,
     files:       <TabFiles projectId={project.id}/>,
     site:        <TabSite/>,
     mom:         <TabMOM/>,
