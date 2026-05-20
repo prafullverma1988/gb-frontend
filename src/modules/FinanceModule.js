@@ -2232,6 +2232,27 @@ function FinanceModule(){
   };
   useEffect(()=>{ loadWalletApprovals(); },[]);
 
+  // ── EQUIPMENT REVIEW (new section) ────────────────────────────
+  const [equipReview,setEquipReview]=useState([]);
+  const [equipReviewLoading,setEquipReviewLoading]=useState(false);
+  const [equipParties,setEquipParties]=useState([]);
+  const [equipRouteEdit,setEquipRouteEdit]=useState(null); // {usageId, route, vendor_id, subcon_id}
+  const [equipActing,setEquipActing]=useState(null); // id currently being acted on
+  const loadEquipReview=()=>{
+    setEquipReviewLoading(true);
+    api.get("/equipment/usage?needs_review=1").then(res=>{
+      if(res&&res.success) setEquipReview(res.data||[]);
+    }).catch(()=>{}).finally(()=>setEquipReviewLoading(false));
+  };
+  useEffect(()=>{ loadEquipReview(); },[]);
+  useEffect(()=>{
+    // load parties for route-change picker (vendors + subcons)
+    api.get("/finance/parties").then(res=>{
+      if(res&&res.success) setEquipParties(res.data||[]);
+    }).catch(()=>{});
+  },[]);
+  const equipReviewCount = equipReview.length;
+
   // Load GRN data when tab opens (or refresh requested)
   const loadUnbilledGRNs=()=>{
     setGrnLoading(true);
@@ -2796,7 +2817,7 @@ function FinanceModule(){
     }catch(e){console.error("Reject PR error:",e);}
   };
 
-  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"wallet_approvals",l:`Wallet Approvals${walletApprovals.length>0?` (${walletApprovals.length})`:""}`},{id:"unbilled_grn",l:"Unbilled GRN"},{id:"billed_mat",l:"Billed Material"}];
+  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"wallet_approvals",l:`Wallet Approvals${walletApprovals.length>0?` (${walletApprovals.length})`:""}`},{id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},{id:"unbilled_grn",l:"Unbilled GRN"},{id:"billed_mat",l:"Billed Material"}];
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -3855,6 +3876,181 @@ function FinanceModule(){
         {tab==="wallet_approvals"&&(
           <WalletApprovalsPanel approvals={walletApprovals} photoPolicy={walletPhotoPolicy}
             onChange={()=>{loadWalletApprovals();loadWallets();}}/>
+        )}
+
+        {/* ══ EQUIPMENT REVIEW TAB ══ */}
+        {tab==="equipment_review"&&(
+          <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
+            {equipReviewLoading && (
+              <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading equipment usage...</div>
+            )}
+            {!equipReviewLoading && equipReview.length === 0 && (
+              <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"50px 20px",textAlign:"center"}}>
+                <div style={{fontSize:14,fontWeight:600,color:T.t2}}>All caught up</div>
+                <div style={{fontSize:12,color:T.t4,marginTop:6}}>No equipment usage entries pending review</div>
+              </div>
+            )}
+            {!equipReviewLoading && equipReview.map(row=>{
+              const routeOf = (r) => {
+                const route = r.confirmed_route || r.suggested_route || "";
+                if (route === "vendor") return { label: "Rental against vendor", party: equipParties.find(p=>p.id===r.vendor_id)?.name || r.vendor_party_name || "" };
+                if (route === "subcon") return { label: "Subcon against", party: equipParties.find(p=>p.id===r.subcon_id)?.name || r.subcon_party_name || "" };
+                if (route === "owned") return { label: "Owned equipment", party: "" };
+                if (route === "log_only") return { label: "Log only", party: "" };
+                return { label: route || "—", party: "" };
+              };
+              const r = routeOf(row);
+              const mode = row.measurement_mode || "hourly";
+              const dur = mode === "hourly"
+                ? `${row.hours_or_days || 0} hr`
+                : mode === "daily"
+                  ? `${row.hours_or_days || 0} day${(row.hours_or_days||0)>1?"s":""}`
+                  : "Fixed";
+              const isRateBlocking = row.approval_status === "pending" && Number(row.rate_changed) === 1;
+              const isEditingRoute = equipRouteEdit && equipRouteEdit.usageId === row.id;
+              const acting = equipActing === row.id;
+              const doConfirm = async () => {
+                setEquipActing(row.id);
+                try {
+                  await api.post(`/equipment/usage/${row.id}/confirm`, {});
+                } catch(e){}
+                setEquipActing(null);
+                loadEquipReview();
+              };
+              const doApproveRate = async () => {
+                setEquipActing(row.id);
+                try { await api.post(`/equipment/usage/${row.id}/approve-rate`, {}); } catch(e){}
+                setEquipActing(null);
+                loadEquipReview();
+              };
+              const doRejectRate = async () => {
+                setEquipActing(row.id);
+                try { await api.post(`/equipment/usage/${row.id}/reject-rate`, {}); } catch(e){}
+                setEquipActing(null);
+                loadEquipReview();
+              };
+              const submitRouteChange = async () => {
+                if (!equipRouteEdit) return;
+                setEquipActing(row.id);
+                try {
+                  await api.post(`/equipment/usage/${row.id}/change-route`, {
+                    route: equipRouteEdit.route,
+                    vendor_id: equipRouteEdit.route === "vendor" ? (equipRouteEdit.vendor_id || null) : null,
+                    subcon_id: equipRouteEdit.route === "subcon" ? (equipRouteEdit.subcon_id || null) : null,
+                  });
+                  await api.post(`/equipment/usage/${row.id}/confirm`, {});
+                } catch(e){}
+                setEquipActing(null);
+                setEquipRouteEdit(null);
+                loadEquipReview();
+              };
+              return (
+                <div key={row.id} style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"14px 18px",marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+                  <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
+                    <div style={{flex:1,minWidth:240}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,flexWrap:"wrap"}}>
+                        <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{row.equipment_name || `Equipment #${row.equipment_id||""}`}</div>
+                        <span style={{fontSize:11,color:T.t3,padding:"2px 9px",background:T.sltL,borderRadius:20,fontWeight:600}}>{dur}</span>
+                      </div>
+                      <div style={{fontSize:12,color:T.t3,marginBottom:4}}>
+                        <span style={{fontWeight:600,color:T.t2}}>{row.project_name || "Unknown project"}</span>
+                        {" · "}
+                        {row.created_by_name || "Unknown user"}
+                        {" · "}
+                        {row.usage_date || ""}
+                      </div>
+                      <div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                        <span style={{fontSize:11.5,color:T.blu,background:T.bluL,padding:"4px 10px",borderRadius:20,fontWeight:600,border:`1px solid ${T.blu}33`}}>
+                          Suggests: {r.label}{r.party ? ` — ${r.party}` : ""}
+                        </span>
+                      </div>
+                      {isRateBlocking && (
+                        <div style={{marginTop:10,padding:"8px 12px",background:T.ambL,border:`1px solid ${T.amb}55`,borderRadius:6,fontSize:12,color:T.amb,fontWeight:600}}>
+                          Rate ₹{Number(row.rate_used||0).toLocaleString()} (master ₹{Number(row.master_default_rate||0).toLocaleString()}) — needs approval
+                        </div>
+                      )}
+                    </div>
+                    <div style={{textAlign:"right",minWidth:140}}>
+                      <div style={{fontSize:18,fontWeight:800,color:T.t1,lineHeight:1}}>₹{Number(row.total_amount||0).toLocaleString()}</div>
+                      <div style={{fontSize:10.5,color:T.t4,marginTop:3,textTransform:"uppercase",letterSpacing:".4px"}}>Total</div>
+                    </div>
+                  </div>
+
+                  {/* Route editor */}
+                  {isEditingRoute && (
+                    <div style={{marginTop:12,padding:"10px 12px",background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:8}}>
+                      <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:8}}>Change route</div>
+                      <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                        {[{k:"vendor",l:"Rental against vendor"},{k:"subcon",l:"Subcon against"},{k:"owned",l:"Owned equipment"},{k:"log_only",l:"Log only"}].map(o=>(
+                          <button key={o.k} onClick={()=>setEquipRouteEdit({...equipRouteEdit,route:o.k})}
+                            style={{
+                              padding:"6px 12px",borderRadius:6,border:`1.5px solid ${equipRouteEdit.route===o.k?T.blu:T.b1}`,
+                              background:equipRouteEdit.route===o.k?T.surface:"transparent",
+                              color:equipRouteEdit.route===o.k?T.blu:T.t2,fontSize:11.5,fontWeight:600,cursor:"pointer",
+                            }}>{o.l}</button>
+                        ))}
+                      </div>
+                      {equipRouteEdit.route === "vendor" && (
+                        <select value={equipRouteEdit.vendor_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,vendor_id:e.target.value?parseInt(e.target.value,10):null})}
+                          style={{width:"100%",height:34,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+                          <option value="">— Select vendor —</option>
+                          {equipParties.filter(p=>String(p.type||"").toLowerCase().includes("vendor")||String(p.type||"").toLowerCase()==="supplier"||String(p.type||"").toLowerCase()==="material supplier").map(p=>(
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      {equipRouteEdit.route === "subcon" && (
+                        <select value={equipRouteEdit.subcon_id || ""} onChange={e=>setEquipRouteEdit({...equipRouteEdit,subcon_id:e.target.value?parseInt(e.target.value,10):null})}
+                          style={{width:"100%",height:34,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,background:T.surface,outline:"none",fontFamily:"inherit"}}>
+                          <option value="">— Select sub-contractor —</option>
+                          {equipParties.filter(p=>{const t=String(p.type||"").toLowerCase();return t==="subcon"||t==="sub-con"||t==="subcontractor";}).map(p=>(
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                          ))}
+                        </select>
+                      )}
+                      <div style={{display:"flex",gap:6,justifyContent:"flex-end",marginTop:10}}>
+                        <button onClick={()=>setEquipRouteEdit(null)} disabled={acting}
+                          style={{padding:"7px 14px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                        <button onClick={submitRouteChange} disabled={acting}
+                          style={{padding:"7px 16px",borderRadius:6,background:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
+                          {acting ? "Saving..." : "Apply & Confirm"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  {!isEditingRoute && (
+                    <div style={{display:"flex",gap:8,justifyContent:"flex-end",marginTop:12,flexWrap:"wrap"}}>
+                      {isRateBlocking ? (
+                        <>
+                          <button onClick={doRejectRate} disabled={acting}
+                            style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.red}`,background:T.redL,color:T.red,fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
+                            Reject rate
+                          </button>
+                          <button onClick={doApproveRate} disabled={acting}
+                            style={{padding:"8px 16px",borderRadius:7,background:T.grn,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
+                            Approve rate
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button onClick={()=>setEquipRouteEdit({usageId:row.id,route:row.suggested_route||"vendor",vendor_id:row.vendor_id||null,subcon_id:row.subcon_id||null})} disabled={acting}
+                            style={{padding:"8px 16px",borderRadius:7,border:`1.5px solid ${T.b2}`,background:T.surface,color:T.t2,fontSize:12.5,fontWeight:600,cursor:"pointer"}}>
+                            Change route
+                          </button>
+                          <button onClick={doConfirm} disabled={acting}
+                            style={{padding:"8px 18px",borderRadius:7,background:T.grn,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:"pointer",opacity:acting?0.6:1}}>
+                            {acting ? "Working..." : "Confirm"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
         )}
 
         {/* ══ UNBILLED GRN TAB ══ */}

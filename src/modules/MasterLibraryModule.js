@@ -1871,72 +1871,307 @@ function LabourRateSection() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// 8. EQUIPMENT / MACHINERY MASTER (My idea)
+// 8. EQUIPMENT / MACHINERY MASTER (wired to /equipment/master)
 // ═══════════════════════════════════════════════════════════════════════
 function EquipmentSection() {
-  const { items: equipment, loading, save: apiSave, del: apiDel } = useSection("equipment");
+  const [equipment, setEquipment] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [vendors, setVendors] = useState([]);
   const [search, setSearch] = useState("");
+  const [ownerFilter, setOwnerFilter] = useState("All"); // All | Owned | Rented
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const emptyForm = { name: "", code: "", type: "Earthwork", ownership: "Owned", vendor: "", dailyRate: 0, status: "Available" };
+  const [saving, setSaving] = useState(false);
+  const [saveErr, setSaveErr] = useState("");
+
+  const emptyForm = {
+    name: "", code: "", type: "Earthwork",
+    ownership: "rented", measurement_mode: "hourly",
+    default_rate: 0, fuel_per_hour: 0,
+    default_vendor_id: "", fuel_responsibility: "rent_included",
+    registration_no: "", machine_type: "", capacity: "",
+    maintenance_track: false, source: "",
+  };
   const [form, setForm] = useState(emptyForm);
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
-  const filtered = equipment.filter(e => e.name.toLowerCase().includes(search.toLowerCase()) || e.type.toLowerCase().includes(search.toLowerCase()));
-  const openCreate = () => { setEditing(null); setForm({ ...emptyForm, code: `EQ-${String(equipment.length + 1).padStart(3, "0")}` }); setShowModal(true); };
-  const openEdit = (e) => { setEditing(e); setForm({ ...emptyForm, ...e }); setShowModal(true); };
-  const save = () => { if (!form.name.trim()) return; if (editing) { setEquipment(prev => prev.map(e => e.id === editing.id ? { ...e, ...form } : e)); } else { setEquipment(prev => [...prev, { ...form, id: Date.now(), currentProject: "—" }]); } setShowModal(false); };
-  const del = (id) => setEquipment(prev => prev.filter(e => e.id !== id));
-  const statusColors = { "In Use": { c: T.green, bg: T.greenSoft }, "Available": { c: T.blue, bg: T.blueSoft }, "Maintenance": { c: T.amber, bg: T.amberSoft }, "Damaged": { c: T.red, bg: T.redSoft } };
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await api.get("/equipment/master");
+      if (res.success) setEquipment(res.data || []);
+    } catch (e) {}
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    api.get("/finance/parties").then(r => {
+      if (r.success) {
+        const list = (r.data || []).filter(p => {
+          const t = String(p.type || "").toLowerCase();
+          return t === "vendor" || t === "material vendor" || t === "supplier" || t === "material supplier" || t === "labour vendor";
+        });
+        setVendors(list);
+      }
+    }).catch(() => {});
+  }, []);
+
+  const filtered = equipment.filter(e => {
+    const s = search.toLowerCase();
+    const matches = (e.name || "").toLowerCase().includes(s)
+      || (e.code || "").toLowerCase().includes(s)
+      || (e.type || "").toLowerCase().includes(s);
+    if (!matches) return false;
+    if (ownerFilter === "All") return true;
+    const own = String(e.ownership || "").toLowerCase();
+    return ownerFilter === "Owned" ? own === "owned" : own === "rented";
+  });
+
+  const nextCode = (() => {
+    const max = equipment.reduce((acc, e) => {
+      const m = String(e.code || "").match(/^EQ-(\d+)$/i);
+      return m ? Math.max(acc, parseInt(m[1], 10)) : acc;
+    }, 0);
+    return `EQ-${String(max + 1).padStart(3, "0")}`;
+  })();
+
+  const openCreate = () => {
+    setEditing(null);
+    setSaveErr("");
+    setForm({ ...emptyForm, code: nextCode });
+    setShowModal(true);
+  };
+  const openEdit = (e) => {
+    setEditing(e);
+    setSaveErr("");
+    setForm({
+      ...emptyForm,
+      name: e.name || "",
+      code: e.code || "",
+      type: e.type || "Earthwork",
+      ownership: String(e.ownership || "rented").toLowerCase(),
+      measurement_mode: e.measurement_mode || "hourly",
+      default_rate: e.default_rate || 0,
+      fuel_per_hour: e.fuel_per_hour || 0,
+      default_vendor_id: e.default_vendor_id || "",
+      fuel_responsibility: e.fuel_responsibility || "rent_included",
+      registration_no: e.registration_no || "",
+      machine_type: e.machine_type || "",
+      capacity: e.capacity || "",
+      maintenance_track: !!e.maintenance_track,
+      source: e.source || "",
+    });
+    setShowModal(true);
+  };
+
+  const save = async () => {
+    if (!form.name.trim()) { setSaveErr("Name is required"); return; }
+    setSaving(true); setSaveErr("");
+    const body = {
+      name: form.name.trim(),
+      code: form.code || "",
+      type: form.type || "",
+      ownership: form.ownership,
+      measurement_mode: form.measurement_mode,
+      default_rate: parseFloat(form.default_rate) || 0,
+      fuel_per_hour: parseFloat(form.fuel_per_hour) || 0,
+      default_vendor_id: form.ownership === "rented" ? (form.default_vendor_id || null) : null,
+      fuel_responsibility: form.ownership === "rented" ? form.fuel_responsibility : null,
+      registration_no: form.ownership === "owned" ? form.registration_no : "",
+      machine_type: form.ownership === "owned" ? form.machine_type : "",
+      capacity: form.ownership === "owned" ? form.capacity : "",
+      maintenance_track: form.ownership === "owned" ? !!form.maintenance_track : false,
+      source: form.source || "",
+    };
+    try {
+      const res = editing
+        ? await api.put("/equipment/master/" + editing.id, body)
+        : await api.post("/equipment/master", body);
+      if (res.success) {
+        setShowModal(false);
+        await load();
+      } else {
+        setSaveErr(res.message || "Save failed");
+      }
+    } catch (e) {
+      setSaveErr(e.message || "Save failed");
+    }
+    setSaving(false);
+  };
+
+  const del = async (id) => {
+    if (!window.confirm("Delete this equipment?")) return;
+    try {
+      const res = await api.del("/equipment/master/" + id);
+      if (res.success) setEquipment(p => p.filter(x => x.id !== id));
+      else alert(res.message || "Delete failed");
+    } catch (e) { alert(e.message || "Delete failed"); }
+  };
+
+  const rateUnit = (mode) => mode === "hourly" ? "/hr" : mode === "daily" ? "/day" : " lump";
+  const modeLabel = (mode) => mode === "hourly" ? "Hourly" : mode === "daily" ? "Daily" : "Fixed";
 
   const columns = [
-    { key: "code", label: "Code", minW: 70, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.teal, background: T.tealSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
+    { key: "code", label: "Code", minW: 70, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.teal, background: T.tealSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code || "-"}</code> },
     { key: "name", label: "Equipment", minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "type", label: "Type", minW: 80 },
-    { key: "ownership", label: "Own/Rent", minW: 70, render: r => <Badge text={r.ownership} color={r.ownership === "Owned" ? T.green : T.amber} bg={r.ownership === "Owned" ? T.greenSoft : T.amberSoft} /> },
-    { key: "vendor", label: "Vendor", minW: 110, style: { fontSize: 12 } },
-    { key: "dailyRate", label: "Daily Rate", minW: 80, align: "right", render: r => r.dailyRate > 0 ? <span style={{ fontWeight: 700 }}>Rs.{(r.dailyRate||0).toLocaleString()}</span> : <span style={{ color: T.textLight }}>N/A</span> },
-    { key: "currentProject", label: "At Project", minW: 130, style: { fontSize: 12 } },
-    { key: "status", label: "Status", minW: 80, render: r => { const sc = statusColors[r.status] || statusColors.Available; return <Badge text={r.status} color={sc.c} bg={sc.bg} />; }},
+    { key: "type", label: "Type", minW: 90, render: r => r.type || <span style={{ color: T.textLight }}>—</span> },
+    { key: "ownership", label: "Ownership", minW: 90, render: r => {
+        const own = String(r.ownership || "").toLowerCase();
+        return <Badge text={own === "owned" ? "Owned" : "Rented"} color={own === "owned" ? T.green : T.blue} bg={own === "owned" ? T.greenSoft : T.blueSoft} />;
+      }},
+    { key: "measurement_mode", label: "Mode", minW: 70, render: r => <span style={{ fontSize: 12, color: T.textMid }}>{modeLabel(r.measurement_mode)}</span> },
+    { key: "default_rate", label: "Default Rate", minW: 110, align: "right", render: r => r.default_rate > 0
+        ? <span style={{ fontWeight: 700 }}>₹{Number(r.default_rate).toLocaleString()}<span style={{ fontSize: 11, color: T.textLight, fontWeight: 500 }}>{rateUnit(r.measurement_mode)}</span></span>
+        : <span style={{ color: T.textLight }}>—</span> },
+    { key: "vendor", label: "Vendor", minW: 130, style: { fontSize: 12 }, render: r => {
+        if (String(r.ownership || "").toLowerCase() === "owned") return <span style={{ color: T.textLight, fontSize: 12 }}>—</span>;
+        const v = vendors.find(x => x.id === r.default_vendor_id);
+        return v ? v.name : <span style={{ color: T.textLight }}>—</span>;
+      }},
   ];
+
+  const ownerFilterEl = (
+    <div style={{ display: "flex", gap: 4, background: T.borderLight, padding: 3, borderRadius: 8 }}>
+      {["All", "Owned", "Rented"].map(o => (
+        <button key={o} onClick={() => setOwnerFilter(o)}
+          style={{
+            padding: "5px 11px", borderRadius: 6, border: "none",
+            background: ownerFilter === o ? T.card : "transparent",
+            color: ownerFilter === o ? T.text : T.textMid,
+            fontSize: 12, fontWeight: 600, cursor: "pointer",
+            boxShadow: ownerFilter === o ? T.shadow : "none",
+          }}>{o}</button>
+      ))}
+    </div>
+  );
 
   return (
     <div>
       <ToolbarWithIO search={search} setSearch={setSearch} count={filtered.length} label="equipment" onAdd={openCreate} addLabel="Add Equipment"
+        filterEl={ownerFilterEl}
         templateConfig={{
-          headers: ["Equipment Name","Code","Type","Ownership","Vendor","Daily Rental Rate (Rs.)"],
-          sampleRows: [["JCB 3DX Backhoe Loader","EQ-001","Earthwork","Rented","Singh Cranes","5500"],["Concrete Mixer 10/7","EQ-002","Concrete","Owned","","0"]],
+          headers: ["Equipment Name","Code","Type","Ownership","Measurement Mode","Default Rate","Vendor"],
+          sampleRows: [["JCB 3DX Backhoe Loader","EQ-001","Earthwork","Rented","hourly","850","Singh Cranes"],["Concrete Mixer 10/7","EQ-002","Concrete","Owned","daily","0",""]],
           filename: "gb_equipment_export.csv", templateFilename: "gb_template_equipment.csv",
-          instructions: "Instructions: Ownership: Owned or Rented. Type: Earthwork, Lifting, Concrete, Steel, Safety, Transport",
-          mapRow: (e) => [e.name, e.code, e.type, e.ownership, e.vendor, e.dailyRate],
+          instructions: "Instructions: Ownership: owned or rented. Measurement Mode: hourly, daily or fixed. Type: Earthwork, Lifting, Concrete, Steel, Safety, Transport, Pumping, Compaction",
+          mapRow: (e) => [e.name, e.code, e.type, e.ownership, e.measurement_mode, e.default_rate, vendors.find(v => v.id === e.default_vendor_id)?.name || ""],
         }}
         currentData={equipment}
-        onImportData={(rows) => {
-          const items = rows.map((r, i) => ({
-            id: Date.now() + i, name: r["Equipment Name"]||"", code: r["Code"]||`EQ-${String(equipment.length+i+1).padStart(3,"0")}`,
-            type: r["Type"]||"Earthwork", ownership: r["Ownership"]||"Owned", vendor: r["Vendor"]||"",
-            dailyRate: parseFloat(r["Daily Rental Rate (Rs.)"])||0, currentProject: "—", status: "Available",
-          })).filter(e => e.name);
-          setEquipment(prev => [...prev, ...items]);
+        onImportData={async (rows) => {
+          for (const r of rows) {
+            if (!r["Equipment Name"]) continue;
+            const vendorName = (r["Vendor"] || "").trim();
+            const matchedVendor = vendorName ? vendors.find(v => v.name.toLowerCase() === vendorName.toLowerCase()) : null;
+            await api.post("/equipment/master", {
+              name: r["Equipment Name"],
+              code: r["Code"] || "",
+              type: r["Type"] || "Earthwork",
+              ownership: (r["Ownership"] || "rented").toLowerCase(),
+              measurement_mode: (r["Measurement Mode"] || "hourly").toLowerCase(),
+              default_rate: parseFloat(r["Default Rate"]) || 0,
+              default_vendor_id: matchedVendor?.id || null,
+            }).catch(() => {});
+          }
+          await load();
         }}
       />
-      <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Equipment" : "Add Equipment"} width={560}>
+      {loading ? (
+        <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, padding: "40px 20px", textAlign: "center", color: T.textLight, fontSize: 13 }}>Loading equipment...</div>
+      ) : (
+        <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
+      )}
+      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Equipment" : "Register Equipment"} width={680}>
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormField label="Equipment Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. JCB 3DX Backhoe" half required />
-          <FormField label="Code" value={form.code} onChange={v => upd("code", v)} half />
+          <FormField label="Code" value={form.code} onChange={v => upd("code", v)} placeholder={nextCode} half />
         </div>
+
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={["Earthwork","Lifting","Concrete","Steel","Safety","Transport","Pumping","Compaction","Other"]} half />
-          <FormSelect label="Ownership" value={form.ownership} onChange={v => upd("ownership", v)} options={["Owned","Rented"]} half />
-        </div>
-        {form.ownership === "Rented" && (
-          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-            <FormField label="Vendor / Rental Company" value={form.vendor} onChange={v => upd("vendor", v)} half />
-            <FormField label="Daily Rental Rate (Rs.)" value={form.dailyRate || ""} onChange={v => upd("dailyRate", parseFloat(v) || 0)} type="number" half />
+          <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={["Earthwork","Lifting","Concrete","Steel","Safety","Transport","Pumping","Compaction"]} half />
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>Ownership</label>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={() => upd("ownership", "rented")}
+                style={{
+                  flex: 1, padding: "10px 14px", borderRadius: T.radiusSm,
+                  border: `1.5px solid ${form.ownership === "rented" ? T.blue : T.border}`,
+                  background: form.ownership === "rented" ? T.blueSoft : "white",
+                  color: form.ownership === "rented" ? T.blue : T.textMid,
+                  fontWeight: 700, fontSize: 13, cursor: "pointer",
+                }}>Rented</button>
+              <button onClick={() => upd("ownership", "owned")}
+                style={{
+                  flex: 1, padding: "10px 14px", borderRadius: T.radiusSm,
+                  border: `1.5px solid ${form.ownership === "owned" ? T.green : T.border}`,
+                  background: form.ownership === "owned" ? T.greenSoft : "white",
+                  color: form.ownership === "owned" ? T.green : T.textMid,
+                  fontWeight: 700, fontSize: 13, cursor: "pointer",
+                }}>Owned</button>
+            </div>
           </div>
+        </div>
+
+        <div style={{ marginBottom: 14 }}>
+          <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>Measurement Mode</label>
+          <div style={{ display: "flex", gap: 6, background: T.borderLight, padding: 4, borderRadius: 8, width: "fit-content" }}>
+            {[{ k: "hourly", l: "Hourly" }, { k: "daily", l: "Daily" }, { k: "fixed", l: "Fixed" }].map(m => (
+              <button key={m.k} onClick={() => upd("measurement_mode", m.k)}
+                style={{
+                  padding: "7px 18px", borderRadius: 6, border: "none",
+                  background: form.measurement_mode === m.k ? T.card : "transparent",
+                  color: form.measurement_mode === m.k ? T.blue : T.textMid,
+                  fontSize: 13, fontWeight: 600, cursor: "pointer",
+                  boxShadow: form.measurement_mode === m.k ? T.shadow : "none",
+                }}>{m.l}</button>
+            ))}
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+          <FormField
+            label={`Default Rate (₹${rateUnit(form.measurement_mode)})`}
+            value={form.default_rate || ""}
+            onChange={v => upd("default_rate", parseFloat(v) || 0)}
+            type="number" half
+            placeholder="0"
+          />
+          <FormField label="Fuel per hour (litres, optional)" value={form.fuel_per_hour || ""} onChange={v => upd("fuel_per_hour", parseFloat(v) || 0)} type="number" half placeholder="0" />
+        </div>
+
+        {form.ownership === "rented" && (
+          <>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+              <FormSelect label="Default Vendor" value={form.default_vendor_id} onChange={v => upd("default_vendor_id", v)}
+                options={[{ value: "", label: "— None —" }, ...vendors.map(v => ({ value: v.id, label: v.name }))]} half />
+              <FormSelect label="Fuel Responsibility" value={form.fuel_responsibility} onChange={v => upd("fuel_responsibility", v)}
+                options={[{ value: "rent_included", label: "Rent included" }, { value: "company", label: "Company pays" }]} half />
+            </div>
+          </>
         )}
-        <FormSelect label="Status" value={form.status} onChange={v => upd("status", v)} options={["Available","In Use","Maintenance","Damaged"]} />
-        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={editing ? "Update" : "Add Equipment"} />
+
+        {form.ownership === "owned" && (
+          <>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+              <FormField label="Registration Number" value={form.registration_no} onChange={v => upd("registration_no", v)} half placeholder="CG-04-XX-1234" />
+              <FormField label="Machine Type" value={form.machine_type} onChange={v => upd("machine_type", v)} half placeholder="e.g. Backhoe" />
+            </div>
+            <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+              <FormField label="Capacity" value={form.capacity} onChange={v => upd("capacity", v)} half placeholder="e.g. 1 cum / 10 ton" />
+              <div style={{ flex: 1, minWidth: 180, display: "flex", alignItems: "flex-end", paddingBottom: 6 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: T.textMid, fontWeight: 600, cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!form.maintenance_track} onChange={e => upd("maintenance_track", e.target.checked)} style={{ width: 16, height: 16, cursor: "pointer" }} />
+                  Track maintenance
+                </label>
+              </div>
+            </div>
+          </>
+        )}
+
+        {saveErr && <div style={{ marginTop: 8, padding: "8px 12px", background: T.redSoft, color: T.red, fontSize: 12, borderRadius: 6, fontWeight: 600 }}>{saveErr}</div>}
+
+        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : (editing ? "Update" : "Add Equipment")} />
       </Modal>
     </div>
   );
