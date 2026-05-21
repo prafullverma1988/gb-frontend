@@ -2907,9 +2907,19 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
   const [expandedId,setExpandedId]=useState(null);
   const [savingChk,setSavingChk]=useState(null);
   const [showAddForm,setShowAddForm]=useState(false);
-  const [newTodo,setNewTodo]=useState({title:"",priority:"Medium",category:"Admin",due_date:""});
+  // Default project_id = null  (= "Company level", spec §5). User picks a
+  // project to scope the new todo under it.
+  const [newTodo,setNewTodo]=useState({title:"",priority:"Medium",category:"Admin",due_date:"",project_id:null});
   const [creating,setCreating]=useState(false);
+  // Projects list for the scope selector — loaded once on mount.
+  const [projects,setProjects]=useState([]);
+  const [pinging,setPinging]=useState(null); // todo id currently being pinged
   useEffect(()=>{ setLocalTodos(todos); },[todos]);
+  useEffect(()=>{
+    api.get("/projects").then(r=>{
+      if(r && r.success && Array.isArray(r.data)) setProjects(r.data);
+    }).catch(()=>{});
+  },[]);
   const priC={"High":{c:"#DC2626",bg:"#FEE2E2"},"Medium":{c:"#D97706",bg:"#FEF3C7"},"Low":{c:"#64748B",bg:"#F1F5F9"}};
   const fmtDate=d=>d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
 
@@ -2988,10 +2998,23 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
       {/* Add Company Todo form */}
       {showAddForm && (
         <div style={{padding:"12px 14px",background:"#F5F3FF",borderBottom:"1px solid #DDD6FE",flexShrink:0}}>
-          <div style={{fontSize:10.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:8}}>🏢 NEW COMPANY-LEVEL TODO</div>
+          <div style={{fontSize:10.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:8}}>+ NEW TODO</div>
           <input value={newTodo.title} onChange={e=>setNewTodo(p=>({...p,title:e.target.value}))}
             placeholder="Todo title..." autoFocus
             style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #DDD6FE",fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box",marginBottom:8}}/>
+          {/* ── Scope selector — Company level vs a specific project. ── */}
+          <div style={{marginBottom:8}}>
+            <div style={{fontSize:9.5,fontWeight:700,color:"#7C3AED",letterSpacing:".4px",marginBottom:4}}>KAHAAN BANEGA?</div>
+            <select
+              value={newTodo.project_id || ""}
+              onChange={e=>setNewTodo(p=>({...p,project_id:e.target.value?Number(e.target.value):null}))}
+              style={{width:"100%",padding:"7px 10px",borderRadius:6,border:"1.5px solid #DDD6FE",fontSize:12,outline:"none",fontFamily:"inherit",background:"white",boxSizing:"border-box"}}>
+              <option value="">🏢 Company level (sabhi projects ke liye)</option>
+              {projects.map(p=>(
+                <option key={p.id} value={p.id}>📍 {p.name}{p.city?" · "+p.city:""}</option>
+              ))}
+            </select>
+          </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:8}}>
             <SearchSelect value={newTodo.priority} options={["High","Medium","Low"]} compact
               onChange={v=>setNewTodo(p=>({...p,priority:v}))} placeholder="Priority"/>
@@ -3005,14 +3028,20 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
             setCreating(true);
             const res = await api.post("/projects/company-todos", newTodo);
             if(res.success){
-              setLocalTodos(prev=>[{...res.data, project_id:null, project_name:null},...prev]);
-              setNewTodo({title:"",priority:"Medium",category:"Admin",due_date:""});
+              // Lookup project_name from local list if project_id set.
+              const proj = newTodo.project_id ? projects.find(p=>p.id===newTodo.project_id) : null;
+              setLocalTodos(prev=>[{
+                ...res.data,
+                project_id: newTodo.project_id || null,
+                project_name: proj ? proj.name : null,
+              },...prev]);
+              setNewTodo({title:"",priority:"Medium",category:"Admin",due_date:"",project_id:null});
               setShowAddForm(false);
             }
             setCreating(false);
           }} disabled={!newTodo.title.trim()||creating}
             style={{width:"100%",padding:"8px",borderRadius:6,border:"none",background:newTodo.title.trim()?"#7C3AED":"#ccc",color:"white",fontSize:12,fontWeight:700,cursor:newTodo.title.trim()?"pointer":"not-allowed"}}>
-            {creating?"Adding…":"+ Add Company Todo"}
+            {creating?"Adding…":(newTodo.project_id?"+ Add to Project Todo":"+ Add Company Todo")}
           </button>
         </div>
       )}
@@ -3055,9 +3084,28 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                 </div>
               </div>
 
-              {/* Expanded checklist */}
+              {/* Expanded detail panel */}
               {isExpanded && (
                 <div style={{padding:"0 13px 12px",borderTop:"1px dashed #E2E8F0",background:"#F8FAFC"}}>
+                  {/* Raised-by row — created_by_name + created_at (matches mobile) */}
+                  {(t.created_by_name || t.created_at) && (() => {
+                    const stamp = (() => {
+                      if (!t.created_at) return "";
+                      try {
+                        const d = new Date(t.created_at);
+                        const date = d.toLocaleDateString("en-IN", { day:"2-digit", month:"short" });
+                        const time = d.toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", hour12: true });
+                        return date + " · " + time;
+                      } catch (_) { return ""; }
+                    })();
+                    return (
+                      <div style={{paddingTop:10,fontSize:11,color:"#64748B"}}>
+                        <span style={{fontWeight:600,color:"#475569"}}>🙋 Raised by</span>{" "}
+                        {t.created_by_name || "—"}{stamp ? " · " + stamp : ""}
+                      </div>
+                    );
+                  })()}
+
                   {hasChecklist ? (
                     <div style={{paddingTop:10}}>
                       <div style={{fontSize:10,fontWeight:700,color:"#64748B",letterSpacing:".5px",marginBottom:8}}>CHECKLIST · {clDone}/{t.checklist.length} done</div>
@@ -3069,7 +3117,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                           <div style={{width:16,height:16,borderRadius:4,border:c.done?"none":"1.5px solid #CBD5E1",background:c.done?"#22C55E":"white",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",opacity:savingChk===`${t.id}-${idx}`?.5:1}}>
                             {c.done&&<svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
                           </div>
-                          <span style={{flex:1,fontSize:12.5,color:c.done?"#94A3B8":"#1E293B",textDecoration:c.done?"line-through":"none"}}>{c.text||c.title||"Item"}</span>
+                          <span style={{flex:1,fontSize:12.5,color:c.done?"#94A3B8":"#1E293B",textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||c.title||c.item||c.label||c.name||"Item"}</span>
                           {savingChk===`${t.id}-${idx}`&&<span style={{fontSize:9,color:"#94A3B8"}}>saving…</span>}
                         </div>
                       ))}
@@ -3083,12 +3131,32 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
                       {t.description}
                     </div>
                   )}
-                  {t.project_id && (
-                    <button onClick={(e)=>{e.stopPropagation();goToProject(t);}}
-                      style={{marginTop:10,padding:"6px 12px",borderRadius:6,border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#3B82F6",fontSize:11,fontWeight:600,cursor:"pointer"}}>
-                      Open in Project →
-                    </button>
-                  )}
+                  <div style={{marginTop:10,display:"flex",gap:8,flexWrap:"wrap"}}>
+                    {/* Ping the assignee — backend writes a todo_ping notification. */}
+                    {t.assigned_to && (
+                      <button onClick={async(e)=>{
+                        e.stopPropagation();
+                        if (pinging === t.id) return;
+                        setPinging(t.id);
+                        const path = t._source === "company_todo" || (t._source !== "project_task" && !t.project_id)
+                          ? "/projects/company-todos/" + t.id + "/ping"
+                          : "/tasks/" + t.id + "/ping";
+                        try { await api.post(path, {}); } catch (_) {}
+                        setPinging(null);
+                      }}
+                        disabled={pinging === t.id}
+                        style={{padding:"6px 12px",borderRadius:6,border:"none",background:"#D97706",color:"white",fontSize:11,fontWeight:700,cursor:pinging===t.id?"wait":"pointer",display:"flex",alignItems:"center",gap:4,opacity:pinging===t.id?0.7:1}}>
+                        <span>{pinging === t.id ? "Pinging…" : "Ping"}</span>
+                        {pinging !== t.id && <span>🔔</span>}
+                      </button>
+                    )}
+                    {t.project_id && (
+                      <button onClick={(e)=>{e.stopPropagation();goToProject(t);}}
+                        style={{padding:"6px 12px",borderRadius:6,border:"1px solid #BFDBFE",background:"#EFF6FF",color:"#3B82F6",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                        Open in Project →
+                      </button>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
