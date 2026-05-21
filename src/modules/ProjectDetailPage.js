@@ -2169,7 +2169,17 @@ function TabTodo({projectId}) {
     }
   };
 
-  // Toggle a checklist item — emits canonical {text, done} on write.
+  // Inverse of progressFromStatus — derive status from checklist completion %.
+  const statusFromPct=(pct)=>{
+    if(pct>=100) return "Completed";
+    if(pct>0)    return "In Progress";
+    return "Not Started";
+  };
+
+  // Toggle a checklist item — emits canonical {text, done} on write AND
+  // auto-promotes/demotes the todo's status when completion crosses a
+  // threshold (0 → Not Started, 1-99% → In Progress, 100% → Completed).
+  // One combined PUT keeps the checklist and status in lockstep server-side.
   const toggleCheck=async(todoId,ci)=>{
     const todo=todos.find(t=>t.id===todoId);
     if(!todo) return;
@@ -2177,11 +2187,23 @@ function TabTodo({projectId}) {
       text:c.text||"",
       done: i===ci ? !c.done : !!c.done,
     }));
-    setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:updated}:t));
+    const body={checklist:updated};
+    const patch={checklist:updated};
+    if(updated.length>0){
+      const pct=Math.round((updated.filter(c=>c.done).length/updated.length)*100);
+      const derived=statusFromPct(pct);
+      const currentStatus=todo.done?"Completed":(todo.status||"Not Started");
+      if(derived!==currentStatus){
+        body.status=derived;
+        patch.done=derived==="Completed";
+        patch.status=derived;
+      }
+    }
+    setTodos(p=>p.map(t=>t.id===todoId?{...t,...patch}:t));
     try{
-      await api.put(apiBaseFor(todo),{checklist:updated});
+      await api.put(apiBaseFor(todo),body);
     }catch(e){
-      setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:todo.checklist}:t));
+      setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:todo.checklist,done:todo.done}:t));
     }
   };
 
@@ -2372,19 +2394,32 @@ function TabTodo({projectId}) {
                           {todo.description}
                         </div>
                       )}
-                      {/* Checklist */}
-                      {todo.checklist.length>0&&(
-                        <div style={{marginBottom:todo.assigneeId?8:0}}>
-                          {todo.checklist.map((c,ci)=>(
-                            <div key={ci} onClick={()=>toggleCheck(todo.id,ci)} style={{display:"flex",alignItems:"center",gap:7,padding:"3px 0",cursor:"pointer"}}>
-                              <div style={{width:14,height:14,borderRadius:3,background:c.done?T.grn:T.surface,border:`1.5px solid ${c.done?T.grn:T.b2}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                                {c.done&&<svg width={8} height={8} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
-                              </div>
-                              <span style={{fontSize:12,color:c.done?T.t4:T.t1,textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||"Item"}</span>
+                      {/* Checklist + progress bar (drives task status) */}
+                      {todo.checklist.length>0&&(() => {
+                        const cDone=todo.checklist.filter(c=>c.done).length;
+                        const cTotal=todo.checklist.length;
+                        const cPct=Math.round((cDone/cTotal)*100);
+                        return (
+                          <div style={{marginBottom:todo.assigneeId?8:0}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                              <div style={{fontSize:10,fontWeight:700,color:T.t4,letterSpacing:".4px"}}>☑ CHECKLIST</div>
+                              <span style={{fontSize:10.5,fontWeight:700,color:cPct===100?T.grn:T.blu}}>{cDone}/{cTotal}</span>
                             </div>
-                          ))}
-                        </div>
-                      )}
+                            {/* Progress bar — drives status via toggleCheck */}
+                            <div style={{height:4,background:T.b1,borderRadius:2,marginBottom:8,overflow:"hidden"}}>
+                              <div style={{height:"100%",width:cPct+"%",background:cPct===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/>
+                            </div>
+                            {todo.checklist.map((c,ci)=>(
+                              <div key={ci} onClick={()=>toggleCheck(todo.id,ci)} style={{display:"flex",alignItems:"center",gap:7,padding:"3px 0",cursor:"pointer"}}>
+                                <div style={{width:14,height:14,borderRadius:3,background:c.done?T.grn:T.surface,border:`1.5px solid ${c.done?T.grn:T.b2}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                  {c.done&&<svg width={8} height={8} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
+                                </div>
+                                <span style={{fontSize:12,color:c.done?T.t4:T.t1,textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||"Item"}</span>
+                              </div>
+                            ))}
+                          </div>
+                        );
+                      })()}
                       {/* Ping button — only when there's an assignee. Backend
                           gates pinger==assignee and silently no-ops. */}
                       {todo.assigneeId&&(

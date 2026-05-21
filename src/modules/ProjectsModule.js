@@ -2937,9 +2937,24 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
     if (t.project_id) onSelectProject && onSelectProject({ id: t.project_id, name: t.project_name, initialTab: "todo" });
   };
 
-  const apiPathFor = (t) => t.project_id
-    ? `/projects/${t.project_id}/tasks/${t.id}`
-    : `/projects/company-todos/${t.id}`;
+  // Source-aware routing — mobile-created project todos live in
+  // company_todos (with project_id set), web-created live in project_tasks.
+  // The `_source` discriminator from /projects/all-todos drives the path.
+  const apiPathFor = (t) => {
+    const useCompanyEndpoint = t._source === "company_todo"
+      || (t._source !== "project_task" && !t.project_id);
+    return useCompanyEndpoint
+      ? `/projects/company-todos/${t.id}`
+      : `/projects/${t.project_id}/tasks/${t.id}`;
+  };
+
+  // Inverse of progressFromStatus — given checklist completion %, derive
+  // the task status so the checklist drives the bucket the todo lives in.
+  const statusFromPct = (pct) => {
+    if (pct >= 100) return "Completed";
+    if (pct > 0)    return "In Progress";
+    return "Not Started";
+  };
 
   const toggleDone = async (t, e) => {
     if (e) e.stopPropagation();
@@ -2956,11 +2971,25 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
     if (e) e.stopPropagation();
     setSavingChk(`${t.id}-${idx}`);
     const updatedChecklist = (t.checklist||[]).map((c,i) => i===idx ? {...c, done: !c.done} : c);
-    setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, checklist: JSON.stringify(updatedChecklist) } : x));
+    // Auto-derive status from new checklist progress — send one combined
+    // PUT (checklist + status) when status would change so we don't fire
+    // two requests and risk a PUT-order race.
+    const body = { checklist: updatedChecklist };
+    let nextStatus = t.status;
+    if (updatedChecklist.length > 0) {
+      const pct = Math.round((updatedChecklist.filter(c=>c.done).length / updatedChecklist.length) * 100);
+      const derived = statusFromPct(pct);
+      if (derived !== t.status) { body.status = derived; nextStatus = derived; }
+    }
+    setLocalTodos(prev => prev.map(x => x.id === t.id
+      ? { ...x, checklist: JSON.stringify(updatedChecklist), status: nextStatus }
+      : x));
     try {
-      await api.put(apiPathFor(t), { checklist: updatedChecklist });
+      await api.put(apiPathFor(t), body);
     } catch (err) {
-      setLocalTodos(prev => prev.map(x => x.id === t.id ? { ...x, checklist: JSON.stringify(t.checklist) } : x));
+      setLocalTodos(prev => prev.map(x => x.id === t.id
+        ? { ...x, checklist: JSON.stringify(t.checklist), status: t.status }
+        : x));
     }
     setSavingChk(null);
   };
@@ -3108,7 +3137,20 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
 
                   {hasChecklist ? (
                     <div style={{paddingTop:10}}>
-                      <div style={{fontSize:10,fontWeight:700,color:"#64748B",letterSpacing:".5px",marginBottom:8}}>CHECKLIST · {clDone}/{t.checklist.length} done</div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                        <div style={{fontSize:10,fontWeight:700,color:"#64748B",letterSpacing:".5px"}}>☑ CHECKLIST</div>
+                        <span style={{fontSize:10,fontWeight:700,color:clDone===t.checklist.length?"#15803D":"#7C3AED"}}>{clDone}/{t.checklist.length}</span>
+                      </div>
+                      {/* Progress bar — drives task status via toggleChecklistItem */}
+                      <div style={{height:4,background:"#E2E8F0",borderRadius:2,marginBottom:8,overflow:"hidden"}}>
+                        <div style={{
+                          height:"100%",
+                          width: Math.round((clDone/t.checklist.length)*100)+"%",
+                          background: clDone===t.checklist.length ? "#15803D" : "#7C3AED",
+                          borderRadius:2,
+                          transition:"width .3s",
+                        }}/>
+                      </div>
                       {t.checklist.map((c,idx)=>(
                         <div key={idx} onClick={(e)=>toggleChecklistItem(t,idx,e)}
                           style={{display:"flex",alignItems:"center",gap:9,padding:"7px 8px",borderRadius:6,cursor:"pointer",marginBottom:3,background:c.done?"#F0FDF4":"transparent",transition:"background .12s"}}
