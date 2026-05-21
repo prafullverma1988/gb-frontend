@@ -1416,12 +1416,16 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     setSaveErr(""); setActing(p=>({...p,[id]:"approving"}));
     try{
       const mr=(data.mrs||[]).find(m=>m.id===id);
+      const qty=approvedQty||mr?.quantity||null;
       const res=await api.patch("/procurement/mrs/"+id+"/approve",{
         action:"Approved",
-        approved_qty:approvedQty||mr?.quantity||null,
+        approved_qty:qty,
       });
       if(res.success===false) { setSaveErr(res.message||"Approve failed"); }
-      else { setData(p=>({...p,mrs:(p.mrs||[]).filter(m=>m.id!==id)})); }
+      else {
+        // Update MR in-place — moves to "Approved" tab via stage filter (NOT remove)
+        setData(p=>({...p,mrs:(p.mrs||[]).map(m=>m.id===id?{...m,stage:"Approved",mr_status:"Approved",mat_status:"Pending",approved_qty:qty}:m)}));
+      }
     }catch(e){ setSaveErr(e.message); }
     setActing(p=>({...p,[id]:null}));
   };
@@ -1433,7 +1437,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
         rejected_reason:rejectNote||"Rejected by admin",
       });
       if(res.success===false) { setSaveErr(res.message||"Reject failed"); }
-      else { setData(p=>({...p,mrs:(p.mrs||[]).filter(m=>m.id!==id)})); }
+      else {
+        // Update in-place — moves to "Rejected" tab
+        setData(p=>({...p,mrs:(p.mrs||[]).map(m=>m.id===id?{...m,stage:"Rejected",mr_status:"Rejected",rejected_reason:rejectNote||"Rejected by admin"}:m)}));
+      }
     }catch(e){ setSaveErr(e.message); }
     setActing(p=>({...p,[id]:null}));
     setRejectId(null); setRejectNote("");
