@@ -2077,35 +2077,78 @@ function TabTodo({projectId}) {
   const [fPri,setFPri]=useState("All");
   const [newForm,setNewForm]=useState({text:"",priority:"Medium",assigneeId:"",due:"",cat:"Civil",checklist:[]});
   const [newCheckText,setNewCheckText]=useState("");
+  const [pinging,setPinging]=useState(null); // todo id currently being pinged
 
-  // Parse a task row from API into local todo shape
-  const parseTask=(t)=>{
+  // Parse a todo row from API into local shape.
+  // Handles BOTH `project_task` and `company_todo` source rows — backend
+  // `/projects/all-todos` returns a `_source` discriminator we preserve so
+  // mutations can be routed to the right endpoint.
+  const parseTodo=(t)=>{
     let cl=[];
     try{ cl=typeof t.checklist==="string"?JSON.parse(t.checklist):(t.checklist||[]); }catch(e){ cl=[]; }
+    // Canonical key on read — tolerate legacy {t}/{title}/{item}/{label}/{name}.
+    cl=(Array.isArray(cl)?cl:[]).map(c=>({
+      text: c.text || c.t || c.title || c.item || c.label || c.name || "",
+      done: !!c.done,
+    }));
     return {
       id:t.id,
       text:t.title||t.name||"",
+      description:t.description||"",
       priority:t.priority||"Medium",
       assignee:t.assigned_name||"Unassigned",
       assigneeId:t.assigned_to||null,
       due:t.due_date||"",
       cat:t.category||"Other",
       done:t.status==="done"||t.status==="Completed",
-      checklist:cl
+      checklist:cl,
+      // Unified-todo metadata (mirrors mobile)
+      _source: t._source || "project_task",
+      project_id: t.project_id,
+      raisedBy: t.created_by_name || "",
+      raisedAt: t.created_at || "",
     };
   };
 
-  // Fetch todos + team on mount
+  // Source-aware endpoint helpers — same pattern as Home → TodoDrawer.
+  const apiBaseFor=(t)=>(
+    t._source==="company_todo"
+      ? "/projects/company-todos/"+t.id
+      : "/projects/"+projectId+"/tasks/"+t.id
+  );
+  const pingPathFor=(t)=>(
+    t._source==="company_todo" || (t._source!=="project_task" && !t.project_id)
+      ? "/projects/company-todos/"+t.id+"/ping"
+      : "/tasks/"+t.id+"/ping"
+  );
+
+  // Format a created_at timestamp as `DD MMM · HH:MM AM` (mirrors mobile).
+  const fmtCreatedAt=(s)=>{
+    if(!s) return "";
+    try{
+      const d=new Date(s);
+      const date=d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
+      const time=d.toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit",hour12:true});
+      return date+" · "+time;
+    }catch(_){ return ""; }
+  };
+
+  // Fetch todos (BOTH sources) + team on mount.
+  // Switched from /projects/:id/tasks → /projects/all-todos so company_todos
+  // scoped to this project also show up here (matches mobile ProjectScreen).
   useEffect(()=>{
     if(!projectId) return;
     const load=async()=>{
       setLoading(true);
       try{
-        const [taskRes,teamRes]=await Promise.all([
-          api.get(`/projects/${projectId}/tasks`),
+        const [todoRes,teamRes]=await Promise.all([
+          api.get("/projects/all-todos"),
           api.get("/projects/team-members")
         ]);
-        if(taskRes.success) setTodos((taskRes.data||[]).map(parseTask));
+        if(todoRes.success){
+          const filtered=(todoRes.data||[]).filter(r=>Number(r.project_id)===Number(projectId));
+          setTodos(filtered.map(parseTodo));
+        }
         if(teamRes.success) setTeam(teamRes.data||[]);
       }catch(e){ console.error("Todo load error:",e); }
       setLoading(false);
@@ -2113,47 +2156,62 @@ function TabTodo({projectId}) {
     load();
   },[projectId]);
 
-  // Toggle done/undone
+  // Toggle done/undone — source-aware.
   const toggle=async(id)=>{
     const todo=todos.find(t=>t.id===id);
     if(!todo) return;
     const newStatus=todo.done?"todo":"done";
     setTodos(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t));
     try{
-      await api.put(`/projects/${projectId}/tasks/${id}`,{status:newStatus});
+      await api.put(apiBaseFor(todo),{status:newStatus});
     }catch(e){
       setTodos(p=>p.map(t=>t.id===id?{...t,done:!t.done}:t)); // revert
     }
   };
 
-  // Toggle checklist item
+  // Toggle a checklist item — emits canonical {text, done} on write.
   const toggleCheck=async(todoId,ci)=>{
     const todo=todos.find(t=>t.id===todoId);
     if(!todo) return;
-    const updated=todo.checklist.map((c,i)=>i===ci?{...c,done:!c.done}:c);
+    const updated=todo.checklist.map((c,i)=>({
+      text:c.text||"",
+      done: i===ci ? !c.done : !!c.done,
+    }));
     setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:updated}:t));
     try{
-      await api.put(`/projects/${projectId}/tasks/${todoId}`,{checklist:updated});
+      await api.put(apiBaseFor(todo),{checklist:updated});
     }catch(e){
       setTodos(p=>p.map(t=>t.id===todoId?{...t,checklist:todo.checklist}:t));
     }
   };
 
-  // Add new todo
+  // Ping the assignee — source-aware endpoint.
+  const handlePing=async(t)=>{
+    if(pinging===t.id) return;
+    setPinging(t.id);
+    try{ await api.post(pingPathFor(t),{}); }catch(_){}
+    setPinging(null);
+  };
+
+  // Add new todo — always lands in project_tasks (this tab is project-scoped).
+  // Emits canonical {text,done} checklist on write.
   const addTodo=async()=>{
     if(!newForm.text.trim()||saving) return;
     setSaving(true);
     try{
+      const cl=newForm.checklist.length>0
+        ? newForm.checklist.map(c=>({text:c.text||c.t||"",done:!!c.done})).filter(c=>c.text)
+        : null;
       const res=await api.post(`/projects/${projectId}/tasks`,{
         title:newForm.text,
         priority:newForm.priority,
         assigned_to:newForm.assigneeId||null,
         due_date:newForm.due||null,
         category:newForm.cat,
-        checklist:newForm.checklist.length>0?newForm.checklist:null
+        checklist:cl
       });
       if(res.success&&res.data){
-        setTodos(p=>[parseTask(res.data),...p]);
+        setTodos(p=>[parseTodo({...res.data,_source:"project_task"}),...p]);
         setNewForm({text:"",priority:"Medium",assigneeId:team[0]?.id||"",due:"",cat:"Civil",checklist:[]});
         setShowAdd(false);
       }
@@ -2163,14 +2221,23 @@ function TabTodo({projectId}) {
 
   const addCheck=()=>{
     if(!newCheckText.trim()) return;
-    setNewForm(p=>({...p,checklist:[...p.checklist,{t:newCheckText,done:false}]}));
+    // Canonical key — {text, done}.
+    setNewForm(p=>({...p,checklist:[...p.checklist,{text:newCheckText.trim(),done:false}]}));
     setNewCheckText("");
   };
 
-  // Delete todo
+  // Delete todo — source-aware.
   const deleteTodo=async(id)=>{
+    const todo=todos.find(t=>t.id===id);
     setTodos(p=>p.filter(t=>t.id!==id));
-    try{ await api.del(`/projects/${projectId}/tasks/${id}`); }catch(e){}
+    if(!todo) return;
+    try{
+      if(todo._source==="company_todo"){
+        await api.del("/projects/company-todos/"+id);
+      }else{
+        await api.del(`/projects/${projectId}/tasks/${id}`);
+      }
+    }catch(e){}
   };
 
   const display=todos.filter(t=>(fCat==="All"||t.cat===fCat)&&(fPri==="All"||t.priority===fPri));
@@ -2241,7 +2308,7 @@ function TabTodo({projectId}) {
             {newForm.checklist.map((c,i)=>(
               <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
                 <div style={{width:14,height:14,borderRadius:3,background:T.grnL,border:`1px solid ${T.grnM}`,flexShrink:0}}/>
-                <span style={{fontSize:12,color:T.t1,flex:1}}>{c.t}</span>
+                <span style={{fontSize:12,color:T.t1,flex:1}}>{c.text||c.t||""}</span>
                 <button onClick={()=>setNewForm(p=>({...p,checklist:p.checklist.filter((_,j)=>j!==i)}))} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:12}}>×</button>
               </div>
             ))}
@@ -2287,16 +2354,47 @@ function TabTodo({projectId}) {
                       </span>
                     )}
                   </div>
-                  {isExp&&todo.checklist.length>0&&(
+                  {isExp&&(
                     <div style={{marginTop:8,paddingTop:8,borderTop:`1px solid ${T.b1}`}}>
-                      {todo.checklist.map((c,ci)=>(
-                        <div key={ci} onClick={()=>toggleCheck(todo.id,ci)} style={{display:"flex",alignItems:"center",gap:7,padding:"3px 0",cursor:"pointer"}}>
-                          <div style={{width:14,height:14,borderRadius:3,background:c.done?T.grn:T.surface,border:`1.5px solid ${c.done?T.grn:T.b2}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
-                            {c.done&&<svg width={8} height={8} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
-                          </div>
-                          <span style={{fontSize:12,color:c.done?T.t4:T.t1,textDecoration:c.done?"line-through":"none"}}>{c.t}</span>
+                      {/* Raised-by row — created_by_name + created_at (mobile parity) */}
+                      {(todo.raisedBy||todo.raisedAt)&&(
+                        <div style={{fontSize:11,color:T.t4,marginBottom:8}}>
+                          <span style={{fontWeight:600,color:T.t3}}>🙋 Raised by</span>{" "}
+                          {todo.raisedBy||"—"}{todo.raisedAt?" · "+fmtCreatedAt(todo.raisedAt):""}
+                          {todo._source==="company_todo"&&(
+                            <span style={{marginLeft:6,padding:"1px 6px",borderRadius:8,background:T.purL,color:T.pur,fontSize:9.5,fontWeight:700,letterSpacing:".3px"}}>COMPANY</span>
+                          )}
                         </div>
-                      ))}
+                      )}
+                      {/* Description (if any) */}
+                      {todo.description&&(
+                        <div style={{fontSize:12,color:T.t2,marginBottom:8,padding:"6px 9px",background:T.surfaceB,borderRadius:6,whiteSpace:"pre-wrap"}}>
+                          {todo.description}
+                        </div>
+                      )}
+                      {/* Checklist */}
+                      {todo.checklist.length>0&&(
+                        <div style={{marginBottom:todo.assigneeId?8:0}}>
+                          {todo.checklist.map((c,ci)=>(
+                            <div key={ci} onClick={()=>toggleCheck(todo.id,ci)} style={{display:"flex",alignItems:"center",gap:7,padding:"3px 0",cursor:"pointer"}}>
+                              <div style={{width:14,height:14,borderRadius:3,background:c.done?T.grn:T.surface,border:`1.5px solid ${c.done?T.grn:T.b2}`,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                                {c.done&&<svg width={8} height={8} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.5}><path d="M2 5l2.5 2.5L8 3"/></svg>}
+                              </div>
+                              <span style={{fontSize:12,color:c.done?T.t4:T.t1,textDecoration:c.done?"line-through":"none"}}>{c.text||c.t||"Item"}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {/* Ping button — only when there's an assignee. Backend
+                          gates pinger==assignee and silently no-ops. */}
+                      {todo.assigneeId&&(
+                        <button onClick={(e)=>{e.stopPropagation();handlePing(todo);}}
+                          disabled={pinging===todo.id}
+                          style={{padding:"5px 10px",borderRadius:6,border:"none",background:T.amb,color:"white",fontSize:11,fontWeight:700,cursor:pinging===todo.id?"wait":"pointer",display:"inline-flex",alignItems:"center",gap:4,opacity:pinging===todo.id?0.7:1}}>
+                          <span>{pinging===todo.id?"Pinging…":"Ping"}</span>
+                          {pinging!==todo.id&&<span>🔔</span>}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
