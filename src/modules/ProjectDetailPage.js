@@ -5419,29 +5419,11 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               </button>
             </div>
           )}
-          {labLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading...</div>}
-          {!labLoading&&labours.length===0&&!showLabForm&&<div style={{textAlign:"center",padding:"32px 0",color:"#94A3B8",fontSize:13}}>No labour entries yet</div>}
-          {labours.map(l=>(
-            <div key={l.id} style={{background:"white",borderRadius:10,padding:"12px 14px",border:"1px solid #E2E8F0",marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-              <div style={{flex:1}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                  <div style={{width:32,height:32,borderRadius:"50%",background:l.labour_type==="Subcon"?"#DBEAFE":l.labour_type==="Vendor"?"#F1F5F9":"#DCFCE7",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,flexShrink:0}}>
-                    {l.labour_type==="Subcon"?"🏗":l.labour_type==="Vendor"?"🏢":"👷"}
-                  </div>
-                  <div>
-                    <div style={{fontSize:13,fontWeight:700,color:"#1E293B"}}>{l.labour_name}</div>
-                    <div style={{fontSize:11,color:"#64748B"}}>{l.role} · {l.count} workers · {l.hours}h/day</div>
-                  </div>
-                  <span style={{marginLeft:"auto",fontSize:9,fontWeight:600,padding:"2px 7px",borderRadius:4,background:l.labour_type==="Direct"?"#DCFCE7":l.labour_type==="Subcon"?"#DBEAFE":"#F1F5F9",color:l.labour_type==="Direct"?"#16A34A":l.labour_type==="Subcon"?"#2563EB":"#475569"}}>{l.labour_type==="Direct"?"Company Labour":l.labour_type||"Company Labour"}</span>
-                </div>
-                <div style={{fontSize:10.5,color:"#94A3B8",paddingLeft:40}}>{fmtDate(l.work_date)}{l.remark?" · "+l.remark:""}</div>
-              </div>
-              <button onClick={async()=>{const r=await api.del("/tasks/"+task.id+"/labour/"+l.id);if(r.success)setLabours(p=>p.filter(x=>x.id!==l.id));}}
-                style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",padding:8,display:"flex",flexShrink:0}}>
-                <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
-              </button>
-            </div>
-          ))}
+          {/* Legacy flat list removed — the grouped-by-date "Attendance History"
+              block above (line ~5244) already renders every labour row exactly
+              once. Keeping this map duplicated each row with a different tag
+              ("Company Labour" vs "Company"), which is why TSK000592 showed
+              every entry twice. */}
         </div>
 
         {/* ════════════ PHOTOS SECTION ════════════ */}
