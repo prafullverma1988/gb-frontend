@@ -4525,7 +4525,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
         {[
           {id:"progress", l:"Progress",  ic:"M13 2L3 14h9l-1 8 10-12h-9l1-8z",       cnt:null},
           {id:"materials",l:"Materials", ic:"M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4", cnt:materials.length||null},
-          {id:"labour",   l:"Labour",    ic:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z", cnt:labours.length||null},
+          {id:"labour",   l:"Workers",   ic:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8z", cnt:labours.length||null},
           {id:"photos",   l:"Photos",    ic:"M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z", cnt:photos.length||null},
           {id:"issues",   l:"Issues",    ic:"M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01", cnt:issues.filter(i=>i.status==="Open"||i.status==="In Progress").length||null},
         ].map(t=>{
@@ -5808,7 +5808,7 @@ function TabAttendance({ project }) {
   const [rateSaving,     setRateSaving]     = useState(false);
 
   const ROLES = ["Labour","Mason","Helper","Electrician","Plumber","Carpenter","Painter","Supervisor","Welder","Tile Fixer","Polisher","Bar Bender","Shuttering","Other"];
-  const TYPE_LABELS = { company:"Company Labour", subcon:"Subcontractor", vendor:"Labour Vendor" };
+  const TYPE_LABELS = { company:"Company Workers", subcon:"Subcontractor", vendor:"Labour Vendor" };
   const TYPE_COLORS = { company:T.blu, subcon:T.grn, vendor:T.amb };
   const TYPE_BG     = { company:T.bluL, subcon:T.grnL, vendor:T.ambL };
   const TYPE_BM     = { company:T.bluM, subcon:T.grnM, vendor:T.ambM };
@@ -6133,7 +6133,7 @@ function TabAttendance({ project }) {
             <button onClick={()=>{ setShowAddWf(true); setLibSearch(""); setSelectedLibIds(new Set()); setShowNewWf(false); setWfForm({name:"",role:"Labour",category:"Unskilled",dailyRate:"",phone:"",city:""}); }}
               style={{padding:"6px 13px",borderRadius:6,background:TYPE_COLORS[labType],color:"white",border:"none",fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M12 5v14M5 12h14"/></svg>
-              Add Labour
+              Add Worker
             </button>
           </>}
           <button onClick={()=>setShowHistory(p=>!p)}
@@ -6255,7 +6255,7 @@ function TabAttendance({ project }) {
               ?<div style={{padding:"32px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>Loading…</div>
               :currentWF.length===0
                 ?<div style={{padding:"40px 18px",textAlign:"center",color:T.t4,fontSize:12.5}}>
-                  No {TYPE_LABELS[labType]} registered yet.<br/>Click <b>"+ Add Labour"</b> above to register workforce for this project.
+                  No {TYPE_LABELS[labType]} registered yet.<br/>Click <b>"+ Add Worker"</b> above to register workforce for this project.
                  </div>
                 :<>
                   <THead cols="2fr 1fr 90px 100px 100px" headers={["Name","Role","Daily Rate","Rate Status","Action"]}/>

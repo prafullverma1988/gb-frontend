@@ -1097,7 +1097,7 @@ function PartyMasterSection() {
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>Staff Subtype <span style={{ color: T.red }}>*</span></div>
               <div style={{ display: "flex", gap: 10 }}>
-                {[{ v: "office", l: "Office Staff (salaried)" }, { v: "wages", l: "Daily Wages Labour" }].map(o => (
+                {[{ v: "office", l: "Office Staff (salaried)" }, { v: "wages", l: "Daily Wages Worker" }].map(o => (
                   <button key={o.v} type="button" onClick={() => upd("staff_subtype", o.v)}
                     style={{ flex: 1, padding: "9px 10px", borderRadius: 8, cursor: "pointer", fontSize: 12.5, fontWeight: 600,
                       border: `1.5px solid ${form.staff_subtype === o.v ? T.teal : T.borderLight}`,
@@ -2770,7 +2770,7 @@ const masterSections = [
   { id: "work_cat",      label: "Work Category",       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
   { id: "party",         label: "Party / Supplier",    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
   { id: "subcon",        label: "Subcontractors",      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
-  { id: "workers",       label: "Workers / Labour",    Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
+  { id: "workers",       label: "Workers",             Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
   { id: "subcon_rate",   label: "Subcon Rate Card",    Icon: IcDollar,    Comp: SubconRateCardSection,    section: null, countKey: null, color: T.teal },
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
   { id: "client_boq",    label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: null, color: T.indigo },

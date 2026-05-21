@@ -2049,7 +2049,7 @@ function AddStaffModal({onClose,onSaved}){
             <F label="Subtype">
               <select style={inp} value={form.staff_subtype} onChange={e=>set("staff_subtype",e.target.value)} disabled={!!picked}>
                 <option value="office">Office Staff</option>
-                <option value="wages">Daily Wages Labour</option>
+                <option value="wages">Daily Wages Worker</option>
               </select>
             </F>
           </Sect>
@@ -4496,7 +4496,7 @@ function PayrollModule(){
           </button>
           <button onClick={()=>setModeAndTab("daily")}
             style={{display:"flex",alignItems:"center",gap:7,padding:"8px 18px",border:"none",background:mode==="daily"?T.amb:"transparent",color:mode==="daily"?"#fff":T.t3,borderRadius:8,fontSize:12.5,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
-            <span style={{fontSize:14}}>👷</span> Daily Wages Labour
+            <span style={{fontSize:14}}>👷</span> Daily Wages Workers
           </button>
         </div>
       </div>
