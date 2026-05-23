@@ -878,11 +878,21 @@ function DashboardModule(){
   const [dismissedAlerts,setDismissedAlerts]=useState([]);
   const [showAllActivity,setShowAllActivity]=useState(false);
   const [showAllActions,setShowAllActions]=useState(false);
-  const [dashData,setDashData]=useState(null);
+  const [dashData,setDashData]=useState(() => apiCache.get("dashboard:summary"));
 
+  // Stale-while-revalidate: instantly paint last known data (if any)
+  // so coming back to the dashboard feels free, then silently refresh
+  // in the background. Cache TTL is 60 s — short enough that the
+  // numbers stay close to live, long enough to cover quick back-nav
+  // bounces. Mutations elsewhere should call
+  // apiCache.invalidate("dashboard:summary") so the next visit pulls
+  // fresh data.
   useEffect(()=>{
     api.get("/dashboard/summary").then(res=>{
-      if(res.success) setDashData(res.data);
+      if(res.success){
+        setDashData(res.data);
+        apiCache.set("dashboard:summary", res.data, 60_000);
+      }
     }).catch(()=>{});
   },[]);
 
