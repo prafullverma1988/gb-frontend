@@ -9,6 +9,7 @@ import MRDetailDrawer from "../components/MRDetailDrawer";
 import MaterialTransferTab from "../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../components/MaterialLedgerDrawer";
 import uploadManager from "../utils/uploadManager";
+import { ProjectSettingsModal } from "./ProjectsModule";
 
 // ── TZ-safe local date helper ────────────────────────────────────────
 // `new Date().toISOString().split("T")[0]` shifts by 1 day in early IST hours
@@ -14152,15 +14153,20 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
           />
         </SimpleDrawer>
       )}
-      {/* ── PROJECT SETTINGS DRAWER ── */}
+      {/* ── PROJECT SETTINGS MODAL ── */}
       {showProjectSettings && (
-        <SimpleDrawer title="Project Settings" subtitle={`${project.name}`} onClose={()=>setShowProjectSettings(false)}>
-          <PlaceholderEmpty
-            icon={<svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>}
-            title="Project settings"
-            desc="Edit project name, dates, PM, BOQ value, status, and team members. This panel will host all per-project configuration."
-          />
-        </SimpleDrawer>
+        <ProjectSettingsModal
+          project={project}
+          onClose={()=>setShowProjectSettings(false)}
+          onUpdated={(updated)=>{
+            setShowProjectSettings(false);
+            if (onSwitchProject) onSwitchProject(updated);
+          }}
+          onDeleted={()=>{
+            setShowProjectSettings(false);
+            if (onBack) onBack();
+          }}
+        />
       )}
       {/* ── PAYMENT REQUEST DRAWER ── */}
       <PaymentRequestDrawer

@@ -606,7 +606,7 @@ const STATUS_OPTIONS = ["Not Started","Ongoing","Hold","Completed"];
 const TYPE_OPTIONS   = ["Residential","Commercial","Industrial","Interior"];
 const CITIES         = ["Raipur","Bhilai","Bilaspur","Durg","Rajnandgaon","Other"];
 
-function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
+export function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const [section, setSection] = useState("basic"); // basic | team | status | danger
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
