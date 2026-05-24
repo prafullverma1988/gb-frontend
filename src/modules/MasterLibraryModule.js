@@ -1586,15 +1586,58 @@ function ClientBOQSection() {
   const filteredItems = boqItems.filter(i => filterCat === "All" || i.category === filterCat);
 
   // ── Save rates ───────────────────────────────────────────────────────
-  // New payload shape: { item_id, base_rate, add_on_rate, description } per
-  // item. Backend computes `rate` = base + add_on so the legacy `rate` column
-  // (still read by Estimate module) stays in sync.
+  // 2-phase save:
+  //   Phase 1 — if user inline-edited any item's base_rate, PUT the new
+  //             base to /library/boq-items/:id so the master library
+  //             reflects it (other packages will see the new base too).
+  //   Phase 2 — POST /library/rate-matrix/bulk with the per-package
+  //             items[]. Backend stores add_on_rate + computes
+  //             rate = base + add_on for the legacy `rate` column
+  //             (Estimate module still reads it).
+  //
+  // Items list sent to bulk uses POST-PUT base_rate (the value that
+  // will be in boq_items after Phase 1 finishes).
   const saveRates = async () => {
     if (!selPkg || !selCity) return;
     setSaving(true);
+
+    // Phase 1 — push base_rate edits to the master library.
+    const baseEdits = [];
+    for (const [idStr, vals] of Object.entries(changed)) {
+      if (vals.base_rate === undefined) continue;
+      const id = Number(idStr);
+      const item = boqItems.find(i => i.id === id);
+      if (!item) continue;
+      const newBase = Number(vals.base_rate) || 0;
+      if (newBase === Number(item.base_rate)) continue;       // no real change
+      baseEdits.push({ id, item, newBase });
+    }
+    for (const { id, item, newBase } of baseEdits) {
+      const r = await api.put("/library/boq-items/" + id, {
+        name:        item.name,
+        category:    item.category,
+        unit:        item.unit,
+        base_rate:   newBase,
+        description: item.description || "",
+      });
+      if (r?.success && r.data) {
+        // Patch local boqItems so subsequent code uses the new base.
+        setBoqItems(p => p.map(i => i.id === id ? { ...i, ...r.data, base_rate: newBase } : i));
+      }
+    }
+    // Build effective base map for the bulk payload (covers both edited
+    // and unedited rows). Read directly from changed/rates so we don't
+    // depend on the async setBoqItems above having flushed.
+    const effectiveBase = (item) => {
+      const c = cellOf(item.id);
+      if (c && c.base_rate !== undefined) return Number(c.base_rate) || 0;
+      return Number(item.base_rate) || 0;
+    };
+
+    // Phase 2 — per-package items[].
     const items = boqItems.map(i => ({
       item_id:     i.id,
-      base_rate:   Number(i.base_rate) || 0,
+      base_rate:   effectiveBase(i),
       add_on_rate: Number(getAddOn(i)) || 0,
       description: getDesc(i) || "",
     }));
@@ -1606,7 +1649,12 @@ function ClientBOQSection() {
       // Merge `changed` into `rates` (canonical) then clear `changed`.
       setRates(prev => {
         const n = { ...prev };
-        Object.entries(changed).forEach(([id, v]) => { n[id] = { ...n[id], ...v }; });
+        Object.entries(changed).forEach(([id, v]) => {
+          // Don't store base_rate in `rates` (rates is per-package only;
+          // base lives on boq_items master).
+          const { base_rate, ...rest } = v;
+          n[id] = { ...n[id], ...rest };
+        });
         return n;
       });
       setChanged({});
@@ -1788,6 +1836,14 @@ function ClientBOQSection() {
     const c = cellOf(item.id);
     return c && c.description !== undefined ? c.description : "";
   };
+  // Effective base rate — `changed[id].base_rate` (inline-edited) wins
+  // over `item.base_rate` (master library default). Stored as a STRING
+  // while editing (matches the input value) so the user can type freely.
+  const getBase = (item) => {
+    const c = cellOf(item.id);
+    if (c && c.base_rate !== undefined) return c.base_rate;
+    return item.base_rate;
+  };
   // Merge a partial { add_on?, description? } into the changed entry for an item.
   const patchChanged = (id, patch) => setChanged(p => {
     const cur = p[id] ?? rates[id] ?? { add_on: 0, description: "" };
@@ -1918,7 +1974,9 @@ function ClientBOQSection() {
             const catNames = Object.keys(grouped).sort();
 
             // Grand totals across picked items only.
-            const gBase  = pickedItems.reduce((s, i) => s + (Number(i.base_rate) || 0), 0);
+            // Uses getBase(i) so inline-edited base rates feed into the
+            // totals live, even before Save Rates persists them.
+            const gBase  = pickedItems.reduce((s, i) => s + (Number(getBase(i)) || 0), 0);
             const gAddOn = pickedItems.reduce((s, i) => s + (Number(getAddOn(i)) || 0), 0);
             const gTotal = gBase + gAddOn;
 
@@ -1948,7 +2006,9 @@ function ClientBOQSection() {
               <>
                 {catNames.map(catName => {
                   const items = grouped[catName];
-                  const sBase  = items.reduce((s, i) => s + (Number(i.base_rate) || 0), 0);
+                  // Per-section subtotal — uses getBase so inline base edits
+                  // reflect in the header + subtotal row immediately.
+                  const sBase  = items.reduce((s, i) => s + (Number(getBase(i)) || 0), 0);
                   const sAddOn = items.reduce((s, i) => s + (Number(getAddOn(i)) || 0), 0);
                   const sTot   = sBase + sAddOn;
                   const collapsed = !!collapsedCats[catName];
@@ -2019,12 +2079,27 @@ function ClientBOQSection() {
                             {items.map((item, idx) => {
                               const aVal = getAddOn(item);
                               const dVal = getDesc(item);
+                              const bVal = getBase(item);
                               const isChanged = changed[item.id] !== undefined;
+                              // Base-rate edit is local to `changed` until the
+                              // Save Rates click triggers a PUT against
+                              // /library/boq-items/:id (which propagates the
+                              // new base_rate everywhere). See saveRates below.
+                              const baseEdited = changed[item.id] && changed[item.id].base_rate !== undefined
+                                && Number(changed[item.id].base_rate) !== Number(item.base_rate);
                               return (
                                 <tr key={item.id} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA", borderBottom: "1px solid #F3F4F6" }}>
                                   <td style={{ padding: "9px 14px", fontWeight: 600, fontSize: 13, color: "#111827" }}>{item.name}</td>
                                   <td style={{ padding: "9px 14px", textAlign: "center", fontSize: 12, color: "#6B7280" }}>{item.unit}</td>
-                                  <td style={{ padding: "9px 14px", textAlign: "right", fontSize: 13, color: "#9CA3AF" }}>Rs.{Number(item.base_rate || 0).toLocaleString()}</td>
+                                  <td style={{ padding: "9px 14px", textAlign: "right" }}>
+                                    <input type="number" value={bVal}
+                                      placeholder="0"
+                                      onChange={e => patchChanged(item.id, { base_rate: e.target.value })}
+                                      title="Base rate (master library). Edit & Save Rates to update everywhere."
+                                      style={{ width: 110, padding: "6px 10px", borderRadius: 6, textAlign: "right", fontFamily: "inherit", fontSize: 13,
+                                        border: "1.5px solid " + (baseEdited ? "#F59E0B" : "#E5E7EB"),
+                                        background: baseEdited ? "#FFFBEB" : "white", outline: "none", color: baseEdited ? "#92400E" : "#374151", fontWeight: baseEdited ? 700 : 500 }}/>
+                                  </td>
                                   <td style={{ padding: "9px 14px", textAlign: "right" }}>
                                     <input type="number" value={aVal}
                                       placeholder="0"
