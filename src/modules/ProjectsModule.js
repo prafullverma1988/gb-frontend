@@ -1354,7 +1354,20 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   };
 
   const load=async()=>{
-    setLoading(true);
+    // Stale-while-revalidate: if we have a cached snapshot for this
+    // mode, paint it INSTANTLY (no spinner), then silently refresh in
+    // the background. Cache TTL is 30 s so the data is at most that
+    // stale. Mutating actions (approve / reject) call
+    // apiCache.invalidate("approval-drawer") below so cache is
+    // dropped immediately on user action.
+    const cacheKey = "approval-drawer:" + mode;
+    const cached = apiCache.get(cacheKey);
+    if (cached) {
+      setData(cached);
+      setLoading(false);  // skip the spinner — show stale data instantly
+    } else {
+      setLoading(true);
+    }
     try{
       if(mode==="materials"){
         const [mrRes,poRes,whmrRes,grnRes,trRes,venRes]=await Promise.all([
@@ -1365,25 +1378,29 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
           api.get("/warehouse/transfers").catch(()=>({success:false})),
           api.get("/procurement/vendors").catch(()=>({success:false})),
         ]);
-        setData({
+        const next = {
           mrs:    mrRes.success  ? mrRes.data   : [],
           pos:    poRes.success  ? poRes.data   : [],
           whmrs:  whmrRes.success? whmrRes.data : [],
           grns:   grnRes.success ? grnRes.data  : [],
           transfers: trRes.success ? trRes.data  : [],
           finance:[], centralized:[],
-        });
+        };
+        setData(next);
+        apiCache.set(cacheKey, next, 30000);
         if(venRes.success&&Array.isArray(venRes.data)) setVendorList(venRes.data);
       } else {
         const [prRes,apRes]=await Promise.all([
           api.get("/finance/payment-requests"),
           api.get("/approvals/pending").catch(()=>({success:false})),
         ]);
-        setData({
+        const next = {
           mrs:[], pos:[], whmrs:[], grns:[], transfers:[],
           finance:(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending"),
           centralized:apRes.success?apRes.data||[]:[],
-        });
+        };
+        setData(next);
+        apiCache.set(cacheKey, next, 30000);
       }
     }catch(e){ setSaveErr("Data load failed"); }
     setLoading(false);
@@ -1396,7 +1413,12 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     setSaveErr("");setActing(p=>({...p,["c"+id]:"approving"}));
     try{
       const res=await api.patch("/approvals/"+id+"/action",{action:"approve"});
-      if(res.success) setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==id)}));
+      if(res.success) {
+        setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==id)}));
+        // Cache is now stale — drop it so next drawer open refetches.
+        apiCache.invalidate("approval-drawer");
+        apiCache.invalidate("approval-counts");
+      }
       else setSaveErr(res.message||"Approve failed");
     }catch(e){setSaveErr(e.message);}
     setActing(p=>({...p,["c"+id]:null}));
