@@ -2339,7 +2339,6 @@ function ProjectsPage({onSelectProject}){
       window.removeEventListener("focus", onFocus);
       document.removeEventListener("visibilitychange", onVis);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[]);
 
   const cities=["All",...new Set(allProjects.map(p=>p.city))];
