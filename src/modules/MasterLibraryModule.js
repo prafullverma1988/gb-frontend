@@ -1168,31 +1168,40 @@ function PartyMasterSection() {
 // 4. WORK CATEGORY
 // ═══════════════════════════════════════════════════════════════════════
 function WorkCategorySection() {
+  // Work Category is a SCOPING label only (e.g. "Civil", "Electrical").
+  // Unit + rate live on the BOQ Item Library rows that reference the
+  // category by name. The category itself is just a string id, so the
+  // form has been trimmed to Name + Code + Description.
+  //
+  // The `unit` / `base_rate` columns still exist on the work_categories
+  // table from earlier schema; we just don't expose them in the UI. The
+  // backend POST/PUT still accept them and will write 0 / "" defaults
+  // from this client — safe for any legacy code that reads them.
   const { items: cats, loading, save: apiSave, del: apiDel, reload } = useSection("work-categories");
-  const { items: uomList } = useSection("uom");
   const [search, setSearch] = useState("");
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const [form, setForm] = useState({ name: "", code: "", unit: "Sq.Ft", rate: 0, desc: "" });
+  const [form, setForm] = useState({ name: "", code: "", desc: "" });
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
-
-  // UOM from backend, fallback to defaults
-  const uomOptions = uomList.length > 0
-    ? uomList.map(u => u.symbol ? u.symbol + " (" + u.name + ")" : u.name)
-    : ["CFT","Sq.Ft","Running Ft","Kg","MT","Point","Unit","Lump Sum","Brass","Piece"];
-  const uomValues = uomList.length > 0 ? uomList.map(u => u.name) : uomOptions;
 
   const filtered = cats.filter(c =>
     c.name.toLowerCase().includes(search.toLowerCase()) ||
     (c.code||"").toLowerCase().includes(search.toLowerCase())
   );
-  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", unit: uomValues[0] || "Sq.Ft", rate: 0, desc: "" }); setShowModal(true); };
-  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", unit: c.unit||"Sq.Ft", rate: c.rate||0, desc: c.description||c.desc||"" }); setShowModal(true); };
+  const openCreate = () => { setEditing(null); setForm({ name: "", code: "", desc: "" }); setShowModal(true); };
+  const openEdit = (c) => { setEditing(c); setForm({ name: c.name, code: c.code||"", desc: c.description||c.desc||"" }); setShowModal(true); };
   const save = async () => {
     if (!form.name.trim()) return alert("Work category name required");
     setSaving(true);
-    const res = await apiSave({ name: form.name.trim(), code: form.code, unit: form.unit, rate: form.rate, description: form.desc }, editing?.id);
+    // Send empty unit / 0 rate to keep backend payload shape stable.
+    const res = await apiSave({
+      name:        form.name.trim(),
+      code:        form.code,
+      description: form.desc,
+      unit:        "",
+      rate:        0,
+    }, editing?.id);
     setSaving(false);
     if (res.success) setShowModal(false);
     else alert(res.message || "Save failed");
@@ -1200,23 +1209,23 @@ function WorkCategorySection() {
   const del = (id) => apiDel(id);
 
   const workTemplateConfig = {
-    headers: ["Work Category Name", "Code", "Unit", "Base Rate (Rs.)", "Description"],
+    headers: ["Work Category Name", "Code", "Description"],
     sampleRows: [
-      ["Excavation & Earthwork", "EXC", "CFT", "12", "Foundation digging, trenching"],
-      ["RCC Work", "RCC", "CFT", "280", "Footings, columns, beams, slabs"],
+      ["Excavation & Earthwork", "EXC", "Foundation digging, trenching"],
+      ["RCC Work",               "RCC", "Footings, columns, beams, slabs"],
     ],
     filename: "gb_work_categories_export.csv",
     templateFilename: "gb_template_work_categories.csv",
-    instructions: "Instructions: Name and Code required. Unit examples: CFT, Sq.Ft, Kg, Point, Unit, Running Ft, Lump Sum",
-    mapRow: (c) => [c.name, c.code, c.unit, c.rate, c.desc],
+    instructions: "Instructions: Name required. Code is a short uppercase ID (e.g. RCC, EXC). Description is the scope of work this category covers.",
+    mapRow: (c) => [c.name, c.code, c.description || c.desc],
   };
   const handleWorkImport = async (rows) => {
     const mapped = rows.map(r => ({
       name:        (r["Work Category Name"] || "").trim(),
       code:        (r["Code"] || "").trim(),
-      unit:        (r["Unit"] || "Sq.Ft").trim(),
-      rate:        parseFloat(r["Base Rate (Rs.)"]) || 0,
       description: (r["Description"] || "").trim(),
+      unit:        "",
+      rate:        0,
     })).filter(c => c.name);
     const res = await api.post("/library/work-categories/bulk", { rows: mapped });
     if (res.success) await reload();
@@ -1224,11 +1233,11 @@ function WorkCategorySection() {
   };
 
   const columns = [
-    { key: "code", label: "Code", minW: 60, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.purple, background: T.purpleSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
-    { key: "name", label: "Work Category", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "desc", label: "Description", minW: 200, style: { fontSize: 12, color: T.textMid } },
-    { key: "unit", label: "Unit", minW: 70 },
-    { key: "rate", label: "Base Rate", minW: 90, align: "right", render: r => <span style={{ fontWeight: 700, color: T.text }}>Rs.{(r.rate||0).toLocaleString()}/{r.unit||""}</span> },
+    { key: "code", label: "Code", minW: 70, render: r => r.code
+        ? <code style={{ fontSize: 12, fontWeight: 600, color: T.purple, background: T.purpleSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code>
+        : <span style={{ color: T.textLight }}>—</span> },
+    { key: "name",        label: "Work Category", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
+    { key: "description", label: "Description",   minW: 260, render: r => <span style={{ fontSize: 12, color: T.textMid }}>{r.description || r.desc || "—"}</span> },
   ];
 
   return (
@@ -1240,10 +1249,6 @@ function WorkCategorySection() {
         <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
           <FormField label="Work Category Name" value={form.name} onChange={v => upd("name", v)} placeholder="e.g. RCC Work" half required />
           <FormField label="Code" value={form.code} onChange={v => upd("code", v.toUpperCase())} placeholder="e.g. RCC" half />
-        </div>
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={uomValues} half />
-          <FormField label="Base Rate (Rs.)" value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half />
         </div>
         <FormTextarea label="Description" value={form.desc} onChange={v => upd("desc", v)} placeholder="What work is included?" rows={2} />
         <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Create"} />
