@@ -2316,6 +2316,32 @@ function ProjectsPage({onSelectProject}){
     }).catch(()=>{});
   },[]);
 
+  // ── L2: cross-user refresh on window focus ─────────────────────
+  // L1 (mutation-site triggers) covers actions taken in THIS tab.
+  // But if another teammate (or another tab) creates an approval,
+  // this tab's badge stays stale until the user manually clicks.
+  // When the window comes back into focus we silently invalidate the
+  // approval cache and re-pull the badge — no spinner, no flash, just
+  // a fresh number next time you glance. Cheap (one /counts call) and
+  // throttled implicitly by how often the user tab-switches.
+  useEffect(()=>{
+    const onFocus = () => {
+      apiCache.invalidate("approval-drawer");
+      apiCache.invalidate("approval-counts");
+      loadApprovalCounts();
+    };
+    window.addEventListener("focus", onFocus);
+    // Same trigger on tab-visibility change for users who keep the tab
+    // open but switch to another window (no "focus" event on some OSes).
+    const onVis = () => { if (!document.hidden) onFocus(); };
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      document.removeEventListener("visibilitychange", onVis);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[]);
+
   const cities=["All",...new Set(allProjects.map(p=>p.city))];
   const progClr=pct=>pct===100?T.grn:pct>60?T.blu:pct>30?T.amb:T.red;
 

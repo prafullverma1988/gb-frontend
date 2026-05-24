@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import api, { API_BASE } from "../config/api";
+import apiCache from "../utils/apiCache";
 import { Avatar, Credit } from "../components/Credit";
 import PaymentRequestDrawer from "../components/PaymentRequestDrawer";
 import SearchSelect from "../components/SearchSelect";
@@ -751,6 +752,7 @@ function TabDesign({ project, isAdmin }) {
           project_id: projectId || res.data.project_id,
           project_name: projectName || res.data.project_name || "",
         }).catch(e => console.error("Approval submit:", e));
+        apiCache.refreshApprovals();  // pre-warm Pending Approvals badge
         setDrawings(p => [res.data, ...p]);
         setShowUpload(false);
         setUForm({ title:"", category:"Architectural", drawing_type:"2D", note:"" });
@@ -3985,6 +3987,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
                 project_id: projectId,
                 project_name: "",
               }).catch(e => console.error("Approval submit:", e));
+              apiCache.refreshApprovals();  // pre-warm badge
               onSaved();
             }
             else alert(res.message||"Failed");
@@ -6172,6 +6175,7 @@ function TabAttendance({ project }) {
       });
       if (res.success) {
         setWorkforce(prev=>({...prev,[labType]:prev[labType].map(w=>w.id===rateReqWorker.id?{...w,rateStatus:"pending",pendingRate:Number(newRateVal)}:w)}));
+        apiCache.refreshApprovals();  // pre-warm badge
         setShowRateModal(false); setRateReqWorker(null); setNewRateVal(""); setRateReason("");
       } else {
         alert(res.message || "Failed to submit");
@@ -8095,6 +8099,8 @@ function TabMaterial({ project }) {
           required_date:"", notes:"", photos: [],
         });
         setShowModal(false);
+        // One refresh after the whole batch — pre-warm the badge once.
+        apiCache.refreshApprovals();
       }
     } catch(e) { alert("Error: " + e.message); }
     finally { setSaving(false); mrSubmitRef.current = false; }
@@ -9531,6 +9537,7 @@ function TabSubcon({ projectId }) {
         project_id: projectId,
         project_name: projectName || "",
       }).catch(e => console.error("Approval submit:", e));
+      apiCache.refreshApprovals();  // pre-warm badge
       setShowNewBill(false); selectWo(selWo);
     }
     else alert(res.message||"Failed");
@@ -10301,6 +10308,7 @@ function EditWOModal({ wo, subcons, fmtC, inpStyle, lblStyle, onClose, onSaved }
         project_name: wo.project_name || "",
         notes: reason || "",
       }).catch(e => console.error("Approval submit:", e));
+      apiCache.refreshApprovals();  // pre-warm badge
       onSaved();
     }
     else alert(res.message||"Failed");

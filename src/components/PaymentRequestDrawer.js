@@ -14,6 +14,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import api, { getUser } from "../config/api";
+import apiCache from "../utils/apiCache";
 import SearchSelect from "./SearchSelect";
 import { Credit, fmtTimeAgo } from "./Credit";
 
@@ -204,6 +205,8 @@ export default function PaymentRequestDrawer({
       }
       if (window.toast) window.toast.success("Payment request sent for approval");
       onSaved && onSaved();
+      // New PR → pending approval queue. Pre-warm the badge.
+      apiCache.refreshApprovals();
       // Switch back to list mode + refresh, instead of closing — user can see their submission
       setMode("list");
       setAmount(""); setPurpose(""); setNote(""); setNeededBy(""); setErr("");

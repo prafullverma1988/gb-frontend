@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import TransactionDetailDrawer from "../components/TransactionDetailDrawer";
 import LibrarySelect from "../components/LibrarySelect";
 import api from "../config/api";
+import apiCache from "../utils/apiCache";
 import useDebounce from "../utils/useDebounce";
 
 // ── ICON BASE ────────────────────────────────────────────────────────
@@ -1906,6 +1907,7 @@ function NewPRModal({onClose,onSave,dbParties,dbProjects}){
         note:note||null,
       });
       if(res?.success===false){setErr(res.message||"Save failed");setSaving(false);savingRef.current=false;return;}
+      apiCache.refreshApprovals();  // pre-warm badge — new PR is now pending
       onSave&&onSave();
       onClose();
     }catch(e){setErr(e?.message||"Network error");setSaving(false);}

@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import api from "../config/api";
+import apiCache from "../utils/apiCache";
 import uploadManager from "../utils/uploadManager";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
@@ -140,6 +141,8 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
               project_id: capturedForm.project_id || res.data.project_id,
               project_name: proj?.name || res.data.project_name || "",
             }).catch(e => console.error("Approval submit:", e));
+            // Pre-warm the approval badge: drawer's next open paints instantly.
+            apiCache.refreshApprovals();
             // Auto-learn site location from live-camera presence
             // (best-effort, silently no-ops if GPS denied)
             const pid = capturedForm.project_id || res.data.project_id;
@@ -1049,7 +1052,11 @@ export default function DesignModule() {
       setAprvActing(p=>({...p,[id]:"revision"}));
       try {
         const res = await api.patch("/design/drawings/"+id+"/status", {status:"Revision", note:reason});
-        if (res.success) setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Revision",note:reason}:d));
+        if (res.success) {
+          setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Revision",note:reason}:d));
+          // Revision flips drawing back into the approval queue.
+          apiCache.refreshApprovals();
+        }
       } catch(e) {}
       setAprvActing(p=>({...p,[id]:null}));
     };
@@ -1060,7 +1067,11 @@ export default function DesignModule() {
       setAprvActing(p=>({...p,[id]:"rejecting"}));
       try {
         const res = await api.patch("/design/drawings/"+id+"/status", {status:"Rejected", note:reason});
-        if (res.success) setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Rejected"}:d));
+        if (res.success) {
+          setDrawings(p=>p.map(d=>d.id===id?{...d,status:"Rejected"}:d));
+          // Removes from approval queue — keep badge in sync.
+          apiCache.refreshApprovals();
+        }
       } catch(e) {}
       setAprvActing(p=>({...p,[id]:null}));
     };
