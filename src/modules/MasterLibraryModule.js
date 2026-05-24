@@ -1482,10 +1482,33 @@ function ClientBOQSection() {
   const [selPkg,     setSelPkg]     = useState(null);
   const [filterCat,  setFilterCat]  = useState("All");
 
-  // ── Rate matrix (item_id → rate) ─────────────────────────────────────
-  const [rates,   setRates]   = useState({});
-  const [changed, setChanged] = useState({});
-  const [saving,  setSaving]  = useState(false);
+  // ── Rate matrix ──────────────────────────────────────────────────────
+  // Both maps keyed by item_id → { add_on:Number, description:String }.
+  // `changed` mirrors the same shape for any field the user has touched
+  // since last load/save; merge `changed` on top of `rates` to get the
+  // effective value (see cellOf / getAddOn / getDesc below).
+  // ITEM PICKING: items show in a section only when they're "picked" for
+  // this package+city — i.e. an entry exists in `rates` OR `changed`.
+  const [rates,         setRates]         = useState({});
+  const [changed,       setChanged]       = useState({});
+  const [collapsedCats, setCollapsedCats] = useState({}); // catName → true when collapsed
+  const [saving,        setSaving]        = useState(false);
+
+  // ── Picker modal (opens from "+ Add Item to {category}") ────────────
+  const [pickerCat,     setPickerCat]     = useState(null); // category name, null = closed
+  const [pickerSearch,  setPickerSearch]  = useState("");
+  const [pickerMode,    setPickerMode]    = useState("list"); // "list" | "create"
+  const [pickerForm,    setPickerForm]    = useState({});      // for inline "+ Add new"
+  const [pickerSaving,  setPickerSaving]  = useState(false);
+
+  // ── Inline rename of a category in a section header ─────────────────
+  const [renameCatId,    setRenameCatId]    = useState(null);  // work_categories.id
+  const [renameCatValue, setRenameCatValue] = useState("");
+
+  // ── Edit modal for an existing BOQ item (Subcon-style modal) ────────
+  const [editItem,     setEditItem]     = useState(null);
+  const [editItemForm, setEditItemForm] = useState({});
+  const [editItemSaving, setEditItemSaving] = useState(false);
 
   // ── Add-new modals ───────────────────────────────────────────────────
   const [addModal, setAddModal] = useState(null); // "type"|"city"|"pkg"|"item"
@@ -1542,7 +1565,12 @@ function ClientBOQSection() {
       .then(r => {
         if (r.success) {
           const map = {};
-          (r.data||[]).forEach(x => { map[x.item_id] = parseFloat(x.rate); });
+          (r.data||[]).forEach(x => {
+            map[x.item_id] = {
+              add_on:      parseFloat(x.add_on_rate) || 0,
+              description: x.description || "",
+            };
+          });
           setRates(map);
           setChanged({});
         }
@@ -1553,24 +1581,147 @@ function ClientBOQSection() {
   const filteredItems = boqItems.filter(i => filterCat === "All" || i.category === filterCat);
 
   // ── Save rates ───────────────────────────────────────────────────────
+  // New payload shape: { item_id, base_rate, add_on_rate, description } per
+  // item. Backend computes `rate` = base + add_on so the legacy `rate` column
+  // (still read by Estimate module) stays in sync.
   const saveRates = async () => {
     if (!selPkg || !selCity) return;
     setSaving(true);
-    const allRates = boqItems.map(item => ({
-      item_id: item.id,
-      rate: parseFloat(changed[item.id] !== undefined ? changed[item.id] : rates[item.id] !== undefined ? rates[item.id] : item.base_rate || 0),
+    const items = boqItems.map(i => ({
+      item_id:     i.id,
+      base_rate:   Number(i.base_rate) || 0,
+      add_on_rate: Number(getAddOn(i)) || 0,
+      description: getDesc(i) || "",
     }));
-    const res = await api.post("/library/rate-matrix/bulk", { package_id: selPkg.id, city_id: selCity.id, items: allRates });
+    const res = await api.post("/library/rate-matrix/bulk", {
+      package_id: selPkg.id, city_id: selCity.id, items,
+    });
     setSaving(false);
     if (res.success) {
-      setRates(prev => { const n = { ...prev }; Object.keys(changed).forEach(k => { n[k] = parseFloat(changed[k]); }); return n; });
+      // Merge `changed` into `rates` (canonical) then clear `changed`.
+      setRates(prev => {
+        const n = { ...prev };
+        Object.entries(changed).forEach(([id, v]) => { n[id] = { ...n[id], ...v }; });
+        return n;
+      });
       setChanged({});
       alert("Rates saved!");
     } else alert(res.message || "Save failed");
   };
 
   // ── Add new handlers ─────────────────────────────────────────────────
-  const openAdd = (type) => { setAddForm({}); setAddModal(type); };
+  // `preset` lets section footers pre-fill new-item fields (e.g. category).
+  // For "pkg" edit: pass { _editingId, name, sqft_rate, description } to
+  // switch the existing pkg modal into edit mode (PUT instead of POST).
+  const openAdd = (type, preset = {}) => { setAddForm({ ...preset }); setAddModal(type); };
+
+  // ── Picker handlers ─────────────────────────────────────────────────
+  // Opens the picker for a given category. From here the user either
+  // picks an existing library item (boq_items WHERE category=catName AND
+  // NOT-already-in-rates) or switches to "create new" to push a fresh
+  // boq_items row + auto-pick it.
+  const openPicker  = (catName) => { setPickerCat(catName); setPickerSearch(""); setPickerMode("list"); setPickerForm({ category: catName }); };
+  const closePicker = () => { setPickerCat(null); setPickerSearch(""); setPickerMode("list"); setPickerForm({}); };
+  const pickItemIntoSection = (item) => {
+    // Add to `changed` with default values — Save Rates will persist.
+    setChanged(p => ({ ...p, [item.id]: { add_on: 0, description: "" } }));
+    closePicker();
+  };
+  const submitNewInPicker = async () => {
+    if (!pickerForm.name?.trim()) return alert("Item name required");
+    setPickerSaving(true);
+    const res = await api.post("/library/boq-items", {
+      name:        pickerForm.name.trim(),
+      category:    pickerForm.category || pickerCat || (catOptions[0] || ""),
+      unit:        pickerForm.unit || uomOptions[0] || "",
+      base_rate:   parseFloat(pickerForm.base_rate) || 0,
+      description: pickerForm.description || "",
+    });
+    setPickerSaving(false);
+    if (res?.success && res.data) {
+      // Add new item to master + auto-pick into this section.
+      setBoqItems(p => [res.data, ...p]);
+      setChanged(p => ({ ...p, [res.data.id]: { add_on: 0, description: "" } }));
+      closePicker();
+    } else alert(res?.message || "Save failed");
+  };
+
+  // ── Category rename ─────────────────────────────────────────────────
+  // Calls the new POST /library/work-categories/:id/rename endpoint
+  // which updates work_categories.name + all boq_items.category strings
+  // in one transaction. After save we reload work-categories AND
+  // boq-items so the section regroups cleanly.
+  const startRenameCat = (catName) => {
+    const cat = workCats.find(c => c.name === catName);
+    if (!cat) return;
+    setRenameCatId(cat.id);
+    setRenameCatValue(catName);
+  };
+  const cancelRenameCat = () => { setRenameCatId(null); setRenameCatValue(""); };
+  const saveRenameCat = async () => {
+    const newName = renameCatValue.trim();
+    if (!newName || !renameCatId) return;
+    const res = await api.post("/library/work-categories/" + renameCatId + "/rename", { name: newName });
+    if (res?.success) {
+      cancelRenameCat();
+      // Refresh both — workCats is in useSection("work-categories") which
+      // is consumed read-only here; the simplest refresh is to reload
+      // boq_items (so category strings get the new name) and let workCats
+      // self-refresh on next mount. For instant UX we also patch
+      // boqItems local state.
+      await loadItems();
+    } else alert(res?.message || "Rename failed");
+  };
+
+  // ── Item edit / delete ──────────────────────────────────────────────
+  const openEditItem = (item) => {
+    setEditItem(item);
+    setEditItemForm({
+      name:        item.name || "",
+      category:    item.category || (catOptions[0] || ""),
+      unit:        item.unit || (uomOptions[0] || ""),
+      base_rate:   item.base_rate || 0,
+      description: item.description || "",
+    });
+  };
+  const closeEditItem = () => { setEditItem(null); setEditItemForm({}); };
+  const saveEditItem = async () => {
+    if (!editItem || !editItemForm.name?.trim()) return;
+    setEditItemSaving(true);
+    const res = await api.put("/library/boq-items/" + editItem.id, {
+      name:        editItemForm.name.trim(),
+      category:    editItemForm.category,
+      unit:        editItemForm.unit,
+      base_rate:   parseFloat(editItemForm.base_rate) || 0,
+      description: editItemForm.description || "",
+    });
+    setEditItemSaving(false);
+    if (res?.success && res.data) {
+      setBoqItems(p => p.map(i => i.id === editItem.id ? res.data : i));
+      closeEditItem();
+    } else alert(res?.message || "Save failed");
+  };
+  const deleteItemRow = async (item) => {
+    if (!window.confirm("Delete \"" + item.name + "\" from the library? This also removes it from any package's rate matrix on next save.")) return;
+    const res = await api.del("/library/boq-items/" + item.id);
+    if (res?.success) {
+      setBoqItems(p => p.filter(i => i.id !== item.id));
+      // Drop any pending change for this item too.
+      setChanged(p => { const n = { ...p }; delete n[item.id]; return n; });
+      setRates(p => { const n = { ...p }; delete n[item.id]; return n; });
+    } else alert(res?.message || "Delete failed");
+  };
+
+  // ── Package edit (reuses existing pkg modal in edit mode) ──────────
+  const openEditPkg = (pkg) => {
+    setAddForm({
+      _editingId:  pkg.id,
+      name:        pkg.name || "",
+      sqft_rate:   pkg.sqft_rate || 0,
+      description: pkg.description || "",
+    });
+    setAddModal("pkg");
+  };
   const handleAdd = async () => {
     setAdding(true);
     let res;
@@ -1584,8 +1735,21 @@ function ClientBOQSection() {
       if (res.success) { await loadCities(); setSelCity(res.data); }
     } else if (addModal === "pkg") {
       if (!addForm.name?.trim()) { setAdding(false); return alert("Name required"); }
-      res = await api.post("/library/rate-packages", { name: addForm.name.trim(), construction_type_id: selType?.id, sqft_rate: addForm.sqft_rate || 0, description: addForm.description || "" });
-      if (res.success) { await loadPackages(); setSelPkg(res.data); }
+      if (addForm._editingId) {
+        // EDIT mode — PUT instead of POST.
+        res = await api.put("/library/rate-packages/" + addForm._editingId, {
+          name: addForm.name.trim(),
+          sqft_rate: addForm.sqft_rate || 0,
+          description: addForm.description || "",
+        });
+        if (res.success) {
+          await loadPackages();
+          if (selPkg?.id === addForm._editingId) setSelPkg(p => ({ ...p, ...res.data }));
+        }
+      } else {
+        res = await api.post("/library/rate-packages", { name: addForm.name.trim(), construction_type_id: selType?.id, sqft_rate: addForm.sqft_rate || 0, description: addForm.description || "" });
+        if (res.success) { await loadPackages(); setSelPkg(res.data); }
+      }
     } else if (addModal === "item") {
       if (!addForm.name?.trim()) { setAdding(false); return alert("Name required"); }
       res = await api.post("/library/boq-items", { name: addForm.name.trim(), category: addForm.category || catOptions[0] || "", unit: addForm.unit || uomOptions[0] || "", base_rate: addForm.base_rate || 0, description: addForm.description || "" });
@@ -1609,12 +1773,21 @@ function ClientBOQSection() {
   // Filtered packages for selected type
   const typePkgs = packages.filter(p => selType && String(p.construction_type_id) === String(selType.id));
 
-  // Rate for a given item (changed > saved > base)
-  const getRate = (item) => {
-    if (changed[item.id] !== undefined) return changed[item.id];
-    if (rates[item.id]   !== undefined) return rates[item.id];
-    return "";
+  // Effective value lookups (changed > saved > default).
+  const cellOf = (id) => (changed[id] ?? rates[id] ?? null);
+  const getAddOn = (item) => {
+    const c = cellOf(item.id);
+    return c && c.add_on !== undefined ? c.add_on : "";
   };
+  const getDesc = (item) => {
+    const c = cellOf(item.id);
+    return c && c.description !== undefined ? c.description : "";
+  };
+  // Merge a partial { add_on?, description? } into the changed entry for an item.
+  const patchChanged = (id, patch) => setChanged(p => {
+    const cur = p[id] ?? rates[id] ?? { add_on: 0, description: "" };
+    return { ...p, [id]: { ...cur, ...patch } };
+  });
   const hasChanged = Object.keys(changed).length > 0;
 
   return (
@@ -1673,16 +1846,28 @@ function ClientBOQSection() {
             3 — Package
           </div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {typePkgs.map(pkg => (
-              <div key={pkg.id} onClick={() => setSelPkg(pkg)}
-                style={{ padding: "9px 20px", borderRadius: 8, border: "2px solid " + (selPkg?.id === pkg.id ? "#7C3AED" : "#E5E7EB"),
-                  background: selPkg?.id === pkg.id ? "#7C3AED" : "white",
-                  color: selPkg?.id === pkg.id ? "white" : "#374151",
-                  fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 0.15s" }}>
-                <div>{pkg.name}</div>
-                {pkg.sqft_rate > 0 && <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>Rs.{Number(pkg.sqft_rate).toLocaleString()}/sqft</div>}
-              </div>
-            ))}
+            {typePkgs.map(pkg => {
+              const active = selPkg?.id === pkg.id;
+              return (
+                <div key={pkg.id} onClick={() => setSelPkg(pkg)}
+                  style={{ position: "relative", padding: "9px 32px 9px 20px", borderRadius: 8,
+                    border: "2px solid " + (active ? "#7C3AED" : "#E5E7EB"),
+                    background: active ? "#7C3AED" : "white",
+                    color: active ? "white" : "#374151",
+                    fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 0.15s" }}>
+                  <div>{pkg.name}</div>
+                  {pkg.sqft_rate > 0 && <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>Rs.{Number(pkg.sqft_rate).toLocaleString()}/sqft</div>}
+                  {/* Edit pencil — only visible on the selected tile so non-active tiles stay clean */}
+                  {active && (
+                    <button onClick={(e) => { e.stopPropagation(); openEditPkg(pkg); }}
+                      title="Edit package"
+                      style={{ position: "absolute", right: 6, top: 6, background: "rgba(255,255,255,0.18)", border: "none", borderRadius: 4, color: "white", cursor: "pointer", padding: 3, display: "flex" }}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             <button onClick={() => openAdd("pkg")}
               style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
               + New Package
@@ -1691,7 +1876,7 @@ function ClientBOQSection() {
         </div>
       )}
 
-      {/* ── LEVEL 4+5: Category filter + Items grid ───────────────────── */}
+      {/* ── LEVEL 4+5: Grouped category sections + per-item add-on/description ── */}
       {selType && selCity && selPkg && (
         <>
           {/* Info + Save bar */}
@@ -1706,87 +1891,208 @@ function ClientBOQSection() {
             </button>
           </div>
 
-          {/* Category filter + Add item */}
-          <div style={{ display: "flex", gap: 10, marginBottom: 14, justifyContent: "space-between", alignItems: "center" }}>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-              {allCats.map(cat => (
-                <button key={cat} onClick={() => setFilterCat(cat)}
-                  style={{ padding: "6px 14px", borderRadius: 6, border: "1.5px solid " + (filterCat === cat ? "#7C3AED" : "#E5E7EB"),
-                    background: filterCat === cat ? "#7C3AED" : "white",
-                    color: filterCat === cat ? "white" : "#374151",
-                    fontWeight: 600, fontSize: 12, cursor: "pointer" }}>
-                  {cat}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => openAdd("item")}
-              style={{ padding: "8px 16px", background: "#10B981", color: "white", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-              + Add Item
-            </button>
-          </div>
+          {/* GROUPED SECTIONS — Subcon-style dark headers, items appear only when picked */}
+          {(() => {
+            // Items visible in the section view = items the user has explicitly
+            // picked for this package+city (have an entry in `rates` or
+            // `changed`). Master library still lives in boqItems untouched.
+            const pickedIds = new Set([
+              ...Object.keys(rates),
+              ...Object.keys(changed),
+            ].map(String));
+            const pickedItems = boqItems.filter(i => pickedIds.has(String(i.id)));
 
-          {/* Items table */}
-          {filteredItems.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "50px 0", color: "#9CA3AF" }}>
-              No items found — click "Add Item" to add BOQ items
-            </div>
-          ) : (
-            <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", overflow: "hidden" }}>
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ background: "#F9FAFB" }}>
-                    <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Stage / Item</th>
-                    <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Description</th>
-                    <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 120 }}>Category</th>
-                    <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 70 }}>Unit</th>
-                    <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 110 }}>Base Rate</th>
-                    <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#2563EB", textTransform: "uppercase", width: 150 }}>{selCity.name} Rate</th>
-                    <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 110 }}>Stages</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item, idx) => {
-                    const val = getRate(item);
-                    const isChanged = changed[item.id] !== undefined;
-                    const stageCount = parseInt(item.stage_count || 0);
-                    return (
-                      <tr key={item.id} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA", borderBottom: "1px solid #F3F4F6" }}>
-                        <td style={{ padding: "10px 14px" }}>
-                          <div style={{ fontWeight: 600, fontSize: 13, color: "#111827" }}>{item.name}</div>
-                        </td>
-                        <td style={{ padding: "10px 14px", fontSize: 12, color: "#4B5563" }}>{item.description || "—"}</td>
-                        <td style={{ padding: "10px 14px" }}>
-                          <span style={{ fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 4 }}>{item.category || "—"}</span>
-                        </td>
-                        <td style={{ padding: "10px 14px", textAlign: "center", fontSize: 12, color: "#6B7280" }}>{item.unit}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right", fontSize: 13, color: "#9CA3AF" }}>Rs.{Number(item.base_rate||0).toLocaleString()}</td>
-                        <td style={{ padding: "10px 14px", textAlign: "right" }}>
-                          <input
-                            type="number"
-                            value={val}
-                            placeholder={String(item.base_rate || 0)}
-                            onChange={e => setChanged(p => ({ ...p, [item.id]: e.target.value }))}
-                            style={{ width: 120, padding: "6px 10px", borderRadius: 6, textAlign: "right", fontFamily: "inherit", fontSize: 13,
-                              border: "1.5px solid " + (isChanged ? "#2563EB" : "#E5E7EB"),
-                              background: isChanged ? "#EFF6FF" : "white", outline: "none" }}
-                          />
-                        </td>
-                        <td style={{ padding: "10px 14px", textAlign: "center" }}>
-                          <button onClick={() => openStagesModal(item)}
-                            style={{ padding: "5px 12px", borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
-                              background: stageCount > 0 ? "#ECFDF5" : "#F3F4F6",
-                              color: stageCount > 0 ? "#059669" : "#6B7280",
-                              border: "1px solid " + (stageCount > 0 ? "#A7F3D0" : "#E5E7EB") }}>
-                            {stageCount > 0 ? "✏ " + stageCount + " stage" + (stageCount > 1 ? "s" : "") : "+ Stages"}
+            // Group picked items by category. Categories WITHOUT picked items
+            // are not rendered — to add to a fresh category, click the master
+            // "+ Add Item" button below.
+            const grouped = pickedItems.reduce((acc, item) => {
+              const k = item.category || "Uncategorized";
+              (acc[k] ||= []).push(item);
+              return acc;
+            }, {});
+            const catNames = Object.keys(grouped).sort();
+
+            // Grand totals across picked items only.
+            const gBase  = pickedItems.reduce((s, i) => s + (Number(i.base_rate) || 0), 0);
+            const gAddOn = pickedItems.reduce((s, i) => s + (Number(getAddOn(i)) || 0), 0);
+            const gTotal = gBase + gAddOn;
+
+            // Set of categories the user might want to start adding to —
+            // master work-categories that don't yet have a picked item.
+            const startCats = (workCats || [])
+              .map(c => c.name)
+              .filter(n => !catNames.includes(n));
+
+            if (catNames.length === 0) {
+              return (
+                <div style={{ textAlign: "center", padding: "40px 0", color: "#9CA3AF" }}>
+                  No items picked for this package yet. Start adding:
+                  <div style={{ marginTop: 14, display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
+                    {(startCats.length ? startCats : [catOptions[0] || "Civil Work"]).map(c => (
+                      <button key={c} onClick={() => openPicker(c)}
+                        style={{ background:"#EFF6FF", color:"#2563EB", border:"1px dashed #BFDBFE", borderRadius:6, padding:"6px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                        + Add Item to {c}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            }
+
+            return (
+              <>
+                {catNames.map(catName => {
+                  const items = grouped[catName];
+                  const sBase  = items.reduce((s, i) => s + (Number(i.base_rate) || 0), 0);
+                  const sAddOn = items.reduce((s, i) => s + (Number(getAddOn(i)) || 0), 0);
+                  const sTot   = sBase + sAddOn;
+                  const collapsed = !!collapsedCats[catName];
+                  const cat = (workCats || []).find(c => c.name === catName);
+                  const renaming = renameCatId && cat && cat.id === renameCatId;
+                  return (
+                    <div key={catName} style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", marginBottom: 12, overflow: "hidden" }}>
+                      {/* Section header — Subcon-style dark navy */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "#1E293B", color: "white" }}>
+                        <span onClick={() => setCollapsedCats(p => ({ ...p, [catName]: !p[catName] }))}
+                          style={{ cursor: "pointer", display: "flex" }}>
+                          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={2.5}
+                            style={{ transition: "transform .15s", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)" }}>
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        </span>
+                        {renaming ? (
+                          <>
+                            <input value={renameCatValue}
+                              onChange={e => setRenameCatValue(e.target.value)}
+                              onKeyDown={e => { if (e.key === "Enter") saveRenameCat(); if (e.key === "Escape") cancelRenameCat(); }}
+                              autoFocus
+                              style={{ padding: "4px 9px", fontSize: 13, fontWeight: 600, borderRadius: 5, border: "1.5px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.08)", color: "white", outline: "none", fontFamily: "inherit", minWidth: 180 }}/>
+                            <button onClick={saveRenameCat} style={{ background: "#10B981", color: "white", border: "none", borderRadius: 4, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
+                            <button onClick={cancelRenameCat} style={{ background: "none", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 4, padding: "3px 10px", fontSize: 11, cursor: "pointer" }}>Cancel</button>
+                          </>
+                        ) : (
+                          <>
+                            <span onClick={() => setCollapsedCats(p => ({ ...p, [catName]: !p[catName] }))} style={{ fontWeight: 700, fontSize: 13.5, color: "white", cursor: "pointer" }}>{catName}</span>
+                            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>· {items.length} item{items.length > 1 ? "s" : ""}</span>
+                            {cat && (
+                              <button onClick={() => startRenameCat(catName)} title="Rename category"
+                                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.45)", cursor: "pointer", padding: 2, display: "flex" }}>
+                                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                              </button>
+                            )}
+                          </>
+                        )}
+                        <div style={{ marginLeft: "auto", display: "flex", gap: 14, fontSize: 11.5, fontWeight: 600 }}>
+                          <span style={{ color: "rgba(255,255,255,0.6)" }}>Base <strong style={{ color: "white" }}>Rs.{Math.round(sBase).toLocaleString()}</strong></span>
+                          <span style={{ color: "rgba(255,255,255,0.6)" }}>Add-on <strong style={{ color: "#93C5FD" }}>Rs.{Math.round(sAddOn).toLocaleString()}</strong></span>
+                          <span style={{ color: "rgba(255,255,255,0.6)" }}>Total <strong style={{ color: "#4ADE80" }}>Rs.{Math.round(sTot).toLocaleString()}</strong></span>
+                        </div>
+                      </div>
+
+                      {/* Items table — hidden when collapsed */}
+                      {!collapsed && (
+                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                          <thead>
+                            <tr style={{ background: "#FAFAFA" }}>
+                              <th style={{ padding: "8px 14px", textAlign: "left",   fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Item</th>
+                              <th style={{ padding: "8px 14px", textAlign: "center", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 70 }}>Unit</th>
+                              <th style={{ padding: "8px 14px", textAlign: "right",  fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 110 }}>Base Rate</th>
+                              <th style={{ padding: "8px 14px", textAlign: "right",  fontSize: 10.5, fontWeight: 700, color: "#2563EB", textTransform: "uppercase", width: 140 }}>Add-on Rate</th>
+                              <th style={{ padding: "8px 14px", textAlign: "left",   fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Description</th>
+                              <th style={{ padding: "8px 8px",  textAlign: "center", width: 60 }}></th>
+                            </tr>
+                            {/* Subtotals row — aligned with column totals */}
+                            <tr style={{ background: "#F3F4F6", borderTop: "1px solid #E5E7EB" }}>
+                              <td style={{ padding: "5px 14px", fontSize: 10.5, fontWeight: 700, color: "#6B7280" }}>SUBTOTAL</td>
+                              <td/>
+                              <td style={{ padding: "5px 14px", textAlign: "right", fontSize: 12, fontWeight: 700, color: "#374151" }}>Rs.{Math.round(sBase).toLocaleString()}</td>
+                              <td style={{ padding: "5px 14px", textAlign: "right", fontSize: 12, fontWeight: 700, color: "#2563EB" }}>Rs.{Math.round(sAddOn).toLocaleString()}</td>
+                              <td colSpan={2} style={{ padding: "5px 14px", textAlign: "right", fontSize: 12, fontWeight: 700, color: "#059669" }}>Total Rs.{Math.round(sTot).toLocaleString()}</td>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {items.map((item, idx) => {
+                              const aVal = getAddOn(item);
+                              const dVal = getDesc(item);
+                              const isChanged = changed[item.id] !== undefined;
+                              return (
+                                <tr key={item.id} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA", borderBottom: "1px solid #F3F4F6" }}>
+                                  <td style={{ padding: "9px 14px", fontWeight: 600, fontSize: 13, color: "#111827" }}>{item.name}</td>
+                                  <td style={{ padding: "9px 14px", textAlign: "center", fontSize: 12, color: "#6B7280" }}>{item.unit}</td>
+                                  <td style={{ padding: "9px 14px", textAlign: "right", fontSize: 13, color: "#9CA3AF" }}>Rs.{Number(item.base_rate || 0).toLocaleString()}</td>
+                                  <td style={{ padding: "9px 14px", textAlign: "right" }}>
+                                    <input type="number" value={aVal}
+                                      placeholder="0"
+                                      onChange={e => patchChanged(item.id, { add_on: e.target.value })}
+                                      style={{ width: 120, padding: "6px 10px", borderRadius: 6, textAlign: "right", fontFamily: "inherit", fontSize: 13,
+                                        border: "1.5px solid " + (isChanged ? "#2563EB" : "#E5E7EB"),
+                                        background: isChanged ? "#EFF6FF" : "white", outline: "none" }}/>
+                                  </td>
+                                  <td style={{ padding: "9px 14px" }}>
+                                    <input type="text" value={dVal}
+                                      placeholder="Optional note for this package/city"
+                                      onChange={e => patchChanged(item.id, { description: e.target.value })}
+                                      style={{ width: "100%", padding: "6px 10px", borderRadius: 6, fontFamily: "inherit", fontSize: 12,
+                                        border: "1.5px solid " + (isChanged ? "#2563EB" : "#E5E7EB"),
+                                        background: isChanged ? "#EFF6FF" : "white", outline: "none", boxSizing: "border-box" }}/>
+                                  </td>
+                                  <td style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
+                                    <button onClick={() => openEditItem(item)} title="Edit item in library"
+                                      style={{ background: "none", border: "none", color: "#6B7280", cursor: "pointer", padding: 4, marginRight: 2 }}>
+                                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                    </button>
+                                    <button onClick={() => deleteItemRow(item)} title="Delete item from library"
+                                      style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: 4 }}>
+                                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      )}
+
+                      {/* Section footer — opens picker for this category */}
+                      {!collapsed && (
+                        <div style={{ padding: "8px 14px", borderTop: "1px solid #F3F4F6", background: "#FAFAFA" }}>
+                          <button onClick={() => openPicker(catName)}
+                            style={{ background: "none", border: "1px dashed #BFDBFE", color: "#2563EB", borderRadius: 5, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                            + Add Item to {catName}
                           </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+
+                {/* Grand Total — Subcon-style right-aligned line */}
+                <div style={{ marginTop: 10, padding: "8px 4px", textAlign: "right", fontSize: 13, fontWeight: 700, color: "#374151" }}>
+                  Grand Total —
+                  <span style={{ marginLeft: 14 }}>Base <strong style={{ color: "#374151" }}>Rs.{Math.round(gBase).toLocaleString()}</strong></span>
+                  <span style={{ marginLeft: 14, color: "#2563EB" }}>Add-on <strong>Rs.{Math.round(gAddOn).toLocaleString()}</strong></span>
+                  <span style={{ marginLeft: 14, color: "#059669", fontSize: 15 }}><strong>Rs.{Math.round(gTotal).toLocaleString()}</strong></span>
+                </div>
+
+                {/* Start a brand new category — picker for any work-category that has no items yet */}
+                {startCats.length > 0 && (
+                  <div style={{ marginTop: 12, padding: "10px 12px", background: "#F9FAFB", border: "1px dashed #E5E7EB", borderRadius: 8 }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
+                      Add items to other categories
+                    </div>
+                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                      {startCats.map(c => (
+                        <button key={c} onClick={() => openPicker(c)}
+                          style={{ background: "white", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 5, padding: "4px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
+                          + {c}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </>
+            );
+          })()}
         </>
       )}
 
@@ -1848,9 +2154,208 @@ function ClientBOQSection() {
         </div>
       )}
 
-      {/* ── Add New Modals ─────────────────────────────────────────────── */}
+      {/* ── PICKER MODAL — "+ Add Item to {category}" ─────────────────
+          Subcon-style dark-header modal. List mode shows library items
+          (boq_items WHERE category=pickerCat AND NOT-yet-in-rates).
+          "Create new" mode swaps the body for an inline add form so the
+          user can push a fresh boq_items row + auto-pick it without
+          leaving the modal.
+      */}
+      {pickerCat && (() => {
+        const pickedIds = new Set([...Object.keys(rates), ...Object.keys(changed)].map(String));
+        const available = boqItems.filter(i =>
+          (i.category || "Uncategorized") === pickerCat &&
+          !pickedIds.has(String(i.id)) &&
+          (!pickerSearch.trim() ||
+            i.name.toLowerCase().includes(pickerSearch.toLowerCase()))
+        );
+        return (
+          <div onClick={closePicker}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ background: "white", borderRadius: 12, width: "min(560px, 95vw)", maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+              {/* Dark header */}
+              <div style={{ background: "#0F172A", padding: "13px 18px", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>
+                    {pickerMode === "list" ? "Add Item to " + pickerCat : "New BOQ Item — " + pickerCat}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
+                    {pickerMode === "list"
+                      ? "Pick from existing library items, or click \"+ Add new\" if it's not there yet."
+                      : "Saves to master library + auto-adds to this package."}
+                  </div>
+                </div>
+                <button onClick={closePicker} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>×</button>
+              </div>
+              {/* Body */}
+              <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+                {pickerMode === "list" ? (
+                  <>
+                    <input value={pickerSearch} onChange={e => setPickerSearch(e.target.value)}
+                      placeholder={"Search items in " + pickerCat + "…"}
+                      autoFocus
+                      style={{ width: "100%", padding: "9px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 10 }}/>
+                    <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 7 }}>
+                      {available.length === 0 ? (
+                        <div style={{ padding: "30px 14px", textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>
+                          {pickerSearch.trim()
+                            ? "No matches in " + pickerCat + ". Click \"+ Add new\" below to create one."
+                            : "All " + pickerCat + " items are already in this package, or none exist yet."}
+                        </div>
+                      ) : available.map((item, idx) => (
+                        <div key={item.id} onClick={() => pickItemIntoSection(item)}
+                          style={{ padding: "9px 12px", cursor: "pointer", borderBottom: idx < available.length - 1 ? "1px solid #F3F4F6" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                          onMouseEnter={e => e.currentTarget.style.background = "#F8FAFC"}
+                          onMouseLeave={e => e.currentTarget.style.background = "white"}>
+                          <div>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{item.name}</div>
+                            <div style={{ fontSize: 10.5, color: "#6B7280", marginTop: 1 }}>{item.unit} {item.description ? "· " + item.description : ""}</div>
+                          </div>
+                          <div style={{ fontSize: 11.5, color: "#9CA3AF" }}>Rs.{Number(item.base_rate || 0).toLocaleString()}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <button onClick={() => setPickerMode("create")}
+                      style={{ marginTop: 10, width: "100%", background: "#EFF6FF", color: "#2563EB", border: "1px dashed #BFDBFE", borderRadius: 7, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+                      + Add new item (not in library yet)
+                    </button>
+                  </>
+                ) : (
+                  // Inline create form — Subcon-style 2-col grid
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                    <div style={{ gridColumn: "1 / 3" }}>
+                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Item Name *</label>
+                      <input value={pickerForm.name || ""} onChange={e => setPickerForm(p => ({ ...p, name: e.target.value }))}
+                        placeholder="e.g. RCC Footing M25" autoFocus
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Category *</label>
+                      <select value={pickerForm.category || pickerCat} onChange={e => setPickerForm(p => ({ ...p, category: e.target.value }))}
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
+                        {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Unit</label>
+                      <select value={pickerForm.unit || (uomOptions[0] || "")} onChange={e => setPickerForm(p => ({ ...p, unit: e.target.value }))}
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
+                        {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Base Rate (Rs.)</label>
+                      <input type="number" value={pickerForm.base_rate || ""} onChange={e => setPickerForm(p => ({ ...p, base_rate: e.target.value }))}
+                        placeholder="0"
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                    </div>
+                    <div>
+                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Description / Scope</label>
+                      <input value={pickerForm.description || ""} onChange={e => setPickerForm(p => ({ ...p, description: e.target.value }))}
+                        placeholder="Optional"
+                        style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                    </div>
+                    <div style={{ gridColumn: "1 / 3" }}>
+                      <button onClick={() => setPickerMode("list")}
+                        style={{ background: "none", border: "none", color: "#6B7280", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: "4px 0" }}>
+                        ← Back to library list
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+              {/* Footer */}
+              <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
+                <button onClick={closePicker}
+                  style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #E5E7EB", background: "white", fontSize: 12, cursor: "pointer" }}>
+                  Cancel
+                </button>
+                {pickerMode === "create" && (
+                  <button onClick={submitNewInPicker} disabled={pickerSaving || !pickerForm.name?.trim()}
+                    style={{ flex: 2, padding: "9px", borderRadius: 7, background: (pickerSaving || !pickerForm.name?.trim()) ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (pickerSaving || !pickerForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                    {pickerSaving ? "Saving…" : "Save & Add"}
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── EDIT ITEM MODAL — Subcon-style ────────────────────────────
+          Opens from the pencil icon on each item row. Edits boq_items
+          (the master row), not the per-package rate. To change the
+          add-on/description for this package, the user edits inline on
+          the table row directly.
+      */}
+      {editItem && (
+        <div onClick={closeEditItem}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: "white", borderRadius: 12, width: "min(540px, 95vw)", maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ background: "#0F172A", padding: "13px 18px", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Edit BOQ Item</div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>Master library — changes apply across all packages.</div>
+              </div>
+              <button onClick={closeEditItem} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ gridColumn: "1 / 3" }}>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Item Name *</label>
+                  <input value={editItemForm.name || ""} onChange={e => setEditItemForm(p => ({ ...p, name: e.target.value }))} autoFocus
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Category *</label>
+                  <select value={editItemForm.category || ""} onChange={e => setEditItemForm(p => ({ ...p, category: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
+                    {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Unit</label>
+                  <select value={editItemForm.unit || ""} onChange={e => setEditItemForm(p => ({ ...p, unit: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
+                    {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Base Rate (Rs.)</label>
+                  <input type="number" value={editItemForm.base_rate || ""} onChange={e => setEditItemForm(p => ({ ...p, base_rate: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Description / Scope</label>
+                  <input value={editItemForm.description || ""} onChange={e => setEditItemForm(p => ({ ...p, description: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
+              <button onClick={closeEditItem}
+                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #E5E7EB", background: "white", fontSize: 12, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={saveEditItem} disabled={editItemSaving || !editItemForm.name?.trim()}
+                style={{ flex: 2, padding: "9px", borderRadius: 7, background: (editItemSaving || !editItemForm.name?.trim()) ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (editItemSaving || !editItemForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                {editItemSaving ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Add New Modals (type/city/pkg only — items handled by picker) ── */}
       <Modal open={!!addModal} onClose={() => setAddModal(null)}
-        title={addModal === "type" ? "New Construction Type" : addModal === "city" ? "New City" : addModal === "pkg" ? "New Package" : "New BOQ Item"}
+        title={
+          addModal === "type" ? "New Construction Type" :
+          addModal === "city" ? "New City" :
+          addModal === "pkg"  ? (addForm._editingId ? "Edit Package" : "New Package") :
+          "New BOQ Item"
+        }
         width={440}>
         {addModal === "type" && (
           <>
@@ -1901,6 +2406,213 @@ function ClientBOQSection() {
         )}
         <ModalFooter onClose={() => setAddModal(null)} onSave={handleAdd} saveLabel={adding ? "Adding..." : "Add"} />
       </Modal>
+    </div>
+  );
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════
+// BOQ ITEM LIBRARY — standalone CRUD over boq_items
+// Powers ClientBOQSection's picker. Sits in the sidebar under RATES & BOQ
+// so users can manage the master list without going through a package.
+// ═══════════════════════════════════════════════════════════════════════
+function BoqItemLibrarySection() {
+  const { items: rows, loading, save: apiSave, del: apiDel, reload } = useSection("boq-items");
+  const { items: workCats }    = useSection("work-categories");
+  const { items: uomList }     = useSection("uom");
+
+  const catOptions = workCats.map(c => c.name);
+  const uomOptions = uomList.length > 0 ? uomList.map(u => u.name) : ["Sq.Ft","CFT","Running Ft","Kg","Point","Unit","Lump Sum","Piece"];
+
+  const [search,    setSearch]    = useState("");
+  const [filterCat, setFilterCat] = useState("All");
+  const [editing,   setEditing]   = useState(null);  // boq_items row or null
+  const [showAdd,   setShowAdd]   = useState(false);
+  const emptyForm = { name: "", category: catOptions[0] || "", unit: uomOptions[0] || "Sq.Ft", base_rate: 0, description: "" };
+  const [form,    setForm]    = useState(emptyForm);
+  const [saving,  setSaving]  = useState(false);
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const openCreate = () => { setEditing(null); setForm({ ...emptyForm, category: catOptions[0] || "", unit: uomOptions[0] || "Sq.Ft" }); setShowAdd(true); };
+  const openEdit   = (r) => { setEditing(r); setForm({ name: r.name||"", category: r.category||"", unit: r.unit||"", base_rate: r.base_rate||0, description: r.description||"" }); setShowAdd(true); };
+  const closeForm  = () => { setShowAdd(false); setEditing(null); setForm(emptyForm); };
+
+  const save = async () => {
+    if (!form.name.trim()) return alert("Item name required");
+    setSaving(true);
+    const res = await apiSave({
+      name: form.name.trim(),
+      category: form.category,
+      unit: form.unit,
+      base_rate: parseFloat(form.base_rate) || 0,
+      description: form.description || "",
+    }, editing?.id);
+    setSaving(false);
+    if (res?.success) closeForm();
+    else alert(res?.message || "Save failed");
+  };
+  const del = async (r) => {
+    if (!window.confirm("Delete \"" + r.name + "\" from the BOQ item library?")) return;
+    await apiDel(r.id);
+  };
+
+  // ── Filter ──────────────────────────────────────────────────────────
+  const filtered = rows.filter(r => {
+    if (filterCat !== "All" && r.category !== filterCat) return false;
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return (r.name||"").toLowerCase().includes(q)
+        || (r.category||"").toLowerCase().includes(q)
+        || (r.description||"").toLowerCase().includes(q);
+  });
+
+  // Cat tabs (with counts).
+  const catCounts = rows.reduce((acc, r) => { const k = r.category || "Uncategorized"; acc[k] = (acc[k]||0)+1; return acc; }, {});
+  const allCatPills = ["All", ...Object.keys(catCounts).sort()];
+
+  return (
+    <div style={{ fontFamily: "inherit" }}>
+      {/* Toolbar */}
+      <div style={{ display: "flex", gap: 10, marginBottom: 12, alignItems: "center", justifyContent: "space-between", flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flex: 1, minWidth: 240 }}>
+          <input value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="Search items by name, category, or description…"
+            style={{ flex: 1, maxWidth: 360, padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none", fontFamily: "inherit" }}/>
+          <span style={{ fontSize: 12, color: "#6B7280" }}>{filtered.length} / {rows.length} items</span>
+        </div>
+        <button onClick={openCreate}
+          style={{ background: "#10B981", color: "white", border: "none", borderRadius: 7, padding: "8px 16px", fontSize: 13, fontWeight: 600, cursor: "pointer" }}>
+          + Add Item
+        </button>
+      </div>
+
+      {/* Category pills */}
+      <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 12 }}>
+        {allCatPills.map(c => {
+          const active = filterCat === c;
+          const count  = c === "All" ? rows.length : (catCounts[c] || 0);
+          return (
+            <button key={c} onClick={() => setFilterCat(c)}
+              style={{ padding: "5px 12px", borderRadius: 6,
+                border: "1.5px solid " + (active ? "#7C3AED" : "#E5E7EB"),
+                background: active ? "#7C3AED" : "white",
+                color: active ? "white" : "#374151",
+                fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
+              {c} <span style={{ opacity: 0.75 }}>({count})</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Table */}
+      {loading ? (
+        <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>Loading…</div>
+      ) : filtered.length === 0 ? (
+        <div style={{ padding: "40px 0", textAlign: "center", color: "#9CA3AF", fontSize: 13 }}>
+          No items found. Click <strong>+ Add Item</strong> to create one.
+        </div>
+      ) : (
+        <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", overflow: "hidden" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ background: "#F9FAFB" }}>
+                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Item</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 140 }}>Category</th>
+                <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 80 }}>Unit</th>
+                <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 120 }}>Base Rate</th>
+                <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Description</th>
+                <th style={{ padding: "10px 8px",  textAlign: "center", width: 80 }}></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((r, idx) => (
+                <tr key={r.id} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA", borderBottom: "1px solid #F3F4F6" }}>
+                  <td style={{ padding: "9px 14px", fontWeight: 600, fontSize: 13, color: "#111827" }}>{r.name}</td>
+                  <td style={{ padding: "9px 14px" }}>
+                    <span style={{ fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 4 }}>{r.category || "—"}</span>
+                  </td>
+                  <td style={{ padding: "9px 14px", textAlign: "center", fontSize: 12, color: "#6B7280" }}>{r.unit || "—"}</td>
+                  <td style={{ padding: "9px 14px", textAlign: "right", fontSize: 13, fontWeight: 600, color: "#374151" }}>Rs.{Number(r.base_rate || 0).toLocaleString()}</td>
+                  <td style={{ padding: "9px 14px", fontSize: 12, color: "#6B7280" }}>{r.description || "—"}</td>
+                  <td style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
+                    <button onClick={() => openEdit(r)} title="Edit"
+                      style={{ background: "none", border: "none", color: "#6B7280", cursor: "pointer", padding: 4, marginRight: 2 }}>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    </button>
+                    <button onClick={() => del(r)} title="Delete"
+                      style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: 4 }}>
+                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Add/Edit modal — Subcon-style */}
+      {showAdd && (
+        <div onClick={closeForm}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div onClick={e => e.stopPropagation()}
+            style={{ background: "white", borderRadius: 12, width: "min(540px, 95vw)", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ background: "#0F172A", padding: "13px 18px", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>{editing ? "Edit BOQ Item" : "New BOQ Item"}</div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>Master library — used by Client BOQ Rate's picker.</div>
+              </div>
+              <button onClick={closeForm} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ padding: 16 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                <div style={{ gridColumn: "1 / 3" }}>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Item Name *</label>
+                  <input value={form.name} onChange={e => upd("name", e.target.value)} autoFocus
+                    placeholder="e.g. RCC Footing M25"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Category *</label>
+                  <select value={form.category} onChange={e => upd("category", e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
+                    {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Unit</label>
+                  <select value={form.unit} onChange={e => upd("unit", e.target.value)}
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
+                    {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Base Rate (Rs.)</label>
+                  <input type="number" value={form.base_rate || ""} onChange={e => upd("base_rate", parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                </div>
+                <div>
+                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Description / Scope</label>
+                  <input value={form.description} onChange={e => upd("description", e.target.value)}
+                    placeholder="Optional"
+                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                </div>
+              </div>
+            </div>
+            <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
+              <button onClick={closeForm}
+                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #E5E7EB", background: "white", fontSize: 12, cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={save} disabled={saving || !form.name.trim()}
+                style={{ flex: 2, padding: "9px", borderRadius: 7, background: (saving || !form.name.trim()) ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (saving || !form.name.trim()) ? "not-allowed" : "pointer" }}>
+                {saving ? "Saving…" : editing ? "Save Changes" : "Add Item"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -2866,7 +3578,8 @@ const masterSections = [
   { id: "workers",       label: "Workers",             Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
   { id: "subcon_rate",   label: "Subcon Rate Card",    Icon: IcDollar,    Comp: SubconRateCardSection,    section: null, countKey: null, color: T.teal },
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
-  { id: "client_boq",    label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: "RATES & BOQ", countKey: null, color: T.indigo },
+  { id: "boq_items",     label: "BOQ Item Library",    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: "RATES & BOQ", countKey: null, color: T.purple },
+  { id: "client_boq",    label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: null, countKey: null, color: T.indigo },
   { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", countKey: "equipment", color: T.rose },
   { id: "design_library", label: "Design Library",     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "DESIGN LIBRARY", countKey: null, color: T.purple },
   { id: "uom",           label: "Units (UOM)",         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
