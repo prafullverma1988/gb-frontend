@@ -1582,11 +1582,73 @@ function TabEstimate({ project }) {
   const inpS = {padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
   const lblS = {fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3};
 
+  // Library data — loaded once for the Library Picker. Cities + packages +
+  // construction types feed the city/construction badge next to each rate.
+  const [libItems, setLibItems] = useState([]);
+  const [libCities, setLibCities] = useState([]);
+  const [libPackages, setLibPackages] = useState([]);
+  const [libConTypes, setLibConTypes] = useState([]);
+  const [libRates, setLibRates] = useState([]);   // [{package_id, city_id, item_id, rate}]
+  const [libPicker, setLibPicker] = useState(null); // { si, ii } or null
+  const [libFilterCity, setLibFilterCity] = useState(null);
+  const [libFilterPkg, setLibFilterPkg] = useState(null);
+  const [libSearch, setLibSearch] = useState("");
+
   useEffect(() => {
     if (!projectId) return;
     loadEstimates();
     api.get("/customer-estimates/customers").then(r => { if(r.success) setCustomers(r.data||[]); }).catch(()=>{});
+    // Load library data in parallel (small payloads, fine to keep in memory).
+    Promise.all([
+      api.get("/library/boq-items").catch(()=>({success:false})),
+      api.get("/library/cities").catch(()=>({success:false})),
+      api.get("/library/rate-packages").catch(()=>({success:false})),
+      api.get("/library/construction-types").catch(()=>({success:false})),
+    ]).then(([bi, ci, pk, ct]) => {
+      if (bi.success) setLibItems(bi.data||[]);
+      if (ci.success) setLibCities(ci.data||[]);
+      if (pk.success) setLibPackages(pk.data||[]);
+      if (ct.success) setLibConTypes(ct.data||[]);
+    });
   }, [projectId]);
+
+  // When city + package selected, fetch rates for that combo.
+  useEffect(() => {
+    if (!libFilterCity || !libFilterPkg) { setLibRates([]); return; }
+    api.get("/library/rate-matrix?city_id="+libFilterCity.id+"&package_id="+libFilterPkg.id)
+      .then(r => { if (r.success) setLibRates(r.data||[]); })
+      .catch(()=>{});
+  }, [libFilterCity, libFilterPkg]);
+
+  // Effective rate for a library item in current city/package context (falls back to base_rate).
+  const libEffectiveRate = (item) => {
+    const row = libRates.find(x => parseInt(x.item_id) === parseInt(item.id));
+    return row ? parseFloat(row.rate) : parseFloat(item.base_rate || 0);
+  };
+  const libConTypeName = (pkg) => {
+    const ct = libConTypes.find(x => parseInt(x.id) === parseInt(pkg?.construction_type_id));
+    return ct?.name || "";
+  };
+
+  const pickLibraryItem = (libItem) => {
+    if (!libPicker) return;
+    const { si, ii } = libPicker;
+    const rate = libEffectiveRate(libItem);
+    setEstForm(p => {
+      const s = [...p.sections];
+      s[si] = { ...s[si], items: s[si].items.map((it, i) => i === ii ? {
+        ...it,
+        description: libItem.name + (libItem.description ? " — " + libItem.description : ""),
+        unit: libItem.unit || it.unit,
+        rate: String(rate),
+        library_item_id: libItem.id,
+        library_city: libFilterCity?.name,
+        library_type: libConTypeName(libFilterPkg),
+      } : it) };
+      return { ...p, sections: s };
+    });
+    setLibPicker(null);
+  };
 
   const loadEstimates = async () => {
     setLoading(true);
@@ -1607,7 +1669,12 @@ function TabEstimate({ project }) {
       api.get("/customer-estimates/payments/list?project_id="+projectId).catch(()=>({success:false})),
       api.get("/customer-estimates/"+est.id+"/milestones").catch(()=>({success:false})),
     ]);
-    if (det.success) setEstDetail(det.data);
+    if (det.success) {
+      setEstDetail(det.data);
+      // Refresh selEst from the detail so header fields like billing_method stay fresh
+      // after server-side mutations (e.g. apply-library-stages flips it to milestone_rate).
+      setSelEst(prev => prev ? { ...prev, ...det.data } : prev);
+    }
     if (sum.success) setSummary(sum.data);
     if (inv.success) setInvoices(inv.data||[]);
     if (pay.success) setPayments(pay.data||[]);
@@ -1636,6 +1703,7 @@ function TabEstimate({ project }) {
         items: s.items.map(i => ({
           description: i.description, unit: i.unit||"",
           qty: parseFloat(i.qty), rate: parseFloat(i.rate),
+          library_item_id: i.library_item_id || null,
         })),
       })),
     }).catch(()=>({success:false}));
@@ -2080,12 +2148,24 @@ function TabEstimate({ project }) {
                   {["Description","Unit","Qty","Rate",""].map(h => <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
                 </div>
                 {sec.items.map((it, ii) => (
-                  <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px 32px",gap:6,marginBottom:4}}>
-                    <input value={it.description} onChange={e=>setItemField(si,ii,"description",e.target.value)} placeholder="Item description" style={inpS}/>
-                    <input value={it.unit} onChange={e=>setItemField(si,ii,"unit",e.target.value)} placeholder="sqft" style={inpS}/>
-                    <input type="number" value={it.qty} onChange={e=>setItemField(si,ii,"qty",e.target.value)} placeholder="0" style={inpS}/>
-                    <input type="number" value={it.rate} onChange={e=>setItemField(si,ii,"rate",e.target.value)} placeholder="0" style={inpS}/>
-                    <button onClick={()=>removeItem(si,ii)} disabled={sec.items.length<=1} style={{background:sec.items.length<=1?T.b1:T.redL,color:sec.items.length<=1?T.t4:T.red,border:"none",borderRadius:5,fontSize:14,cursor:sec.items.length<=1?"default":"pointer"}}>×</button>
+                  <div key={ii} style={{marginBottom:4}}>
+                    <div style={{display:"grid",gridTemplateColumns:"24px 1fr 70px 80px 100px 32px",gap:6}}>
+                      <button onClick={()=>setLibPicker({si,ii})} title="Pick from Library"
+                        style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,fontSize:13,cursor:"pointer"}}>
+                        📚
+                      </button>
+                      <input value={it.description} onChange={e=>setItemField(si,ii,"description",e.target.value)} placeholder="Item description (or pick 📚)" style={inpS}/>
+                      <input value={it.unit} onChange={e=>setItemField(si,ii,"unit",e.target.value)} placeholder="sqft" style={inpS}/>
+                      <input type="number" value={it.qty} onChange={e=>setItemField(si,ii,"qty",e.target.value)} placeholder="area" style={inpS}/>
+                      <input type="number" value={it.rate} onChange={e=>setItemField(si,ii,"rate",e.target.value)} placeholder="rate" style={inpS}/>
+                      <button onClick={()=>removeItem(si,ii)} disabled={sec.items.length<=1} style={{background:sec.items.length<=1?T.b1:T.redL,color:sec.items.length<=1?T.t4:T.red,border:"none",borderRadius:5,fontSize:14,cursor:sec.items.length<=1?"default":"pointer"}}>×</button>
+                    </div>
+                    {(it.library_item_id || it.library_city) && (
+                      <div style={{marginLeft:30,marginTop:3,fontSize:10,color:T.t4}}>
+                        <span style={{background:T.purL,color:T.pur,padding:"1px 6px",borderRadius:3,fontWeight:600}}>📚 Library</span>
+                        {it.library_city && <span style={{marginLeft:6}}>{it.library_city}{it.library_type?" · "+it.library_type:""}</span>}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <button onClick={()=>addItem(si)} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Item</button>
@@ -2237,12 +2317,44 @@ function TabEstimate({ project }) {
 
             {msForm.kind === "rate" && (<>
               <label style={lblS}>Estimate Item</label>
-              <select value={msForm.estimate_item_id||""} onChange={e=>setMsForm(p=>({...p,estimate_item_id:parseInt(e.target.value)||null}))} style={{...inpS,marginBottom:12}}>
+              <select value={msForm.estimate_item_id||""} onChange={e=>setMsForm(p=>({...p,estimate_item_id:parseInt(e.target.value)||null}))} style={{...inpS,marginBottom:8}}>
                 <option value="">— pick an item —</option>
                 {(estDetail?.sections||[]).flatMap(s => s.items).map(it => (
-                  <option key={it.id} value={it.id}>{it.description} ({fmtC(it.rate)}/{it.unit})</option>
+                  <option key={it.id} value={it.id}>{it.description} ({fmtC(it.rate)}/{it.unit}){it.library_item_id?" 📚":""}</option>
                 ))}
               </select>
+              {/* "Use Library Stages" — visible when the picked item came from a library row
+                  that has a linked stage breakup. Calls apply-library-stages and closes the modal. */}
+              {(() => {
+                if (!msForm.estimate_item_id) return null;
+                const it = (estDetail?.sections||[]).flatMap(s => s.items).find(x => x.id === msForm.estimate_item_id);
+                if (!it || !it.library_item_id) return null;
+                const libItem = libItems.find(x => parseInt(x.id) === parseInt(it.library_item_id));
+                const stages = parseInt(libItem?.stage_count || 0);
+                if (stages === 0) return (
+                  <div style={{marginBottom:12,padding:"7px 10px",background:T.surfaceB,borderRadius:5,fontSize:11,color:T.t3}}>
+                    📚 Library item — but no stages defined yet. Add stages in Master Library to enable one-click apply.
+                  </div>
+                );
+                return (
+                  <div style={{marginBottom:12,padding:"8px 12px",background:T.grnL,border:"1px solid "+T.grnM,borderRadius:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:11.5,color:T.grn}}>📚 <b>{libItem.name}</b> has {stages} library stage{stages>1?"s":""} pre-loaded.</span>
+                    <button onClick={async()=>{
+                        setSaving(true);
+                        const r = await api.post("/customer-estimates/"+selEst.id+"/items/"+it.id+"/apply-library-stages", {}).catch(()=>({success:false}));
+                        setSaving(false);
+                        if (r.success) {
+                          setShowSetMs(false);
+                          await reloadSel();
+                        } else alert(r.message||"Failed");
+                      }}
+                      disabled={saving}
+                      style={{padding:"5px 12px",background:T.grn,color:"white",border:"none",borderRadius:5,fontSize:11,fontWeight:700,cursor:saving?"default":"pointer"}}>
+                      {saving?"Applying…":"Use Library Stages"}
+                    </button>
+                  </div>
+                );
+              })()}
               <div style={{display:"grid",gridTemplateColumns:"40px 1fr 140px 32px",gap:6,marginBottom:6}}>
                 {["#","Stage Name","Cum Rate","" ].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
               </div>
@@ -2277,6 +2389,78 @@ function TabEstimate({ project }) {
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
             <button onClick={()=>setShowSetMs(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
             <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Save Milestones"}</button>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── MODAL: Library Picker ────────────────────────────────
+          Pick a library item to populate an estimate row. City+package
+          chips drive the effective rate; base_rate is used when no city
+          context is selected.
+      */}
+      {libPicker && (<>
+        <div onClick={()=>setLibPicker(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:310}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:760,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:311,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Pick from Client BOQ Library</div>
+            <button onClick={()=>setLibPicker(null)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
+          </div>
+          <div style={{padding:"12px 18px",borderBottom:"1px solid "+T.b1,background:T.surfaceB}}>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+              <span style={{fontSize:10,fontWeight:700,color:T.t3,alignSelf:"center"}}>CITY:</span>
+              {libCities.map(c => (
+                <button key={c.id} onClick={()=>setLibFilterCity(libFilterCity?.id===c.id?null:c)}
+                  style={{padding:"4px 10px",borderRadius:5,border:"1px solid "+(libFilterCity?.id===c.id?"#0891B2":T.b1),background:libFilterCity?.id===c.id?"#0891B2":T.surface,color:libFilterCity?.id===c.id?"white":T.t2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                  {c.name}
+                </button>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+              <span style={{fontSize:10,fontWeight:700,color:T.t3,alignSelf:"center"}}>PACKAGE:</span>
+              {libPackages.map(p => (
+                <button key={p.id} onClick={()=>setLibFilterPkg(libFilterPkg?.id===p.id?null:p)}
+                  style={{padding:"4px 10px",borderRadius:5,border:"1px solid "+(libFilterPkg?.id===p.id?T.pur:T.b1),background:libFilterPkg?.id===p.id?T.pur:T.surface,color:libFilterPkg?.id===p.id?"white":T.t2,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                  {p.name} {p.sqft_rate>0?"· ₹"+p.sqft_rate+"/sqft":""} <span style={{opacity:0.7,marginLeft:4}}>({libConTypeName(p)})</span>
+                </button>
+              ))}
+            </div>
+            <input value={libSearch} onChange={e=>setLibSearch(e.target.value)} placeholder="🔍 Search items by name / description"
+              style={{...inpS,marginTop:4}}/>
+            {(!libFilterCity || !libFilterPkg) && (
+              <div style={{marginTop:6,fontSize:10.5,color:T.amb}}>Pick a city + package to see city-specific rates. Without them, base rates are shown.</div>
+            )}
+          </div>
+          <div style={{flex:1,overflowY:"auto"}}>
+            {libItems
+              .filter(it => !libSearch || (it.name+" "+(it.description||"")).toLowerCase().includes(libSearch.toLowerCase()))
+              .map(it => {
+                const rate = libEffectiveRate(it);
+                const stages = parseInt(it.stage_count || 0);
+                return (
+                  <div key={it.id} onClick={()=>pickLibraryItem(it)}
+                    onMouseEnter={e=>e.currentTarget.style.background=T.bluL}
+                    onMouseLeave={e=>e.currentTarget.style.background="transparent"}
+                    style={{display:"grid",gridTemplateColumns:"1fr 80px 110px 130px",gap:10,padding:"10px 18px",borderBottom:"1px solid "+T.b1,cursor:"pointer",alignItems:"center"}}>
+                    <div>
+                      <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{it.name}</div>
+                      {it.description && <div style={{fontSize:11,color:T.t4,marginTop:2}}>{it.description}</div>}
+                      <div style={{fontSize:10,color:T.t4,marginTop:3}}>
+                        <span style={{background:T.purL,color:T.pur,padding:"1px 5px",borderRadius:3,fontWeight:600}}>{it.category || "—"}</span>
+                        {stages > 0 && <span style={{marginLeft:6,background:T.grnL,color:T.grn,padding:"1px 5px",borderRadius:3,fontWeight:600}}>{stages} stages</span>}
+                      </div>
+                    </div>
+                    <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
+                    <div style={{textAlign:"right"}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums"}}>₹{rate.toLocaleString("en-IN")}</div>
+                      {libFilterCity && libFilterPkg && (
+                        <div style={{fontSize:9,color:T.t4,marginTop:1}}>{libFilterCity.name} · {libConTypeName(libFilterPkg)}</div>
+                      )}
+                    </div>
+                    <button style={{padding:"6px 12px",background:T.blu,color:"white",border:"none",borderRadius:5,fontSize:11,fontWeight:700,cursor:"pointer"}}>Pick →</button>
+                  </div>
+                );
+              })}
+            {libItems.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No library items. Add some in Master Library → Client BOQ Rate.</div>}
           </div>
         </div>
       </>)}

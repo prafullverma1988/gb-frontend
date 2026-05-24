@@ -1493,6 +1493,36 @@ function ClientBOQSection() {
   const [adding,   setAdding]   = useState(false);
   const upd = (k, v) => setAddForm(p => ({ ...p, [k]: v }));
 
+  // ── Stages editor modal (per-library-row milestone breakup) ──────────
+  const [stagesModal,  setStagesModal]  = useState(null); // boq_item or null
+  const [stagesForm,   setStagesForm]   = useState([{ seq: 0, name: "", cum_pct: "" }]);
+  const [stagesSaving, setStagesSaving] = useState(false);
+
+  const openStagesModal = async (item) => {
+    setStagesModal(item);
+    setStagesForm([{ seq: 0, name: "", cum_pct: "" }]);
+    const r = await api.get("/library/boq-items/" + item.id + "/stages").catch(() => ({ success: false }));
+    if (r.success && (r.data?.lines || []).length > 0) {
+      setStagesForm(r.data.lines.map((l, i) => ({ seq: i, name: l.name, cum_pct: String(l.cum_pct) })));
+    }
+  };
+  const closeStagesModal = () => { setStagesModal(null); setStagesForm([{ seq: 0, name: "", cum_pct: "" }]); };
+  const saveStages = async () => {
+    if (!stagesModal) return;
+    const lines = stagesForm
+      .filter(s => s.name && s.cum_pct !== "")
+      .map((s, i) => ({ seq: i, name: s.name, cum_pct: parseFloat(s.cum_pct) }));
+    if (lines.length === 0) return alert("Add at least one stage");
+    setStagesSaving(true);
+    const r = await api.put("/library/boq-items/" + stagesModal.id + "/stages", { lines }).catch(() => ({ success: false }));
+    setStagesSaving(false);
+    if (r.success) {
+      if (r.data?.warnings?.length) alert("Saved with warnings:\n" + r.data.warnings.join("\n"));
+      await loadItems();
+      closeStagesModal();
+    } else alert(r.message || "Save failed");
+  };
+
   const uomOptions  = uomList.length  > 0 ? uomList.map(u => u.name)  : ["Sq.Ft","CFT","Running Ft","Kg","Point","Unit","Lump Sum","Piece"];
   const catOptions  = workCats.map(c => c.name);
   const allCats     = ["All", ...catOptions];
@@ -1705,23 +1735,26 @@ function ClientBOQSection() {
               <table style={{ width: "100%", borderCollapse: "collapse" }}>
                 <thead>
                   <tr style={{ background: "#F9FAFB" }}>
-                    <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Item</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Stage / Item</th>
+                    <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Description</th>
                     <th style={{ padding: "10px 14px", textAlign: "left", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 120 }}>Category</th>
                     <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 70 }}>Unit</th>
                     <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 110 }}>Base Rate</th>
                     <th style={{ padding: "10px 14px", textAlign: "right", fontSize: 11, fontWeight: 700, color: "#2563EB", textTransform: "uppercase", width: 150 }}>{selCity.name} Rate</th>
+                    <th style={{ padding: "10px 14px", textAlign: "center", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 110 }}>Stages</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredItems.map((item, idx) => {
                     const val = getRate(item);
                     const isChanged = changed[item.id] !== undefined;
+                    const stageCount = parseInt(item.stage_count || 0);
                     return (
                       <tr key={item.id} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA", borderBottom: "1px solid #F3F4F6" }}>
                         <td style={{ padding: "10px 14px" }}>
                           <div style={{ fontWeight: 600, fontSize: 13, color: "#111827" }}>{item.name}</div>
-                          {item.description && <div style={{ fontSize: 11, color: "#9CA3AF", marginTop: 2 }}>{item.description}</div>}
                         </td>
+                        <td style={{ padding: "10px 14px", fontSize: 12, color: "#4B5563" }}>{item.description || "—"}</td>
                         <td style={{ padding: "10px 14px" }}>
                           <span style={{ fontSize: 11, fontWeight: 600, color: "#7C3AED", background: "#EDE9FE", padding: "2px 8px", borderRadius: 4 }}>{item.category || "—"}</span>
                         </td>
@@ -1738,6 +1771,15 @@ function ClientBOQSection() {
                               background: isChanged ? "#EFF6FF" : "white", outline: "none" }}
                           />
                         </td>
+                        <td style={{ padding: "10px 14px", textAlign: "center" }}>
+                          <button onClick={() => openStagesModal(item)}
+                            style={{ padding: "5px 12px", borderRadius: 6, fontSize: 11.5, fontWeight: 600, cursor: "pointer",
+                              background: stageCount > 0 ? "#ECFDF5" : "#F3F4F6",
+                              color: stageCount > 0 ? "#059669" : "#6B7280",
+                              border: "1px solid " + (stageCount > 0 ? "#A7F3D0" : "#E5E7EB") }}>
+                            {stageCount > 0 ? "✏ " + stageCount + " stage" + (stageCount > 1 ? "s" : "") : "+ Stages"}
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
@@ -1747,6 +1789,57 @@ function ClientBOQSection() {
           )}
         </>
       )}
+
+      {/* ── STAGES EDITOR MODAL ──────────────────────────────────────────
+          Edits the milestone_template linked to a Client BOQ row. Stages are
+          stored as cum_pct (cumulative % of item rate), so the same breakup
+          scales across cities/packages: same template works at Rs.300 or Rs.1,550.
+      */}
+      {stagesModal && (<>
+        <div onClick={closeStagesModal} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300 }}/>
+        <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 600, maxWidth: "95vw", maxHeight: "85vh", background: "white", borderRadius: 12, zIndex: 301, boxShadow: "0 24px 64px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column" }}>
+          <div style={{ padding: "14px 18px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Stage Breakup — {stagesModal.name}</div>
+              <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>Cumulative %  of item rate. Reusable across cities/packages.</div>
+            </div>
+            <button onClick={closeStagesModal} style={{ background: "none", border: "none", fontSize: 18, color: "#6B7280", cursor: "pointer" }}>×</button>
+          </div>
+          <div style={{ padding: "16px 18px", overflowY: "auto", flex: 1 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "40px 1fr 120px 32px", gap: 6, marginBottom: 6 }}>
+              {["#", "Stage Name", "Cum %", ""].map(h => <span key={h} style={{ fontSize: 9.5, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" }}>{h}</span>)}
+            </div>
+            {stagesForm.map((s, si) => (
+              <div key={si} style={{ display: "grid", gridTemplateColumns: "40px 1fr 120px 32px", gap: 6, marginBottom: 4, alignItems: "center" }}>
+                <span style={{ fontSize: 12, color: "#9CA3AF" }}>{si + 1}</span>
+                <input value={s.name}
+                  onChange={e => { const arr = [...stagesForm]; arr[si] = { ...arr[si], name: e.target.value }; setStagesForm(arr); }}
+                  placeholder="e.g. Footing"
+                  style={{ padding: "7px 10px", borderRadius: 6, border: "1.5px solid #E5E7EB", fontSize: 12, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" }}/>
+                <input type="number" value={s.cum_pct}
+                  onChange={e => { const arr = [...stagesForm]; arr[si] = { ...arr[si], cum_pct: e.target.value }; setStagesForm(arr); }}
+                  placeholder="cum %"
+                  style={{ padding: "7px 10px", borderRadius: 6, border: "1.5px solid #E5E7EB", fontSize: 12, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" }}/>
+                <button onClick={() => { const arr = stagesForm.filter((_, i) => i !== si); setStagesForm(arr.length ? arr : [{ seq: 0, name: "", cum_pct: "" }]); }}
+                  style={{ background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 5, fontSize: 14, cursor: "pointer" }}>×</button>
+              </div>
+            ))}
+            <button onClick={() => setStagesForm(p => [...p, { seq: p.length, name: "", cum_pct: "" }])}
+              style={{ marginTop: 8, background: "#EFF6FF", color: "#2563EB", border: "1px dashed #BFDBFE", borderRadius: 5, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+              + Add Stage
+            </button>
+            <div style={{ marginTop: 12, padding: "8px 10px", background: "#F9FAFB", borderRadius: 5, fontSize: 11, color: "#6B7280" }}>
+              Last cum_pct should be 100. If not, a warning is shown (the breakup is still saved).
+            </div>
+          </div>
+          <div style={{ padding: "12px 18px", borderTop: "1px solid #E5E7EB", display: "flex", justifyContent: "flex-end", gap: 8 }}>
+            <button onClick={closeStagesModal} style={{ padding: "7px 16px", borderRadius: 6, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
+            <button onClick={saveStages} disabled={stagesSaving} style={{ padding: "7px 18px", borderRadius: 6, background: stagesSaving ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 12, fontWeight: 700, cursor: stagesSaving ? "default" : "pointer" }}>
+              {stagesSaving ? "Saving…" : "Save Stages"}
+            </button>
+          </div>
+        </div>
+      </>)}
 
       {/* Empty state */}
       {!selType && (
