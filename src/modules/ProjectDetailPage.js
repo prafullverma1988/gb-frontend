@@ -1533,234 +1533,479 @@ function TabDesign({ project, isAdmin }) {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 3 — ESTIMATE
 // ═══════════════════════════════════════════════════════════════════
-function TabEstimate() {
+function TabEstimate({ project }) {
+  const projectId = project?.id;
+  const [estimates, setEstimates] = useState([]);
+  const [selEst, setSelEst] = useState(null);
+  const [estDetail, setEstDetail] = useState(null);
+  const [summary, setSummary] = useState(null);
+  const [invoices, setInvoices] = useState([]);
+  const [payments, setPayments] = useState([]);
+  const [milestones, setMilestones] = useState({ rate_by_item:{}, percent:[] });
   const [subTab, setSubTab] = useState("boq");
-  const [openSec, setOpenSec] = useState({1:true,2:true,3:false,4:false});
+  const [loading, setLoading] = useState(true);
+  const [showNewEst, setShowNewEst] = useState(false);
+  const [showNewInv, setShowNewInv] = useState(false);
+  const [showSetMs, setShowSetMs] = useState(false);
+  const [showPay, setShowPay] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const [customers, setCustomers] = useState([]);
 
-  // computed
-  const grandTotal  = D.boqSections.flatMap(s=>s.items).reduce((s,i)=>s+i.amount,0);
-  const donePct     = Math.round(D.boqSections.flatMap(s=>s.items).reduce((s,i)=>s+(i.amount*(i.done/100)),0)/grandTotal*100)||0;
-  const paidTotal   = D.invoices.filter(i=>i.status==="Paid").reduce((s,i)=>s+i.amount,0);
-  const pendingAmt  = D.invoices.find(i=>i.status==="Pending")?.amount||0;
-  const upcomingAmt = D.invoices.filter(i=>i.status==="Upcoming").reduce((s,i)=>s+i.amount,0);
-  const collected   = paidTotal;
-  const balance     = grandTotal - collected;
-  const invS={"Paid":{c:T.grn,bg:T.grnL,brd:T.grnM},"Pending":{c:T.amb,bg:T.ambL,brd:T.ambM},"Upcoming":{c:T.slt,bg:T.sltL,brd:T.b2}};
+  // Form state — New Estimate
+  const [estForm, setEstForm] = useState({
+    customer_id: "", customer_name: "", retention_pct: 5, tds_pct: 1, tax_pct: 0,
+    description: "",
+    sections: [{ title: "Section 1", items: [{ description:"", unit:"", qty:"", rate:"" }] }],
+  });
+  // Form state — New Invoice (milestone OR manual)
+  const [invForm, setInvForm] = useState({
+    source: "milestone", invoice_date: localYMD(), remark: "",
+    items: [],  // milestone-based: [{milestone_id, cumulative_qty}]
+    manualItems: [{ description:"", qty:"", rate:"" }],
+    tax_pct: 0, retention_pct: 0, tds_pct: 0,
+    customer_name: "",
+  });
+  // Form state — Record Payment
+  const [payForm, setPayForm] = useState({
+    amount_received:"", payment_date: localYMD(), payment_mode:"Bank Transfer",
+    reference_no:"", remark:"",
+  });
+  // Form state — Set Milestones
+  const [msForm, setMsForm] = useState({
+    kind: "rate",   // 'rate' | 'percent'
+    estimate_item_id: null,
+    rateMs: [{ seq:0, name:"", cum_rate:"" }],
+    pctMs:  [{ seq:0, name:"", pct:"" }],
+  });
 
-  const SUBTABS=[
-    {id:"boq",  l:"BOQ / Estimate"},
-    {id:"payment",l:"Payments"},
-    {id:"milestone",l:"Milestones"},
-    {id:"invoice",l:"Invoices"},
-  ];
+  const fmtC = (v) => "₹"+(parseFloat(v)||0).toLocaleString("en-IN",{maximumFractionDigits:0});
+  const inpS = {padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
+  const lblS = {fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3};
 
-  return(
-    <div style={{padding:"14px 18px"}}>
+  useEffect(() => {
+    if (!projectId) return;
+    loadEstimates();
+    api.get("/customer-estimates/customers").then(r => { if(r.success) setCustomers(r.data||[]); }).catch(()=>{});
+  }, [projectId]);
 
-      {/* ── Left + Right layout ── */}
-      <div style={{display:"grid",gridTemplateColumns:"240px 1fr",gap:14}}>
+  const loadEstimates = async () => {
+    setLoading(true);
+    const r = await api.get("/customer-estimates?project_id="+projectId).catch(()=>({success:false}));
+    if (r.success) setEstimates(r.data||[]);
+    setLoading(false);
+  };
 
-        {/* Left summary card */}
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          <div style={{background:T.surface,borderRadius:9,padding:"13px 14px",border:`1.5px solid ${T.blu}`,borderLeft:`4px solid ${T.blu}`,boxShadow:"0 2px 10px rgba(37,99,235,0.08)"}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Contract Summary</div>
-            {[
-              {l:"Contract Value",v:`₹${fmt(grandTotal)}`,c:T.slt,bold:true},
-              {l:"Work Done",     v:`${donePct}%`,          c:T.blu},
-              {l:"Collected",     v:`₹${fmt(collected)}`,   c:T.grn},
-              {l:"Balance Due",   v:`₹${fmt(balance)}`,     c:T.red},
-              {l:"Sections",      v:D.boqSections.length,   c:T.slt},
-              {l:"Total Items",   v:D.boqSections.flatMap(s=>s.items).length, c:T.slt},
-            ].map((r,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:i<5?`1px solid ${T.b1}`:"none"}}>
-                <span style={{fontSize:11,color:T.t4}}>{r.l}</span>
-                <span style={{fontSize:r.bold?14:12.5,fontWeight:r.bold?700:600,color:r.c}}>{r.v}</span>
-              </div>
-            ))}
-            {/* Progress bar */}
-            <div style={{marginTop:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                <span style={{fontSize:10,color:T.t3}}>Work Progress</span>
-                <span style={{fontSize:11,fontWeight:700,color:T.blu}}>{donePct}%</span>
-              </div>
-              <div style={{height:6,background:T.b1,borderRadius:3,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${donePct}%`,background:`linear-gradient(90deg,${T.blu},#60a5fa)`,borderRadius:3}}/>
-              </div>
-            </div>
-            <div style={{marginTop:8}}>
-              <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-                <span style={{fontSize:10,color:T.t3}}>Payment Collected</span>
-                <span style={{fontSize:11,fontWeight:700,color:T.grn}}>{Math.round(collected/grandTotal*100)}%</span>
-              </div>
-              <div style={{height:6,background:T.b1,borderRadius:3,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${Math.round(collected/grandTotal*100)}%`,background:`linear-gradient(90deg,${T.grn},#34d399)`,borderRadius:3}}/>
-              </div>
-            </div>
-          </div>
+  const selectEst = async (est) => {
+    setSelEst(est);
+    setSubTab("boq");
+    const [det, sum, inv, pay, ms] = await Promise.all([
+      api.get("/customer-estimates/"+est.id).catch(()=>({success:false})),
+      api.get("/customer-estimates/"+est.id+"/summary").catch(()=>({success:false})),
+      // List by project_id (not estimate_id) so manual invoices for this project
+      // appear alongside estimate-linked ones — single tab, source chip distinguishes.
+      api.get("/customer-estimates/invoices/list?project_id="+projectId).catch(()=>({success:false})),
+      api.get("/customer-estimates/payments/list?project_id="+projectId).catch(()=>({success:false})),
+      api.get("/customer-estimates/"+est.id+"/milestones").catch(()=>({success:false})),
+    ]);
+    if (det.success) setEstDetail(det.data);
+    if (sum.success) setSummary(sum.data);
+    if (inv.success) setInvoices(inv.data||[]);
+    if (pay.success) setPayments(pay.data||[]);
+    if (ms.success)  setMilestones(ms.data||{rate_by_item:{},percent:[]});
+  };
 
-          {/* Invoice status mini */}
-          <div style={{background:T.surface,borderRadius:9,padding:"12px 14px",border:`1px solid ${T.b1}`}}>
-            <div style={{fontSize:10,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Invoice Status</div>
-            {[{l:"Paid",v:`₹${fmt(paidTotal)}`,c:T.grn,bg:T.grnL},{l:"Pending",v:`₹${fmt(pendingAmt)}`,c:T.amb,bg:T.ambL},{l:"Upcoming",v:`₹${fmt(upcomingAmt)}`,c:T.slt,bg:T.sltL}].map((s,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 8px",borderRadius:6,background:s.bg,marginBottom:5}}>
-                <span style={{fontSize:11,fontWeight:600,color:s.c}}>{s.l}</span>
-                <span style={{fontSize:12.5,fontWeight:700,color:s.c}}>{s.v}</span>
-              </div>
-            ))}
-          </div>
+  const reloadSel = async () => { if (selEst) await selectEst(selEst); };
+
+  const submitEst = async () => {
+    const validSecs = estForm.sections
+      .map(s => ({ title: s.title, items: s.items.filter(i => i.description && i.qty && i.rate) }))
+      .filter(s => s.items.length > 0);
+    if (!estForm.customer_name && !estForm.customer_id) return alert("Customer required");
+    if (validSecs.length === 0) return alert("Add at least one item with description, qty, rate");
+    setSaving(true);
+    const r = await api.post("/customer-estimates", {
+      project_id: projectId,
+      customer_id: estForm.customer_id || null,
+      customer_name: estForm.customer_name,
+      description: estForm.description,
+      retention_pct: parseFloat(estForm.retention_pct||0),
+      tds_pct: parseFloat(estForm.tds_pct||0),
+      tax_pct: parseFloat(estForm.tax_pct||0),
+      sections: validSecs.map(s => ({
+        title: s.title,
+        items: s.items.map(i => ({
+          description: i.description, unit: i.unit||"",
+          qty: parseFloat(i.qty), rate: parseFloat(i.rate),
+        })),
+      })),
+    }).catch(()=>({success:false}));
+    setSaving(false);
+    if (r.success) {
+      setShowNewEst(false);
+      setEstForm({ customer_id:"", customer_name:"", retention_pct:5, tds_pct:1, tax_pct:0, description:"",
+        sections:[{title:"Section 1",items:[{description:"",unit:"",qty:"",rate:""}]}] });
+      await loadEstimates();
+      await selectEst(r.data);
+    } else alert(r.message || "Failed");
+  };
+
+  const submitInvoice = async () => {
+    if (!selEst && invForm.source === "milestone") return alert("Select an estimate first");
+    setSaving(true);
+    let body;
+    if (invForm.source === "manual") {
+      const items = invForm.manualItems.filter(i => i.description && i.qty && i.rate)
+        .map(i => ({ description:i.description, qty:parseFloat(i.qty), rate:parseFloat(i.rate) }));
+      if (items.length === 0) { setSaving(false); return alert("Add at least one line"); }
+      body = {
+        project_id: projectId, source: "manual",
+        invoice_date: invForm.invoice_date, remark: invForm.remark,
+        customer_name: invForm.customer_name || selEst?.customer_name || "",
+        retention_pct: parseFloat(invForm.retention_pct||0),
+        tds_pct: parseFloat(invForm.tds_pct||0),
+        tax_pct: parseFloat(invForm.tax_pct||0),
+        items,
+      };
+    } else {
+      const items = invForm.items.filter(i => i.milestone_id);
+      if (items.length === 0) { setSaving(false); return alert("Select at least one milestone"); }
+      body = {
+        estimate_id: selEst.id,
+        invoice_date: invForm.invoice_date, remark: invForm.remark,
+        items,
+      };
+    }
+    const r = await api.post("/customer-estimates/invoices", body).catch(()=>({success:false}));
+    setSaving(false);
+    if (r.success) {
+      setShowNewInv(false);
+      setInvForm({ source:"milestone", invoice_date: localYMD(), remark:"", items:[],
+        manualItems:[{description:"",qty:"",rate:""}], tax_pct:0, retention_pct:0, tds_pct:0, customer_name:"" });
+      await reloadSel();
+      if (!selEst) await loadEstimates();
+    } else alert(r.message || "Failed");
+  };
+
+  const submitPayment = async () => {
+    if (!showPay || !payForm.amount_received) return alert("Amount required");
+    setSaving(true);
+    const r = await api.post("/customer-estimates/payments", {
+      invoice_id: showPay,
+      amount_received: parseFloat(payForm.amount_received),
+      payment_date: payForm.payment_date,
+      payment_mode: payForm.payment_mode,
+      reference_no: payForm.reference_no,
+      remark: payForm.remark,
+    }).catch(()=>({success:false}));
+    setSaving(false);
+    if (r.success) {
+      setShowPay(null);
+      setPayForm({amount_received:"",payment_date:localYMD(),payment_mode:"Bank Transfer",reference_no:"",remark:""});
+      await reloadSel();
+    } else alert(r.message || "Failed");
+  };
+
+  const submitMilestones = async () => {
+    if (!selEst) return;
+    setSaving(true);
+    let r;
+    if (msForm.kind === "rate") {
+      if (!msForm.estimate_item_id) { setSaving(false); return alert("Pick an item"); }
+      const ms = msForm.rateMs.filter(m => m.name && m.cum_rate)
+        .map((m,i) => ({ seq:i, name:m.name, cum_rate: parseFloat(m.cum_rate) }));
+      if (ms.length === 0) { setSaving(false); return alert("Add at least one milestone"); }
+      // Switch method if needed
+      if (selEst.billing_method !== "milestone_rate") {
+        await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"milestone_rate"});
+      }
+      r = await api.post("/customer-estimates/"+selEst.id+"/milestones/rate", {
+        items: [{ estimate_item_id: msForm.estimate_item_id, milestones: ms }],
+      }).catch(()=>({success:false}));
+    } else {
+      const ms = msForm.pctMs.filter(m => m.name && m.pct)
+        .map((m,i) => ({ seq:i, name:m.name, pct: parseFloat(m.pct) }));
+      if (ms.length === 0) { setSaving(false); return alert("Add at least one stage"); }
+      if (selEst.billing_method !== "milestone_percent") {
+        await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"milestone_percent"});
+      }
+      r = await api.post("/customer-estimates/"+selEst.id+"/milestones/percent", {
+        milestones: ms,
+      }).catch(()=>({success:false}));
+    }
+    setSaving(false);
+    if (r.success) {
+      setShowSetMs(false);
+      setMsForm({kind:"rate",estimate_item_id:null,rateMs:[{seq:0,name:"",cum_rate:""}],pctMs:[{seq:0,name:"",pct:""}]});
+      await reloadSel();
+      if (r.data?.warnings?.length) alert("Saved with warnings:\n" + r.data.warnings.join("\n"));
+    } else alert(r.message || "Failed");
+  };
+
+  const deleteInvoice = async (invId, no) => {
+    if (!window.confirm("Delete invoice " + no + "? This cannot be undone.")) return;
+    const r = await api.del("/customer-estimates/invoices/" + invId);
+    if (r.success) await reloadSel();
+    else alert(r.message || "Delete failed");
+  };
+
+  // ── Form helpers (sections/items in New Estimate) ─────────────
+  const addSection = () => setEstForm(p => ({
+    ...p, sections: [...p.sections, { title: "Section " + (p.sections.length+1), items: [{description:"",unit:"",qty:"",rate:""}] }]
+  }));
+  const removeSection = (si) => setEstForm(p => ({ ...p, sections: p.sections.filter((_,i) => i !== si) }));
+  const addItem = (si) => setEstForm(p => {
+    const s = [...p.sections];
+    s[si] = { ...s[si], items: [...s[si].items, {description:"",unit:"",qty:"",rate:""}] };
+    return { ...p, sections: s };
+  });
+  const removeItem = (si, ii) => setEstForm(p => {
+    const s = [...p.sections];
+    s[si] = { ...s[si], items: s[si].items.filter((_,i) => i !== ii) };
+    return { ...p, sections: s };
+  });
+  const setItemField = (si, ii, field, val) => setEstForm(p => {
+    const s = [...p.sections];
+    s[si] = { ...s[si], items: s[si].items.map((it,i) => i === ii ? { ...it, [field]: val } : it) };
+    return { ...p, sections: s };
+  });
+
+  // ── RENDER ─────────────────────────────────────────────────────
+  return (
+    <div style={{display:"flex",gap:0,height:"100%",minHeight:520}}>
+      {/* LEFT — Estimate list */}
+      <div style={{width:230,borderRight:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0,overflowY:"auto"}}>
+        <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Estimates ({estimates.length})</span>
+          <button onClick={()=>setShowNewEst(true)} style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>+ New</button>
         </div>
+        {loading && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:11}}>Loading…</div>}
+        {!loading && estimates.length === 0 && <div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>No estimates yet</div>}
+        {estimates.map(e => {
+          const isSel = selEst?.id === e.id;
+          const stC = e.status === "Active" ? T.grn : T.t4;
+          return (
+            <div key={e.id} onClick={()=>selectEst(e)}
+              style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1,background:isSel?"#EFF6FF":T.surfaceB,borderLeft:isSel?"3px solid "+T.blu:"3px solid transparent"}}>
+              <div style={{fontSize:12,fontWeight:700,color:isSel?T.blu:T.t1,marginBottom:2}}>{e.customer_name || "—"}</div>
+              <div style={{fontSize:10,color:T.t4,marginBottom:4}}>{e.estimate_no} · {e.billing_method}</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:10,fontWeight:700,color:T.grn}}>{fmtC(e.total_value)}</span>
+                <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:stC+"22",color:stC}}>{e.status}</span>
+              </div>
+              {e.invoice_count > 0 && <div style={{fontSize:9.5,color:T.t4,marginTop:3}}>{e.invoice_count} invoice{e.invoice_count>1?"s":""}</div>}
+            </div>
+          );
+        })}
 
-        {/* Right detail panel */}
-        <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-          {/* Panel header */}
-          <div style={{padding:"11px 16px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <div style={{fontSize:13.5,fontWeight:700,color:T.t1}}>Estimate & BOQ</div>
-            <div style={{display:"flex",gap:10}}>
-              {[{l:"BOQ Total",v:`₹${fmt(grandTotal)}`,c:T.slt},{l:`Done ${donePct}%`,v:`₹${fmt(Math.round(grandTotal*donePct/100))}`,c:T.blu},{l:"Collected",v:`₹${fmt(collected)}`,c:T.grn},{l:"Balance",v:`₹${fmt(balance)}`,c:T.red}].map(({l,v,c})=>(
-                <div key={l} style={{textAlign:"right"}}>
-                  <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",marginBottom:1}}>{l}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:c}}>{v}</div>
-                </div>
-              ))}
+        {/* "+ Manual Invoice" — available even without an estimate */}
+        <div style={{padding:"10px 12px",borderTop:"1px solid "+T.b1,marginTop:8}}>
+          <button onClick={()=>{ setInvForm(p=>({...p,source:"manual"})); setShowNewInv(true); }}
+            style={{width:"100%",background:T.purL,color:T.pur,border:"1.5px dashed "+T.pur,borderRadius:6,padding:"7px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+            + Manual Invoice
+          </button>
+          <div style={{fontSize:9.5,color:T.t4,marginTop:4,textAlign:"center"}}>Ad-hoc, not tied to an estimate</div>
+        </div>
+      </div>
+
+      {/* RIGHT — Detail */}
+      <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+        {!selEst && (
+          <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"100%",color:T.t4,flexDirection:"column",gap:8}}>
+            <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5}><path d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+            <div style={{fontSize:13,color:T.t3}}>Select an estimate or create one</div>
+          </div>
+        )}
+
+        {selEst && (<>
+          {/* Header */}
+          <div style={{padding:"12px 16px",borderBottom:"1px solid "+T.b1,background:"#0F172A",flexShrink:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:"white"}}>{selEst.customer_name || "—"}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{selEst.estimate_no} · {selEst.billing_method} · Ret {selEst.retention_pct}% · TDS {selEst.tds_pct}% · Tax {selEst.tax_pct}%</div>
+              </div>
+              <div style={{display:"flex",gap:16,alignItems:"center"}}>
+                {summary && [
+                  {l:"Estimate",v:fmtC(summary.estimate_value),c:"#94A3B8"},
+                  {l:"Invoiced",v:fmtC(summary.total_invoiced),c:"#60A5FA"},
+                  {l:"Received",v:fmtC(summary.total_received),c:"#4ADE80"},
+                  {l:"Manual+",v:fmtC(summary.manual_extras),c:"#A78BFA"},
+                  {l:"Balance",v:fmtC(summary.balance_receivable),c:"#F87171"},
+                ].map(s => (
+                  <div key={s.l} style={{textAlign:"right"}}>
+                    <div style={{fontSize:9,color:"rgba(255,255,255,0.4)",textTransform:"uppercase"}}>{s.l}</div>
+                    <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
-          {/* Inner tabs */}
-          <div style={{display:"flex",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0}}>
-            {SUBTABS.map(t=>(
+          {/* Sub Tabs */}
+          <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
+            {[
+              {id:"boq",label:"BOQ / Items"},
+              {id:"milestone",label:"Milestones"},
+              {id:"invoice",label:"Invoices ("+invoices.length+")"},
+              {id:"payment",label:"Payments ("+payments.length+")"},
+            ].map(t => (
               <button key={t.id} onClick={()=>setSubTab(t.id)}
-                style={{padding:"8px 14px",border:"none",background:"none",color:subTab===t.id?T.blu:T.t3,fontWeight:subTab===t.id?700:400,fontSize:12,cursor:"pointer",borderBottom:subTab===t.id?`2px solid ${T.blu}`:"2px solid transparent",fontFamily:"inherit",whiteSpace:"nowrap",transition:"all .15s"}}>
-                {t.l}
+                style={{padding:"8px 16px",border:"none",background:"transparent",color:subTab===t.id?T.blu:T.t3,fontSize:12,fontWeight:subTab===t.id?700:400,cursor:"pointer",borderBottom:subTab===t.id?"2px solid "+T.blu:"2px solid transparent",fontFamily:"inherit"}}>
+                {t.label}
               </button>
             ))}
             <div style={{flex:1}}/>
-            <div style={{display:"flex",alignItems:"center",paddingRight:12}}>
-              <AddBtn label={subTab==="boq"?"Add Item":subTab==="invoice"?"New Invoice":subTab==="milestone"?"Add Milestone":"Record Payment"}/>
+            <div style={{display:"flex",alignItems:"center",gap:6,paddingRight:12}}>
+              {subTab==="milestone" && (
+                <button onClick={()=>{ setMsForm(p=>({...p,estimate_item_id:null})); setShowSetMs(true); }}
+                  style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                  + Set Milestones
+                </button>
+              )}
+              {subTab==="invoice" && (<>
+                <button onClick={()=>{ setInvForm(p=>({...p,source:"milestone"})); setShowNewInv(true); }}
+                  style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                  + Invoice
+                </button>
+                <button onClick={()=>{ setInvForm(p=>({...p,source:"manual"})); setShowNewInv(true); }}
+                  style={{background:T.purL,color:T.pur,border:"1px solid "+T.pur,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                  + Manual
+                </button>
+              </>)}
             </div>
           </div>
 
-          <div style={{flex:1,overflowY:"auto"}}>
+          {/* Tab Body */}
+          <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
 
-            {/* ── BOQ TAB ── */}
-            {subTab==="boq"&&(
+            {/* BOQ TAB */}
+            {subTab==="boq" && estDetail && (
               <div>
-                <div style={{display:"grid",gridTemplateColumns:"50px 1fr 60px 70px 90px 115px 80px",padding:"6px 16px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,position:"sticky",top:0}}>
-                  {["S.No","Description","Unit","Qty","Rate","Amount","Done%"].map((h,i)=>(
-                    <span key={i} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
-                  ))}
-                </div>
-                {D.boqSections.map(sec=>{
-                  const secTotal=sec.items.reduce((s,i)=>s+i.amount,0);
-                  const secDone=sec.items.reduce((s,i)=>s+(i.amount*(i.done/100)),0);
-                  const isO=openSec[sec.id]!==false;
-                  return(
-                    <div key={sec.id}>
-                      <div onClick={()=>setOpenSec(p=>({...p,[sec.id]:!p[sec.id]}))}
-                        style={{display:"grid",gridTemplateColumns:"50px 1fr 60px 70px 90px 115px 80px",padding:"9px 16px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`,cursor:"pointer",alignItems:"center",borderLeft:`3px solid ${T.blu}`}}>
-                        <svg width={10} height={10} viewBox="0 0 12 12" fill="none" stroke={T.blu} strokeWidth={2} style={{transform:isO?"none":"rotate(-90deg)",transition:"transform .2s"}}><path d="M2 4l4 4 4-4"/></svg>
-                        <span style={{fontSize:13,fontWeight:700,color:T.blu}}>{sec.name}</span>
-                        <span/><span/><span/>
-                        <span style={{fontSize:13,fontWeight:700,color:T.blu}}>₹{fmtN(secTotal)}</span>
-                        <div>
-                          <span style={{fontSize:10,fontWeight:600,color:T.blu}}>{Math.round(secDone/secTotal*100)||0}%</span>
-                          <div style={{height:3,background:T.bluM,borderRadius:2,overflow:"hidden",marginTop:2}}>
-                            <div style={{height:"100%",width:`${Math.round(secDone/secTotal*100)||0}%`,background:T.blu,borderRadius:2}}/>
-                          </div>
-                        </div>
+                {(estDetail.sections||[]).length === 0 && (estDetail.unsectioned||[]).length === 0 && (
+                  <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No items in this estimate</div>
+                )}
+                {(estDetail.sections||[]).map(sec => {
+                  const secTotal = (sec.items||[]).reduce((s,i) => s + parseFloat(i.amount||0), 0);
+                  return (
+                    <div key={sec.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
+                      <div style={{padding:"9px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM,display:"flex",justifyContent:"space-between",alignItems:"center",borderLeft:"3px solid "+T.blu}}>
+                        <span style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{sec.title}</span>
+                        <span style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
                       </div>
-                      {isO&&sec.items.map(item=>(
-                        <div key={item.no} style={{display:"grid",gridTemplateColumns:"50px 1fr 60px 70px 90px 115px 80px",padding:"8px 16px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background .1s"}}
-                          onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                          onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                          <span style={{fontSize:11,color:T.t4,fontFamily:"monospace"}}>{item.no}</span>
-                          <span style={{fontSize:12.5,color:T.t1}}>{item.desc}</span>
-                          <span style={{fontSize:11.5,color:T.t3}}>{item.unit}</span>
-                          <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{item.qty}</span>
-                          <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>₹{item.rate.toLocaleString("en-IN")}</span>
-                          <span style={{fontSize:12.5,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{item.amount.toLocaleString("en-IN")}</span>
-                          <div>
-                            <div style={{fontSize:10.5,color:item.done===100?T.grn:T.t3,fontWeight:600,marginBottom:2}}>{item.done}%</div>
-                            <PBar pct={item.done} color={item.done===100?T.grn:item.done>60?T.blu:T.amb} h={4}/>
-                          </div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 95px 110px",padding:"6px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
+                        {["Description","Unit","Qty","Rate","Amount"].map(h => (
+                          <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
+                        ))}
+                      </div>
+                      {(sec.items||[]).map(it => (
+                        <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 95px 110px",padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
+                          <span style={{fontSize:12.5,color:T.t1}}>{it.description}</span>
+                          <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
+                          <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{parseFloat(it.qty)}</span>
+                          <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
+                          <span style={{fontSize:12.5,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.amount)}</span>
                         </div>
                       ))}
                     </div>
                   );
                 })}
-                {/* Grand total */}
-                <div style={{display:"grid",gridTemplateColumns:"50px 1fr 60px 70px 90px 115px 80px",padding:"10px 16px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,position:"sticky",bottom:0}}>
-                  <span/><span style={{fontSize:13,fontWeight:700,color:T.t1}}>Grand Total</span><span/><span/><span/>
-                  <span style={{fontSize:15,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(grandTotal)}</span>
-                  <span style={{fontSize:11.5,fontWeight:600,color:T.grn}}>{donePct}% done</span>
-                </div>
               </div>
             )}
 
-            {/* ── PAYMENTS TAB ── */}
-            {subTab==="payment"&&(
-              <div style={{padding:"14px 16px"}}>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:14}}>
-                  {[{l:"Contract Value",v:`₹${fmt(grandTotal)}`,c:T.slt},{l:"Collected",v:`₹${fmt(collected)}`,c:T.grn},{l:"Balance Due",v:`₹${fmt(balance)}`,c:T.red}].map((s,i)=>(
-                    <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-                      <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{s.l}</div>
-                      <div style={{fontSize:18,fontWeight:700,color:s.c}}>{s.v}</div>
-                    </div>
-                  ))}
-                </div>
-                <div style={{marginBottom:14,padding:"11px 14px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
-                    <span style={{fontSize:12,fontWeight:600,color:T.t2}}>Collection Progress</span>
-                    <span style={{fontSize:12,fontWeight:700,color:T.grn}}>{Math.round(collected/grandTotal*100)}%</span>
+            {/* MILESTONES TAB */}
+            {subTab==="milestone" && (
+              <div>
+                {selEst.billing_method === "manual" && (
+                  <div style={{padding:"24px",textAlign:"center",color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8}}>
+                    <div style={{fontSize:13,marginBottom:6}}>This estimate uses <b>manual</b> billing (per-item cumulative qty).</div>
+                    <div style={{fontSize:11.5,color:T.t4}}>Click <b>+ Set Milestones</b> to switch to milestone-based (rate or %).</div>
                   </div>
-                  <div style={{height:8,background:T.b1,borderRadius:4,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${Math.round(collected/grandTotal*100)}%`,background:`linear-gradient(90deg,${T.grn},#34d399)`,borderRadius:4}}/>
-                  </div>
-                  <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
-                    <span style={{fontSize:10.5,color:T.grn}}>Collected ₹{fmt(collected)}</span>
-                    <span style={{fontSize:10.5,color:T.red}}>Remaining ₹{fmt(balance)}</span>
-                  </div>
-                </div>
-                <Panel>
-                  <THead cols="80px 1fr 130px 80px" headers={["Date","Invoice","Amount","Status"]}/>
-                  {D.invoices.filter(i=>i.status==="Paid").map((inv,i)=>(
-                    <div key={i} style={{display:"grid",gridTemplateColumns:"80px 1fr 130px 80px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",transition:"background .1s"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                      <span style={{fontSize:11.5,color:T.t4}}>{inv.date}</span>
-                      <span style={{fontSize:12.5,color:T.t1}}>{inv.desc}</span>
-                      <span style={{fontSize:13,fontWeight:700,color:T.grn,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(inv.amount)}</span>
-                      <Pill label="Paid" c={T.grn} bg={T.grnL}/>
-                    </div>
-                  ))}
-                </Panel>
-              </div>
-            )}
-
-            {/* ── MILESTONES TAB ── */}
-            {subTab==="milestone"&&(
-              <div style={{padding:"14px 16px"}}>
-                {D.invoices.map((inv,i)=>{
-                  const ms=invS[inv.status]||invS["Upcoming"];
-                  return(
-                    <div key={i} style={{background:T.surface,borderRadius:8,border:`1px solid ${ms.brd}`,marginBottom:8,padding:"11px 14px",display:"flex",alignItems:"center",gap:12,boxShadow:inv.status==="Pending"?`0 2px 8px ${T.amb}18`:"0 1px 3px rgba(0,0,0,0.04)"}}>
-                      <div style={{width:36,height:36,borderRadius:8,background:ms.bg,border:`1px solid ${ms.brd}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                        <span style={{fontSize:13,fontWeight:700,color:ms.c}}>{i+1}</span>
-                      </div>
-                      <div style={{flex:1}}>
-                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
-                          <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{inv.desc}</span>
-                          <Pill label={inv.status} c={ms.c} bg={ms.bg} brd={ms.brd}/>
-                          <span style={{fontSize:10.5,color:T.t4}}>{inv.pct}% of contract</span>
+                )}
+                {selEst.billing_method === "milestone_rate" && (estDetail?.sections||[]).map(sec =>
+                  (sec.items||[]).map(it => {
+                    const ms = milestones.rate_by_item[it.id] || [];
+                    return (
+                      <div key={it.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                          <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{it.description}</div>
+                          <div style={{fontSize:11,color:T.t3}}>Item rate: <b>{fmtC(it.rate)}</b></div>
                         </div>
-                        <div style={{fontSize:10.5,color:T.t4}}>Target: {inv.date}</div>
-                      </div>
-                      <div style={{textAlign:"right",flexShrink:0}}>
-                        <div style={{fontSize:15,fontWeight:700,color:inv.status==="Paid"?T.grn:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(inv.amount)}</div>
-                        {inv.status==="Pending"&&(
-                          <button style={{marginTop:6,padding:"4px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>Collect</button>
+                        {ms.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No milestones set. Use + Set Milestones.</div>}
+                        {ms.length > 0 && (
+                          <div style={{display:"grid",gridTemplateColumns:"30px 1fr 100px 100px",gap:6,padding:"4px 0",borderBottom:"1px solid "+T.b1,marginBottom:4}}>
+                            {["#","Stage","Cum Rate","Inc Rate"].map(h => <span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                          </div>
                         )}
-                        {inv.status==="Upcoming"&&(
-                          <div style={{marginTop:4,fontSize:10,color:T.t4}}>Not yet due</div>
+                        {ms.map(m => (
+                          <div key={m.id} style={{display:"grid",gridTemplateColumns:"30px 1fr 100px 100px",gap:6,padding:"4px 0",fontSize:12}}>
+                            <span style={{color:T.t4}}>{m.seq+1}</span>
+                            <span style={{color:T.t1}}>{m.name}</span>
+                            <span style={{color:T.t2,textAlign:"right",paddingRight:8}}>{fmtC(m.cum_rate)}</span>
+                            <span style={{color:T.blu,textAlign:"right",paddingRight:8,fontWeight:600}}>{fmtC(m.inc_rate)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })
+                )}
+                {selEst.billing_method === "milestone_percent" && (
+                  <div style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px"}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1,marginBottom:8}}>Payment Stages (% of estimate)</div>
+                    {milestones.percent.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No stages set yet.</div>}
+                    {milestones.percent.length > 0 && (
+                      <div style={{display:"grid",gridTemplateColumns:"30px 1fr 80px 130px",gap:6,padding:"4px 0",borderBottom:"1px solid "+T.b1,marginBottom:4}}>
+                        {["#","Stage","%","Amount"].map(h => <span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                      </div>
+                    )}
+                    {milestones.percent.map(m => (
+                      <div key={m.id} style={{display:"grid",gridTemplateColumns:"30px 1fr 80px 130px",gap:6,padding:"4px 0",fontSize:12}}>
+                        <span style={{color:T.t4}}>{m.seq+1}</span>
+                        <span style={{color:T.t1}}>{m.name}</span>
+                        <span style={{color:T.t2,textAlign:"right",paddingRight:8}}>{parseFloat(m.pct)}%</span>
+                        <span style={{color:T.grn,textAlign:"right",paddingRight:8,fontWeight:600}}>{fmtC(m.amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* INVOICES TAB */}
+            {subTab==="invoice" && (
+              <div>
+                {invoices.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No invoices yet</div>}
+                {invoices.map(inv => {
+                  const stC = inv.status==="Paid"?T.grn:inv.status==="Approved"?T.blu:inv.status==="Submitted"?T.amb:T.t4;
+                  return (
+                    <div key={inv.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+stC}}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                        <div>
+                          <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{inv.invoice_no}</span>
+                          {inv.source==="manual" && <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:T.purL,color:T.pur,border:"1px solid "+T.pur}}>MANUAL</span>}
+                          <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>{inv.invoice_date}</span>
+                        </div>
+                        <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{inv.status}</span>
+                      </div>
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
+                        {[{l:"Gross",v:fmtC(inv.gross_amount),c:T.t1},{l:"Retention",v:fmtC(inv.retention_amt),c:T.amb},{l:"TDS",v:fmtC(inv.tds_amt),c:T.red},{l:"Net Receivable",v:fmtC(inv.net_receivable),c:T.grn}].map(s => (
+                          <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
+                            <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
+                            <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{display:"flex",gap:8}}>
+                        {inv.status!=="Paid" && (
+                          <button onClick={()=>{ setPayForm(p=>({...p,amount_received:String(inv.net_receivable)})); setShowPay(inv.id); }}
+                            style={{padding:"6px 12px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                            ₹ Record Payment
+                          </button>
+                        )}
+                        {inv.status!=="Paid" && (
+                          <button onClick={()=>deleteInvoice(inv.id, inv.invoice_no)}
+                            style={{padding:"6px 12px",borderRadius:5,background:T.redL,color:T.red,border:"1px solid "+T.redM,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                            🗑 Delete
+                          </button>
                         )}
                       </div>
                     </div>
@@ -1769,46 +2014,302 @@ function TabEstimate() {
               </div>
             )}
 
-            {/* ── INVOICES TAB ── */}
-            {subTab==="invoice"&&(
-              <div style={{padding:"14px 16px"}}>
-                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:14}}>
-                  {[
-                    {l:"Total Contract",v:`₹${fmt(grandTotal)}`,c:T.slt},
-                    {l:"Invoiced",      v:`₹${fmt(D.invoices.reduce((s,i)=>s+i.amount,0))}`,c:T.blu},
-                    {l:"Collected",     v:`₹${fmt(paidTotal)}`,  c:T.grn},
-                    {l:"Pending",       v:`₹${fmt(pendingAmt)}`, c:T.amb},
-                  ].map((s,i)=>(
-                    <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-                      <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{s.l}</div>
-                      <div style={{fontSize:16,fontWeight:700,color:s.c}}>{s.v}</div>
-                    </div>
-                  ))}
+            {/* PAYMENTS TAB */}
+            {subTab==="payment" && (
+              <div>
+                {payments.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No payments recorded</div>}
+                {payments.map(p => (
+                  <div key={p.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"10px 14px",marginBottom:6,display:"grid",gridTemplateColumns:"100px 1fr 120px 100px",gap:10,alignItems:"center"}}>
+                    <span style={{fontSize:11.5,color:T.t3}}>{p.payment_date}</span>
+                    <span style={{fontSize:12,color:T.t1}}>{p.payment_mode} {p.reference_no?" · "+p.reference_no:""}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:T.grn,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(p.amount_received)}</span>
+                    <span style={{fontSize:11,color:T.t4}}>Inv #{p.invoice_id}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>)}
+      </div>
+
+      {/* ── MODAL: New Estimate ─────────────────────────────────── */}
+      {showNewEst && (<>
+        <div onClick={()=>setShowNewEst(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:760,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>New Customer Estimate</div>
+            <button onClick={()=>setShowNewEst(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
+          </div>
+          <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+              <div>
+                <label style={lblS}>Customer</label>
+                <input type="text" list="ce-customers" value={estForm.customer_name}
+                  onChange={e => {
+                    const v = e.target.value;
+                    const match = customers.find(c => c.name === v);
+                    setEstForm(p => ({...p, customer_name: v, customer_id: match?.id || ""}));
+                  }}
+                  placeholder="Type or pick a customer" style={inpS}/>
+                <datalist id="ce-customers">
+                  {customers.map(c => <option key={c.id} value={c.name}/>)}
+                </datalist>
+              </div>
+              <div>
+                <label style={lblS}>Description</label>
+                <input type="text" value={estForm.description} onChange={e=>setEstForm(p=>({...p,description:e.target.value}))} style={inpS}/>
+              </div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:14}}>
+              <div><label style={lblS}>Retention %</label><input type="number" value={estForm.retention_pct} onChange={e=>setEstForm(p=>({...p,retention_pct:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>TDS %</label><input type="number" value={estForm.tds_pct} onChange={e=>setEstForm(p=>({...p,tds_pct:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>Tax % (GST)</label><input type="number" value={estForm.tax_pct} onChange={e=>setEstForm(p=>({...p,tax_pct:e.target.value}))} style={inpS}/></div>
+            </div>
+
+            {estForm.sections.map((sec, si) => (
+              <div key={si} style={{border:"1px solid "+T.b1,borderRadius:8,padding:"10px 12px",marginBottom:10,background:T.surfaceB}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
+                  <input type="text" value={sec.title}
+                    onChange={e=>{ const s=[...estForm.sections]; s[si]={...s[si],title:e.target.value}; setEstForm(p=>({...p,sections:s})); }}
+                    style={{...inpS,width:"60%",fontWeight:700,fontSize:13}}/>
+                  {estForm.sections.length > 1 && (
+                    <button onClick={()=>removeSection(si)} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>Remove Section</button>
+                  )}
                 </div>
-                <Panel>
-                  <THead cols="95px 1fr 50px 130px 95px 90px" headers={["Invoice#","Description","PCT","Amount","Date","Status"]}/>
-                  {D.invoices.map((inv,i)=>{
-                    const ss=invS[inv.status]||invS["Upcoming"];
-                    return(
-                      <div key={i} style={{display:"grid",gridTemplateColumns:"95px 1fr 50px 130px 95px 90px",padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:inv.status==="Pending"?`3px solid ${T.amb}`:inv.status==="Paid"?`3px solid ${T.grn}`:"3px solid transparent",transition:"background .1s"}}
-                        onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                        <span style={{fontSize:12,fontFamily:"monospace",color:T.blu,fontWeight:600}}>{inv.no}</span>
-                        <span style={{fontSize:12.5,color:T.t1}}>{inv.desc}</span>
-                        <span style={{fontSize:12,color:T.t3}}>{inv.pct}%</span>
-                        <span style={{fontSize:13,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(inv.amount)}</span>
-                        <span style={{fontSize:11.5,color:T.t3}}>{inv.date}</span>
-                        <Pill label={inv.status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
-                      </div>
-                    );
-                  })}
-                </Panel>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px 32px",gap:6,marginBottom:6}}>
+                  {["Description","Unit","Qty","Rate",""].map(h => <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                </div>
+                {sec.items.map((it, ii) => (
+                  <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px 32px",gap:6,marginBottom:4}}>
+                    <input value={it.description} onChange={e=>setItemField(si,ii,"description",e.target.value)} placeholder="Item description" style={inpS}/>
+                    <input value={it.unit} onChange={e=>setItemField(si,ii,"unit",e.target.value)} placeholder="sqft" style={inpS}/>
+                    <input type="number" value={it.qty} onChange={e=>setItemField(si,ii,"qty",e.target.value)} placeholder="0" style={inpS}/>
+                    <input type="number" value={it.rate} onChange={e=>setItemField(si,ii,"rate",e.target.value)} placeholder="0" style={inpS}/>
+                    <button onClick={()=>removeItem(si,ii)} disabled={sec.items.length<=1} style={{background:sec.items.length<=1?T.b1:T.redL,color:sec.items.length<=1?T.t4:T.red,border:"none",borderRadius:5,fontSize:14,cursor:sec.items.length<=1?"default":"pointer"}}>×</button>
+                  </div>
+                ))}
+                <button onClick={()=>addItem(si)} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Item</button>
+              </div>
+            ))}
+            <button onClick={addSection} style={{background:T.surface,color:T.blu,border:"1.5px dashed "+T.blu,borderRadius:6,padding:"8px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>+ Add Section</button>
+          </div>
+          <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}}>
+            <button onClick={()=>setShowNewEst(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button onClick={submitEst} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Create Estimate"}</button>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── MODAL: New Invoice ──────────────────────────────────── */}
+      {showNewInv && (<>
+        <div onClick={()=>setShowNewInv(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:680,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{invForm.source==="manual"?"New Manual Invoice":"New Invoice (from milestones)"}</div>
+            <button onClick={()=>setShowNewInv(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
+          </div>
+          <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
+              <div><label style={lblS}>Invoice Date</label><input type="date" value={invForm.invoice_date} onChange={e=>setInvForm(p=>({...p,invoice_date:e.target.value}))} style={inpS}/></div>
+              {invForm.source==="manual" && <div><label style={lblS}>Customer Name</label><input value={invForm.customer_name} onChange={e=>setInvForm(p=>({...p,customer_name:e.target.value}))} placeholder={selEst?.customer_name||"Customer"} style={inpS}/></div>}
+              {invForm.source==="milestone" && selEst && <div><div style={{fontSize:11,color:T.t3,paddingTop:18}}><b>Estimate:</b> {selEst.estimate_no} ({selEst.billing_method})</div></div>}
+            </div>
+
+            {invForm.source==="manual" && (<>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px 32px",gap:6,marginBottom:6}}>
+                {["Description","Unit","Qty","Rate",""].map(h => <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+              </div>
+              {invForm.manualItems.map((it, ii) => (
+                <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px 32px",gap:6,marginBottom:4}}>
+                  <input value={it.description} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],description:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder="e.g. Termite treatment" style={inpS}/>
+                  <input value={it.unit||""} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],unit:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder="" style={inpS}/>
+                  <input type="number" value={it.qty} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],qty:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder="0" style={inpS}/>
+                  <input type="number" value={it.rate} onChange={e=>{const arr=[...invForm.manualItems];arr[ii]={...arr[ii],rate:e.target.value};setInvForm(p=>({...p,manualItems:arr}));}} placeholder="0" style={inpS}/>
+                  <button onClick={()=>{const arr=invForm.manualItems.filter((_,i)=>i!==ii);setInvForm(p=>({...p,manualItems:arr.length?arr:[{description:"",qty:"",rate:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>setInvForm(p=>({...p,manualItems:[...p.manualItems,{description:"",qty:"",rate:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Line</button>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginTop:14}}>
+                <div><label style={lblS}>Retention %</label><input type="number" value={invForm.retention_pct} onChange={e=>setInvForm(p=>({...p,retention_pct:e.target.value}))} style={inpS}/></div>
+                <div><label style={lblS}>TDS %</label><input type="number" value={invForm.tds_pct} onChange={e=>setInvForm(p=>({...p,tds_pct:e.target.value}))} style={inpS}/></div>
+                <div><label style={lblS}>Tax %</label><input type="number" value={invForm.tax_pct} onChange={e=>setInvForm(p=>({...p,tax_pct:e.target.value}))} style={inpS}/></div>
+              </div>
+            </>)}
+
+            {invForm.source==="milestone" && selEst && selEst.billing_method === "milestone_rate" && (<>
+              <div style={{fontSize:11,color:T.t3,marginBottom:8}}>Tick milestones to bill. Enter cumulative qty (0–{(estDetail?.sections||[]).flatMap(s=>s.items).reduce((m,i)=>Math.max(m,parseFloat(i.qty)||0),0)} max per item).</div>
+              {(estDetail?.sections||[]).flatMap(s => s.items).map(it => {
+                const ms = milestones.rate_by_item[it.id] || [];
+                if (ms.length === 0) return null;
+                return (
+                  <div key={it.id} style={{marginBottom:12,border:"1px solid "+T.b1,borderRadius:6,padding:"8px 10px"}}>
+                    <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:6}}>{it.description} <span style={{color:T.t4,fontWeight:400}}>· qty {parseFloat(it.qty)} {it.unit}</span></div>
+                    {ms.map(m => {
+                      const picked = invForm.items.find(x => x.milestone_id === m.id);
+                      return (
+                        <div key={m.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 90px 120px",gap:6,alignItems:"center",padding:"3px 0"}}>
+                          <input type="checkbox" checked={!!picked}
+                            onChange={e => {
+                              if (e.target.checked) setInvForm(p => ({...p, items:[...p.items, {milestone_id:m.id, cumulative_qty:""}]}));
+                              else setInvForm(p => ({...p, items: p.items.filter(x => x.milestone_id !== m.id)}));
+                            }}/>
+                          <span style={{fontSize:12,color:T.t1}}>{m.name}</span>
+                          <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8}}>inc {fmtC(m.inc_rate)}</span>
+                          <input type="number" placeholder="cum qty" disabled={!picked}
+                            value={picked?.cumulative_qty || ""}
+                            onChange={e => setInvForm(p => ({...p, items: p.items.map(x => x.milestone_id===m.id ? {...x, cumulative_qty:e.target.value} : x)}))}
+                            style={{...inpS,padding:"4px 8px",fontSize:11}}/>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </>)}
+
+            {invForm.source==="milestone" && selEst && selEst.billing_method === "milestone_percent" && (
+              <div>
+                <div style={{fontSize:11,color:T.t3,marginBottom:8}}>Tick stages to bill (each stage can be billed once).</div>
+                {milestones.percent.map(m => {
+                  const picked = invForm.items.find(x => x.milestone_id === m.id);
+                  return (
+                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 80px 140px",gap:6,alignItems:"center",padding:"6px 8px",borderBottom:"1px solid "+T.b1}}>
+                      <input type="checkbox" checked={!!picked}
+                        onChange={e => {
+                          if (e.target.checked) setInvForm(p => ({...p, items:[...p.items, {milestone_id:m.id}]}));
+                          else setInvForm(p => ({...p, items: p.items.filter(x => x.milestone_id !== m.id)}));
+                        }}/>
+                      <span style={{fontSize:12,color:T.t1}}>{m.name}</span>
+                      <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8}}>{parseFloat(m.pct)}%</span>
+                      <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(m.amount)}</span>
+                    </div>
+                  );
+                })}
               </div>
             )}
 
+            {invForm.source==="milestone" && selEst && selEst.billing_method === "manual" && (
+              <div>
+                <div style={{fontSize:11,color:T.t3,marginBottom:8}}>Estimate uses manual billing — enter cumulative qty per item.</div>
+                {(estDetail?.sections||[]).flatMap(s=>s.items).map(it => {
+                  const picked = invForm.items.find(x => x.estimate_item_id === it.id);
+                  return (
+                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 100px 100px",gap:6,alignItems:"center",padding:"5px 8px",borderBottom:"1px solid "+T.b1}}>
+                      <input type="checkbox" checked={!!picked}
+                        onChange={e => {
+                          if (e.target.checked) setInvForm(p => ({...p, items:[...p.items, {estimate_item_id:it.id, cumulative_qty:"", rate:parseFloat(it.rate)}]}));
+                          else setInvForm(p => ({...p, items: p.items.filter(x => x.estimate_item_id !== it.id)}));
+                        }}/>
+                      <span style={{fontSize:12,color:T.t1}}>{it.description}</span>
+                      <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8}}>{fmtC(it.rate)}/{it.unit}</span>
+                      <input type="number" placeholder="cum qty" disabled={!picked}
+                        value={picked?.cumulative_qty || ""}
+                        onChange={e => setInvForm(p => ({...p, items: p.items.map(x => x.estimate_item_id===it.id ? {...x, cumulative_qty:e.target.value} : x)}))}
+                        style={{...inpS,padding:"4px 8px",fontSize:11}}/>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+          <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
+            <button onClick={()=>setShowNewInv(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button onClick={submitInvoice} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Create Invoice"}</button>
           </div>
         </div>
-      </div>
+      </>)}
+
+      {/* ── MODAL: Set Milestones ───────────────────────────────── */}
+      {showSetMs && selEst && (<>
+        <div onClick={()=>setShowSetMs(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:620,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Set Payment Milestones</div>
+            <button onClick={()=>setShowSetMs(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
+          </div>
+          <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <button onClick={()=>setMsForm(p=>({...p,kind:"rate"}))}
+                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="rate"?T.blu:T.surfaceB,color:msForm.kind==="rate"?"white":T.t2,border:"1px solid "+(msForm.kind==="rate"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>Rate-based (per item)</button>
+              <button onClick={()=>setMsForm(p=>({...p,kind:"percent"}))}
+                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="percent"?T.blu:T.surfaceB,color:msForm.kind==="percent"?"white":T.t2,border:"1px solid "+(msForm.kind==="percent"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>%-based (estimate value)</button>
+            </div>
+
+            {msForm.kind === "rate" && (<>
+              <label style={lblS}>Estimate Item</label>
+              <select value={msForm.estimate_item_id||""} onChange={e=>setMsForm(p=>({...p,estimate_item_id:parseInt(e.target.value)||null}))} style={{...inpS,marginBottom:12}}>
+                <option value="">— pick an item —</option>
+                {(estDetail?.sections||[]).flatMap(s => s.items).map(it => (
+                  <option key={it.id} value={it.id}>{it.description} ({fmtC(it.rate)}/{it.unit})</option>
+                ))}
+              </select>
+              <div style={{display:"grid",gridTemplateColumns:"40px 1fr 140px 32px",gap:6,marginBottom:6}}>
+                {["#","Stage Name","Cum Rate","" ].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+              </div>
+              {msForm.rateMs.map((m, mi) => (
+                <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 140px 32px",gap:6,marginBottom:4}}>
+                  <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
+                  <input value={m.name} onChange={e=>{const arr=[...msForm.rateMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,rateMs:arr}));}} placeholder="e.g. Footing" style={inpS}/>
+                  <input type="number" value={m.cum_rate} onChange={e=>{const arr=[...msForm.rateMs];arr[mi]={...arr[mi],cum_rate:e.target.value};setMsForm(p=>({...p,rateMs:arr}));}} placeholder="cum ₹/unit" style={inpS}/>
+                  <button onClick={()=>{const arr=msForm.rateMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,rateMs:arr.length?arr:[{seq:0,name:"",cum_rate:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>setMsForm(p=>({...p,rateMs:[...p.rateMs,{seq:p.rateMs.length,name:"",cum_rate:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Stage</button>
+              <div style={{marginTop:10,padding:"8px 10px",background:T.surfaceB,borderRadius:5,fontSize:10.5,color:T.t3}}>Last cum_rate should match the item rate. If not, you'll get a warning (saved anyway).</div>
+            </>)}
+
+            {msForm.kind === "percent" && (<>
+              <div style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 32px",gap:6,marginBottom:6}}>
+                {["#","Stage Name","%",""].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+              </div>
+              {msForm.pctMs.map((m, mi) => (
+                <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 32px",gap:6,marginBottom:4}}>
+                  <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
+                  <input value={m.name} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="e.g. Foundation" style={inpS}/>
+                  <input type="number" value={m.pct} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],pct:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="%" style={inpS}/>
+                  <button onClick={()=>{const arr=msForm.pctMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,pctMs:arr.length?arr:[{seq:0,name:"",pct:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>setMsForm(p=>({...p,pctMs:[...p.pctMs,{seq:p.pctMs.length,name:"",pct:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Stage</button>
+              <div style={{marginTop:10,padding:"8px 10px",background:T.surfaceB,borderRadius:5,fontSize:10.5,color:T.t3}}>Total should be 100%. Mismatch shows a warning (saved anyway).</div>
+            </>)}
+          </div>
+          <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
+            <button onClick={()=>setShowSetMs(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Save Milestones"}</button>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── MODAL: Record Payment ───────────────────────────────── */}
+      {showPay && (<>
+        <div onClick={()=>setShowPay(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:480,maxWidth:"95vw",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Record Payment</div>
+            <button onClick={()=>setShowPay(null)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
+          </div>
+          <div style={{padding:"16px 18px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:10}}>
+              <div><label style={lblS}>Amount</label><input type="number" value={payForm.amount_received} onChange={e=>setPayForm(p=>({...p,amount_received:e.target.value}))} style={inpS}/></div>
+              <div><label style={lblS}>Date</label><input type="date" value={payForm.payment_date} onChange={e=>setPayForm(p=>({...p,payment_date:e.target.value}))} style={inpS}/></div>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:10}}>
+              <div><label style={lblS}>Mode</label>
+                <select value={payForm.payment_mode} onChange={e=>setPayForm(p=>({...p,payment_mode:e.target.value}))} style={inpS}>
+                  <option>Bank Transfer</option><option>Cash</option><option>Cheque</option><option>UPI</option><option>Credit Card</option>
+                </select>
+              </div>
+              <div><label style={lblS}>Reference #</label><input value={payForm.reference_no} onChange={e=>setPayForm(p=>({...p,reference_no:e.target.value}))} style={inpS}/></div>
+            </div>
+            <div><label style={lblS}>Remark</label><input value={payForm.remark} onChange={e=>setPayForm(p=>({...p,remark:e.target.value}))} style={inpS}/></div>
+          </div>
+          <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
+            <button onClick={()=>setShowPay(null)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button onClick={submitPayment} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.grn,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Record"}</button>
+          </div>
+        </div>
+      </>)}
     </div>
   );
 }
@@ -14103,7 +14604,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     // ── Construction tabs (unchanged) ──
     overview:    <TabOverview    proj={project} onRequestPayment={()=>setPaymentReq({})}/>,
     design:      <TabDesign project={project} isAdmin={isAdmin}/>,
-    estimate:    <TabEstimate/>,
+    estimate:    <TabEstimate project={project}/>,
     party:       <TabParty/>,
     transaction: <TabTransaction/>,
     todo:        <TabTodo projectId={project.id}/>,
