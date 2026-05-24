@@ -9851,7 +9851,7 @@ function TabSubcon({ projectId }) {
       {/* NEW WO MODAL */}
       {showNewWO&&(
         <NewWOModal
-          subcons={subcons} projectId={projectId} fmtC={fmtC}
+          subcons={subcons} setSubcons={setSubcons} projectId={projectId} fmtC={fmtC}
           inpStyle={inpStyle} lblStyle={lblStyle} saving={saving} setSaving={setSaving}
           onClose={()=>setShowNewWO(false)}
           onSaved={()=>{ setShowNewWO(false); loadWOs(); }}
@@ -9995,7 +9995,7 @@ function TabSubcon({ projectId }) {
   );
 }
 
-function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setSaving, onClose, onSaved }) {
+function NewWOModal({ subcons, setSubcons, projectId, fmtC, inpStyle, lblStyle, saving, setSaving, onClose, onSaved }) {
   const CATS = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
   const blankSection = () => ({ title:"", items:[{ description:"", unit:"", qty:"", rate:"", isLibrary:false }] });
 
@@ -10009,7 +10009,25 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
   const [showLibFor, setShowLibFor] = useState(null); // {secIdx, itemIdx}
   const [libSearch, setLibSearch] = useState("");
   const [secCollapsed, setSecCollapsed] = useState({});
+  const [showAddSc, setShowAddSc] = useState(false);  // inline new-subcon modal
   const toggleSecCollapse = (si) => setSecCollapsed(p=>({...p,[si]:!p[si]}));
+
+  // ── Library-backed subcon match: when user types/picks a name that
+  //    matches an entry in /library/subcontractors, surface its
+  //    labour_strength + trade as a chip, and auto-fill the category.
+  const matchedSubcon = (subcons || []).find(
+    s => (s.name || "").trim().toLowerCase() === (form.subcon_name || "").trim().toLowerCase()
+  );
+  useEffect(() => {
+    if (matchedSubcon && matchedSubcon.trade) {
+      // Best-effort map library "trade" to WO "category". If the trade
+      // string contains one of CATS, use it; else leave whatever the
+      // user picked.
+      const hit = CATS.find(c => (matchedSubcon.trade || "").toLowerCase().includes(c.toLowerCase()));
+      if (hit && hit !== form.subcon_category) setForm(p => ({ ...p, subcon_category: hit }));
+    }
+    // eslint-disable-next-line
+  }, [matchedSubcon?.id]);
 
   // Load library items when category changes
   useEffect(()=>{
@@ -10085,8 +10103,49 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:14}}>
             <div style={{gridColumn:"1/3"}}>
               <label style={lblStyle}>Subcontractor *</label>
-              <input list="sc-list-wo" value={form.subcon_name} onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))} placeholder="Select or type..." style={inpStyle}/>
-              <datalist id="sc-list-wo">{subcons.map(s=><option key={s.id} value={s.name}/>)}</datalist>
+              <div style={{display:"flex",gap:6,alignItems:"stretch"}}>
+                <input list="sc-list-wo" value={form.subcon_name}
+                  onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))}
+                  placeholder="Select from library or type new..."
+                  style={{...inpStyle,flex:1}}/>
+                <datalist id="sc-list-wo">
+                  {subcons.map(s=>(
+                    <option key={s.id} value={s.name}>
+                      {s.trade || ""}{s.labour_strength?` • ${s.labour_strength} labour`:""}
+                    </option>
+                  ))}
+                </datalist>
+                <button type="button" onClick={()=>setShowAddSc(true)}
+                  title="Add new subcontractor to master library"
+                  style={{padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.blu}`,background:T.bluL,color:T.blu,fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
+                  + New
+                </button>
+              </div>
+              {/* Labour strength chip — appears when typed name matches a library entry */}
+              {matchedSubcon && (
+                <div style={{marginTop:5,display:"flex",gap:6,flexWrap:"wrap",fontSize:10.5}}>
+                  {matchedSubcon.trade && (
+                    <span style={{padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700}}>
+                      {matchedSubcon.trade}
+                    </span>
+                  )}
+                  {matchedSubcon.labour_strength > 0 && (
+                    <span style={{padding:"2px 8px",borderRadius:10,background:"#DCFCE7",color:"#15803D",fontWeight:700}}>
+                      👷 {matchedSubcon.labour_strength} labour
+                    </span>
+                  )}
+                  {matchedSubcon.phone && (
+                    <span style={{padding:"2px 8px",borderRadius:10,background:T.surfaceB,color:T.t3,fontWeight:600}}>
+                      📞 {matchedSubcon.phone}
+                    </span>
+                  )}
+                  {matchedSubcon.city && (
+                    <span style={{padding:"2px 8px",borderRadius:10,background:T.surfaceB,color:T.t3,fontWeight:600}}>
+                      📍 {matchedSubcon.city}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div>
               <label style={lblStyle}>Category</label>
@@ -10188,6 +10247,31 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
         </div>
       </div>
 
+      {/* Add new subcontractor → master library */}
+      {showAddSc && (
+        <SubconLibraryFormModal
+          onClose={()=>setShowAddSc(false)}
+          onSaved={(newSc)=>{
+            // 1. Append to local list so the datalist + chip updates immediately
+            if (setSubcons) setSubcons(prev => [newSc, ...(prev || [])]);
+            // 2. Auto-select the new subcontractor in the WO form
+            setForm(p => ({
+              ...p,
+              subcon_name: newSc.name,
+              // If the library entry's trade matches a WO category, prefill it
+              subcon_category: (function() {
+                const t = (newSc.trade || "").toLowerCase();
+                const cats = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
+                return cats.find(c => t.includes(c.toLowerCase())) || p.subcon_category;
+              })(),
+            }));
+            setShowAddSc(false);
+          }}
+          inpStyle={inpStyle}
+          lblStyle={lblStyle}
+        />
+      )}
+
       {/* Library picker modal */}
       {showLibFor&&(
         <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:600,display:"flex",alignItems:"center",justifyContent:"center"}}
@@ -10219,6 +10303,130 @@ function NewWOModal({ subcons, projectId, fmtC, inpStyle, lblStyle, saving, setS
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+
+// ─────────────────────────────────────────────────────────────────────
+// SubconLibraryFormModal — inline "Add new subcontractor" form opened
+// from inside NewWOModal / EditWOModal. Mirrors the field set used by
+// MasterLibraryModule's SubcontractorSection so the master library
+// stays consistent regardless of where the subcon was first created.
+//
+// POSTs to /library/subcontractors (the same endpoint MasterLibrary
+// uses), then calls onSaved(newRow) so the caller can:
+//   1. Append the row to its local `subcons` list (no full re-fetch)
+//   2. Auto-select the new entry in the WO form
+// ─────────────────────────────────────────────────────────────────────
+function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
+  const TRADES = [
+    "RCC & Civil","Electrical Work","Plumbing","Painting","Tiles & Flooring",
+    "Fabrication","Carpentry","Waterproofing","False Ceiling","HVAC",
+    "Landscaping","Demolition","Other",
+  ];
+  const [form, setForm] = useState({
+    name: "", owner: "", trade: "RCC & Civil", phone: "", city: "",
+    labour_strength: 0, gstin: "", status: "Active",
+  });
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!form.name.trim()) { setErr("Firm / Company name is required"); return; }
+    setSaving(true); setErr("");
+    try {
+      const res = await api.post("/library/subcontractors", form);
+      setSaving(false);
+      if (res?.success === false) { setErr(res.message || "Save failed"); return; }
+      onSaved && onSaved(res.data || { ...form, id: Date.now() });
+    } catch (e) {
+      setSaving(false);
+      setErr(e?.message || "Network error");
+    }
+  };
+
+  return (
+    <div onClick={onClose}
+      style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center"}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{background:T.surface,borderRadius:12,width:"min(560px,95vw)",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.35)"}}>
+        {/* Header */}
+        <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Add Subcontractor to Library</div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)",marginTop:1}}>Saved to master library so it appears across all projects</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+        {/* Body */}
+        <div style={{flex:1,overflowY:"auto",padding:16}}>
+          {err && (
+            <div style={{padding:"7px 10px",borderRadius:6,background:"#FEE2E2",color:"#B91C1C",fontSize:11.5,fontWeight:600,marginBottom:10}}>
+              {err}
+            </div>
+          )}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+            <div>
+              <label style={lblStyle}>Firm / Company Name *</label>
+              <input value={form.name} onChange={e=>upd("name", e.target.value)}
+                placeholder="e.g. Raj Construction" style={inpStyle} autoFocus/>
+            </div>
+            <div>
+              <label style={lblStyle}>Owner / Contact Person</label>
+              <input value={form.owner} onChange={e=>upd("owner", e.target.value)}
+                placeholder="Owner name" style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>Trade / Specialty *</label>
+              <select value={form.trade} onChange={e=>upd("trade", e.target.value)} style={inpStyle}>
+                {TRADES.map(t=><option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={lblStyle}>Phone</label>
+              <input value={form.phone} onChange={e=>upd("phone", e.target.value)}
+                placeholder="+91 XXXXX XXXXX" style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>City</label>
+              <input value={form.city} onChange={e=>upd("city", e.target.value)}
+                placeholder="Raipur" style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>Labour Strength</label>
+              <input type="number" min={0} value={form.labour_strength || ""}
+                onChange={e=>upd("labour_strength", parseInt(e.target.value) || 0)}
+                placeholder="e.g. 15" style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>GSTIN</label>
+              <input value={form.gstin} onChange={e=>upd("gstin", e.target.value)}
+                placeholder="If registered" style={inpStyle}/>
+            </div>
+            <div>
+              <label style={lblStyle}>Status</label>
+              <select value={form.status} onChange={e=>upd("status", e.target.value)} style={inpStyle}>
+                <option value="Active">Active</option>
+                <option value="Inactive">Inactive</option>
+                <option value="Blacklisted">Blacklisted</option>
+              </select>
+            </div>
+          </div>
+        </div>
+        {/* Footer */}
+        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8}}>
+          <button onClick={onClose}
+            style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>
+            Cancel
+          </button>
+          <button onClick={save} disabled={saving || !form.name.trim()}
+            style={{flex:2,padding:"9px",borderRadius:7,background:(saving||!form.name.trim())?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:(saving||!form.name.trim())?"not-allowed":"pointer"}}>
+            {saving ? "Saving…" : "Save & Use"}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
