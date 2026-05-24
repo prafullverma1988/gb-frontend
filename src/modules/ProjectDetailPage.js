@@ -10138,9 +10138,24 @@ function TabSubcon({ projectId }) {
   const [billForm, setBillForm] = useState({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
   const [payForm, setPayForm] = useState({ amount_paid:"", payment_date: new Date().toISOString().split("T")[0], payment_mode:"Bank Transfer", reference_no:"", remark:"" });
 
+  // ── Milestone billing (Phase 1 backend already shipped; this is the UI side) ──
+  // Subcon WOs default to billing_method='manual'. Switch via the chip in the WO
+  // header. milestone_rate uses per-item milestones with cum_rate; milestone_percent
+  // uses WO-value stages with pct. Shares the milestone_templates store with library.
+  const [woMilestones, setWoMilestones] = useState({ rate_by_item: {}, percent: [] });
+  const [showSetMs, setShowSetMs]       = useState(false);
+  const [msForm, setMsForm] = useState({
+    kind: "rate",            // 'rate' | 'percent'
+    wo_item_id: null,
+    rateMs: [{ seq: 0, name: "", cum_rate: "" }],
+    pctMs:  [{ seq: 0, name: "", pct: "" }],
+  });
+  const [templates, setTemplates] = useState([]); // shared milestone_templates
+
   useEffect(()=>{
     loadWOs();
     api.get("/library/subcontractors").then(r=>{ if(r.success) setSubcons(r.data||[]); }).catch(()=>{});
+    api.get("/subcon/milestone-templates").then(r=>{ if(r.success) setTemplates(r.data||[]); }).catch(()=>{});
   },[projectId]);
 
   const loadWOs = async () => {
@@ -10152,14 +10167,76 @@ function TabSubcon({ projectId }) {
 
   const selectWo = async (wo) => {
     setSelWo(wo); setSubTab("wo");
-    const [bRes, sRes, aRes] = await Promise.all([
+    const [bRes, sRes, aRes, mRes, dRes] = await Promise.all([
       api.get("/subcon/ra-bills?wo_id="+wo.id).catch(()=>({success:false})),
       api.get("/subcon/work-orders/"+wo.id+"/summary").catch(()=>({success:false})),
       api.get("/subcon/amendments?wo_id="+wo.id).catch(()=>({success:false})),
+      api.get("/subcon/wo/"+wo.id+"/milestones").catch(()=>({success:false})),
+      // Fresh WO detail so billing_method stays in sync after PUT /billing-method.
+      api.get("/subcon/work-orders/"+wo.id).catch(()=>({success:false})),
     ]);
     if(bRes.success) setBills(bRes.data||[]);
     if(sRes.success) setSummary(sRes.data);
     if(aRes.success) setAmendments(aRes.data||[]);
+    if(mRes.success) setWoMilestones(mRes.data || { rate_by_item:{}, percent:[] });
+    if(dRes.success) setSelWo(prev => prev ? { ...prev, ...dRes.data } : prev);
+  };
+
+  const reloadWo = async () => { if (selWo) await selectWo(selWo); };
+
+  // ── BILLING-METHOD SWITCH ──
+  const switchBillingMethod = async (method) => {
+    if (!selWo) return;
+    if (selWo.billing_method === method) return;
+    const r = await api.put("/subcon/wo/"+selWo.id+"/billing-method", { billing_method: method }).catch(()=>({success:false}));
+    if (r.success) await reloadWo();
+    else alert(r.message || "Switch failed (incompatible bills?)");
+  };
+
+  // ── SET MILESTONES (rate or percent) ──
+  const submitMilestones = async () => {
+    if (!selWo) return;
+    setSaving(true);
+    let r;
+    if (msForm.kind === "rate") {
+      if (!msForm.wo_item_id) { setSaving(false); return alert("Pick a WO item first"); }
+      const ms = msForm.rateMs.filter(m => m.name && m.cum_rate)
+        .map((m,i) => ({ seq:i, name:m.name, cum_rate: parseFloat(m.cum_rate) }));
+      if (!ms.length) { setSaving(false); return alert("Add at least one stage"); }
+      if (selWo.billing_method !== "milestone_rate") {
+        await api.put("/subcon/wo/"+selWo.id+"/billing-method", { billing_method: "milestone_rate" });
+      }
+      r = await api.post("/subcon/wo/"+selWo.id+"/milestones/rate", {
+        items: [{ wo_item_id: msForm.wo_item_id, milestones: ms }],
+      }).catch(()=>({success:false}));
+    } else {
+      const ms = msForm.pctMs.filter(m => m.name && m.pct)
+        .map((m,i) => ({ seq:i, name:m.name, pct: parseFloat(m.pct) }));
+      if (!ms.length) { setSaving(false); return alert("Add at least one stage"); }
+      if (selWo.billing_method !== "milestone_percent") {
+        await api.put("/subcon/wo/"+selWo.id+"/billing-method", { billing_method: "milestone_percent" });
+      }
+      r = await api.post("/subcon/wo/"+selWo.id+"/milestones/percent", { milestones: ms }).catch(()=>({success:false}));
+    }
+    setSaving(false);
+    if (r.success) {
+      setShowSetMs(false);
+      setMsForm({ kind:"rate", wo_item_id:null, rateMs:[{seq:0,name:"",cum_rate:""}], pctMs:[{seq:0,name:"",pct:""}] });
+      if (r.data?.warnings?.length) alert("Saved with warnings:\n" + r.data.warnings.join("\n"));
+      await reloadWo();
+    } else alert(r.message || "Failed");
+  };
+
+  // ── APPLY TEMPLATE to a WO item (template uses cum_pct × item.rate) ──
+  const applyTemplateToItem = async (woItemId, templateId) => {
+    const r = await api.post("/subcon/wo/"+selWo.id+"/items/"+woItemId+"/apply-template",
+      { template_id: templateId }).catch(()=>({success:false}));
+    if (r.success) {
+      if (selWo.billing_method !== "milestone_rate") {
+        await api.put("/subcon/wo/"+selWo.id+"/billing-method", { billing_method: "milestone_rate" });
+      }
+      await reloadWo();
+    } else alert(r.message || "Apply template failed");
   };
 
   const fmtC = (v) => "₹"+(parseFloat(v)||0).toLocaleString("en-IN",{maximumFractionDigits:0});
@@ -10185,30 +10262,41 @@ function TabSubcon({ projectId }) {
   };
 
   // ── NEW RA BILL SUBMIT ──
+  // Branches on selWo.billing_method:
+  //   manual           → existing behaviour, items map all WO items with cumulative_qty
+  //   milestone_rate   → billForm.items already in {milestone_id, cumulative_qty} shape
+  //   milestone_percent→ billForm.items already in {milestone_id} shape (just tick)
   const submitBill = async () => {
-    if(billSubmitRef.current) return; // hard guard against double-fire
+    if(billSubmitRef.current) return;
     if(!selWo) return;
     billSubmitRef.current = true;
     setSaving(true);
-    const woDetail = await api.get("/subcon/work-orders/"+selWo.id).catch(()=>({success:false}));
-    // Flatten all items from sections
-    const allItems = [];
-    if(woDetail.success){
-      (woDetail.data.sections||[]).forEach(sec=>{
-        (sec.items||[]).forEach(it=>allItems.push(it));
-      });
-      // Also unsectioned items
-      (woDetail.data.unsectioned||[]).forEach(it=>allItems.push(it));
+
+    const method = selWo.billing_method || "manual";
+    let payloadItems = [];
+
+    if (method === "manual") {
+      const woDetail = await api.get("/subcon/work-orders/"+selWo.id).catch(()=>({success:false}));
+      const allItems = [];
+      if (woDetail.success) {
+        (woDetail.data.sections||[]).forEach(sec => (sec.items||[]).forEach(it => allItems.push(it)));
+        (woDetail.data.unsectioned||[]).forEach(it => allItems.push(it));
+      }
+      payloadItems = allItems.map(it => ({
+        wo_item_id: it.id,
+        cumulative_qty: parseFloat(billForm.items.find(bi => bi.wo_item_id === it.id)?.cumulative_qty || 0),
+        rate: parseFloat(it.rate),
+      }));
+    } else {
+      // milestone_rate or milestone_percent — billForm.items already carries the right shape.
+      payloadItems = (billForm.items || []).filter(x => x.milestone_id);
     }
+
     const res = await api.post("/subcon/ra-bills",{
       wo_id: selWo.id,
       bill_date: billForm.bill_date,
       remark: billForm.remark,
-      items: allItems.map((it)=>({
-        wo_item_id: it.id,
-        cumulative_qty: parseFloat(billForm.items.find(bi=>bi.wo_item_id===it.id)?.cumulative_qty||0),
-        rate: parseFloat(it.rate),
-      })),
+      items: payloadItems,
     }).catch(()=>({success:false}));
     setSaving(false);
     billSubmitRef.current = false;
@@ -10218,12 +10306,15 @@ function TabSubcon({ projectId }) {
         ref_id: res.data.id,
         ref_no: res.data.bill_no || "",
         title: (selWo.subcon_name||selWo.name||"") + " - RA Bill",
-        amount: res.data.total_amount || 0,
+        amount: res.data.total_amount || res.data.gross_amount || 0,
         project_id: projectId,
         project_name: projectName || "",
       }).catch(e => console.error("Approval submit:", e));
-      apiCache.refreshApprovals();  // pre-warm badge
-      setShowNewBill(false); selectWo(selWo);
+      apiCache.refreshApprovals();
+      if (res.data?.warnings?.length) alert("Saved with warnings:\n" + res.data.warnings.join("\n"));
+      setShowNewBill(false);
+      setBillForm({ bill_date: new Date().toISOString().split("T")[0], remark:"", items:[] });
+      selectWo(selWo);
     }
     else alert(res.message||"Failed");
   };
@@ -10291,7 +10382,23 @@ function TabSubcon({ projectId }) {
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
               <div>
                 <div style={{fontSize:15,fontWeight:700,color:"white"}}>{selWo.subcon_name}</div>
-                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{selWo.description||selWo.subcon_category}</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2,display:"flex",alignItems:"center",gap:8}}>
+                  <span>{selWo.description||selWo.subcon_category}</span>
+                  {/* Billing-method chip — drives which UI the New RA Bill modal renders. */}
+                  <span style={{
+                    background: selWo.billing_method==="manual" ? "rgba(148,163,184,0.2)"
+                              : selWo.billing_method==="milestone_rate" ? "rgba(96,165,250,0.2)"
+                              : "rgba(167,139,250,0.2)",
+                    color: selWo.billing_method==="manual" ? "#CBD5E1"
+                         : selWo.billing_method==="milestone_rate" ? "#60A5FA"
+                         : "#A78BFA",
+                    padding:"1px 8px", borderRadius:4, fontWeight:700, fontSize:10,
+                  }}>
+                    {selWo.billing_method==="milestone_rate" ? "MILESTONE (rate)"
+                      : selWo.billing_method==="milestone_percent" ? "MILESTONE (%)"
+                      : "MANUAL BILLING"}
+                  </span>
+                </div>
               </div>
               <div style={{display:"flex",gap:16,alignItems:"center"}}>
                 {summary&&[
@@ -10306,6 +10413,11 @@ function TabSubcon({ projectId }) {
                     <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
                   </div>
                 ))}
+                {/* Set Milestones — opens a modal that also flips billing_method. */}
+                <button onClick={()=>{ setMsForm({ kind:"rate", wo_item_id:null, rateMs:[{seq:0,name:"",cum_rate:""}], pctMs:[{seq:0,name:"",pct:""}] }); setShowSetMs(true); }}
+                  style={{background:"rgba(96,165,250,0.15)",border:"1px solid rgba(96,165,250,0.35)",color:"#60A5FA",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                  🎯 Set Milestones
+                </button>
                 <button onClick={()=>setShowEditWO(true)}
                   style={{background:"rgba(255,255,255,0.1)",border:"1px solid rgba(255,255,255,0.2)",color:"white",borderRadius:6,padding:"5px 12px",fontSize:11,fontWeight:600,cursor:"pointer",flexShrink:0}}>
                   ✏ Edit
@@ -10533,6 +10645,98 @@ function TabSubcon({ projectId }) {
         />
       )}
 
+      {/* ── SET MILESTONES MODAL (rate or %) ─────────────────────────────
+          Mirrors the customer-estimates flow but talks to /subcon endpoints.
+          Auto-flips billing_method on save (manual → milestone_rate/percent).
+      */}
+      {showSetMs && selWo && (<>
+        <div onClick={()=>setShowSetMs(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:680,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Set Payment Milestones — {selWo.subcon_name}</div>
+            <button onClick={()=>setShowSetMs(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
+          </div>
+          <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              <button onClick={()=>setMsForm(p=>({...p,kind:"rate"}))}
+                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="rate"?T.blu:T.surfaceB,color:msForm.kind==="rate"?"white":T.t2,border:"1px solid "+(msForm.kind==="rate"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>Rate-based (per item)</button>
+              <button onClick={()=>setMsForm(p=>({...p,kind:"percent"}))}
+                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="percent"?T.blu:T.surfaceB,color:msForm.kind==="percent"?"white":T.t2,border:"1px solid "+(msForm.kind==="percent"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>%-based (WO value)</button>
+            </div>
+
+            {msForm.kind === "rate" && (<>
+              <label style={lblStyle}>WO Item</label>
+              <select value={msForm.wo_item_id||""} onChange={e=>setMsForm(p=>({...p,wo_item_id:parseInt(e.target.value)||null}))} style={{...inpStyle,marginBottom:12}}>
+                <option value="">— pick a WO item —</option>
+                <WoItemOptions woId={selWo.id} fmtC={fmtC}/>
+              </select>
+
+              {/* Apply Template — one-click load from shared milestone_templates */}
+              {templates.length > 0 && msForm.wo_item_id && (
+                <div style={{marginBottom:12,padding:"8px 10px",background:T.surfaceB,borderRadius:6,display:"flex",gap:8,alignItems:"center"}}>
+                  <span style={{fontSize:11,color:T.t3}}>Apply template:</span>
+                  <select onChange={async e=>{
+                      const tid = parseInt(e.target.value);
+                      if (!tid) return;
+                      await applyTemplateToItem(msForm.wo_item_id, tid);
+                      setShowSetMs(false);
+                      e.target.value = "";
+                    }} style={{...inpStyle,padding:"4px 8px",fontSize:11,flex:1}}>
+                    <option value="">— pick a template —</option>
+                    {templates.map(t => <option key={t.id} value={t.id}>{t.name} ({(t.lines||[]).length} stages)</option>)}
+                  </select>
+                </div>
+              )}
+
+              <div style={{display:"grid",gridTemplateColumns:"40px 1fr 140px 32px",gap:6,marginBottom:6}}>
+                {["#","Stage Name","Cum Rate","" ].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+              </div>
+              {msForm.rateMs.map((m, mi) => (
+                <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 140px 32px",gap:6,marginBottom:4}}>
+                  <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
+                  <input value={m.name} onChange={e=>{const arr=[...msForm.rateMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,rateMs:arr}));}} placeholder="e.g. Footing" style={inpStyle}/>
+                  <input type="number" value={m.cum_rate} onChange={e=>{const arr=[...msForm.rateMs];arr[mi]={...arr[mi],cum_rate:e.target.value};setMsForm(p=>({...p,rateMs:arr}));}} placeholder="cum ₹/unit" style={inpStyle}/>
+                  <button onClick={()=>{const arr=msForm.rateMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,rateMs:arr.length?arr:[{seq:0,name:"",cum_rate:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>setMsForm(p=>({...p,rateMs:[...p.rateMs,{seq:p.rateMs.length,name:"",cum_rate:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Stage</button>
+              <div style={{marginTop:10,padding:"8px 10px",background:T.surfaceB,borderRadius:5,fontSize:10.5,color:T.t3}}>Last cum_rate should match the item rate. If not, you'll get a warning (saved anyway).</div>
+            </>)}
+
+            {msForm.kind === "percent" && (<>
+              <div style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 32px",gap:6,marginBottom:6}}>
+                {["#","Stage Name","%",""].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+              </div>
+              {msForm.pctMs.map((m, mi) => (
+                <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 32px",gap:6,marginBottom:4}}>
+                  <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
+                  <input value={m.name} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="e.g. Foundation" style={inpStyle}/>
+                  <input type="number" value={m.pct} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],pct:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="%" style={inpStyle}/>
+                  <button onClick={()=>{const arr=msForm.pctMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,pctMs:arr.length?arr:[{seq:0,name:"",pct:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
+                </div>
+              ))}
+              <button onClick={()=>setMsForm(p=>({...p,pctMs:[...p.pctMs,{seq:p.pctMs.length,name:"",pct:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Stage</button>
+              <div style={{marginTop:10,padding:"8px 10px",background:T.surfaceB,borderRadius:5,fontSize:10.5,color:T.t3}}>Total should be 100% of WO value (₹{(parseFloat(selWo.total_value)||0).toLocaleString("en-IN")}). Mismatch warns, doesn't block.</div>
+            </>)}
+
+            {/* Switch to manual button — only meaningful if currently milestone */}
+            {selWo.billing_method !== "manual" && (
+              <div style={{marginTop:14,padding:"8px 10px",background:T.surfaceB,borderRadius:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:11,color:T.t3}}>Currently: <b>{selWo.billing_method}</b>. Switch back to manual?</span>
+                <button onClick={async()=>{ await switchBillingMethod("manual"); setShowSetMs(false); }}
+                  style={{padding:"5px 10px",borderRadius:5,background:T.surfaceB,color:T.t2,border:"1px solid "+T.b1,fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                  Switch to Manual
+                </button>
+              </div>
+            )}
+          </div>
+          <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
+            <button onClick={()=>setShowSetMs(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Save Milestones"}</button>
+          </div>
+        </div>
+      </>)}
+
       {/* NEW WO MODAL */}
       {showNewWO&&(
         <NewWOModal
@@ -10545,7 +10749,8 @@ function TabSubcon({ projectId }) {
 
       {/* NEW RA BILL MODAL */}
       {showNewBill&&selWo&&(
-        <NewRaBillModal woId={selWo.id} fmtC={fmtC} inpStyle={inpStyle} lblStyle={lblStyle}
+        <NewRaBillModal woId={selWo.id} wo={selWo} milestones={woMilestones}
+          fmtC={fmtC} inpStyle={inpStyle} lblStyle={lblStyle}
           billForm={billForm} setBillForm={setBillForm} saving={saving}
           onClose={()=>setShowNewBill(false)} onSave={submitBill}/>
       )}
@@ -11591,12 +11796,53 @@ function WoItemsTable({ woId, fmtC }) {
   );
 }
 
-function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm, saving, onClose, onSave }) {
-  const [sections, setSections] = useState([]); // [{title, items:[{id,description,unit,qty,rate,prev_cum}]}]
+// Small helper — async-fetches a WO's items and renders them as <option> nodes.
+// Used by the Set Milestones modal's WO Item dropdown.
+function WoItemOptions({ woId, fmtC }) {
+  const [items, setItems] = useState([]);
+  useEffect(() => {
+    api.get("/subcon/work-orders/"+woId).then(r => {
+      if (r.success) {
+        const all = [];
+        (r.data.sections||[]).forEach(s => (s.items||[]).forEach(it => all.push(it)));
+        (r.data.unsectioned||[]).forEach(it => all.push(it));
+        setItems(all);
+      }
+    }).catch(()=>{});
+  }, [woId]);
+  return items.map(it => (
+    <option key={it.id} value={it.id}>{it.description} ({fmtC(it.rate)}/{it.unit||"-"}, qty {it.qty})</option>
+  ));
+}
+
+function NewRaBillModal({ woId, wo, milestones, fmtC, inpStyle, lblStyle, billForm, setBillForm, saving, onClose, onSave }) {
+  // Branches on wo.billing_method:
+  //   manual           → existing cumulative-qty per item flow (unchanged)
+  //   milestone_rate   → checkbox per milestone with cum_qty input; rate auto from inc_rate
+  //   milestone_percent→ tick checkbox per stage; amount = stage.amount
+  const method = wo?.billing_method || "manual";
+  const [sections, setSections] = useState([]); // manual mode
   const [loadingWO, setLoadingWO] = useState(true);
-  const [cumQtys, setCumQtys] = useState({}); // {item_id: cumulative_qty_string}
+  const [cumQtys, setCumQtys] = useState({});   // manual mode
 
   useEffect(()=>{
+    // Milestone modes: skip the per-item prev-cum dance; UI consumes milestones from props.
+    if (method !== "manual") {
+      setLoadingWO(false);
+      setBillForm(p => ({ ...p, items: [] }));
+      // Still load sections for read-only context display (item name → milestone group header).
+      api.get("/subcon/work-orders/"+woId).then(r => {
+        if (r.success) {
+          const secs = r.data.sections || [];
+          const unsec = r.data.unsectioned || [];
+          const built = secs.map(s => ({ ...s, items: (s.items||[]).map(it => ({ ...it, prev_cum: 0 })) }));
+          if (unsec.length > 0) built.push({ title: "Other Items", items: unsec.map(it => ({...it, prev_cum: 0})) });
+          setSections(built);
+        }
+      }).catch(()=>{});
+      return;
+    }
+
     setLoadingWO(true);
     api.get("/subcon/work-orders/"+woId).then(async r=>{
       if(!r.success){ setLoadingWO(false); return; }
@@ -11633,7 +11879,7 @@ function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm,
       setBillForm(p=>({...p, items: allItems.map(it=>({ wo_item_id:it.id, cumulative_qty: prevMap[it.id]||0, rate:it.rate }))}));
       setLoadingWO(false);
     }).catch(()=>setLoadingWO(false));
-  },[woId]);
+  },[woId, method]);
 
   // When user updates a cumQty, sync to billForm.items
   const updateCum = (itemId, val) => {
@@ -11644,14 +11890,31 @@ function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm,
     }));
   };
 
-  // Live gross calculation
-  const gross = sections.reduce((st,sec)=>
-    st + sec.items.reduce((s,it)=>{
-      const cum = parseFloat(cumQtys[it.id]||0);
-      const thisBill = Math.max(0, cum - (it.prev_cum||0));
-      return s + thisBill * parseFloat(it.rate||0);
-    },0)
-  ,0);
+  // Live gross calculation — branches on billing method.
+  // Manual: Σ (this_cum - prev_cum) × rate, per WO item.
+  // Milestone rate: Σ inc_rate × cum_qty, per picked milestone.
+  // Milestone percent: Σ stage.amount, per ticked stage.
+  let gross = 0;
+  if (method === "manual") {
+    gross = sections.reduce((st,sec) =>
+      st + sec.items.reduce((s,it) => {
+        const cum = parseFloat(cumQtys[it.id]||0);
+        const thisBill = Math.max(0, cum - (it.prev_cum||0));
+        return s + thisBill * parseFloat(it.rate||0);
+      },0)
+    ,0);
+  } else if (method === "milestone_rate") {
+    const rateByMs = {};
+    Object.values(milestones?.rate_by_item || {}).flat().forEach(m => { rateByMs[m.id] = parseFloat(m.inc_rate); });
+    gross = (billForm.items || []).reduce((s, x) => {
+      const cum = parseFloat(x.cumulative_qty || 0);
+      return s + cum * (rateByMs[x.milestone_id] || 0);
+    }, 0);
+  } else if (method === "milestone_percent") {
+    const amtByMs = {};
+    (milestones?.percent || []).forEach(m => { amtByMs[m.id] = parseFloat(m.amount); });
+    gross = (billForm.items || []).reduce((s, x) => s + (amtByMs[x.milestone_id] || 0), 0);
+  }
 
   // Get WO retention/tds — from first section item or default
   const allWoItems = sections.flatMap(s=>s.items);
@@ -11683,57 +11946,130 @@ function NewRaBillModal({ woId, fmtC, inpStyle, lblStyle, billForm, setBillForm,
             </div>
           </div>
 
-          {/* Column headers */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",background:"#1E293B",padding:"7px 12px",gap:8,borderRadius:"7px 7px 0 0"}}>
-            {["Item","Unit","WO Qty","Prev Cum","Rate","This Cum ▼","This Bill Amt"].map((h,i)=>(
-              <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
-            ))}
-          </div>
+          {loadingWO && <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>Loading…</div>}
 
-          {loadingWO&&<div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:12}}>Loading WO items...</div>}
-
-          {!loadingWO&&sections.map((sec,si)=>{
-            const secThisBillAmt = sec.items.reduce((s,it)=>{
-              const cum=parseFloat(cumQtys[it.id]||0);
-              return s + Math.max(0,cum-(it.prev_cum||0))*parseFloat(it.rate||0);
-            },0);
-            return(
-              <div key={si}>
-                {/* Section header */}
-                <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"6px 12px",gap:8,background:"#374151",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
-                  <div style={{gridColumn:"1/7",fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</div>
-                  <div style={{fontSize:11,fontWeight:700,color:"#4ADE80",textAlign:"right"}}>{fmtC(secThisBillAmt)}</div>
+          {/* ── MANUAL BILLING — original per-item cum_qty flow ── */}
+          {!loadingWO && method === "manual" && (<>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",background:"#1E293B",padding:"7px 12px",gap:8,borderRadius:"7px 7px 0 0"}}>
+              {["Item","Unit","WO Qty","Prev Cum","Rate","This Cum ▼","This Bill Amt"].map((h,i)=>(
+                <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.5)",textTransform:"uppercase",textAlign:i>1?"right":"left"}}>{h}</div>
+              ))}
+            </div>
+            {sections.map((sec,si)=>{
+              const secThisBillAmt = sec.items.reduce((s,it)=>{
+                const cum=parseFloat(cumQtys[it.id]||0);
+                return s + Math.max(0,cum-(it.prev_cum||0))*parseFloat(it.rate||0);
+              },0);
+              return(
+                <div key={si}>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"6px 12px",gap:8,background:"#374151",borderBottom:"1px solid rgba(255,255,255,0.08)"}}>
+                    <div style={{gridColumn:"1/7",fontSize:11,fontWeight:700,color:"white"}}>{si+1}. {sec.title}</div>
+                    <div style={{fontSize:11,fontWeight:700,color:"#4ADE80",textAlign:"right"}}>{fmtC(secThisBillAmt)}</div>
+                  </div>
+                  {sec.items.map(it=>{
+                    const cum = parseFloat(cumQtys[it.id]||0);
+                    const thisBill = Math.max(0, cum-(it.prev_cum||0));
+                    const thisAmt = thisBill * parseFloat(it.rate||0);
+                    const overLimit = cum > parseFloat(it.qty||0);
+                    return(
+                      <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit?"#FEF2F2":T.surface}}>
+                        <div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{it.description}</div>
+                        <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit}</div>
+                        <div style={{fontSize:12,color:T.t2,textAlign:"right",fontWeight:500}}>{it.qty}</div>
+                        <div style={{fontSize:12,color:T.t3,textAlign:"right"}}>{it.prev_cum||0}</div>
+                        <div style={{fontSize:12,fontWeight:700,color:T.blu,textAlign:"right"}}>₹{parseFloat(it.rate||0).toLocaleString("en-IN")}</div>
+                        <div>
+                          <input type="number" value={cumQtys[it.id]||""} min={0}
+                            onChange={e=>updateCum(it.id, e.target.value)}
+                            style={{...inpStyle,textAlign:"right",fontWeight:700,padding:"5px 8px",
+                              border:"1.5px solid "+(overLimit?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
+                              color:overLimit?T.red:T.t1}}/>
+                          {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>Exceeds WO!</div>}
+                        </div>
+                        <div style={{textAlign:"right"}}>
+                          <div style={{fontSize:12,fontWeight:700,color:thisAmt>0?T.grn:T.t4}}>{thisAmt>0?fmtC(thisAmt):"—"}</div>
+                          {thisBill>0&&<div style={{fontSize:9,color:T.t4,marginTop:1}}>{thisBill} {it.unit}</div>}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-                {sec.items.map(it=>{
-                  const cum = parseFloat(cumQtys[it.id]||0);
-                  const thisBill = Math.max(0, cum-(it.prev_cum||0));
-                  const thisAmt = thisBill * parseFloat(it.rate||0);
-                  const overLimit = cum > parseFloat(it.qty||0);
-                  return(
-                    <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 55px 70px 70px 70px 75px 85px",padding:"8px 12px",gap:8,borderBottom:"1px solid "+T.b1,alignItems:"center",background:overLimit?"#FEF2F2":T.surface}}>
-                      <div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{it.description}</div>
-                      <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>{it.unit}</div>
-                      <div style={{fontSize:12,color:T.t2,textAlign:"right",fontWeight:500}}>{it.qty}</div>
-                      <div style={{fontSize:12,color:T.t3,textAlign:"right"}}>{it.prev_cum||0}</div>
-                      <div style={{fontSize:12,fontWeight:700,color:T.blu,textAlign:"right"}}>₹{parseFloat(it.rate||0).toLocaleString("en-IN")}</div>
-                      <div>
-                        <input type="number" value={cumQtys[it.id]||""} min={0}
-                          onChange={e=>updateCum(it.id, e.target.value)}
-                          style={{...inpStyle,textAlign:"right",fontWeight:700,padding:"5px 8px",
-                            border:"1.5px solid "+(overLimit?T.red:cum>(it.prev_cum||0)?T.blu:T.b1),
-                            color:overLimit?T.red:T.t1}}/>
-                        {overLimit&&<div style={{fontSize:9,color:T.red,marginTop:1,textAlign:"right"}}>Exceeds WO!</div>}
+              );
+            })}
+          </>)}
+
+          {/* ── MILESTONE RATE — checkbox per milestone with cum_qty input ── */}
+          {!loadingWO && method === "milestone_rate" && (<>
+            <div style={{padding:"8px 12px",background:"#EFF6FF",borderRadius:7,marginBottom:10,fontSize:11.5,color:T.t2}}>
+              Tick milestones to bill. Cum qty 0 → WO item qty per milestone, independent. Amount = inc_rate × (this_cum − prev billed).
+            </div>
+            {sections.flatMap(sec => sec.items).map(it => {
+              const ms = (milestones?.rate_by_item || {})[it.id] || [];
+              if (ms.length === 0) return null;
+              return (
+                <div key={it.id} style={{marginBottom:10,border:"1px solid "+T.b1,borderRadius:7,overflow:"hidden"}}>
+                  <div style={{padding:"7px 10px",background:"#1E293B",color:"white",fontSize:12,fontWeight:700,display:"flex",justifyContent:"space-between"}}>
+                    <span>{it.description}</span>
+                    <span style={{color:"#94A3B8",fontWeight:400,fontSize:11}}>{it.qty} {it.unit} · ₹{parseFloat(it.rate).toLocaleString("en-IN")}</span>
+                  </div>
+                  {ms.map(m => {
+                    const picked = (billForm.items||[]).find(x => x.milestone_id === m.id);
+                    const cum = parseFloat(picked?.cumulative_qty || 0);
+                    const incRate = parseFloat(m.inc_rate);
+                    const lineAmt = cum > 0 ? incRate * cum : 0;
+                    return (
+                      <div key={m.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 90px 110px 90px",gap:8,padding:"6px 10px",borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
+                        <input type="checkbox" checked={!!picked}
+                          onChange={e => {
+                            if (e.target.checked) setBillForm(p => ({ ...p, items: [...(p.items||[]), { milestone_id: m.id, cumulative_qty: "" }] }));
+                            else setBillForm(p => ({ ...p, items: (p.items||[]).filter(x => x.milestone_id !== m.id) }));
+                          }}/>
+                        <span style={{fontSize:12,color:T.t1}}>{m.name}</span>
+                        <span style={{fontSize:11,color:T.t3,textAlign:"right"}}>inc {fmtC(m.inc_rate)}</span>
+                        <input type="number" placeholder="cum qty" disabled={!picked}
+                          value={picked?.cumulative_qty || ""}
+                          onChange={e => setBillForm(p => ({ ...p, items: (p.items||[]).map(x => x.milestone_id === m.id ? { ...x, cumulative_qty: e.target.value } : x) }))}
+                          style={{...inpStyle,padding:"4px 8px",fontSize:11,textAlign:"right"}}/>
+                        <span style={{fontSize:12,fontWeight:700,color:lineAmt>0?T.grn:T.t4,textAlign:"right"}}>{lineAmt>0?fmtC(lineAmt):"—"}</span>
                       </div>
-                      <div style={{textAlign:"right"}}>
-                        <div style={{fontSize:12,fontWeight:700,color:thisAmt>0?T.grn:T.t4}}>{thisAmt>0?fmtC(thisAmt):"—"}</div>
-                        {thisBill>0&&<div style={{fontSize:9,color:T.t4,marginTop:1}}>{thisBill} {it.unit}</div>}
-                      </div>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
+              );
+            })}
+            {sections.flatMap(s=>s.items).every(it => !(milestones?.rate_by_item || {})[it.id]) && (
+              <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12,background:T.surfaceB,borderRadius:7}}>
+                No milestones set yet. Close this and click <b>🎯 Set Milestones</b> on the WO header.
               </div>
-            );
-          })}
+            )}
+          </>)}
+
+          {/* ── MILESTONE PERCENT — tick stages to bill (amount = stage.amount) ── */}
+          {!loadingWO && method === "milestone_percent" && (<>
+            <div style={{padding:"8px 12px",background:"#F5F3FF",borderRadius:7,marginBottom:10,fontSize:11.5,color:T.t2}}>
+              Tick stages to bill. Each stage can be billed once.
+            </div>
+            {(milestones?.percent || []).length === 0 && (
+              <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:12,background:T.surfaceB,borderRadius:7}}>
+                No %-stages set yet. Close this and click <b>🎯 Set Milestones</b> on the WO header.
+              </div>
+            )}
+            {(milestones?.percent || []).map(m => {
+              const picked = (billForm.items||[]).find(x => x.milestone_id === m.id);
+              return (
+                <div key={m.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 80px 140px",gap:8,padding:"8px 10px",borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
+                  <input type="checkbox" checked={!!picked}
+                    onChange={e => {
+                      if (e.target.checked) setBillForm(p => ({ ...p, items: [...(p.items||[]), { milestone_id: m.id }] }));
+                      else setBillForm(p => ({ ...p, items: (p.items||[]).filter(x => x.milestone_id !== m.id) }));
+                    }}/>
+                  <span style={{fontSize:12.5,color:T.t1}}>{m.name}</span>
+                  <span style={{fontSize:11.5,color:T.t3,textAlign:"right"}}>{parseFloat(m.pct)}%</span>
+                  <span style={{fontSize:13,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(m.amount)}</span>
+                </div>
+              );
+            })}
+          </>)}
 
           {/* Bill Summary */}
           {gross>0&&(
