@@ -10040,7 +10040,20 @@ function NewWOModal({ subcons, setSubcons, projectId, fmtC, inpStyle, lblStyle, 
   const addSection = () => setForm(p=>({...p, sections:[...p.sections, blankSection()]}));
   const removeSection = (si) => setForm(p=>({...p, sections:p.sections.filter((_,i)=>i!==si)}));
   const updateSection = (si, key, val) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,[key]:val}:s)}));
-  const addItem = (si) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:[...s.items,{description:"",unit:"",qty:"",rate:"",isLibrary:false}]}:s)}));
+  const addItem = (si) => {
+    setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:[...s.items,{description:"",unit:"",qty:"",rate:"",isLibrary:false}]}:s)}));
+    // After React paints the new row, auto-focus its description field
+    // so a keyboard-driven user can keep typing without reaching for
+    // the mouse. setTimeout(0) defers until after the commit phase.
+    setTimeout(() => {
+      const sec = form.sections[si];
+      if (!sec) return;
+      // length BEFORE setForm settled = index of the brand-new row
+      const newIdx = sec.items.length;
+      const el = document.querySelector(`[data-wo-desc="new-${si}-${newIdx}"]`);
+      if (el) el.focus();
+    }, 0);
+  };
   const removeItem = (si,ii) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:s.items.filter((_,j)=>j!==ii)}:s)}));
   const updateItem = (si,ii,key,val) => setForm(p=>({...p, sections:p.sections.map((s,i)=>i===si?{...s,items:s.items.map((it,j)=>j===ii?{...it,[key]:val}:it)}:s)}));
 
@@ -10209,7 +10222,9 @@ function NewWOModal({ subcons, setSubcons, projectId, fmtC, inpStyle, lblStyle, 
                       <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 90px 34px 28px",gap:6,marginBottom:6,alignItems:"center"}}>
                         <div style={{position:"relative"}}>
                           <input value={it.description} onChange={e=>updateItem(si,ii,"description",e.target.value)}
-                            placeholder="Item description" style={{...inpStyle,paddingRight:28}}/>
+                            placeholder="Item description"
+                            data-wo-desc={`new-${si}-${ii}`}
+                            style={{...inpStyle,paddingRight:28}}/>
                           <button onClick={()=>{setShowLibFor({secIdx:si,itemIdx:ii});setLibSearch("");}}
                             title="Pick from library"
                             style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:0}}>📚</button>
@@ -10473,7 +10488,18 @@ function EditWOModal({ wo, subcons, fmtC, inpStyle, lblStyle, onClose, onSaved }
   const addSection = () => setSections(p=>[...p, blankSection()]);
   const removeSection = (si) => setSections(p=>p.filter((_,i)=>i!==si));
   const updateSection = (si,key,val) => setSections(p=>p.map((s,i)=>i===si?{...s,[key]:val}:s));
-  const addItem = (si) => setSections(p=>p.map((s,i)=>i===si?{...s,items:[...s.items,blankItem()]}:s));
+  const addItem = (si) => {
+    setSections(p=>p.map((s,i)=>i===si?{...s,items:[...s.items,blankItem()]}:s));
+    // Auto-focus new description input — keyboard-friendly (same UX as
+    // NewWOModal). Defers to setTimeout so the row is in the DOM first.
+    setTimeout(() => {
+      const sec = sections[si];
+      if (!sec) return;
+      const newIdx = sec.items.length;
+      const el = document.querySelector(`[data-wo-desc="edit-${si}-${newIdx}"]`);
+      if (el) el.focus();
+    }, 0);
+  };
   const removeItem = (si,ii) => setSections(p=>p.map((s,i)=>i===si?{...s,items:s.items.filter((_,j)=>j!==ii)}:s));
   const updateItem = (si,ii,key,val) => setSections(p=>p.map((s,i)=>i===si?{...s,items:s.items.map((it,j)=>j===ii?{...it,[key]:val}:it)}:s));
   const pickLibItem = (item) => {
@@ -10626,7 +10652,9 @@ function EditWOModal({ wo, subcons, fmtC, inpStyle, lblStyle, onClose, onSaved }
                         background:it.isNew?"#EFF6FF":"transparent",borderRadius:it.isNew?4:0,padding:it.isNew?"2px 4px":"0"}}>
                         <div style={{position:"relative"}}>
                           <input value={it.description} onChange={e=>updateItem(si,ii,"description",e.target.value)}
-                            placeholder="Item description" style={{...inpStyle,paddingRight:28}}/>
+                            placeholder="Item description"
+                            data-wo-desc={`edit-${si}-${ii}`}
+                            style={{...inpStyle,paddingRight:28}}/>
                           <button onClick={()=>{setShowLibFor({si,ii});setLibSearch("");}}
                             style={{position:"absolute",right:4,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",cursor:"pointer",color:T.blu,fontSize:14,lineHeight:1,padding:0}}>📚</button>
                         </div>
