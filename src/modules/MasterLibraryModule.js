@@ -1544,6 +1544,24 @@ function ClientBOQSection() {
   const [newCatForm,       setNewCatForm]       = useState(null);  // null = hidden, {name,code,desc} when expanded
   const [newCatSaving,     setNewCatSaving]     = useState(false);
 
+  // ── Package STRUCTURES (Ground Floor / First Floor / Septic / etc.) ─
+  // Free-typed sub-units of a package. Each has its own unit + rate.
+  // Items live one level below — scoped to (package, city, structure).
+  // Auto-loaded whenever selPkg changes; first/Default structure becomes
+  // the auto-selection so the rates grid populates immediately.
+  const STRUCT_UNITS = [
+    { key: "sqft",      label: "sqft (per square foot)" },
+    { key: "lump_sum",  label: "lump sum" },
+    { key: "rft",       label: "rft (per running foot)" },
+    { key: "nos",       label: "nos (per count)" },
+    { key: "cubic_ft",  label: "cubic ft" },
+  ];
+  const [pkgStructures, setPkgStructures] = useState([]);
+  const [selStructure,  setSelStructure]  = useState(null);
+  const [structModal,   setStructModal]   = useState(null);   // null | "add" | structure object (edit)
+  const [structForm,    setStructForm]    = useState({ name: "", unit: "sqft", rate: 0 });
+  const [structSaving,  setStructSaving]  = useState(false);
+
   // ── Add-new modals ───────────────────────────────────────────────────
   const [addModal, setAddModal] = useState(null); // "type"|"city"|"pkg"|"item"
   const [addForm,  setAddForm]  = useState({});
@@ -1592,10 +1610,37 @@ function ClientBOQSection() {
 
   useEffect(() => { loadTypes(); loadCities(); loadPackages(); loadItems(); }, []);
 
-  // ── Load rates when pkg+city selected ───────────────────────────────
+  // ── Load structures for the selected package ───────────────────────
+  // Triggers on package change. Auto-selects the first active structure
+  // (the "Default" auto-created by backend migration is always present).
+  const loadStructures = async (pkgId) => {
+    if (!pkgId) { setPkgStructures([]); setSelStructure(null); return; }
+    const r = await api.get("/library/packages/" + pkgId + "/structures").catch(() => ({ success: false }));
+    if (!r?.success) return;
+    const list = r.data || [];
+    setPkgStructures(list);
+    setSelStructure(prev => {
+      // Keep current selection if it still exists in the new list, else
+      // fall back to the first structure.
+      const stay = prev && list.find(s => s.id === prev.id);
+      return stay || list[0] || null;
+    });
+  };
   useEffect(() => {
-    if (!selPkg || !selCity) return;
-    api.get("/library/rate-matrix?package_id=" + selPkg.id + "&city_id=" + selCity.id)
+    if (!selPkg) { setPkgStructures([]); setSelStructure(null); return; }
+    loadStructures(selPkg.id);
+    // Reset any unsaved rate edits when switching packages
+    setChanged({});
+    setAddedEmptyCats([]);
+    // eslint-disable-next-line
+  }, [selPkg]);
+
+  // ── Load rates when pkg+city+structure all selected ────────────────
+  // Adds structure_id to the request so each (package, city, structure)
+  // tuple has its own item set + rates. Switching structure reloads.
+  useEffect(() => {
+    if (!selPkg || !selCity || !selStructure) { setRates({}); return; }
+    api.get("/library/rate-matrix?package_id=" + selPkg.id + "&city_id=" + selCity.id + "&structure_id=" + selStructure.id)
       .then(r => {
         if (r.success) {
           const map = {};
@@ -1607,9 +1652,51 @@ function ClientBOQSection() {
           });
           setRates(map);
           setChanged({});
+          setAddedEmptyCats([]);
         }
       }).catch(() => {});
-  }, [selPkg, selCity]);
+  }, [selPkg, selCity, selStructure]);
+
+  // ── Structure CRUD handlers ────────────────────────────────────────
+  const openAddStructure = () => {
+    setStructForm({ name: "", unit: "sqft", rate: 0 });
+    setStructModal("add");
+  };
+  const openEditStructure = (s) => {
+    setStructForm({ name: s.name, unit: s.unit, rate: s.rate });
+    setStructModal(s);
+  };
+  const closeStructModal = () => { if (!structSaving) setStructModal(null); };
+  const saveStructure = async () => {
+    if (!structForm.name?.trim() || !selPkg) return;
+    setStructSaving(true);
+    let res;
+    const body = {
+      name: structForm.name.trim(),
+      unit: structForm.unit,
+      rate: parseFloat(structForm.rate) || 0,
+    };
+    if (structModal === "add") {
+      res = await api.post("/library/packages/" + selPkg.id + "/structures", body);
+    } else {
+      res = await api.put("/library/structures/" + structModal.id, body);
+    }
+    setStructSaving(false);
+    if (res?.success) {
+      await loadStructures(selPkg.id);
+      if (res.data) setSelStructure(res.data);
+      setStructModal(null);
+    } else alert(res?.message || "Save failed");
+  };
+  const deleteStructure = async (s) => {
+    if (!window.confirm(`Delete structure "${s.name}"?\nAll its items + rates will be removed from this package.`)) return;
+    const res = await api.del("/library/structures/" + s.id);
+    if (res?.success) {
+      // After delete, reload structures and pick a different one.
+      setSelStructure(null);
+      await loadStructures(selPkg.id);
+    } else alert(res?.message || "Delete failed");
+  };
 
   // ── Filtered items ───────────────────────────────────────────────────
   const filteredItems = boqItems.filter(i => filterCat === "All" || i.category === filterCat);
@@ -1671,7 +1758,10 @@ function ClientBOQSection() {
       description: getDesc(i) || "",
     }));
     const res = await api.post("/library/rate-matrix/bulk", {
-      package_id: selPkg.id, city_id: selCity.id, items,
+      package_id:   selPkg.id,
+      city_id:      selCity.id,
+      structure_id: selStructure ? selStructure.id : undefined,
+      items,
     });
     setSaving(false);
     if (res.success) {
@@ -2079,8 +2169,64 @@ function ClientBOQSection() {
         </div>
       )}
 
-      {/* ── LEVEL 4+5: Grouped category sections + per-item add-on/description ── */}
+      {/* ── LEVEL 4: STRUCTURES inside the package ─────────────────────
+          A package can host multiple structures (Ground Floor sqft,
+          Septic Tank lump_sum, Boundary Wall rft, etc.). Items below
+          are scoped to whichever structure is selected here. */}
       {selType && selCity && selPkg && (
+        <div style={{ marginBottom: 18 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
+            4 — Structure
+          </div>
+          {pkgStructures.length === 0 ? (
+            <div style={{ padding: "14px 16px", background: "#FEF3C7", border: "1.5px dashed #FCD34D", borderRadius: 8, color: "#92400E", fontSize: 12.5 }}>
+              No structures yet — click <strong>"+ Add Structure"</strong> below to start.
+              Each structure represents a sub-unit of the package (e.g. Ground Floor sqft @ Rs.1550, Septic Tank lump @ Rs.85,000).
+            </div>
+          ) : null}
+          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: pkgStructures.length === 0 ? 10 : 0 }}>
+            {pkgStructures.map(s => {
+              const active = selStructure?.id === s.id;
+              const unitLbl = (STRUCT_UNITS.find(u => u.key === s.unit)?.label || s.unit).split(" ")[0];
+              return (
+                <div key={s.id} onClick={() => setSelStructure(s)}
+                  style={{ position: "relative", padding: "10px 16px 10px 18px", borderRadius: 9, minWidth: 170,
+                           border: "2px solid " + (active ? "#0EA5E9" : "#E5E7EB"),
+                           background: active ? "#0EA5E9" : "white",
+                           color: active ? "white" : "#374151",
+                           cursor: "pointer", transition: "all .15s",
+                           paddingRight: active ? 56 : 18 }}>
+                  <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
+                  <div style={{ fontSize: 11, fontWeight: 500, opacity: active ? 0.85 : 0.7, marginTop: 1 }}>
+                    Rs.{Number(s.rate || 0).toLocaleString()}/{unitLbl}
+                  </div>
+                  {active && (
+                    <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 2 }}>
+                      <button onClick={(e) => { e.stopPropagation(); openEditStructure(s); }}
+                        title="Edit structure"
+                        style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", borderRadius: 4, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
+                        ✎
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); deleteStructure(s); }}
+                        title="Delete structure"
+                        style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", borderRadius: 4, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, lineHeight: 1 }}>
+                        ×
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <button onClick={openAddStructure}
+              style={{ padding: "10px 16px", borderRadius: 9, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+              + Add Structure
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── LEVEL 5+6: Grouped category sections + per-item add-on/description ── */}
+      {selType && selCity && selPkg && selStructure && (
         <>
           {/* Info + Save bar — now also hosts the "+ Add Category" dropdown */}
           <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8, padding: "10px 16px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
@@ -2453,6 +2599,79 @@ function ClientBOQSection() {
           Select a Construction Type above to start
         </div>
       )}
+
+      {/* ── STRUCTURE Add/Edit Modal (Subcon-style) ───────────────────
+          Used for both "Add Structure" (structModal === "add") and
+          "Edit Structure" (structModal === <structure object>). Same
+          shape: name (free-typed), unit dropdown, rate. ────────────── */}
+      {structModal && (() => {
+        const isEdit = structModal !== "add";
+        return (
+          <>
+            <div onClick={closeStructModal}
+              style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 700 }} />
+            <div onClick={e => e.stopPropagation()}
+              style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+                       width: "min(480px,95vw)", background: "white", borderRadius: 12, zIndex: 701,
+                       boxShadow: "0 24px 64px rgba(0,0,0,0.35)", display: "flex", flexDirection: "column" }}>
+              {/* Dark header */}
+              <div style={{ background: "#0F172A", padding: "13px 18px", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>
+                    {isEdit ? "Edit Structure" : "Add Structure"}
+                  </div>
+                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
+                    {selPkg ? `Package: ${selPkg.name}` : ""}
+                  </div>
+                </div>
+                <button onClick={closeStructModal} disabled={structSaving}
+                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 22, cursor: structSaving ? "not-allowed" : "pointer", lineHeight: 1 }}>×</button>
+              </div>
+              {/* Body */}
+              <div style={{ padding: 18 }}>
+                <div style={{ marginBottom: 12 }}>
+                  <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Name *</label>
+                  <input autoFocus value={structForm.name}
+                    onChange={e => setStructForm(p => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g. Ground Floor, Septic Tank, Boundary Wall"
+                    style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 12, marginBottom: 12 }}>
+                  <div>
+                    <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Unit *</label>
+                    <select value={structForm.unit}
+                      onChange={e => setStructForm(p => ({ ...p, unit: e.target.value }))}
+                      style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", background: "white" }}>
+                      {STRUCT_UNITS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Rate (Rs.)</label>
+                    <input type="number" value={structForm.rate}
+                      onChange={e => setStructForm(p => ({ ...p, rate: e.target.value }))}
+                      placeholder="0"
+                      style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "right" }}/>
+                  </div>
+                </div>
+                <div style={{ padding: "8px 10px", background: "#F9FAFB", borderRadius: 5, fontSize: 11, color: "#6B7280" }}>
+                  💡 Rate per unit. For sqft: Rs./sqft. For lump_sum: total Rs. For rft: Rs./running foot. Etc.
+                </div>
+              </div>
+              {/* Footer */}
+              <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
+                <button onClick={closeStructModal} disabled={structSaving}
+                  style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: structSaving ? "not-allowed" : "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={saveStructure} disabled={structSaving || !structForm.name?.trim()}
+                  style={{ flex: 2, padding: "9px", borderRadius: 7, background: (structSaving || !structForm.name?.trim()) ? "#9CA3AF" : "#0EA5E9", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (structSaving || !structForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                  {structSaving ? "Saving…" : (isEdit ? "Update" : "Add Structure")}
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
 
       {/* ── PICKER MODAL — "+ Add Item to {category}" ─────────────────
           Subcon-style dark-header modal. List mode shows library items
