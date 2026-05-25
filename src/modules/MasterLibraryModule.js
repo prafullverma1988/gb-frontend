@@ -1479,7 +1479,7 @@ function ClientBOQSection() {
   const [packages,  setPackages]  = useState([]);
   const [boqItems,  setBoqItems]  = useState([]);
   const { items: uomList }        = useSection("uom");
-  const { items: workCats }       = useSection("work-categories");
+  const { items: workCats, reload: reloadWorkCats } = useSection("work-categories");
 
   // ── Selections ───────────────────────────────────────────────────────
   const [selType,    setSelType]    = useState(null);  // { id, name, color }
@@ -1514,6 +1514,35 @@ function ClientBOQSection() {
   const [editItem,     setEditItem]     = useState(null);
   const [editItemForm, setEditItemForm] = useState({});
   const [editItemSaving, setEditItemSaving] = useState(false);
+
+  // ── Comprehensive Package Edit drawer ───────────────────────────────
+  // Opened from the pencil icon on a package tile. Lets the user edit
+  // EVERYTHING about a package in one place:
+  //   • Package details (name / sqft_rate / description)
+  //   • Categories used in this package (rename inline)
+  //   • Items inside each category (inline edit name / unit / base_rate
+  //     + remove from master library via soft-delete)
+  //
+  // All edits stage locally until "Save All" — that triggers a series
+  // of API calls (PUT package, POST rename for each renamed cat, PUT
+  // each edited item, DELETE each removed item) sequentially. Loading
+  // state shown on the Save button while it runs.
+  const [pkgDrawer,    setPkgDrawer]    = useState(null);  // pkg object | null
+  const [pkgDraft,     setPkgDraft]     = useState({});    // {name, sqft_rate, description}
+  const [catRenames,   setCatRenames]   = useState({});    // {[oldName]: newName}
+  const [itemEdits,    setItemEdits]    = useState({});    // {[item_id]: {name?, unit?, base_rate?}}
+  const [deletedItems, setDeletedItems] = useState({});    // {[item_id]: true}
+  const [pkgSaving,    setPkgSaving]    = useState(false);
+
+  // ── "+ Add Category" dropdown — shows all work_categories ───────────
+  // Lets user explicitly add a CATEGORY as an empty section to the BOQ
+  // grid even when no items in that category have been picked yet. Once
+  // the section is visible, "+ Add Item to {cat}" pulls items from the
+  // library (existing picker flow).
+  const [addedEmptyCats,   setAddedEmptyCats]   = useState([]); // names that should show as empty sections
+  const [catDropdownOpen,  setCatDropdownOpen]  = useState(false);
+  const [newCatForm,       setNewCatForm]       = useState(null);  // null = hidden, {name,code,desc} when expanded
+  const [newCatSaving,     setNewCatSaving]     = useState(false);
 
   // ── Add-new modals ───────────────────────────────────────────────────
   const [addModal, setAddModal] = useState(null); // "type"|"city"|"pkg"|"item"
@@ -1766,14 +1795,119 @@ function ClientBOQSection() {
   };
 
   // ── Package edit (reuses existing pkg modal in edit mode) ──────────
+  // Old behavior: opened the small "Edit Package" modal (just
+  // name + sqft_rate + description). Replaced with the comprehensive
+  // drawer that lets the user edit package details + every category
+  // and item under it from a single screen.
   const openEditPkg = (pkg) => {
-    setAddForm({
-      _editingId:  pkg.id,
+    setPkgDrawer(pkg);
+    setPkgDraft({
       name:        pkg.name || "",
       sqft_rate:   pkg.sqft_rate || 0,
       description: pkg.description || "",
     });
-    setAddModal("pkg");
+    setCatRenames({});
+    setItemEdits({});
+    setDeletedItems({});
+  };
+  const closePkgDrawer = () => {
+    if (pkgSaving) return;
+    setPkgDrawer(null);
+  };
+
+  // Single batched save for the entire drawer. Order matters:
+  //   1. PUT package details (if any field changed)
+  //   2. POST /work-categories/:id/rename for each renamed category
+  //      (this also propagates the rename across boq_items.category)
+  //   3. PUT /boq-items/:id for each edited item (uses the NEW
+  //      category name from step 2 if applicable)
+  //   4. DELETE /boq-items/:id for each removed item (soft delete)
+  // After all calls finish, reload packages + items + workCats so the
+  // grid reflects the new state, and close the drawer.
+  const savePackageEdit = async () => {
+    if (!pkgDrawer) return;
+    setPkgSaving(true);
+    try {
+      // 1. Package
+      const pkgChanged = (
+        pkgDraft.name        !== pkgDrawer.name ||
+        Number(pkgDraft.sqft_rate) !== Number(pkgDrawer.sqft_rate || 0) ||
+        (pkgDraft.description || "") !== (pkgDrawer.description || "")
+      );
+      if (pkgChanged) {
+        await api.put("/library/rate-packages/" + pkgDrawer.id, {
+          name:        pkgDraft.name.trim(),
+          sqft_rate:   Number(pkgDraft.sqft_rate) || 0,
+          description: pkgDraft.description || "",
+          construction_type_id: pkgDrawer.construction_type_id,
+        });
+      }
+      // 2. Category renames
+      for (const [oldName, newName] of Object.entries(catRenames)) {
+        const trimmed = (newName || "").trim();
+        if (!trimmed || trimmed === oldName) continue;
+        const cat = workCats.find(c => c.name === oldName);
+        if (cat) {
+          await api.post("/library/work-categories/" + cat.id + "/rename", { name: trimmed });
+        }
+      }
+      // 3. Item edits — use latest category name (post-rename) for
+      //    items whose category got renamed in step 2.
+      const nameAfterRename = (oldCatName) => catRenames[oldCatName]?.trim() || oldCatName;
+      for (const [idStr, edits] of Object.entries(itemEdits)) {
+        const item = boqItems.find(i => i.id === Number(idStr));
+        if (!item) continue;
+        await api.put("/library/boq-items/" + idStr, {
+          name:        (edits.name        ?? item.name).trim(),
+          category:    nameAfterRename(edits.category ?? item.category),
+          unit:        edits.unit        ?? item.unit,
+          base_rate:   parseFloat(edits.base_rate ?? item.base_rate) || 0,
+          description: edits.description ?? item.description ?? "",
+        });
+      }
+      // 4. Soft-deletes
+      for (const idStr of Object.keys(deletedItems)) {
+        await api.del("/library/boq-items/" + idStr);
+      }
+      // 5. Refresh everything that could have changed.
+      await Promise.all([
+        loadPackages(),
+        loadItems(),
+        reloadWorkCats(),
+      ]);
+      setPkgDrawer(null);
+    } catch (e) {
+      alert("Save failed: " + (e?.message || "Unknown error"));
+    } finally {
+      setPkgSaving(false);
+    }
+  };
+
+  // ── Add Category helpers ─────────────────────────────────────────
+  const addEmptyCategorySection = (name) => {
+    if (!name) return;
+    setAddedEmptyCats(prev => prev.includes(name) ? prev : [...prev, name]);
+    setCatDropdownOpen(false);
+    setNewCatForm(null);
+  };
+  const createAndAddCategory = async () => {
+    const name = (newCatForm?.name || "").trim();
+    if (!name) return;
+    setNewCatSaving(true);
+    const res = await api.post("/library/work-categories", {
+      name,
+      code:        (newCatForm.code || "").trim(),
+      description: (newCatForm.desc || "").trim(),
+      unit:        "",
+      rate:        0,
+    });
+    setNewCatSaving(false);
+    if (res?.success) {
+      await reloadWorkCats();
+      addEmptyCategorySection(name);
+    } else {
+      alert(res?.message || "Failed to create category");
+    }
   };
   const handleAdd = async () => {
     setAdding(true);
@@ -1940,16 +2074,97 @@ function ClientBOQSection() {
       {/* ── LEVEL 4+5: Grouped category sections + per-item add-on/description ── */}
       {selType && selCity && selPkg && (
         <>
-          {/* Info + Save bar */}
+          {/* Info + Save bar — now also hosts the "+ Add Category" dropdown */}
           <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8, padding: "10px 16px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 13, color: "#1E40AF" }}>
               <strong>{selType.name}</strong> — <strong>{selPkg.name}</strong> — <strong>{selCity.name}</strong>
               {hasChanged && <span style={{ marginLeft: 10, color: "#D97706", fontWeight: 600 }}>● Unsaved changes</span>}
             </span>
-            <button onClick={saveRates} disabled={saving}
-              style={{ padding: "8px 20px", background: saving ? "#9CA3AF" : "#2563EB", color: "white", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer" }}>
-              {saving ? "Saving..." : "Save Rates"}
-            </button>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {/* "+ Add Category" dropdown ─────────────────────────────────
+                  Lets the user surface a brand-new category section (empty,
+                  ready to pick items into) without first creating an item.
+                  Dropdown lists every work_categories row, hiding ones
+                  already visible in the grid. Bottom of the dropdown holds
+                  an inline "+ Create new category" form. */}
+              <div style={{ position: "relative" }}>
+                <button onClick={() => { setCatDropdownOpen(o => !o); setNewCatForm(null); }}
+                  style={{ padding: "8px 14px", background: catDropdownOpen ? "#1E40AF" : "white", color: catDropdownOpen ? "white" : "#1E40AF", border: "1.5px solid #1E40AF", borderRadius: 7, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
+                  + Add Category
+                </button>
+                {catDropdownOpen && (() => {
+                  // Hide categories already in the grid (picked OR explicitly added).
+                  const visibleNames = new Set([
+                    ...pickedItems.map(i => i.category || "Uncategorized"),
+                    ...addedEmptyCats,
+                  ]);
+                  const available = (workCats || []).filter(c => !visibleNames.has(c.name));
+                  return (
+                    <>
+                      {/* outside-click guard */}
+                      <div onClick={() => { setCatDropdownOpen(false); setNewCatForm(null); }}
+                        style={{ position: "fixed", inset: 0, background: "transparent", zIndex: 250 }} />
+                      <div onClick={e => e.stopPropagation()}
+                        style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: 280, background: "white", borderRadius: 8, border: "1px solid #E5E7EB", boxShadow: "0 12px 32px rgba(0,0,0,0.15)", zIndex: 251, maxHeight: 380, display: "flex", flexDirection: "column" }}>
+                        <div style={{ padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".4px", borderBottom: "1px solid #F3F4F6" }}>
+                          Pick a category to add
+                        </div>
+                        <div style={{ flex: 1, overflowY: "auto" }}>
+                          {available.length === 0 && newCatForm === null && (
+                            <div style={{ padding: "16px 12px", textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>
+                              All categories already shown
+                            </div>
+                          )}
+                          {available.map(c => (
+                            <div key={c.id} onClick={() => addEmptyCategorySection(c.name)}
+                              style={{ padding: "9px 12px", cursor: "pointer", fontSize: 12.5, color: "#111827", borderBottom: "1px solid #F9FAFB", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                              onMouseEnter={e => e.currentTarget.style.background = "#EFF6FF"}
+                              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
+                              <span style={{ fontWeight: 600 }}>{c.name}</span>
+                              {c.code && <code style={{ fontSize: 10, color: "#7C3AED", background: "#EDE9FE", padding: "1px 6px", borderRadius: 3 }}>{c.code}</code>}
+                            </div>
+                          ))}
+                        </div>
+                        {/* + Create new category footer */}
+                        {newCatForm === null ? (
+                          <button onClick={() => setNewCatForm({ name: "", code: "", desc: "" })}
+                            style={{ padding: "9px 12px", background: "#F0FDF4", border: "none", borderTop: "1px solid #E5E7EB", color: "#059669", fontWeight: 700, fontSize: 12, cursor: "pointer", textAlign: "left" }}>
+                            + Create new category…
+                          </button>
+                        ) : (
+                          <div style={{ padding: "10px 12px", borderTop: "1px solid #E5E7EB", background: "#F9FAFB" }}>
+                            <div style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 6 }}>New Category</div>
+                            <input autoFocus value={newCatForm.name} onChange={e => setNewCatForm(p => ({ ...p, name: e.target.value }))}
+                              placeholder="Name (e.g. Electrical Work)"
+                              style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                            <input value={newCatForm.code} onChange={e => setNewCatForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
+                              placeholder="Code (e.g. ELE)"
+                              style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                            <input value={newCatForm.desc} onChange={e => setNewCatForm(p => ({ ...p, desc: e.target.value }))}
+                              placeholder="Description (optional)"
+                              style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 8, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              <button onClick={() => setNewCatForm(null)}
+                                style={{ flex: 1, padding: "6px", borderRadius: 5, background: "white", border: "1px solid #D1D5DB", fontSize: 11.5, color: "#6B7280", cursor: "pointer" }}>
+                                Cancel
+                              </button>
+                              <button onClick={createAndAddCategory} disabled={newCatSaving || !newCatForm.name?.trim()}
+                                style={{ flex: 2, padding: "6px", borderRadius: 5, background: (newCatSaving || !newCatForm.name?.trim()) ? "#9CA3AF" : "#10B981", color: "white", border: "none", fontSize: 11.5, fontWeight: 700, cursor: (newCatSaving || !newCatForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                                {newCatSaving ? "Saving…" : "Create + Add"}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+              <button onClick={saveRates} disabled={saving}
+                style={{ padding: "8px 20px", background: saving ? "#9CA3AF" : "#2563EB", color: "white", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer" }}>
+                {saving ? "Saving..." : "Save Rates"}
+              </button>
+            </div>
           </div>
 
           {/* GROUPED SECTIONS — Subcon-style dark headers, items appear only when picked */}
@@ -1963,14 +2178,16 @@ function ClientBOQSection() {
             ].map(String));
             const pickedItems = boqItems.filter(i => pickedIds.has(String(i.id)));
 
-            // Group picked items by category. Categories WITHOUT picked items
-            // are not rendered — to add to a fresh category, click the master
-            // "+ Add Item" button below.
+            // Group picked items by category, then also surface any
+            // category the user explicitly added via "+ Add Category" — even
+            // if it currently has zero picked items. This lets the user lay
+            // out the section structure first, then pick items into it.
             const grouped = pickedItems.reduce((acc, item) => {
               const k = item.category || "Uncategorized";
               (acc[k] ||= []).push(item);
               return acc;
             }, {});
+            addedEmptyCats.forEach(name => { if (!grouped[name]) grouped[name] = []; });
             const catNames = Object.keys(grouped).sort();
 
             // Grand totals across picked items only.
@@ -2486,6 +2703,185 @@ function ClientBOQSection() {
         )}
         <ModalFooter onClose={() => setAddModal(null)} onSave={handleAdd} saveLabel={adding ? "Adding..." : "Add"} />
       </Modal>
+
+      {/* ─────────────────────────────────────────────────────────────
+          COMPREHENSIVE PACKAGE EDIT DRAWER
+
+          Opened by the pencil on a package tile. Right-side slide-in
+          panel with three editable zones:
+            1. Package details (name / sqft_rate / description)
+            2. Categories used in this package (rename inline)
+            3. Items per category (edit name / unit / base_rate / delete)
+
+          Everything stages locally; "Save All" runs the batch in order
+          (package → category renames → item PUTs → item deletes) via
+          savePackageEdit().
+       ───────────────────────────────────────────────────────────── */}
+      {pkgDrawer && (() => {
+        // Slice boqItems to ones relevant to this package's grid context
+        // (we don't have a strict pkg→items link in DB; the editor shows
+        // ALL master items, grouped by category, so the user can fix any
+        // item that appears anywhere). Filtering would hide items that
+        // genuinely belong elsewhere but use the same category.
+        const grouped = boqItems.reduce((acc, it) => {
+          const k = it.category || "Uncategorized";
+          if (deletedItems[it.id]) return acc;     // hide soft-deleted (UI-only until save)
+          (acc[k] ||= []).push(it);
+          return acc;
+        }, {});
+        const cats = Object.keys(grouped).sort();
+        const getItemDraft = (item, field) => {
+          const e = itemEdits[item.id];
+          if (e && e[field] !== undefined) return e[field];
+          return item[field] != null ? item[field] : "";
+        };
+        const patchItem = (id, field, value) =>
+          setItemEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [field]: value } }));
+        const uomOpts = (uomList || []).length > 0
+          ? uomList.map(u => u.name)
+          : ["Sq.Ft","CFT","Running Ft","Kg","Point","Unit","Lump Sum","Piece"];
+        return (
+          <>
+            <div onClick={closePkgDrawer}
+              style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 400 }} />
+            <div onClick={e => e.stopPropagation()}
+              style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(640px,96vw)",
+                       background: "white", boxShadow: "-12px 0 32px rgba(0,0,0,0.25)", zIndex: 401,
+                       display: "flex", flexDirection: "column" }}>
+              {/* Dark header */}
+              <div style={{ background: "#0F172A", padding: "13px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
+                <div>
+                  <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Edit Package</div>
+                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
+                    Package, categories & items — all in one place
+                  </div>
+                </div>
+                <button onClick={closePkgDrawer} disabled={pkgSaving}
+                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 22, cursor: pkgSaving ? "not-allowed" : "pointer", lineHeight: 1 }}>
+                  ×
+                </button>
+              </div>
+              {/* Scrollable body */}
+              <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
+                {/* Section 1 — Package basics */}
+                <div style={{ marginBottom: 18 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>1 — Package</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 10, marginBottom: 10 }}>
+                    <div>
+                      <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Package Name *</label>
+                      <input value={pkgDraft.name || ""} onChange={e => setPkgDraft(p => ({ ...p, name: e.target.value }))}
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
+                    </div>
+                    <div>
+                      <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Rate / sqft</label>
+                      <input type="number" value={pkgDraft.sqft_rate || ""} onChange={e => setPkgDraft(p => ({ ...p, sqft_rate: e.target.value }))}
+                        style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "right" }}/>
+                    </div>
+                  </div>
+                  <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Description</label>
+                  <input value={pkgDraft.description || ""} onChange={e => setPkgDraft(p => ({ ...p, description: e.target.value }))}
+                    placeholder="Optional"
+                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
+                </div>
+
+                {/* Section 2 + 3 — Categories with items */}
+                <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>
+                  2 — Categories & Items
+                </div>
+                {cats.length === 0 && (
+                  <div style={{ padding: "16px 14px", background: "#F9FAFB", border: "1px dashed #E5E7EB", borderRadius: 8, color: "#9CA3AF", fontSize: 12, textAlign: "center" }}>
+                    No items in the library yet — close this drawer and use "+ Add Item" inside a category.
+                  </div>
+                )}
+                {cats.map(catName => {
+                  const items = grouped[catName];
+                  const cat = workCats.find(c => c.name === catName);
+                  const renameVal = catRenames[catName];
+                  return (
+                    <div key={catName} style={{ marginBottom: 12, border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden" }}>
+                      {/* Category bar with rename input */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#1E293B" }}>
+                        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>CATEGORY</span>
+                        {cat ? (
+                          <input
+                            value={renameVal !== undefined ? renameVal : catName}
+                            onChange={e => setCatRenames(p => ({ ...p, [catName]: e.target.value }))}
+                            style={{ flex: 1, padding: "4px 8px", borderRadius: 5, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "white", fontSize: 12.5, fontWeight: 600, outline: "none", fontFamily: "inherit" }}/>
+                        ) : (
+                          <span style={{ flex: 1, color: "white", fontSize: 12.5, fontWeight: 700 }}>{catName}</span>
+                        )}
+                        <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)" }}>{items.length} item{items.length !== 1 ? "s" : ""}</span>
+                      </div>
+
+                      {/* Items table */}
+                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ background: "#FAFAFA" }}>
+                            <th style={{ padding: "7px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Item</th>
+                            <th style={{ padding: "7px 10px", textAlign: "center", fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 95 }}>Unit</th>
+                            <th style={{ padding: "7px 10px", textAlign: "right", fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 100 }}>Base Rate</th>
+                            <th style={{ padding: "7px 10px", textAlign: "center", fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 32 }}></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((it, idx) => {
+                            const nameVal = getItemDraft(it, "name");
+                            const unitVal = getItemDraft(it, "unit");
+                            const baseVal = getItemDraft(it, "base_rate");
+                            return (
+                              <tr key={it.id} style={{ borderTop: "1px solid #F3F4F6", background: idx % 2 === 0 ? "white" : "#FAFAFA" }}>
+                                <td style={{ padding: "6px 10px" }}>
+                                  <input value={nameVal} onChange={e => patchItem(it.id, "name", e.target.value)}
+                                    style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #E5E7EB", fontSize: 12, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
+                                </td>
+                                <td style={{ padding: "6px 10px" }}>
+                                  <select value={unitVal} onChange={e => patchItem(it.id, "unit", e.target.value)}
+                                    style={{ width: "100%", padding: "5px 6px", borderRadius: 5, border: "1px solid #E5E7EB", fontSize: 11.5, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}>
+                                    {uomOpts.map(u => <option key={u} value={u}>{u}</option>)}
+                                  </select>
+                                </td>
+                                <td style={{ padding: "6px 10px" }}>
+                                  <input type="number" value={baseVal} onChange={e => patchItem(it.id, "base_rate", e.target.value)}
+                                    style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #E5E7EB", fontSize: 12, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "right" }}/>
+                                </td>
+                                <td style={{ padding: "6px 10px", textAlign: "center" }}>
+                                  <button onClick={() => setDeletedItems(p => ({ ...p, [it.id]: true }))}
+                                    title="Remove from library"
+                                    style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>
+                                    ×
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  );
+                })}
+
+                {/* Deleted items recap (so user knows what'll get soft-deleted on Save) */}
+                {Object.keys(deletedItems).length > 0 && (
+                  <div style={{ marginTop: 10, padding: "8px 12px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6, fontSize: 11.5, color: "#991B1B" }}>
+                    {Object.keys(deletedItems).length} item{Object.keys(deletedItems).length > 1 ? "s" : ""} will be removed from the library on Save. <button onClick={() => setDeletedItems({})} style={{ background: "none", border: "none", color: "#DC2626", textDecoration: "underline", cursor: "pointer", padding: 0, marginLeft: 6, fontSize: 11.5 }}>undo</button>
+                  </div>
+                )}
+              </div>
+              {/* Footer */}
+              <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8, flexShrink: 0, background: "#F9FAFB" }}>
+                <button onClick={closePkgDrawer} disabled={pkgSaving}
+                  style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: pkgSaving ? "not-allowed" : "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={savePackageEdit} disabled={pkgSaving || !pkgDraft.name?.trim()}
+                  style={{ flex: 2, padding: "9px", borderRadius: 7, background: (pkgSaving || !pkgDraft.name?.trim()) ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (pkgSaving || !pkgDraft.name?.trim()) ? "not-allowed" : "pointer" }}>
+                  {pkgSaving ? "Saving All…" : "Save All"}
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
     </div>
   );
 }
