@@ -1985,6 +1985,14 @@ function ClientBOQSection() {
   });
   const hasChanged = Object.keys(changed).length > 0;
 
+  // Derived once at component scope so both the info-bar "+ Add Category"
+  // dropdown (above) and the grouped-section IIFE (below) can read it.
+  // Pre-lift fix: `pickedItems` used to be computed inside the section
+  // IIFE only, which caused a ReferenceError when the dropdown tried to
+  // exclude already-shown categories.
+  const pickedIds   = new Set([...Object.keys(rates), ...Object.keys(changed)].map(String));
+  const pickedItems = boqItems.filter(i => pickedIds.has(String(i.id)));
+
   return (
     <div style={{ fontFamily: "inherit" }}>
 
@@ -2170,13 +2178,8 @@ function ClientBOQSection() {
           {/* GROUPED SECTIONS — Subcon-style dark headers, items appear only when picked */}
           {(() => {
             // Items visible in the section view = items the user has explicitly
-            // picked for this package+city (have an entry in `rates` or
-            // `changed`). Master library still lives in boqItems untouched.
-            const pickedIds = new Set([
-              ...Object.keys(rates),
-              ...Object.keys(changed),
-            ].map(String));
-            const pickedItems = boqItems.filter(i => pickedIds.has(String(i.id)));
+            // picked for this package+city — derived at component scope
+            // above so the "+ Add Category" dropdown can read it too.
 
             // Group picked items by category, then also surface any
             // category the user explicitly added via "+ Add Category" — even
