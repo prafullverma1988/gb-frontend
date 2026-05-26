@@ -569,9 +569,18 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const CLIENT_LIST=dbParties?.length?dbParties.filter(p=>_ptype(p)==="client").map(p=>p.name):[];
   const SUPPLIER_LIST=dbParties?.length?dbParties.filter(p=>{const t=_ptype(p);return t==="supplier"||t==="material supplier"||t==="material_supplier";}).map(p=>p.name):[];
   const SUBCON_LIST=dbParties?.length?dbParties.filter(p=>{const t=_ptype(p);return t==="sub-con"||t==="subcon"||t==="contractor"||t==="subcontractor";}).map(p=>p.name):[];
-  // Staff loaded from payroll_staff (advances / salary disbursement)
+  // Staff parties — internal users with a wallet row (parties.is_staff=1).
+  // Treated as party-equivalent for both inflow (Payment Received = admin
+  // receives from a staff wallet, e.g. reimbursement / wallet drain) and
+  // outflow (Payment Made = admin tops up staff wallet). Sourced primarily
+  // from dbParties; /payroll/staff is the legacy fallback for users
+  // whose party row hasn't been backfilled yet.
+  const STAFF_PARTY_LIST = dbParties?.length
+    ? dbParties.filter(p=>p.is_staff===1).map(p=>p.name)
+    : [];
   const [staffList,setStaffList]=useState([]);
   useEffect(()=>{ api.get("/payroll/staff").then(r=>{ if(r?.success&&Array.isArray(r.data)) setStaffList(r.data.map(s=>s.name)); }).catch(()=>{}); },[]);
+  const STAFF_MERGED = [...new Set([...STAFF_PARTY_LIST, ...staffList])];
   const ALL_PARTIES=dbParties?.length?dbParties.map(p=>p.name):[...CLIENT_LIST,...SUPPLIER_LIST,...SUBCON_LIST];
 
   // Pre-defined material library (used in Material Purchase Bill)
@@ -605,15 +614,21 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Bill heads to Site Expense regardless of who received the cash.
   const isSiteExpense=type==="Petty Cash Expense";
 
-  // Paid To list:
-  //  - Payment Received / Sales Invoice → Clients only
-  //  - Material Purchase Bill            → Vendors (Supplier)
-  //  - Sub-Con Bill                      → Subcontractors
-  //  - Payment Made / Advance Payment    → Vendor + Subcon + Staff (no clients)
-  //  - Site Expense                      → free text, no dropdown
-  //  - everything else                   → all parties (legacy fallback)
-  const PAYABLE_LIST=[...new Set([...SUPPLIER_LIST,...SUBCON_LIST,...staffList])];
-  const partyOptions=type==="Payment Received"||isInvoice?CLIENT_LIST
+  // Paid To list (or Received From for inflows):
+  //  - Payment Received → Clients + Staff (admin can receive money back
+  //                       from a staff wallet — reimbursement / drain)
+  //  - Sales Invoice    → Clients only (only clients get billed)
+  //  - Material Purchase Bill → Vendors (Supplier)
+  //  - Sub-Con Bill           → Subcontractors
+  //  - Payment Made / Advance Payment → Vendor + Subcon + Staff
+  //  - Site Expense → free text, no dropdown
+  //  - else → all parties (legacy fallback)
+  // STAFF_MERGED prefers dbParties.is_staff=1 (live), falls back to
+  // /payroll/staff for staff without a party row yet.
+  const PAYABLE_LIST=[...new Set([...SUPPLIER_LIST,...SUBCON_LIST,...STAFF_MERGED])];
+  const RECEIVABLE_LIST=[...new Set([...CLIENT_LIST,...STAFF_MERGED])];
+  const partyOptions=type==="Payment Received"?RECEIVABLE_LIST
+    :isInvoice?CLIENT_LIST
     :isMaterial?SUPPLIER_LIST
     :isSubcon?SUBCON_LIST
     :(type==="Payment Made"||type==="Advance Payment")?PAYABLE_LIST
@@ -1294,9 +1309,16 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   ) : (type==="Payment Made"||type==="Advance Payment") ? (
                     <SearchSelect options={PAYABLE_LIST} value={party} onChange={setParty}
                       placeholder="Vendor / Subcon / Staff..."/>
+                  ) : type==="Payment Received" ? (
+                    // Inflow can come from a client OR a staff wallet (e.g.
+                    // staff reimbursing the company / returning unused cash).
+                    // SearchSelect on the merged list — LibrarySelect would
+                    // restrict to type="client" and exclude staff.
+                    <SearchSelect options={RECEIVABLE_LIST} value={party} onChange={setParty}
+                      placeholder="Client / Staff..."/>
                   ) : (
                     <LibrarySelect
-                      type={type==="Payment Received"||isInvoice?"client":isMaterial?"supplier":isSubcon?"subcon":"any-party"}
+                      type={isInvoice?"client":isMaterial?"supplier":isSubcon?"subcon":"any-party"}
                       value={party} onChange={setParty} placeholder="Select party..."/>
                   )}
                 </div>
@@ -2381,6 +2403,10 @@ function FinanceModule(){
       rawBalance:rawBal,                 // keep original for calculations
       balType,
       phone:p.phone||p.mobile||"",city:p.city||"",
+      // Preserve staff flag so Payment Made/Received dropdowns can
+      // include internal users (their wallet party row is_staff=1).
+      is_staff: p.is_staff === 1 ? 1 : 0,
+      user_id: p.user_id || null,
     };
   };
 
