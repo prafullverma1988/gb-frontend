@@ -1342,7 +1342,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       blank ("") means company-level. */}
                   {partyObj?.is_staff===1 ? (
                     <div style={{padding:"7px 9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,color:T.t3,display:"flex",alignItems:"center",gap:6}}>
-                      <IcBuilding size={12} color={T.t4}/>
+                      <IcBank size={12} color={T.t4}/>
                       <span>Company / Office</span>
                       <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>(Wallet ops)</span>
                     </div>
