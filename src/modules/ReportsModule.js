@@ -555,19 +555,26 @@ function ChallanModule(){
       if (!grnRes?.success || !Array.isArray(grnRes.data)) {
         setRows([]); setLoading(false); return;
       }
-      // Flatten: each GRN × each item → one report row
+      // Flatten: each GRN × each item → one report row.
+      // Rate/total semantics:
+      //   - Billed GRN  → use library last_rate / base_rate as approximation
+      //                   (TODO: replace with actual transaction_items rate).
+      //                   Total = rate × qty.
+      //   - Unbilled GRN → rate is NOT confirmed yet (bill not posted).
+      //                    Show 0 in data (renders as "—" in UI).
+      // Only qty is treated as factual on every row.
       const flat = [];
       for (const g of grnRes.data) {
         const dateRaw = g.received_date || g.created_at;
         const date = dateRaw ? new Date(dateRaw).toISOString().slice(0,10) : "";
         const items = Array.isArray(g.items) ? g.items : [];
         if (items.length === 0) continue;
+        const isBilled = !!g.billed_at;
         for (const it of items) {
           const matName = it.description || "";
           const libHit = lib[matName.trim().toLowerCase()] || {};
-          // Rate: prefer library's last_rate (most recent purchase),
-          // fall back to base_rate. GRN itself doesn't store rate.
-          const rate = libHit.last_rate || libHit.base_rate || 0;
+          // Rate only shown for billed GRNs; unbilled = 0 (renders "—")
+          const rate = isBilled ? (libHit.last_rate || libHit.base_rate || 0) : 0;
           const qty = Number(it.received_qty) || 0;
           flat.push({
             id: `${g.id}-${it.id}`,
@@ -582,8 +589,8 @@ function ChallanModule(){
             qty,
             unit: it.unit || libHit.unit || "",
             rate,
-            total: rate * qty,
-            status: g.billed_at ? "Billed" : "Unbilled",
+            total: rate * qty,            // 0 for unbilled
+            status: isBilled ? "Billed" : "Unbilled",
             grnType: g.grn_type || "—",
             source: g.source || "Procurement",
           });
@@ -639,7 +646,10 @@ function ChallanModule(){
         i+1, r.date, r.vendor, r.site,
         (r.challan||"—") + (r.grnNumber ? ` / ${r.grnNumber}` : ""),
         r.material, r.category,
-        r.qty, r.unit, r.rate, r.total, r.status,
+        r.qty, r.unit,
+        r.rate || "—",      // unbilled → dash
+        r.total || "—",     // unbilled → dash
+        r.status,
       ]),
       [],
       ["","","","","","","","","","TOTAL →", totalAmt, ""],
@@ -693,12 +703,20 @@ function ChallanModule(){
   return(
     <div>
       {/* Summary tiles */}
+      {/* Unbilled tile shows count only ("rate pending") since the
+          per-row total is 0 until the bill posts. */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:12}}>
-        {[{l:"Total Value",v:fmtRs(totalAmt),c:T.blu,sub:`${filtered.length} entries`},
-          {l:"Billed",v:fmtRs(totalPaid),c:T.grn,sub:`${filtered.filter(m=>m.status==="Billed").length} items`},
-          {l:"Unbilled",v:fmtRs(totalPending),c:T.amb,sub:`${filtered.filter(m=>m.status==="Unbilled").length} items`},
-          {l:"Avg. Per Entry",v:filtered.length?fmtRs(Math.round(avgUnit)):"—",c:T.slt,sub:"per material line"},
-        ].map((s,i)=>(
+        {(()=>{
+          const billedCount = filtered.filter(m=>m.status==="Billed").length;
+          const unbilledCount = filtered.filter(m=>m.status==="Unbilled").length;
+          const avgBilled = billedCount ? totalPaid / billedCount : 0;
+          return [
+            {l:"Total Value",v:fmtRs(totalAmt),c:T.blu,sub:`${filtered.length} entries · billed-side only`},
+            {l:"Billed",v:fmtRs(totalPaid),c:T.grn,sub:`${billedCount} items`},
+            {l:"Unbilled",v:unbilledCount?`${unbilledCount} item${unbilledCount===1?"":"s"}`:"—",c:T.amb,sub:"rate pending"},
+            {l:"Avg. per Billed",v:avgBilled?fmtRs(Math.round(avgBilled)):"—",c:T.slt,sub:"only billed lines"},
+          ];
+        })().map((s,i)=>(
           <div key={i} style={{padding:"11px 14px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
             <div style={{fontSize:18,fontWeight:800,color:s.c}}>{s.v}</div>
@@ -832,12 +850,16 @@ function ChallanModule(){
           )}
         </div>
 
-        {/* Footer totals */}
+        {/* Footer totals — TOTAL only counts billed lines (unbilled
+            rate is unknown until bill posts). Note appended so the
+            user knows why the number differs from row sums. */}
         <div style={{display:"grid",gridTemplateColumns:"80px 120px 90px 110px 1fr 100px 90px 95px 95px 80px",
           padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,gap:8}}>
-          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/9"}}>TOTAL &nbsp;({filtered.length} entries)</span>
+          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/9"}}>
+            TOTAL &nbsp;({filtered.length} entries · {filtered.filter(m=>m.status==="Unbilled").length} unbilled excluded)
+          </span>
           <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtRs(totalAmt)}</span>
-          <span style={{fontSize:10.5,color:T.t3}}>Billed: {fmtRs(totalPaid)}</span>
+          <span style={{fontSize:10.5,color:T.t3}}>Billed only</span>
         </div>
       </div>
     </div>
