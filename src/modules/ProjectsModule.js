@@ -5,6 +5,7 @@ import { Credit } from "../components/Credit";
 import useDebounce from "../utils/useDebounce";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
+import { WalletApprovalsPanel } from "./FinanceModule";
 
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
   <svg width={size} height={size} viewBox="0 0 24 24" fill={fill} stroke={color} strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
@@ -1320,7 +1321,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   // MR filters
   const [mrSite,setMrSite]=useState("All");           // project filter
   const [mrSearch,setMrSearch]=useState("");          // material name search
-  const [data,setData]=useState({mrs:[],pos:[],whmrs:[],grns:[],transfers:[],finance:[],centralized:[]});
+  const [data,setData]=useState({mrs:[],pos:[],whmrs:[],grns:[],transfers:[],finance:[],centralized:[],wallets:[]});
+  const [walletPhotoPolicy,setWalletPhotoPolicy]=useState({});
+  const WALLET_CAP=10;
   const [vendorList,setVendorList]=useState([]);
   const [loading,setLoading]=useState(true);
   const [acting,setActing]=useState({});
@@ -1375,15 +1378,19 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
         });
         if(venRes.success&&Array.isArray(venRes.data)) setVendorList(venRes.data);
       } else {
-        const [prRes,apRes]=await Promise.all([
+        const [prRes,apRes,wRes,wpRes]=await Promise.all([
           api.get("/finance/payment-requests"),
           api.get("/approvals/pending").catch(()=>({success:false})),
+          api.get("/wallets/pending-approvals").catch(()=>({success:false})),
+          api.get("/wallets/photo-policy").catch(()=>({success:false})),
         ]);
         setData({
           mrs:[], pos:[], whmrs:[], grns:[], transfers:[],
           finance:(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending"),
           centralized:apRes.success?apRes.data||[]:[],
+          wallets:wRes.success?wRes.data||[]:[],
         });
+        if(wpRes.success) setWalletPhotoPolicy(wpRes.data||{});
       }
     }catch(e){ setSaveErr("Data load failed"); }
     setLoading(false);
@@ -1494,7 +1501,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   const recentTransfers= data.transfers.slice(0,20);
 
   const totalCount = mode==="approvals"
-    ? designItems.length+financeItems.length+paymentItems.length
+    ? designItems.length+financeItems.length+paymentItems.length+(data.wallets||[]).length
     : mrByStage("Requested").length + pendingPOs.length + whPendingMRs.length;
 
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(1)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${n}`;
@@ -1838,10 +1845,12 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     </div>
   );
 
+  const walletItems = data.wallets || [];
   const APPROVAL_TABS=[
     {id:"design",  label:"Design",  color:"#7C3AED", count:designItems.length},
     {id:"finance", label:"Finance", color:T.blu,     count:financeItems.length},
     {id:"payment", label:"Payment", color:T.grn,     count:paymentItems.length},
+    {id:"wallet",  label:"Wallet",  color:T.amb,     count:walletItems.length},
   ];
   const MATERIAL_TABS=[
     {id:"mr",        label:"Material Requests", color:T.blu, count:mrByStage("Requested").length},
@@ -1867,7 +1876,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10}}>
           <span style={{background:headerAccent,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{totalCount} pending</span>
-          <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{mode==="approvals"?"Design · Finance · Payment":"Procurement · MR · Warehouse"}</span>
+          <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{mode==="approvals"?"Design · Finance · Payment · Wallet":"Procurement · MR · Warehouse"}</span>
         </div>
         <div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,0.12)"}}>
           {tabs.map(t=>(
@@ -1906,6 +1915,20 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
               <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
                 {financeItems.map(item=><CentralCard key={item.id} item={item}/>)}
               </div></>
+        )}
+        {!loading&&mode==="approvals"&&activeTab==="wallet"&&(
+          walletItems.length===0
+            ?<EmptyState msg="Koi pending wallet approval nahi!" sub="Staff wallet transactions sab clear hain"/>
+            :<><SectionHead label="Wallet Approvals" count={walletItems.length} color={T.amb} bg={T.ambL} bdr={T.ambM}/>
+              <WalletApprovalsPanel
+                approvals={walletItems.slice(0, WALLET_CAP)}
+                photoPolicy={walletPhotoPolicy}
+                onChange={load}/>
+              {walletItems.length>WALLET_CAP&&(
+                <div style={{padding:"6px 18px 18px",fontSize:11,color:T.t4,textAlign:"center"}}>
+                  + {walletItems.length-WALLET_CAP} aur queue mein — top {WALLET_CAP} dikhaye gaye
+                </div>
+              )}</>
         )}
         {!loading&&mode==="approvals"&&activeTab==="payment"&&(
           paymentItems.length===0

@@ -2004,7 +2004,7 @@ async function uploadCloudinaryW(file){
   return d.secure_url;
 }
 
-function WalletApprovalsPanel({approvals,photoPolicy,onChange}){
+export function WalletApprovalsPanel({approvals,photoPolicy,onChange}){
   const [busy,setBusy]=useState(null);          // txn_id being acted on
   const [reject,setReject]=useState(null);       // {txn_id}
   const [ask,setAsk]=useState(null);             // {txn_id}
@@ -2223,14 +2223,6 @@ function FinanceModule(){
     }).catch(()=>{});
   };
   useEffect(()=>{ loadWallets(); },[]);
-  // Wallet approval queue + photo policy (Phase 2)
-  const [walletApprovals,setWalletApprovals]=useState([]);
-  const [walletPhotoPolicy,setWalletPhotoPolicy]=useState({});
-  const loadWalletApprovals=()=>{
-    api.get("/wallets/pending-approvals").then(res=>{ if(res&&res.success) setWalletApprovals(res.data||[]); }).catch(()=>{});
-    api.get("/wallets/photo-policy").then(res=>{ if(res&&res.success) setWalletPhotoPolicy(res.data||{}); }).catch(()=>{});
-  };
-  useEffect(()=>{ loadWalletApprovals(); },[]);
 
   // ── EQUIPMENT REVIEW (new section) ────────────────────────────
   const [equipReview,setEquipReview]=useState([]);
@@ -2817,7 +2809,7 @@ function FinanceModule(){
     }catch(e){console.error("Reject PR error:",e);}
   };
 
-  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"wallet_approvals",l:`Wallet Approvals${walletApprovals.length>0?` (${walletApprovals.length})`:""}`},{id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},{id:"unbilled_grn",l:"Unbilled GRN"},{id:"billed_mat",l:"Billed Material"}];
+  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},{id:"unbilled_grn",l:"Unbilled GRN"},{id:"billed_mat",l:"Billed Material"}];
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -3870,12 +3862,6 @@ function FinanceModule(){
               );
             })()}
           </div>
-        )}
-
-        {/* ══ WALLET APPROVALS TAB ══ */}
-        {tab==="wallet_approvals"&&(
-          <WalletApprovalsPanel approvals={walletApprovals} photoPolicy={walletPhotoPolicy}
-            onChange={()=>{loadWalletApprovals();loadWallets();}}/>
         )}
 
         {/* ══ EQUIPMENT REVIEW TAB ══ */}
