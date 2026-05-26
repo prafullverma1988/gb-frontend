@@ -3567,7 +3567,27 @@ function FinanceModule(){
                   return t.dr || isBT; // BT with destination = source debited
                 }).reduce((s,t)=>s+t.amount,0);
                 let runBal = totalBal - _seenCR + _seenDR;
-                return cbAll.map((txn,i)=>{
+                // The opening_balance value used as the cash-book starting
+                // point. Captured here so the standalone first row can
+                // display it verbatim (independent of any txn rendering).
+                const openingForRow = runBal;
+                const openingRow = (
+                  <div key="__opening__"
+                    style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"10px 14px",gap:4,borderBottom:`2px solid ${T.bluM||T.b1}`,alignItems:"center",background:T.bluL+"55",fontWeight:600}}>
+                    <span style={{fontSize:11.5,color:T.t3,fontWeight:600,whiteSpace:"nowrap"}}>—</span>
+                    <span style={{fontSize:10.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"3px 9px",borderRadius:20,whiteSpace:"nowrap",border:`1px solid ${T.bluM}`}}>Opening Balance</span>
+                    <span style={{fontSize:11.5,color:T.t3,fontStyle:"italic"}}>Before period</span>
+                    <span style={{fontSize:11,color:T.t4}}>—</span>
+                    <span style={{fontSize:11.5,color:T.t3,fontStyle:"italic"}}>Carry-forward from prior transactions</span>
+                    <span style={{textAlign:"right",fontSize:12.5,color:T.t4}}>—</span>
+                    <span style={{textAlign:"right",fontSize:12.5,color:T.t4}}>—</span>
+                    <span style={{fontSize:13,fontWeight:800,color:openingForRow>=0?T.blu:T.red,textAlign:"right"}}>{openingForRow<0?"-":""}₹{fmtN(Math.abs(openingForRow))}</span>
+                    <span style={{fontSize:11,color:T.t4}}>All accounts</span>
+                    <span style={{fontSize:10.5,color:T.t4}}>—</span>
+                    <span style={{fontSize:11,color:T.t4}}>System</span>
+                  </div>
+                );
+                const txnRows = cbAll.map((txn,i)=>{
                   const meta=CB_TYPE_META[txn.type]||{label:txn.type||"Transaction",color:T.t3,bg:T.b1,dir:txn.dr?"out":"in"};
                   const isBT=txn.txnType==="bank_transfer"||txn.type==="Bank Transfer";
                   // Extract note: prefer txn.note field; fallback: parse from description (last segment after " — ")
@@ -3607,6 +3627,10 @@ function FinanceModule(){
                     </div>
                   );
                 });
+                // Render: opening balance row first, then the txn rows
+                // chronologically. Both share the same grid layout for
+                // visual alignment.
+                return [openingRow, ...txnRows];
               })()}
               {activeTxns.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
               </div>
