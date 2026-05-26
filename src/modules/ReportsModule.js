@@ -176,22 +176,73 @@ function printHTML(title, html){
 // MODULE 1 — CASH BOOK + DAY BOOK
 // ══════════════════════════════════════════════════════════════
 function CashBookModule(){
-  const [entries,setEntries]=useState(INIT_CASH);
+  // ── Live data — same source as Finance → Cash Book tab ──────
+  // Reports is VIEW-ONLY: no Add/Edit/Delete here. Use the Finance
+  // module for mutations; this screen pulls the same /finance/
+  // transactions list (filtered for cash events) and renders Cash
+  // Book + Day Book + PDF/Excel export.
+  const [entries,setEntries]=useState([]);
+  const [loading,setLoading]=useState(true);
+  // Cash-event filter — receipts, payments, transfers (the same
+  // whitelist Finance uses for its Cash Book tab). Excludes bills
+  // (material_purchase / subcon_expense as bills / sales_invoice)
+  // because those are liabilities, not money movements.
+  const CASH_TYPES = new Set(["receipt", "payment", "party_payment",
+    "site_expense", "bank_transfer", "wallet_payment", "wallet_topup"]);
+  // map backend txn.type → cash-book "head" label.
+  const TYPE_TO_HEAD = {
+    receipt: "Other", payment: "Other", party_payment: "Other",
+    site_expense: "Site Expense", subcon_expense: "Subcontractor",
+    material_purchase: "Material", bank_transfer: "Other",
+    wallet_payment: "Other", wallet_topup: "Other",
+  };
+  useEffect(() => {
+    setLoading(true);
+    api.get("/finance/transactions?limit=1000")
+      .then(r => {
+        if (!r?.success || !Array.isArray(r.data)) return;
+        const rows = r.data
+          .filter(t => CASH_TYPES.has(t.type) && (t.status || "") !== "cancelled")
+          .map(t => {
+            const isCR = t.type === "receipt" ||
+              (t.type === "bank_transfer" && /Bank Transfer IN/i.test(t.description || ""));
+            const amt = parseFloat(t.amount) || 0;
+            const date = (t.date ? new Date(t.date) : new Date()).toISOString().slice(0, 10);
+            return {
+              id: t.id,
+              date,
+              party: t.party_name || "",
+              desc: t.description || t.note || t.type,
+              account: t.account_name || "",
+              head: t.head_name || TYPE_TO_HEAD[t.type] || "Other",
+              mop: (t.mop || "cash").replace(/_/g, " ").replace(/\b\w/g, c => c.toUpperCase()),
+              site: t.project_name || "",
+              recAmt: isCR ? amt : 0,
+              payAmt: isCR ? 0 : amt,
+            };
+          });
+        setEntries(rows);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+  // Derive filter dropdown options from the live data so we never
+  // show "All Sites" with no sites under it.
+  const SITES_LIVE   = useMemo(() => Array.from(new Set(entries.map(e => e.site).filter(Boolean))).sort(), [entries]);
+  const ACCOUNTS_LIVE= useMemo(() => Array.from(new Set(entries.map(e => e.account).filter(Boolean))).sort(), [entries]);
+  const PARTIES_LIVE = useMemo(() => Array.from(new Set(entries.map(e => e.party).filter(Boolean))).sort(), [entries]);
+
   const [view,setView]=useState("cashbook"); // cashbook | daybook
   const [fSite,setFSite]=useState("All");
   const [fHead,setFHead]=useState("All");
   const [fMOP,setFMOP]=useState("All");
   const [fAcc,setFAcc]=useState("All");
   const [fParty,setFParty]=useState("All");
-  const [fFrom,setFFrom]=useState("2026-03-01");
-  const [fTo,setFTo]=useState("2026-03-16");
+  // Default range: last 30 days through today — covers most recent
+  // activity without the user having to set dates every visit.
+  const [fFrom,setFFrom]=useState(() => { const d = new Date(); d.setDate(d.getDate()-30); return d.toISOString().slice(0,10); });
+  const [fTo,setFTo]=useState(TODAY);
   const [search,setSearch]=useState("");
-  const [showAdd,setShowAdd]=useState(false);
-  const [newRow,setNewRow]=useState({date:TODAY,recAmt:"",payAmt:"",party:"",desc:"",head:HEADS[0],site:SITES[0]});
-  // Refs for tab navigation in add form
-  const cashRefs={date:useRef(null),recAmt:useRef(null),payAmt:useRef(null),party:useRef(null),desc:useRef(null),head:useRef(null),site:useRef(null),save:useRef(null)};
-  const cashOrder=["date","recAmt","payAmt","party","desc","head","site","save"];
-  const focusNext=(cur)=>{const i=cashOrder.indexOf(cur);const nx=cashOrder[i+1];if(nx&&cashRefs[nx]?.current)cashRefs[nx].current.focus();};
 
   const filtered=useMemo(()=>entries.filter(e=>{
     if(fSite!=="All"&&e.site!==fSite) return false;
@@ -224,16 +275,6 @@ function CashBookModule(){
   const totalRec=filtered.reduce((s,e)=>s+e.recAmt,0);
   const totalPay=filtered.reduce((s,e)=>s+e.payAmt,0);
   const balance=totalRec-totalPay;
-
-  const upd=k=>e=>setNewRow(p=>({...p,[k]:e.target.value}));
-
-  const addEntry=()=>{
-    if(!newRow.desc.trim()) return;
-    const e={...newRow,id:`C${String(entries.length+1).padStart(3,"0")}`,recAmt:Number(newRow.recAmt)||0,payAmt:Number(newRow.payAmt)||0};
-    setEntries(p=>[...p,e]);
-    setNewRow({date:TODAY,recAmt:"",payAmt:"",party:"",desc:"",head:HEADS[0],site:SITES[0]});
-    setTimeout(()=>cashRefs.date?.current?.focus(),30);
-  };
 
   // Excel download — Cashbook
   const dlExcelCash=()=>{
@@ -351,7 +392,7 @@ function CashBookModule(){
         {/* Row 2: Filters + buttons */}
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
           <select value={fSite} onChange={e=>setFSite(e.target.value)} style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}>
-            <option value="All">All Sites</option>{SITES.map(s=><option key={s}>{s}</option>)}
+            <option value="All">All Sites</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={fHead} onChange={e=>setFHead(e.target.value)} style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}>
             <option value="All">All Heads</option>{HEADS.map(h=><option key={h}>{h}</option>)}
@@ -360,11 +401,14 @@ function CashBookModule(){
             <option value="All">All MOP</option>{MOPS.map(m=><option key={m}>{m}</option>)}
           </select>
           <select value={fAcc} onChange={e=>setFAcc(e.target.value)} style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}>
-            <option value="All">All Accounts</option>{ACCOUNTS.map(a=><option key={a}>{a}</option>)}
+            <option value="All">All Accounts</option>{ACCOUNTS_LIVE.map(a=><option key={a}>{a}</option>)}
           </select>
           <select value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}>
-            <option value="All">All Parties</option>{PARTIES.map(p=><option key={p}>{p}</option>)}
+            <option value="All">All Parties</option>{PARTIES_LIVE.map(p=><option key={p}>{p}</option>)}
           </select>
+          {/* Reports = VIEW-ONLY. Excel + PDF only. Add/Edit/Delete
+              moved out — those live in Finance → Cash Book where the
+              backend ledger is the source of truth. */}
           <div style={{marginLeft:"auto",display:"flex",gap:6}}>
             <button onClick={view==="cashbook"?dlExcelCash:dlExcelDay}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
@@ -374,65 +418,16 @@ function CashBookModule(){
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               <IcPrint size={13} color={T.blu}/> PDF / Print
             </button>
-            <button onClick={()=>setShowAdd(s=>!s)}
-              style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-              <IcAdd size={12} color="white"/> Add Entry
-            </button>
           </div>
         </div>
       </div>
 
-      {/* Add entry form */}
-      {showAdd&&(
-        <div style={{background:T.surface,borderRadius:8,border:`1.5px solid ${T.bluM}`,padding:"12px 14px",marginBottom:10}}>
-          <div style={{display:"grid",gridTemplateColumns:"110px 110px 110px 1fr 1fr 130px 150px auto",gap:7,alignItems:"end"}}>
-            <div>
-              <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Date</label>
-              <input ref={cashRefs.date} type="date" value={newRow.date} onChange={upd("date")}
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();focusNext("date");}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            </div>
-            <div>
-              <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Receipt ₹</label>
-              <input ref={cashRefs.recAmt} type="number" value={newRow.recAmt} onChange={upd("recAmt")} placeholder="0"
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();focusNext("recAmt");}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            </div>
-            <div>
-              <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Payment ₹</label>
-              <input ref={cashRefs.payAmt} type="number" value={newRow.payAmt} onChange={upd("payAmt")} placeholder="0"
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();focusNext("payAmt");}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            </div>
-            <div>
-              <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Party *</label>
-              <SearchSelect options={PARTIES} value={newRow.party} onChange={v=>upd("party")({target:{value:v}})}
-                placeholder="Party name..." accent={T.pur}
-                style={{height:30}} onTabNext={()=>focusNext("party")}/>
-            </div>
-            <div>
-              <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Description *</label>
-              <input ref={cashRefs.desc} value={newRow.desc} onChange={upd("desc")} placeholder="What is this for..."
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();focusNext("desc");}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:5,border:`1px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
-            </div>
-            <div>
-              <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Head</label>
-              <SearchSelect options={HEADS} value={newRow.head} onChange={v=>upd("head")({target:{value:v}})}
-                style={{height:30}} onTabNext={()=>focusNext("head")}/>
-            </div>
-            <div>
-              <label style={{fontSize:9,fontWeight:600,color:T.t4,textTransform:"uppercase",display:"block",marginBottom:3}}>Site</label>
-              <SearchSelect options={SITES} value={newRow.site} onChange={v=>upd("site")({target:{value:v}})}
-                style={{height:30}} onTabNext={()=>cashRefs.save?.current?.focus()}/>
-            </div>
-            <div style={{display:"flex",gap:5,alignItems:"flex-end"}}>
-              <button ref={cashRefs.save} onClick={addEntry}
-                onKeyDown={e=>{if(e.key==="Enter")addEntry();}}
-                style={{height:30,padding:"0 12px",borderRadius:5,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>Save</button>
-              <button onClick={()=>setShowAdd(false)} style={{height:30,padding:"0 10px",borderRadius:5,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,color:T.t3,cursor:"pointer"}}>✕</button>
-            </div>
-          </div>
+      {/* Add-entry form removed — Reports is view-only. To record a
+          new transaction, use Finance → Cash Book → Receipt/Payment. */}
+
+      {loading && (
+        <div style={{padding:"30px",textAlign:"center",fontSize:12,color:T.t4,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:10}}>
+          Loading transactions...
         </div>
       )}
 
