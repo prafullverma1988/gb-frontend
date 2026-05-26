@@ -3586,7 +3586,8 @@ function FinanceModule(){
                   if(!isInternal){if(isCR) runBal+=txn.amount; else runBal-=txn.amount;}
                   return(
                     <div key={txn.id||i}
-                      style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"8px 14px",gap:4,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s"}}
+                      onClick={()=>setSelTxn(txn)}
+                      style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"8px 14px",gap:4,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"pointer"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
                       onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
                       <span style={{fontSize:11.5,color:T.t3,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
