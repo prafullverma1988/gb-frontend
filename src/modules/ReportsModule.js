@@ -749,12 +749,6 @@ function ChallanModule(){
           </select>
           {/* MOP dropdown removed — GRNs don't have a payment method
               at GRN time; that lives on the eventual bill payment txn. */}
-          <select value="hidden" onChange={()=>{}}
-            style={{...selStyle2,display:"none"}}>
-            <option value="hidden">hidden</option>
-            style={{...selStyle2,borderColor:fMOP!=="All"?T.grn:T.b1,background:fMOP!=="All"?T.grnL:T.surface,color:fMOP!=="All"?T.grn:T.t2}}>
-            <option value="hidden">hidden</option>
-          </select>
           {["All","Billed","Unbilled"].map(s=>(
             <button key={s} onClick={()=>setFStatus(s)}
               style={{padding:"4px 11px",borderRadius:20,border:`1.5px solid ${fStatus===s?(s==="Billed"?T.grn:s==="Unbilled"?T.amb:T.blu):T.b1}`,
