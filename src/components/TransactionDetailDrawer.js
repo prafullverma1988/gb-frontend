@@ -104,6 +104,12 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   const backendType = txn.txnType || txn.type_back || txn.type || "";
   const meta = TYPE_META[backendType] || { label: txn.type || "Transaction", c: T.t3, bg: T.b1, in: null };
   const isBill = ["material_purchase", "subcon_expense", "site_expense", "sales_invoice"].includes(backendType);
+  // hasDueDate: only true bills/invoices carry a separate due_date.
+  // site_expense is a petty-cash event (immediate), not a credit-bill —
+  // it goes through cash like receipt/payment. Cash events (receipt,
+  // payment, party_payment, bank_transfer, wallet_*) also have no
+  // "due date" concept — the txn date IS the cash date.
+  const hasDueDate = ["material_purchase", "subcon_expense", "sales_invoice"].includes(backendType);
   const items = Array.isArray(txn.items) ? txn.items : (Array.isArray(txn.line_items) ? txn.line_items : []);
   const amtSign = meta.in === true ? "+" : meta.in === false ? "−" : "";
   const amtColor = meta.in === true ? T.grn : meta.in === false ? T.red : T.t2;
@@ -115,7 +121,9 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
       const payload = {
         amount: parseFloat(form.amount) || 0,
         date: form.date || undefined,
-        due_date: form.due_date || null,
+        // due_date only relevant for bills/invoices — clear it for
+        // cash-event types so the column doesn't carry stale values.
+        due_date: hasDueDate ? (form.due_date || null) : null,
         status: form.status,
         note: form.note,
         party_name: form.party_name,
@@ -225,7 +233,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
               <Tile label="Status"   value={txn.status || "—"} c={txn.status === "paid" ? T.grn : T.amb}/>
               <Tile label="Party"    value={txn.party_name || txn.party || "—"}/>
               <Tile label="Project"  value={txn.project_name || txn.project || "—"}/>
-              {txn.due_date && <Tile label="Payment Due" value={fmtDate(txn.due_date)} c={T.amb}/>}
+              {hasDueDate && txn.due_date && <Tile label="Payment Due" value={fmtDate(txn.due_date)} c={T.amb}/>}
               {txn.reference_no && <Tile label="Reference" value={txn.reference_no}/>}
               {txn.account_name && <Tile label="Account" value={txn.account_name}/>}
               {txn.to_account_name && <Tile label="To Account" value={txn.to_account_name}/>}
@@ -236,10 +244,18 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
           {editing && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
               <Field label="Amount *" type="number" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))}/>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <Field label="Bill Date" type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
-                <Field label="Payment Due Date" type="date" value={form.due_date} onChange={v => setForm(p => ({ ...p, due_date: v }))}/>
-              </div>
+              {/* Date row: bills get two-column "Bill Date + Due Date";
+                  cash events get a single "Transaction Date". The
+                  due_date concept only makes sense for credit
+                  bills/invoices. */}
+              {hasDueDate ? (
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+                  <Field label="Bill Date" type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
+                  <Field label="Payment Due Date" type="date" value={form.due_date} onChange={v => setForm(p => ({ ...p, due_date: v }))}/>
+                </div>
+              ) : (
+                <Field label="Transaction Date" type="date" value={form.date} onChange={v => setForm(p => ({ ...p, date: v }))}/>
+              )}
               <Field label="Party" value={form.party_name} onChange={v => setForm(p => ({ ...p, party_name: v }))}/>
               <Field label="Project" value={form.project_name} onChange={v => setForm(p => ({ ...p, project_name: v }))}/>
               <Field label="Reference No." value={form.reference_no} onChange={v => setForm(p => ({ ...p, reference_no: v }))}/>
