@@ -855,22 +855,92 @@ function ChallanModule(){
 // ══════════════════════════════════════════════════════════════
 function ProgressReportModule(){
   const [selProject,setSelProject]=useState(null);
+  const [projects,setProjects]=useState([]);
+  const [loading,setLoading]=useState(true);
 
-  const totalContract=PROJECTS.reduce((s,p)=>s+p.contract,0);
-  const totalBilled  =PROJECTS.reduce((s,p)=>s+p.billed,0);
-  const totalReceived=PROJECTS.reduce((s,p)=>s+p.received,0);
-  const totalExp     =PROJECTS.reduce((s,p)=>s+p.expenses,0);
+  // ── Live data: /projects + /finance/transactions, aggregated per project ──
+  // - contract = contract_value || boq_value
+  // - received = SUM(receipt amount) where project_id = p.id
+  // - billed   = SUM(sales_invoice amount) where project_id = p.id
+  // - expenses = projects.total_expense (already maintained server-side)
+  // - progress = projects.progress_pct
+  // Phases / milestones loaded lazily when a project card is expanded.
+  useEffect(()=>{
+    setLoading(true);
+    Promise.all([
+      api.get("/projects"),
+      api.get("/finance/transactions?limit=2000"),
+    ]).then(([projRes, txnRes])=>{
+      if (!projRes?.success || !Array.isArray(projRes.data)) {
+        setProjects([]); setLoading(false); return;
+      }
+      const txns = (txnRes?.success && Array.isArray(txnRes.data)) ? txnRes.data : [];
+      // Aggregate received + billed per project_id
+      const aggr = {};
+      txns.forEach(t => {
+        if (!t.project_id) return;
+        if (t.status === "cancelled") return;
+        if (!aggr[t.project_id]) aggr[t.project_id] = { received: 0, billed: 0 };
+        const amt = parseFloat(t.amount) || 0;
+        if (t.type === "receipt") aggr[t.project_id].received += amt;
+        else if (t.type === "sales_invoice") aggr[t.project_id].billed += amt;
+      });
+      const list = projRes.data.map(p => {
+        const a = aggr[p.id] || { received: 0, billed: 0 };
+        const contract = parseFloat(p.contract_value) || parseFloat(p.boq_value) || 0;
+        const expenses = parseFloat(p.total_expense) || 0;
+        return {
+          id: p.id,
+          name: p.name,
+          site: p.city || p.site_address || "—",
+          status: p.status || "ongoing",
+          progress: parseInt(p.progress_pct) || 0,
+          contract, billed: a.billed, received: a.received, expenses,
+          start: p.start_date || "",
+          target: p.end_date || "",
+          phases: [], // populated on expand (lazy load)
+        };
+      });
+      setProjects(list);
+    }).catch(()=>setProjects([])).finally(()=>setLoading(false));
+  }, []);
+
+  // Lazy-load milestones when a project is expanded
+  useEffect(()=>{
+    if (!selProject) return;
+    const p = projects.find(x => x.id === selProject);
+    if (!p || p.phases.length > 0) return; // already loaded
+    api.get("/projects/" + selProject + "/milestones").then(r => {
+      if (r?.success && Array.isArray(r.data)) {
+        setProjects(prev => prev.map(x => x.id === selProject ? {
+          ...x,
+          phases: r.data.map(m => ({
+            name: m.title || m.name || "Phase",
+            pct: parseInt(m.progress_pct) || 0,
+            status: m.status === "completed" ? "Done"
+                  : m.status === "in_progress" ? "In Progress"
+                  : "Pending",
+          })),
+        } : x));
+      }
+    }).catch(()=>{});
+  }, [selProject, projects]);
+
+  const totalContract=projects.reduce((s,p)=>s+p.contract,0);
+  const totalBilled  =projects.reduce((s,p)=>s+p.billed,0);
+  const totalReceived=projects.reduce((s,p)=>s+p.received,0);
+  const totalExp     =projects.reduce((s,p)=>s+p.expenses,0);
   const totalProfit  =totalReceived-totalExp;
-  const avgProgress  =Math.round(PROJECTS.reduce((s,p)=>s+p.progress,0)/PROJECTS.length);
+  const avgProgress  =projects.length?Math.round(projects.reduce((s,p)=>s+p.progress,0)/projects.length):0;
 
   const dlExcelPortfolio=()=>{
     const rows=[
       [COMPANY_NAME+" — Portfolio Financial Report"],
       [`Generated: ${TODAY}`],[],
       ["Project","Site","Status","Progress %","Contract Value ₹","Billed ₹","Received ₹","Expenses ₹","Net Margin ₹","Margin %","Start","Target"],
-      ...PROJECTS.map(p=>[p.name,p.site,p.status,p.progress+"%",p.contract,p.billed,p.received,p.expenses,p.received-p.expenses,Math.round((p.received-p.expenses)/p.received*100)+"%",p.start,p.target]),
+      ...projects.map(p=>[p.name,p.site,p.status,p.progress+"%",p.contract,p.billed,p.received,p.expenses,p.received-p.expenses,p.received?Math.round((p.received-p.expenses)/p.received*100)+"%":"—",p.start,p.target]),
       [],
-      ["TOTAL","","",avgProgress+"%",totalContract,totalBilled,totalReceived,totalExp,totalProfit,Math.round(totalProfit/totalReceived*100)+"%","",""],
+      ["TOTAL","","",avgProgress+"%",totalContract,totalBilled,totalReceived,totalExp,totalProfit,totalReceived?Math.round(totalProfit/totalReceived*100)+"%":"—","",""],
     ];
     downloadCSV("GB_Portfolio_Report.csv",rows);
   };
@@ -880,18 +950,18 @@ function ProgressReportModule(){
       [`${p.name} — Progress & Financial Report`],[`Site: ${p.site} | Status: ${p.status} | Generated: ${TODAY}`],[],
       ["Metric","Value"],
       ["Contract Value",p.contract],["Billed",p.billed],["Received",p.received],["Expenses",p.expenses],
-      ["Net Margin",p.received-p.expenses],["Margin %",Math.round((p.received-p.expenses)/p.received*100)+"%"],
+      ["Net Margin",p.received-p.expenses],["Margin %",p.received?Math.round((p.received-p.expenses)/p.received*100)+"%":"—"],
       ["Overall Progress",p.progress+"%"],["Start Date",p.start],["Target Date",p.target],[],
       ["Phase","Progress %","Status"],
-      ...p.phases.map(ph=>[ph.name,ph.pct+"%",ph.status]),
+      ...(p.phases||[]).map(ph=>[ph.name,ph.pct+"%",ph.status]),
     ];
     downloadCSV(`${p.name.replace(/[^a-z0-9]/gi,"_")}_Report.csv`,rows);
   };
 
   const printPortfolio=()=>{
-    const rows=PROJECTS.map(p=>{
+    const rows=projects.map(p=>{
       const margin=p.received-p.expenses;
-      const marginPct=Math.round(margin/p.received*100);
+      const marginPct=p.received?Math.round(margin/p.received*100):0;
       const phasesHtml=p.phases.map(ph=>`<span style="font-size:9px;padding:1px 6px;border-radius:20px;margin-right:3px;background:${ph.status==="Done"?"#ECFDF5":ph.status==="In Progress"?"#EFF6FF":"#F8F9FB"};color:${ph.status==="Done"?"#059669":ph.status==="In Progress"?"#2563EB":"#9CA3AF"}">${ph.name}: ${ph.pct}%</span>`).join("");
       return`<tr>
         <td style="font-weight:600">${p.name}</td>
@@ -910,7 +980,7 @@ function ProgressReportModule(){
     }).join("");
     printHTML("Portfolio Report — "+COMPANY_NAME,`
       <div class="header">
-        <div><h1>${COMPANY_NAME} — Portfolio Report</h1><div class="header-sub">As of ${TODAY} &nbsp;|&nbsp; ${PROJECTS.length} Projects</div></div>
+        <div><h1>${COMPANY_NAME} — Portfolio Report</h1><div class="header-sub">As of ${TODAY} &nbsp;|&nbsp; ${projects.length} Projects</div></div>
       </div>
       <div class="summary-grid" style="grid-template-columns:repeat(5,1fr)">
         <div class="summary-box" style="border-top-color:#2563EB"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Portfolio</div><div style="font-size:14px;font-weight:800;color:#2563EB">${fmtRs(totalContract)}</div></div>
@@ -927,8 +997,8 @@ function ProgressReportModule(){
 
   const printProject=p=>{
     const margin=p.received-p.expenses;
-    const marginPct=Math.round(margin/p.received*100);
-    const phases=p.phases.map(ph=>`
+    const marginPct=p.received?Math.round(margin/p.received*100):0;
+    const phases=(p.phases||[]).map(ph=>`
       <tr>
         <td>${ph.name}</td>
         <td>
@@ -978,11 +1048,27 @@ function ProgressReportModule(){
 
       {/* Project cards */}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {PROJECTS.map(p=>{
+        {loading && (
+          <div style={{padding:"30px",textAlign:"center",fontSize:12,color:T.t4,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+            Loading projects...
+          </div>
+        )}
+        {!loading && projects.length === 0 && (
+          <div style={{padding:"30px",textAlign:"center",fontSize:13,color:T.t3,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+            No projects yet. Create projects via Projects module.
+          </div>
+        )}
+        {projects.map(p=>{
           const margin=p.received-p.expenses;
-          const marginPct=Math.round(margin/p.received*100);
+          const marginPct=p.received?Math.round(margin/p.received*100):0;
           const isSel=selProject===p.id;
-          const sc=p.status==="Near Completion"?{c:T.grn,bg:T.grnL}:p.status==="Ongoing"?{c:T.blu,bg:T.bluL}:{c:T.slt,bg:T.sltL};
+          // Backend status enum: ongoing | hold | completed | not_started
+          const _stat = String(p.status||"").toLowerCase();
+          const sc = _stat==="completed"?{c:T.grn,bg:T.grnL}
+                   : _stat==="ongoing"  ?{c:T.blu,bg:T.bluL}
+                   : _stat==="hold"     ?{c:T.amb,bg:T.ambL}
+                   :                     {c:T.slt,bg:T.sltL};
+          const statusLabel = _stat ? _stat.replace(/_/g," ").replace(/\b\w/g, c => c.toUpperCase()) : "—";
           return(
             <div key={p.id} style={{background:T.surface,borderRadius:10,border:`1.5px solid ${isSel?T.blu:T.b1}`,overflow:"hidden",boxShadow:isSel?"0 0 0 3px rgba(37,99,235,0.1)":"0 1px 3px rgba(0,0,0,0.05)"}}>
               <div style={{padding:"13px 16px",cursor:"pointer",borderLeft:`4px solid ${T.blu}`}} onClick={()=>setSelProject(isSel?null:p.id)}>
@@ -990,7 +1076,7 @@ function ProgressReportModule(){
                   <div style={{flex:1}}>
                     <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:3}}>
                       <span style={{fontSize:14,fontWeight:700,color:T.t1}}>{p.name}</span>
-                      <Pill label={p.status} c={sc.c} bg={sc.bg}/>
+                      <Pill label={statusLabel} c={sc.c} bg={sc.bg}/>
                     </div>
                     <span style={{fontSize:11.5,color:T.t4}}>{p.site} · {p.start} → {p.target}</span>
                   </div>
@@ -1022,25 +1108,31 @@ function ProgressReportModule(){
                 </div>
               </div>
 
-              {/* Expanded: phase breakdown */}
+              {/* Expanded: phase breakdown (lazy-loaded from /projects/:id/milestones) */}
               {isSel&&(
                 <div style={{padding:"12px 16px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB}}>
                   <div style={{fontSize:11,fontWeight:700,color:T.t2,marginBottom:8}}>Phase-wise Progress</div>
-                  <div style={{display:"flex",flexDirection:"column",gap:6}}>
-                    {p.phases.map((ph,i)=>{
-                      const phc=ph.status==="Done"?T.grn:ph.status==="In Progress"?T.blu:T.b2;
-                      return(
-                        <div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
-                          <span style={{fontSize:12,color:T.t2,width:100,flexShrink:0}}>{ph.name}</span>
-                          <div style={{flex:1,height:6,background:T.b1,borderRadius:6,overflow:"hidden"}}>
-                            <div style={{height:"100%",width:`${ph.pct}%`,background:phc,borderRadius:6}}/>
+                  {!p.phases || p.phases.length === 0 ? (
+                    <div style={{fontSize:11.5,color:T.t4,padding:"8px 4px",textAlign:"center"}}>
+                      No phases / milestones defined for this project yet.
+                    </div>
+                  ) : (
+                    <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                      {p.phases.map((ph,i)=>{
+                        const phc=ph.status==="Done"?T.grn:ph.status==="In Progress"?T.blu:T.b2;
+                        return(
+                          <div key={i} style={{display:"flex",alignItems:"center",gap:10}}>
+                            <span style={{fontSize:12,color:T.t2,width:100,flexShrink:0}}>{ph.name}</span>
+                            <div style={{flex:1,height:6,background:T.b1,borderRadius:6,overflow:"hidden"}}>
+                              <div style={{height:"100%",width:`${ph.pct}%`,background:phc,borderRadius:6}}/>
+                            </div>
+                            <span style={{fontSize:11.5,fontWeight:700,color:phc,width:38,textAlign:"right",flexShrink:0}}>{ph.pct}%</span>
+                            <Pill label={ph.status} c={phc==="#E5E7EB"?T.slt:phc} bg={ph.status==="Done"?T.grnL:ph.status==="In Progress"?T.bluL:T.sltL}/>
                           </div>
-                          <span style={{fontSize:11.5,fontWeight:700,color:phc,width:38,textAlign:"right",flexShrink:0}}>{ph.pct}%</span>
-                          <Pill label={ph.status} c={phc==="#E5E7EB"?T.slt:phc} bg={ph.status==="Done"?T.grnL:ph.status==="In Progress"?T.bluL:T.sltL}/>
-                        </div>
-                      );
-                    })}
-                  </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
