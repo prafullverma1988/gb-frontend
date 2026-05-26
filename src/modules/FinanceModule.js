@@ -2602,8 +2602,6 @@ function FinanceModule(){
     if(chipTxn==="Site Expense"&&t.type!=="Site Expense") return false;
     if(chipTxn==="Sub-Con"&&t.type!=="Sub-Con Expense") return false;
     if(chipTxn==="Party Payment"&&t.type!=="Party Payment") return false;
-    if(chipTxn==="Wallet Payment"&&t.type!=="Wallet Payment") return false;
-    if(chipTxn==="Wallet Top-up"&&t.type!=="Wallet Top-up") return false;
     if(chipTxn==="Unpaid"&&t.status==="paid") return false;
     return true;
   });
@@ -2975,9 +2973,15 @@ function FinanceModule(){
             colors:{"Client":{c:T.grn,bg:T.grnL},"Vendor":{c:T.amb,bg:T.ambL},"Labour":{c:T.blu,bg:T.bluL},"Sub-Con":{c:T.slt,bg:T.sltL},"Material Supplier":{c:T.pur,bg:T.purL}},
           },
           transaction:{
-            chips:["All","Payment In","Payment Out","Material","Site Expense","Sub-Con","Party Payment","Wallet Payment","Wallet Top-up","Unpaid"],
+            // "Wallet Payment" / "Wallet Top-up" chips removed — the wallets
+            // route inserts as type='party_payment' or 'site_expense', so no
+            // row in DB ever had type='wallet_payment'/'wallet_topup'. Those
+            // chips always returned zero rows. To distinguish wallet-origin
+            // spends from regular ones, filter on paid_via_staff_id NOT NULL
+            // (future enhancement — needs that column on apiTransactions).
+            chips:["All","Payment In","Payment Out","Material","Site Expense","Sub-Con","Party Payment","Unpaid"],
             active:chipTxn, set:setChipTxn,
-            colors:{"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Sub-Con":{c:T.slt,bg:T.sltL},"Party Payment":{c:T.pur,bg:T.purL},"Wallet Payment":{c:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{c:"#1565C0",bg:"#E3F2FD"},"Unpaid":{c:T.red,bg:T.redL}},
+            colors:{"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Sub-Con":{c:T.slt,bg:T.sltL},"Party Payment":{c:T.pur,bg:T.purL},"Unpaid":{c:T.red,bg:T.redL}},
           },
           cashbook:{
             chips:["All","Receipts","Payments"],
