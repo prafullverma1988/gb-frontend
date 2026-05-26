@@ -641,7 +641,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [delivDate,setDelivDate]=useState(prefillGRN?.deliveryDate||_today);
   // prefillGRN = {grnId, grnNumber, vendor, deliveryDate, project, items:[{name,qty,unit,head}]}
   const [party,setParty]=useState(prefillGRN?.vendor||preParty||"");
-  const [project,setProject]=useState(prefillGRN?.project||PROJECTS_LIST[0]);
+  // Project default: bills / GRN-prefilled forms keep project-level (their
+  // semantics demand project attribution); pure payments default to
+  // company-level ("" = no project). Staff payee → forced company-level
+  // (handled in render + payload below).
+  const _projectDefault = prefillGRN?.project
+    || (isMaterial || isSubcon ? (PROJECTS_LIST[0] || "") : "");
+  const [project,setProject]=useState(_projectDefault);
   // GRN-prefilled fields are locked (vendor / project / delivery date / material+qty)
   const isFromGRN = !!prefillGRN;
   const grnItemCount = (prefillGRN?.items?.length)||0;
@@ -661,6 +667,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
   // ── Material Bill: payment due date (default = bill_date + party.credit_days) ──
   const partyObj = useMemo(()=>(dbParties||[]).find(p=>(p.name||"").toLowerCase().trim()===String(party||"").toLowerCase().trim()),[dbParties,party]);
+  // Safety: if user switches the payee to a staff after picking a project,
+  // auto-clear the project — wallet ops are always company-level.
+  useEffect(()=>{
+    if (partyObj?.is_staff===1 && project) setProject("");
+  }, [partyObj, project]);
   const partyCreditDays = parseInt(partyObj?.credit_days)||7;
   const [payDueDate,setPayDueDate]=useState(()=>{
     const d=new Date(); d.setDate(d.getDate()+7);
@@ -1324,7 +1335,24 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 </div>
                 <div>
                   {lbl("Project")}
-                  <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Project..."/>
+                  {/* Staff payee → wallet operations are inherently company-
+                      level (wallet sits at the company, not a project). Lock
+                      to "Company / Office" and disable the picker.
+                      Non-staff → "Company / Office" + project list; default
+                      blank ("") means company-level. */}
+                  {partyObj?.is_staff===1 ? (
+                    <div style={{padding:"7px 9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,color:T.t3,display:"flex",alignItems:"center",gap:6}}>
+                      <IcBuilding size={12} color={T.t4}/>
+                      <span>Company / Office</span>
+                      <span style={{fontSize:10,color:T.t4,marginLeft:"auto"}}>(Wallet ops)</span>
+                    </div>
+                  ) : (
+                    <SearchSelect
+                      options={["Company / Office", ...PROJECTS_LIST]}
+                      value={project || "Company / Office"}
+                      onChange={(v)=>setProject(v==="Company / Office"?"":v)}
+                      placeholder="Project..."/>
+                  )}
                 </div>
                 <div>
                   {lbl("Account *",T.red)}
