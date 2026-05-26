@@ -523,91 +523,144 @@ function CashBookModule(){
 // MODULE 2 — MATERIAL CHALLAN REGISTER
 // ══════════════════════════════════════════════════════════════
 function ChallanModule(){
-  const [materials,setMaterials]=useState(INIT_MATERIAL);
+  // ── Live data: GRNs flattened to one row per material item ──
+  // Source: /procurement/grns?exclude_auto=1 (real site receipts only,
+  // no auto-bill synthetic GRNs). Each GRN's items[] is expanded so
+  // each material/qty/unit becomes its own row. Category + base rate
+  // come from material_master via library lookup.
+  // Reports = view-only — no add/edit/delete here.
+  const [rows,setRows]=useState([]);
+  const [loading,setLoading]=useState(true);
+  const [matLibMap,setMatLibMap]=useState({}); // name(lower) → {category_name, base_rate, last_rate, unit}
+
+  useEffect(()=>{
+    setLoading(true);
+    Promise.all([
+      api.get("/procurement/grns?exclude_auto=1"),
+      api.get("/library/materials").catch(()=>({data:[]})),
+    ]).then(([grnRes, libRes])=>{
+      const lib = {};
+      const libRows = (libRes?.data || libRes?.rows || []);
+      libRows.forEach(m => {
+        const k = String(m.name || "").trim().toLowerCase();
+        if (k) lib[k] = {
+          category_name: m.category_name || "—",
+          base_rate: Number(m.base_rate)||0,
+          last_rate: Number(m.last_rate)||0,
+          unit: m.unit || "",
+        };
+      });
+      setMatLibMap(lib);
+
+      if (!grnRes?.success || !Array.isArray(grnRes.data)) {
+        setRows([]); setLoading(false); return;
+      }
+      // Flatten: each GRN × each item → one report row
+      const flat = [];
+      for (const g of grnRes.data) {
+        const dateRaw = g.received_date || g.created_at;
+        const date = dateRaw ? new Date(dateRaw).toISOString().slice(0,10) : "";
+        const items = Array.isArray(g.items) ? g.items : [];
+        if (items.length === 0) continue;
+        for (const it of items) {
+          const matName = it.description || "";
+          const libHit = lib[matName.trim().toLowerCase()] || {};
+          // Rate: prefer library's last_rate (most recent purchase),
+          // fall back to base_rate. GRN itself doesn't store rate.
+          const rate = libHit.last_rate || libHit.base_rate || 0;
+          const qty = Number(it.received_qty) || 0;
+          flat.push({
+            id: `${g.id}-${it.id}`,
+            grnId: g.id,
+            date,
+            vendor: g.vendor_name || "—",
+            site: g.project_name || "—",
+            challan: g.challan_no || "—",
+            grnNumber: g.grn_number || "",
+            material: matName,
+            category: libHit.category_name || "—",
+            qty,
+            unit: it.unit || libHit.unit || "",
+            rate,
+            total: rate * qty,
+            status: g.billed_at ? "Billed" : "Unbilled",
+            grnType: g.grn_type || "—",
+            source: g.source || "Procurement",
+          });
+        }
+      }
+      setRows(flat);
+    }).catch(()=>setRows([])).finally(()=>setLoading(false));
+  }, []);
+
+  // ── Filter state ──
   const [fSite,setFSite]=useState("All");
   const [fParty,setFParty]=useState("All");
   const [fHead,setFHead]=useState("All");
   const [fStatus,setFStatus]=useState("All");
-  const [fMOP,setFMOP]=useState("All");
-  const [fFrom,setFFrom]=useState("2026-03-01");
-  const [fTo,setFTo]=useState("2026-03-16");
+  const [fFrom,setFFrom]=useState(() => { const d = new Date(); d.setDate(d.getDate()-90); return d.toISOString().slice(0,10); });
+  const [fTo,setFTo]=useState(TODAY);
   const [search,setSearch]=useState("");
-  const [showAdd,setShowAdd]=useState(false);
-  const blank={billDate:TODAY,delivDate:TODAY,materialName:"",matHead:MAT_HEADS[0],
-    desc:"",party:SUPPLIERS[0],site:SITES[0],qty:"",unit:MAT_UNITS[0],price:"",
-    account:ACCOUNTS[0],mop:MOPS[0],status:"Pending",remark:""};
-  const [form,setForm]=useState(blank);
-  // Refs for tab navigation in material form
-  const matBillRef=useRef(null);
-  const matDelivRef=useRef(null);
-  const matNameRef=useRef(null);
-  const matQtyRef=useRef(null);
-  const matPriceRef=useRef(null);
-  const matDescRef=useRef(null);
-  const matSaveRef=useRef(null);
 
-  const upd=k=>e=>setForm(p=>({...p,[k]:e.target.value}));
-  const calcTotal=m=>Number(m.qty||0)*Number(m.price||0);
+  // Derive filter options from live data so dropdowns only show what
+  // actually exists.
+  const SITES_LIVE   = useMemo(() => Array.from(new Set(rows.map(r => r.site).filter(s => s && s !== "—"))).sort(), [rows]);
+  const VENDORS_LIVE = useMemo(() => Array.from(new Set(rows.map(r => r.vendor).filter(v => v && v !== "—"))).sort(), [rows]);
+  const CATS_LIVE    = useMemo(() => Array.from(new Set(rows.map(r => r.category).filter(c => c && c !== "—"))).sort(), [rows]);
 
-  const filtered=useMemo(()=>materials.filter(m=>{
-    if(fSite!=="All"&&m.site!==fSite) return false;
-    if(fParty!=="All"&&m.party!==fParty) return false;
-    if(fHead!=="All"&&m.matHead!==fHead) return false;
-    if(fStatus!=="All"&&m.status!==fStatus) return false;
-    if(fMOP!=="All"&&m.mop!==fMOP) return false;
-    if(m.billDate<fFrom||m.billDate>fTo) return false;
-    if(search&&!m.materialName.toLowerCase().includes(search.toLowerCase())&&
-       !m.party.toLowerCase().includes(search.toLowerCase())&&
-       !m.desc.toLowerCase().includes(search.toLowerCase())) return false;
+  const filtered=useMemo(()=>rows.filter(r=>{
+    if(fSite!=="All"&&r.site!==fSite) return false;
+    if(fParty!=="All"&&r.vendor!==fParty) return false;
+    if(fHead!=="All"&&r.category!==fHead) return false;
+    if(fStatus!=="All"&&r.status!==fStatus) return false;
+    if(r.date<fFrom||r.date>fTo) return false;
+    if(search){
+      const q=search.toLowerCase();
+      if(!r.material.toLowerCase().includes(q) &&
+         !r.vendor.toLowerCase().includes(q) &&
+         !(r.challan||"").toLowerCase().includes(q) &&
+         !(r.site||"").toLowerCase().includes(q)) return false;
+    }
     return true;
-  }).sort((a,b)=>a.billDate.localeCompare(b.billDate)),[materials,fSite,fParty,fHead,fStatus,fMOP,fFrom,fTo,search]);
+  }).sort((a,b)=>a.date.localeCompare(b.date)),[rows,fSite,fParty,fHead,fStatus,fFrom,fTo,search]);
 
-  const totalAmt=filtered.reduce((s,m)=>s+m.total,0);
-  const totalPaid=filtered.filter(m=>m.status==="Paid").reduce((s,m)=>s+m.total,0);
-  const totalPending=filtered.filter(m=>m.status==="Pending").reduce((s,m)=>s+m.total,0);
-
-  const saveEntry=()=>{
-    if(!form.materialName.trim()||!form.qty||!form.price) return;
-    const t=Number(form.qty)*Number(form.price);
-    const m={...form,id:`M${String(materials.length+1).padStart(3,"0")}`,
-      qty:Number(form.qty),price:Number(form.price),total:t};
-    setMaterials(p=>[...p,m]);
-    setForm(blank);
-    setTimeout(()=>matBillRef.current?.focus(),30);
-  };
-
-  const markPaid=id=>setMaterials(p=>p.map(m=>m.id===id?{...m,status:"Paid"}:m));
+  const totalAmt=filtered.reduce((s,m)=>s+(m.total||0),0);
+  const totalPaid=filtered.filter(m=>m.status==="Billed").reduce((s,m)=>s+(m.total||0),0);
+  const totalPending=filtered.filter(m=>m.status==="Unbilled").reduce((s,m)=>s+(m.total||0),0);
+  const avgUnit=filtered.length?totalAmt/filtered.length:0;
 
   const dlExcel=()=>{
-    const rows=[
+    const xRows=[
       [COMPANY_NAME+" — Material Challan / Purchase Register"],
       [`Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],[],
-      ["#","Bill Date","Delivery Date","Material Name","Head","Description","Party / Supplier",
-       "Site","Qty","Unit","Price ₹","Total ₹","Account","MOP","Status","Remark"],
-      ...filtered.map(m=>[m.id,m.billDate,m.delivDate,m.materialName,m.matHead,m.desc,
-        m.party,m.site,m.qty,m.unit,m.price,m.total,m.account,m.mop,m.status,m.remark]),
-      [],[" "," "," "," "," "," "," "," "," "," "," ","TOTAL → "+fmtRs(totalAmt),"","","",""],
+      ["#","Date","Vendor","Site","Challan / GRN","Material","Category",
+       "Qty","Unit","Rate ₹","Total ₹","Status"],
+      ...filtered.map((r,i)=>[
+        i+1, r.date, r.vendor, r.site,
+        (r.challan||"—") + (r.grnNumber ? ` / ${r.grnNumber}` : ""),
+        r.material, r.category,
+        r.qty, r.unit, r.rate, r.total, r.status,
+      ]),
+      [],
+      ["","","","","","","","","","TOTAL →", totalAmt, ""],
     ];
-    downloadCSV(`Material_Register_${fFrom}_${fTo}.csv`,rows);
+    downloadCSV(`Material_Register_${fFrom}_${fTo}.csv`,xRows);
   };
 
   const printAll=()=>{
-    const rows=filtered.map(m=>`
+    const tbody=filtered.map(r=>`
       <tr>
-        <td>${fmtDate(m.billDate)}</td>
-        <td>${fmtDate(m.delivDate)}</td>
-        <td style="font-weight:700">${m.materialName}</td>
-        <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:#EFF6FF;color:#2563EB">${m.matHead}</span></td>
-        <td style="color:#6B7280;font-size:10px">${m.desc||"—"}</td>
-        <td style="font-weight:600;color:#7C3AED">${m.party}</td>
-        <td>${m.site}</td>
-        <td style="text-align:right">${fmtN(m.qty)}</td>
-        <td>${m.unit}</td>
-        <td style="text-align:right">${fmtRs(m.price)}</td>
-        <td style="text-align:right;font-weight:700;color:#059669">${fmtRs(m.total)}</td>
-        <td>${m.account}</td>
-        <td>${m.mop}</td>
-        <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:${m.status==="Paid"?"#ECFDF5":"#FFFBEB"};color:${m.status==="Paid"?"#059669":"#D97706"}">${m.status}</span></td>
+        <td>${fmtShort(r.date)}</td>
+        <td style="font-weight:600;color:#7C3AED">${r.vendor}</td>
+        <td>${r.site}</td>
+        <td style="font-size:10px;color:#6B7280">${r.challan||"—"}${r.grnNumber?`<br/>${r.grnNumber}`:""}</td>
+        <td style="font-weight:700">${r.material}</td>
+        <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:#EFF6FF;color:#2563EB">${r.category}</span></td>
+        <td style="text-align:right">${fmtN(r.qty)}</td>
+        <td>${r.unit}</td>
+        <td style="text-align:right">${r.rate?fmtRs(r.rate):"—"}</td>
+        <td style="text-align:right;font-weight:700;color:#059669">${r.total?fmtRs(r.total):"—"}</td>
+        <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:${r.status==="Billed"?"#ECFDF5":"#FFFBEB"};color:${r.status==="Billed"?"#059669":"#D97706"}">${r.status}</span></td>
       </tr>`).join("");
     printHTML("Material Purchase Register — "+COMPANY_NAME,`
       <div class="header">
@@ -617,16 +670,16 @@ function ChallanModule(){
       </div>
       <div class="summary-grid">
         <div class="summary-box" style="border-top-color:#2563EB"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Total Value</div><div style="font-size:15px;font-weight:800;color:#2563EB">${fmtRs(totalAmt)}</div></div>
-        <div class="summary-box" style="border-top-color:#059669"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Paid</div><div style="font-size:15px;font-weight:800;color:#059669">${fmtRs(totalPaid)}</div></div>
-        <div class="summary-box" style="border-top-color:#D97706"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Pending</div><div style="font-size:15px;font-weight:800;color:#D97706">${fmtRs(totalPending)}</div></div>
+        <div class="summary-box" style="border-top-color:#059669"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Billed</div><div style="font-size:15px;font-weight:800;color:#059669">${fmtRs(totalPaid)}</div></div>
+        <div class="summary-box" style="border-top-color:#D97706"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Unbilled</div><div style="font-size:15px;font-weight:800;color:#D97706">${fmtRs(totalPending)}</div></div>
       </div>
       <table>
-        <tr><th>Bill Date</th><th>Deliv. Date</th><th>Material</th><th>Head</th><th>Description</th><th>Party</th><th>Site</th>
-          <th style="text-align:right">Qty</th><th>Unit</th><th style="text-align:right">Price ₹</th>
-          <th style="text-align:right">Total ₹</th><th>Account</th><th>MOP</th><th>Status</th></tr>
-        ${rows}
-        <tr class="total-row"><td colspan="10" style="text-align:right">GRAND TOTAL</td>
-          <td style="text-align:right;color:#059669">${fmtRs(totalAmt)}</td><td colspan="3"></td></tr>
+        <tr><th>Date</th><th>Vendor</th><th>Site</th><th>Challan / GRN</th><th>Material</th><th>Category</th>
+          <th style="text-align:right">Qty</th><th>Unit</th><th style="text-align:right">Rate ₹</th>
+          <th style="text-align:right">Total ₹</th><th>Status</th></tr>
+        ${tbody}
+        <tr class="total-row"><td colspan="9" style="text-align:right">GRAND TOTAL</td>
+          <td style="text-align:right;color:#059669">${fmtRs(totalAmt)}</td><td></td></tr>
       </table>`);
   };
 
@@ -642,9 +695,9 @@ function ChallanModule(){
       {/* Summary tiles */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10,marginBottom:12}}>
         {[{l:"Total Value",v:fmtRs(totalAmt),c:T.blu,sub:`${filtered.length} entries`},
-          {l:"Paid",v:fmtRs(totalPaid),c:T.grn,sub:`${filtered.filter(m=>m.status==="Paid").length} items`},
-          {l:"Pending",v:fmtRs(totalPending),c:T.amb,sub:`${filtered.filter(m=>m.status==="Pending").length} items`},
-          {l:"Avg. Unit Price",v:filtered.length?fmtRs(Math.round(totalAmt/filtered.length)):"—",c:T.slt,sub:"per entry"},
+          {l:"Billed",v:fmtRs(totalPaid),c:T.grn,sub:`${filtered.filter(m=>m.status==="Billed").length} items`},
+          {l:"Unbilled",v:fmtRs(totalPending),c:T.amb,sub:`${filtered.filter(m=>m.status==="Unbilled").length} items`},
+          {l:"Avg. Per Entry",v:filtered.length?fmtRs(Math.round(avgUnit)):"—",c:T.slt,sub:"per material line"},
         ].map((s,i)=>(
           <div key={i} style={{padding:"11px 14px",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,borderTop:`3px solid ${s.c}`}}>
             <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:2}}>{s.l}</div>
@@ -667,6 +720,8 @@ function ChallanModule(){
             <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search material, party, description..."
               style={{...selStyle2,width:"100%",paddingLeft:26,boxSizing:"border-box"}}/>
           </div>
+          {/* Reports = view-only. Add Entry removed; new GRNs come
+              from Warehouse / Procurement workflows. */}
           <div style={{display:"flex",gap:6,marginLeft:"auto"}}>
             <button onClick={dlExcel}
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
@@ -676,41 +731,41 @@ function ChallanModule(){
               style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
               <IcPrint size={13} color={T.blu}/> PDF / Print
             </button>
-            <button onClick={()=>setShowAdd(s=>!s)}
-              style={{display:"flex",alignItems:"center",gap:4,padding:"5px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-              <IcAdd size={12} color="white"/> Add Entry
-            </button>
           </div>
         </div>
         {/* Row 2: filters */}
         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
           <select value={fSite} onChange={e=>setFSite(e.target.value)}
             style={{...selStyle2,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}>
-            <option value="All">All Sites</option>{SITES.map(s=><option key={s}>{s}</option>)}
+            <option value="All">All Sites</option>{SITES_LIVE.map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={fParty} onChange={e=>setFParty(e.target.value)}
             style={{...selStyle2,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}>
-            <option value="All">All Parties</option>{SUPPLIERS.map(s=><option key={s}>{s}</option>)}
+            <option value="All">All Vendors</option>{VENDORS_LIVE.map(s=><option key={s}>{s}</option>)}
           </select>
           <select value={fHead} onChange={e=>setFHead(e.target.value)}
             style={{...selStyle2,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}>
-            <option value="All">All Heads</option>{MAT_HEADS.map(h=><option key={h}>{h}</option>)}
+            <option value="All">All Categories</option>{CATS_LIVE.map(h=><option key={h}>{h}</option>)}
           </select>
-          <select value={fMOP} onChange={e=>setFMOP(e.target.value)}
+          {/* MOP dropdown removed — GRNs don't have a payment method
+              at GRN time; that lives on the eventual bill payment txn. */}
+          <select value="hidden" onChange={()=>{}}
+            style={{...selStyle2,display:"none"}}>
+            <option value="hidden">hidden</option>
             style={{...selStyle2,borderColor:fMOP!=="All"?T.grn:T.b1,background:fMOP!=="All"?T.grnL:T.surface,color:fMOP!=="All"?T.grn:T.t2}}>
-            <option value="All">All MOP</option>{MOPS.map(m=><option key={m}>{m}</option>)}
+            <option value="hidden">hidden</option>
           </select>
-          {["All","Paid","Pending"].map(s=>(
+          {["All","Billed","Unbilled"].map(s=>(
             <button key={s} onClick={()=>setFStatus(s)}
-              style={{padding:"4px 11px",borderRadius:20,border:`1.5px solid ${fStatus===s?(s==="Paid"?T.grn:s==="Pending"?T.amb:T.blu):T.b1}`,
-                background:fStatus===s?(s==="Paid"?T.grnL:s==="Pending"?T.ambL:T.bluL):"none",
-                color:fStatus===s?(s==="Paid"?T.grn:s==="Pending"?T.amb:T.blu):T.t3,
+              style={{padding:"4px 11px",borderRadius:20,border:`1.5px solid ${fStatus===s?(s==="Billed"?T.grn:s==="Unbilled"?T.amb:T.blu):T.b1}`,
+                background:fStatus===s?(s==="Billed"?T.grnL:s==="Unbilled"?T.ambL:T.bluL):"none",
+                color:fStatus===s?(s==="Billed"?T.grn:s==="Unbilled"?T.amb:T.blu):T.t3,
                 fontSize:11.5,fontWeight:fStatus===s?700:400,cursor:"pointer"}}>
               {s==="All"?"All Status":s}
             </button>
           ))}
-          {(fSite!=="All"||fParty!=="All"||fHead!=="All"||fMOP!=="All"||fStatus!=="All"||search)&&(
-            <button onClick={()=>{setFSite("All");setFParty("All");setFHead("All");setFMOP("All");setFStatus("All");setSearch("");}}
+          {(fSite!=="All"||fParty!=="All"||fHead!=="All"||fStatus!=="All"||search)&&(
+            <button onClick={()=>{setFSite("All");setFParty("All");setFHead("All");setFStatus("All");setSearch("");}}
               style={{padding:"4px 10px",borderRadius:20,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>
               Clear All ✕
             </button>
@@ -718,163 +773,77 @@ function ChallanModule(){
         </div>
       </div>
 
-      {showAdd&&(
-        <div style={{background:T.surface,borderRadius:8,border:`1.5px solid ${T.bluM}`,padding:"14px 16px",marginBottom:12}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>New Material Entry</div>
-          {/* Row 1: dates, name, head, party, site */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr 1fr",gap:8,marginBottom:9}}>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Bill Date *</label>
-              <input ref={matBillRef} type="date" value={form.billDate} onChange={upd("billDate")}
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();matDelivRef.current?.focus();}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-            </div>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Delivery Date</label>
-              <input ref={matDelivRef} type="date" value={form.delivDate} onChange={upd("delivDate")}
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();matNameRef.current?.focus();}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-            </div>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Material Name *</label>
-              <input ref={matNameRef} value={form.materialName} onChange={upd("materialName")} placeholder="e.g. OPC Cement 53 Grade"
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();matQtyRef.current?.focus();}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-            </div>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Head *</label>
-              <SearchSelect options={MAT_HEADS} value={form.matHead} onChange={v=>upd("matHead")({target:{value:v}})}
-                style={{height:30}} onTabNext={()=>matQtyRef.current?.focus()}/>
-            </div>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Party / Supplier *</label>
-              <SearchSelect options={SUPPLIERS} value={form.party} onChange={v=>upd("party")({target:{value:v}})}
-                accent={T.pur} style={{height:30}} onTabNext={()=>matQtyRef.current?.focus()}/>
-            </div>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Site *</label>
-              <SearchSelect options={SITES} value={form.site} onChange={v=>upd("site")({target:{value:v}})}
-                style={{height:30}} onTabNext={()=>matQtyRef.current?.focus()}/>
-            </div>
-          </div>
-          {/* Row 2: qty, unit, price, total, status */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr 1fr",gap:8,marginBottom:9}}>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Qty *</label>
-              <input ref={matQtyRef} type="number" value={form.qty} onChange={upd("qty")} placeholder="e.g. 50"
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();matPriceRef.current?.focus();}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-            </div>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Unit</label>
-              <SearchSelect options={MAT_UNITS} value={form.unit} onChange={v=>upd("unit")({target:{value:v}})}
-                style={{height:30}} onTabNext={()=>matPriceRef.current?.focus()}/>
-            </div>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Price ₹ *</label>
-              <input ref={matPriceRef} type="number" value={form.price} onChange={upd("price")} placeholder="per unit"
-                onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();matDescRef.current?.focus();}}}
-                style={{width:"100%",height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-            </div>
-            <div style={{display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",marginBottom:3}}>Total ₹</label>
-              <div style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${T.grnM}`,background:T.grnL,display:"flex",alignItems:"center",fontSize:13,fontWeight:800,color:T.grn}}>
-                {form.qty&&form.price?fmtRs(Number(form.qty)*Number(form.price)):"Auto"}
-              </div>
-            </div>
-            <div>
-              <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Status</label>
-              <SearchSelect options={["Pending","Paid"]} value={form.status} onChange={v=>upd("status")({target:{value:v}})}
-                style={{height:30}} onTabNext={()=>matDescRef.current?.focus()}/>
-            </div>
-          </div>
-          <div style={{marginBottom:10}}>
-            <label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".3px",display:"block",marginBottom:3}}>Description / Remark</label>
-            <input ref={matDescRef} value={form.desc} onChange={upd("desc")} placeholder="Additional notes about this material purchase..."
-              onKeyDown={e=>{if(e.key==="Tab"){e.preventDefault();matSaveRef.current?.focus();}if(e.key==="Enter"){e.preventDefault();saveEntry();}}}
-              style={{width:"100%",height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-              onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-          </div>
-          <div style={{display:"flex",gap:7}}>
-            <button onClick={()=>{setShowAdd(false);setForm(blank);}} style={{padding:"7px 14px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-            <button ref={matSaveRef} onClick={saveEntry}
-              onKeyDown={e=>{if(e.key==="Enter")saveEntry();}}
-              style={{padding:"7px 18px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>Save Entry</button>
-          </div>
+      {/* Add-entry form removed — Reports is view-only. GRN/Challan
+          entries come from the Procurement / Warehouse workflows. */}
+
+      {loading && (
+        <div style={{padding:"30px",textAlign:"center",fontSize:12,color:T.t4,background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:10}}>
+          Loading material register...
         </div>
       )}
 
-      {/* Table */}
+      {/* Table — GRN material register, line-item level */}
       <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-        {/* Table header */}
-        <div style={{display:"grid",gridTemplateColumns:"85px 85px 1fr 90px 1fr 120px 90px 90px 100px 80px",
+        {/* Columns: Date | Vendor | Site | Challan/GRN | Material | Category | Qty/Unit | Rate | Total | Status */}
+        <div style={{display:"grid",gridTemplateColumns:"80px 120px 90px 110px 1fr 100px 90px 95px 95px 80px",
           padding:"7px 14px",background:T.sb,gap:8}}>
-          {["Bill Date","Deliv. Date","Material Name","Head","Description","Party","Site",
-            "Qty / Unit","Total ₹","Status"].map((h,i)=>(
+          {["Date","Vendor","Site","Challan / GRN","Material","Category",
+            "Qty / Unit","Rate ₹","Total ₹","Status"].map((h,i)=>(
             <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
           ))}
         </div>
 
         <div style={{maxHeight:460,overflowY:"auto"}}>
-          {filtered.map((m,i)=>{
-            const hc=headColors[m.matHead]||{c:T.slt,bg:T.sltL};
-            const sc=m.status==="Paid"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
+          {filtered.map((r,i)=>{
+            const sc=r.status==="Billed"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
             return(
-              <div key={m.id}
-                style={{display:"grid",gridTemplateColumns:"85px 85px 1fr 90px 1fr 120px 90px 90px 100px 80px",
+              <div key={r.id}
+                style={{display:"grid",gridTemplateColumns:"80px 120px 90px 110px 1fr 100px 90px 95px 95px 80px",
                   padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:8,
                   background:i%2===0?"transparent":T.surfaceB,
-                  borderLeft:`3px solid ${hc.c}44`,transition:"background .1s",cursor:"default"}}
+                  transition:"background .1s",cursor:"default"}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=T.sltL}
                 onMouseLeave={ev=>ev.currentTarget.style.background=i%2===0?"transparent":T.surfaceB}>
+                <div style={{fontSize:11,fontWeight:600,color:T.t2}}>{fmtShort(r.date)}</div>
+                <div style={{fontSize:11.5,fontWeight:600,color:T.pur,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.vendor}>{r.vendor}</div>
+                <div style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.site}>{r.site}</div>
+                <div style={{fontSize:10.5,color:T.t3,overflow:"hidden"}}>
+                  <div style={{fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.challan||"—"}</div>
+                  {r.grnNumber && <div style={{fontSize:9,color:T.t4}}>{r.grnNumber}</div>}
+                </div>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.material}>{r.material}</div>
+                <Pill label={r.category} c={T.blu} bg={T.bluL}/>
                 <div>
-                  <div style={{fontSize:11,fontWeight:600,color:T.t2}}>{fmtShort(m.billDate)}</div>
+                  <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{fmtN(r.qty)}</div>
+                  <div style={{fontSize:9.5,color:T.t4}}>{r.unit||"—"}</div>
                 </div>
-                <div>
-                  <div style={{fontSize:11,color:T.t3}}>{fmtShort(m.delivDate)}</div>
-                  {m.billDate!==m.delivDate&&<div style={{fontSize:9,color:T.amb}}>+{Math.round((new Date(m.delivDate)-new Date(m.billDate))/(86400000))}d</div>}
+                <div style={{fontSize:11.5,fontWeight:600,color:T.t2,textAlign:"right"}}>
+                  {r.rate ? fmtRs(r.rate) : <span style={{color:T.t4}}>—</span>}
                 </div>
-                <div style={{fontSize:12.5,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.materialName}</div>
-                <Pill label={m.matHead} c={hc.c} bg={hc.bg}/>
-                <div style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.desc||"—"}</div>
-                <div style={{fontSize:11.5,fontWeight:600,color:T.pur,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.party}</div>
-                <div style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.site.split(" ")[0]}</div>
-                <div>
-                  <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{fmtN(m.qty)}</div>
-                  <div style={{fontSize:9.5,color:T.t4}}>{m.unit} · ₹{fmtN(m.price)}</div>
+                <div style={{fontSize:13,fontWeight:800,color:r.total?T.grn:T.t4,textAlign:"right"}}>
+                  {r.total ? fmtRs(r.total) : "—"}
                 </div>
-                <div style={{fontSize:13,fontWeight:800,color:T.grn}}>{fmtRs(m.total)}</div>
-                <div style={{display:"flex",flexDirection:"column",gap:4}}>
-                  <Pill label={m.status} c={sc.c} bg={sc.bg}/>
-                  {m.status==="Pending"&&(
-                    <button onClick={()=>markPaid(m.id)}
-                      style={{fontSize:9.5,padding:"2px 7px",borderRadius:4,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,cursor:"pointer",fontWeight:600}}>
-                      Mark Paid
-                    </button>
-                  )}
-                </div>
+                <Pill label={r.status} c={sc.c} bg={sc.bg}/>
               </div>
             );
           })}
-          {filtered.length===0&&(
+          {!loading && filtered.length===0&&(
             <div style={{textAlign:"center",padding:"40px",color:T.t4}}>
               <div style={{fontSize:32,marginBottom:8}}>🔍</div>
               <div style={{fontSize:14,fontWeight:600,color:T.t3}}>No entries match the filters</div>
+              <div style={{fontSize:11,color:T.t4,marginTop:4}}>
+                {rows.length === 0 ? "No GRN data yet — record receipts via Warehouse / Procurement first" : "Adjust date range or clear filters"}
+              </div>
             </div>
           )}
         </div>
 
         {/* Footer totals */}
-        <div style={{display:"grid",gridTemplateColumns:"85px 85px 1fr 90px 1fr 120px 90px 90px 100px 80px",
+        <div style={{display:"grid",gridTemplateColumns:"80px 120px 90px 110px 1fr 100px 90px 95px 95px 80px",
           padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,gap:8}}>
-          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/8"}}>TOTAL &nbsp;({filtered.length} entries)</span>
-          <span style={{fontSize:13,fontWeight:800,color:T.grn}}>{fmtRs(totalAmt)}</span>
-          <span style={{fontSize:11,color:T.t3}}>Paid: {fmtRs(totalPaid)}</span>
+          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/9"}}>TOTAL &nbsp;({filtered.length} entries)</span>
+          <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtRs(totalAmt)}</span>
+          <span style={{fontSize:10.5,color:T.t3}}>Billed: {fmtRs(totalPaid)}</span>
         </div>
       </div>
     </div>
