@@ -3476,7 +3476,7 @@ function FinanceModule(){
                 <span style={{fontSize:11,color:T.t4}}>to</span>
                 <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
               </div>
-              <button onClick={()=>openTxn("Payment In")} style={{height:31,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,cursor:"pointer",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
+              <button onClick={()=>openTxn("Payment Received")} style={{height:31,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,cursor:"pointer",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
                 <IcRecv size={13} color={T.grn}/> Receipt
               </button>
               <button onClick={()=>openTxn("Payment Made")} style={{height:31,padding:"0 12px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,cursor:"pointer",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
