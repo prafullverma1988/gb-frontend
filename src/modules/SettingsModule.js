@@ -1360,11 +1360,18 @@ function FinanceSettings() {
   const [dupDays, setDupDays] = useState(4);
   const [dupSaving, setDupSaving] = useState(false);
   const [dupTick, setDupTick] = useState(false);
+  // Negative-balance policy — OFF (default) hard-blocks any payment that
+  // would push the source account below 0. ON lets it through with a
+  // soft confirm on the frontend. Wallets are exempt (own overdraft).
+  const [negEnabled, setNegEnabled] = useState(false);
+  const [negSaving, setNegSaving] = useState(false);
+  const [negTick, setNegTick] = useState(false);
   useEffect(() => {
     api.get("/settings/company").then(r => {
       if (r?.success && r.data) {
         setDupEnabled(r.data.dup_payment_check_enabled !== 0);
         setDupDays(parseInt(r.data.dup_payment_window_days) || 4);
+        setNegEnabled(r.data.allow_negative_balance === 1);
       }
     }).catch(() => {});
   }, []);
@@ -1379,6 +1386,15 @@ function FinanceSettings() {
       setTimeout(() => setDupTick(false), 1800);
     } catch (e) { window.alert(e?.message || "Save failed"); }
     setDupSaving(false);
+  };
+  const saveNeg = async () => {
+    setNegSaving(true);
+    try {
+      await api.put("/settings/company", { allow_negative_balance: negEnabled });
+      setNegTick(true);
+      setTimeout(() => setNegTick(false), 1800);
+    } catch (e) { window.alert(e?.message || "Save failed"); }
+    setNegSaving(false);
   };
 
   return (
@@ -1416,6 +1432,21 @@ function FinanceSettings() {
         {f.autoInvoiceNum && <div style={{ marginLeft: 50, marginBottom: 12 }}><FormField label="Invoice Prefix" value={f.invoicePrefix} onChange={v => upd("invoicePrefix", v)} half /><div style={{ fontSize: 11, color: T.textLight, marginTop: 4 }}>Preview: {f.invoicePrefix}-2026-0001</div></div>}
         <ToggleRow icon={<IcDollar size={17} color={T.blue} />} label="Retention Money Tracking" desc="Auto-hold retention from running bills" value={f.retentionEnabled} onChange={v => upd("retentionEnabled", v)} />
         {f.retentionEnabled && <div style={{ marginLeft: 50, marginBottom: 8 }}><FormSelect label="Retention %" value={f.retentionPct} onChange={v => upd("retentionPct", v)} options={[{value:"3",label:"3%"},{value:"5",label:"5%"},{value:"10",label:"10%"}]} half /></div>}
+      </SectionCard>
+      <SectionCard title="Negative Balance Policy"
+        desc="Bank / cash account negative jaane par kya ho. Default OFF — hard block (recommended). ON karne par soft warning aati hai aur admin override karke aage badh sakta hai. Wallets ka apna alag overdraft rule hai — yeh setting unko affect nahi karti."
+        action={
+          <button onClick={saveNeg} disabled={negSaving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: negTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: negSaving ? "wait" : "pointer", opacity: negSaving ? 0.7 : 1 }}>
+            {negTick ? "✓ Saved" : negSaving ? "Saving..." : "Save"}
+          </button>
+        }>
+        <ToggleRow icon={<IcShield size={17} color={T.blue} />}
+          label={"Allow negative balance on accounts" + (negEnabled ? " — ON (soft warning)" : " — OFF (hard block)")}
+          desc={negEnabled
+            ? "Account ka balance negative ja sakta hai. Frontend confirm prompt dikhayega, admin OK karke aage badh sakta hai."
+            : "Insufficient balance par payment block ho jayega. Real bank pe paisa nahi hai to entry record nahi hogi."}
+          value={negEnabled} onChange={setNegEnabled} />
       </SectionCard>
       <SectionCard title="Budget & Controls" desc="Financial safeguards">
         <ToggleRow icon={<IcBell size={17} color={T.blue} />} label="Budget Overrun Warning" desc="Alert when spending approaches budget" value={f.budgetWarning} onChange={v => upd("budgetWarning", v)} />

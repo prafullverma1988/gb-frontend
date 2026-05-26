@@ -993,6 +993,22 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         });
       }
 
+      // Insufficient balance — backend's negative-balance guard fired.
+      // When company's allow_negative_balance is OFF this is a HARD block
+      // (no override). When ON, the backend wouldn't return this code at
+      // all. So if we see this, the answer is "fix Settings or fix data" —
+      // we show a clear actionable message and stop. No retry-with-force
+      // because the policy at the company level is no-negative.
+      if(res&&res.success===false&&res.code==="INSUFFICIENT_BALANCE"){
+        savingRef.current=false; setSavingTxn(false);
+        setSaveErr(
+          `⚠ Insufficient balance\n\n${res.message}\n\n`+
+          `Option 1: Settings → Finance Settings → "Allow negative balance" ON karein.\n`+
+          `Option 2: Pehle is account me Bank Transfer karke balance laaye, phir payment karein.`
+        );
+        return;
+      }
+
       // Check server response explicitly
       if(res&&res.success===false){
         // Map specific backend error codes to friendlier messages (P0 fix)
