@@ -3467,9 +3467,14 @@ function FinanceModule(){
                 <IcSend size={13} color={T.red}/> Payment
               </button>
               <button onClick={()=>{
-                const rows=[["#","Date","Voucher","Narration","Party","Receipt(Dr)","Payment(Cr)","Balance"]];
+                const rows=[["#","Date","Voucher","Narration","Party","Receipt(Cr)","Payment(Dr)","Balance"]];
                 const sorted=[...cbTxns].sort((a,b)=>a.ds-b.ds);
-                let rb=totalBal;
+                // Same opening-balance trick as the table: start from
+                // closing - seen_CR + seen_DR so the running balance
+                // matches what the table shows on screen.
+                const _cr = sorted.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
+                const _dr = sorted.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+                let rb=totalBal-_cr+_dr;
                 sorted.forEach((t,i)=>{rb+=t.dr?-t.amount:t.amount;rows.push([i+1,t.date,`CB-${String(t.id).padStart(3,"0")}`,t.sub||t.type,t.party,!t.dr?t.amount:"",t.dr?t.amount:"",rb]);});
                 downloadCSV("CashBook.csv",rows);
               }} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
@@ -3501,7 +3506,23 @@ function FinanceModule(){
                 };
                 // Cash book table uses the same whitelist as the tiles
                 // (isCashEvent above) — keeps tiles + table in sync.
-                let runBal=totalBal;
+                //
+                // ── Running balance arithmetic ──────────────────────
+                // totalBal = current (closing) balance of all accounts.
+                // To show "balance after each txn" with txns in date-asc
+                // order, we need to start from the OPENING balance, not
+                // closing. Opening = closing - credits_seen + debits_seen
+                // for the visible cash events. Each txn then adds CR or
+                // subtracts DR, and the running balance after the LAST
+                // txn equals totalBal (closing) by construction.
+                //
+                // Why this matters: earlier the code started from
+                // totalBal and walked forward — the first row showed a
+                // balance EQUAL TO closing + (first txn's effect), so
+                // every row looked shifted up by (closing − opening).
+                // Users saw CR-debits / DR-credits in the running
+                // column, which is the visual inverse of what they
+                // expect.
                 const cbAll=[...activeTxns].filter(t=>{
                   if (!isCashEvent(t)) return false;
                   if(chipCB==="Receipts") return !t.dr;
@@ -3517,6 +3538,19 @@ function FinanceModule(){
                   // default: date asc for running balance
                   return (a.ds-b.ds)*(sortCB.col==="date0"?mul:1);
                 });
+                // Compute opening from closing by reversing every visible
+                // txn (BT is direction-neutral when no destination → skip).
+                const _seenCR = cbAll.filter(t => {
+                  const isBT = t.txnType==="bank_transfer"||t.type==="Bank Transfer";
+                  if (isBT) return false;
+                  return !t.dr;
+                }).reduce((s,t)=>s+t.amount,0);
+                const _seenDR = cbAll.filter(t => {
+                  const isBT = t.txnType==="bank_transfer"||t.type==="Bank Transfer";
+                  if (isBT && !t.to_account_name) return false;
+                  return t.dr || isBT; // BT with destination = source debited
+                }).reduce((s,t)=>s+t.amount,0);
+                let runBal = totalBal - _seenCR + _seenDR;
                 return cbAll.map((txn,i)=>{
                   const meta=CB_TYPE_META[txn.type]||{label:txn.type||"Transaction",color:T.t3,bg:T.b1,dir:txn.dr?"out":"in"};
                   const isBT=txn.txnType==="bank_transfer"||txn.type==="Bank Transfer";
