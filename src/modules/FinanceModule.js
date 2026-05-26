@@ -3580,7 +3580,10 @@ function FinanceModule(){
                       <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{noteText||"—"}</span>
                       <span style={{fontSize:12.5,fontWeight:isCR?700:400,color:isCR?T.grn:T.t4,textAlign:"right"}}>{isCR?`₹${fmtN(txn.amount)}`:"—"}</span>
                       <span style={{fontSize:12.5,fontWeight:!isCR?700:400,color:!isCR?T.red:T.t4,textAlign:"right"}}>{!isCR?`₹${fmtN(txn.amount)}`:"—"}</span>
-                      <span style={{fontSize:12,fontWeight:700,color:runBal>=0?T.t1:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(runBal))}</span>
+                      {/* Sign-aware: when balance is negative, prepend "-"
+                          so "₹79,010" doesn't look identical to a positive
+                          ₹79,010. Red tint still indicates negative. */}
+                      <span style={{fontSize:12,fontWeight:700,color:runBal>=0?T.t1:T.red,textAlign:"right"}}>{runBal<0?"-":""}₹{fmtN(Math.abs(runBal))}</span>
                       <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.account||"—"}</span>
                       <span style={{fontSize:10.5,fontWeight:600,color:T.t2,background:T.surfaceB,padding:"1px 5px",borderRadius:5,whiteSpace:"nowrap",textTransform:"uppercase"}}>{(txn.mop||"").replace("_"," ")||"—"}</span>
                       <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.entryBy||"—"}</span>
