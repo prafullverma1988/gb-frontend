@@ -555,14 +555,24 @@ function ChallanModule(){
       if (!grnRes?.success || !Array.isArray(grnRes.data)) {
         setRows([]); setLoading(false); return;
       }
-      // Flatten: each GRN × each item → one report row.
-      // Rate/total semantics:
-      //   - Billed GRN  → use library last_rate / base_rate as approximation
-      //                   (TODO: replace with actual transaction_items rate).
-      //                   Total = rate × qty.
-      //   - Unbilled GRN → rate is NOT confirmed yet (bill not posted).
-      //                    Show 0 in data (renders as "—" in UI).
-      // Only qty is treated as factual on every row.
+      // ── Flatten: each GRN × each item → one report row ──────────
+      //
+      // Each row is also tagged with a `flowType` so the report can
+      // aggregate three different ways without double-counting:
+      //
+      //   "vendor_to_project"  (a) — direct delivery, full ₹
+      //   "vendor_to_warehouse"(b) — stocking, full ₹ (vendor billed)
+      //   "warehouse_to_project"(c)— issue from stock, qty-only (₹
+      //                              already counted in b)
+      //   "warehouse_to_warehouse"(d) — transfer, internal, no ₹
+      //
+      // For internal flows (c, d) we DON'T show rate/total even if
+      // billed_at is set — those rows are pre-billed shadow GRNs whose
+      // cost was captured at the vendor-side (b) row.
+      //
+      // For Procurement-source rows we use the project_name to decide
+      // a vs b: if the destination project is "Warehouse" (any name
+      // containing warehouse) → b, else → a.
       const flat = [];
       for (const g of grnRes.data) {
         const dateRaw = g.received_date || g.created_at;
@@ -570,11 +580,21 @@ function ChallanModule(){
         const items = Array.isArray(g.items) ? g.items : [];
         if (items.length === 0) continue;
         const isBilled = !!g.billed_at;
+        const src = g.source || "Procurement";
+        const projLower = (g.project_name || "").toLowerCase();
+        const isWarehouseDest = projLower === "warehouse" || projLower.includes("warehouse");
+        let flowType;
+        if (src === "WarehouseIssue") flowType = "warehouse_to_project";
+        else if (src === "WarehouseTransfer") flowType = "warehouse_to_warehouse";
+        else if (isWarehouseDest) flowType = "vendor_to_warehouse";
+        else flowType = "vendor_to_project";
+        // Internal flows (c, d) → no rate/total regardless of billed_at
+        const isInternalFlow = flowType === "warehouse_to_project" || flowType === "warehouse_to_warehouse";
+        const showRate = isBilled && !isInternalFlow;
         for (const it of items) {
           const matName = it.description || "";
           const libHit = lib[matName.trim().toLowerCase()] || {};
-          // Rate only shown for billed GRNs; unbilled = 0 (renders "—")
-          const rate = isBilled ? (libHit.last_rate || libHit.base_rate || 0) : 0;
+          const rate = showRate ? (libHit.last_rate || libHit.base_rate || 0) : 0;
           const qty = Number(it.received_qty) || 0;
           flat.push({
             id: `${g.id}-${it.id}`,
@@ -589,10 +609,11 @@ function ChallanModule(){
             qty,
             unit: it.unit || libHit.unit || "",
             rate,
-            total: rate * qty,            // 0 for unbilled
+            total: rate * qty,
             status: isBilled ? "Billed" : "Unbilled",
             grnType: g.grn_type || "—",
-            source: g.source || "Procurement",
+            source: src,
+            flowType,
           });
         }
       }
@@ -601,6 +622,11 @@ function ChallanModule(){
   }, []);
 
   // ── Filter state ──
+  // view: which aggregation rule to apply
+  //   vendor   — Vendor Purchases (a+b): vendor billed, full ₹
+  //   project  — Project Receipts (a+c): qty into projects, c = qty-only
+  //   warehouse— Warehouse Flow (b+c+d): everything touching warehouse
+  const [view,setView]=useState("vendor");
   const [fSite,setFSite]=useState("All");
   const [fParty,setFParty]=useState("All");
   const [fHead,setFHead]=useState("All");
@@ -609,27 +635,46 @@ function ChallanModule(){
   const [fTo,setFTo]=useState(TODAY);
   const [search,setSearch]=useState("");
 
+  // Map view → set of flowTypes that view should include
+  const VIEW_FLOWS = {
+    vendor:   new Set(["vendor_to_project", "vendor_to_warehouse"]),
+    project:  new Set(["vendor_to_project", "warehouse_to_project"]),
+    warehouse:new Set(["vendor_to_warehouse", "warehouse_to_project", "warehouse_to_warehouse"]),
+  };
+  const FLOW_LABEL = {
+    vendor_to_project:    { short: "Direct",      bg: T.grnL, c: T.grn },
+    vendor_to_warehouse:  { short: "WH In",       bg: T.bluL, c: T.blu },
+    warehouse_to_project: { short: "WH→Project",  bg: T.ambL, c: T.amb },
+    warehouse_to_warehouse:{ short: "WH→WH",      bg: T.sltL, c: T.slt },
+  };
+
   // Derive filter options from live data so dropdowns only show what
   // actually exists.
   const SITES_LIVE   = useMemo(() => Array.from(new Set(rows.map(r => r.site).filter(s => s && s !== "—"))).sort(), [rows]);
   const VENDORS_LIVE = useMemo(() => Array.from(new Set(rows.map(r => r.vendor).filter(v => v && v !== "—"))).sort(), [rows]);
   const CATS_LIVE    = useMemo(() => Array.from(new Set(rows.map(r => r.category).filter(c => c && c !== "—"))).sort(), [rows]);
 
-  const filtered=useMemo(()=>rows.filter(r=>{
-    if(fSite!=="All"&&r.site!==fSite) return false;
-    if(fParty!=="All"&&r.vendor!==fParty) return false;
-    if(fHead!=="All"&&r.category!==fHead) return false;
-    if(fStatus!=="All"&&r.status!==fStatus) return false;
-    if(r.date<fFrom||r.date>fTo) return false;
-    if(search){
-      const q=search.toLowerCase();
-      if(!r.material.toLowerCase().includes(q) &&
-         !r.vendor.toLowerCase().includes(q) &&
-         !(r.challan||"").toLowerCase().includes(q) &&
-         !(r.site||"").toLowerCase().includes(q)) return false;
-    }
-    return true;
-  }).sort((a,b)=>a.date.localeCompare(b.date)),[rows,fSite,fParty,fHead,fStatus,fFrom,fTo,search]);
+  const filtered=useMemo(()=>{
+    const allowedFlows = VIEW_FLOWS[view] || VIEW_FLOWS.vendor;
+    return rows.filter(r=>{
+      // View-level flow filter (the big aggregation rule)
+      if (!allowedFlows.has(r.flowType)) return false;
+      if(fSite!=="All"&&r.site!==fSite) return false;
+      if(fParty!=="All"&&r.vendor!==fParty) return false;
+      if(fHead!=="All"&&r.category!==fHead) return false;
+      if(fStatus!=="All"&&r.status!==fStatus) return false;
+      if(r.date<fFrom||r.date>fTo) return false;
+      if(search){
+        const q=search.toLowerCase();
+        if(!r.material.toLowerCase().includes(q) &&
+           !r.vendor.toLowerCase().includes(q) &&
+           !(r.challan||"").toLowerCase().includes(q) &&
+           !(r.site||"").toLowerCase().includes(q)) return false;
+      }
+      return true;
+    }).sort((a,b)=>a.date.localeCompare(b.date));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[rows,view,fSite,fParty,fHead,fStatus,fFrom,fTo,search]);
 
   const totalAmt=filtered.reduce((s,m)=>s+(m.total||0),0);
   const totalPaid=filtered.filter(m=>m.status==="Billed").reduce((s,m)=>s+(m.total||0),0);
@@ -637,24 +682,26 @@ function ChallanModule(){
   const avgUnit=filtered.length?totalAmt/filtered.length:0;
 
   const dlExcel=()=>{
+    const viewLabel = view==="vendor"?"Vendor Purchases (a+b)":view==="project"?"Project Receipts (a+c)":"Warehouse Flow (b+c+d)";
     const xRows=[
       [COMPANY_NAME+" — Material Challan / Purchase Register"],
-      [`Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],[],
-      ["#","Date","Vendor","Site","Challan / GRN","Material","Category",
+      [`View: ${viewLabel}  |  Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],[],
+      ["#","Date","Vendor","Site","Flow","Challan / GRN","Material","Category",
        "Qty","Unit","Rate ₹","Total ₹","Status"],
       ...filtered.map((r,i)=>[
         i+1, r.date, r.vendor, r.site,
+        (FLOW_LABEL[r.flowType]||{short:"—"}).short,
         (r.challan||"—") + (r.grnNumber ? ` / ${r.grnNumber}` : ""),
         r.material, r.category,
         r.qty, r.unit,
-        r.rate || "—",      // unbilled → dash
-        r.total || "—",     // unbilled → dash
+        r.rate || "—",
+        r.total || "—",
         r.status,
       ]),
       [],
-      ["","","","","","","","","","TOTAL →", totalAmt, ""],
+      ["","","","","","","","","","","TOTAL →", totalAmt, ""],
     ];
-    downloadCSV(`Material_Register_${fFrom}_${fTo}.csv`,xRows);
+    downloadCSV(`Material_Register_${view}_${fFrom}_${fTo}.csv`,xRows);
   };
 
   const printAll=()=>{
@@ -725,8 +772,30 @@ function ChallanModule(){
         ))}
       </div>
 
-      {/* Filter toolbar */}
+      {/* View toggle — three semantically different aggregations.
+          Each view filters the underlying rows to avoid double-counting
+          when summing rates × qty across the warehouse boundary. */}
       <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"10px 12px",marginBottom:10}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+          <span style={{fontSize:10.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginRight:4}}>View</span>
+          {[
+            {k:"vendor",   l:"Vendor Purchases", d:"Vendor billed (a+b) · full ₹"},
+            {k:"project",  l:"Project Receipts", d:"What reached projects (a+c) · c = qty only"},
+            {k:"warehouse",l:"Warehouse Flow",   d:"In + Out + Transfers (b+c+d)"},
+          ].map(v => (
+            <button key={v.k} onClick={()=>setView(v.k)}
+              title={v.d}
+              style={{padding:"5px 12px",borderRadius:6,border:`1.5px solid ${view===v.k?T.blu:T.b1}`,background:view===v.k?T.bluL:T.surface,color:view===v.k?T.blu:T.t3,fontSize:12,fontWeight:view===v.k?700:500,cursor:"pointer",fontFamily:"inherit"}}>
+              {v.l}
+            </button>
+          ))}
+          <span style={{fontSize:10.5,color:T.t4,marginLeft:8,fontStyle:"italic"}}>
+            {view==="vendor"   && "Total = sum of vendor bills (no double-count for warehouse issues)"}
+            {view==="project"  && "Project consumption — warehouse issues show qty only (₹ already counted in vendor receipt)"}
+            {view==="warehouse"&& "Stock movements — receipts in, issues out, internal transfers"}
+          </span>
+        </div>
+
         {/* Row 1: date + search */}
         <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
           <span style={{fontSize:11,color:T.t4,fontWeight:600}}>Bill Date</span>
@@ -796,10 +865,10 @@ function ChallanModule(){
 
       {/* Table — GRN material register, line-item level */}
       <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-        {/* Columns: Date | Vendor | Site | Challan/GRN | Material | Category | Qty/Unit | Rate | Total | Status */}
-        <div style={{display:"grid",gridTemplateColumns:"80px 120px 90px 110px 1fr 100px 90px 95px 95px 80px",
-          padding:"7px 14px",background:T.sb,gap:8}}>
-          {["Date","Vendor","Site","Challan / GRN","Material","Category",
+        {/* Columns: Date | Vendor | Site | Flow | Challan/GRN | Material | Category | Qty/Unit | Rate | Total | Status */}
+        <div style={{display:"grid",gridTemplateColumns:"75px 115px 90px 95px 100px 1fr 90px 80px 85px 90px 75px",
+          padding:"7px 14px",background:T.sb,gap:7}}>
+          {["Date","Vendor","Site","Flow","Challan / GRN","Material","Category",
             "Qty / Unit","Rate ₹","Total ₹","Status"].map((h,i)=>(
             <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
           ))}
@@ -808,10 +877,11 @@ function ChallanModule(){
         <div style={{maxHeight:460,overflowY:"auto"}}>
           {filtered.map((r,i)=>{
             const sc=r.status==="Billed"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
+            const fl=FLOW_LABEL[r.flowType] || {short:"—",bg:T.b1,c:T.t3};
             return(
               <div key={r.id}
-                style={{display:"grid",gridTemplateColumns:"80px 120px 90px 110px 1fr 100px 90px 95px 95px 80px",
-                  padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:8,
+                style={{display:"grid",gridTemplateColumns:"75px 115px 90px 95px 100px 1fr 90px 80px 85px 90px 75px",
+                  padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",gap:7,
                   background:i%2===0?"transparent":T.surfaceB,
                   transition:"background .1s",cursor:"default"}}
                 onMouseEnter={ev=>ev.currentTarget.style.background=T.sltL}
@@ -819,6 +889,7 @@ function ChallanModule(){
                 <div style={{fontSize:11,fontWeight:600,color:T.t2}}>{fmtShort(r.date)}</div>
                 <div style={{fontSize:11.5,fontWeight:600,color:T.pur,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.vendor}>{r.vendor}</div>
                 <div style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={r.site}>{r.site}</div>
+                <Pill label={fl.short} c={fl.c} bg={fl.bg}/>
                 <div style={{fontSize:10.5,color:T.t3,overflow:"hidden"}}>
                   <div style={{fontWeight:600,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.challan||"—"}</div>
                   {r.grnNumber && <div style={{fontSize:9,color:T.t4}}>{r.grnNumber}</div>}
@@ -851,15 +922,15 @@ function ChallanModule(){
         </div>
 
         {/* Footer totals — TOTAL only counts billed lines (unbilled
-            rate is unknown until bill posts). Note appended so the
-            user knows why the number differs from row sums. */}
-        <div style={{display:"grid",gridTemplateColumns:"80px 120px 90px 110px 1fr 100px 90px 95px 95px 80px",
-          padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,gap:8}}>
-          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/9"}}>
-            TOTAL &nbsp;({filtered.length} entries · {filtered.filter(m=>m.status==="Unbilled").length} unbilled excluded)
+            rate is unknown until bill posts). For Project view, also
+            counts only direct (a) flows because (c) is qty-only. */}
+        <div style={{display:"grid",gridTemplateColumns:"75px 115px 90px 95px 100px 1fr 90px 80px 85px 90px 75px",
+          padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,gap:7}}>
+          <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/10"}}>
+            TOTAL &nbsp;({filtered.length} entries · {view==="vendor"?"Vendor Purchases":view==="project"?"Project Receipts":"Warehouse Flow"})
           </span>
           <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtRs(totalAmt)}</span>
-          <span style={{fontSize:10.5,color:T.t3}}>Billed only</span>
+          <span style={{fontSize:10.5,color:T.t3}}>{view==="project"?"Direct only":"Billed only"}</span>
         </div>
       </div>
     </div>
