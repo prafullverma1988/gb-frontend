@@ -639,10 +639,12 @@ function ChallanModule(){
 
   // ── Filter state ──
   // view: which aggregation rule to apply
+  //   all      — Everything (a+b+c+d); rate visible per-row; total
+  //              still uses vendor-billed sum to avoid double-counting
   //   vendor   — Vendor Purchases (a+b): vendor billed, full ₹
   //   project  — Project Receipts (a+c): qty into projects, c = qty-only
   //   warehouse— Warehouse Flow (b+c+d): everything touching warehouse
-  const [view,setView]=useState("vendor");
+  const [view,setView]=useState("all");
   const [fSite,setFSite]=useState("All");
   const [fParty,setFParty]=useState("All");
   const [fHead,setFHead]=useState("All");
@@ -652,12 +654,16 @@ function ChallanModule(){
   const [search,setSearch]=useState("");
 
   // Map view → set of flowTypes that view should include
+  const ALL_FLOWS = new Set(["vendor_to_project", "vendor_to_warehouse",
+    "warehouse_to_project", "warehouse_to_warehouse"]);
   const VIEW_FLOWS = {
+    all:      ALL_FLOWS,
     vendor:   new Set(["vendor_to_project", "vendor_to_warehouse"]),
     project:  new Set(["vendor_to_project", "warehouse_to_project"]),
     warehouse:new Set(["vendor_to_warehouse", "warehouse_to_project", "warehouse_to_warehouse"]),
   };
   // Per-view rate visibility rules.
+  // - All view shows ₹ on every row (raw register).
   // - Vendor view shows ₹ on vendor-billed rows (a, b)
   // - Project view shows ₹ on a (vendor direct) AND c (warehouse-issued,
   //   value = allocated library cost). This is what answers "kis project
@@ -665,6 +671,7 @@ function ChallanModule(){
   // - Warehouse view shows ₹ on b (in) and c (out, allocated). d (transfer)
   //   has no cost movement, just qty.
   const VIEW_RATE_FLOWS = {
+    all:      ALL_FLOWS,
     vendor:   new Set(["vendor_to_project", "vendor_to_warehouse"]),
     project:  new Set(["vendor_to_project", "warehouse_to_project"]),
     warehouse:new Set(["vendor_to_warehouse", "warehouse_to_project"]),
@@ -707,16 +714,23 @@ function ChallanModule(){
   // Totals respect view-aware rate visibility. A row whose rate is
   // hidden in the current view contributes 0 to the total (e.g., d
   // rows in Warehouse view).
-  const totalAmt=filtered.reduce((s,m)=>s+(showRateForRow(m)?(m.total||0):0),0);
-  const totalPaid=filtered.filter(m=>m.status==="Billed").reduce((s,m)=>s+(showRateForRow(m)?(m.total||0):0),0);
-  const totalPending=filtered.filter(m=>m.status==="Unbilled").reduce((s,m)=>s+(showRateForRow(m)?(m.total||0):0),0);
-  const rateRowCount=filtered.filter(showRateForRow).length;
+  // SPECIAL: "All" view shows every row's rate, but the TOTAL still
+  // only counts vendor-billed rows (a+b) — internal moves (c+d) are
+  // not new spend so adding them would double-count.
+  const isVendorBilled = (r) => r.flowType === "vendor_to_project" || r.flowType === "vendor_to_warehouse";
+  const totalSumFlows = view === "all"
+    ? (r) => isVendorBilled(r) && showRateForRow(r)
+    : (r) => showRateForRow(r);
+  const totalAmt=filtered.reduce((s,m)=>s+(totalSumFlows(m)?(m.total||0):0),0);
+  const totalPaid=filtered.filter(m=>m.status==="Billed").reduce((s,m)=>s+(totalSumFlows(m)?(m.total||0):0),0);
+  const totalPending=filtered.filter(m=>m.status==="Unbilled").reduce((s,m)=>s+(totalSumFlows(m)?(m.total||0):0),0);
+  const rateRowCount=filtered.filter(totalSumFlows).length;
   const avgUnit=rateRowCount?totalAmt/rateRowCount:0;
 
   const dlExcel=()=>{
-    const viewLabel = view==="vendor"?"Vendor Purchases (a+b)":view==="project"?"Project Receipts (a+c)":"Warehouse Flow (b+c+d)";
+    const viewLabel = view==="all"?"All Flows (a+b+c+d)":view==="vendor"?"Vendor Purchases (a+b)":view==="project"?"Project Receipts (a+c)":"Warehouse Flow (b+c+d)";
     const xRows=[
-      [COMPANY_NAME+" — Material Challan / Purchase Register"],
+      [COMPANY_NAME+" — Material Register"],
       [`View: ${viewLabel}  |  Period: ${fFrom} to ${fTo}  |  Site: ${fSite}  |  Generated: ${TODAY}`],[],
       ["#","Date","Vendor","Site","Flow","Challan / GRN","Material","Category",
        "Qty","Unit","Rate ₹","Total ₹","Status"],
@@ -754,9 +768,9 @@ function ChallanModule(){
         <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:${r.status==="Billed"?"#ECFDF5":"#FFFBEB"};color:${r.status==="Billed"?"#059669":"#D97706"}">${r.status}</span></td>
       </tr>`;
     }).join("");
-    printHTML("Material Purchase Register — "+COMPANY_NAME,`
+    printHTML("Material Register — "+COMPANY_NAME,`
       <div class="header">
-        <div><h1>${COMPANY_NAME} — Material Purchase Register</h1>
+        <div><h1>${COMPANY_NAME} — Material Register</h1>
           <div class="header-sub">Period: ${fFrom} to ${fTo} &nbsp;|&nbsp; Site: ${fSite} &nbsp;|&nbsp; ${filtered.length} entries</div></div>
         <div style="text-align:right;font-size:11px;color:rgba(255,255,255,0.7)">Total: ${fmtRs(totalAmt)}</div>
       </div>
@@ -814,8 +828,9 @@ function ChallanModule(){
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
           <span style={{fontSize:10.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",marginRight:4}}>View</span>
           {[
+            {k:"all",      l:"All",              d:"Raw register — every GRN row, every flow"},
             {k:"vendor",   l:"Vendor Purchases", d:"Vendor billed (a+b) · full ₹"},
-            {k:"project",  l:"Project Receipts", d:"What reached projects (a+c) · c = qty only"},
+            {k:"project",  l:"Project Receipts", d:"What reached projects (a+c) · c uses FIFO/manual rate"},
             {k:"warehouse",l:"Warehouse Flow",   d:"In + Out + Transfers (b+c+d)"},
           ].map(v => (
             <button key={v.k} onClick={()=>setView(v.k)}
@@ -825,8 +840,9 @@ function ChallanModule(){
             </button>
           ))}
           <span style={{fontSize:10.5,color:T.t4,marginLeft:8,fontStyle:"italic"}}>
+            {view==="all"      && "Every row visible — total uses vendor-billed only (a+b) to avoid double-counting"}
             {view==="vendor"   && "Total = sum of vendor bills (no double-count for warehouse issues)"}
-            {view==="project"  && "Project consumption — warehouse issues show qty only (₹ already counted in vendor receipt)"}
+            {view==="project"  && "Project consumption — warehouse issues show FIFO/manual rate"}
             {view==="warehouse"&& "Stock movements — receipts in, issues out, internal transfers"}
           </span>
         </div>
@@ -962,10 +978,10 @@ function ChallanModule(){
         <div style={{display:"grid",gridTemplateColumns:"75px 115px 90px 95px 100px 1fr 90px 80px 85px 90px 75px",
           padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,gap:7}}>
           <span style={{fontSize:12,fontWeight:700,color:T.t1,gridColumn:"1/10"}}>
-            TOTAL &nbsp;({filtered.length} entries · {view==="vendor"?"Vendor Purchases":view==="project"?"Project Receipts":"Warehouse Flow"})
+            TOTAL &nbsp;({filtered.length} entries · {view==="all"?"All Flows":view==="vendor"?"Vendor Purchases":view==="project"?"Project Receipts":"Warehouse Flow"})
           </span>
           <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>{fmtRs(totalAmt)}</span>
-          <span style={{fontSize:10.5,color:T.t3}}>{view==="project"?"Direct only":"Billed only"}</span>
+          <span style={{fontSize:10.5,color:T.t3}}>{view==="all"?"Vendor a+b only":view==="project"?"Direct only":"Billed only"}</span>
         </div>
       </div>
     </div>
@@ -1273,7 +1289,7 @@ export default function ReportsModule(){
 
   const TABS=[
     {id:"cash",    l:"Cash Book + Day Book",  desc:"Date-wise receipts & payments",icon:IcCalc},
-    {id:"challan", l:"Challan Register",       desc:"Site-wise contractor bills",   icon:IcSheet},
+    {id:"challan", l:"Material Register",      desc:"GRN-level material movement (vendor / project / warehouse)", icon:IcSheet},
     {id:"progress",l:"Progress + Financial",  desc:"Site progress & finance report",icon:IcBar},
   ];
 
