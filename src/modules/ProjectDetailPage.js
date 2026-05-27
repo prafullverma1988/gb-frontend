@@ -10,6 +10,7 @@ import MRDetailDrawer from "../components/MRDetailDrawer";
 import MaterialTransferTab from "../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../components/MaterialLedgerDrawer";
 import uploadManager from "../utils/uploadManager";
+import EstimateBuilderModal from "./EstimateBuilderModal";
 
 // ── TZ-safe local date helper ────────────────────────────────────────
 // `new Date().toISOString().split("T")[0]` shifts by 1 day in early IST hours
@@ -1545,6 +1546,31 @@ function TabEstimate({ project }) {
   const [subTab, setSubTab] = useState("boq");
   const [loading, setLoading] = useState(true);
   const [showNewEst, setShowNewEst] = useState(false);
+
+  // ── M5: Estimate Builder integration ──────────────────────────
+  // Three new paths next to "Quick Manual": Take from CRM Final Quote,
+  // Build from Library, Build from Scratch. All open EstimateBuilderModal
+  // with different initialMode. The dropdown chooser lives next to the
+  // "+ New" button on the Estimate list header.
+  const [estChooserOpen,   setEstChooserOpen]   = useState(false);
+  const [estBuilderOpen,   setEstBuilderOpen]   = useState(false);
+  const [estBuilderMode,   setEstBuilderMode]   = useState("library");   // "library" | "scratch" | "from_quote"
+  const [estBuilderQuoteId,setEstBuilderQuoteId]= useState(null);
+  // CRM-quote availability for "Take from CRM" path. Loaded once per
+  // project on mount; { mode: "specific"|"all"|"none", quotes: [...] }
+  const [crmQuotes, setCrmQuotes] = useState({ mode: "none", quotes: [] });
+  // Project object enriched for the builder. The Estimate tab fetches
+  // its own project info — reuse the local `project` state if it exists,
+  // else hydrate from the route.
+  useEffect(() => {
+    if (!projectId) return;
+    (async () => {
+      try {
+        const r = await api.get("/customer-estimates/from-crm/" + projectId);
+        if (r?.success) setCrmQuotes(r.data || { mode: "none", quotes: [] });
+      } catch (_) {}
+    })();
+  }, [projectId]);
   const [showNewInv, setShowNewInv] = useState(false);
   const [showSetMs, setShowSetMs] = useState(false);
   const [showPay, setShowPay] = useState(null);
@@ -1577,6 +1603,154 @@ function TabEstimate({ project }) {
     rateMs: [{ seq:0, name:"", cum_rate:"" }],
     pctMs:  [{ seq:0, name:"", pct:"" }],
   });
+
+  // ── BOQ Amendment workflow (mirrors Subcon WO amendments) ──
+  // Edits to a live estimate's BOQ go through an approval queue: user
+  // submits proposed_form + proposed_sections + reason → Pending row →
+  // admin approves on the Amendments tab → proposed values flush into
+  // customer_estimates / sections / items + status flips to Approved.
+  const [amendments, setAmendments] = useState([]);   // [{id, status, reason, proposed, ...}]
+  const [showEditBoq, setShowEditBoq] = useState(false);
+  const [amendForm, setAmendForm] = useState({
+    description: "", retention_pct: 0, tds_pct: 0, tax_pct: 0,
+    start_date: "", end_date: "", remark: "",
+    sections: [],
+    reason: "",
+  });
+  const [amendSaving, setAmendSaving] = useState(false);
+  const [expandedAmend, setExpandedAmend] = useState(null);
+
+  // ── Delete estimate (type-to-confirm danger flow) ──────────────
+  // Soft-deletes via the existing DELETE /customer-estimates/:id route.
+  // Two-step confirmation (open panel → type estimate_no → click confirm)
+  // so accidental clicks can't wipe a live estimate that has invoices.
+  const [delEstId,   setDelEstId]   = useState(null);
+  const [delEstText, setDelEstText] = useState("");
+  const [delEstBusy, setDelEstBusy] = useState(false);
+  const openDelEst = (e) => { setDelEstId(e.id); setDelEstText(""); };
+  const closeDelEst = () => { setDelEstId(null); setDelEstText(""); };
+  const confirmDelEst = async (e) => {
+    if (delEstText.trim() !== (e.estimate_no || "")) return;
+    setDelEstBusy(true);
+    const r = await api.del("/customer-estimates/" + e.id).catch(err => ({success:false, message: err.message}));
+    setDelEstBusy(false);
+    if (!r?.success) { alert(r?.message || "Delete failed"); return; }
+    closeDelEst();
+    if (selEst?.id === e.id) setSelEst(null);
+    await loadEstimates();
+  };
+
+  const loadAmendments = async (estId) => {
+    if (!estId) return;
+    const r = await api.get("/customer-estimates/amendments?estimate_id=" + estId).catch(()=>({success:false}));
+    if (r.success) setAmendments(r.data || []);
+  };
+
+  // Seed the edit form from the currently-selected estimate's detail
+  const openEditBoq = () => {
+    if (!selEst || !estDetail) return;
+    setAmendForm({
+      description:   selEst.description   || "",
+      retention_pct: selEst.retention_pct ?? 0,
+      tds_pct:       selEst.tds_pct       ?? 0,
+      tax_pct:       selEst.tax_pct       ?? 0,
+      start_date:    (selEst.start_date || "").slice(0, 10),
+      end_date:      (selEst.end_date   || "").slice(0, 10),
+      remark:        selEst.remark        || "",
+      sections: (estDetail.sections || []).map(s => ({
+        id: s.id,
+        title: s.title || "",
+        items: (s.items || []).map(it => ({
+          id: it.id,
+          description: it.description || "",
+          unit: it.unit || "",
+          qty:  parseFloat(it.qty)  || 0,
+          rate: parseFloat(it.rate) || 0,
+        })),
+      })),
+      reason: "",
+    });
+    setShowEditBoq(true);
+  };
+
+  const submitAmendment = async () => {
+    if (!selEst) return;
+    if (!amendForm.reason || !amendForm.reason.trim()) {
+      alert("Please provide a reason for the amendment.");
+      return;
+    }
+    const validSecs = (amendForm.sections || [])
+      .map(s => ({
+        id: s.id || null,
+        title: (s.title || "").trim() || "Section",
+        items: (s.items || [])
+          .filter(it => (it.description || "").trim() && parseFloat(it.qty) > 0 && parseFloat(it.rate) > 0)
+          .map(it => ({
+            id: it.id || null,
+            description: it.description.trim(),
+            unit: it.unit || "",
+            qty:  parseFloat(it.qty)  || 0,
+            rate: parseFloat(it.rate) || 0,
+          })),
+      }))
+      .filter(s => s.items.length > 0);
+    if (validSecs.length === 0) {
+      alert("Add at least one item with description, qty, and rate.");
+      return;
+    }
+    setAmendSaving(true);
+    const r = await api.post("/customer-estimates/" + selEst.id + "/amendment", {
+      proposed_form: {
+        description:   amendForm.description,
+        retention_pct: amendForm.retention_pct,
+        tds_pct:       amendForm.tds_pct,
+        tax_pct:       amendForm.tax_pct,
+        start_date:    amendForm.start_date || null,
+        end_date:      amendForm.end_date   || null,
+        remark:        amendForm.remark,
+      },
+      proposed_sections: validSecs,
+      reason: amendForm.reason.trim(),
+    }).catch(e => ({ success:false, message: e.message }));
+    setAmendSaving(false);
+    if (!r?.success) {
+      alert(r?.message || "Failed to submit amendment");
+      return;
+    }
+    // Register with central approvals system so the Pending Approvals
+    // drawer surfaces it to admin (same wire-up as Subcon WO Amendment).
+    const proposedTotal = validSecs.reduce((s, sec) =>
+      s + sec.items.reduce((ss, it) => ss + (parseFloat(it.qty)||0) * (parseFloat(it.rate)||0), 0), 0);
+    api.post("/approvals/submit", {
+      module:       "Customer Estimate Amendment",
+      ref_id:       r.data.id,
+      ref_no:       (selEst.estimate_no || "EST") + " · A#" + r.data.id,
+      title:        (selEst.customer_name || "Customer") + " — " + (selEst.estimate_no || "Estimate") + " Amendment",
+      amount:       proposedTotal,
+      project_id:   projectId,
+      project_name: project?.name || "",
+      notes:        amendForm.reason.trim(),
+    }).catch(e => console.error("Approval submit:", e));
+    if (typeof apiCache !== "undefined" && apiCache.refreshApprovals) apiCache.refreshApprovals();
+    setShowEditBoq(false);
+    await loadAmendments(selEst.id);
+    setSubTab("amend");
+  };
+
+  const decideAmendment = async (amendId, status) => {
+    if (status === "Rejected" && !window.confirm("Reject this amendment? The estimate will stay unchanged.")) return;
+    if (status === "Approved" && !window.confirm("Approve this amendment? Sections + items will be replaced and the total recomputed.")) return;
+    const r = await api.patch("/customer-estimates/amendments/" + amendId + "/action", { status })
+      .catch(e => ({ success:false, message: e.message }));
+    if (!r?.success) { alert(r?.message || "Failed"); return; }
+    await loadAmendments(selEst.id);
+    if (status === "Approved") {
+      // Refresh the parent estimate detail + summary (header + total updated)
+      await selectEst(selEst);
+    }
+  };
+
+  const pendingAmendCount = amendments.filter(a => a.status === "Pending").length;
 
   const fmtC = (v) => "₹"+(parseFloat(v)||0).toLocaleString("en-IN",{maximumFractionDigits:0});
   const inpS = {padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
@@ -1679,6 +1853,7 @@ function TabEstimate({ project }) {
     if (inv.success) setInvoices(inv.data||[]);
     if (pay.success) setPayments(pay.data||[]);
     if (ms.success)  setMilestones(ms.data||{rate_by_item:{},percent:[]});
+    loadAmendments(est.id);
   };
 
   const reloadSel = async () => { if (selEst) await selectEst(selEst); };
@@ -1842,25 +2017,170 @@ function TabEstimate({ project }) {
     <div style={{display:"flex",gap:0,height:"100%",minHeight:520}}>
       {/* LEFT — Estimate list */}
       <div style={{width:230,borderRight:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0,overflowY:"auto"}}>
-        <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div style={{padding:"10px 12px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",position:"relative"}}>
           <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Estimates ({estimates.length})</span>
-          <button onClick={()=>setShowNewEst(true)} style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer"}}>+ New</button>
+          <button onClick={()=>setEstChooserOpen(o=>!o)}
+            style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"4px 8px",fontSize:10,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+            + New ▾
+          </button>
+          {/* Chooser dropdown — 4 paths */}
+          {estChooserOpen && (() => {
+            const hasCity  = !!project?.city_id;
+            const hasType  = !!project?.construction_type_id;
+            const libReady = hasCity && hasType;
+            const crmReady = crmQuotes.mode !== "none" && crmQuotes.quotes.length > 0 && libReady;
+            const openBuilder = (mode, quoteId=null) => {
+              setEstBuilderMode(mode);
+              setEstBuilderQuoteId(quoteId);
+              setEstBuilderOpen(true);
+              setEstChooserOpen(false);
+            };
+            return (
+              <>
+                <div onClick={()=>setEstChooserOpen(false)}
+                  style={{position:"fixed",inset:0,zIndex:200}}/>
+                {/* Pulled LEFT so it overflows the narrow 230px sidebar
+                    onto the wider main area. Fixed-positioned in viewport
+                    coordinates so it can't get clipped by the sidebar. */}
+                <div style={{position:"fixed",top:148,left:240,width:320,
+                             background:"white",borderRadius:8,border:"1px solid "+T.b1,
+                             boxShadow:"0 12px 32px rgba(0,0,0,0.18)",zIndex:201,overflow:"hidden"}}>
+                  {!libReady && (
+                    <div style={{padding:"8px 12px",fontSize:10.5,color:"#92400E",background:"#FFFBEB",borderBottom:"1px solid #FDE68A"}}>
+                      ⚠️ Project missing City / Type — CRM path disabled. Library path will ask for them.
+                    </div>
+                  )}
+
+                  {/* PATH 1 — Take from CRM Final Quote */}
+                  {crmReady && crmQuotes.mode === "specific" && (
+                    <div onClick={()=>openBuilder("from_quote", crmQuotes.quotes[0].id)}
+                      style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
+                      onMouseEnter={e=>e.currentTarget.style.background="#F0FDF4"}
+                      onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>📋 Take from CRM Final Quote</div>
+                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
+                        {crmQuotes.quotes[0].quote_no} · ₹{Math.round(Number(crmQuotes.quotes[0].grand_total)||0).toLocaleString("en-IN")}
+                      </div>
+                    </div>
+                  )}
+                  {crmReady && crmQuotes.mode === "all" && crmQuotes.quotes.length === 1 && (
+                    <div onClick={()=>openBuilder("from_quote", crmQuotes.quotes[0].id)}
+                      style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
+                      onMouseEnter={e=>e.currentTarget.style.background="#F0FDF4"}
+                      onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                      <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>📋 Take from CRM Quote</div>
+                      <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
+                        {crmQuotes.quotes[0].quote_no} · {crmQuotes.quotes[0].status}
+                      </div>
+                    </div>
+                  )}
+                  {crmReady && crmQuotes.mode === "all" && crmQuotes.quotes.length > 1 && (
+                    <div style={{borderBottom:"1px solid "+T.b1}}>
+                      <div style={{padding:"8px 12px 4px",fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
+                        📋 Take from CRM Quote
+                      </div>
+                      {crmQuotes.quotes.map(q => (
+                        <div key={q.id} onClick={()=>openBuilder("from_quote", q.id)}
+                          style={{padding:"7px 14px",cursor:"pointer",fontSize:11.5,color:"#0F172A",display:"flex",justifyContent:"space-between",alignItems:"center"}}
+                          onMouseEnter={e=>e.currentTarget.style.background="#F0FDF4"}
+                          onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                          <span><strong>{q.quote_no}</strong> · {q.status}</span>
+                          <span style={{color:T.grn,fontWeight:600}}>₹{Math.round(Number(q.grand_total)||0).toLocaleString("en-IN")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* PATH 2 — Pick from Library (asks for city/type inline if missing) */}
+                  <div onClick={()=>openBuilder("library")}
+                    style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
+                    onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>📚 Pick from Library</div>
+                    <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
+                      {libReady ? "Pick a package + adjust quantities"
+                               : "Will ask city + type, then pick package"}
+                    </div>
+                  </div>
+
+                  {/* PATH 3 — Build from Scratch */}
+                  <div onClick={()=>openBuilder("scratch")}
+                    style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#FAF5FF"}
+                    onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>✏️ Build from Scratch</div>
+                    <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
+                      Empty start — add sections + items from library or new
+                    </div>
+                  </div>
+
+                  {/* PATH 4 — Quick Manual (existing modal, kept) */}
+                  <div onClick={()=>{ setShowNewEst(true); setEstChooserOpen(false); }}
+                    style={{padding:"10px 12px",cursor:"pointer"}}
+                    onMouseEnter={e=>e.currentTarget.style.background="#F8FAFC"}
+                    onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                    <div style={{fontSize:12,fontWeight:700,color:"#0F172A"}}>⚡ Quick Manual</div>
+                    <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>
+                      Type free-form items — no library lookup
+                    </div>
+                  </div>
+                </div>
+              </>
+            );
+          })()}
         </div>
         {loading && <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:11}}>Loading…</div>}
         {!loading && estimates.length === 0 && <div style={{padding:"24px 12px",textAlign:"center",color:T.t4,fontSize:12}}>No estimates yet</div>}
         {estimates.map(e => {
           const isSel = selEst?.id === e.id;
           const stC = e.status === "Active" ? T.grn : T.t4;
+          const isDelOpen = delEstId === e.id;
+          const delEnabled = delEstText.trim() === (e.estimate_no || "") && !delEstBusy;
           return (
-            <div key={e.id} onClick={()=>selectEst(e)}
-              style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1,background:isSel?"#EFF6FF":T.surfaceB,borderLeft:isSel?"3px solid "+T.blu:"3px solid transparent"}}>
-              <div style={{fontSize:12,fontWeight:700,color:isSel?T.blu:T.t1,marginBottom:2}}>{e.customer_name || "—"}</div>
-              <div style={{fontSize:10,color:T.t4,marginBottom:4}}>{e.estimate_no} · {e.billing_method}</div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:10,fontWeight:700,color:T.grn}}>{fmtC(e.total_value)}</span>
-                <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:stC+"22",color:stC}}>{e.status}</span>
+            <div key={e.id} style={{borderBottom:"1px solid "+T.b1,background:isSel?"#EFF6FF":T.surfaceB,borderLeft:isSel?"3px solid "+T.blu:"3px solid transparent"}}>
+              <div onClick={()=>selectEst(e)}
+                style={{padding:"10px 12px",cursor:"pointer",position:"relative"}}>
+                <div style={{fontSize:12,fontWeight:700,color:isSel?T.blu:T.t1,marginBottom:2,paddingRight:22}}>{e.customer_name || "—"}</div>
+                <div style={{fontSize:10,color:T.t4,marginBottom:4}}>{e.estimate_no} · {e.billing_method}</div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:10,fontWeight:700,color:T.grn}}>{fmtC(e.total_value)}</span>
+                  <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:stC+"22",color:stC}}>{e.status}</span>
+                </div>
+                {e.invoice_count > 0 && <div style={{fontSize:9.5,color:T.t4,marginTop:3}}>{e.invoice_count} invoice{e.invoice_count>1?"s":""}</div>}
+                {/* Trash icon (top-right) — opens danger panel below */}
+                <button onClick={(ev)=>{ ev.stopPropagation(); isDelOpen ? closeDelEst() : openDelEst(e); }}
+                  title="Delete this estimate"
+                  style={{position:"absolute",top:8,right:8,background: isDelOpen ? "#FEE2E2" : "transparent",
+                          border:"1px solid " + (isDelOpen ? "#FCA5A5" : "transparent"),
+                          color: isDelOpen ? "#DC2626" : "#94A3B8",
+                          borderRadius:4,padding:"1px 5px",fontSize:11,cursor:"pointer",lineHeight:1}}>
+                  🗑
+                </button>
               </div>
-              {e.invoice_count > 0 && <div style={{fontSize:9.5,color:T.t4,marginTop:3}}>{e.invoice_count} invoice{e.invoice_count>1?"s":""}</div>}
+              {/* Inline danger panel — type estimate_no to confirm */}
+              {isDelOpen && (
+                <div onClick={(ev)=>ev.stopPropagation()}
+                  style={{padding:"9px 12px 11px",background:"#FEF2F2",borderTop:"1px solid #FCA5A5"}}>
+                  <div style={{fontSize:10.5,color:"#7F1D1D",lineHeight:1.45,marginBottom:6}}>
+                    Permanently delete <b>{e.estimate_no}</b>?
+                    {e.invoice_count > 0 && <><br/><b style={{color:"#991B1B"}}>⚠ {e.invoice_count} invoice{e.invoice_count>1?"s":""} linked.</b> They'll lose their estimate reference.</>}
+                    <br/>Type <b>{e.estimate_no}</b> below to confirm.
+                  </div>
+                  <input value={delEstText} onChange={(ev)=>setDelEstText(ev.target.value)}
+                    placeholder={e.estimate_no}
+                    style={{width:"100%",padding:"5px 8px",border:"1px solid #FCA5A5",borderRadius:5,fontSize:11,outline:"none",boxSizing:"border-box",marginBottom:6}}/>
+                  <div style={{display:"flex",gap:5}}>
+                    <button onClick={closeDelEst} disabled={delEstBusy}
+                      style={{flex:1,background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"4px",fontSize:10.5,fontWeight:600,cursor: delEstBusy?"not-allowed":"pointer"}}>
+                      Cancel
+                    </button>
+                    <button onClick={()=>confirmDelEst(e)} disabled={!delEnabled}
+                      style={{flex:1,background: delEnabled?"#DC2626":"#FCA5A5",border:"none",color:"white",borderRadius:5,padding:"4px",fontSize:10.5,fontWeight:700,cursor: delEnabled?"pointer":"not-allowed"}}>
+                      {delEstBusy ? "Deleting…" : "Delete"}
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           );
         })}
@@ -1916,14 +2236,30 @@ function TabEstimate({ project }) {
               {id:"milestone",label:"Milestones"},
               {id:"invoice",label:"Invoices ("+invoices.length+")"},
               {id:"payment",label:"Payments ("+payments.length+")"},
+              {id:"amend",label:"Amendments ("+amendments.length+")", dot: pendingAmendCount > 0},
             ].map(t => (
               <button key={t.id} onClick={()=>setSubTab(t.id)}
-                style={{padding:"8px 16px",border:"none",background:"transparent",color:subTab===t.id?T.blu:T.t3,fontSize:12,fontWeight:subTab===t.id?700:400,cursor:"pointer",borderBottom:subTab===t.id?"2px solid "+T.blu:"2px solid transparent",fontFamily:"inherit"}}>
+                style={{padding:"8px 16px",border:"none",background:"transparent",color:subTab===t.id?T.blu:T.t3,fontSize:12,fontWeight:subTab===t.id?700:400,cursor:"pointer",borderBottom:subTab===t.id?"2px solid "+T.blu:"2px solid transparent",fontFamily:"inherit",position:"relative"}}>
                 {t.label}
+                {t.dot && (
+                  <span style={{position:"absolute",top:6,right:6,width:7,height:7,borderRadius:"50%",background:"#EF4444"}}/>
+                )}
               </button>
             ))}
             <div style={{flex:1}}/>
             <div style={{display:"flex",alignItems:"center",gap:6,paddingRight:12}}>
+              {subTab==="boq" && (
+                <button onClick={openEditBoq}
+                  title={pendingAmendCount > 0 ? "A pending amendment already exists — review it in the Amendments tab first" : "Propose changes to this estimate's BOQ (requires admin approval)"}
+                  disabled={pendingAmendCount > 0}
+                  style={{background: pendingAmendCount > 0 ? "#E5E7EB" : "#FEF3C7",
+                          color: pendingAmendCount > 0 ? "#9CA3AF" : "#92400E",
+                          border:"1px solid "+ (pendingAmendCount > 0 ? "#E5E7EB" : "#FCD34D"),
+                          borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,
+                          cursor: pendingAmendCount > 0 ? "not-allowed" : "pointer"}}>
+                  ✎ Edit BOQ
+                </button>
+              )}
               {subTab==="milestone" && (
                 <button onClick={()=>{ setMsForm(p=>({...p,estimate_item_id:null})); setShowSetMs(true); }}
                   style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
@@ -1954,6 +2290,21 @@ function TabEstimate({ project }) {
                 )}
                 {(estDetail.sections||[]).map(sec => {
                   const secTotal = (sec.items||[]).reduce((s,i) => s + parseFloat(i.amount||0), 0);
+                  // Group items by parsed [Category] prefix in description.
+                  // EstimateBuilderModal flattens 3-level (sec › cat › item)
+                  // → 2-level (section + items[]) by stuffing the category
+                  // into description as "[Category] Item Name". Here we
+                  // reverse that to render a category sub-header row.
+                  // Items without "[Cat]" prefix → grouped under "" (no header).
+                  const groups = {};         // {catName: items[]}
+                  const catOrder = [];       // preserve first-seen order
+                  for (const it of (sec.items || [])) {
+                    const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
+                    const catName = m ? m[1] : "";
+                    const cleanDesc = m ? m[2] : (it.description || "");
+                    if (!groups[catName]) { groups[catName] = []; catOrder.push(catName); }
+                    groups[catName].push({ ...it, _cleanDesc: cleanDesc });
+                  }
                   return (
                     <div key={sec.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
                       <div style={{padding:"9px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM,display:"flex",justifyContent:"space-between",alignItems:"center",borderLeft:"3px solid "+T.blu}}>
@@ -1965,15 +2316,38 @@ function TabEstimate({ project }) {
                           <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
                         ))}
                       </div>
-                      {(sec.items||[]).map(it => (
-                        <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 95px 110px",padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
-                          <span style={{fontSize:12.5,color:T.t1}}>{it.description}</span>
-                          <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
-                          <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{parseFloat(it.qty)}</span>
-                          <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
-                          <span style={{fontSize:12.5,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.amount)}</span>
-                        </div>
-                      ))}
+                      {catOrder.map(catName => {
+                        const items = groups[catName] || [];
+                        const catTotal = items.reduce((s,i) => s + parseFloat(i.amount||0), 0);
+                        return (
+                          <React.Fragment key={catName || "__none__"}>
+                            {catName && (
+                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
+                                           padding:"6px 14px 6px 18px",background:"#F1F5F9",
+                                           borderBottom:"1px solid "+T.b1,borderLeft:"3px solid "+T.bluM}}>
+                                <span style={{fontSize:11.5,fontWeight:700,color:T.t1,letterSpacing:".2px"}}>
+                                  {catName}
+                                  <span style={{fontSize:10,color:T.t4,fontWeight:500,marginLeft:6}}>
+                                    · {items.length} item{items.length === 1 ? "" : "s"}
+                                  </span>
+                                </span>
+                                <span style={{fontSize:11.5,fontWeight:700,color:T.t2,fontVariantNumeric:"tabular-nums"}}>
+                                  {fmtC(catTotal)}
+                                </span>
+                              </div>
+                            )}
+                            {items.map(it => (
+                              <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 95px 110px",padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center", paddingLeft: catName ? 28 : 14}}>
+                                <span style={{fontSize:12.5,color:T.t1}}>{it._cleanDesc}</span>
+                                <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
+                                <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{parseFloat(it.qty)}</span>
+                                <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
+                                <span style={{fontSize:12.5,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.amount)}</span>
+                              </div>
+                            ))}
+                          </React.Fragment>
+                        );
+                      })}
                     </div>
                   );
                 })}
@@ -2096,11 +2470,305 @@ function TabEstimate({ project }) {
                 ))}
               </div>
             )}
+
+            {/* AMENDMENTS TAB — Pending / Approved / Rejected history with approve-reject */}
+            {subTab==="amend" && (
+              <div>
+                {amendments.length === 0 && (
+                  <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>
+                    No amendments yet. Click <b>✎ Edit BOQ</b> on the BOQ tab to propose changes.
+                  </div>
+                )}
+                {amendments.map(a => {
+                  const isOpen = expandedAmend === a.id;
+                  const stCol = a.status === "Pending" ? "#D97706" : a.status === "Approved" ? T.grn : "#DC2626";
+                  const stBg  = a.status === "Pending" ? "#FEF3C7" : a.status === "Approved" ? "#DCFCE7" : "#FEE2E2";
+                  const secs  = a.proposed?.proposed_sections || [];
+                  const form  = a.proposed?.proposed_form || {};
+                  let amendTotal = 0;
+                  secs.forEach(s => (s.items||[]).forEach(it => amendTotal += (parseFloat(it.qty)||0) * (parseFloat(it.rate)||0)));
+                  return (
+                    <div key={a.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:8,overflow:"hidden"}}>
+                      <div onClick={()=>setExpandedAmend(o => o === a.id ? null : a.id)}
+                        style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"24px 1fr 140px 110px 110px",gap:10,alignItems:"center",cursor:"pointer",borderBottom: isOpen ? "1px solid "+T.b1 : "none"}}>
+                        <span style={{transform: isOpen ? "rotate(90deg)" : "rotate(0deg)", transition:"transform .15s", color:T.t3, fontSize:13}}>▸</span>
+                        <div>
+                          <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Amendment #{a.id}</div>
+                          <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.4}}>
+                            <b>Reason:</b> {a.reason}
+                          </div>
+                        </div>
+                        <span style={{fontSize:10.5,color:T.t4}}>
+                          {(a.created_at || "").slice(0,16).replace("T", " ")}
+                          {a.created_by_name && <><br/>by {a.created_by_name}</>}
+                        </span>
+                        <span style={{fontSize:13,fontWeight:700,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>
+                          {fmtC(amendTotal)}
+                        </span>
+                        <span style={{padding:"3px 9px",borderRadius:4,fontSize:10.5,fontWeight:700,background:stBg,color:stCol,textAlign:"center"}}>
+                          {a.status}
+                        </span>
+                      </div>
+                      {isOpen && (
+                        <div style={{padding:"12px 16px",background:T.surfaceB}}>
+                          {/* Proposed header diff */}
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10,marginBottom:12}}>
+                            {[
+                              ["Retention %", form.retention_pct],
+                              ["TDS %",       form.tds_pct],
+                              ["Tax %",       form.tax_pct],
+                              ["Start",       form.start_date],
+                              ["End",         form.end_date],
+                              ["Description", form.description],
+                            ].filter(([_,v]) => v !== undefined && v !== null && v !== "").map(([l,v]) => (
+                              <div key={l} style={{background:T.surface,padding:"7px 10px",borderRadius:6,border:"1px solid "+T.b1}}>
+                                <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{l}</div>
+                                <div style={{fontSize:12,color:T.t1,marginTop:2}}>{String(v)}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Proposed sections + items */}
+                          {secs.map((sec, si) => {
+                            const secTotal = (sec.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0);
+                            return (
+                              <div key={si} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:6,marginBottom:8,overflow:"hidden"}}>
+                                <div style={{padding:"7px 12px",background:T.bluL,borderBottom:"1px solid "+T.bluM,display:"flex",justifyContent:"space-between"}}>
+                                  <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{sec.title}</span>
+                                  <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
+                                </div>
+                                <div style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 95px 110px",padding:"5px 12px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
+                                  {["Description","Unit","Qty","Rate","Amount"].map(h => (
+                                    <span key={h} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
+                                  ))}
+                                </div>
+                                {(sec.items||[]).map((it, ii) => {
+                                  const amt = (parseFloat(it.qty)||0) * (parseFloat(it.rate)||0);
+                                  return (
+                                    <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 95px 110px",padding:"6px 12px",borderBottom:"1px solid "+T.b1,alignItems:"center"}}>
+                                      <span style={{fontSize:12,color:T.t1}}>{it.description}</span>
+                                      <span style={{fontSize:11,color:T.t3}}>{it.unit}</span>
+                                      <span style={{fontSize:11.5,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{parseFloat(it.qty)}</span>
+                                      <span style={{fontSize:11.5,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
+                                      <span style={{fontSize:12,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{fmtC(amt)}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            );
+                          })}
+                          {/* Decided meta */}
+                          {a.status !== "Pending" && (
+                            <div style={{padding:"8px 12px",background:T.surface,borderRadius:6,border:"1px solid "+T.b1,fontSize:11,color:T.t3,marginBottom:8}}>
+                              {a.status} on {(a.decided_at || "").slice(0,16).replace("T"," ")}
+                              {a.decided_by_name && <> · by {a.decided_by_name}</>}
+                            </div>
+                          )}
+                          {/* Approve / Reject — only when Pending */}
+                          {a.status === "Pending" && (
+                            <div style={{display:"flex",gap:10,justifyContent:"flex-end",marginTop:8}}>
+                              <button onClick={()=>decideAmendment(a.id,"Rejected")}
+                                style={{background:"white",color:"#DC2626",border:"1.5px solid #FCA5A5",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                                Reject
+                              </button>
+                              <button onClick={()=>decideAmendment(a.id,"Approved")}
+                                style={{background:T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                                ✓ Approve & Apply
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         </>)}
       </div>
 
-      {/* ── MODAL: New Estimate ─────────────────────────────────── */}
+      {/* ── MODAL: Edit BOQ → Amendment (admin-approval required) ── */}
+      {showEditBoq && selEst && (<>
+        <div onClick={()=>!amendSaving && setShowEditBoq(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",top:"4vh",left:"50%",transform:"translateX(-50%)",width:920,maxWidth:"95vw",height:"92vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
+          <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
+            <div>
+              <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Edit BOQ — {selEst.estimate_no}</div>
+              <div style={{fontSize:11,color:"#92400E",marginTop:2}}>⚠ Changes require admin approval before they apply.</div>
+            </div>
+            <button onClick={()=>setShowEditBoq(false)} disabled={amendSaving}
+              style={{background:"none",border:"none",fontSize:20,color:T.t3,cursor: amendSaving?"not-allowed":"pointer"}}>×</button>
+          </div>
+          <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
+            {/* Header fields */}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10,marginBottom:14}}>
+              <div>
+                <label style={lblS}>Retention %</label>
+                <input type="number" value={amendForm.retention_pct}
+                  onChange={e=>setAmendForm(p=>({...p,retention_pct:e.target.value}))} style={inpS}/>
+              </div>
+              <div>
+                <label style={lblS}>TDS %</label>
+                <input type="number" value={amendForm.tds_pct}
+                  onChange={e=>setAmendForm(p=>({...p,tds_pct:e.target.value}))} style={inpS}/>
+              </div>
+              <div>
+                <label style={lblS}>Tax %</label>
+                <input type="number" value={amendForm.tax_pct}
+                  onChange={e=>setAmendForm(p=>({...p,tax_pct:e.target.value}))} style={inpS}/>
+              </div>
+              <div>
+                <label style={lblS}>Description</label>
+                <input type="text" value={amendForm.description}
+                  onChange={e=>setAmendForm(p=>({...p,description:e.target.value}))} style={inpS}/>
+              </div>
+              <div>
+                <label style={lblS}>Start Date</label>
+                <input type="date" value={amendForm.start_date}
+                  onChange={e=>setAmendForm(p=>({...p,start_date:e.target.value}))} style={inpS}/>
+              </div>
+              <div>
+                <label style={lblS}>End Date</label>
+                <input type="date" value={amendForm.end_date}
+                  onChange={e=>setAmendForm(p=>({...p,end_date:e.target.value}))} style={inpS}/>
+              </div>
+              <div style={{gridColumn:"span 2"}}>
+                <label style={lblS}>Internal Remark</label>
+                <input type="text" value={amendForm.remark}
+                  onChange={e=>setAmendForm(p=>({...p,remark:e.target.value}))} style={inpS}/>
+              </div>
+            </div>
+
+            {/* Sections + items editor */}
+            {amendForm.sections.map((sec, si) => {
+              const secTotal = (sec.items||[]).reduce((s,it) => s + (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0);
+              return (
+                <div key={si} style={{background:T.surfaceB,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
+                  <div style={{padding:"8px 12px",background:T.bluL,borderBottom:"1px solid "+T.bluM,display:"flex",gap:8,alignItems:"center"}}>
+                    <input value={sec.title}
+                      onChange={e=>{
+                        const v = e.target.value;
+                        setAmendForm(p=>{
+                          const next = [...p.sections];
+                          next[si] = { ...next[si], title: v };
+                          return { ...p, sections: next };
+                        });
+                      }}
+                      placeholder="Section title"
+                      style={{flex:1,padding:"5px 9px",border:"1px solid "+T.bluM,borderRadius:5,fontSize:12.5,fontWeight:700,color:T.blu,background:"white",outline:"none"}}/>
+                    <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
+                    <button onClick={()=>{
+                      if (!window.confirm("Delete this section + its items from the proposed BOQ?")) return;
+                      setAmendForm(p=>({ ...p, sections: p.sections.filter((_,i)=> i !== si) }));
+                    }}
+                      style={{background:"white",border:"1px solid #FCA5A5",color:"#DC2626",borderRadius:4,padding:"2px 8px",fontSize:11,cursor:"pointer"}}>
+                      🗑
+                    </button>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 95px 90px 30px",padding:"5px 12px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
+                    {["Description","Unit","Qty","Rate","Amount",""].map(h => (
+                      <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
+                    ))}
+                  </div>
+                  {sec.items.map((it, ii) => {
+                    const amt = (parseFloat(it.qty)||0) * (parseFloat(it.rate)||0);
+                    const patch = (k, v) => setAmendForm(p => {
+                      const next = [...p.sections];
+                      const items = [...next[si].items];
+                      items[ii] = { ...items[ii], [k]: v };
+                      next[si] = { ...next[si], items };
+                      return { ...p, sections: next };
+                    });
+                    return (
+                      <div key={ii} style={{display:"grid",gridTemplateColumns:"1fr 70px 70px 95px 90px 30px",padding:"5px 12px",borderBottom:"1px solid "+T.b1,gap:6,alignItems:"center",background:"white"}}>
+                        <input value={it.description} onChange={e=>patch("description", e.target.value)}
+                          placeholder="Item description"
+                          style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:12,outline:"none"}}/>
+                        <input value={it.unit} onChange={e=>patch("unit", e.target.value)}
+                          placeholder="Sq.Ft"
+                          style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none"}}/>
+                        <input type="number" value={it.qty} onChange={e=>patch("qty", e.target.value)}
+                          style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
+                        <input type="number" value={it.rate} onChange={e=>patch("rate", e.target.value)}
+                          style={{padding:"5px 8px",border:"1px solid "+T.b1,borderRadius:4,fontSize:11.5,outline:"none",textAlign:"right"}}/>
+                        <span style={{fontSize:12,fontWeight:600,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(amt)}</span>
+                        <button onClick={()=>setAmendForm(p=>{
+                          const next = [...p.sections];
+                          next[si] = { ...next[si], items: next[si].items.filter((_,j)=> j !== ii) };
+                          return { ...p, sections: next };
+                        })}
+                          title="Delete row"
+                          style={{background:"transparent",border:"none",color:"#DC2626",cursor:"pointer",fontSize:13}}>×</button>
+                      </div>
+                    );
+                  })}
+                  <div style={{padding:"6px 12px",background:T.surfaceB,borderTop:"1px solid "+T.b1}}>
+                    <button onClick={()=>setAmendForm(p=>{
+                      const next = [...p.sections];
+                      next[si] = { ...next[si], items: [...next[si].items, { description:"", unit:"", qty:"", rate:"" }] };
+                      return { ...p, sections: next };
+                    })}
+                      style={{background:"transparent",border:"1px dashed "+T.bluM,color:T.blu,borderRadius:4,padding:"4px 10px",fontSize:11,fontWeight:600,cursor:"pointer"}}>
+                      + Add Item
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+
+            <button onClick={()=>setAmendForm(p=>({ ...p, sections: [...p.sections, { title:"New Section", items:[{description:"",unit:"",qty:"",rate:""}] }] }))}
+              style={{background:"white",border:"1.5px dashed "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:11.5,fontWeight:700,cursor:"pointer",marginBottom:14}}>
+              + Add Section
+            </button>
+
+            {/* Reason — required */}
+            <div style={{background:"#FFFBEB",border:"1.5px solid #FCD34D",borderRadius:8,padding:"12px 14px",marginTop:6}}>
+              <label style={{fontSize:11,fontWeight:700,color:"#92400E",display:"block",marginBottom:5,textTransform:"uppercase",letterSpacing:".4px"}}>
+                ⚠ Change Reason (Required for Approval)
+              </label>
+              <textarea value={amendForm.reason}
+                onChange={e=>setAmendForm(p=>({...p,reason:e.target.value}))}
+                rows={3}
+                placeholder="Why is this amendment being requested? Mention client request, scope change, error correction, etc."
+                style={{width:"100%",padding:"8px 10px",border:"1px solid #FCD34D",borderRadius:6,fontSize:12,fontFamily:"inherit",outline:"none",boxSizing:"border-box",resize:"vertical"}}/>
+            </div>
+          </div>
+          <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB}}>
+            <div style={{fontSize:11.5,color:T.t3}}>
+              Subtotal: <b style={{color:T.t1,fontSize:13}}>
+                {fmtC(amendForm.sections.reduce((s,sec) => s + (sec.items||[]).reduce((ss,it)=> ss + (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0), 0))}
+              </b>
+            </div>
+            <div style={{display:"flex",gap:10}}>
+              <button onClick={()=>setShowEditBoq(false)} disabled={amendSaving}
+                style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:600,cursor: amendSaving?"not-allowed":"pointer"}}>
+                Cancel
+              </button>
+              <button onClick={submitAmendment} disabled={amendSaving || !amendForm.reason.trim()}
+                style={{background: (amendSaving || !amendForm.reason.trim()) ? "#9CA3AF" : T.blu, color:"white", border:"none", borderRadius:6, padding:"7px 20px", fontSize:12, fontWeight:700, cursor: (amendSaving || !amendForm.reason.trim()) ? "not-allowed" : "pointer"}}>
+                {amendSaving ? "Submitting…" : "Submit for Approval"}
+              </button>
+            </div>
+          </div>
+        </div>
+      </>)}
+
+      {/* ── M5: Library-backed Estimate Builder (paths 1, 2, 3) ─── */}
+      {estBuilderOpen && (
+        <EstimateBuilderModal
+          project={project}
+          initialMode={estBuilderMode}
+          sourceQuoteId={estBuilderQuoteId}
+          onClose={() => setEstBuilderOpen(false)}
+          onSaved={() => {
+            setEstBuilderOpen(false);
+            // Refresh the estimates list — reuse the existing fetch.
+            loadEstimates();
+          }}
+        />
+      )}
+
+      {/* ── MODAL: Quick Manual Estimate (Path 4, existing flow) ── */}
       {showNewEst && (<>
         <div onClick={()=>setShowNewEst(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:760,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
@@ -2500,16 +3168,132 @@ function TabEstimate({ project }) {
 
 // TAB 4 — PARTY
 // ═══════════════════════════════════════════════════════════════════
-function TabParty() {
+function TabParty({ projectId, projectName }) {
+  // ── Live data: parties + this-project's transactions ─────────
+  // Party tab on a project detail page shows only parties that have
+  // activity (any txn) on this project. Balance + ledger entries are
+  // computed from project-scoped transactions, not the party's
+  // company-wide balance.
   const [selP, setSelP] = useState(null);
-  const typeS = {"Client":{c:T.grn,bg:T.grnL},"Material Supplier":{c:T.blu,bg:T.bluL},"Sub-Contractor":{c:T.slt,bg:T.sltL}};
+  const [allParties, setAllParties] = useState([]);
+  const [projTxns, setProjTxns] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const typeS = {
+    "Client":{c:T.grn,bg:T.grnL},
+    "client":{c:T.grn,bg:T.grnL},
+    "Material Supplier":{c:T.blu,bg:T.bluL},
+    "Supplier":{c:T.blu,bg:T.bluL},
+    "supplier":{c:T.blu,bg:T.bluL},
+    "Sub-Contractor":{c:T.slt,bg:T.sltL},
+    "Sub-Con":{c:T.slt,bg:T.sltL},
+    "Subcon":{c:T.slt,bg:T.sltL},
+    "subcon":{c:T.slt,bg:T.sltL},
+    "Labour Vendor":{c:T.pur,bg:T.purL},
+    "staff":{c:T.amb,bg:T.ambL},
+  };
+
+  useEffect(() => {
+    if (!projectId) return;
+    setLoading(true);
+    Promise.all([
+      api.get("/finance/parties"),
+      api.get("/finance/transactions?project_id=" + projectId + "&limit=2000"),
+    ]).then(([pRes, tRes]) => {
+      if (pRes?.success && Array.isArray(pRes.data)) setAllParties(pRes.data);
+      if (tRes?.success && Array.isArray(tRes.data)) setProjTxns(tRes.data);
+    }).catch(()=>{}).finally(()=>setLoading(false));
+  }, [projectId]);
+
+  // Classify txn impact on party balance — vendor side (we owe them
+  // when bill is raised, owe less when we pay) vs client side (they
+  // owe us when we invoice, owe less when they pay).
+  const isVendorType = (t) => {
+    const x = String(t||"").toLowerCase();
+    return x.includes("vendor") || x.includes("supplier") || x.includes("sub-con") || x.includes("subcon") || x.includes("staff");
+  };
+
+  // Per-party project-scoped data
+  const partyRows = useMemo(() => {
+    return allParties.map(p => {
+      const myTxns = projTxns.filter(t => Number(t.party_id) === Number(p.id));
+      if (myTxns.length === 0) return null; // skip parties with no activity on this project
+      const isVendor = isVendorType(p.type);
+      // Vendor: bill = credit (we owe), payment = debit (we paid)
+      // Client: invoice = debit (they owe), receipt = credit (they paid)
+      let credit = 0, debit = 0;
+      const txnRows = [];
+      for (const t of myTxns) {
+        const amt = parseFloat(t.amount) || 0;
+        const type = t.type || "";
+        let isCR;
+        if (isVendor) {
+          // Bills are credits for vendor (party balance increases — we owe more)
+          if (["material_purchase","subcon_expense","site_expense","party_payment"].includes(type) || /bill/i.test(t.description||"")) isCR = true;
+          else if (["payment","party_payment"].includes(type) && !/bill/i.test(t.description||"")) isCR = false;
+          else isCR = type === "receipt" ? false : true; // default: bill-like
+          // simpler: payment to vendor = debit; everything else (purchase/bill) = credit
+          if (type === "payment") isCR = false;
+          else if (type === "material_purchase" || type === "subcon_expense" || type === "site_expense") isCR = true;
+          else if (type === "party_payment") isCR = false; // paying party = debit
+          else isCR = false;
+        } else {
+          // Client: receipt = credit, sales_invoice = debit
+          if (type === "receipt") isCR = true;
+          else if (type === "sales_invoice") isCR = false;
+          else isCR = false;
+        }
+        if (isCR) credit += amt;
+        else debit += amt;
+        txnRows.push({
+          id: t.id,
+          date: t.date ? new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "",
+          note: t.description || t.note || type,
+          type: type.replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()),
+          amount: amt,
+          cr: isCR,
+        });
+      }
+      // For vendor: positive balance = we owe (To Pay, red)
+      // For client: positive balance = they owe us (To Receive, green)
+      const net = credit - debit;
+      const balance = Math.abs(net);
+      const balPositive = isVendor ? net <= 0 : net >= 0;
+      const balLabel = isVendor
+        ? (net > 0 ? "To Pay" : net < 0 ? "Advance Paid" : "Settled")
+        : (net > 0 ? "To Receive" : net < 0 ? "Advance Received" : "Settled");
+      return {
+        id: p.id,
+        name: p.name,
+        type: p.type || "Other",
+        balance, balPositive, balLabel,
+        txnRows: txnRows.sort((a,b)=>b.id-a.id),
+      };
+    }).filter(Boolean).sort((a,b)=>b.balance-a.balance);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allParties, projTxns]);
+
+  // Keep selection in sync when list reloads (e.g., re-select if id still present)
+  useEffect(() => {
+    if (selP && !partyRows.find(p => p.id === selP.id)) setSelP(null);
+    else if (selP) setSelP(partyRows.find(p => p.id === selP.id) || null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [partyRows.length]);
 
   return (
     <div style={{padding:"16px 18px", display:"flex", gap:14, height:"100%"}}>
       <div style={{width:290, flexShrink:0}}>
         <Panel style={{overflow:"hidden"}}>
-          <PHead title="Parties" action={<AddBtn label="Add Party"/>}/>
-          {D.parties.map(p=>{
+          <PHead title={`Parties (${partyRows.length})`} action={<AddBtn label="Add Party"/>}/>
+          {loading && (
+            <div style={{padding:"30px 16px", textAlign:"center", color:T.t4, fontSize:12}}>Loading parties...</div>
+          )}
+          {!loading && partyRows.length === 0 && (
+            <div style={{padding:"30px 16px", textAlign:"center", color:T.t4, fontSize:12}}>
+              No parties with activity on this project yet.
+              <div style={{fontSize:10.5, marginTop:4}}>Create a transaction tagged to this project to add a party here.</div>
+            </div>
+          )}
+          {partyRows.map(p=>{
             const ts = typeS[p.type]||{c:T.slt,bg:T.sltL};
             const isS = selP?.id===p.id;
             return (
@@ -2534,7 +3318,7 @@ function TabParty() {
         <Panel style={{height:"100%", overflow:"hidden", display:"flex", flexDirection:"column"}}>
           {selP?(
             <>
-              <PHead title={selP.name} action={<SecBtn label="Export PDF"/>}/>
+              <PHead title={`${selP.name}  ·  ${projectName||"Project"}`} action={<SecBtn label="Export PDF"/>}/>
               <div style={{padding:"8px 15px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", gap:20}}>
                 {[["Type",selP.type],["Balance",`₹${fmtN(selP.balance)}`],["Status",selP.balLabel]].map(([l,v])=>(
                   <div key={l} style={{display:"flex", gap:6, alignItems:"center"}}>
@@ -2542,18 +3326,21 @@ function TabParty() {
                     <span style={{fontSize:12.5, fontWeight:600, color:T.t1}}>{v}</span>
                   </div>
                 ))}
+                <div style={{marginLeft:"auto", fontSize:10.5, color:T.t4, fontStyle:"italic"}}>
+                  Ledger for this project only · {selP.txnRows.length} txn(s)
+                </div>
               </div>
               <div style={{flex:1, overflowY:"auto"}}>
-                <THead cols="70px 1fr 130px 110px" headers={["Date","Description","Type","Amount"]}/>
-                {(D.partyTxns[selP.id]||[]).map((txn,i)=>(
-                  <div key={i} style={{display:"grid", gridTemplateColumns:"70px 1fr 130px 110px", padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", borderLeft:`3px solid ${txn.cr?T.grn:T.red}33`, transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <THead cols="80px 1fr 130px 110px" headers={["Date","Description","Type","Amount"]}/>
+                {selP.txnRows.map((txn,i)=>(
+                  <div key={i} style={{display:"grid", gridTemplateColumns:"80px 1fr 130px 110px", padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", borderLeft:`3px solid ${txn.cr?T.grn:T.red}33`, transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                     <span style={{fontSize:11.5, color:T.t4}}>{txn.date}</span>
-                    <span style={{fontSize:12.5, color:T.t1, fontWeight:500}}>{txn.note}</span>
+                    <span style={{fontSize:12.5, color:T.t1, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={txn.note}>{txn.note}</span>
                     <Pill label={txn.type} c={T.slt} bg={T.sltL}/>
                     <span style={{fontSize:13, fontWeight:700, color:txn.cr?T.grn:T.red, fontVariantNumeric:"tabular-nums"}}>{txn.cr?"+":"−"} ₹{fmtN(txn.amount)}</span>
                   </div>
                 ))}
-                {!(D.partyTxns[selP.id]||[]).length&&<div style={{padding:"40px 20px", textAlign:"center", color:T.t4, fontSize:13}}>No transactions yet</div>}
+                {selP.txnRows.length===0&&<div style={{padding:"40px 20px", textAlign:"center", color:T.t4, fontSize:13}}>No transactions on this project</div>}
               </div>
               <div style={{padding:"9px 15px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:8}}>
                 <button style={{flex:1, padding:"7px", border:`1px solid ${T.grnM}`, borderRadius:6, background:T.grnL, color:T.grn, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Receipt</button>
@@ -2562,7 +3349,9 @@ function TabParty() {
               </div>
             </>
           ):(
-            <div style={{display:"flex", alignItems:"center", justifyContent:"center", flex:1, color:T.t4, fontSize:13}}>Select a party to view ledger</div>
+            <div style={{display:"flex", alignItems:"center", justifyContent:"center", flex:1, color:T.t4, fontSize:13}}>
+              {partyRows.length === 0 ? "Add a party to start" : "Select a party to view its project-scoped ledger"}
+            </div>
           )}
         </Panel>
       </div>
@@ -15125,7 +15914,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     overview:    <TabOverview    proj={project} onRequestPayment={()=>setPaymentReq({})}/>,
     design:      <TabDesign project={project} isAdmin={isAdmin}/>,
     estimate:    <TabEstimate project={project}/>,
-    party:       <TabParty/>,
+    party:       <TabParty projectId={project.id} projectName={project.name}/>,
     transaction: <TabTransaction/>,
     todo:        <TabTodo projectId={project.id}/>,
     task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
@@ -15493,7 +16282,7 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
     setActing(p => ({ ...p, [key]: null }));
   };
 
-  const MOD_COLORS = { "Material Request": T.amb, "Design Approval": "#7C3AED", "Purchase Order (PO)": T.blu, "RA Bill": "#0891B2", "Subcon WO Amendment": "#EA580C", "Payment Request": T.blu, "Material Site Transfer": "#059669", "Material Issue": "#059669" };
+  const MOD_COLORS = { "Material Request": T.amb, "Design Approval": "#7C3AED", "Purchase Order (PO)": T.blu, "RA Bill": "#0891B2", "Subcon WO Amendment": "#EA580C", "Customer Estimate Amendment": "#DB2777", "Payment Request": T.blu, "Material Site Transfer": "#059669", "Material Issue": "#059669" };
 
   return (<>
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.38)", zIndex: 300, backdropFilter: "blur(2px)" }} />
