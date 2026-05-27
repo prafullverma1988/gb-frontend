@@ -1551,15 +1551,34 @@ function ProcurementModule(){
     vendors:(r.vendors||[]).map(v=>({name:v.vendor_name,status:v.status,rates:(v.rates||[]).map(rt=>({rate:rt.rate,remarks:rt.remarks||""}))})),
   });
 
-  // Vendors from backend (for dropdowns)
+  // Vendors from backend (for dropdowns).
+  // Case-insensitive substring match — DB has mixed-case types like
+  // "Supplier", "supplier", "Material Supplier", "Other Vendor", "vendor",
+  // "Labour Vendor". The earlier strict whitelist missed all the
+  // common "Supplier" / "Vendor" variants, leaving only EqVendor rows
+  // visible in the manual-order dropdown.
   const [dbVendors, setDbVendors] = useState([]);
   useEffect(()=>{
     api.get("/finance/parties").then(res=>{
       if(res.success&&res.data){
-        const vendors=res.data.filter(p=>
-          ["Material Supplier","material_supplier","Other Vendor","vendor"].includes(p.type)
-        );
-        setDbVendors(vendors.length>0?vendors:res.data);
+        const isVendorType = (p) => {
+          const t = String(p?.type || "").toLowerCase().trim();
+          if (!t) return false;
+          // Anything containing "vendor" or "supplier" — covers
+          // "Supplier", "Material Supplier", "Other Vendor", "Labour
+          // Vendor", "EqVendor", etc. Excludes clients, sub-con, staff.
+          if (t === "client" || t === "staff" || t.includes("sub-con") || t.includes("subcon")) return false;
+          return t.includes("vendor") || t.includes("supplier");
+        };
+        const vendors = res.data.filter(isVendorType);
+        // If filter still returns empty (very edge case), fall back to
+        // all non-client / non-staff rows rather than the entire list
+        // — keeps the dropdown useful but not polluted.
+        const fallback = res.data.filter(p => {
+          const t = String(p?.type || "").toLowerCase().trim();
+          return t !== "client" && t !== "staff";
+        });
+        setDbVendors(vendors.length > 0 ? vendors : fallback);
       }
     }).catch(()=>{});
   },[]);
