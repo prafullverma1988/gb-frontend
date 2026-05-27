@@ -588,23 +588,29 @@ function ChallanModule(){
         else if (src === "WarehouseTransfer") flowType = "warehouse_to_warehouse";
         else if (isWarehouseDest) flowType = "vendor_to_warehouse";
         else flowType = "vendor_to_project";
-        // Rate is ALWAYS computed from library (last_rate || base_rate).
-        // Visibility is decided per-view by shouldShowRate() — so the
-        // same row's rate can be a "vendor rate" (a, b) or an
-        // "allocated cost" (c) depending on which view the user is
-        // currently looking at.
-        // Unbilled GRNs (no bill posted yet) still get 0 — qty visible,
-        // rate "—" — because vendor rate isn't locked yet.
+        // Rate priority (highest to lowest):
+        //   1. it.rate (stored in grn_items) — for warehouse-issue rows
+        //      this is the actual FIFO / manually-selected batch rate
+        //      stamped at issue time (warehouse.js line 1117-1119).
+        //   2. Library last_rate / base_rate — proxy fallback when no
+        //      stored rate (legacy data, or unbilled vendor GRNs).
+        // Unbilled vendor flows still get 0 (rate not locked until bill
+        // posts); warehouse-issue/transfer always have stored rate from
+        // the FIFO consume at issue time.
+        const isVendorFlow = flowType === "vendor_to_project" || flowType === "vendor_to_warehouse";
         for (const it of items) {
           const matName = it.description || "";
           const libHit = lib[matName.trim().toLowerCase()] || {};
+          const storedRate = Number(it.rate) || 0;
           const libRate = libHit.last_rate || libHit.base_rate || 0;
-          // For unbilled vendor flows we still don't have a locked rate.
-          // For internal flows (c, d) the rate is library-based "allocated"
-          // cost — those are always treated as rateable in their relevant
-          // view because warehouse stock has a known cost basis.
-          const isVendorFlow = flowType === "vendor_to_project" || flowType === "vendor_to_warehouse";
-          const rate = isVendorFlow ? (isBilled ? libRate : 0) : libRate;
+          let rate;
+          if (isVendorFlow) {
+            rate = isBilled ? (storedRate || libRate) : 0;
+          } else {
+            // FIFO/manual batch rate stamped at issue time; library only
+            // as backup for legacy data without stored rate.
+            rate = storedRate || libRate;
+          }
           const qty = Number(it.received_qty) || 0;
           flat.push({
             id: `${g.id}-${it.id}`,
@@ -696,7 +702,6 @@ function ChallanModule(){
       }
       return true;
     }).sort((a,b)=>a.date.localeCompare(b.date));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   },[rows,view,fSite,fParty,fHead,fStatus,fFrom,fTo,search]);
 
   // Totals respect view-aware rate visibility. A row whose rate is
