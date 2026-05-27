@@ -588,13 +588,23 @@ function ChallanModule(){
         else if (src === "WarehouseTransfer") flowType = "warehouse_to_warehouse";
         else if (isWarehouseDest) flowType = "vendor_to_warehouse";
         else flowType = "vendor_to_project";
-        // Internal flows (c, d) → no rate/total regardless of billed_at
-        const isInternalFlow = flowType === "warehouse_to_project" || flowType === "warehouse_to_warehouse";
-        const showRate = isBilled && !isInternalFlow;
+        // Rate is ALWAYS computed from library (last_rate || base_rate).
+        // Visibility is decided per-view by shouldShowRate() — so the
+        // same row's rate can be a "vendor rate" (a, b) or an
+        // "allocated cost" (c) depending on which view the user is
+        // currently looking at.
+        // Unbilled GRNs (no bill posted yet) still get 0 — qty visible,
+        // rate "—" — because vendor rate isn't locked yet.
         for (const it of items) {
           const matName = it.description || "";
           const libHit = lib[matName.trim().toLowerCase()] || {};
-          const rate = showRate ? (libHit.last_rate || libHit.base_rate || 0) : 0;
+          const libRate = libHit.last_rate || libHit.base_rate || 0;
+          // For unbilled vendor flows we still don't have a locked rate.
+          // For internal flows (c, d) the rate is library-based "allocated"
+          // cost — those are always treated as rateable in their relevant
+          // view because warehouse stock has a known cost basis.
+          const isVendorFlow = flowType === "vendor_to_project" || flowType === "vendor_to_warehouse";
+          const rate = isVendorFlow ? (isBilled ? libRate : 0) : libRate;
           const qty = Number(it.received_qty) || 0;
           flat.push({
             id: `${g.id}-${it.id}`,
@@ -641,6 +651,19 @@ function ChallanModule(){
     project:  new Set(["vendor_to_project", "warehouse_to_project"]),
     warehouse:new Set(["vendor_to_warehouse", "warehouse_to_project", "warehouse_to_warehouse"]),
   };
+  // Per-view rate visibility rules.
+  // - Vendor view shows ₹ on vendor-billed rows (a, b)
+  // - Project view shows ₹ on a (vendor direct) AND c (warehouse-issued,
+  //   value = allocated library cost). This is what answers "kis project
+  //   par kitne ka maal gaya".
+  // - Warehouse view shows ₹ on b (in) and c (out, allocated). d (transfer)
+  //   has no cost movement, just qty.
+  const VIEW_RATE_FLOWS = {
+    vendor:   new Set(["vendor_to_project", "vendor_to_warehouse"]),
+    project:  new Set(["vendor_to_project", "warehouse_to_project"]),
+    warehouse:new Set(["vendor_to_warehouse", "warehouse_to_project"]),
+  };
+  const showRateForRow = (r) => (VIEW_RATE_FLOWS[view] || VIEW_RATE_FLOWS.vendor).has(r.flowType) && r.rate > 0;
   const FLOW_LABEL = {
     vendor_to_project:    { short: "Direct",      bg: T.grnL, c: T.grn },
     vendor_to_warehouse:  { short: "WH In",       bg: T.bluL, c: T.blu },
@@ -676,10 +699,14 @@ function ChallanModule(){
     // eslint-disable-next-line react-hooks/exhaustive-deps
   },[rows,view,fSite,fParty,fHead,fStatus,fFrom,fTo,search]);
 
-  const totalAmt=filtered.reduce((s,m)=>s+(m.total||0),0);
-  const totalPaid=filtered.filter(m=>m.status==="Billed").reduce((s,m)=>s+(m.total||0),0);
-  const totalPending=filtered.filter(m=>m.status==="Unbilled").reduce((s,m)=>s+(m.total||0),0);
-  const avgUnit=filtered.length?totalAmt/filtered.length:0;
+  // Totals respect view-aware rate visibility. A row whose rate is
+  // hidden in the current view contributes 0 to the total (e.g., d
+  // rows in Warehouse view).
+  const totalAmt=filtered.reduce((s,m)=>s+(showRateForRow(m)?(m.total||0):0),0);
+  const totalPaid=filtered.filter(m=>m.status==="Billed").reduce((s,m)=>s+(showRateForRow(m)?(m.total||0):0),0);
+  const totalPending=filtered.filter(m=>m.status==="Unbilled").reduce((s,m)=>s+(showRateForRow(m)?(m.total||0):0),0);
+  const rateRowCount=filtered.filter(showRateForRow).length;
+  const avgUnit=rateRowCount?totalAmt/rateRowCount:0;
 
   const dlExcel=()=>{
     const viewLabel = view==="vendor"?"Vendor Purchases (a+b)":view==="project"?"Project Receipts (a+c)":"Warehouse Flow (b+c+d)";
@@ -694,8 +721,8 @@ function ChallanModule(){
         (r.challan||"—") + (r.grnNumber ? ` / ${r.grnNumber}` : ""),
         r.material, r.category,
         r.qty, r.unit,
-        r.rate || "—",
-        r.total || "—",
+        showRateForRow(r) ? r.rate : "—",
+        showRateForRow(r) ? r.total : "—",
         r.status,
       ]),
       [],
@@ -705,7 +732,9 @@ function ChallanModule(){
   };
 
   const printAll=()=>{
-    const tbody=filtered.map(r=>`
+    const tbody=filtered.map(r=>{
+      const showR = showRateForRow(r);
+      return `
       <tr>
         <td>${fmtShort(r.date)}</td>
         <td style="font-weight:600;color:#7C3AED">${r.vendor}</td>
@@ -715,10 +744,11 @@ function ChallanModule(){
         <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:#EFF6FF;color:#2563EB">${r.category}</span></td>
         <td style="text-align:right">${fmtN(r.qty)}</td>
         <td>${r.unit}</td>
-        <td style="text-align:right">${r.rate?fmtRs(r.rate):"—"}</td>
-        <td style="text-align:right;font-weight:700;color:#059669">${r.total?fmtRs(r.total):"—"}</td>
+        <td style="text-align:right">${showR?fmtRs(r.rate):"—"}</td>
+        <td style="text-align:right;font-weight:700;color:#059669">${showR?fmtRs(r.total):"—"}</td>
         <td><span style="font-size:9px;padding:2px 7px;border-radius:20px;background:${r.status==="Billed"?"#ECFDF5":"#FFFBEB"};color:${r.status==="Billed"?"#059669":"#D97706"}">${r.status}</span></td>
-      </tr>`).join("");
+      </tr>`;
+    }).join("");
     printHTML("Material Purchase Register — "+COMPANY_NAME,`
       <div class="header">
         <div><h1>${COMPANY_NAME} — Material Purchase Register</h1>
@@ -901,10 +931,10 @@ function ChallanModule(){
                   <div style={{fontSize:9.5,color:T.t4}}>{r.unit||"—"}</div>
                 </div>
                 <div style={{fontSize:11.5,fontWeight:600,color:T.t2,textAlign:"right"}}>
-                  {r.rate ? fmtRs(r.rate) : <span style={{color:T.t4}}>—</span>}
+                  {showRateForRow(r) ? fmtRs(r.rate) : <span style={{color:T.t4}}>—</span>}
                 </div>
-                <div style={{fontSize:13,fontWeight:800,color:r.total?T.grn:T.t4,textAlign:"right"}}>
-                  {r.total ? fmtRs(r.total) : "—"}
+                <div style={{fontSize:13,fontWeight:800,color:showRateForRow(r)?T.grn:T.t4,textAlign:"right"}}>
+                  {showRateForRow(r) ? fmtRs(r.total) : "—"}
                 </div>
                 <Pill label={r.status} c={sc.c} bg={sc.bg}/>
               </div>
