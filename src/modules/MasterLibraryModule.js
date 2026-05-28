@@ -8,6 +8,11 @@ const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth
     <path d={d} />
   </svg>
 );
+
+// Indian-comma rupee formatter — Math.round + en-IN locale
+const inr = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
+// Construction-type accent colors — picker palette used in Edit Type modal.
+const COLORS = ["#2563EB", "#10B981", "#F59E0B", "#EF4444", "#8B5CF6", "#EC4899", "#06B6D4", "#84CC16"];
 const IcBox       = (p) => <Icon {...p} d="M21 16V8a2 2 0 00-1-1.73l-7-4a2 2 0 00-2 0l-7 4A2 2 0 003 8v8a2 2 0 001 1.73l7 4a2 2 0 002 0l7-4A2 2 0 0021 16z" />;
 const IcUsers     = (p) => <Icon {...p} d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75M9 7a4 4 0 100 8 4 4 0 000-8z" />;
 const IcFolder    = (p) => <Icon {...p} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />;
@@ -1473,532 +1478,703 @@ function SubconRateCardSection() {
 // Flow: Construction Type → City → Package → Category → Items
 // ═══════════════════════════════════════════════════════════════════════
 function ClientBOQSection() {
-  // ── Master data ──────────────────────────────────────────────────────
-  const [conTypes,  setConTypes]  = useState([]);
-  const [cities,    setCities]    = useState([]);
-  const [packages,  setPackages]  = useState([]);
-  const [boqItems,  setBoqItems]  = useState([]);
-  const { items: uomList }        = useSection("uom");
+  // ═══════════════════════════════════════════════════════════════════
+  // MASTER DATA
+  // ═══════════════════════════════════════════════════════════════════
+  const [conTypes, setConTypes] = useState([]);
+  const [cities,   setCities]   = useState([]);
+  const [packages, setPackages] = useState([]);
+  const [boqItems, setBoqItems] = useState([]);
+  const { items: uomList }                          = useSection("uom");
   const { items: workCats, reload: reloadWorkCats } = useSection("work-categories");
 
-  // ── Selections ───────────────────────────────────────────────────────
-  const [selType,    setSelType]    = useState(null);  // { id, name, color }
-  const [selCity,    setSelCity]    = useState(null);
-  const [selPkg,     setSelPkg]     = useState(null);
-  const [filterCat,  setFilterCat]  = useState("All");
+  // ═══════════════════════════════════════════════════════════════════
+  // SELECTIONS
+  // ═══════════════════════════════════════════════════════════════════
+  const [selType, setSelType] = useState(null);
+  const [selCity, setSelCity] = useState(null);
+  const [selPkg,  setSelPkg]  = useState(null);
 
-  // ── Rate matrix ──────────────────────────────────────────────────────
-  // Both maps keyed by item_id → { add_on:Number, description:String }.
-  // `changed` mirrors the same shape for any field the user has touched
-  // since last load/save; merge `changed` on top of `rates` to get the
-  // effective value (see cellOf / getAddOn / getDesc below).
-  // ITEM PICKING: items show in a section only when they're "picked" for
-  // this package+city — i.e. an entry exists in `rates` OR `changed`.
-  const [rates,         setRates]         = useState({});
-  const [changed,       setChanged]       = useState({});
-  const [collapsedCats, setCollapsedCats] = useState({}); // catName → true when collapsed
-  const [saving,        setSaving]        = useState(false);
+  // ═══════════════════════════════════════════════════════════════════
+  // TREE DATA — all sections rendered together
+  //   pkgStructures = sections (id, name, default_qty, unit, …)
+  //   pkgCategories = categories per (structure_id, category_name)
+  //   sectionItems[sid] = items currently saved in that section
+  // ═══════════════════════════════════════════════════════════════════
+  const [pkgStructures, setPkgStructures] = useState([]);
+  const [pkgCategories, setPkgCategories] = useState([]);
+  const [sectionItems,  setSectionItems]  = useState({}); // { [sid]: [rows] }
 
-  // ── Picker modal (opens from "+ Add Item to {category}") ────────────
-  const [pickerCat,     setPickerCat]     = useState(null); // category name, null = closed
-  const [pickerSearch,  setPickerSearch]  = useState("");
-  const [pickerMode,    setPickerMode]    = useState("list"); // "list" | "create"
-  const [pickerForm,    setPickerForm]    = useState({});      // for inline "+ Add new"
-  const [pickerSaving,  setPickerSaving]  = useState(false);
+  // ═══════════════════════════════════════════════════════════════════
+  // PENDING EDITS — kept until "Save Rates"
+  //   sectionEdits[sid]   = { name?, default_qty? }
+  //   itemEdits[sid][iid] = { base_rate?, add_on_rate?, description? }
+  //   pendingNewItems[sid]= rows picked from the +Add Item drawer
+  //                         (each row has client-side _isNew flag)
+  //   pendingDelItems[sid][iid] = true   (soft-deleted in UI)
+  // ═══════════════════════════════════════════════════════════════════
+  const [sectionEdits,    setSectionEdits]    = useState({});
+  const [itemEdits,       setItemEdits]       = useState({});
+  const [pendingNewItems, setPendingNewItems] = useState({});
+  const [pendingDelItems, setPendingDelItems] = useState({});
 
-  // ── Inline rename of a category in a section header ─────────────────
-  const [renameCatId,    setRenameCatId]    = useState(null);  // work_categories.id
-  const [renameCatValue, setRenameCatValue] = useState("");
+  // ═══════════════════════════════════════════════════════════════════
+  // UI STATE
+  // ═══════════════════════════════════════════════════════════════════
+  const [collapsedSections, setCollapsedSections] = useState({}); // {sid:true}
+  // editingSections — sections currently unlocked for editing.
+  //   Sections start LOCKED (read-only displays) once data is loaded.
+  //   Click the section's "Edit" button → that section unlocks.
+  //   Save Rates → re-locks ALL sections. Prevents accidental rate changes
+  //   that would otherwise flow into quotations. Newly-added sections start
+  //   unlocked so the user can immediately set area + add items.
+  const [editingSections,   setEditingSections]   = useState({}); // {sid:true}
+  const [collapsedCats,     setCollapsedCats]     = useState({}); // {`${sid}:${cid}`:true}
+  const [renameSecId,       setRenameSecId]       = useState(null);
+  const [renameSecValue,    setRenameSecValue]    = useState("");
+  const [renameCatId,       setRenameCatId]       = useState(null);
+  const [renameCatValue,    setRenameCatValue]    = useState("");
+  const [saving,            setSaving]            = useState(false);
 
-  // ── Edit modal for an existing BOQ item (Subcon-style modal) ────────
-  const [editItem,     setEditItem]     = useState(null);
-  const [editItemForm, setEditItemForm] = useState({});
+  // ═══════════════════════════════════════════════════════════════════
+  // DRAWERS / MODALS
+  //   addSectionModal = open modal for new section
+  //   addCatDrawer    = { structure_id }
+  //   addItemDrawer   = { structure_id, category_id, category_name }
+  // ═══════════════════════════════════════════════════════════════════
+  const [addSectionModal, setAddSectionModal] = useState(null);
+  const [addSectionForm,  setAddSectionForm]  = useState({ name: "", default_qty: 0, unit: "sqft", per_item_qty: false });
+  const [addSectionSaving,setAddSectionSaving]= useState(false);
+  const [addCatDrawer,    setAddCatDrawer]    = useState(null);
+  // addCatPicks / addItemPicks: ORDERED arrays of ids reflecting the
+  // user's tick order. First-ticked = first in the resulting section.
+  // The drawer shows a numbered badge (1, 2, 3...) on each ticked row
+  // so the user sees the final order while ticking.
+  const [addCatPicks,     setAddCatPicks]     = useState([]); // [workCatId, ...]
+  const [addCatNewForm,   setAddCatNewForm]   = useState(null); // null | {name,code,desc}
+  const [addCatSaving,    setAddCatSaving]    = useState(false);
+  const [addItemDrawer,   setAddItemDrawer]   = useState(null);
+  const [addItemPicks,    setAddItemPicks]    = useState([]); // [boqItemId, ...]
+  const [addItemSearch,   setAddItemSearch]   = useState("");
+  const [addItemNewForm,  setAddItemNewForm]  = useState(null); // null | {name,unit,category,base_rate}
+  const [addItemSaving,   setAddItemSaving]   = useState(false);
+  // Toggle helpers — append to array if not picked, remove if already picked.
+  const toggleCatPick  = (id) => setAddCatPicks(p => {
+    const idx = p.indexOf(id); return idx >= 0 ? p.filter(x => x !== id) : [...p, id];
+  });
+  const toggleItemPick = (id) => setAddItemPicks(p => {
+    const idx = p.indexOf(id); return idx >= 0 ? p.filter(x => x !== id) : [...p, id];
+  });
+
+  // ═══════════════════════════════════════════════════════════════════
+  // EXISTING modals — kept from the previous component
+  // ═══════════════════════════════════════════════════════════════════
+  const [editItem,       setEditItem]       = useState(null);
+  const [editItemForm,   setEditItemForm]   = useState({});
   const [editItemSaving, setEditItemSaving] = useState(false);
 
-  // ── Comprehensive Package Edit drawer ───────────────────────────────
-  // Opened from the pencil icon on a package tile. Lets the user edit
-  // EVERYTHING about a package in one place:
-  //   • Package details (name / sqft_rate / description)
-  //   • Categories used in this package (rename inline)
-  //   • Items inside each category (inline edit name / unit / base_rate
-  //     + remove from master library via soft-delete)
-  //
-  // All edits stage locally until "Save All" — that triggers a series
-  // of API calls (PUT package, POST rename for each renamed cat, PUT
-  // each edited item, DELETE each removed item) sequentially. Loading
-  // state shown on the Save button while it runs.
-  const [pkgDrawer,    setPkgDrawer]    = useState(null);  // pkg object | null
-  const [pkgDraft,     setPkgDraft]     = useState({});    // {name, sqft_rate, description}
-  const [catRenames,   setCatRenames]   = useState({});    // {[oldName]: newName}
-  const [itemEdits,    setItemEdits]    = useState({});    // {[item_id]: {name?, unit?, base_rate?}}
-  const [deletedItems, setDeletedItems] = useState({});    // {[item_id]: true}
-  const [pkgSaving,    setPkgSaving]    = useState(false);
+  // ── Package Edit Drawer state ─────────────────────────────────────
+  // Opened from the pencil icon on the active Package tile.
+  // Edits package basics + section name/area + section-scoped category
+  // renames + master boq_items edits/deletes. Per-section rates
+  // (add_on / description) stay in the BOQ tree.
+  const [pkgDrawer,         setPkgDrawer]         = useState(null);     // pkg | null
+  const [pkgDraft,          setPkgDraft]          = useState({});       // {name, sqft_rate, description}
+  const [pkgSecEdits,       setPkgSecEdits]       = useState({});       // {[sid]: {name?, default_qty?}}
+  const [pkgCatRenames,     setPkgCatRenames]     = useState({});       // {[rpc_id]: newName}
+  const [pkgItemEdits,      setPkgItemEdits]      = useState({});       // {[boq_item_id]: {name?, unit?, base_rate?, description?}}
+  const [pkgDeletedItems,   setPkgDeletedItems]   = useState({});       // {[boq_item_id]: true}
+  const [pkgCollapsedSecs,  setPkgCollapsedSecs]  = useState({});       // {[sid]: true}
+  const [pkgSaving,         setPkgSaving]         = useState(false);
+  // Danger-zone state for the Delete Package flow — user must type the
+  // exact package name to enable the Delete button (GitHub-style guard).
+  const [pkgDeleteText,     setPkgDeleteText]     = useState("");
+  const [pkgDeleting,       setPkgDeleting]       = useState(false);
+  const [pkgDangerOpen,     setPkgDangerOpen]     = useState(false);
 
-  // ── "+ Add Category" dropdown — shows all work_categories ───────────
-  // Lets user explicitly add a CATEGORY as an empty section to the BOQ
-  // grid even when no items in that category have been picked yet. Once
-  // the section is visible, "+ Add Item to {cat}" pulls items from the
-  // library (existing picker flow).
-  const [addedEmptyCats,   setAddedEmptyCats]   = useState([]); // names that should show as empty sections
-  const [catDropdownOpen,  setCatDropdownOpen]  = useState(false);
-  const [newCatForm,       setNewCatForm]       = useState(null);  // null = hidden, {name,code,desc} when expanded
-  const [newCatSaving,     setNewCatSaving]     = useState(false);
+  // Danger-zone state for City / Construction-Type edit modals
+  const [typeEdit,          setTypeEdit]          = useState(null);  // ct object | null
+  const [typeForm,          setTypeForm]          = useState({});
+  const [typeSaving,        setTypeSaving]        = useState(false);
+  const [typeDangerOpen,    setTypeDangerOpen]    = useState(false);
+  const [typeDeleteText,    setTypeDeleteText]    = useState("");
+  const [cityEdit,          setCityEdit]          = useState(null);  // city object | null
+  const [cityForm,          setCityForm]          = useState({});
+  const [citySaving,        setCitySaving]        = useState(false);
+  const [cityDangerOpen,    setCityDangerOpen]    = useState(false);
+  const [cityDeleteText,    setCityDeleteText]    = useState("");
+  const [addModal,       setAddModal]       = useState(null);    // "type"|"city"|"pkg"
+  const [addForm,        setAddForm]        = useState({});
+  const [adding,         setAdding]         = useState(false);
 
-  // ── Package STRUCTURES (Ground Floor / First Floor / Septic / etc.) ─
-  // Free-typed sub-units of a package. Each has its own unit + rate.
-  // Items live one level below — scoped to (package, city, structure).
-  // Auto-loaded whenever selPkg changes; first/Default structure becomes
-  // the auto-selection so the rates grid populates immediately.
-  const STRUCT_UNITS = [
-    { key: "sqft",      label: "sqft (per square foot)" },
-    { key: "lump_sum",  label: "lump sum" },
-    { key: "rft",       label: "rft (per running foot)" },
-    { key: "nos",       label: "nos (per count)" },
-    { key: "cubic_ft",  label: "cubic ft" },
-  ];
-  const [pkgStructures, setPkgStructures] = useState([]);
-  const [selStructure,  setSelStructure]  = useState(null);
-  const [structModal,   setStructModal]   = useState(null);   // null | "add" | structure object (edit)
-  const [structForm,    setStructForm]    = useState({ name: "", unit: "sqft", rate: 0 });
-  const [structSaving,  setStructSaving]  = useState(false);
+  const uomOptions = uomList.length > 0
+    ? uomList.map(u => u.name)
+    : ["Sq.Ft","CFT","Running Ft","Kg","Point","Unit","Lump Sum","Piece"];
+  const catOptions = workCats.map(c => c.name);
 
-  // ── Add-new modals ───────────────────────────────────────────────────
-  const [addModal, setAddModal] = useState(null); // "type"|"city"|"pkg"|"item"
-  const [addForm,  setAddForm]  = useState({});
-  const [adding,   setAdding]   = useState(false);
-  const upd = (k, v) => setAddForm(p => ({ ...p, [k]: v }));
-
-  // ── Stages editor modal (per-library-row milestone breakup) ──────────
-  const [stagesModal,  setStagesModal]  = useState(null); // boq_item or null
-  const [stagesForm,   setStagesForm]   = useState([{ seq: 0, name: "", cum_pct: "" }]);
-  const [stagesSaving, setStagesSaving] = useState(false);
-
-  const openStagesModal = async (item) => {
-    setStagesModal(item);
-    setStagesForm([{ seq: 0, name: "", cum_pct: "" }]);
-    const r = await api.get("/library/boq-items/" + item.id + "/stages").catch(() => ({ success: false }));
-    if (r.success && (r.data?.lines || []).length > 0) {
-      setStagesForm(r.data.lines.map((l, i) => ({ seq: i, name: l.name, cum_pct: String(l.cum_pct) })));
-    }
-  };
-  const closeStagesModal = () => { setStagesModal(null); setStagesForm([{ seq: 0, name: "", cum_pct: "" }]); };
-  const saveStages = async () => {
-    if (!stagesModal) return;
-    const lines = stagesForm
-      .filter(s => s.name && s.cum_pct !== "")
-      .map((s, i) => ({ seq: i, name: s.name, cum_pct: parseFloat(s.cum_pct) }));
-    if (lines.length === 0) return alert("Add at least one stage");
-    setStagesSaving(true);
-    const r = await api.put("/library/boq-items/" + stagesModal.id + "/stages", { lines }).catch(() => ({ success: false }));
-    setStagesSaving(false);
-    if (r.success) {
-      if (r.data?.warnings?.length) alert("Saved with warnings:\n" + r.data.warnings.join("\n"));
-      await loadItems();
-      closeStagesModal();
-    } else alert(r.message || "Save failed");
-  };
-
-  const uomOptions  = uomList.length  > 0 ? uomList.map(u => u.name)  : ["Sq.Ft","CFT","Running Ft","Kg","Point","Unit","Lump Sum","Piece"];
-  const catOptions  = workCats.map(c => c.name);
-  const allCats     = ["All", ...catOptions];
-
-  // ── Load master data ─────────────────────────────────────────────────
+  // ═══════════════════════════════════════════════════════════════════
+  // LOADERS
+  // ═══════════════════════════════════════════════════════════════════
   const loadTypes    = () => api.get("/library/construction-types").then(r => { if (r.success) setConTypes(r.data||[]); });
   const loadCities   = () => api.get("/library/cities").then(r => { if (r.success) setCities(r.data||[]); });
   const loadPackages = () => api.get("/library/rate-packages").then(r => { if (r.success) setPackages(r.data||[]); });
   const loadItems    = () => api.get("/library/boq-items").then(r => { if (r.success) setBoqItems(r.data||[]); });
+  const loadStructures = async (pkgId) => {
+    if (!pkgId) { setPkgStructures([]); return; }
+    const r = await api.get("/library/packages/" + pkgId + "/structures").catch(() => ({ success: false }));
+    if (r?.success) setPkgStructures(r.data || []);
+  };
+  const loadCategories = async (pkgId) => {
+    if (!pkgId) { setPkgCategories([]); return; }
+    const r = await api.get("/library/packages/" + pkgId + "/categories").catch(() => ({ success: false }));
+    if (r?.success) setPkgCategories(r.data || []);
+  };
+  // Fan out N parallel /rate-matrix calls (one per section) to populate
+  // every section's item list in a single round-trip burst.
+  const loadAllSectionItems = async (pkgId, cityId, sections) => {
+    if (!pkgId || !cityId || !sections?.length) { setSectionItems({}); return; }
+    const results = await Promise.all(sections.map(s =>
+      api.get(`/library/rate-matrix?package_id=${pkgId}&city_id=${cityId}&structure_id=${s.id}`)
+        .then(r => [s.id, r?.success ? (r.data || []) : []])
+        .catch(() => [s.id, []])
+    ));
+    const map = {};
+    for (const [sid, rows] of results) map[sid] = rows;
+    setSectionItems(map);
+  };
 
   useEffect(() => { loadTypes(); loadCities(); loadPackages(); loadItems(); }, []);
 
-  // ── Load structures for the selected package ───────────────────────
-  // Triggers on package change. Auto-selects the first active structure
-  // (the "Default" auto-created by backend migration is always present).
-  const loadStructures = async (pkgId) => {
-    if (!pkgId) { setPkgStructures([]); setSelStructure(null); return; }
-    const r = await api.get("/library/packages/" + pkgId + "/structures").catch(() => ({ success: false }));
-    if (!r?.success) return;
-    const list = r.data || [];
-    setPkgStructures(list);
-    setSelStructure(prev => {
-      // Keep current selection if it still exists in the new list, else
-      // fall back to the first structure.
-      const stay = prev && list.find(s => s.id === prev.id);
-      return stay || list[0] || null;
-    });
-  };
+  // When package changes — reset all pending edits + reload structures + categories.
+  // editingSections also cleared so we land in locked-by-default state.
   useEffect(() => {
-    if (!selPkg) { setPkgStructures([]); setSelStructure(null); return; }
-    loadStructures(selPkg.id);
-    // Reset any unsaved rate edits when switching packages
-    setChanged({});
-    setAddedEmptyCats([]);
+    if (!selPkg) {
+      setPkgStructures([]); setPkgCategories([]); setSectionItems({});
+      setSectionEdits({}); setItemEdits({}); setPendingNewItems({}); setPendingDelItems({});
+      setEditingSections({});
+      return;
+    }
+    (async () => {
+      await Promise.all([loadStructures(selPkg.id), loadCategories(selPkg.id)]);
+    })();
+    setSectionEdits({}); setItemEdits({}); setPendingNewItems({}); setPendingDelItems({});
+    setEditingSections({});
     // eslint-disable-next-line
   }, [selPkg]);
 
-  // ── Load rates when pkg+city+structure all selected ────────────────
-  // Adds structure_id to the request so each (package, city, structure)
-  // tuple has its own item set + rates. Switching structure reloads.
+  // When city OR structures change — re-fan items for every section.
   useEffect(() => {
-    if (!selPkg || !selCity || !selStructure) { setRates({}); return; }
-    api.get("/library/rate-matrix?package_id=" + selPkg.id + "&city_id=" + selCity.id + "&structure_id=" + selStructure.id)
-      .then(r => {
-        if (r.success) {
-          const map = {};
-          (r.data||[]).forEach(x => {
-            map[x.item_id] = {
-              add_on:      parseFloat(x.add_on_rate) || 0,
-              description: x.description || "",
-            };
-          });
-          setRates(map);
-          setChanged({});
-          setAddedEmptyCats([]);
-        }
-      }).catch(() => {});
-  }, [selPkg, selCity, selStructure]);
+    if (!selPkg || !selCity || !pkgStructures.length) { setSectionItems({}); return; }
+    loadAllSectionItems(selPkg.id, selCity.id, pkgStructures);
+    // eslint-disable-next-line
+  }, [selPkg?.id, selCity?.id, pkgStructures]);
 
-  // ── Structure CRUD handlers ────────────────────────────────────────
-  const openAddStructure = () => {
-    setStructForm({ name: "", unit: "sqft", rate: 0 });
-    setStructModal("add");
+  // ═══════════════════════════════════════════════════════════════════
+  // EFFECTIVE VALUE LOOKUPS (with pending edits layered on top)
+  // ═══════════════════════════════════════════════════════════════════
+  const getSecArea = (sec) => {
+    const ed = sectionEdits[sec.id];
+    if (ed && ed.default_qty !== undefined) return Number(ed.default_qty) || 0;
+    return Number(sec.default_qty) || 0;
   };
-  const openEditStructure = (s) => {
-    setStructForm({ name: s.name, unit: s.unit, rate: s.rate });
-    setStructModal(s);
+  const getSecName = (sec) => {
+    const ed = sectionEdits[sec.id];
+    if (ed && ed.name !== undefined) return ed.name;
+    return sec.name;
   };
-  const closeStructModal = () => { if (!structSaving) setStructModal(null); };
-  const saveStructure = async () => {
-    if (!structForm.name?.trim() || !selPkg) return;
-    setStructSaving(true);
-    let res;
-    const body = {
-      name: structForm.name.trim(),
-      unit: structForm.unit,
-      rate: parseFloat(structForm.rate) || 0,
-    };
-    if (structModal === "add") {
-      res = await api.post("/library/packages/" + selPkg.id + "/structures", body);
-    } else {
-      res = await api.put("/library/structures/" + structModal.id, body);
+  // Effective per_item_qty flag — staged edit wins over the saved row.
+  // When ON, each item has its own qty (from pcr.qty / itemEdits.qty);
+  // when OFF, section.default_qty applies to all items uniformly.
+  const getSecPerItem = (sec) => {
+    const ed = sectionEdits[sec.id];
+    if (ed && ed.per_item_qty !== undefined) return !!ed.per_item_qty;
+    return !!Number(sec.per_item_qty);
+  };
+  const patchSection = (sid, patch) => setSectionEdits(p => ({
+    ...p, [sid]: { ...(p[sid] || {}), ...patch }
+  }));
+
+  // Item base/addon/desc — itemEdits[sid][iid] wins over the row's saved value.
+  const getRowBase = (sid, row) => {
+    const ed = itemEdits[sid]?.[row.item_id];
+    if (ed && ed.base_rate !== undefined) return ed.base_rate;
+    // Saved row stores `rate` = base + add_on (backward-compat for Estimate
+    // module). Recover base = rate - add_on, then handle NaN.
+    const stored = (row.base_rate !== undefined && row.base_rate !== null)
+      ? Number(row.base_rate)
+      : (Number(row.rate) || 0) - (Number(row.add_on_rate) || 0);
+    return stored;
+  };
+  const getRowAddOn = (sid, row) => {
+    const ed = itemEdits[sid]?.[row.item_id];
+    if (ed && ed.add_on_rate !== undefined) return ed.add_on_rate;
+    return Number(row.add_on_rate) || 0;
+  };
+  const getRowDesc = (sid, row) => {
+    const ed = itemEdits[sid]?.[row.item_id];
+    if (ed && ed.description !== undefined) return ed.description;
+    return row.description || "";
+  };
+  // Effective per-item qty — used only when section.per_item_qty is ON.
+  // Staged edit wins; otherwise the pcr row's `qty` column.
+  const getRowQty = (sid, row) => {
+    const ed = itemEdits[sid]?.[row.item_id];
+    if (ed && ed.qty !== undefined) return ed.qty;
+    return (row.qty === null || row.qty === undefined) ? 0 : Number(row.qty);
+  };
+  const patchRow = (sid, itemId, patch) => setItemEdits(p => ({
+    ...p,
+    [sid]: { ...(p[sid] || {}), [itemId]: { ...(p[sid]?.[itemId] || {}), ...patch } }
+  }));
+
+  // Resolve rows visible under (section, category) — saved + pending-new − pending-del.
+  const rowsOfCategory = (sid, catId) => {
+    const saved  = sectionItems[sid] || [];
+    const news   = pendingNewItems[sid] || [];
+    const delMap = pendingDelItems[sid] || {};
+    return [...saved, ...news]
+      .filter(r => Number(r.category_id) === Number(catId))
+      .filter(r => !delMap[r.item_id]);
+  };
+  // Resolve categories of a given section (rate_package_categories).
+  const catsOfSection = (sid) => pkgCategories
+    .filter(c => c.structure_id === sid)
+    .sort((a,b) => (a.sort_order||0) - (b.sort_order||0) || a.id - b.id);
+
+  // ═══════════════════════════════════════════════════════════════════
+  // FORMULAS (live, every render)
+  // ═══════════════════════════════════════════════════════════════════
+  // calcRow / calcCategory now take a "perItem" flag. In uniform mode
+  // (perItem=false) each item is multiplied by the passed `area`. In
+  // per-item mode (perItem=true) the row's own qty is used.
+  const calcRow = (sid, row, area, perItem) => {
+    const base  = Number(getRowBase(sid, row))  || 0;
+    const addOn = Number(getRowAddOn(sid, row)) || 0;
+    const qty   = perItem ? (Number(getRowQty(sid, row)) || 0) : area;
+    return { base, addOn, qty, perSqft: base + addOn, total: (base + addOn) * qty };
+  };
+  const calcCategory = (sid, catId, area, perItem) => {
+    let base = 0, addOn = 0, count = 0, itemTotalSum = 0;
+    for (const r of rowsOfCategory(sid, catId)) {
+      const rc = calcRow(sid, r, area, perItem);
+      base  += rc.base;
+      addOn += rc.addOn;
+      itemTotalSum += rc.total;
+      count++;
     }
-    setStructSaving(false);
-    if (res?.success) {
-      await loadStructures(selPkg.id);
-      if (res.data) setSelStructure(res.data);
-      setStructModal(null);
-    } else alert(res?.message || "Save failed");
+    const perSqft = base + addOn;
+    // Per-item mode: cat total = sum of item totals (each with own qty)
+    // Uniform mode:  cat total = (Σ base + Σ addOn) × area
+    const total = perItem ? itemTotalSum : (perSqft * area);
+    return { base, addOn, perSqft, total, count };
   };
-  const deleteStructure = async (s) => {
-    if (!window.confirm(`Delete structure "${s.name}"?\nAll its items + rates will be removed from this package.`)) return;
-    const res = await api.del("/library/structures/" + s.id);
-    if (res?.success) {
-      // After delete, reload structures and pick a different one.
-      setSelStructure(null);
-      await loadStructures(selPkg.id);
-    } else alert(res?.message || "Delete failed");
+  const calcSection = (sec) => {
+    const area    = getSecArea(sec);
+    const perItem = getSecPerItem(sec);
+    let base = 0, addOn = 0, total = 0;
+    for (const cat of catsOfSection(sec.id)) {
+      const c = calcCategory(sec.id, cat.id, area, perItem);
+      base += c.base; addOn += c.addOn; total += c.total;
+    }
+    const perSqft = base + addOn;
+    // Per-item mode: section total = Σ category totals (already qty-weighted)
+    // Uniform mode:  section total = (Σ base + Σ addOn) × area
+    const sectionTotal = perItem ? total : (perSqft * area);
+    return { area, perItem, base, addOn, perSqft, total: sectionTotal };
+  };
+  const calcGrand = () => {
+    let base = 0, addOn = 0, total = 0;
+    for (const sec of pkgStructures) {
+      const s = calcSection(sec);
+      base += s.base; addOn += s.addOn; total += s.total;
+    }
+    return { base, addOn, total };
   };
 
-  // ── Filtered items ───────────────────────────────────────────────────
-  const filteredItems = boqItems.filter(i => filterCat === "All" || i.category === filterCat);
+  const hasChanged =
+       Object.keys(sectionEdits).length > 0
+    || Object.values(itemEdits).some(o => Object.keys(o).length > 0)
+    || Object.values(pendingNewItems).some(a => a.length > 0)
+    || Object.values(pendingDelItems).some(o => Object.keys(o).length > 0);
 
-  // ── Save rates ───────────────────────────────────────────────────────
-  // 2-phase save:
-  //   Phase 1 — if user inline-edited any item's base_rate, PUT the new
-  //             base to /library/boq-items/:id so the master library
-  //             reflects it (other packages will see the new base too).
-  //   Phase 2 — POST /library/rate-matrix/bulk with the per-package
-  //             items[]. Backend stores add_on_rate + computes
-  //             rate = base + add_on for the legacy `rate` column
-  //             (Estimate module still reads it).
-  //
-  // Items list sent to bulk uses POST-PUT base_rate (the value that
-  // will be in boq_items after Phase 1 finishes).
+  // ═══════════════════════════════════════════════════════════════════
+  // SECTION CRUD (inline name rename, delete, add via modal)
+  // ═══════════════════════════════════════════════════════════════════
+  const startRenameSection = (sec) => { setRenameSecId(sec.id); setRenameSecValue(getSecName(sec)); };
+  const cancelRenameSection = () => { setRenameSecId(null); setRenameSecValue(""); };
+  const commitRenameSection = () => {
+    if (renameSecId) patchSection(renameSecId, { name: renameSecValue.trim() });
+    cancelRenameSection();
+  };
+  const deleteSection = async (sec) => {
+    if (!window.confirm(`Delete section "${getSecName(sec)}" and all its categories + items?`)) return;
+    const r = await api.del("/library/structures/" + sec.id);
+    if (r?.success) {
+      await loadStructures(selPkg.id);
+      await loadCategories(selPkg.id);
+    } else alert(r?.message || "Delete failed");
+  };
+  const openAddSection = () => {
+    setAddSectionForm({ name: "", default_qty: 0, unit: "sqft", per_item_qty: false });
+    setAddSectionModal(true);
+  };
+  const closeAddSection = () => { if (!addSectionSaving) setAddSectionModal(null); };
+  const saveAddSection = async () => {
+    if (!addSectionForm.name?.trim() || !selPkg) return;
+    setAddSectionSaving(true);
+    const r = await api.post("/library/packages/" + selPkg.id + "/structures", {
+      name:         addSectionForm.name.trim(),
+      unit:         addSectionForm.unit || "sqft",
+      rate:         0,
+      default_qty:  Number(addSectionForm.default_qty) || 0,
+      per_item_qty: !!addSectionForm.per_item_qty,
+    });
+    setAddSectionSaving(false);
+    if (r?.success) {
+      await loadStructures(selPkg.id);
+      // Newly-added sections start UNLOCKED so the user can immediately
+      // add categories + items without an extra "Edit" click.
+      if (r.data?.id) setEditingSections(p => ({ ...p, [r.data.id]: true }));
+      setAddSectionModal(null);
+    } else alert(r?.message || "Save failed");
+  };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // CATEGORY CRUD (inline rename, delete, +Add via drawer)
+  // ═══════════════════════════════════════════════════════════════════
+  const startRenameCat = (cat) => { setRenameCatId(cat.id); setRenameCatValue(cat.category_name); };
+  const cancelRenameCat = () => { setRenameCatId(null); setRenameCatValue(""); };
+  const commitRenameCat = async () => {
+    if (!renameCatId || !renameCatValue.trim()) { cancelRenameCat(); return; }
+    // Section-scoped: only renames rate_package_categories.category_name,
+    // does NOT touch master work_categories or boq_items.category.
+    const r = await api.put("/library/categories/" + renameCatId, { category_name: renameCatValue.trim() });
+    if (r?.success) {
+      await loadCategories(selPkg.id);
+    } else alert(r?.message || "Rename failed");
+    cancelRenameCat();
+  };
+  const deleteCategory = async (cat) => {
+    if (!window.confirm(`Delete category "${cat.category_name}" and all its items in this section?`)) return;
+    const r = await api.del("/library/categories/" + cat.id);
+    if (r?.success) {
+      await loadCategories(selPkg.id);
+      await loadAllSectionItems(selPkg.id, selCity.id, pkgStructures);
+    } else alert(r?.message || "Delete failed");
+  };
+  const openAddCatDrawer = (sec) => {
+    setAddCatPicks([]); setAddCatNewForm(null);
+    setAddCatDrawer({ structure_id: sec.id, section_name: getSecName(sec) });
+  };
+  const closeAddCatDrawer = () => { if (!addCatSaving) setAddCatDrawer(null); };
+  const confirmAddCats = async () => {
+    if (!addCatDrawer) return;
+    setAddCatSaving(true);
+    // addCatPicks is now an ordered array — pick order = final sort order.
+    // Append the new batch AFTER any categories already in this section.
+    const existingMaxSort = pkgCategories
+      .filter(c => c.structure_id === addCatDrawer.structure_id)
+      .reduce((mx, c) => Math.max(mx, Number(c.sort_order) || 0), 0);
+    for (let i = 0; i < addCatPicks.length; i++) {
+      const id = addCatPicks[i];
+      const nm = workCats.find(c => c.id === id)?.name;
+      if (!nm) continue;
+      await api.post("/library/packages/" + selPkg.id + "/categories", {
+        structure_id:  addCatDrawer.structure_id,
+        category_name: nm,
+        sort_order:    existingMaxSort + 1 + i,
+      });
+    }
+    setAddCatSaving(false);
+    await loadCategories(selPkg.id);
+    closeAddCatDrawer();
+  };
+  const createAndAddCat = async () => {
+    if (!addCatNewForm?.name?.trim() || !addCatDrawer) return;
+    setAddCatSaving(true);
+    const cr = await api.post("/library/work-categories", {
+      name:        addCatNewForm.name.trim(),
+      code:        (addCatNewForm.code || "").trim(),
+      description: (addCatNewForm.desc || "").trim(),
+    });
+    if (cr?.success) {
+      await api.post("/library/packages/" + selPkg.id + "/categories", {
+        structure_id:  addCatDrawer.structure_id,
+        category_name: addCatNewForm.name.trim(),
+      });
+      await reloadWorkCats();
+      await loadCategories(selPkg.id);
+      setAddCatNewForm(null);
+    } else alert(cr?.message || "Failed to create category");
+    setAddCatSaving(false);
+  };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // ITEM CRUD (in-row edit, pending delete, +Add via drawer)
+  // ═══════════════════════════════════════════════════════════════════
+  const removeItemRow = (sid, itemId) => {
+    // Soft-delete in UI (cleared by Save Rates).
+    setPendingDelItems(p => ({
+      ...p,
+      [sid]: { ...(p[sid] || {}), [itemId]: true }
+    }));
+    // Drop any pending edits + pending-new for that item.
+    setItemEdits(p => {
+      const sec = { ...(p[sid] || {}) }; delete sec[itemId];
+      return { ...p, [sid]: sec };
+    });
+    setPendingNewItems(p => ({
+      ...p,
+      [sid]: (p[sid] || []).filter(r => r.item_id !== itemId)
+    }));
+  };
+  const openAddItemDrawer = (sec, cat) => {
+    setAddItemPicks([]); setAddItemSearch(""); setAddItemNewForm(null);
+    setAddItemDrawer({
+      structure_id:  sec.id,
+      section_name:  getSecName(sec),
+      category_id:   cat.id,
+      category_name: cat.category_name,
+    });
+  };
+  const closeAddItemDrawer = () => { if (!addItemSaving) setAddItemDrawer(null); };
+  const confirmAddItems = () => {
+    if (!addItemDrawer) return;
+    const sid    = addItemDrawer.structure_id;
+    const catId  = addItemDrawer.category_id;
+    // addItemPicks is now an ORDERED array — preserve user's tick order
+    // so the items appear in the section in that order. package_city_rates
+    // has no sort_order column, but bulk INSERT preserves array order →
+    // display order (sorted by pcr.id) matches the order we insert in.
+    const picks  = [...addItemPicks];
+    if (!picks.length) { closeAddItemDrawer(); return; }
+    const existing = new Set([
+      ...(sectionItems[sid] || []).map(r => r.item_id),
+      ...(pendingNewItems[sid] || []).map(r => r.item_id),
+    ]);
+    const fresh = picks
+      .filter(id => !existing.has(id))
+      .map(id => {
+        const masterItem = boqItems.find(i => i.id === id);
+        return {
+          _isNew:      true,
+          item_id:     id,
+          category_id: catId,        // target category — drawer's footer category (NOT boq_items.category)
+          base_rate:   Number(masterItem?.base_rate) || 0,
+          add_on_rate: 0,
+          description: "",
+        };
+      });
+    if (fresh.length) {
+      setPendingNewItems(p => ({ ...p, [sid]: [...(p[sid] || []), ...fresh] }));
+    }
+    // Un-mark any pending deletes for these items (re-adding a deleted item).
+    setPendingDelItems(p => {
+      const sec = { ...(p[sid] || {}) };
+      for (const id of picks) delete sec[id];
+      return { ...p, [sid]: sec };
+    });
+    closeAddItemDrawer();
+  };
+  const createAndAddItem = async () => {
+    if (!addItemNewForm?.name?.trim() || !addItemDrawer) return;
+    setAddItemSaving(true);
+    const r = await api.post("/library/boq-items", {
+      name:        addItemNewForm.name.trim(),
+      category:    addItemNewForm.category || addItemDrawer.category_name,
+      unit:        addItemNewForm.unit || uomOptions[0] || "Sq.Ft",
+      base_rate:   Number(addItemNewForm.base_rate) || 0,
+      description: addItemNewForm.description || "",
+    });
+    setAddItemSaving(false);
+    if (r?.success && r.data) {
+      const newItem = r.data;
+      setBoqItems(p => [newItem, ...p]);
+      // Auto-add into the drawer's target category in this section.
+      const sid = addItemDrawer.structure_id;
+      setPendingNewItems(p => ({
+        ...p,
+        [sid]: [...(p[sid] || []), {
+          _isNew:      true,
+          item_id:     newItem.id,
+          category_id: addItemDrawer.category_id,
+          base_rate:   Number(newItem.base_rate) || 0,
+          add_on_rate: 0,
+          description: "",
+        }]
+      }));
+      setAddItemNewForm(null);
+    } else alert(r?.message || "Save failed");
+  };
+
+  // ═══════════════════════════════════════════════════════════════════
+  // SAVE RATES — Promise.allSettled so partial failures keep dirty flags
+  //   1. Section name + default_qty PUTs (one per dirty section)
+  //   2. Per-section bulk POST /rate-matrix/bulk (one per dirty section)
+  //   3. Master base_rate PUTs (dedup'd across sections)
+  // ═══════════════════════════════════════════════════════════════════
   const saveRates = async () => {
     if (!selPkg || !selCity) return;
     setSaving(true);
 
-    // Phase 1 — push base_rate edits to the master library.
-    const baseEdits = [];
-    for (const [idStr, vals] of Object.entries(changed)) {
-      if (vals.base_rate === undefined) continue;
-      const id = Number(idStr);
-      const item = boqItems.find(i => i.id === id);
-      if (!item) continue;
-      const newBase = Number(vals.base_rate) || 0;
-      if (newBase === Number(item.base_rate)) continue;       // no real change
-      baseEdits.push({ id, item, newBase });
+    // ── (1) Section edits — figure which sections need PUTs.
+    const sectionOps = []; // { sid, body }
+    for (const [sidStr, ed] of Object.entries(sectionEdits)) {
+      const sid = Number(sidStr);
+      const body = {};
+      if (ed.name         !== undefined) body.name = ed.name.trim();
+      if (ed.default_qty  !== undefined) body.default_qty = Number(ed.default_qty) || 0;
+      if (ed.per_item_qty !== undefined) body.per_item_qty = !!ed.per_item_qty;
+      if (Object.keys(body).length) sectionOps.push({ sid, body });
     }
-    for (const { id, item, newBase } of baseEdits) {
-      const r = await api.put("/library/boq-items/" + id, {
-        name:        item.name,
-        category:    item.category,
-        unit:        item.unit,
-        base_rate:   newBase,
-        description: item.description || "",
-      });
-      if (r?.success && r.data) {
-        // Patch local boqItems so subsequent code uses the new base.
-        setBoqItems(p => p.map(i => i.id === id ? { ...i, ...r.data, base_rate: newBase } : i));
-      }
+
+    // ── (2) Dirty section list = anything with item changes.
+    const dirtySids = new Set();
+    Object.keys(itemEdits).forEach(s => { if (Object.keys(itemEdits[s] || {}).length) dirtySids.add(Number(s)); });
+    Object.keys(pendingNewItems).forEach(s => { if ((pendingNewItems[s] || []).length) dirtySids.add(Number(s)); });
+    Object.keys(pendingDelItems).forEach(s => { if (Object.keys(pendingDelItems[s] || {}).length) dirtySids.add(Number(s)); });
+    // If section.default_qty changed we still want the area mirrored onto items.
+    sectionOps.forEach(s => {
+      // Any section-level change (name / default_qty / per_item_qty) may
+      // require items to be re-saved because we mirror qty onto pcr rows.
+      if ((s.body.default_qty !== undefined || s.body.per_item_qty !== undefined)
+          && (sectionItems[s.sid] || []).length) dirtySids.add(s.sid);
+    });
+
+    const itemOps = []; // { sid, items, area }
+    for (const sid of dirtySids) {
+      const sec = pkgStructures.find(s => s.id === sid);
+      if (!sec) continue;
+      const area    = getSecArea(sec);
+      const perItem = getSecPerItem(sec);
+      const delMap = pendingDelItems[sid] || {};
+      const saved  = (sectionItems[sid] || []).filter(r => !delMap[r.item_id]);
+      const news   = pendingNewItems[sid] || [];
+      const all    = [...saved, ...news];
+      const items  = all.map(r => ({
+        item_id:     r.item_id,
+        category_id: r.category_id,
+        base_rate:   Number(getRowBase(sid, r))  || 0,
+        add_on_rate: Number(getRowAddOn(sid, r)) || 0,
+        description: getRowDesc(sid, r),
+        // Per-item mode: each row keeps its own qty (from edits or saved).
+        // Uniform mode:  mirror section.area onto each pcr row so backend
+        //   compute can use either column without mode-checks.
+        qty:         perItem ? (Number(getRowQty(sid, r)) || 0) : area,
+      }));
+      itemOps.push({ sid, items });
     }
-    // Build effective base map for the bulk payload (covers both edited
-    // and unedited rows). Read directly from changed/rates so we don't
-    // depend on the async setBoqItems above having flushed.
-    const effectiveBase = (item) => {
-      const c = cellOf(item.id);
-      if (c && c.base_rate !== undefined) return Number(c.base_rate) || 0;
-      return Number(item.base_rate) || 0;
-    };
 
-    // Phase 2 — per-package items[].
-    const items = boqItems.map(i => ({
-      item_id:     i.id,
-      base_rate:   effectiveBase(i),
-      add_on_rate: Number(getAddOn(i)) || 0,
-      description: getDesc(i) || "",
-    }));
-    const res = await api.post("/library/rate-matrix/bulk", {
-      package_id:   selPkg.id,
-      city_id:      selCity.id,
-      structure_id: selStructure ? selStructure.id : undefined,
-      items,
-    });
-    setSaving(false);
-    if (res.success) {
-      // Merge `changed` into `rates` (canonical) then clear `changed`.
-      setRates(prev => {
-        const n = { ...prev };
-        Object.entries(changed).forEach(([id, v]) => {
-          // Don't store base_rate in `rates` (rates is per-package only;
-          // base lives on boq_items master).
-          const { base_rate, ...rest } = v;
-          n[id] = { ...n[id], ...rest };
-        });
-        return n;
-      });
-      setChanged({});
-      alert("Rates saved!");
-    } else alert(res.message || "Save failed");
-  };
-
-  // ── Add new handlers ─────────────────────────────────────────────────
-  // `preset` lets section footers pre-fill new-item fields (e.g. category).
-  // For "pkg" edit: pass { _editingId, name, sqft_rate, description } to
-  // switch the existing pkg modal into edit mode (PUT instead of POST).
-  const openAdd = (type, preset = {}) => { setAddForm({ ...preset }); setAddModal(type); };
-
-  // ── Picker handlers ─────────────────────────────────────────────────
-  // Opens the picker for a given category. From here the user either
-  // picks an existing library item (boq_items WHERE category=catName AND
-  // NOT-already-in-rates) or switches to "create new" to push a fresh
-  // boq_items row + auto-pick it.
-  const openPicker  = (catName) => { setPickerCat(catName); setPickerSearch(""); setPickerMode("list"); setPickerForm({ category: catName }); };
-  const closePicker = () => { setPickerCat(null); setPickerSearch(""); setPickerMode("list"); setPickerForm({}); };
-  const pickItemIntoSection = (item) => {
-    // Add to `changed` with default values — Save Rates will persist.
-    setChanged(p => ({ ...p, [item.id]: { add_on: 0, description: "" } }));
-    closePicker();
-  };
-  const submitNewInPicker = async () => {
-    if (!pickerForm.name?.trim()) return alert("Item name required");
-    setPickerSaving(true);
-    const res = await api.post("/library/boq-items", {
-      name:        pickerForm.name.trim(),
-      category:    pickerForm.category || pickerCat || (catOptions[0] || ""),
-      unit:        pickerForm.unit || uomOptions[0] || "",
-      base_rate:   parseFloat(pickerForm.base_rate) || 0,
-      description: pickerForm.description || "",
-    });
-    setPickerSaving(false);
-    if (res?.success && res.data) {
-      // Add new item to master + auto-pick into this section.
-      setBoqItems(p => [res.data, ...p]);
-      setChanged(p => ({ ...p, [res.data.id]: { add_on: 0, description: "" } }));
-      closePicker();
-    } else alert(res?.message || "Save failed");
-  };
-
-  // ── Category rename ─────────────────────────────────────────────────
-  // Calls the new POST /library/work-categories/:id/rename endpoint
-  // which updates work_categories.name + all boq_items.category strings
-  // in one transaction. After save we reload work-categories AND
-  // boq-items so the section regroups cleanly.
-  const startRenameCat = (catName) => {
-    const cat = workCats.find(c => c.name === catName);
-    if (!cat) return;
-    setRenameCatId(cat.id);
-    setRenameCatValue(catName);
-  };
-  const cancelRenameCat = () => { setRenameCatId(null); setRenameCatValue(""); };
-  const saveRenameCat = async () => {
-    const newName = renameCatValue.trim();
-    if (!newName || !renameCatId) return;
-    const res = await api.post("/library/work-categories/" + renameCatId + "/rename", { name: newName });
-    if (res?.success) {
-      cancelRenameCat();
-      // Refresh both — workCats is in useSection("work-categories") which
-      // is consumed read-only here; the simplest refresh is to reload
-      // boq_items (so category strings get the new name) and let workCats
-      // self-refresh on next mount. For instant UX we also patch
-      // boqItems local state.
-      await loadItems();
-    } else alert(res?.message || "Rename failed");
-  };
-
-  // ── Item edit / delete ──────────────────────────────────────────────
-  const openEditItem = (item) => {
-    setEditItem(item);
-    setEditItemForm({
-      name:        item.name || "",
-      category:    item.category || (catOptions[0] || ""),
-      unit:        item.unit || (uomOptions[0] || ""),
-      base_rate:   item.base_rate || 0,
-      description: item.description || "",
-    });
-  };
-  const closeEditItem = () => { setEditItem(null); setEditItemForm({}); };
-  const saveEditItem = async () => {
-    if (!editItem || !editItemForm.name?.trim()) return;
-    setEditItemSaving(true);
-    const res = await api.put("/library/boq-items/" + editItem.id, {
-      name:        editItemForm.name.trim(),
-      category:    editItemForm.category,
-      unit:        editItemForm.unit,
-      base_rate:   parseFloat(editItemForm.base_rate) || 0,
-      description: editItemForm.description || "",
-    });
-    setEditItemSaving(false);
-    if (res?.success && res.data) {
-      setBoqItems(p => p.map(i => i.id === editItem.id ? res.data : i));
-      closeEditItem();
-    } else alert(res?.message || "Save failed");
-  };
-  const deleteItemRow = async (item) => {
-    if (!window.confirm("Delete \"" + item.name + "\" from the library? This also removes it from any package's rate matrix on next save.")) return;
-    const res = await api.del("/library/boq-items/" + item.id);
-    if (res?.success) {
-      setBoqItems(p => p.filter(i => i.id !== item.id));
-      // Drop any pending change for this item too.
-      setChanged(p => { const n = { ...p }; delete n[item.id]; return n; });
-      setRates(p => { const n = { ...p }; delete n[item.id]; return n; });
-    } else alert(res?.message || "Delete failed");
-  };
-
-  // ── Package edit (reuses existing pkg modal in edit mode) ──────────
-  // Old behavior: opened the small "Edit Package" modal (just
-  // name + sqft_rate + description). Replaced with the comprehensive
-  // drawer that lets the user edit package details + every category
-  // and item under it from a single screen.
-  const openEditPkg = (pkg) => {
-    setPkgDrawer(pkg);
-    setPkgDraft({
-      name:        pkg.name || "",
-      sqft_rate:   pkg.sqft_rate || 0,
-      description: pkg.description || "",
-    });
-    setCatRenames({});
-    setItemEdits({});
-    setDeletedItems({});
-  };
-  const closePkgDrawer = () => {
-    if (pkgSaving) return;
-    setPkgDrawer(null);
-  };
-
-  // Single batched save for the entire drawer. Order matters:
-  //   1. PUT package details (if any field changed)
-  //   2. POST /work-categories/:id/rename for each renamed category
-  //      (this also propagates the rename across boq_items.category)
-  //   3. PUT /boq-items/:id for each edited item (uses the NEW
-  //      category name from step 2 if applicable)
-  //   4. DELETE /boq-items/:id for each removed item (soft delete)
-  // After all calls finish, reload packages + items + workCats so the
-  // grid reflects the new state, and close the drawer.
-  const savePackageEdit = async () => {
-    if (!pkgDrawer) return;
-    setPkgSaving(true);
-    try {
-      // 1. Package
-      const pkgChanged = (
-        pkgDraft.name        !== pkgDrawer.name ||
-        Number(pkgDraft.sqft_rate) !== Number(pkgDrawer.sqft_rate || 0) ||
-        (pkgDraft.description || "") !== (pkgDrawer.description || "")
-      );
-      if (pkgChanged) {
-        await api.put("/library/rate-packages/" + pkgDrawer.id, {
-          name:        pkgDraft.name.trim(),
-          sqft_rate:   Number(pkgDraft.sqft_rate) || 0,
-          description: pkgDraft.description || "",
-          construction_type_id: pkgDrawer.construction_type_id,
-        });
-      }
-      // 2. Category renames
-      for (const [oldName, newName] of Object.entries(catRenames)) {
-        const trimmed = (newName || "").trim();
-        if (!trimmed || trimmed === oldName) continue;
-        const cat = workCats.find(c => c.name === oldName);
-        if (cat) {
-          await api.post("/library/work-categories/" + cat.id + "/rename", { name: trimmed });
-        }
-      }
-      // 3. Item edits — use latest category name (post-rename) for
-      //    items whose category got renamed in step 2.
-      const nameAfterRename = (oldCatName) => catRenames[oldCatName]?.trim() || oldCatName;
-      for (const [idStr, edits] of Object.entries(itemEdits)) {
-        const item = boqItems.find(i => i.id === Number(idStr));
+    // ── (3) Master base_rate edits — push to boq_items, dedup'd.
+    const masterEdits = new Map(); // itemId → { newBase, item }
+    for (const [sidStr, byItem] of Object.entries(itemEdits)) {
+      for (const [iidStr, ed] of Object.entries(byItem)) {
+        if (ed.base_rate === undefined) continue;
+        const iid = Number(iidStr);
+        const item = boqItems.find(i => i.id === iid);
         if (!item) continue;
-        await api.put("/library/boq-items/" + idStr, {
-          name:        (edits.name        ?? item.name).trim(),
-          category:    nameAfterRename(edits.category ?? item.category),
-          unit:        edits.unit        ?? item.unit,
-          base_rate:   parseFloat(edits.base_rate ?? item.base_rate) || 0,
-          description: edits.description ?? item.description ?? "",
+        const newBase = Number(ed.base_rate) || 0;
+        if (newBase === Number(item.base_rate)) continue;
+        if (!masterEdits.has(iid)) masterEdits.set(iid, { newBase, item });
+      }
+    }
+
+    // ── Fan out all ops via Promise.allSettled.
+    const ops = [];
+    for (const { sid, body } of sectionOps) {
+      ops.push((async () => {
+        const r = await api.put("/library/structures/" + sid, body);
+        return { kind: "section", sid, ok: !!r?.success, msg: r?.message };
+      })());
+    }
+    for (const { sid, items } of itemOps) {
+      ops.push((async () => {
+        const r = await api.post("/library/rate-matrix/bulk", {
+          package_id:   selPkg.id,
+          city_id:      selCity.id,
+          structure_id: sid,
+          items,
+        });
+        return { kind: "items", sid, ok: !!r?.success, msg: r?.message };
+      })());
+    }
+    for (const [iid, { newBase, item }] of masterEdits.entries()) {
+      ops.push((async () => {
+        const r = await api.put("/library/boq-items/" + iid, {
+          name:        item.name,
+          category:    item.category,
+          unit:        item.unit,
+          base_rate:   newBase,
+          description: item.description || "",
+        });
+        return { kind: "boq-item", iid, ok: !!r?.success, msg: r?.message };
+      })());
+    }
+
+    const results = await Promise.allSettled(ops);
+    setSaving(false);
+
+    // Selectively clear dirty flags for SUCCESSFUL ops only.
+    const okSidSection = new Set();
+    const okSidItems   = new Set();
+    const okItemIds    = new Set();
+    const failures     = [];
+    for (const r of results) {
+      if (r.status === "rejected") { failures.push("rejected"); continue; }
+      const v = r.value;
+      if (!v?.ok) { failures.push(v?.msg || "unknown"); continue; }
+      if (v.kind === "section")  okSidSection.add(v.sid);
+      if (v.kind === "items")    okSidItems.add(v.sid);
+      if (v.kind === "boq-item") okItemIds.add(v.iid);
+    }
+    if (okSidSection.size) {
+      setSectionEdits(p => { const n = {...p}; okSidSection.forEach(s => delete n[s]); return n; });
+    }
+    if (okSidItems.size) {
+      setItemEdits(p => { const n = {...p}; okSidItems.forEach(s => delete n[s]); return n; });
+      setPendingNewItems(p => { const n = {...p}; okSidItems.forEach(s => delete n[s]); return n; });
+      setPendingDelItems(p => { const n = {...p}; okSidItems.forEach(s => delete n[s]); return n; });
+    }
+    if (okItemIds.size && boqItems.length) {
+      // Patch local boqItems so the next render sees the new master base.
+      setBoqItems(p => p.map(i => {
+        if (!okItemIds.has(i.id)) return i;
+        const e = masterEdits.get(i.id);
+        return e ? { ...i, base_rate: e.newBase } : i;
+      }));
+    }
+
+    // Refresh canonical state from server.
+    await Promise.all([
+      loadStructures(selPkg.id),
+      loadCategories(selPkg.id),
+      loadItems(),
+    ]);
+    await loadAllSectionItems(selPkg.id, selCity.id, pkgStructures);
+
+    if (failures.length) {
+      alert(`Saved ${ops.length - failures.length} of ${ops.length}.\nFailed: ${failures.length}.\nFailed sections will stay marked as unsaved.`);
+      // Re-lock the sections that saved successfully. Failed ones stay
+      // unlocked so the user can fix and retry.
+      if (okSidItems.size || okSidSection.size) {
+        setEditingSections(p => {
+          const n = { ...p };
+          okSidItems.forEach(s => delete n[s]);
+          okSidSection.forEach(s => delete n[s]);
+          return n;
         });
       }
-      // 4. Soft-deletes
-      for (const idStr of Object.keys(deletedItems)) {
-        await api.del("/library/boq-items/" + idStr);
-      }
-      // 5. Refresh everything that could have changed.
-      await Promise.all([
-        loadPackages(),
-        loadItems(),
-        reloadWorkCats(),
-      ]);
-      setPkgDrawer(null);
-    } catch (e) {
-      alert("Save failed: " + (e?.message || "Unknown error"));
-    } finally {
-      setPkgSaving(false);
+    } else {
+      // Full success → re-lock every section (zero-friction default state).
+      setEditingSections({});
+      alert("Rates saved!");
     }
   };
 
-  // ── Add Category helpers ─────────────────────────────────────────
-  const addEmptyCategorySection = (name) => {
-    if (!name) return;
-    setAddedEmptyCats(prev => prev.includes(name) ? prev : [...prev, name]);
-    setCatDropdownOpen(false);
-    setNewCatForm(null);
-  };
-  const createAndAddCategory = async () => {
-    const name = (newCatForm?.name || "").trim();
-    if (!name) return;
-    setNewCatSaving(true);
-    const res = await api.post("/library/work-categories", {
-      name,
-      code:        (newCatForm.code || "").trim(),
-      description: (newCatForm.desc || "").trim(),
-      unit:        "",
-      rate:        0,
-    });
-    setNewCatSaving(false);
-    if (res?.success) {
-      await reloadWorkCats();
-      addEmptyCategorySection(name);
-    } else {
-      alert(res?.message || "Failed to create category");
-    }
-  };
+  // ═══════════════════════════════════════════════════════════════════
+  // BASIC ADD-NEW HANDLERS (Construction Type, City, Package) — kept
+  // ═══════════════════════════════════════════════════════════════════
+  const openAdd = (type, preset = {}) => { setAddForm({ ...preset }); setAddModal(type); };
   const handleAdd = async () => {
     setAdding(true);
     let res;
@@ -2013,10 +2189,9 @@ function ClientBOQSection() {
     } else if (addModal === "pkg") {
       if (!addForm.name?.trim()) { setAdding(false); return alert("Name required"); }
       if (addForm._editingId) {
-        // EDIT mode — PUT instead of POST.
         res = await api.put("/library/rate-packages/" + addForm._editingId, {
-          name: addForm.name.trim(),
-          sqft_rate: addForm.sqft_rate || 0,
+          name:        addForm.name.trim(),
+          sqft_rate:   addForm.sqft_rate || 0,
           description: addForm.description || "",
         });
         if (res.success) {
@@ -2024,83 +2199,370 @@ function ClientBOQSection() {
           if (selPkg?.id === addForm._editingId) setSelPkg(p => ({ ...p, ...res.data }));
         }
       } else {
-        res = await api.post("/library/rate-packages", { name: addForm.name.trim(), construction_type_id: selType?.id, sqft_rate: addForm.sqft_rate || 0, description: addForm.description || "" });
+        res = await api.post("/library/rate-packages", {
+          name: addForm.name.trim(),
+          construction_type_id: selType?.id,
+          sqft_rate: addForm.sqft_rate || 0,
+          description: addForm.description || ""
+        });
         if (res.success) { await loadPackages(); setSelPkg(res.data); }
       }
-    } else if (addModal === "item") {
-      if (!addForm.name?.trim()) { setAdding(false); return alert("Name required"); }
-      res = await api.post("/library/boq-items", { name: addForm.name.trim(), category: addForm.category || catOptions[0] || "", unit: addForm.unit || uomOptions[0] || "", base_rate: addForm.base_rate || 0, description: addForm.description || "" });
-      if (res.success) { await loadItems(); }
     }
     setAdding(false);
     if (res?.success) setAddModal(null);
     else if (res) alert(res.message || "Save failed");
   };
 
-  const COLORS = ["#2563EB","#10B981","#F59E0B","#EF4444","#8B5CF6","#EC4899","#06B6D4","#84CC16"];
+  // ═══════════════════════════════════════════════════════════════════
+  // PACKAGE EDIT DRAWER — open / staged-edit helpers / save
+  //   Edits are staged in pkg* maps; nothing hits server until Save All.
+  //   Save uses Promise.allSettled, clears successful flags only.
+  // ═══════════════════════════════════════════════════════════════════
+  const openEditPkg = (pkg) => {
+    setPkgDrawer(pkg);
+    setPkgDraft({
+      name:        pkg.name || "",
+      sqft_rate:   pkg.sqft_rate || 0,
+      description: pkg.description || "",
+    });
+    setPkgSecEdits({});
+    setPkgCatRenames({});
+    setPkgItemEdits({});
+    setPkgDeletedItems({});
+    setPkgCollapsedSecs({});
+  };
+  const closePkgDrawer = () => { if (!pkgSaving) setPkgDrawer(null); };
 
-  // ── Breadcrumb style selector row ────────────────────────────────────
-  const selBoxStyle = (active) => ({
-    flex: 1, minWidth: 160, background: "white", borderRadius: 10,
-    border: "1.5px solid " + (active ? "#2563EB" : "#E5E7EB"),
-    padding: "12px 14px", cursor: "pointer",
-    boxShadow: active ? "0 0 0 3px #DBEAFE" : "none",
+  // Effective lookups for drawer (staged > saved).
+  const pkgGetSecName = (sec) => {
+    const ed = pkgSecEdits[sec.id];
+    if (ed && ed.name !== undefined) return ed.name;
+    return sec.name;
+  };
+  const pkgGetSecArea = (sec) => {
+    const ed = pkgSecEdits[sec.id];
+    if (ed && ed.default_qty !== undefined) return ed.default_qty;
+    return sec.default_qty || 0;
+  };
+  const pkgPatchSec = (sid, patch) => setPkgSecEdits(p => ({
+    ...p, [sid]: { ...(p[sid] || {}), ...patch }
+  }));
+  const pkgGetCatName = (cat) => {
+    if (pkgCatRenames[cat.id] !== undefined) return pkgCatRenames[cat.id];
+    return cat.category_name;
+  };
+  const pkgGetItem = (iid) => {
+    const master = boqItems.find(i => i.id === iid);
+    if (!master) return null;
+    const ed = pkgItemEdits[iid] || {};
+    return {
+      id: iid,
+      name:        ed.name        !== undefined ? ed.name        : master.name,
+      unit:        ed.unit        !== undefined ? ed.unit        : master.unit,
+      base_rate:   ed.base_rate   !== undefined ? ed.base_rate   : master.base_rate,
+      description: ed.description !== undefined ? ed.description : (master.description || ""),
+      _master: master,
+    };
+  };
+  const pkgPatchItem = (iid, patch) => setPkgItemEdits(p => ({
+    ...p, [iid]: { ...(p[iid] || {}), ...patch }
+  }));
+  const pkgToggleDelete = (iid) => setPkgDeletedItems(p => {
+    const n = { ...p };
+    if (n[iid]) delete n[iid]; else n[iid] = true;
+    return n;
   });
 
-  // Filtered packages for selected type
+  const savePackageEdit = async () => {
+    if (!pkgDrawer) return;
+    setPkgSaving(true);
+    const ops = [];
+
+    // (1) Package basics
+    const orig = pkgDrawer;
+    const pkgChanged =
+         pkgDraft.name        !== orig.name
+      || Number(pkgDraft.sqft_rate) !== Number(orig.sqft_rate || 0)
+      || (pkgDraft.description || "") !== (orig.description || "");
+    if (pkgChanged) {
+      ops.push((async () => {
+        const r = await api.put("/library/rate-packages/" + orig.id, {
+          name:        pkgDraft.name.trim(),
+          sqft_rate:   Number(pkgDraft.sqft_rate) || 0,
+          description: pkgDraft.description || "",
+          construction_type_id: orig.construction_type_id,
+        });
+        return { kind: "pkg", ok: !!r?.success, msg: r?.message };
+      })());
+    }
+
+    // (2) Section edits (name + default_qty)
+    for (const [sidStr, ed] of Object.entries(pkgSecEdits)) {
+      const sid = Number(sidStr);
+      const body = {};
+      if (ed.name        !== undefined) body.name = ed.name.trim();
+      if (ed.default_qty !== undefined) body.default_qty = Number(ed.default_qty) || 0;
+      if (!Object.keys(body).length) continue;
+      ops.push((async () => {
+        const r = await api.put("/library/structures/" + sid, body);
+        return { kind: "section", sid, ok: !!r?.success, msg: r?.message };
+      })());
+    }
+
+    // (3) Section-scoped category renames (rate_package_categories)
+    for (const [rpcIdStr, newName] of Object.entries(pkgCatRenames)) {
+      const rpcId = Number(rpcIdStr);
+      const trimmed = (newName || "").trim();
+      if (!trimmed) continue;
+      ops.push((async () => {
+        const r = await api.put("/library/categories/" + rpcId, { category_name: trimmed });
+        return { kind: "category", rpcId, ok: !!r?.success, msg: r?.message };
+      })());
+    }
+
+    // (4) Master item edits (boq_items)
+    for (const [iidStr, ed] of Object.entries(pkgItemEdits)) {
+      const iid = Number(iidStr);
+      const master = boqItems.find(i => i.id === iid);
+      if (!master) continue;
+      // Skip items pending deletion — DELETE handles them.
+      if (pkgDeletedItems[iid]) continue;
+      // No-op if nothing changed.
+      const newName = ed.name        !== undefined ? ed.name.trim()        : master.name;
+      const newUnit = ed.unit        !== undefined ? ed.unit                : master.unit;
+      const newBase = ed.base_rate   !== undefined ? (Number(ed.base_rate) || 0) : (Number(master.base_rate) || 0);
+      const newDesc = ed.description !== undefined ? ed.description         : (master.description || "");
+      const nothing =
+           newName === master.name
+        && newUnit === master.unit
+        && newBase === (Number(master.base_rate) || 0)
+        && newDesc === (master.description || "");
+      if (nothing) continue;
+      ops.push((async () => {
+        const r = await api.put("/library/boq-items/" + iid, {
+          name:        newName,
+          category:    master.category,
+          unit:        newUnit,
+          base_rate:   newBase,
+          description: newDesc,
+        });
+        return { kind: "boq-item", iid, ok: !!r?.success, msg: r?.message };
+      })());
+    }
+
+    // (5) Master item soft-deletes
+    for (const iidStr of Object.keys(pkgDeletedItems)) {
+      const iid = Number(iidStr);
+      ops.push((async () => {
+        const r = await api.del("/library/boq-items/" + iid);
+        return { kind: "boq-item-del", iid, ok: !!r?.success, msg: r?.message };
+      })());
+    }
+
+    const results = await Promise.allSettled(ops);
+    setPkgSaving(false);
+
+    // Selectively clear dirty flags.
+    let pkgOK = false;
+    const okSids   = new Set();
+    const okRpcIds = new Set();
+    const okIids   = new Set();
+    const okDelIids= new Set();
+    const failures = [];
+    for (const r of results) {
+      if (r.status === "rejected") { failures.push("rejected"); continue; }
+      const v = r.value;
+      if (!v?.ok) { failures.push(v?.msg || "unknown"); continue; }
+      if (v.kind === "pkg")            pkgOK = true;
+      if (v.kind === "section")        okSids.add(v.sid);
+      if (v.kind === "category")       okRpcIds.add(v.rpcId);
+      if (v.kind === "boq-item")       okIids.add(v.iid);
+      if (v.kind === "boq-item-del")   okDelIids.add(v.iid);
+    }
+    if (pkgOK) {
+      // Patch local pkgDrawer + packages list so the UI reflects new name/rate
+      // immediately even before loadPackages() returns.
+      setPackages(p => p.map(x => x.id === orig.id ? { ...x, ...pkgDraft } : x));
+      if (selPkg?.id === orig.id) setSelPkg(p => ({ ...p, ...pkgDraft }));
+    }
+    if (okSids.size) setPkgSecEdits(p => { const n = {...p}; okSids.forEach(s => delete n[s]); return n; });
+    if (okRpcIds.size) setPkgCatRenames(p => { const n = {...p}; okRpcIds.forEach(s => delete n[s]); return n; });
+    if (okIids.size) setPkgItemEdits(p => { const n = {...p}; okIids.forEach(s => delete n[s]); return n; });
+    if (okDelIids.size) {
+      setPkgDeletedItems(p => { const n = {...p}; okDelIids.forEach(s => delete n[s]); return n; });
+      // Drop deleted items from local boqItems too.
+      setBoqItems(p => p.filter(i => !okDelIids.has(i.id)));
+    }
+
+    // Refresh canonical state.
+    await Promise.all([
+      loadPackages(),
+      loadItems(),
+      loadStructures(orig.id),
+      loadCategories(orig.id),
+    ]);
+    if (selCity && pkgStructures.length) {
+      await loadAllSectionItems(orig.id, selCity.id, pkgStructures);
+    }
+
+    if (failures.length) {
+      alert(`Saved ${ops.length - failures.length} of ${ops.length}.\nFailed: ${failures.length}.\nFailed edits stay marked as unsaved.`);
+    } else {
+      // Close drawer only on full success.
+      setPkgDrawer(null);
+    }
+  };
+
+  // ── DELETE PACKAGE — danger-zone flow with type-to-confirm ─────
+  // Cascades on the backend (sections + categories + pcr rows all soft-
+  // deleted in one route call). Quotations referencing the package are
+  // intentionally left intact so historical records stay readable.
+  const deletePackage = async () => {
+    if (!pkgDrawer) return;
+    if (pkgDeleteText.trim() !== pkgDrawer.name) return;   // guard
+    setPkgDeleting(true);
+    try {
+      const r = await api.del("/library/rate-packages/" + pkgDrawer.id);
+      if (!r?.success) { alert(r?.message || "Delete failed"); return; }
+      await loadPackages();
+      if (selPkg?.id === pkgDrawer.id) setSelPkg(null);
+      setPkgDrawer(null);
+      setPkgDangerOpen(false);
+      setPkgDeleteText("");
+    } finally { setPkgDeleting(false); }
+  };
+
+  // ── EDIT / DELETE CONSTRUCTION TYPE (danger-zone delete) ───────
+  const openTypeEdit = (ct) => {
+    setTypeEdit(ct);
+    setTypeForm({ name: ct.name || "", color: ct.color || "#2563EB" });
+    setTypeDangerOpen(false); setTypeDeleteText("");
+  };
+  const closeTypeEdit = () => { if (!typeSaving) { setTypeEdit(null); setTypeDangerOpen(false); setTypeDeleteText(""); } };
+  const saveTypeEdit = async () => {
+    if (!typeEdit || !typeForm.name?.trim()) return;
+    setTypeSaving(true);
+    const r = await api.put("/library/construction-types/" + typeEdit.id, {
+      name: typeForm.name.trim(), color: typeForm.color || "#2563EB",
+    });
+    setTypeSaving(false);
+    if (r?.success) {
+      await loadTypes();
+      if (selType?.id === typeEdit.id) setSelType(p => ({ ...p, ...typeForm }));
+      setTypeEdit(null);
+    } else alert(r?.message || "Save failed");
+  };
+  const deleteType = async () => {
+    if (!typeEdit) return;
+    if (typeDeleteText.trim() !== typeEdit.name) return;
+    setTypeSaving(true);
+    const r = await api.del("/library/construction-types/" + typeEdit.id);
+    setTypeSaving(false);
+    if (r?.success) {
+      await loadTypes();
+      if (selType?.id === typeEdit.id) { setSelType(null); setSelPkg(null); }
+      setTypeEdit(null);
+    } else alert(r?.message || "Delete failed");
+  };
+
+  // ── EDIT / DELETE CITY (danger-zone delete) ────────────────────
+  const openCityEdit = (city) => {
+    setCityEdit(city);
+    setCityForm({ name: city.name || "", state: city.state || "Chhattisgarh" });
+    setCityDangerOpen(false); setCityDeleteText("");
+  };
+  const closeCityEdit = () => { if (!citySaving) { setCityEdit(null); setCityDangerOpen(false); setCityDeleteText(""); } };
+  const saveCityEdit = async () => {
+    if (!cityEdit || !cityForm.name?.trim()) return;
+    setCitySaving(true);
+    const r = await api.put("/library/cities/" + cityEdit.id, {
+      name: cityForm.name.trim(), state: cityForm.state || "Chhattisgarh",
+    });
+    setCitySaving(false);
+    if (r?.success) {
+      await loadCities();
+      if (selCity?.id === cityEdit.id) setSelCity(p => ({ ...p, ...cityForm }));
+      setCityEdit(null);
+    } else alert(r?.message || "Save failed");
+  };
+  const deleteCity = async () => {
+    if (!cityEdit) return;
+    if (cityDeleteText.trim() !== cityEdit.name) return;
+    setCitySaving(true);
+    const r = await api.del("/library/cities/" + cityEdit.id);
+    setCitySaving(false);
+    if (r?.success) {
+      await loadCities();
+      if (selCity?.id === cityEdit.id) setSelCity(null);
+      setCityEdit(null);
+    } else alert(r?.message || "Delete failed");
+  };
+
+  const pkgHasChanged = !!pkgDrawer && (
+       pkgDraft.name        !== pkgDrawer.name
+    || Number(pkgDraft.sqft_rate) !== Number(pkgDrawer.sqft_rate || 0)
+    || (pkgDraft.description || "") !== (pkgDrawer.description || "")
+    || Object.values(pkgSecEdits).some(o => Object.keys(o).length > 0)
+    || Object.keys(pkgCatRenames).length > 0
+    || Object.keys(pkgItemEdits).length > 0
+    || Object.keys(pkgDeletedItems).length > 0
+  );
+
+  // ═══════════════════════════════════════════════════════════════════
+  // PALETTE
+  // ═══════════════════════════════════════════════════════════════════
+  const COL_DARK    = "#0F172A";
+  const COL_DARK2   = "#1E293B";
+  const COL_CAT_BG  = "#F1F5F9";    // category subheader bg
+  const COL_AMBER   = "#F59E0B";
+  const COL_TEAL    = "#0D9488";
+  const COL_TEAL_BG = "#CCFBF1";
+  const COL_GREEN   = "#059669";
+  const COL_RED     = "#EF4444";
+  const COL_BLUE    = "#2563EB";
+
   const typePkgs = packages.filter(p => selType && String(p.construction_type_id) === String(selType.id));
+  const grand = calcGrand();
 
-  // Effective value lookups (changed > saved > default).
-  const cellOf = (id) => (changed[id] ?? rates[id] ?? null);
-  const getAddOn = (item) => {
-    const c = cellOf(item.id);
-    return c && c.add_on !== undefined ? c.add_on : "";
-  };
-  const getDesc = (item) => {
-    const c = cellOf(item.id);
-    return c && c.description !== undefined ? c.description : "";
-  };
-  // Effective base rate — `changed[id].base_rate` (inline-edited) wins
-  // over `item.base_rate` (master library default). Stored as a STRING
-  // while editing (matches the input value) so the user can type freely.
-  const getBase = (item) => {
-    const c = cellOf(item.id);
-    if (c && c.base_rate !== undefined) return c.base_rate;
-    return item.base_rate;
-  };
-  // Merge a partial { add_on?, description? } into the changed entry for an item.
-  const patchChanged = (id, patch) => setChanged(p => {
-    const cur = p[id] ?? rates[id] ?? { add_on: 0, description: "" };
-    return { ...p, [id]: { ...cur, ...patch } };
-  });
-  const hasChanged = Object.keys(changed).length > 0;
-
-  // Derived once at component scope so both the info-bar "+ Add Category"
-  // dropdown (above) and the grouped-section IIFE (below) can read it.
-  // Pre-lift fix: `pickedItems` used to be computed inside the section
-  // IIFE only, which caused a ReferenceError when the dropdown tried to
-  // exclude already-shown categories.
-  const pickedIds   = new Set([...Object.keys(rates), ...Object.keys(changed)].map(String));
-  const pickedItems = boqItems.filter(i => pickedIds.has(String(i.id)));
-
+  // ═══════════════════════════════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════════════════════════════
   return (
     <div style={{ fontFamily: "inherit" }}>
 
-      {/* ── LEVEL 1: Construction Type ────────────────────────────────── */}
+      {/* ─── LEVEL 1: Construction Type ──────────────────────────────── */}
       <div style={{ marginBottom: 18 }}>
-        <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
-          1 — Construction Type
-        </div>
+        <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>1 — Construction Type</div>
         <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-          {conTypes.map(ct => (
-            <div key={ct.id} onClick={() => { setSelType(ct); setSelPkg(null); setRates({}); setChanged({}); }}
-              style={{ padding: "9px 18px", borderRadius: 8, border: "2px solid " + (selType?.id === ct.id ? (ct.color||"#2563EB") : "#E5E7EB"),
-                background: selType?.id === ct.id ? (ct.color||"#2563EB") : "white",
-                color: selType?.id === ct.id ? "white" : "#374151",
-                fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 0.15s" }}>
-              {ct.name}
-            </div>
-          ))}
+          {conTypes.map(ct => {
+            const active = selType?.id === ct.id;
+            return (
+              <div key={ct.id} onClick={() => { setSelType(ct); setSelPkg(null); }}
+                style={{
+                  position: "relative",
+                  padding: active ? "9px 32px 9px 18px" : "9px 18px", borderRadius: 8,
+                  border: "2px solid " + (active ? (ct.color || COL_BLUE) : "#E5E7EB"),
+                  background: active ? (ct.color || COL_BLUE) : "white",
+                  color: active ? "white" : "#374151",
+                  fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all .15s"
+                }}>
+                {ct.name}
+                {active && (
+                  <button onClick={(e) => { e.stopPropagation(); openTypeEdit(ct); }}
+                    title="Edit construction type"
+                    style={{ position: "absolute", right: 6, top: 6,
+                             background: "rgba(255,255,255,0.2)", border: "none",
+                             borderRadius: 4, color: "white", cursor: "pointer",
+                             padding: 3, display: "flex" }}>
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                    </svg>
+                  </button>
+                )}
+              </div>
+            );
+          })}
           <button onClick={() => openAdd("type")}
             style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
             + New Type
@@ -2108,22 +2570,40 @@ function ClientBOQSection() {
         </div>
       </div>
 
-      {/* ── LEVEL 2: City ─────────────────────────────────────────────── */}
+      {/* ─── LEVEL 2: City ──────────────────────────────────────────── */}
       {selType && (
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
-            2 — City
-          </div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>2 — City</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-            {cities.map(city => (
-              <div key={city.id} onClick={() => { setSelCity(city); setRates({}); setChanged({}); }}
-                style={{ padding: "9px 18px", borderRadius: 8, border: "2px solid " + (selCity?.id === city.id ? "#0891B2" : "#E5E7EB"),
-                  background: selCity?.id === city.id ? "#0891B2" : "white",
-                  color: selCity?.id === city.id ? "white" : "#374151",
-                  fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 0.15s" }}>
-                {city.name}
-              </div>
-            ))}
+            {cities.map(city => {
+              const active = selCity?.id === city.id;
+              return (
+                <div key={city.id} onClick={() => setSelCity(city)}
+                  style={{
+                    position: "relative",
+                    padding: active ? "9px 32px 9px 18px" : "9px 18px", borderRadius: 8,
+                    border: "2px solid " + (active ? "#0891B2" : "#E5E7EB"),
+                    background: active ? "#0891B2" : "white",
+                    color: active ? "white" : "#374151",
+                    fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all .15s"
+                  }}>
+                  {city.name}
+                  {active && (
+                    <button onClick={(e) => { e.stopPropagation(); openCityEdit(city); }}
+                      title="Edit city"
+                      style={{ position: "absolute", right: 6, top: 6,
+                               background: "rgba(255,255,255,0.2)", border: "none",
+                               borderRadius: 4, color: "white", cursor: "pointer",
+                               padding: 3, display: "flex" }}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              );
+            })}
             <button onClick={() => openAdd("city")}
               style={{ padding: "9px 14px", borderRadius: 8, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
               + New City
@@ -2132,12 +2612,10 @@ function ClientBOQSection() {
         </div>
       )}
 
-      {/* ── LEVEL 3: Package ──────────────────────────────────────────── */}
+      {/* ─── LEVEL 3: Package ──────────────────────────────────────── */}
       {selType && selCity && (
         <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
-            3 — Package
-          </div>
+          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>3 — Package</div>
           <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
             {typePkgs.map(pkg => {
               const active = selPkg?.id === pkg.id;
@@ -2147,15 +2625,21 @@ function ClientBOQSection() {
                     border: "2px solid " + (active ? "#7C3AED" : "#E5E7EB"),
                     background: active ? "#7C3AED" : "white",
                     color: active ? "white" : "#374151",
-                    fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all 0.15s" }}>
+                    fontWeight: 600, fontSize: 13, cursor: "pointer", transition: "all .15s" }}>
                   <div>{pkg.name}</div>
-                  {pkg.sqft_rate > 0 && <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>Rs.{Number(pkg.sqft_rate).toLocaleString()}/sqft</div>}
-                  {/* Edit pencil — only visible on the selected tile so non-active tiles stay clean */}
+                  {pkg.sqft_rate > 0 && <div style={{ fontSize: 11, fontWeight: 500, opacity: 0.85 }}>Rs.{inr(pkg.sqft_rate)}/sqft</div>}
+                  {/* Pencil — only on the active tile. Opens Package Edit drawer. */}
                   {active && (
                     <button onClick={(e) => { e.stopPropagation(); openEditPkg(pkg); }}
                       title="Edit package"
-                      style={{ position: "absolute", right: 6, top: 6, background: "rgba(255,255,255,0.18)", border: "none", borderRadius: 4, color: "white", cursor: "pointer", padding: 3, display: "flex" }}>
-                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                      style={{ position: "absolute", right: 6, top: 6,
+                               background: "rgba(255,255,255,0.18)", border: "none",
+                               borderRadius: 4, color: "white", cursor: "pointer",
+                               padding: 3, display: "flex" }}>
+                      <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                      </svg>
                     </button>
                   )}
                 </div>
@@ -2169,503 +2653,680 @@ function ClientBOQSection() {
         </div>
       )}
 
-      {/* ── LEVEL 4: STRUCTURES inside the package ─────────────────────
-          A package can host multiple structures (Ground Floor sqft,
-          Septic Tank lump_sum, Boundary Wall rft, etc.). Items below
-          are scoped to whichever structure is selected here. */}
+      {/* ═══════════════════════════════════════════════════════════════
+          TREE — Section → Category → Item (all sections rendered together)
+      ═══════════════════════════════════════════════════════════════ */}
       {selType && selCity && selPkg && (
-        <div style={{ marginBottom: 18 }}>
-          <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 8 }}>
-            4 — Structure
-          </div>
-          {pkgStructures.length === 0 ? (
-            <div style={{ padding: "14px 16px", background: "#FEF3C7", border: "1.5px dashed #FCD34D", borderRadius: 8, color: "#92400E", fontSize: 12.5 }}>
-              No structures yet — click <strong>"+ Add Structure"</strong> below to start.
-              Each structure represents a sub-unit of the package (e.g. Ground Floor sqft @ Rs.1550, Septic Tank lump @ Rs.85,000).
-            </div>
-          ) : null}
-          <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: pkgStructures.length === 0 ? 10 : 0 }}>
-            {pkgStructures.map(s => {
-              const active = selStructure?.id === s.id;
-              const unitLbl = (STRUCT_UNITS.find(u => u.key === s.unit)?.label || s.unit).split(" ")[0];
-              return (
-                <div key={s.id} onClick={() => setSelStructure(s)}
-                  style={{ position: "relative", padding: "10px 16px 10px 18px", borderRadius: 9, minWidth: 170,
-                           border: "2px solid " + (active ? "#0EA5E9" : "#E5E7EB"),
-                           background: active ? "#0EA5E9" : "white",
-                           color: active ? "white" : "#374151",
-                           cursor: "pointer", transition: "all .15s",
-                           paddingRight: active ? 56 : 18 }}>
-                  <div style={{ fontWeight: 700, fontSize: 13 }}>{s.name}</div>
-                  <div style={{ fontSize: 11, fontWeight: 500, opacity: active ? 0.85 : 0.7, marginTop: 1 }}>
-                    Rs.{Number(s.rate || 0).toLocaleString()}/{unitLbl}
-                  </div>
-                  {active && (
-                    <div style={{ position: "absolute", top: 6, right: 6, display: "flex", gap: 2 }}>
-                      <button onClick={(e) => { e.stopPropagation(); openEditStructure(s); }}
-                        title="Edit structure"
-                        style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", borderRadius: 4, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12 }}>
-                        ✎
-                      </button>
-                      <button onClick={(e) => { e.stopPropagation(); deleteStructure(s); }}
-                        title="Delete structure"
-                        style={{ background: "rgba(255,255,255,0.2)", border: "none", color: "white", borderRadius: 4, width: 22, height: 22, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, lineHeight: 1 }}>
-                        ×
-                      </button>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-            <button onClick={openAddStructure}
-              style={{ padding: "10px 16px", borderRadius: 9, border: "2px dashed #D1D5DB", background: "transparent", color: "#6B7280", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
-              + Add Structure
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── LEVEL 5+6: Grouped category sections + per-item add-on/description ── */}
-      {selType && selCity && selPkg && selStructure && (
         <>
-          {/* Info + Save bar — now also hosts the "+ Add Category" dropdown */}
-          <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8, padding: "10px 16px", marginBottom: 14, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          {/* ── CONTEXT BAR + GLOBAL ACTIONS ── */}
+          <div style={{ background: "#EFF6FF", border: "1px solid #BFDBFE", borderRadius: 8,
+                        padding: "10px 16px", marginBottom: 14, display: "flex",
+                        justifyContent: "space-between", alignItems: "center" }}>
             <span style={{ fontSize: 13, color: "#1E40AF" }}>
               <strong>{selType.name}</strong> — <strong>{selPkg.name}</strong> — <strong>{selCity.name}</strong>
               {hasChanged && <span style={{ marginLeft: 10, color: "#D97706", fontWeight: 600 }}>● Unsaved changes</span>}
             </span>
-            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              {/* "+ Add Category" dropdown ─────────────────────────────────
-                  Lets the user surface a brand-new category section (empty,
-                  ready to pick items into) without first creating an item.
-                  Dropdown lists every work_categories row, hiding ones
-                  already visible in the grid. Bottom of the dropdown holds
-                  an inline "+ Create new category" form. */}
-              <div style={{ position: "relative" }}>
-                <button onClick={() => { setCatDropdownOpen(o => !o); setNewCatForm(null); }}
-                  style={{ padding: "8px 14px", background: catDropdownOpen ? "#1E40AF" : "white", color: catDropdownOpen ? "white" : "#1E40AF", border: "1.5px solid #1E40AF", borderRadius: 7, fontSize: 12.5, fontWeight: 600, cursor: "pointer" }}>
-                  + Add Category
-                </button>
-                {catDropdownOpen && (() => {
-                  // Hide categories already in the grid (picked OR explicitly added).
-                  const visibleNames = new Set([
-                    ...pickedItems.map(i => i.category || "Uncategorized"),
-                    ...addedEmptyCats,
-                  ]);
-                  const available = (workCats || []).filter(c => !visibleNames.has(c.name));
-                  return (
-                    <>
-                      {/* outside-click guard */}
-                      <div onClick={() => { setCatDropdownOpen(false); setNewCatForm(null); }}
-                        style={{ position: "fixed", inset: 0, background: "transparent", zIndex: 250 }} />
-                      <div onClick={e => e.stopPropagation()}
-                        style={{ position: "absolute", top: "calc(100% + 6px)", right: 0, width: 280, background: "white", borderRadius: 8, border: "1px solid #E5E7EB", boxShadow: "0 12px 32px rgba(0,0,0,0.15)", zIndex: 251, maxHeight: 380, display: "flex", flexDirection: "column" }}>
-                        <div style={{ padding: "8px 12px", fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".4px", borderBottom: "1px solid #F3F4F6" }}>
-                          Pick a category to add
-                        </div>
-                        <div style={{ flex: 1, overflowY: "auto" }}>
-                          {available.length === 0 && newCatForm === null && (
-                            <div style={{ padding: "16px 12px", textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>
-                              All categories already shown
-                            </div>
-                          )}
-                          {available.map(c => (
-                            <div key={c.id} onClick={() => addEmptyCategorySection(c.name)}
-                              style={{ padding: "9px 12px", cursor: "pointer", fontSize: 12.5, color: "#111827", borderBottom: "1px solid #F9FAFB", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                              onMouseEnter={e => e.currentTarget.style.background = "#EFF6FF"}
-                              onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
-                              <span style={{ fontWeight: 600 }}>{c.name}</span>
-                              {c.code && <code style={{ fontSize: 10, color: "#7C3AED", background: "#EDE9FE", padding: "1px 6px", borderRadius: 3 }}>{c.code}</code>}
-                            </div>
-                          ))}
-                        </div>
-                        {/* + Create new category footer */}
-                        {newCatForm === null ? (
-                          <button onClick={() => setNewCatForm({ name: "", code: "", desc: "" })}
-                            style={{ padding: "9px 12px", background: "#F0FDF4", border: "none", borderTop: "1px solid #E5E7EB", color: "#059669", fontWeight: 700, fontSize: 12, cursor: "pointer", textAlign: "left" }}>
-                            + Create new category…
-                          </button>
-                        ) : (
-                          <div style={{ padding: "10px 12px", borderTop: "1px solid #E5E7EB", background: "#F9FAFB" }}>
-                            <div style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 6 }}>New Category</div>
-                            <input autoFocus value={newCatForm.name} onChange={e => setNewCatForm(p => ({ ...p, name: e.target.value }))}
-                              placeholder="Name (e.g. Electrical Work)"
-                              style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
-                            <input value={newCatForm.code} onChange={e => setNewCatForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
-                              placeholder="Code (e.g. ELE)"
-                              style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
-                            <input value={newCatForm.desc} onChange={e => setNewCatForm(p => ({ ...p, desc: e.target.value }))}
-                              placeholder="Description (optional)"
-                              style={{ width: "100%", padding: "6px 8px", borderRadius: 5, border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 8, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
-                            <div style={{ display: "flex", gap: 6 }}>
-                              <button onClick={() => setNewCatForm(null)}
-                                style={{ flex: 1, padding: "6px", borderRadius: 5, background: "white", border: "1px solid #D1D5DB", fontSize: 11.5, color: "#6B7280", cursor: "pointer" }}>
-                                Cancel
-                              </button>
-                              <button onClick={createAndAddCategory} disabled={newCatSaving || !newCatForm.name?.trim()}
-                                style={{ flex: 2, padding: "6px", borderRadius: 5, background: (newCatSaving || !newCatForm.name?.trim()) ? "#9CA3AF" : "#10B981", color: "white", border: "none", fontSize: 11.5, fontWeight: 700, cursor: (newCatSaving || !newCatForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                                {newCatSaving ? "Saving…" : "Create + Add"}
-                              </button>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    </>
-                  );
-                })()}
-              </div>
-              <button onClick={saveRates} disabled={saving}
-                style={{ padding: "8px 20px", background: saving ? "#9CA3AF" : "#2563EB", color: "white", border: "none", borderRadius: 7, fontSize: 13, fontWeight: 700, cursor: saving ? "default" : "pointer" }}>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button onClick={openAddSection}
+                style={{ padding: "8px 14px", background: "white", color: COL_DARK,
+                         border: "1.5px solid " + COL_DARK, borderRadius: 7,
+                         fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
+                + Add Section
+              </button>
+              <button onClick={saveRates} disabled={saving || !hasChanged}
+                style={{ padding: "8px 20px",
+                         background: (saving || !hasChanged) ? "#9CA3AF" : COL_BLUE,
+                         color: "white", border: "none", borderRadius: 7,
+                         fontSize: 13, fontWeight: 700,
+                         cursor: (saving || !hasChanged) ? "default" : "pointer" }}>
                 {saving ? "Saving..." : "Save Rates"}
               </button>
             </div>
           </div>
 
-          {/* GROUPED SECTIONS — Subcon-style dark headers, items appear only when picked */}
-          {(() => {
-            // Items visible in the section view = items the user has explicitly
-            // picked for this package+city — derived at component scope
-            // above so the "+ Add Category" dropdown can read it too.
+          {/* ── EMPTY STATE: no sections yet ── */}
+          {pkgStructures.length === 0 && (
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#9CA3AF", fontSize: 14 }}>
+              No sections in this package yet. Click <strong>+ Add Section</strong> above to start.
+            </div>
+          )}
 
-            // Group picked items by category, then also surface any
-            // category the user explicitly added via "+ Add Category" — even
-            // if it currently has zero picked items. This lets the user lay
-            // out the section structure first, then pick items into it.
-            const grouped = pickedItems.reduce((acc, item) => {
-              const k = item.category || "Uncategorized";
-              (acc[k] ||= []).push(item);
-              return acc;
-            }, {});
-            addedEmptyCats.forEach(name => { if (!grouped[name]) grouped[name] = []; });
-            const catNames = Object.keys(grouped).sort();
+          {/* ── SECTIONS ── */}
+          {pkgStructures.map(sec => {
+            const sCalc      = calcSection(sec);
+            const area       = sCalc.area;
+            const perItem    = sCalc.perItem;
+            const collapsed  = !!collapsedSections[sec.id];
+            const editable   = !!editingSections[sec.id];
+            const cats       = catsOfSection(sec.id);
+            const renaming   = editable && renameSecId === sec.id;
+            const dirty      = !!sectionEdits[sec.id]
+                            || !!(itemEdits[sec.id] && Object.keys(itemEdits[sec.id]).length)
+                            || !!(pendingNewItems[sec.id] && pendingNewItems[sec.id].length)
+                            || !!(pendingDelItems[sec.id] && Object.keys(pendingDelItems[sec.id]).length);
+            // "set area" hint only matters in uniform mode — per-item sections show per-row qty
+            const noAreaHint = !perItem && area === 0;
+            return (
+              <div key={sec.id}
+                style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB",
+                         marginBottom: 14, overflow: "hidden",
+                         boxShadow: dirty ? "0 0 0 2px #FCD34D" : "none" }}>
+                {/* ── SECTION HEADER (dark) ── */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10,
+                              padding: "11px 16px", background: COL_DARK, color: "white" }}>
+                  <span onClick={() => setCollapsedSections(p => ({ ...p, [sec.id]: !p[sec.id] }))}
+                    style={{ cursor: "pointer", display: "flex" }}>
+                    <svg width={14} height={14} viewBox="0 0 24 24" fill="none"
+                         stroke="rgba(255,255,255,0.65)" strokeWidth={2.5}
+                         style={{ transition: "transform .15s", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)" }}>
+                      <polyline points="9 18 15 12 9 6"/>
+                    </svg>
+                  </span>
 
-            // Grand totals across picked items only.
-            // Uses getBase(i) so inline-edited base rates feed into the
-            // totals live, even before Save Rates persists them.
-            const gBase  = pickedItems.reduce((s, i) => s + (Number(getBase(i)) || 0), 0);
-            const gAddOn = pickedItems.reduce((s, i) => s + (Number(getAddOn(i)) || 0), 0);
-            const gTotal = gBase + gAddOn;
+                  {renaming ? (
+                    <>
+                      <input value={renameSecValue}
+                        onChange={e => setRenameSecValue(e.target.value)}
+                        onKeyDown={e => { if (e.key === "Enter") commitRenameSection(); if (e.key === "Escape") cancelRenameSection(); }}
+                        onBlur={commitRenameSection}
+                        autoFocus
+                        style={{ padding: "5px 10px", fontSize: 14, fontWeight: 700,
+                                 borderRadius: 5, border: "1.5px solid rgba(255,255,255,0.3)",
+                                 background: "rgba(255,255,255,0.1)", color: "white", outline: "none",
+                                 fontFamily: "inherit", minWidth: 220 }}/>
+                    </>
+                  ) : (
+                    <span onClick={editable ? () => startRenameSection(sec) : undefined}
+                      title={editable ? "Click to rename" : "Click Edit to unlock"}
+                      style={{ fontWeight: 700, fontSize: 14, color: "white",
+                               cursor: editable ? "pointer" : "default" }}>
+                      {getSecName(sec)}
+                    </span>
+                  )}
 
-            // Set of categories the user might want to start adding to —
-            // master work-categories that don't yet have a picked item.
-            const startCats = (workCats || [])
-              .map(c => c.name)
-              .filter(n => !catNames.includes(n));
+                  <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>
+                    · {cats.length} categ{cats.length === 1 ? "ory" : "ories"}
+                  </span>
+                  {noAreaHint && (
+                    <span style={{ marginLeft: 6, padding: "2px 8px", fontSize: 10.5, fontWeight: 600,
+                                   background: "rgba(252,211,77,0.18)", color: "#FCD34D",
+                                   borderRadius: 4, border: "1px solid rgba(252,211,77,0.35)" }}>
+                      set area to see totals
+                    </span>
+                  )}
 
-            if (catNames.length === 0) {
-              return (
-                <div style={{ textAlign: "center", padding: "40px 0", color: "#9CA3AF" }}>
-                  No items picked for this package yet. Start adding:
-                  <div style={{ marginTop: 14, display:"flex", gap:8, justifyContent:"center", flexWrap:"wrap" }}>
-                    {(startCats.length ? startCats : [catOptions[0] || "Civil Work"]).map(c => (
-                      <button key={c} onClick={() => openPicker(c)}
-                        style={{ background:"#EFF6FF", color:"#2563EB", border:"1px dashed #BFDBFE", borderRadius:6, padding:"6px 14px", fontSize:12, fontWeight:700, cursor:"pointer" }}>
-                        + Add Item to {c}
+                  {/* Right metrics — in per-item mode the Base/Add-on/per-sqft
+                      aggregates are mathematically meaningless (different items
+                      have different qtys, so summing per-unit rates doesn't
+                      represent anything useful). Only Total survives there. */}
+                  <div style={{ marginLeft: "auto", display: "flex", gap: 12, alignItems: "center",
+                                fontSize: 11.5, fontWeight: 600 }}>
+                    {!perItem && (
+                      <>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Base <strong style={{ color: "white" }}>Rs.{inr(sCalc.base)}</strong></span>
+                        <span style={{ color: "rgba(255,255,255,0.6)" }}>Add-on <strong style={{ color: COL_AMBER }}>Rs.{inr(sCalc.addOn)}</strong></span>
+                        <span style={{ padding: "3px 9px", background: COL_TEAL_BG, color: COL_TEAL,
+                                       borderRadius: 4, fontWeight: 700 }}>
+                          Rs.{inr(sCalc.perSqft)}/{sec.unit || "sqft"}
+                        </span>
+                      </>
+                    )}
+                    {/* Per-item qty toggle (only when section is editable) */}
+                    {editable && (
+                      <button onClick={() => patchSection(sec.id, { per_item_qty: !perItem })}
+                        title={perItem
+                          ? "Per-item qty mode is ON. Each item has its own quantity. Click to switch to uniform area."
+                          : "Uniform area mode. All items share the section's Area. Click to switch to per-item qty."}
+                        style={{ background: perItem ? "rgba(245,158,11,0.22)" : "rgba(255,255,255,0.10)",
+                                 border: "1px solid " + (perItem ? "#F59E0B" : "rgba(255,255,255,0.2)"),
+                                 color: perItem ? "#FCD34D" : "rgba(255,255,255,0.85)",
+                                 borderRadius: 4, padding: "3px 9px", fontSize: 10.5, fontWeight: 700,
+                                 cursor: "pointer", letterSpacing: ".3px", textTransform: "uppercase" }}>
+                        {perItem ? "Per-item Qty" : "Uniform Area"}
                       </button>
-                    ))}
+                    )}
+                    {/* Area — input/text in uniform mode; in per-item mode, hidden
+                        (each row carries its own qty in the table below). */}
+                    {!perItem && (
+                      <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ color: "rgba(255,255,255,0.55)", fontSize: 11, textTransform: "uppercase" }}>Area</span>
+                        {editable ? (
+                          <input type="number"
+                            value={sectionEdits[sec.id]?.default_qty ?? (sec.default_qty || 0)}
+                            onChange={e => patchSection(sec.id, { default_qty: e.target.value })}
+                            style={{
+                              width: 80, padding: "5px 8px", borderRadius: 5, textAlign: "right",
+                              fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                              border: "1.5px solid " + (sectionEdits[sec.id]?.default_qty !== undefined ? COL_AMBER : "rgba(255,255,255,0.2)"),
+                              background: sectionEdits[sec.id]?.default_qty !== undefined ? "rgba(245,158,11,0.15)" : "rgba(255,255,255,0.08)",
+                              color: "white", outline: "none",
+                            }}/>
+                        ) : (
+                          <span style={{ minWidth: 50, padding: "4px 8px", textAlign: "right",
+                                         color: "white", fontWeight: 700, fontSize: 12 }}>
+                            {inr(area)}
+                          </span>
+                        )}
+                      </span>
+                    )}
+                    <span style={{ color: "rgba(255,255,255,0.6)" }}>Total <strong style={{ color: COL_TEAL_BG, fontSize: 13 }}>Rs.{inr(sCalc.total)}</strong></span>
+
+                    {/* Edit / Done toggle — switches the entire section between
+                        locked (read-only displays) and editable. Default = locked. */}
+                    <button onClick={() => setEditingSections(p => ({ ...p, [sec.id]: !p[sec.id] }))}
+                      title={editable ? "Lock section" : "Unlock to edit"}
+                      style={{ background: editable ? "#10B981" : "rgba(255,255,255,0.14)",
+                               border: "none", color: "white",
+                               borderRadius: 5, padding: "4px 10px", fontSize: 11, fontWeight: 700,
+                               cursor: "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                      {editable ? (
+                        <>
+                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                          Done
+                        </>
+                      ) : (
+                        <>
+                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                            <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+                            <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+                          </svg>
+                          Edit
+                        </>
+                      )}
+                    </button>
+
+                    {/* × delete — only visible when section is unlocked */}
+                    {editable && (
+                      <button onClick={() => deleteSection(sec)}
+                        title="Delete section"
+                        style={{ background: "rgba(239,68,68,0.18)", border: "none", color: "#FCA5A5",
+                                 borderRadius: 4, width: 24, height: 24, fontSize: 14, cursor: "pointer", lineHeight: 1 }}>
+                        ×
+                      </button>
+                    )}
                   </div>
                 </div>
-              );
-            }
 
-            return (
-              <>
-                {catNames.map(catName => {
-                  const items = grouped[catName];
-                  // Per-section subtotal — uses getBase so inline base edits
-                  // reflect in the header + subtotal row immediately.
-                  const sBase  = items.reduce((s, i) => s + (Number(getBase(i)) || 0), 0);
-                  const sAddOn = items.reduce((s, i) => s + (Number(getAddOn(i)) || 0), 0);
-                  const sTot   = sBase + sAddOn;
-                  const collapsed = !!collapsedCats[catName];
-                  const cat = (workCats || []).find(c => c.name === catName);
-                  const renaming = renameCatId && cat && cat.id === renameCatId;
-                  return (
-                    <div key={catName} style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", marginBottom: 12, overflow: "hidden" }}>
-                      {/* Section header — Subcon-style dark navy */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 14px", background: "#1E293B", color: "white" }}>
-                        <span onClick={() => setCollapsedCats(p => ({ ...p, [catName]: !p[catName] }))}
-                          style={{ cursor: "pointer", display: "flex" }}>
-                          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.55)" strokeWidth={2.5}
-                            style={{ transition: "transform .15s", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)" }}>
-                            <polyline points="9 18 15 12 9 6"/>
-                          </svg>
-                        </span>
-                        {renaming ? (
-                          <>
-                            <input value={renameCatValue}
-                              onChange={e => setRenameCatValue(e.target.value)}
-                              onKeyDown={e => { if (e.key === "Enter") saveRenameCat(); if (e.key === "Escape") cancelRenameCat(); }}
-                              autoFocus
-                              style={{ padding: "4px 9px", fontSize: 13, fontWeight: 600, borderRadius: 5, border: "1.5px solid rgba(255,255,255,0.25)", background: "rgba(255,255,255,0.08)", color: "white", outline: "none", fontFamily: "inherit", minWidth: 180 }}/>
-                            <button onClick={saveRenameCat} style={{ background: "#10B981", color: "white", border: "none", borderRadius: 4, padding: "3px 10px", fontSize: 11, fontWeight: 700, cursor: "pointer" }}>Save</button>
-                            <button onClick={cancelRenameCat} style={{ background: "none", color: "rgba(255,255,255,0.55)", border: "1px solid rgba(255,255,255,0.18)", borderRadius: 4, padding: "3px 10px", fontSize: 11, cursor: "pointer" }}>Cancel</button>
-                          </>
-                        ) : (
-                          <>
-                            <span onClick={() => setCollapsedCats(p => ({ ...p, [catName]: !p[catName] }))} style={{ fontWeight: 700, fontSize: 13.5, color: "white", cursor: "pointer" }}>{catName}</span>
-                            <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 500 }}>· {items.length} item{items.length > 1 ? "s" : ""}</span>
-                            {cat && (
-                              <button onClick={() => startRenameCat(catName)} title="Rename category"
-                                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.45)", cursor: "pointer", padding: 2, display: "flex" }}>
-                                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                              </button>
-                            )}
-                          </>
-                        )}
-                        <div style={{ marginLeft: "auto", display: "flex", gap: 14, fontSize: 11.5, fontWeight: 600 }}>
-                          <span style={{ color: "rgba(255,255,255,0.6)" }}>Base <strong style={{ color: "white" }}>Rs.{Math.round(sBase).toLocaleString()}</strong></span>
-                          <span style={{ color: "rgba(255,255,255,0.6)" }}>Add-on <strong style={{ color: "#93C5FD" }}>Rs.{Math.round(sAddOn).toLocaleString()}</strong></span>
-                          <span style={{ color: "rgba(255,255,255,0.6)" }}>Total <strong style={{ color: "#4ADE80" }}>Rs.{Math.round(sTot).toLocaleString()}</strong></span>
-                        </div>
+                {/* ── CATEGORIES ── */}
+                {!collapsed && (
+                  <div style={{ padding: 10 }}>
+                    {cats.length === 0 && (
+                      <div style={{ padding: "18px 12px", textAlign: "center", color: "#9CA3AF", fontSize: 12.5 }}>
+                        No categories in this section yet.
                       </div>
+                    )}
+                    {cats.map(cat => {
+                      const cCalc        = calcCategory(sec.id, cat.id, area, perItem);
+                      const catKey       = `${sec.id}:${cat.id}`;
+                      const catCollapsed = !!collapsedCats[catKey];
+                      const rows         = rowsOfCategory(sec.id, cat.id);
+                      const catRenaming  = editable && renameCatId === cat.id;
+                      return (
+                        <div key={cat.id} style={{ marginBottom: 10, border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden" }}>
+                          {/* Category subheader */}
+                          <div style={{ display: "flex", alignItems: "center", gap: 8,
+                                        padding: "8px 12px", background: COL_CAT_BG, borderBottom: catCollapsed ? "none" : "1px solid #E5E7EB" }}>
+                            <span onClick={() => setCollapsedCats(p => ({ ...p, [catKey]: !p[catKey] }))}
+                              style={{ cursor: "pointer", display: "flex" }}>
+                              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth={2.5}
+                                style={{ transition: "transform .15s", transform: catCollapsed ? "rotate(0deg)" : "rotate(90deg)" }}>
+                                <polyline points="9 18 15 12 9 6"/>
+                              </svg>
+                            </span>
+                            {catRenaming ? (
+                              <input value={renameCatValue}
+                                onChange={e => setRenameCatValue(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") commitRenameCat(); if (e.key === "Escape") cancelRenameCat(); }}
+                                onBlur={commitRenameCat}
+                                autoFocus
+                                style={{ padding: "3px 8px", fontSize: 12.5, fontWeight: 700,
+                                         borderRadius: 4, border: "1.5px solid " + COL_BLUE,
+                                         background: "white", outline: "none", fontFamily: "inherit", minWidth: 180 }}/>
+                            ) : (
+                              <span onClick={editable ? () => startRenameCat(cat) : undefined}
+                                title={editable ? "Click to rename (section-scoped)" : "Click Edit on section to unlock"}
+                                style={{ fontWeight: 700, fontSize: 12.5, color: "#0F172A",
+                                         cursor: editable ? "pointer" : "default" }}>
+                                {cat.category_name}
+                              </span>
+                            )}
+                            <span style={{ fontSize: 10.5, color: "#94A3B8", fontWeight: 500 }}>
+                              · {rows.length} item{rows.length === 1 ? "" : "s"}
+                            </span>
+                            <div style={{ marginLeft: "auto", display: "flex", gap: 10, alignItems: "center",
+                                          fontSize: 11, fontWeight: 600 }}>
+                              {/* In per-item mode aggregated Base + Add-on are
+                                  meaningless (items have different qtys). Only
+                                  Total renders. Items below keep their own rates. */}
+                              {!perItem && (
+                                <>
+                                  <span style={{ color: "#64748B" }}>Base <strong style={{ color: "#0F172A" }}>Rs.{inr(cCalc.base)}</strong></span>
+                                  <span style={{ color: "#64748B" }}>Add-on <strong style={{ color: COL_AMBER }}>Rs.{inr(cCalc.addOn)}</strong></span>
+                                </>
+                              )}
+                              <span style={{ color: "#64748B" }}>Total <strong style={{ color: COL_GREEN }}>Rs.{inr(cCalc.total)}</strong></span>
+                              {editable && (
+                                <button onClick={() => deleteCategory(cat)}
+                                  title="Delete category"
+                                  style={{ background: "transparent", border: "none", color: COL_RED, cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1 }}>
+                                  ×
+                                </button>
+                              )}
+                            </div>
+                          </div>
 
-                      {/* Items table — hidden when collapsed */}
-                      {!collapsed && (
-                        <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                          <thead>
-                            <tr style={{ background: "#FAFAFA" }}>
-                              <th style={{ padding: "8px 14px", textAlign: "left",   fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Item</th>
-                              <th style={{ padding: "8px 14px", textAlign: "center", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 70 }}>Unit</th>
-                              <th style={{ padding: "8px 14px", textAlign: "right",  fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 110 }}>Base Rate</th>
-                              <th style={{ padding: "8px 14px", textAlign: "right",  fontSize: 10.5, fontWeight: 700, color: "#2563EB", textTransform: "uppercase", width: 140 }}>Add-on Rate</th>
-                              <th style={{ padding: "8px 14px", textAlign: "left",   fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Description</th>
-                              <th style={{ padding: "8px 8px",  textAlign: "center", width: 60 }}></th>
-                            </tr>
-                            {/* Subtotals row — aligned with column totals */}
-                            <tr style={{ background: "#F3F4F6", borderTop: "1px solid #E5E7EB" }}>
-                              <td style={{ padding: "5px 14px", fontSize: 10.5, fontWeight: 700, color: "#6B7280" }}>SUBTOTAL</td>
-                              <td/>
-                              <td style={{ padding: "5px 14px", textAlign: "right", fontSize: 12, fontWeight: 700, color: "#374151" }}>Rs.{Math.round(sBase).toLocaleString()}</td>
-                              <td style={{ padding: "5px 14px", textAlign: "right", fontSize: 12, fontWeight: 700, color: "#2563EB" }}>Rs.{Math.round(sAddOn).toLocaleString()}</td>
-                              <td colSpan={2} style={{ padding: "5px 14px", textAlign: "right", fontSize: 12, fontWeight: 700, color: "#059669" }}>Total Rs.{Math.round(sTot).toLocaleString()}</td>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {items.map((item, idx) => {
-                              const aVal = getAddOn(item);
-                              const dVal = getDesc(item);
-                              const bVal = getBase(item);
-                              const isChanged = changed[item.id] !== undefined;
-                              // Base-rate edit is local to `changed` until the
-                              // Save Rates click triggers a PUT against
-                              // /library/boq-items/:id (which propagates the
-                              // new base_rate everywhere). See saveRates below.
-                              const baseEdited = changed[item.id] && changed[item.id].base_rate !== undefined
-                                && Number(changed[item.id].base_rate) !== Number(item.base_rate);
-                              return (
-                                <tr key={item.id} style={{ background: idx % 2 === 0 ? "white" : "#FAFAFA", borderBottom: "1px solid #F3F4F6" }}>
-                                  <td style={{ padding: "9px 14px", fontWeight: 600, fontSize: 13, color: "#111827" }}>{item.name}</td>
-                                  <td style={{ padding: "9px 14px", textAlign: "center", fontSize: 12, color: "#6B7280" }}>{item.unit}</td>
-                                  <td style={{ padding: "9px 14px", textAlign: "right" }}>
-                                    <input type="number" value={bVal}
-                                      placeholder="0"
-                                      onChange={e => patchChanged(item.id, { base_rate: e.target.value })}
-                                      title="Base rate (master library). Edit & Save Rates to update everywhere."
-                                      style={{ width: 110, padding: "6px 10px", borderRadius: 6, textAlign: "right", fontFamily: "inherit", fontSize: 13,
-                                        border: "1.5px solid " + (baseEdited ? "#F59E0B" : "#E5E7EB"),
-                                        background: baseEdited ? "#FFFBEB" : "white", outline: "none", color: baseEdited ? "#92400E" : "#374151", fontWeight: baseEdited ? 700 : 500 }}/>
-                                  </td>
-                                  <td style={{ padding: "9px 14px", textAlign: "right" }}>
-                                    <input type="number" value={aVal}
-                                      placeholder="0"
-                                      onChange={e => patchChanged(item.id, { add_on: e.target.value })}
-                                      style={{ width: 120, padding: "6px 10px", borderRadius: 6, textAlign: "right", fontFamily: "inherit", fontSize: 13,
-                                        border: "1.5px solid " + (isChanged ? "#2563EB" : "#E5E7EB"),
-                                        background: isChanged ? "#EFF6FF" : "white", outline: "none" }}/>
-                                  </td>
-                                  <td style={{ padding: "9px 14px" }}>
-                                    <input type="text" value={dVal}
-                                      placeholder="Optional note for this package/city"
-                                      onChange={e => patchChanged(item.id, { description: e.target.value })}
-                                      style={{ width: "100%", padding: "6px 10px", borderRadius: 6, fontFamily: "inherit", fontSize: 12,
-                                        border: "1.5px solid " + (isChanged ? "#2563EB" : "#E5E7EB"),
-                                        background: isChanged ? "#EFF6FF" : "white", outline: "none", boxSizing: "border-box" }}/>
-                                  </td>
-                                  <td style={{ padding: "9px 6px", textAlign: "center", whiteSpace: "nowrap" }}>
-                                    <button onClick={() => openEditItem(item)} title="Edit item in library"
-                                      style={{ background: "none", border: "none", color: "#6B7280", cursor: "pointer", padding: 4, marginRight: 2 }}>
-                                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                                    </button>
-                                    <button onClick={() => deleteItemRow(item)} title="Delete item from library"
-                                      style={{ background: "none", border: "none", color: "#EF4444", cursor: "pointer", padding: 4 }}>
-                                      <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      )}
-
-                      {/* Section footer — opens picker for this category */}
-                      {!collapsed && (
-                        <div style={{ padding: "8px 14px", borderTop: "1px solid #F3F4F6", background: "#FAFAFA" }}>
-                          <button onClick={() => openPicker(catName)}
-                            style={{ background: "none", border: "1px dashed #BFDBFE", color: "#2563EB", borderRadius: 5, padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-                            + Add Item to {catName}
-                          </button>
+                          {/* Item table */}
+                          {!catCollapsed && (
+                            <>
+                              <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                <thead>
+                                  <tr style={{ background: "#FAFAFA" }}>
+                                    <th style={{ padding: "7px 12px", textAlign: "left",  fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Item</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "center", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 60 }}>Unit</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 95 }}>Base</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_AMBER, textTransform: "uppercase", width: 95 }}>Add-on</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "left",  fontSize: 10, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Description</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_TEAL, textTransform: "uppercase", width: 70 }}>{perItem ? "Qty" : "Area"}</th>
+                                    <th style={{ padding: "7px 12px", textAlign: "right", fontSize: 10, fontWeight: 700, color: COL_GREEN, textTransform: "uppercase", width: 105 }}>Total</th>
+                                    <th style={{ width: 36 }}/>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {rows.length === 0 && (
+                                    <tr>
+                                      <td colSpan={8} style={{ padding: "12px", textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>
+                                        No items in this category yet.
+                                      </td>
+                                    </tr>
+                                  )}
+                                  {rows.map((r, idx) => {
+                                    const masterItem = boqItems.find(b => b.id === r.item_id);
+                                    const name  = masterItem?.name || ("Item #" + r.item_id);
+                                    const unit  = masterItem?.unit || "—";
+                                    const calc  = calcRow(sec.id, r, area, perItem);
+                                    const ed    = itemEdits[sec.id]?.[r.item_id];
+                                    const isNew = !!r._isNew;
+                                    const hasEdit = !!ed && Object.keys(ed).length > 0;
+                                    const baseEdited = ed?.base_rate !== undefined
+                                                    && masterItem
+                                                    && Number(ed.base_rate) !== Number(masterItem.base_rate);
+                                    return (
+                                      <tr key={r.item_id}
+                                        style={{ background: isNew ? "#ECFDF5" : (idx % 2 === 0 ? "white" : "#FAFAFA"),
+                                                 borderBottom: "1px solid #F3F4F6" }}>
+                                        <td style={{ padding: "8px 12px", fontWeight: 600, fontSize: 12.5, color: "#0F172A" }}>
+                                          {name}
+                                          {isNew && <span style={{ marginLeft: 6, padding: "1px 6px", fontSize: 9.5, fontWeight: 700, background: COL_GREEN, color: "white", borderRadius: 3 }}>NEW</span>}
+                                        </td>
+                                        <td style={{ padding: "8px 12px", textAlign: "center", fontSize: 12, color: "#64748B" }}>{unit}</td>
+                                        <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                                          {editable ? (
+                                            <input type="number" value={getRowBase(sec.id, r)}
+                                              onChange={e => patchRow(sec.id, r.item_id, { base_rate: e.target.value })}
+                                              title="Base rate (master library — saves to boq_items)"
+                                              style={{ width: 85, padding: "5px 7px", borderRadius: 5, textAlign: "right",
+                                                       fontFamily: "inherit", fontSize: 12.5,
+                                                       border: "1.5px solid " + (baseEdited ? COL_AMBER : "#E5E7EB"),
+                                                       background: baseEdited ? "#FFFBEB" : "white", outline: "none",
+                                                       color: baseEdited ? "#92400E" : "#0F172A",
+                                                       fontWeight: baseEdited ? 700 : 500 }}/>
+                                          ) : (
+                                            <span style={{ fontSize: 12.5, color: "#0F172A", fontWeight: 500 }}>
+                                              {inr(getRowBase(sec.id, r))}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td style={{ padding: "8px 12px", textAlign: "right" }}>
+                                          {editable ? (
+                                            <input type="number" value={getRowAddOn(sec.id, r)}
+                                              onChange={e => patchRow(sec.id, r.item_id, { add_on_rate: e.target.value })}
+                                              style={{ width: 85, padding: "5px 7px", borderRadius: 5, textAlign: "right",
+                                                       fontFamily: "inherit", fontSize: 12.5,
+                                                       border: "1.5px solid " + (hasEdit ? COL_BLUE : "#E5E7EB"),
+                                                       background: hasEdit ? "#EFF6FF" : "white", outline: "none" }}/>
+                                          ) : (
+                                            <span style={{ fontSize: 12.5, color: COL_AMBER, fontWeight: 600 }}>
+                                              {inr(getRowAddOn(sec.id, r))}
+                                            </span>
+                                          )}
+                                        </td>
+                                        <td style={{ padding: "8px 12px" }}>
+                                          {editable ? (
+                                            <input type="text" value={getRowDesc(sec.id, r)}
+                                              onChange={e => patchRow(sec.id, r.item_id, { description: e.target.value })}
+                                              placeholder="Optional note"
+                                              style={{ width: "100%", padding: "5px 9px", borderRadius: 5,
+                                                       fontFamily: "inherit", fontSize: 11.5,
+                                                       border: "1.5px solid " + (hasEdit ? COL_BLUE : "#E5E7EB"),
+                                                       background: hasEdit ? "#EFF6FF" : "white", outline: "none", boxSizing: "border-box" }}/>
+                                          ) : (
+                                            <span style={{ fontSize: 11.5, color: "#475569" }}>
+                                              {getRowDesc(sec.id, r) || <em style={{ color: "#CBD5E1" }}>—</em>}
+                                            </span>
+                                          )}
+                                        </td>
+                                        {/* Area / Qty column. Per-item mode: editable qty input
+                                            when section unlocked; read-only span when locked.
+                                            Uniform mode: shows section's area (read-only either way). */}
+                                        <td style={{ padding: "8px 12px", textAlign: "right", fontSize: 12, color: COL_TEAL, fontWeight: 600 }}>
+                                          {perItem && editable ? (
+                                            <input type="number"
+                                              value={getRowQty(sec.id, r)}
+                                              onChange={e => patchRow(sec.id, r.item_id, { qty: e.target.value })}
+                                              placeholder="0"
+                                              title="Item-specific quantity (per-item mode)"
+                                              style={{ width: 70, padding: "5px 7px", borderRadius: 5, textAlign: "right",
+                                                       fontFamily: "inherit", fontSize: 12.5,
+                                                       border: "1.5px solid " + (itemEdits[sec.id]?.[r.item_id]?.qty !== undefined ? COL_AMBER : "#E5E7EB"),
+                                                       background: itemEdits[sec.id]?.[r.item_id]?.qty !== undefined ? "#FFFBEB" : "white",
+                                                       outline: "none", color: COL_TEAL, fontWeight: 700 }}/>
+                                          ) : (
+                                            inr(perItem ? getRowQty(sec.id, r) : area)
+                                          )}
+                                        </td>
+                                        <td style={{ padding: "8px 12px", textAlign: "right", fontSize: 13, fontWeight: 700, color: COL_GREEN }}>
+                                          Rs.{inr(calc.total)}
+                                        </td>
+                                        <td style={{ padding: "8px 6px", textAlign: "center" }}>
+                                          {editable && (
+                                            <button onClick={() => removeItemRow(sec.id, r.item_id)}
+                                              title="Remove from this section"
+                                              style={{ background: "transparent", border: "none", color: COL_RED, cursor: "pointer", fontSize: 14, padding: 2, lineHeight: 1 }}>
+                                              ×
+                                            </button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                              {/* Category footer — only visible when section is unlocked */}
+                              {editable && (
+                                <div style={{ padding: "8px 12px", borderTop: "1px solid #F3F4F6", background: "#FAFAFA" }}>
+                                  <button onClick={() => openAddItemDrawer(sec, cat)}
+                                    style={{ background: "transparent", border: "1px dashed #BFDBFE",
+                                             color: COL_BLUE, borderRadius: 5,
+                                             padding: "5px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
+                                    + Add Item to {cat.category_name}
+                                  </button>
+                                </div>
+                              )}
+                            </>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
+                      );
+                    })}
 
-                {/* Grand Total — Subcon-style right-aligned line */}
-                <div style={{ marginTop: 10, padding: "8px 4px", textAlign: "right", fontSize: 13, fontWeight: 700, color: "#374151" }}>
-                  Grand Total —
-                  <span style={{ marginLeft: 14 }}>Base <strong style={{ color: "#374151" }}>Rs.{Math.round(gBase).toLocaleString()}</strong></span>
-                  <span style={{ marginLeft: 14, color: "#2563EB" }}>Add-on <strong>Rs.{Math.round(gAddOn).toLocaleString()}</strong></span>
-                  <span style={{ marginLeft: 14, color: "#059669", fontSize: 15 }}><strong>Rs.{Math.round(gTotal).toLocaleString()}</strong></span>
-                </div>
-
-                {/* Start a brand new category — picker for any work-category that has no items yet */}
-                {startCats.length > 0 && (
-                  <div style={{ marginTop: 12, padding: "10px 12px", background: "#F9FAFB", border: "1px dashed #E5E7EB", borderRadius: 8 }}>
-                    <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 6 }}>
-                      Add items to other categories
-                    </div>
-                    <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
-                      {startCats.map(c => (
-                        <button key={c} onClick={() => openPicker(c)}
-                          style={{ background: "white", color: "#2563EB", border: "1px solid #BFDBFE", borderRadius: 5, padding: "4px 10px", fontSize: 11.5, fontWeight: 600, cursor: "pointer" }}>
-                          + {c}
+                    {/* Section footer — only visible when section is unlocked */}
+                    {editable && (
+                      <div style={{ padding: "6px 0 2px", textAlign: "right" }}>
+                        <button onClick={() => openAddCatDrawer(sec)}
+                          style={{ background: "white", border: "1px dashed #94A3B8",
+                                   color: "#475569", borderRadius: 6,
+                                   padding: "6px 14px", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                          + Add Category
                         </button>
-                      ))}
-                    </div>
+                      </div>
+                    )}
                   </div>
                 )}
-              </>
+              </div>
             );
-          })()}
+          })}
+
+          {/* ── GRAND TOTAL BAR (dark) ── */}
+          {pkgStructures.length > 0 && (
+            <div style={{ marginTop: 10, padding: "14px 18px",
+                          background: COL_DARK, color: "white", borderRadius: 10,
+                          display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, letterSpacing: ".4px",
+                             textTransform: "uppercase", color: "rgba(255,255,255,0.7)" }}>
+                Grand Total
+              </span>
+              {/* Base + Add-on hidden by design — each section has its own area,
+                  so summing per-sqft rates across sections would be meaningless.
+                  Only the Total (which is Σ section.total) is comparable. */}
+              <div style={{ display: "flex", alignItems: "center", fontSize: 13, fontWeight: 600 }}>
+                <span style={{ color: "rgba(255,255,255,0.6)" }}>Total <strong style={{ color: COL_TEAL_BG, fontSize: 18 }}>Rs.{inr(grand.total)}</strong></span>
+              </div>
+            </div>
+          )}
         </>
       )}
 
-      {/* ── STAGES EDITOR MODAL ──────────────────────────────────────────
-          Edits the milestone_template linked to a Client BOQ row. Stages are
-          stored as cum_pct (cumulative % of item rate), so the same breakup
-          scales across cities/packages: same template works at Rs.300 or Rs.1,550.
-      */}
-      {stagesModal && (<>
-        <div onClick={closeStagesModal} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.45)", zIndex: 300 }}/>
-        <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: 600, maxWidth: "95vw", maxHeight: "85vh", background: "white", borderRadius: 12, zIndex: 301, boxShadow: "0 24px 64px rgba(0,0,0,0.3)", display: "flex", flexDirection: "column" }}>
-          <div style={{ padding: "14px 18px", borderBottom: "1px solid #E5E7EB", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <div>
-              <div style={{ fontSize: 15, fontWeight: 700, color: "#111827" }}>Stage Breakup — {stagesModal.name}</div>
-              <div style={{ fontSize: 11, color: "#6B7280", marginTop: 2 }}>Cumulative %  of item rate. Reusable across cities/packages.</div>
-            </div>
-            <button onClick={closeStagesModal} style={{ background: "none", border: "none", fontSize: 18, color: "#6B7280", cursor: "pointer" }}>×</button>
-          </div>
-          <div style={{ padding: "16px 18px", overflowY: "auto", flex: 1 }}>
-            <div style={{ display: "grid", gridTemplateColumns: "40px 1fr 120px 32px", gap: 6, marginBottom: 6 }}>
-              {["#", "Stage Name", "Cum %", ""].map(h => <span key={h} style={{ fontSize: 9.5, fontWeight: 700, color: "#9CA3AF", textTransform: "uppercase" }}>{h}</span>)}
-            </div>
-            {stagesForm.map((s, si) => (
-              <div key={si} style={{ display: "grid", gridTemplateColumns: "40px 1fr 120px 32px", gap: 6, marginBottom: 4, alignItems: "center" }}>
-                <span style={{ fontSize: 12, color: "#9CA3AF" }}>{si + 1}</span>
-                <input value={s.name}
-                  onChange={e => { const arr = [...stagesForm]; arr[si] = { ...arr[si], name: e.target.value }; setStagesForm(arr); }}
-                  placeholder="e.g. Footing"
-                  style={{ padding: "7px 10px", borderRadius: 6, border: "1.5px solid #E5E7EB", fontSize: 12, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" }}/>
-                <input type="number" value={s.cum_pct}
-                  onChange={e => { const arr = [...stagesForm]; arr[si] = { ...arr[si], cum_pct: e.target.value }; setStagesForm(arr); }}
-                  placeholder="cum %"
-                  style={{ padding: "7px 10px", borderRadius: 6, border: "1.5px solid #E5E7EB", fontSize: 12, outline: "none", fontFamily: "inherit", width: "100%", boxSizing: "border-box" }}/>
-                <button onClick={() => { const arr = stagesForm.filter((_, i) => i !== si); setStagesForm(arr.length ? arr : [{ seq: 0, name: "", cum_pct: "" }]); }}
-                  style={{ background: "#FEF2F2", color: "#DC2626", border: "none", borderRadius: 5, fontSize: 14, cursor: "pointer" }}>×</button>
+      {/* ═══════════════════════════════════════════════════════════════
+          ADD SECTION MODAL (kept as modal per locked Q3)
+      ═══════════════════════════════════════════════════════════════ */}
+      {addSectionModal && (
+        <>
+          <div onClick={closeAddSection}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 700 }}/>
+          <div onClick={e => e.stopPropagation()}
+            style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+                     width: "min(440px,95vw)", background: "white", borderRadius: 12, zIndex: 701,
+                     boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ background: COL_DARK, padding: "13px 18px", borderRadius: "12px 12px 0 0",
+                          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Add Section</div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
+                  Package: {selPkg?.name}
+                </div>
               </div>
-            ))}
-            <button onClick={() => setStagesForm(p => [...p, { seq: p.length, name: "", cum_pct: "" }])}
-              style={{ marginTop: 8, background: "#EFF6FF", color: "#2563EB", border: "1px dashed #BFDBFE", borderRadius: 5, padding: "6px 12px", fontSize: 11.5, fontWeight: 700, cursor: "pointer" }}>
-              + Add Stage
-            </button>
-            <div style={{ marginTop: 12, padding: "8px 10px", background: "#F9FAFB", borderRadius: 5, fontSize: 11, color: "#6B7280" }}>
-              Last cum_pct should be 100. If not, a warning is shown (the breakup is still saved).
+              <button onClick={closeAddSection} disabled={addSectionSaving}
+                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
+                         fontSize: 22, cursor: addSectionSaving ? "not-allowed" : "pointer", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ padding: 18 }}>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Name *</label>
+                <input autoFocus value={addSectionForm.name}
+                  onChange={e => setAddSectionForm(p => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Ground Floor, First Floor, Other Civil Work"
+                  style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
+                           border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
+                           outline: "none", boxSizing: "border-box" }}/>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 12 }}>
+                <div>
+                  <label style={{ fontSize: 10.5, fontWeight: 700, color: COL_TEAL, display: "block", marginBottom: 4, textTransform: "uppercase" }}>Area / Qty *</label>
+                  <input type="number" value={addSectionForm.default_qty}
+                    onChange={e => setAddSectionForm(p => ({ ...p, default_qty: e.target.value }))}
+                    placeholder="0"
+                    style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
+                             border: "1.5px solid " + COL_TEAL_BG, fontSize: 13, fontFamily: "inherit",
+                             outline: "none", boxSizing: "border-box", textAlign: "right",
+                             background: "#F0FDFA" }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Unit</label>
+                  <select value={addSectionForm.unit}
+                    onChange={e => setAddSectionForm(p => ({ ...p, unit: e.target.value }))}
+                    style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
+                             border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
+                             outline: "none", boxSizing: "border-box", background: "white" }}>
+                    <option value="sqft">sqft</option>
+                    <option value="lump_sum">lump sum</option>
+                    <option value="rft">rft</option>
+                    <option value="nos">nos</option>
+                    <option value="cubic_ft">cubic ft</option>
+                  </select>
+                </div>
+              </div>
+              {/* Per-item qty toggle — when ON, each item in this
+                  section has its own qty input. When OFF, all items
+                  share the section's Area. Used for mixed sections
+                  like "Other Civil Work" with hutment×1, TC×1,
+                  fixtures×6, etc. */}
+              <div style={{ padding: "10px 12px", background: addSectionForm.per_item_qty ? "#FFFBEB" : "#F9FAFB",
+                            border: "1.5px solid " + (addSectionForm.per_item_qty ? "#FCD34D" : "#E5E7EB"),
+                            borderRadius: 6, marginBottom: 10, cursor: "pointer", userSelect: "none" }}
+                onClick={() => setAddSectionForm(p => ({ ...p, per_item_qty: !p.per_item_qty }))}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}>
+                  <input type="checkbox" checked={!!addSectionForm.per_item_qty} onChange={() => {}}
+                    style={{ width: 16, height: 16, cursor: "pointer", flexShrink: 0 }}/>
+                  <div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#0F172A" }}>
+                      Per-item quantity {addSectionForm.per_item_qty ? "(enabled)" : "(disabled — uniform area)"}
+                    </div>
+                    <div style={{ fontSize: 10.5, color: "#6B7280", marginTop: 2 }}>
+                      {addSectionForm.per_item_qty
+                        ? "Each item in this section will have its own Qty input. Section Area is ignored for totals."
+                        : "All items share the section's Area above. Best for floors / uniform-rate sections."}
+                    </div>
+                  </div>
+                </label>
+              </div>
+              <div style={{ padding: "8px 10px", background: "#F9FAFB", borderRadius: 5, fontSize: 11, color: "#6B7280" }}>
+                💡 Lump-sum / mixed sections: enable "Per-item quantity" above. Each item gets its own count (hutment ×1, fixtures ×6, etc.).
+              </div>
+            </div>
+            <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
+              <button onClick={closeAddSection} disabled={addSectionSaving}
+                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB",
+                         background: "white", fontSize: 13, color: "#374151",
+                         cursor: addSectionSaving ? "not-allowed" : "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={saveAddSection} disabled={addSectionSaving || !addSectionForm.name?.trim()}
+                style={{ flex: 2, padding: "9px", borderRadius: 7,
+                         background: (addSectionSaving || !addSectionForm.name?.trim()) ? "#9CA3AF" : COL_BLUE,
+                         color: "white", border: "none", fontSize: 13, fontWeight: 700,
+                         cursor: (addSectionSaving || !addSectionForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                {addSectionSaving ? "Adding…" : "Add Section"}
+              </button>
             </div>
           </div>
-          <div style={{ padding: "12px 18px", borderTop: "1px solid #E5E7EB", display: "flex", justifyContent: "flex-end", gap: 8 }}>
-            <button onClick={closeStagesModal} style={{ padding: "7px 16px", borderRadius: 6, background: "#F9FAFB", border: "1px solid #E5E7EB", color: "#374151", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-            <button onClick={saveStages} disabled={stagesSaving} style={{ padding: "7px 18px", borderRadius: 6, background: stagesSaving ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 12, fontWeight: 700, cursor: stagesSaving ? "default" : "pointer" }}>
-              {stagesSaving ? "Saving…" : "Save Stages"}
-            </button>
-          </div>
-        </div>
-      </>)}
-
-      {/* Empty state */}
-      {!selType && (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "#9CA3AF", fontSize: 14 }}>
-          Select a Construction Type above to start
-        </div>
+        </>
       )}
 
-      {/* ── STRUCTURE Add/Edit Modal (Subcon-style) ───────────────────
-          Used for both "Add Structure" (structModal === "add") and
-          "Edit Structure" (structModal === <structure object>). Same
-          shape: name (free-typed), unit dropdown, rate. ────────────── */}
-      {structModal && (() => {
-        const isEdit = structModal !== "add";
+      {/* ═══════════════════════════════════════════════════════════════
+          + ADD CATEGORY DRAWER (right slide-over, multi-checkbox)
+      ═══════════════════════════════════════════════════════════════ */}
+      {addCatDrawer && (() => {
+        const sid = addCatDrawer.structure_id;
+        const alreadyInSection = new Set(
+          pkgCategories.filter(c => c.structure_id === sid).map(c => c.category_name)
+        );
         return (
           <>
-            <div onClick={closeStructModal}
-              style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 700 }} />
+            <div onClick={closeAddCatDrawer}
+              style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 700 }}/>
             <div onClick={e => e.stopPropagation()}
-              style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
-                       width: "min(480px,95vw)", background: "white", borderRadius: 12, zIndex: 701,
-                       boxShadow: "0 24px 64px rgba(0,0,0,0.35)", display: "flex", flexDirection: "column" }}>
-              {/* Dark header */}
-              <div style={{ background: "#0F172A", padding: "13px 18px", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(380px,95vw)",
+                       background: "white", zIndex: 701, boxShadow: "-12px 0 32px rgba(0,0,0,0.15)",
+                       display: "flex", flexDirection: "column" }}>
+              <div style={{ background: COL_DARK, padding: "13px 16px", color: "white",
+                            display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>
-                    {isEdit ? "Edit Structure" : "Add Structure"}
-                  </div>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Add Category</div>
                   <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
-                    {selPkg ? `Package: ${selPkg.name}` : ""}
+                    Section: {addCatDrawer.section_name}
                   </div>
                 </div>
-                <button onClick={closeStructModal} disabled={structSaving}
-                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 22, cursor: structSaving ? "not-allowed" : "pointer", lineHeight: 1 }}>×</button>
+                <button onClick={closeAddCatDrawer}
+                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
+                           fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
               </div>
-              {/* Body */}
-              <div style={{ padding: 18 }}>
-                <div style={{ marginBottom: 12 }}>
-                  <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Name *</label>
-                  <input autoFocus value={structForm.name}
-                    onChange={e => setStructForm(p => ({ ...p, name: e.target.value }))}
-                    placeholder="e.g. Ground Floor, Septic Tank, Boundary Wall"
-                    style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 12, marginBottom: 12 }}>
-                  <div>
-                    <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Unit *</label>
-                    <select value={structForm.unit}
-                      onChange={e => setStructForm(p => ({ ...p, unit: e.target.value }))}
-                      style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", background: "white" }}>
-                      {STRUCT_UNITS.map(u => <option key={u.key} value={u.key}>{u.label}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Rate (Rs.)</label>
-                    <input type="number" value={structForm.rate}
-                      onChange={e => setStructForm(p => ({ ...p, rate: e.target.value }))}
-                      placeholder="0"
-                      style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "right" }}/>
-                  </div>
-                </div>
-                <div style={{ padding: "8px 10px", background: "#F9FAFB", borderRadius: 5, fontSize: 11, color: "#6B7280" }}>
-                  💡 Rate per unit. For sqft: Rs./sqft. For lump_sum: total Rs. For rft: Rs./running foot. Etc.
+              <div style={{ flex: 1, overflowY: "auto", padding: 12 }}>
+                {workCats.map(c => {
+                  const exists = alreadyInSection.has(c.name);
+                  const pickIdx = addCatPicks.indexOf(c.id);
+                  const isPicked = pickIdx >= 0;
+                  return (
+                    <label key={c.id}
+                      style={{ display: "flex", alignItems: "center", gap: 10,
+                               padding: "9px 10px", borderRadius: 6,
+                               cursor: exists ? "not-allowed" : "pointer",
+                               background: exists ? "#F3F4F6" : (isPicked ? "#EFF6FF" : "white"),
+                               border: "1px solid " + (isPicked ? "#BFDBFE" : "#E5E7EB"),
+                               marginBottom: 5, opacity: exists ? 0.55 : 1 }}>
+                      <input type="checkbox" disabled={exists} checked={isPicked}
+                        onChange={() => toggleCatPick(c.id)}
+                        style={{ width: 16, height: 16 }}/>
+                      {/* Pick-order badge — first tick = 1, second tick = 2, ... */}
+                      {isPicked && (
+                        <span title="Pick order — this is the position the new category will land in the section"
+                          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                   width: 20, height: 20, borderRadius: "50%", background: "#2563EB",
+                                   color: "white", fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>
+                          {pickIdx + 1}
+                        </span>
+                      )}
+                      <span style={{ flex: 1 }}>
+                        <span style={{ fontSize: 12.5, fontWeight: 600, color: "#0F172A" }}>{c.name}</span>
+                        {c.code && <code style={{ marginLeft: 6, fontSize: 10, color: "#7C3AED",
+                                                  background: "#EDE9FE", padding: "1px 6px", borderRadius: 3 }}>{c.code}</code>}
+                        {exists && <span style={{ marginLeft: 8, fontSize: 10, color: "#9CA3AF" }}>(already added)</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+
+                {/* + Create new */}
+                <div style={{ marginTop: 12, paddingTop: 12, borderTop: "1px dashed #E5E7EB" }}>
+                  {addCatNewForm === null ? (
+                    <button onClick={() => setAddCatNewForm({ name: "", code: "", desc: "" })}
+                      style={{ width: "100%", padding: "8px 12px", background: "#F0FDF4",
+                               border: "1px dashed " + COL_GREEN, color: COL_GREEN,
+                               borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      + Create new category
+                    </button>
+                  ) : (
+                    <div style={{ padding: 10, background: "#F9FAFB", borderRadius: 6, border: "1px solid #E5E7EB" }}>
+                      <input autoFocus value={addCatNewForm.name}
+                        onChange={e => setAddCatNewForm(p => ({ ...p, name: e.target.value }))}
+                        placeholder="Name (e.g. Electrical)"
+                        style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
+                                 border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6,
+                                 outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                      <input value={addCatNewForm.code}
+                        onChange={e => setAddCatNewForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
+                        placeholder="Code (optional)"
+                        style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
+                                 border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6,
+                                 outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                      <input value={addCatNewForm.desc}
+                        onChange={e => setAddCatNewForm(p => ({ ...p, desc: e.target.value }))}
+                        placeholder="Description (optional)"
+                        style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
+                                 border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 8,
+                                 outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => setAddCatNewForm(null)}
+                          style={{ flex: 1, padding: 6, borderRadius: 5, background: "white",
+                                   border: "1px solid #D1D5DB", fontSize: 11.5, color: "#6B7280", cursor: "pointer" }}>
+                          Cancel
+                        </button>
+                        <button onClick={createAndAddCat}
+                          disabled={addCatSaving || !addCatNewForm.name?.trim()}
+                          style={{ flex: 2, padding: 6, borderRadius: 5,
+                                   background: (addCatSaving || !addCatNewForm.name?.trim()) ? "#9CA3AF" : COL_GREEN,
+                                   color: "white", border: "none", fontSize: 11.5, fontWeight: 700,
+                                   cursor: (addCatSaving || !addCatNewForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                          {addCatSaving ? "Saving…" : "Create + Add"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
-              {/* Footer */}
-              <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
-                <button onClick={closeStructModal} disabled={structSaving}
-                  style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: structSaving ? "not-allowed" : "pointer" }}>
+              <div style={{ padding: "12px 14px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
+                <button onClick={closeAddCatDrawer} disabled={addCatSaving}
+                  style={{ flex: 1, padding: "8px", borderRadius: 6, border: "1px solid #D1D5DB",
+                           background: "white", fontSize: 12, color: "#374151",
+                           cursor: addCatSaving ? "not-allowed" : "pointer" }}>
                   Cancel
                 </button>
-                <button onClick={saveStructure} disabled={structSaving || !structForm.name?.trim()}
-                  style={{ flex: 2, padding: "9px", borderRadius: 7, background: (structSaving || !structForm.name?.trim()) ? "#9CA3AF" : "#0EA5E9", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (structSaving || !structForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                  {structSaving ? "Saving…" : (isEdit ? "Update" : "Add Structure")}
+                <button onClick={confirmAddCats} disabled={addCatSaving}
+                  style={{ flex: 2, padding: "8px", borderRadius: 6,
+                           background: addCatSaving ? "#9CA3AF" : COL_BLUE,
+                           color: "white", border: "none", fontSize: 12, fontWeight: 700,
+                           cursor: addCatSaving ? "not-allowed" : "pointer" }}>
+                  {addCatSaving ? "Adding…" : `Add Selected (${addCatPicks.length})`}
                 </button>
               </div>
             </div>
@@ -2673,437 +3334,784 @@ function ClientBOQSection() {
         );
       })()}
 
-      {/* ── PICKER MODAL — "+ Add Item to {category}" ─────────────────
-          Subcon-style dark-header modal. List mode shows library items
-          (boq_items WHERE category=pickerCat AND NOT-yet-in-rates).
-          "Create new" mode swaps the body for an inline add form so the
-          user can push a fresh boq_items row + auto-pick it without
-          leaving the modal.
-      */}
-      {pickerCat && (() => {
-        const pickedIds = new Set([...Object.keys(rates), ...Object.keys(changed)].map(String));
-        const available = boqItems.filter(i =>
-          (i.category || "Uncategorized") === pickerCat &&
-          !pickedIds.has(String(i.id)) &&
-          (!pickerSearch.trim() ||
-            i.name.toLowerCase().includes(pickerSearch.toLowerCase()))
+      {/* ═══════════════════════════════════════════════════════════════
+          + ADD ITEM DRAWER (right slide-over, items grouped by category)
+          IMPORTANT: target category_id comes from drawer's footer click,
+          NOT from boq_items.category. Same item can be added to different
+          target categories across sections.
+      ═══════════════════════════════════════════════════════════════ */}
+      {addItemDrawer && (() => {
+        const sid       = addItemDrawer.structure_id;
+        const alreadyHere = new Set([
+          ...(sectionItems[sid] || []).map(r => r.item_id),
+          ...(pendingNewItems[sid] || []).map(r => r.item_id),
+        ]);
+        const q = addItemSearch.trim().toLowerCase();
+        const filtered = boqItems.filter(i =>
+          !q || i.name.toLowerCase().includes(q) || (i.category || "").toLowerCase().includes(q)
         );
+        const grouped = filtered.reduce((acc, i) => {
+          const k = i.category || "Uncategorized";
+          (acc[k] ||= []).push(i);
+          return acc;
+        }, {});
         return (
-          <div onClick={closePicker}
-            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <>
+            <div onClick={closeAddItemDrawer}
+              style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 700 }}/>
             <div onClick={e => e.stopPropagation()}
-              style={{ background: "white", borderRadius: 12, width: "min(560px, 95vw)", maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
-              {/* Dark header */}
-              <div style={{ background: "#0F172A", padding: "13px 18px", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>
-                    {pickerMode === "list" ? "Add Item to " + pickerCat : "New BOQ Item — " + pickerCat}
-                  </div>
-                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
-                    {pickerMode === "list"
-                      ? "Pick from existing library items, or click \"+ Add new\" if it's not there yet."
-                      : "Saves to master library + auto-adds to this package."}
+              style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(460px,95vw)",
+                       background: "white", zIndex: 701, boxShadow: "-12px 0 32px rgba(0,0,0,0.15)",
+                       display: "flex", flexDirection: "column" }}>
+              <div style={{ background: COL_DARK, padding: "13px 16px", color: "white",
+                            display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14, fontWeight: 700 }}>Add Item</div>
+                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1,
+                                whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                    {addItemDrawer.section_name} › {addItemDrawer.category_name}
                   </div>
                 </div>
-                <button onClick={closePicker} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>×</button>
+                <button onClick={closeAddItemDrawer}
+                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
+                           fontSize: 22, cursor: "pointer", lineHeight: 1 }}>×</button>
               </div>
-              {/* Body */}
-              <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-                {pickerMode === "list" ? (
-                  <>
-                    <input value={pickerSearch} onChange={e => setPickerSearch(e.target.value)}
-                      placeholder={"Search items in " + pickerCat + "…"}
-                      autoFocus
-                      style={{ width: "100%", padding: "9px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box", marginBottom: 10 }}/>
-                    <div style={{ maxHeight: 320, overflowY: "auto", border: "1px solid #E5E7EB", borderRadius: 7 }}>
-                      {available.length === 0 ? (
-                        <div style={{ padding: "30px 14px", textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>
-                          {pickerSearch.trim()
-                            ? "No matches in " + pickerCat + ". Click \"+ Add new\" below to create one."
-                            : "All " + pickerCat + " items are already in this package, or none exist yet."}
-                        </div>
-                      ) : available.map((item, idx) => (
-                        <div key={item.id} onClick={() => pickItemIntoSection(item)}
-                          style={{ padding: "9px 12px", cursor: "pointer", borderBottom: idx < available.length - 1 ? "1px solid #F3F4F6" : "none", display: "flex", justifyContent: "space-between", alignItems: "center" }}
-                          onMouseEnter={e => e.currentTarget.style.background = "#F8FAFC"}
-                          onMouseLeave={e => e.currentTarget.style.background = "white"}>
-                          <div>
-                            <div style={{ fontSize: 12.5, fontWeight: 600, color: "#111827" }}>{item.name}</div>
-                            <div style={{ fontSize: 10.5, color: "#6B7280", marginTop: 1 }}>{item.unit} {item.description ? "· " + item.description : ""}</div>
-                          </div>
-                          <div style={{ fontSize: 11.5, color: "#9CA3AF" }}>Rs.{Number(item.base_rate || 0).toLocaleString()}</div>
-                        </div>
-                      ))}
+              <div style={{ padding: "10px 14px", borderBottom: "1px solid #E5E7EB", background: "#F9FAFB" }}>
+                <input value={addItemSearch}
+                  onChange={e => setAddItemSearch(e.target.value)}
+                  placeholder="Search items by name or category…"
+                  style={{ width: "100%", padding: "7px 11px", borderRadius: 6,
+                           border: "1.5px solid #E5E7EB", fontSize: 12.5, outline: "none",
+                           fontFamily: "inherit", boxSizing: "border-box" }}/>
+              </div>
+              <div style={{ flex: 1, overflowY: "auto", padding: "8px 0" }}>
+                {Object.entries(grouped).sort((a,b) => a[0].localeCompare(b[0])).map(([catName, items]) => (
+                  <div key={catName} style={{ marginBottom: 4 }}>
+                    <div style={{ padding: "6px 14px", fontSize: 10.5, fontWeight: 700,
+                                  color: "#6B7280", textTransform: "uppercase",
+                                  background: "#F3F4F6", letterSpacing: ".4px" }}>
+                      {catName} <span style={{ color: "#9CA3AF" }}>· {items.length}</span>
                     </div>
-                    <button onClick={() => setPickerMode("create")}
-                      style={{ marginTop: 10, width: "100%", background: "#EFF6FF", color: "#2563EB", border: "1px dashed #BFDBFE", borderRadius: 7, padding: "8px 12px", fontSize: 12.5, fontWeight: 700, cursor: "pointer" }}>
-                      + Add new item (not in library yet)
+                    {items.map(i => {
+                      const here = alreadyHere.has(i.id);
+                      const pickIdx = addItemPicks.indexOf(i.id);
+                      const isPicked = pickIdx >= 0;
+                      return (
+                        <label key={i.id}
+                          style={{ display: "flex", alignItems: "center", gap: 10,
+                                   padding: "8px 14px", cursor: here ? "not-allowed" : "pointer",
+                                   background: here ? "#F9FAFB" : (isPicked ? "#EFF6FF" : "white"),
+                                   borderBottom: "1px solid #F3F4F6",
+                                   opacity: here ? 0.55 : 1 }}>
+                          <input type="checkbox" disabled={here} checked={isPicked}
+                            onChange={() => toggleItemPick(i.id)}
+                            style={{ width: 16, height: 16 }}/>
+                          {/* Pick-order badge */}
+                          {isPicked && (
+                            <span title="Pick order — this is the position the item will land in the section"
+                              style={{ display: "inline-flex", alignItems: "center", justifyContent: "center",
+                                       width: 20, height: 20, borderRadius: "50%", background: "#2563EB",
+                                       color: "white", fontSize: 10.5, fontWeight: 700, flexShrink: 0 }}>
+                              {pickIdx + 1}
+                            </span>
+                          )}
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: "#0F172A" }}>
+                              {i.name}
+                              {here && <span style={{ marginLeft: 8, fontSize: 10, color: "#9CA3AF" }}>(already here)</span>}
+                            </div>
+                            <div style={{ fontSize: 10.5, color: "#64748B", marginTop: 1 }}>
+                              base Rs.{inr(i.base_rate)} · {i.unit}
+                            </div>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ))}
+
+                {/* + Create new item */}
+                <div style={{ padding: "12px 14px", borderTop: "1px dashed #E5E7EB", marginTop: 8 }}>
+                  {addItemNewForm === null ? (
+                    <button onClick={() => setAddItemNewForm({ name: "", unit: uomOptions[0] || "Sq.Ft",
+                                                              category: addItemDrawer.category_name, base_rate: 0 })}
+                      style={{ width: "100%", padding: "8px 12px", background: "#F0FDF4",
+                               border: "1px dashed " + COL_GREEN, color: COL_GREEN,
+                               borderRadius: 6, fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                      + Create new item
                     </button>
-                  </>
-                ) : (
-                  // Inline create form — Subcon-style 2-col grid
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                    <div style={{ gridColumn: "1 / 3" }}>
-                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Item Name *</label>
-                      <input value={pickerForm.name || ""} onChange={e => setPickerForm(p => ({ ...p, name: e.target.value }))}
-                        placeholder="e.g. RCC Footing M25" autoFocus
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                  ) : (
+                    <div style={{ padding: 10, background: "#F9FAFB", borderRadius: 6, border: "1px solid #E5E7EB" }}>
+                      <input autoFocus value={addItemNewForm.name}
+                        onChange={e => setAddItemNewForm(p => ({ ...p, name: e.target.value }))}
+                        placeholder="Item name"
+                        style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
+                                 border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 6,
+                                 outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginBottom: 6 }}>
+                        <select value={addItemNewForm.unit}
+                          onChange={e => setAddItemNewForm(p => ({ ...p, unit: e.target.value }))}
+                          style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
+                                   border: "1.5px solid #D1D5DB", fontSize: 12,
+                                   outline: "none", fontFamily: "inherit", background: "white", boxSizing: "border-box" }}>
+                          {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                        <select value={addItemNewForm.category}
+                          onChange={e => setAddItemNewForm(p => ({ ...p, category: e.target.value }))}
+                          style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
+                                   border: "1.5px solid #D1D5DB", fontSize: 12,
+                                   outline: "none", fontFamily: "inherit", background: "white", boxSizing: "border-box" }}>
+                          {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                      </div>
+                      <input type="number" value={addItemNewForm.base_rate}
+                        onChange={e => setAddItemNewForm(p => ({ ...p, base_rate: e.target.value }))}
+                        placeholder="Base rate"
+                        style={{ width: "100%", padding: "6px 9px", borderRadius: 5,
+                                 border: "1.5px solid #D1D5DB", fontSize: 12, marginBottom: 8,
+                                 outline: "none", fontFamily: "inherit", boxSizing: "border-box", textAlign: "right" }}/>
+                      <div style={{ display: "flex", gap: 6 }}>
+                        <button onClick={() => setAddItemNewForm(null)}
+                          style={{ flex: 1, padding: 6, borderRadius: 5, background: "white",
+                                   border: "1px solid #D1D5DB", fontSize: 11.5, color: "#6B7280", cursor: "pointer" }}>
+                          Cancel
+                        </button>
+                        <button onClick={createAndAddItem}
+                          disabled={addItemSaving || !addItemNewForm.name?.trim()}
+                          style={{ flex: 2, padding: 6, borderRadius: 5,
+                                   background: (addItemSaving || !addItemNewForm.name?.trim()) ? "#9CA3AF" : COL_GREEN,
+                                   color: "white", border: "none", fontSize: 11.5, fontWeight: 700,
+                                   cursor: (addItemSaving || !addItemNewForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                          {addItemSaving ? "Saving…" : "Create + Add to this section"}
+                        </button>
+                      </div>
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Category *</label>
-                      <select value={pickerForm.category || pickerCat} onChange={e => setPickerForm(p => ({ ...p, category: e.target.value }))}
-                        style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
-                        {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                      </select>
+                  )}
+                </div>
+              </div>
+              <div style={{ padding: "12px 14px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
+                <button onClick={closeAddItemDrawer}
+                  style={{ flex: 1, padding: "8px", borderRadius: 6, border: "1px solid #D1D5DB",
+                           background: "white", fontSize: 12, color: "#374151", cursor: "pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={confirmAddItems}
+                  style={{ flex: 2, padding: "8px", borderRadius: 6,
+                           background: COL_BLUE, color: "white", border: "none",
+                           fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  Add Selected ({addItemPicks.length})
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          PACKAGE EDIT DRAWER (right slide-over, ~640px)
+            Tier A — Package basics (name + sqft_rate + description)
+            Tier B — Sections in this package
+                       • inline rename + area edit
+                       • per-category rename (section-scoped, rate_package_categories)
+                       • per-item master edits (boq_items: name/unit/base_rate)
+                       • soft-delete item from master library
+            Save All — Promise.allSettled across all dirty staged edits.
+      ═══════════════════════════════════════════════════════════════ */}
+      {pkgDrawer && (
+        <>
+          <div onClick={closePkgDrawer}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 700 }}/>
+          <div onClick={e => e.stopPropagation()}
+            style={{ position: "fixed", top: 0, right: 0, bottom: 0,
+                     width: "min(640px,95vw)", background: "white", zIndex: 701,
+                     boxShadow: "-12px 0 32px rgba(0,0,0,0.18)",
+                     display: "flex", flexDirection: "column" }}>
+            {/* Dark header */}
+            <div style={{ background: COL_DARK, padding: "13px 18px", color: "white",
+                          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                  Edit Package: {pkgDrawer.name}
+                </div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
+                  {selType?.name} · Package #{pkgDrawer.id}
+                  {pkgHasChanged && <span style={{ marginLeft: 8, color: "#FCD34D", fontWeight: 600 }}>● Unsaved</span>}
+                </div>
+              </div>
+              <button onClick={closePkgDrawer} disabled={pkgSaving}
+                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)",
+                         fontSize: 22, cursor: pkgSaving ? "not-allowed" : "pointer", lineHeight: 1 }}>×</button>
+            </div>
+
+            {/* Body — scrolling */}
+            <div style={{ flex: 1, overflowY: "auto", padding: "14px 16px" }}>
+
+              {/* ── TIER A: PACKAGE BASICS ── */}
+              <div style={{ marginBottom: 18, padding: 14,
+                            border: "1px solid #E5E7EB", borderRadius: 8, background: "#FAFBFC" }}>
+                <div style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280",
+                              textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 10 }}>
+                  1 — Package Basics
+                </div>
+                <div style={{ marginBottom: 10 }}>
+                  <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Name *</label>
+                  <input value={pkgDraft.name || ""}
+                    onChange={e => setPkgDraft(p => ({ ...p, name: e.target.value }))}
+                    style={{ width: "100%", padding: "8px 11px", borderRadius: 6,
+                             border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
+                             outline: "none", boxSizing: "border-box" }}/>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "180px 1fr", gap: 10, marginBottom: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Per-sqft rate (Rs.)</label>
+                    <input type="number" value={pkgDraft.sqft_rate ?? 0}
+                      onChange={e => setPkgDraft(p => ({ ...p, sqft_rate: e.target.value }))}
+                      style={{ width: "100%", padding: "8px 11px", borderRadius: 6,
+                               border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
+                               outline: "none", boxSizing: "border-box", textAlign: "right" }}/>
+                  </div>
+                  <div>
+                    <label style={{ fontSize: 10, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 3, textTransform: "uppercase" }}>Description</label>
+                    <input value={pkgDraft.description || ""}
+                      onChange={e => setPkgDraft(p => ({ ...p, description: e.target.value }))}
+                      placeholder="Optional"
+                      style={{ width: "100%", padding: "8px 11px", borderRadius: 6,
+                               border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
+                               outline: "none", boxSizing: "border-box" }}/>
+                  </div>
+                </div>
+                <div style={{ fontSize: 10.5, color: "#9CA3AF", fontStyle: "italic" }}>
+                  Per-sqft rate is informational on the package tile. Per-section rates live inside the BOQ tree.
+                </div>
+              </div>
+
+              {/* ── TIER B: SECTIONS ── */}
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280",
+                            textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 8, marginTop: 4 }}>
+                2 — Sections, Categories &amp; Items
+              </div>
+
+              {pkgStructures.length === 0 && (
+                <div style={{ padding: "18px 12px", textAlign: "center", color: "#9CA3AF",
+                              fontSize: 12.5, border: "1px dashed #E5E7EB", borderRadius: 8 }}>
+                  No sections in this package yet. Add one from the main BOQ tree.
+                </div>
+              )}
+
+              {pkgStructures.map(sec => {
+                const collapsed = !!pkgCollapsedSecs[sec.id];
+                const cats = pkgCategories
+                  .filter(c => c.structure_id === sec.id)
+                  .sort((a,b) => (a.sort_order||0) - (b.sort_order||0) || a.id - b.id);
+                const secNameVal = pkgGetSecName(sec);
+                const secAreaVal = pkgGetSecArea(sec);
+                const secDirty   = !!pkgSecEdits[sec.id];
+                return (
+                  <div key={sec.id}
+                    style={{ marginBottom: 12, border: "1px solid #E5E7EB", borderRadius: 8,
+                             overflow: "hidden",
+                             boxShadow: secDirty ? "0 0 0 2px #FCD34D" : "none" }}>
+                    {/* Section header */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8,
+                                  padding: "8px 12px", background: COL_DARK2, color: "white" }}>
+                      <span onClick={() => setPkgCollapsedSecs(p => ({ ...p, [sec.id]: !p[sec.id] }))}
+                        style={{ cursor: "pointer", display: "flex" }}>
+                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none"
+                             stroke="rgba(255,255,255,0.55)" strokeWidth={2.5}
+                             style={{ transition: "transform .15s", transform: collapsed ? "rotate(0deg)" : "rotate(90deg)" }}>
+                          <polyline points="9 18 15 12 9 6"/>
+                        </svg>
+                      </span>
+                      <input value={secNameVal}
+                        onChange={e => pkgPatchSec(sec.id, { name: e.target.value })}
+                        style={{ flex: 1, padding: "5px 9px", fontSize: 12.5, fontWeight: 700,
+                                 borderRadius: 5,
+                                 border: "1.5px solid " + (pkgSecEdits[sec.id]?.name !== undefined ? COL_AMBER : "rgba(255,255,255,0.18)"),
+                                 background: pkgSecEdits[sec.id]?.name !== undefined ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.08)",
+                                 color: "white", outline: "none", fontFamily: "inherit" }}/>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.6)" }}>Area</span>
+                      <input type="number" value={secAreaVal}
+                        onChange={e => pkgPatchSec(sec.id, { default_qty: e.target.value })}
+                        style={{ width: 80, padding: "5px 8px", borderRadius: 5, textAlign: "right",
+                                 fontFamily: "inherit", fontSize: 12, fontWeight: 700,
+                                 border: "1.5px solid " + (pkgSecEdits[sec.id]?.default_qty !== undefined ? COL_AMBER : "rgba(255,255,255,0.18)"),
+                                 background: pkgSecEdits[sec.id]?.default_qty !== undefined ? "rgba(245,158,11,0.18)" : "rgba(255,255,255,0.08)",
+                                 color: "white", outline: "none" }}/>
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Unit</label>
-                      <select value={pickerForm.unit || (uomOptions[0] || "")} onChange={e => setPickerForm(p => ({ ...p, unit: e.target.value }))}
-                        style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
-                        {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                      </select>
+
+                    {/* Categories + items */}
+                    {!collapsed && (
+                      <div style={{ padding: 10 }}>
+                        {cats.length === 0 && (
+                          <div style={{ padding: "12px", textAlign: "center", color: "#9CA3AF", fontSize: 12 }}>
+                            No categories in this section.
+                          </div>
+                        )}
+                        {cats.map(cat => {
+                          // Items currently in this (section, category) from the
+                          // saved sectionItems map. Pending-new items from the BOQ
+                          // tree are NOT shown here (drawer = edit-existing-only).
+                          const rows = (sectionItems[sec.id] || [])
+                            .filter(r => Number(r.category_id) === Number(cat.id));
+                          const catNameVal = pkgGetCatName(cat);
+                          const catDirty = pkgCatRenames[cat.id] !== undefined;
+                          return (
+                            <div key={cat.id}
+                              style={{ marginBottom: 10, border: "1px solid #E5E7EB",
+                                       borderRadius: 6, overflow: "hidden",
+                                       boxShadow: catDirty ? "0 0 0 1px #FCD34D" : "none" }}>
+                              {/* Category header — inline rename */}
+                              <div style={{ padding: "7px 10px", background: COL_CAT_BG,
+                                            display: "flex", alignItems: "center", gap: 8,
+                                            borderBottom: "1px solid #E5E7EB" }}>
+                                <input value={catNameVal}
+                                  onChange={e => setPkgCatRenames(p => ({ ...p, [cat.id]: e.target.value }))}
+                                  title="Section-scoped rename (only this package)"
+                                  style={{ flex: 1, padding: "4px 8px", fontSize: 12, fontWeight: 700,
+                                           borderRadius: 4,
+                                           border: "1.5px solid " + (catDirty ? COL_AMBER : "#CBD5E1"),
+                                           background: catDirty ? "#FFFBEB" : "white",
+                                           outline: "none", fontFamily: "inherit",
+                                           color: "#0F172A" }}/>
+                                <span style={{ fontSize: 10.5, color: "#94A3B8", fontWeight: 500 }}>
+                                  · {rows.length} item{rows.length === 1 ? "" : "s"}
+                                </span>
+                              </div>
+
+                              {/* Items — master edit */}
+                              {rows.length === 0 ? (
+                                <div style={{ padding: "10px", textAlign: "center", color: "#9CA3AF", fontSize: 11.5 }}>
+                                  No items.
+                                </div>
+                              ) : (
+                                <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                                  <thead>
+                                    <tr style={{ background: "#FAFAFA" }}>
+                                      <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase" }}>Item Name</th>
+                                      <th style={{ padding: "6px 10px", textAlign: "left", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 90 }}>Unit</th>
+                                      <th style={{ padding: "6px 10px", textAlign: "right", fontSize: 9.5, fontWeight: 700, color: "#64748B", textTransform: "uppercase", width: 90 }}>Master Base</th>
+                                      <th style={{ width: 36 }}/>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {rows.map(r => {
+                                      const it = pkgGetItem(r.item_id);
+                                      if (!it) return null;
+                                      const deleted = !!pkgDeletedItems[r.item_id];
+                                      const ed = pkgItemEdits[r.item_id] || {};
+                                      const itemDirty = Object.keys(ed).length > 0;
+                                      return (
+                                        <tr key={r.item_id}
+                                          style={{ background: deleted ? "#FEF2F2" : "white",
+                                                   opacity: deleted ? 0.55 : 1,
+                                                   borderBottom: "1px solid #F3F4F6" }}>
+                                          <td style={{ padding: "5px 10px" }}>
+                                            <input value={it.name}
+                                              onChange={e => pkgPatchItem(r.item_id, { name: e.target.value })}
+                                              disabled={deleted}
+                                              style={{ width: "100%", padding: "4px 7px", borderRadius: 4,
+                                                       border: "1.5px solid " + (ed.name !== undefined ? COL_AMBER : "#E5E7EB"),
+                                                       background: ed.name !== undefined ? "#FFFBEB" : "white",
+                                                       fontSize: 12, outline: "none", fontFamily: "inherit",
+                                                       boxSizing: "border-box",
+                                                       textDecoration: deleted ? "line-through" : "none" }}/>
+                                          </td>
+                                          <td style={{ padding: "5px 10px" }}>
+                                            <select value={it.unit || ""}
+                                              onChange={e => pkgPatchItem(r.item_id, { unit: e.target.value })}
+                                              disabled={deleted}
+                                              style={{ width: "100%", padding: "4px 7px", borderRadius: 4,
+                                                       border: "1.5px solid " + (ed.unit !== undefined ? COL_AMBER : "#E5E7EB"),
+                                                       background: ed.unit !== undefined ? "#FFFBEB" : "white",
+                                                       fontSize: 12, outline: "none", fontFamily: "inherit",
+                                                       boxSizing: "border-box" }}>
+                                              {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
+                                            </select>
+                                          </td>
+                                          <td style={{ padding: "5px 10px", textAlign: "right" }}>
+                                            <input type="number" value={it.base_rate ?? 0}
+                                              onChange={e => pkgPatchItem(r.item_id, { base_rate: e.target.value })}
+                                              disabled={deleted}
+                                              style={{ width: "100%", padding: "4px 7px", borderRadius: 4,
+                                                       border: "1.5px solid " + (ed.base_rate !== undefined ? COL_AMBER : "#E5E7EB"),
+                                                       background: ed.base_rate !== undefined ? "#FFFBEB" : "white",
+                                                       fontSize: 12, textAlign: "right", outline: "none",
+                                                       fontFamily: "inherit", boxSizing: "border-box",
+                                                       fontWeight: ed.base_rate !== undefined ? 700 : 500,
+                                                       color: ed.base_rate !== undefined ? "#92400E" : "#0F172A" }}/>
+                                          </td>
+                                          <td style={{ padding: "5px 6px", textAlign: "center" }}>
+                                            <button onClick={() => pkgToggleDelete(r.item_id)}
+                                              title={deleted ? "Undo delete" : "Delete from master library"}
+                                              style={{ background: deleted ? COL_RED : "transparent",
+                                                       color: deleted ? "white" : COL_RED,
+                                                       border: deleted ? "none" : "1px solid #FCA5A5",
+                                                       borderRadius: 4,
+                                                       fontSize: 11, fontWeight: 700, padding: "3px 7px",
+                                                       cursor: "pointer", lineHeight: 1 }}>
+                                              {deleted ? "↺" : "×"}
+                                            </button>
+                                          </td>
+                                        </tr>
+                                      );
+                                    })}
+                                  </tbody>
+                                </table>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              <div style={{ padding: "8px 10px", background: "#FFFBEB", border: "1px dashed #FCD34D",
+                            borderRadius: 6, fontSize: 11, color: "#92400E", marginTop: 4 }}>
+                ⚠️ Item rename / unit / base_rate edits affect the <strong>master library</strong> — every package using this item sees the change. Delete is a soft-delete from the master library.
+              </div>
+
+              {/* ── DANGER ZONE — Delete Package ───────────────────────
+                  Two-step type-to-confirm guard so a stray click can't
+                  nuke the whole package + its sections + items. Backend
+                  cascades the soft-delete to structures/categories/pcr. */}
+              <div style={{ marginTop: 18, padding: 14, background: "#FEF2F2",
+                            border: "1.5px solid #FCA5A5", borderRadius: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: ".4px" }}>
+                      Danger Zone
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Base Rate (Rs.)</label>
-                      <input type="number" value={pickerForm.base_rate || ""} onChange={e => setPickerForm(p => ({ ...p, base_rate: e.target.value }))}
-                        placeholder="0"
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                    <div style={{ fontSize: 11, color: "#7F1D1D", marginTop: 3 }}>
+                      Delete this package and all its sections, categories &amp; rate rows. Existing quotations stay readable.
                     </div>
-                    <div>
-                      <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Description / Scope</label>
-                      <input value={pickerForm.description || ""} onChange={e => setPickerForm(p => ({ ...p, description: e.target.value }))}
-                        placeholder="Optional"
-                        style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
+                  </div>
+                  {!pkgDangerOpen && (
+                    <button onClick={() => { setPkgDangerOpen(true); setPkgDeleteText(""); }}
+                      disabled={pkgSaving || pkgDeleting}
+                      style={{ padding: "7px 14px", borderRadius: 6, background: "white", border: "1.5px solid #DC2626",
+                               color: "#DC2626", fontSize: 12, fontWeight: 700,
+                               cursor: (pkgSaving || pkgDeleting) ? "not-allowed" : "pointer" }}>
+                      Delete Package…
+                    </button>
+                  )}
+                </div>
+                {pkgDangerOpen && (
+                  <div style={{ marginTop: 12, padding: 12, background: "white", border: "1px solid #FECACA", borderRadius: 6 }}>
+                    <div style={{ fontSize: 11.5, color: "#7F1D1D", marginBottom: 6, lineHeight: 1.45 }}>
+                      To confirm, type <strong>{pkgDrawer.name}</strong> below:
                     </div>
-                    <div style={{ gridColumn: "1 / 3" }}>
-                      <button onClick={() => setPickerMode("list")}
-                        style={{ background: "none", border: "none", color: "#6B7280", fontSize: 11.5, fontWeight: 600, cursor: "pointer", padding: "4px 0" }}>
-                        ← Back to library list
+                    <input value={pkgDeleteText}
+                      onChange={e => setPkgDeleteText(e.target.value)}
+                      placeholder={pkgDrawer.name}
+                      autoFocus
+                      style={{ width: "100%", padding: "8px 11px", borderRadius: 6,
+                               border: "1.5px solid #FCA5A5", background: "#FEF2F2",
+                               fontSize: 13, fontFamily: "inherit", outline: "none",
+                               boxSizing: "border-box", color: "#7F1D1D", marginBottom: 10 }}/>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button onClick={() => { setPkgDangerOpen(false); setPkgDeleteText(""); }}
+                        disabled={pkgDeleting}
+                        style={{ flex: 1, padding: "8px", borderRadius: 5, background: "white",
+                                 border: "1px solid #D1D5DB", fontSize: 12, color: "#374151",
+                                 cursor: pkgDeleting ? "not-allowed" : "pointer" }}>
+                        Cancel
+                      </button>
+                      <button onClick={deletePackage}
+                        disabled={pkgDeleting || pkgDeleteText.trim() !== pkgDrawer.name}
+                        style={{ flex: 2, padding: "8px", borderRadius: 5,
+                                 background: (pkgDeleting || pkgDeleteText.trim() !== pkgDrawer.name) ? "#FCA5A5" : "#DC2626",
+                                 color: "white", border: "none", fontSize: 12, fontWeight: 700,
+                                 cursor: (pkgDeleting || pkgDeleteText.trim() !== pkgDrawer.name) ? "not-allowed" : "pointer" }}>
+                        {pkgDeleting ? "Deleting…" : "I understand, delete this package"}
                       </button>
                     </div>
                   </div>
                 )}
               </div>
-              {/* Footer */}
-              <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
-                <button onClick={closePicker}
-                  style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #E5E7EB", background: "white", fontSize: 12, cursor: "pointer" }}>
-                  Cancel
-                </button>
-                {pickerMode === "create" && (
-                  <button onClick={submitNewInPicker} disabled={pickerSaving || !pickerForm.name?.trim()}
-                    style={{ flex: 2, padding: "9px", borderRadius: 7, background: (pickerSaving || !pickerForm.name?.trim()) ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (pickerSaving || !pickerForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                    {pickerSaving ? "Saving…" : "Save & Add"}
-                  </button>
-                )}
-              </div>
             </div>
-          </div>
-        );
-      })()}
 
-      {/* ── EDIT ITEM MODAL — Subcon-style ────────────────────────────
-          Opens from the pencil icon on each item row. Edits boq_items
-          (the master row), not the per-package rate. To change the
-          add-on/description for this package, the user edits inline on
-          the table row directly.
-      */}
-      {editItem && (
-        <div onClick={closeEditItem}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
-          <div onClick={e => e.stopPropagation()}
-            style={{ background: "white", borderRadius: 12, width: "min(540px, 95vw)", maxHeight: "92vh", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
-            <div style={{ background: "#0F172A", padding: "13px 18px", borderRadius: "12px 12px 0 0", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Edit BOQ Item</div>
-                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>Master library — changes apply across all packages.</div>
-              </div>
-              <button onClick={closeEditItem} style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 20, cursor: "pointer", lineHeight: 1 }}>×</button>
-            </div>
-            <div style={{ flex: 1, overflowY: "auto", padding: 16 }}>
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
-                <div style={{ gridColumn: "1 / 3" }}>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Item Name *</label>
-                  <input value={editItemForm.name || ""} onChange={e => setEditItemForm(p => ({ ...p, name: e.target.value }))} autoFocus
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Category *</label>
-                  <select value={editItemForm.category || ""} onChange={e => setEditItemForm(p => ({ ...p, category: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
-                    {catOptions.map(c => <option key={c} value={c}>{c}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Unit</label>
-                  <select value={editItemForm.unit || ""} onChange={e => setEditItemForm(p => ({ ...p, unit: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", background: "white" }}>
-                    {uomOptions.map(u => <option key={u} value={u}>{u}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Base Rate (Rs.)</label>
-                  <input type="number" value={editItemForm.base_rate || ""} onChange={e => setEditItemForm(p => ({ ...p, base_rate: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
-                </div>
-                <div>
-                  <label style={{ display: "block", fontSize: 10.5, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", marginBottom: 4 }}>Description / Scope</label>
-                  <input value={editItemForm.description || ""} onChange={e => setEditItemForm(p => ({ ...p, description: e.target.value }))}
-                    style={{ width: "100%", padding: "8px 12px", borderRadius: 7, border: "1.5px solid #E5E7EB", fontSize: 13, outline: "none", fontFamily: "inherit", boxSizing: "border-box" }}/>
-                </div>
-              </div>
-            </div>
-            <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
-              <button onClick={closeEditItem}
-                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #E5E7EB", background: "white", fontSize: 12, cursor: "pointer" }}>
+            {/* Footer */}
+            <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB",
+                          display: "flex", gap: 8, background: "#F9FAFB" }}>
+              <button onClick={closePkgDrawer} disabled={pkgSaving}
+                style={{ flex: 1, padding: "9px", borderRadius: 6, border: "1px solid #D1D5DB",
+                         background: "white", fontSize: 13, color: "#374151",
+                         cursor: pkgSaving ? "not-allowed" : "pointer" }}>
                 Cancel
               </button>
-              <button onClick={saveEditItem} disabled={editItemSaving || !editItemForm.name?.trim()}
-                style={{ flex: 2, padding: "9px", borderRadius: 7, background: (editItemSaving || !editItemForm.name?.trim()) ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (editItemSaving || !editItemForm.name?.trim()) ? "not-allowed" : "pointer" }}>
-                {editItemSaving ? "Saving…" : "Save Changes"}
+              <button onClick={savePackageEdit}
+                disabled={pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()}
+                style={{ flex: 2, padding: "9px", borderRadius: 6,
+                         background: (pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()) ? "#9CA3AF" : COL_BLUE,
+                         color: "white", border: "none", fontSize: 13, fontWeight: 700,
+                         cursor: (pkgSaving || !pkgHasChanged || !pkgDraft.name?.trim()) ? "not-allowed" : "pointer" }}>
+                {pkgSaving ? "Saving All…" : "Save All"}
               </button>
             </div>
           </div>
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          ADD TYPE / CITY / PACKAGE MODAL (existing simple modal, kept)
+      ═══════════════════════════════════════════════════════════════ */}
+      {addModal && (
+        <>
+          <div onClick={() => setAddModal(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 600 }}/>
+          <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+                        width: "min(440px,95vw)", background: "white", borderRadius: 12, zIndex: 601,
+                        boxShadow: "0 24px 64px rgba(0,0,0,0.3)" }}>
+            <div style={{ padding: "14px 18px", borderBottom: "1px solid #E5E7EB",
+                          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ fontSize: 15, fontWeight: 700, color: "#0F172A" }}>
+                {addModal === "type" ? "New Construction Type"
+                 : addModal === "city" ? "New City"
+                 : (addForm._editingId ? "Edit Package" : "New Package")}
+              </div>
+              <button onClick={() => setAddModal(null)}
+                style={{ background: "none", border: "none", fontSize: 18, color: "#6B7280", cursor: "pointer" }}>×</button>
+            </div>
+            <div style={{ padding: "16px 18px" }}>
+              <input autoFocus value={addForm.name || ""}
+                onChange={e => setAddForm(p => ({ ...p, name: e.target.value }))}
+                placeholder="Name"
+                style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
+                         border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
+                         outline: "none", boxSizing: "border-box", marginBottom: 10 }}/>
+              {addModal === "pkg" && (
+                <input type="number" value={addForm.sqft_rate || ""}
+                  onChange={e => setAddForm(p => ({ ...p, sqft_rate: e.target.value }))}
+                  placeholder="Per-sqft rate (informational)"
+                  style={{ width: "100%", padding: "9px 11px", borderRadius: 7,
+                           border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit",
+                           outline: "none", boxSizing: "border-box", marginBottom: 10 }}/>
+              )}
+            </div>
+            <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8 }}>
+              <button onClick={() => setAddModal(null)}
+                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB",
+                         background: "white", fontSize: 13, color: "#374151", cursor: "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={handleAdd} disabled={adding}
+                style={{ flex: 2, padding: "9px", borderRadius: 7,
+                         background: adding ? "#9CA3AF" : COL_BLUE,
+                         color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer" }}>
+                {adding ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ─────────────────────────────────────────────────────────────
+          Empty state — package not selected
+      ───────────────────────────────────────────────────────────── */}
+      {!selPkg && selType && selCity && (
+        <div style={{ textAlign: "center", padding: "40px 0", color: "#9CA3AF", fontSize: 13 }}>
+          Pick a Package above to start building the BOQ.
         </div>
       )}
 
-      {/* ── Add New Modals (type/city/pkg only — items handled by picker) ── */}
-      <Modal open={!!addModal} onClose={() => setAddModal(null)}
-        title={
-          addModal === "type" ? "New Construction Type" :
-          addModal === "city" ? "New City" :
-          addModal === "pkg"  ? (addForm._editingId ? "Edit Package" : "New Package") :
-          "New BOQ Item"
-        }
-        width={440}>
-        {addModal === "type" && (
-          <>
-            <FormField label="Type Name" value={addForm.name||""} onChange={v => upd("name", v)} placeholder="e.g. Residential House, Villa, Commercial" required />
-            <div style={{ height: 14 }} />
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", display: "block", marginBottom: 8 }}>Color</label>
-              <div style={{ display: "flex", gap: 8 }}>
-                {COLORS.map(c => (
-                  <div key={c} onClick={() => upd("color", c)}
-                    style={{ width: 28, height: 28, borderRadius: "50%", background: c, cursor: "pointer", border: (addForm.color||"#2563EB") === c ? "3px solid #111827" : "3px solid transparent" }} />
-                ))}
+      {/* ═══════════════════════════════════════════════════════════════
+          EDIT CONSTRUCTION TYPE modal — rename, recolor, danger-zone delete
+      ═══════════════════════════════════════════════════════════════ */}
+      {typeEdit && (
+        <>
+          <div onClick={closeTypeEdit}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 720 }}/>
+          <div onClick={e => e.stopPropagation()}
+            style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+                     width: "min(460px,95vw)", background: "white", borderRadius: 12, zIndex: 721,
+                     boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ background: COL_DARK, padding: "13px 18px", borderRadius: "12px 12px 0 0",
+                          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Edit Construction Type</div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{typeEdit.name}</div>
               </div>
+              <button onClick={closeTypeEdit} disabled={typeSaving}
+                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 22, cursor: typeSaving ? "not-allowed" : "pointer", lineHeight: 1 }}>×</button>
             </div>
-          </>
-        )}
-        {addModal === "city" && (
-          <>
-            <FormField label="City Name" value={addForm.name||""} onChange={v => upd("name", v)} placeholder="e.g. Raipur, Bhilai, Durg" required />
-            <div style={{ height: 12 }} />
-            <FormField label="State" value={addForm.state||"Chhattisgarh"} onChange={v => upd("state", v)} placeholder="Chhattisgarh" />
-          </>
-        )}
-        {addModal === "pkg" && (
-          <>
-            <FormField label="Package Name" value={addForm.name||""} onChange={v => upd("name", v)} placeholder="e.g. Basic, Standard, Premium" required />
-            <div style={{ height: 12 }} />
-            <div style={{ display: "flex", gap: 16 }}>
-              <FormField label="Base Rate (Rs./sqft)" value={addForm.sqft_rate||""} onChange={v => upd("sqft_rate", parseFloat(v)||0)} type="number" half />
-              <FormField label="Description" value={addForm.description||""} onChange={v => upd("description", v)} placeholder="Optional" half />
-            </div>
-          </>
-        )}
-        {addModal === "item" && (
-          <>
-            <FormField label="Item Name" value={addForm.name||""} onChange={v => upd("name", v)} placeholder="e.g. RCC Footing M25" required />
-            <div style={{ height: 12 }} />
-            <div style={{ display: "flex", gap: 16 }}>
-              <FormSelect label="Category" value={addForm.category||catOptions[0]||""} onChange={v => upd("category", v)} options={catOptions} half required />
-              <FormSelect label="Unit" value={addForm.unit||uomOptions[0]||""} onChange={v => upd("unit", v)} options={uomOptions} half />
-            </div>
-            <div style={{ height: 12 }} />
-            <div style={{ display: "flex", gap: 16 }}>
-              <FormField label="Base Rate (Rs.)" value={addForm.base_rate||""} onChange={v => upd("base_rate", parseFloat(v)||0)} type="number" half />
-              <FormField label="Description / Scope" value={addForm.description||""} onChange={v => upd("description", v)} placeholder="Optional" half />
-            </div>
-          </>
-        )}
-        <ModalFooter onClose={() => setAddModal(null)} onSave={handleAdd} saveLabel={adding ? "Adding..." : "Add"} />
-      </Modal>
-
-      {/* ─────────────────────────────────────────────────────────────
-          COMPREHENSIVE PACKAGE EDIT DRAWER
-
-          Opened by the pencil on a package tile. Right-side slide-in
-          panel with three editable zones:
-            1. Package details (name / sqft_rate / description)
-            2. Categories used in this package (rename inline)
-            3. Items per category (edit name / unit / base_rate / delete)
-
-          Everything stages locally; "Save All" runs the batch in order
-          (package → category renames → item PUTs → item deletes) via
-          savePackageEdit().
-       ───────────────────────────────────────────────────────────── */}
-      {pkgDrawer && (() => {
-        // Slice boqItems to ones relevant to this package's grid context
-        // (we don't have a strict pkg→items link in DB; the editor shows
-        // ALL master items, grouped by category, so the user can fix any
-        // item that appears anywhere). Filtering would hide items that
-        // genuinely belong elsewhere but use the same category.
-        const grouped = boqItems.reduce((acc, it) => {
-          const k = it.category || "Uncategorized";
-          if (deletedItems[it.id]) return acc;     // hide soft-deleted (UI-only until save)
-          (acc[k] ||= []).push(it);
-          return acc;
-        }, {});
-        const cats = Object.keys(grouped).sort();
-        const getItemDraft = (item, field) => {
-          const e = itemEdits[item.id];
-          if (e && e[field] !== undefined) return e[field];
-          return item[field] != null ? item[field] : "";
-        };
-        const patchItem = (id, field, value) =>
-          setItemEdits(p => ({ ...p, [id]: { ...(p[id] || {}), [field]: value } }));
-        const uomOpts = (uomList || []).length > 0
-          ? uomList.map(u => u.name)
-          : ["Sq.Ft","CFT","Running Ft","Kg","Point","Unit","Lump Sum","Piece"];
-        return (
-          <>
-            <div onClick={closePkgDrawer}
-              style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.45)", zIndex: 400 }} />
-            <div onClick={e => e.stopPropagation()}
-              style={{ position: "fixed", top: 0, right: 0, bottom: 0, width: "min(640px,96vw)",
-                       background: "white", boxShadow: "-12px 0 32px rgba(0,0,0,0.25)", zIndex: 401,
-                       display: "flex", flexDirection: "column" }}>
-              {/* Dark header */}
-              <div style={{ background: "#0F172A", padding: "13px 18px", display: "flex", justifyContent: "space-between", alignItems: "center", flexShrink: 0 }}>
-                <div>
-                  <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Edit Package</div>
-                  <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>
-                    Package, categories & items — all in one place
-                  </div>
-                </div>
-                <button onClick={closePkgDrawer} disabled={pkgSaving}
-                  style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 22, cursor: pkgSaving ? "not-allowed" : "pointer", lineHeight: 1 }}>
-                  ×
-                </button>
+            <div style={{ padding: 18 }}>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Name *</label>
+                <input autoFocus value={typeForm.name || ""}
+                  onChange={e => setTypeForm(p => ({ ...p, name: e.target.value }))}
+                  style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
               </div>
-              {/* Scrollable body */}
-              <div style={{ flex: 1, overflowY: "auto", padding: 18 }}>
-                {/* Section 1 — Package basics */}
-                <div style={{ marginBottom: 18 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>1 — Package</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 140px", gap: 10, marginBottom: 10 }}>
-                    <div>
-                      <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Package Name *</label>
-                      <input value={pkgDraft.name || ""} onChange={e => setPkgDraft(p => ({ ...p, name: e.target.value }))}
-                        style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
-                    </div>
-                    <div>
-                      <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Rate / sqft</label>
-                      <input type="number" value={pkgDraft.sqft_rate || ""} onChange={e => setPkgDraft(p => ({ ...p, sqft_rate: e.target.value }))}
-                        style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "right" }}/>
+              <div style={{ marginBottom: 6 }}>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Color</label>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {COLORS.map(c => (
+                    <div key={c} onClick={() => setTypeForm(p => ({ ...p, color: c }))}
+                      style={{ width: 28, height: 28, borderRadius: 6, background: c, cursor: "pointer",
+                               border: "3px solid " + (typeForm.color === c ? "#0F172A" : "transparent") }}/>
+                  ))}
+                </div>
+              </div>
+
+              {/* Danger zone */}
+              <div style={{ marginTop: 18, padding: 12, background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: ".4px" }}>Danger Zone</div>
+                    <div style={{ fontSize: 10.5, color: "#7F1D1D", marginTop: 2 }}>
+                      Delete this construction type. Packages tied to it will lose their type filter.
                     </div>
                   </div>
-                  <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4 }}>Description</label>
-                  <input value={pkgDraft.description || ""} onChange={e => setPkgDraft(p => ({ ...p, description: e.target.value }))}
-                    placeholder="Optional"
-                    style={{ width: "100%", padding: "8px 10px", borderRadius: 6, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
+                  {!typeDangerOpen && (
+                    <button onClick={() => { setTypeDangerOpen(true); setTypeDeleteText(""); }}
+                      disabled={typeSaving}
+                      style={{ padding: "6px 12px", borderRadius: 5, background: "white", border: "1.5px solid #DC2626", color: "#DC2626", fontSize: 11.5, fontWeight: 700, cursor: typeSaving ? "not-allowed" : "pointer" }}>
+                      Delete…
+                    </button>
+                  )}
                 </div>
-
-                {/* Section 2 + 3 — Categories with items */}
-                <div style={{ fontSize: 11, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", letterSpacing: ".5px", marginBottom: 8 }}>
-                  2 — Categories & Items
-                </div>
-                {cats.length === 0 && (
-                  <div style={{ padding: "16px 14px", background: "#F9FAFB", border: "1px dashed #E5E7EB", borderRadius: 8, color: "#9CA3AF", fontSize: 12, textAlign: "center" }}>
-                    No items in the library yet — close this drawer and use "+ Add Item" inside a category.
-                  </div>
-                )}
-                {cats.map(catName => {
-                  const items = grouped[catName];
-                  const cat = workCats.find(c => c.name === catName);
-                  const renameVal = catRenames[catName];
-                  return (
-                    <div key={catName} style={{ marginBottom: 12, border: "1px solid #E5E7EB", borderRadius: 8, overflow: "hidden" }}>
-                      {/* Category bar with rename input */}
-                      <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "8px 12px", background: "#1E293B" }}>
-                        <span style={{ fontSize: 10, color: "rgba(255,255,255,0.5)", fontWeight: 700 }}>CATEGORY</span>
-                        {cat ? (
-                          <input
-                            value={renameVal !== undefined ? renameVal : catName}
-                            onChange={e => setCatRenames(p => ({ ...p, [catName]: e.target.value }))}
-                            style={{ flex: 1, padding: "4px 8px", borderRadius: 5, border: "1px solid rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.08)", color: "white", fontSize: 12.5, fontWeight: 600, outline: "none", fontFamily: "inherit" }}/>
-                        ) : (
-                          <span style={{ flex: 1, color: "white", fontSize: 12.5, fontWeight: 700 }}>{catName}</span>
-                        )}
-                        <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)" }}>{items.length} item{items.length !== 1 ? "s" : ""}</span>
-                      </div>
-
-                      {/* Items table */}
-                      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                        <thead>
-                          <tr style={{ background: "#FAFAFA" }}>
-                            <th style={{ padding: "7px 10px", textAlign: "left", fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase" }}>Item</th>
-                            <th style={{ padding: "7px 10px", textAlign: "center", fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 95 }}>Unit</th>
-                            <th style={{ padding: "7px 10px", textAlign: "right", fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 100 }}>Base Rate</th>
-                            <th style={{ padding: "7px 10px", textAlign: "center", fontSize: 10, fontWeight: 700, color: "#6B7280", textTransform: "uppercase", width: 32 }}></th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {items.map((it, idx) => {
-                            const nameVal = getItemDraft(it, "name");
-                            const unitVal = getItemDraft(it, "unit");
-                            const baseVal = getItemDraft(it, "base_rate");
-                            return (
-                              <tr key={it.id} style={{ borderTop: "1px solid #F3F4F6", background: idx % 2 === 0 ? "white" : "#FAFAFA" }}>
-                                <td style={{ padding: "6px 10px" }}>
-                                  <input value={nameVal} onChange={e => patchItem(it.id, "name", e.target.value)}
-                                    style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #E5E7EB", fontSize: 12, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
-                                </td>
-                                <td style={{ padding: "6px 10px" }}>
-                                  <select value={unitVal} onChange={e => patchItem(it.id, "unit", e.target.value)}
-                                    style={{ width: "100%", padding: "5px 6px", borderRadius: 5, border: "1px solid #E5E7EB", fontSize: 11.5, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}>
-                                    {uomOpts.map(u => <option key={u} value={u}>{u}</option>)}
-                                  </select>
-                                </td>
-                                <td style={{ padding: "6px 10px" }}>
-                                  <input type="number" value={baseVal} onChange={e => patchItem(it.id, "base_rate", e.target.value)}
-                                    style={{ width: "100%", padding: "5px 8px", borderRadius: 5, border: "1px solid #E5E7EB", fontSize: 12, fontFamily: "inherit", outline: "none", boxSizing: "border-box", textAlign: "right" }}/>
-                                </td>
-                                <td style={{ padding: "6px 10px", textAlign: "center" }}>
-                                  <button onClick={() => setDeletedItems(p => ({ ...p, [it.id]: true }))}
-                                    title="Remove from library"
-                                    style={{ background: "none", border: "none", color: "#DC2626", cursor: "pointer", fontSize: 16, lineHeight: 1, padding: 0 }}>
-                                    ×
-                                  </button>
-                                </td>
-                              </tr>
-                            );
-                          })}
-                        </tbody>
-                      </table>
+                {typeDangerOpen && (
+                  <div style={{ marginTop: 10, padding: 10, background: "white", border: "1px solid #FECACA", borderRadius: 6 }}>
+                    <div style={{ fontSize: 11, color: "#7F1D1D", marginBottom: 5 }}>
+                      Type <strong>{typeEdit.name}</strong> to confirm:
                     </div>
-                  );
-                })}
-
-                {/* Deleted items recap (so user knows what'll get soft-deleted on Save) */}
-                {Object.keys(deletedItems).length > 0 && (
-                  <div style={{ marginTop: 10, padding: "8px 12px", background: "#FEF2F2", border: "1px solid #FECACA", borderRadius: 6, fontSize: 11.5, color: "#991B1B" }}>
-                    {Object.keys(deletedItems).length} item{Object.keys(deletedItems).length > 1 ? "s" : ""} will be removed from the library on Save. <button onClick={() => setDeletedItems({})} style={{ background: "none", border: "none", color: "#DC2626", textDecoration: "underline", cursor: "pointer", padding: 0, marginLeft: 6, fontSize: 11.5 }}>undo</button>
+                    <input value={typeDeleteText}
+                      onChange={e => setTypeDeleteText(e.target.value)}
+                      placeholder={typeEdit.name} autoFocus
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: 5, border: "1.5px solid #FCA5A5", background: "#FEF2F2", fontSize: 12, fontFamily: "inherit", outline: "none", boxSizing: "border-box", color: "#7F1D1D", marginBottom: 8 }}/>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => { setTypeDangerOpen(false); setTypeDeleteText(""); }}
+                        disabled={typeSaving}
+                        style={{ flex: 1, padding: 6, borderRadius: 5, background: "white", border: "1px solid #D1D5DB", fontSize: 11.5, color: "#374151", cursor: typeSaving ? "not-allowed" : "pointer" }}>
+                        Cancel
+                      </button>
+                      <button onClick={deleteType}
+                        disabled={typeSaving || typeDeleteText.trim() !== typeEdit.name}
+                        style={{ flex: 2, padding: 6, borderRadius: 5,
+                                 background: (typeSaving || typeDeleteText.trim() !== typeEdit.name) ? "#FCA5A5" : "#DC2626",
+                                 color: "white", border: "none", fontSize: 11.5, fontWeight: 700,
+                                 cursor: (typeSaving || typeDeleteText.trim() !== typeEdit.name) ? "not-allowed" : "pointer" }}>
+                        {typeSaving ? "Deleting…" : "Delete construction type"}
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>
-              {/* Footer */}
-              <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8, flexShrink: 0, background: "#F9FAFB" }}>
-                <button onClick={closePkgDrawer} disabled={pkgSaving}
-                  style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: pkgSaving ? "not-allowed" : "pointer" }}>
-                  Cancel
-                </button>
-                <button onClick={savePackageEdit} disabled={pkgSaving || !pkgDraft.name?.trim()}
-                  style={{ flex: 2, padding: "9px", borderRadius: 7, background: (pkgSaving || !pkgDraft.name?.trim()) ? "#9CA3AF" : "#2563EB", color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: (pkgSaving || !pkgDraft.name?.trim()) ? "not-allowed" : "pointer" }}>
-                  {pkgSaving ? "Saving All…" : "Save All"}
-                </button>
+            </div>
+            <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8, background: "#F9FAFB" }}>
+              <button onClick={closeTypeEdit} disabled={typeSaving}
+                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: typeSaving ? "not-allowed" : "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={saveTypeEdit} disabled={typeSaving || !typeForm.name?.trim()}
+                style={{ flex: 2, padding: "9px", borderRadius: 7,
+                         background: (typeSaving || !typeForm.name?.trim()) ? "#9CA3AF" : COL_BLUE,
+                         color: "white", border: "none", fontSize: 13, fontWeight: 700,
+                         cursor: (typeSaving || !typeForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                {typeSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          EDIT CITY modal — rename, state, danger-zone delete
+      ═══════════════════════════════════════════════════════════════ */}
+      {cityEdit && (
+        <>
+          <div onClick={closeCityEdit}
+            style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.55)", zIndex: 720 }}/>
+          <div onClick={e => e.stopPropagation()}
+            style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
+                     width: "min(460px,95vw)", background: "white", borderRadius: 12, zIndex: 721,
+                     boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ background: COL_DARK, padding: "13px 18px", borderRadius: "12px 12px 0 0",
+                          display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "white" }}>Edit City</div>
+                <div style={{ fontSize: 10.5, color: "rgba(255,255,255,0.55)", marginTop: 1 }}>{cityEdit.name}</div>
+              </div>
+              <button onClick={closeCityEdit} disabled={citySaving}
+                style={{ background: "none", border: "none", color: "rgba(255,255,255,0.5)", fontSize: 22, cursor: citySaving ? "not-allowed" : "pointer", lineHeight: 1 }}>×</button>
+            </div>
+            <div style={{ padding: 18 }}>
+              <div style={{ marginBottom: 12 }}>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>Name *</label>
+                <input autoFocus value={cityForm.name || ""}
+                  onChange={e => setCityForm(p => ({ ...p, name: e.target.value }))}
+                  style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
+              </div>
+              <div>
+                <label style={{ fontSize: 10.5, fontWeight: 700, color: "#6B7280", display: "block", marginBottom: 4, textTransform: "uppercase" }}>State</label>
+                <input value={cityForm.state || ""}
+                  onChange={e => setCityForm(p => ({ ...p, state: e.target.value }))}
+                  placeholder="Chhattisgarh"
+                  style={{ width: "100%", padding: "9px 11px", borderRadius: 7, border: "1.5px solid #D1D5DB", fontSize: 13, fontFamily: "inherit", outline: "none", boxSizing: "border-box" }}/>
+              </div>
+
+              {/* Danger zone */}
+              <div style={{ marginTop: 18, padding: 12, background: "#FEF2F2", border: "1.5px solid #FCA5A5", borderRadius: 8 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: "#991B1B", textTransform: "uppercase", letterSpacing: ".4px" }}>Danger Zone</div>
+                    <div style={{ fontSize: 10.5, color: "#7F1D1D", marginTop: 2 }}>
+                      Delete this city. Leads + rates tied to it will lose their city tag.
+                    </div>
+                  </div>
+                  {!cityDangerOpen && (
+                    <button onClick={() => { setCityDangerOpen(true); setCityDeleteText(""); }}
+                      disabled={citySaving}
+                      style={{ padding: "6px 12px", borderRadius: 5, background: "white", border: "1.5px solid #DC2626", color: "#DC2626", fontSize: 11.5, fontWeight: 700, cursor: citySaving ? "not-allowed" : "pointer" }}>
+                      Delete…
+                    </button>
+                  )}
+                </div>
+                {cityDangerOpen && (
+                  <div style={{ marginTop: 10, padding: 10, background: "white", border: "1px solid #FECACA", borderRadius: 6 }}>
+                    <div style={{ fontSize: 11, color: "#7F1D1D", marginBottom: 5 }}>
+                      Type <strong>{cityEdit.name}</strong> to confirm:
+                    </div>
+                    <input value={cityDeleteText}
+                      onChange={e => setCityDeleteText(e.target.value)}
+                      placeholder={cityEdit.name} autoFocus
+                      style={{ width: "100%", padding: "7px 10px", borderRadius: 5, border: "1.5px solid #FCA5A5", background: "#FEF2F2", fontSize: 12, fontFamily: "inherit", outline: "none", boxSizing: "border-box", color: "#7F1D1D", marginBottom: 8 }}/>
+                    <div style={{ display: "flex", gap: 6 }}>
+                      <button onClick={() => { setCityDangerOpen(false); setCityDeleteText(""); }}
+                        disabled={citySaving}
+                        style={{ flex: 1, padding: 6, borderRadius: 5, background: "white", border: "1px solid #D1D5DB", fontSize: 11.5, color: "#374151", cursor: citySaving ? "not-allowed" : "pointer" }}>
+                        Cancel
+                      </button>
+                      <button onClick={deleteCity}
+                        disabled={citySaving || cityDeleteText.trim() !== cityEdit.name}
+                        style={{ flex: 2, padding: 6, borderRadius: 5,
+                                 background: (citySaving || cityDeleteText.trim() !== cityEdit.name) ? "#FCA5A5" : "#DC2626",
+                                 color: "white", border: "none", fontSize: 11.5, fontWeight: 700,
+                                 cursor: (citySaving || cityDeleteText.trim() !== cityEdit.name) ? "not-allowed" : "pointer" }}>
+                        {citySaving ? "Deleting…" : "Delete city"}
+                      </button>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
-          </>
-        );
-      })()}
+            <div style={{ padding: "12px 16px", borderTop: "1px solid #E5E7EB", display: "flex", gap: 8, background: "#F9FAFB" }}>
+              <button onClick={closeCityEdit} disabled={citySaving}
+                style={{ flex: 1, padding: "9px", borderRadius: 7, border: "1px solid #D1D5DB", background: "white", fontSize: 13, color: "#374151", cursor: citySaving ? "not-allowed" : "pointer" }}>
+                Cancel
+              </button>
+              <button onClick={saveCityEdit} disabled={citySaving || !cityForm.name?.trim()}
+                style={{ flex: 2, padding: "9px", borderRadius: 7,
+                         background: (citySaving || !cityForm.name?.trim()) ? "#9CA3AF" : COL_BLUE,
+                         color: "white", border: "none", fontSize: 13, fontWeight: 700,
+                         cursor: (citySaving || !cityForm.name?.trim()) ? "not-allowed" : "pointer" }}>
+                {citySaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

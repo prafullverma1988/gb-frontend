@@ -1573,6 +1573,8 @@ function TabEstimate({ project }) {
   }, [projectId]);
   const [showNewInv, setShowNewInv] = useState(false);
   const [showSetMs, setShowSetMs] = useState(false);
+  // Payment Schedule mode chooser dropdown (Item-wise / % / Manual)
+  const [msChooserOpen, setMsChooserOpen] = useState(false);
   const [showPay, setShowPay] = useState(null);
   const [saving, setSaving] = useState(false);
   const [customers, setCustomers] = useState([]);
@@ -1596,13 +1598,24 @@ function TabEstimate({ project }) {
     amount_received:"", payment_date: localYMD(), payment_mode:"Bank Transfer",
     reference_no:"", remark:"",
   });
-  // Form state — Set Milestones
+  // Form state — Set Schedule
+  // Item-wise mode supports multi-item picking. pickedItemIds preserves the
+  // order in which the user added items (numbered badges in the picker).
+  // itemStages maps each picked item to its own stage editor state.
+  // Legacy fields (estimate_item_id, rateMs) kept temporarily for any code
+  // that still references them, but the active flow uses the multi-item map.
   const [msForm, setMsForm] = useState({
     kind: "rate",   // 'rate' | 'percent'
     estimate_item_id: null,
     rateMs: [{ seq:0, name:"", cum_rate:"" }],
     pctMs:  [{ seq:0, name:"", pct:"" }],
+    pickedItemIds: [],
+    itemStages: {},        // { [estimate_item_id]: [{seq, name, cum_rate}, ...] }
+    expandedItemId: null,  // which picked-item's stage editor is currently open
   });
+  // Item picker drawer state
+  const [itemPickerOpen, setItemPickerOpen]     = useState(false);
+  const [itemPickerSearch, setItemPickerSearch] = useState("");
 
   // ── BOQ Amendment workflow (mirrors Subcon WO amendments) ──
   // Edits to a live estimate's BOQ go through an approval queue: user
@@ -1660,6 +1673,10 @@ function TabEstimate({ project }) {
       sections: (estDetail.sections || []).map(s => ({
         id: s.id,
         title: s.title || "",
+        // Preserve qty mode (uniform / per-item) end-to-end so the
+        // amendment round-trips cleanly. Edit modal doesn't expose a
+        // toggle; admin uses the builder for mode changes.
+        per_item_qty: s.per_item_qty ? 1 : 0,
         items: (s.items || []).map(it => ({
           id: it.id,
           description: it.description || "",
@@ -1683,6 +1700,9 @@ function TabEstimate({ project }) {
       .map(s => ({
         id: s.id || null,
         title: (s.title || "").trim() || "Section",
+        // Pass-through qty mode so the apply step recreates sections
+        // with the same uniform/per-item semantics.
+        per_item_qty: s.per_item_qty ? 1 : 0,
         items: (s.items || [])
           .filter(it => (it.description || "").trim() && parseFloat(it.qty) > 0 && parseFloat(it.rate) > 0)
           .map(it => ({
@@ -1948,26 +1968,122 @@ function TabEstimate({ project }) {
     } else alert(r.message || "Failed");
   };
 
+  // ── Module C: Sync schedule milestones to project_tasks ──────
+  // Soft-banner offer appears after a successful schedule save. User can
+  // accept (creates matching tasks + back-links task_id on milestones) or
+  // dismiss. Dismissal sticks for this session — they can re-trigger via
+  // the "Sync to tasks" button on the Payment Schedule tab header.
+  const [syncBanner, setSyncBanner]       = useState(null); // { milestoneCount } | null
+  const [syncBannerDismissed, setSyncBannerDismissed] = useState(false);
+  const [syncToast, setSyncToast]         = useState(null); // { created, taskIds } | null
+  const [syncing, setSyncing]             = useState(false);
+
+  const runSyncTasks = async (silent = false) => {
+    if (!selEst) return;
+    setSyncing(true);
+    const r = await api.post("/customer-estimates/"+selEst.id+"/milestones/sync-tasks", { only_unlinked: true })
+      .catch(e => ({ success:false, message:e.message }));
+    setSyncing(false);
+    if (!r?.success) { alert(r?.message || "Sync failed"); return; }
+    setSyncBanner(null);
+    if (!silent) {
+      // Capture the newly-created task ids for undo. We don't get them back
+      // from the bulk endpoint, so re-fetch milestones to read fresh task_ids.
+      const m = await api.get("/customer-estimates/"+selEst.id+"/milestones").catch(()=>({success:false}));
+      const taskIds = m?.success
+        ? Object.values(m.data?.rate_by_item || {}).flat().map(x => x.task_id).filter(Boolean)
+        : [];
+      setSyncToast({ created: r.data?.created || 0, skipped: r.data?.skipped || 0, taskIds });
+      // Auto-dismiss toast after 10s
+      setTimeout(() => setSyncToast(curr => curr?.created === r.data?.created ? null : curr), 10000);
+    }
+    await reloadSel();
+  };
+  const undoSyncTasks = async () => {
+    if (!syncToast?.taskIds?.length || !selEst) return;
+    setSyncing(true);
+    const r = await api.post("/customer-estimates/"+selEst.id+"/milestones/sync-tasks/undo", { task_ids: syncToast.taskIds })
+      .catch(e => ({ success:false, message:e.message }));
+    setSyncing(false);
+    if (!r?.success) { alert(r?.message || "Undo failed"); return; }
+    setSyncToast(null);
+    await reloadSel();
+  };
+
+  // ── Edit existing payment schedule (open modal pre-loaded) ────
+  // Two entry points:
+  //   - editRateSchedule(itemId)  → opens Item-wise modal with that item
+  //                                  pre-picked + its stages loaded.
+  //   - editPercentSchedule()     → opens % mode with existing pct stages.
+  const editRateSchedule = (itemId) => {
+    const stored = (milestones.rate_by_item[itemId] || [])
+      .slice()
+      .sort((a,b) => a.seq - b.seq)
+      .map(m => ({ seq:m.seq, name:m.name||"", cum_rate: String(m.cum_rate||"") }));
+    setMsForm(p => ({
+      ...p,
+      kind: "rate",
+      pickedItemIds: [itemId],
+      itemStages: { [itemId]: stored.length ? stored : [{seq:0,name:"",cum_rate:""}] },
+      expandedItemId: itemId,
+    }));
+    setShowSetMs(true);
+  };
+  const editPercentSchedule = () => {
+    const stored = (milestones.percent || [])
+      .slice()
+      .sort((a,b) => a.seq - b.seq)
+      .map(m => ({ seq:m.seq, name:m.name||"", pct: String(m.pct||"") }));
+    setMsForm(p => ({
+      ...p,
+      kind: "percent",
+      pctMs: stored.length ? stored : [{seq:0,name:"",pct:""}],
+    }));
+    setShowSetMs(true);
+  };
+  const deleteRateSchedule = async (itemId, itemName) => {
+    if (!window.confirm(`Delete payment schedule for "${itemName}"?\n\nAll milestones for this item will be removed. Existing invoices stay intact.`)) return;
+    const r = await api.del("/customer-estimates/"+selEst.id+"/milestones/rate/"+itemId).catch(e => ({success:false, message:e.message}));
+    if (!r?.success) { alert(r?.message || "Delete failed"); return; }
+    await reloadSel();
+  };
+  const deletePercentSchedule = async () => {
+    if (!window.confirm("Delete the entire % payment schedule?\n\nAll stages will be removed. Existing invoices stay intact.")) return;
+    const r = await api.del("/customer-estimates/"+selEst.id+"/milestones/percent").catch(e => ({success:false, message:e.message}));
+    if (!r?.success) { alert(r?.message || "Delete failed"); return; }
+    await reloadSel();
+  };
+
   const submitMilestones = async () => {
     if (!selEst) return;
     setSaving(true);
     let r;
     if (msForm.kind === "rate") {
-      if (!msForm.estimate_item_id) { setSaving(false); return alert("Pick an item"); }
-      const ms = msForm.rateMs.filter(m => m.name && m.cum_rate)
-        .map((m,i) => ({ seq:i, name:m.name, cum_rate: parseFloat(m.cum_rate) }));
-      if (ms.length === 0) { setSaving(false); return alert("Add at least one milestone"); }
-      // Switch method if needed
+      // Multi-item flow — iterate pickedItemIds and batch-send their stages.
+      // Backend POST /milestones/rate already accepts { items: [...] } so one
+      // call covers all picked items.
+      const itemsPayload = msForm.pickedItemIds
+        .map(itemId => {
+          const stages = (msForm.itemStages[itemId] || [])
+            .filter(m => m.name && m.cum_rate)
+            .map((m,i) => ({ seq:i, name:m.name, cum_rate: parseFloat(m.cum_rate) }));
+          return stages.length > 0 ? { estimate_item_id: itemId, milestones: stages } : null;
+        })
+        .filter(Boolean);
+      if (itemsPayload.length === 0) {
+        setSaving(false);
+        return alert("Pick at least one item and add at least one milestone to it.");
+      }
       if (selEst.billing_method !== "milestone_rate") {
         await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"milestone_rate"});
       }
       r = await api.post("/customer-estimates/"+selEst.id+"/milestones/rate", {
-        items: [{ estimate_item_id: msForm.estimate_item_id, milestones: ms }],
+        items: itemsPayload,
       }).catch(()=>({success:false}));
     } else {
       const ms = msForm.pctMs.filter(m => m.name && m.pct)
         .map((m,i) => ({ seq:i, name:m.name, pct: parseFloat(m.pct) }));
-      if (ms.length === 0) { setSaving(false); return alert("Add at least one stage"); }
+      if (ms.length === 0) { setSaving(false); return alert("Add at least one milestone"); }
       if (selEst.billing_method !== "milestone_percent") {
         await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"milestone_percent"});
       }
@@ -1977,10 +2093,24 @@ function TabEstimate({ project }) {
     }
     setSaving(false);
     if (r.success) {
+      // Capture milestone count BEFORE reloading state, for the banner copy
+      const justSavedMilestones = msForm.kind === "rate"
+        ? msForm.pickedItemIds.reduce((n, id) => n + ((msForm.itemStages[id] || []).filter(s => s.name && s.cum_rate).length), 0)
+        : msForm.pctMs.filter(m => m.name && m.pct).length;
       setShowSetMs(false);
-      setMsForm({kind:"rate",estimate_item_id:null,rateMs:[{seq:0,name:"",cum_rate:""}],pctMs:[{seq:0,name:"",pct:""}]});
+      setMsForm({
+        kind:"rate", estimate_item_id:null,
+        rateMs:[{seq:0,name:"",cum_rate:""}], pctMs:[{seq:0,name:"",pct:""}],
+        pickedItemIds:[], itemStages:{}, expandedItemId:null,
+      });
       await reloadSel();
       if (r.data?.warnings?.length) alert("Saved with warnings:\n" + r.data.warnings.join("\n"));
+      // Module C: offer to sync milestones to tasks. Only for rate mode
+      // (% mode milestones aren't item-specific so task sync wouldn't be
+      // 1:1 anyway). Don't re-prompt if user explicitly dismissed earlier.
+      if (msForm.kind === "rate" && justSavedMilestones > 0 && !syncBannerDismissed) {
+        setSyncBanner({ milestoneCount: justSavedMilestones });
+      }
     } else alert(r.message || "Failed");
   };
 
@@ -2233,7 +2363,7 @@ function TabEstimate({ project }) {
           <div style={{display:"flex",borderBottom:"1px solid "+T.b1,background:T.surfaceB,flexShrink:0}}>
             {[
               {id:"boq",label:"BOQ / Items"},
-              {id:"milestone",label:"Milestones"},
+              {id:"milestone",label:"Payment Schedule"},
               {id:"invoice",label:"Invoices ("+invoices.length+")"},
               {id:"payment",label:"Payments ("+payments.length+")"},
               {id:"amend",label:"Amendments ("+amendments.length+")", dot: pendingAmendCount > 0},
@@ -2261,10 +2391,124 @@ function TabEstimate({ project }) {
                 </button>
               )}
               {subTab==="milestone" && (
-                <button onClick={()=>{ setMsForm(p=>({...p,estimate_item_id:null})); setShowSetMs(true); }}
-                  style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                  + Set Milestones
-                </button>
+                <>
+                  {/* 🔗 Sync to tasks — opt-in trigger for users who skipped
+                      the post-save banner. Counts how many milestones still
+                      need linking and shows the count inline. Disabled when
+                      every milestone is already linked. (Module C) */}
+                  {selEst.billing_method === "milestone_rate" && (() => {
+                    const allMs = Object.values(milestones.rate_by_item || {}).flat();
+                    const unlinked = allMs.filter(m => !m.task_id).length;
+                    if (allMs.length === 0) return null;
+                    return (
+                      <button onClick={()=>runSyncTasks(false)}
+                        disabled={syncing || unlinked === 0}
+                        title={unlinked === 0
+                          ? "All milestones already linked to project tasks"
+                          : `Create ${unlinked} project task${unlinked === 1 ? "" : "s"} linked to milestones`}
+                        style={{
+                          background: unlinked === 0 ? T.surfaceB : "#EFF6FF",
+                          color: unlinked === 0 ? T.t4 : T.blu,
+                          border:"1px solid " + (unlinked === 0 ? T.b1 : T.bluM),
+                          borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:700,
+                          cursor: (syncing || unlinked === 0) ? "default" : "pointer",
+                        }}>
+                        🔗 {unlinked === 0 ? "All synced" : `Sync ${unlinked} to tasks`}
+                      </button>
+                    );
+                  })()}
+                  {/* 🤖 Auto-billing toggle — single estimate-level switch
+                      (Module B). When ON + a linked task hits "Complete",
+                      the future hook will auto-create a DRAFT invoice. Off
+                      by default; safe opt-in. Toggle never affects existing
+                      drafts — they wait for admin review regardless. */}
+                  <button onClick={async()=>{
+                      const next = !selEst.auto_bill_on_complete;
+                      if (next && !window.confirm(
+                        "Turn ON auto-billing?\n\n" +
+                        "When a project task linked to a milestone is marked Complete, " +
+                        "the system will auto-create a DRAFT invoice.\n\n" +
+                        "Drafts always need your review before going to the customer. " +
+                        "You can turn this off anytime."
+                      )) return;
+                      const r = await api.patch("/customer-estimates/"+selEst.id+"/auto-bill", { enabled: next })
+                        .catch(e => ({ success:false, message:e.message }));
+                      if (!r?.success) { alert(r?.message || "Failed"); return; }
+                      // Optimistic local update — full reload would jump scroll
+                      setSelEst(prev => prev ? { ...prev, auto_bill_on_complete: next ? 1 : 0 } : prev);
+                    }}
+                    title={selEst.auto_bill_on_complete
+                      ? "Auto-billing is ON. Click to turn off."
+                      : "Auto-billing is OFF. Click to turn on — drafts created on task completion."}
+                    style={{
+                      background: selEst.auto_bill_on_complete ? "#DCFCE7" : T.surfaceB,
+                      color: selEst.auto_bill_on_complete ? "#15803D" : T.t3,
+                      border:"1px solid " + (selEst.auto_bill_on_complete ? "#86EFAC" : T.b1),
+                      borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer",
+                      display:"flex",alignItems:"center",gap:5,
+                    }}>
+                    🤖 Auto-bill {selEst.auto_bill_on_complete ? "ON" : "OFF"}
+                  </button>
+                <div style={{position:"relative"}}>
+                  <button onClick={()=>setMsChooserOpen(o=>!o)}
+                    style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    + Set Schedule ▾
+                  </button>
+                  {msChooserOpen && (<>
+                    {/* Click-outside scrim — sits below the menu, captures
+                        clicks anywhere else to close. */}
+                    <div onClick={()=>setMsChooserOpen(false)} style={{position:"fixed",inset:0,zIndex:200}}/>
+                    <div style={{position:"absolute",top:30,right:0,width:280,background:"white",border:"1px solid "+T.b1,borderRadius:8,boxShadow:"0 12px 32px rgba(0,0,0,0.18)",zIndex:201,overflow:"hidden"}}>
+                      <div style={{padding:"8px 12px",fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",borderBottom:"1px solid "+T.b1,background:T.surfaceB}}>
+                        Choose billing mode
+                      </div>
+                      {/* Item-wise — opens existing modal with kind=rate */}
+                      <div onClick={()=>{
+                          setMsForm(p=>({...p,kind:"rate",estimate_item_id:null}));
+                          setShowSetMs(true); setMsChooserOpen(false);
+                        }}
+                        style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
+                        onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>📋 Item-wise</div>
+                        <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
+                          Pick BOQ items, define billing stages per item (₹/unit)
+                        </div>
+                      </div>
+                      {/* % of Order Value */}
+                      <div onClick={()=>{
+                          setMsForm(p=>({...p,kind:"percent"}));
+                          setShowSetMs(true); setMsChooserOpen(false);
+                        }}
+                        style={{padding:"10px 12px",cursor:"pointer",borderBottom:"1px solid "+T.b1}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
+                        onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>📊 % of Order Value</div>
+                        <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
+                          Define milestones as % of total estimate value
+                        </div>
+                      </div>
+                      {/* Manual — directly switches billing_method, no modal */}
+                      <div onClick={async()=>{
+                          setMsChooserOpen(false);
+                          if (selEst.billing_method === "manual") return;
+                          if (!window.confirm("Switch to Manual mode? You'll bill per-item cumulative qty without preset stages.")) return;
+                          const r = await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"manual"}).catch(()=>({success:false}));
+                          if (r.success) await reloadSel();
+                          else alert(r.message||"Switch failed");
+                        }}
+                        style={{padding:"10px 12px",cursor:"pointer"}}
+                        onMouseEnter={e=>e.currentTarget.style.background="#FAF5FF"}
+                        onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.t1}}>✍️ Manual (Item Cumulative)</div>
+                        <div style={{fontSize:10.5,color:T.t3,marginTop:2,lineHeight:1.4}}>
+                          No preset stages — bill cumulative qty per item ad-hoc
+                        </div>
+                      </div>
+                    </div>
+                  </>)}
+                </div>
+                </>
               )}
               {subTab==="invoice" && (<>
                 <button onClick={()=>{ setInvForm(p=>({...p,source:"milestone"})); setShowNewInv(true); }}
@@ -2288,94 +2532,206 @@ function TabEstimate({ project }) {
                 {(estDetail.sections||[]).length === 0 && (estDetail.unsectioned||[]).length === 0 && (
                   <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No items in this estimate</div>
                 )}
-                {(estDetail.sections||[]).map(sec => {
-                  const secTotal = (sec.items||[]).reduce((s,i) => s + parseFloat(i.amount||0), 0);
-                  // Group items by parsed [Category] prefix in description.
-                  // EstimateBuilderModal flattens 3-level (sec › cat › item)
-                  // → 2-level (section + items[]) by stuffing the category
-                  // into description as "[Category] Item Name". Here we
-                  // reverse that to render a category sub-header row.
-                  // Items without "[Cat]" prefix → grouped under "" (no header).
-                  const groups = {};         // {catName: items[]}
-                  const catOrder = [];       // preserve first-seen order
-                  for (const it of (sec.items || [])) {
-                    const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
-                    const catName = m ? m[1] : "";
-                    const cleanDesc = m ? m[2] : (it.description || "");
-                    if (!groups[catName]) { groups[catName] = []; catOrder.push(catName); }
-                    groups[catName].push({ ...it, _cleanDesc: cleanDesc });
-                  }
-                  return (
-                    <div key={sec.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
-                      <div style={{padding:"9px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM,display:"flex",justifyContent:"space-between",alignItems:"center",borderLeft:"3px solid "+T.blu}}>
-                        <span style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{sec.title}</span>
-                        <span style={{fontSize:12.5,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
-                      </div>
-                      <div style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 95px 110px",padding:"6px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
-                        {["Description","Unit","Qty","Rate","Amount"].map(h => (
-                          <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
-                        ))}
-                      </div>
-                      {catOrder.map(catName => {
-                        const items = groups[catName] || [];
-                        const catTotal = items.reduce((s,i) => s + parseFloat(i.amount||0), 0);
-                        return (
-                          <React.Fragment key={catName || "__none__"}>
-                            {catName && (
-                              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",
-                                           padding:"6px 14px 6px 18px",background:"#F1F5F9",
-                                           borderBottom:"1px solid "+T.b1,borderLeft:"3px solid "+T.bluM}}>
-                                <span style={{fontSize:11.5,fontWeight:700,color:T.t1,letterSpacing:".2px"}}>
-                                  {catName}
-                                  <span style={{fontSize:10,color:T.t4,fontWeight:500,marginLeft:6}}>
-                                    · {items.length} item{items.length === 1 ? "" : "s"}
+                {(() => {
+                  // Item rows stay column-aligned in this 5-col grid so
+                  // RATE + AMOUNT line up properly down the table.
+                  // Section + category BARS use a flex layout instead and
+                  // sit slightly right of the item Rate/Amount columns so
+                  // the totals visually pop out as a rolled-up summary.
+                  const GRID = "1fr 60px 70px 95px 110px";
+                  return (estDetail.sections||[]).map(sec => {
+                    const secTotal   = (sec.items||[]).reduce((s,i) => s + parseFloat(i.amount||0), 0);
+                    const secRateSum = (sec.items||[]).reduce((s,i) => s + parseFloat(i.rate||0),   0);
+                    const secQtySum  = (sec.items||[]).reduce((s,i) => s + parseFloat(i.qty||0),    0);
+                    // Mode = single source of truth from DB. Uniform mode:
+                    //   show the area (any item's qty), display per-sqft rate.
+                    // Per-item mode:
+                    //   show Σ qty, hide per-sqft (mathematically meaningless).
+                    const secPerItem = !!Number(sec.per_item_qty);
+                    const secArea    = parseFloat((sec.items||[])[0]?.qty) || 0;
+                    const secQtyDisplay = secPerItem ? secQtySum : secArea;
+                    // Group items by parsed [Category] prefix in description.
+                    // EstimateBuilderModal flattens 3-level (sec › cat › item)
+                    // → 2-level (section + items[]) by stuffing the category
+                    // into description as "[Category] Item Name". Reverse it
+                    // here to render category sub-headers + rollups.
+                    const groups = {};
+                    const catOrder = [];
+                    for (const it of (sec.items || [])) {
+                      const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
+                      const catName = m ? m[1] : "";
+                      const cleanDesc = m ? m[2] : (it.description || "");
+                      if (!groups[catName]) { groups[catName] = []; catOrder.push(catName); }
+                      groups[catName].push({ ...it, _cleanDesc: cleanDesc });
+                    }
+                    return (
+                      <div key={sec.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
+                        {/* Section bar — flex layout, totals cluster on the far right
+                            (slightly outside the item column positions so they stand
+                            out as a summary, not an item row). */}
+                        {/* Section bar — uses SAME grid as item rows so Qty
+                            and Rate sit exactly under their column headers.
+                            Container paddingRight is reduced to 0 (vs items'
+                            14) so the AMOUNT total sits ~14-18px to the right
+                            of where item amounts end — a deliberate offset
+                            that signals "rollup total", not item row. */}
+                        <div style={{display:"grid",gridTemplateColumns:GRID,padding:"9px 0 9px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM,borderLeft:"3px solid "+T.blu,alignItems:"center"}}>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.blu}}>
+                            {sec.title}
+                            {secPerItem && <span style={{marginLeft:8,padding:"1px 6px",fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3,letterSpacing:".3px"}}>PER-ITEM QTY</span>}
+                          </span>
+                          <span/>{/* Unit column — empty on bar */}
+                          <span style={{fontSize:11.5,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:8}}>
+                            {Math.round(secQtyDisplay).toLocaleString("en-IN")}
+                          </span>
+                          <span style={{fontSize:11.5,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:8}}>
+                            {secPerItem ? "" : fmtC(secRateSum) + "/sqft"}
+                          </span>
+                          <span style={{fontSize:13.5,fontWeight:800,color:T.blu,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:0}}>
+                            {fmtC(secTotal)}
+                          </span>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:GRID,padding:"6px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
+                          {["Description","Unit","Qty","Rate","Amount"].map((h,i) => (
+                            <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",textAlign:i>=2?"right":"left",paddingRight:(i===2||i===3)?8:0}}>{h}</span>
+                          ))}
+                        </div>
+                        {catOrder.map(catName => {
+                          const items = groups[catName] || [];
+                          const catTotal   = items.reduce((s,i) => s + parseFloat(i.amount||0), 0);
+                          const catRateSum = items.reduce((s,i) => s + parseFloat(i.rate||0),   0);
+                          const catQtySum  = items.reduce((s,i) => s + parseFloat(i.qty||0),    0);
+                          // Category inherits the section's mode (categories
+                          // don't carry their own flag — they're just visual
+                          // sub-groups within a section).
+                          const catArea       = parseFloat(items[0]?.qty) || 0;
+                          const catQtyDisplay = secPerItem ? catQtySum : catArea;
+                          return (
+                            <React.Fragment key={catName || "__none__"}>
+                              {catName && (
+                                <div style={{display:"grid",gridTemplateColumns:GRID,padding:"6px 0 6px 18px",background:"#F1F5F9",
+                                             borderBottom:"1px solid "+T.b1,borderLeft:"3px solid "+T.bluM,alignItems:"center"}}>
+                                  <span style={{fontSize:11.5,fontWeight:700,color:T.t1,letterSpacing:".2px"}}>
+                                    {catName}
+                                    <span style={{fontSize:10,color:T.t4,fontWeight:500,marginLeft:6}}>
+                                      · {items.length} item{items.length === 1 ? "" : "s"}
+                                    </span>
                                   </span>
-                                </span>
-                                <span style={{fontSize:11.5,fontWeight:700,color:T.t2,fontVariantNumeric:"tabular-nums"}}>
-                                  {fmtC(catTotal)}
-                                </span>
-                              </div>
-                            )}
-                            {items.map(it => (
-                              <div key={it.id} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 95px 110px",padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center", paddingLeft: catName ? 28 : 14}}>
-                                <span style={{fontSize:12.5,color:T.t1}}>{it._cleanDesc}</span>
-                                <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
-                                <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{parseFloat(it.qty)}</span>
-                                <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
-                                <span style={{fontSize:12.5,fontWeight:600,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.amount)}</span>
-                              </div>
-                            ))}
-                          </React.Fragment>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
+                                  <span/>{/* Unit col */}
+                                  <span style={{fontSize:11,fontWeight:700,color:T.t2,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:8}}>
+                                    {Math.round(catQtyDisplay).toLocaleString("en-IN")}
+                                  </span>
+                                  <span style={{fontSize:11,fontWeight:700,color:T.t2,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:8}}>
+                                    {secPerItem ? "" : fmtC(catRateSum) + "/sqft"}
+                                  </span>
+                                  <span style={{fontSize:12.5,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:0}}>
+                                    {fmtC(catTotal)}
+                                  </span>
+                                </div>
+                              )}
+                              {items.map(it => (
+                                <div key={it.id} style={{display:"grid",gridTemplateColumns:GRID,padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center", paddingLeft: catName ? 28 : 14}}>
+                                  <span style={{fontSize:12.5,color:T.t1}}>{it._cleanDesc}</span>
+                                  <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
+                                  <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{parseFloat(it.qty)}</span>
+                                  <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
+                                  <span style={{fontSize:12.5,fontWeight:600,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(it.amount)}</span>
+                                </div>
+                              ))}
+                            </React.Fragment>
+                          );
+                        })}
+                      </div>
+                    );
+                  });
+                })()}
               </div>
             )}
 
             {/* MILESTONES TAB */}
             {subTab==="milestone" && (
               <div>
+                {/* Module C: Soft sync banner — appears after schedule save.
+                    User can accept (creates tasks + back-links), or Skip.
+                    Skip sticks for the session. They can always re-trigger
+                    via the "🔗 Sync to tasks" header button. */}
+                {syncBanner && (
+                  <div style={{padding:"10px 14px",background:"#EFF6FF",border:"1px solid "+T.bluM,borderRadius:8,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1,marginBottom:2}}>
+                        ✨ Want matching tasks in this project?
+                      </div>
+                      <div style={{fontSize:11,color:T.t3,lineHeight:1.4}}>
+                        Create {syncBanner.milestoneCount} project task{syncBanner.milestoneCount === 1 ? "" : "s"} linked to these milestones.
+                        When a task is marked Complete, the linked milestone is ready to bill.
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={()=>{ setSyncBanner(null); setSyncBannerDismissed(true); }}
+                        disabled={syncing}
+                        style={{background:"transparent",border:"1px solid "+T.b1,color:T.t3,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:600,cursor: syncing?"default":"pointer"}}>
+                        Skip
+                      </button>
+                      <button onClick={()=>runSyncTasks(false)}
+                        disabled={syncing}
+                        style={{background:T.blu,border:"none",color:"white",borderRadius:5,padding:"5px 14px",fontSize:11,fontWeight:700,cursor: syncing?"default":"pointer"}}>
+                        {syncing ? "Creating…" : "Create tasks"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+                {/* Undo toast — visible for 10s after sync */}
+                {syncToast && (
+                  <div style={{padding:"9px 14px",background:"#0F172A",color:"white",borderRadius:8,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}}>
+                    <div style={{fontSize:12,fontWeight:600}}>
+                      ✓ Created {syncToast.created} task{syncToast.created === 1 ? "" : "s"} linked to milestones
+                      {syncToast.skipped > 0 && <span style={{color:"rgba(255,255,255,0.5)",fontWeight:400,marginLeft:6}}>· {syncToast.skipped} already linked</span>}
+                    </div>
+                    <div style={{display:"flex",gap:6}}>
+                      <button onClick={undoSyncTasks} disabled={syncing}
+                        style={{background:"rgba(255,255,255,0.12)",border:"none",color:"white",borderRadius:5,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor: syncing?"default":"pointer"}}>
+                        ↺ Undo
+                      </button>
+                      <button onClick={()=>setSyncToast(null)} disabled={syncing}
+                        style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:14,cursor:"pointer",padding:"0 4px"}}>×</button>
+                    </div>
+                  </div>
+                )}
                 {selEst.billing_method === "manual" && (
                   <div style={{padding:"24px",textAlign:"center",color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8}}>
                     <div style={{fontSize:13,marginBottom:6}}>This estimate uses <b>manual</b> billing (per-item cumulative qty).</div>
-                    <div style={{fontSize:11.5,color:T.t4}}>Click <b>+ Set Milestones</b> to switch to milestone-based (rate or %).</div>
+                    <div style={{fontSize:11.5,color:T.t4}}>Click <b>+ Set Schedule</b> to switch to milestone-based (item-wise rate or % of order value).</div>
                   </div>
                 )}
                 {selEst.billing_method === "milestone_rate" && (estDetail?.sections||[]).map(sec =>
                   (sec.items||[]).map(it => {
                     const ms = milestones.rate_by_item[it.id] || [];
+                    const hasSchedule = ms.length > 0;
                     return (
                       <div key={it.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
-                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:8}}>
-                          <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{it.description}</div>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
+                          <div style={{fontSize:12.5,fontWeight:700,color:T.t1,flex:1}}>{it.description}</div>
                           <div style={{fontSize:11,color:T.t3}}>Item rate: <b>{fmtC(it.rate)}</b></div>
+                          {/* Edit / Delete affordances — visible when a schedule exists for this item */}
+                          {hasSchedule && (
+                            <div style={{display:"flex",gap:5}}>
+                              <button onClick={()=>editRateSchedule(it.id)}
+                                title="Edit schedule"
+                                style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
+                                ✎
+                              </button>
+                              <button onClick={()=>deleteRateSchedule(it.id, it.description)}
+                                title="Delete schedule"
+                                style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
+                                🗑
+                              </button>
+                            </div>
+                          )}
                         </div>
-                        {ms.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No milestones set. Use + Set Milestones.</div>}
-                        {ms.length > 0 && (
+                        {!hasSchedule && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No payment schedule set. Use + Set Schedule.</div>}
+                        {hasSchedule && (
                           <div style={{display:"grid",gridTemplateColumns:"30px 1fr 100px 100px",gap:6,padding:"4px 0",borderBottom:"1px solid "+T.b1,marginBottom:4}}>
-                            {["#","Stage","Cum Rate","Inc Rate"].map(h => <span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                            {["#","Milestone","Cumulative ₹/unit","Incremental"].map(h => <span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
                           </div>
                         )}
                         {ms.map(m => (
@@ -2392,11 +2748,27 @@ function TabEstimate({ project }) {
                 )}
                 {selEst.billing_method === "milestone_percent" && (
                   <div style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px"}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1,marginBottom:8}}>Payment Stages (% of estimate)</div>
-                    {milestones.percent.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No stages set yet.</div>}
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Payment Milestones (% of order value)</div>
+                      {milestones.percent.length > 0 && (
+                        <div style={{display:"flex",gap:5}}>
+                          <button onClick={editPercentSchedule}
+                            title="Edit schedule"
+                            style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
+                            ✎
+                          </button>
+                          <button onClick={deletePercentSchedule}
+                            title="Delete schedule"
+                            style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
+                            🗑
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {milestones.percent.length === 0 && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No milestones set yet.</div>}
                     {milestones.percent.length > 0 && (
                       <div style={{display:"grid",gridTemplateColumns:"30px 1fr 80px 130px",gap:6,padding:"4px 0",borderBottom:"1px solid "+T.b1,marginBottom:4}}>
-                        {["#","Stage","%","Amount"].map(h => <span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                        {["#","Milestone","%","Amount"].map(h => <span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
                       </div>
                     )}
                     {milestones.percent.map(m => (
@@ -2967,99 +3339,418 @@ function TabEstimate({ project }) {
         </div>
       </>)}
 
-      {/* ── MODAL: Set Milestones ───────────────────────────────── */}
+      {/* ── MODAL: Payment Schedule Setup ────────────────────────── */}
       {showSetMs && selEst && (<>
         <div onClick={()=>setShowSetMs(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:620,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Set Payment Milestones</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Payment Schedule Setup</div>
             <button onClick={()=>setShowSetMs(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
           </div>
           <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
             <div style={{display:"flex",gap:8,marginBottom:14}}>
               <button onClick={()=>setMsForm(p=>({...p,kind:"rate"}))}
-                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="rate"?T.blu:T.surfaceB,color:msForm.kind==="rate"?"white":T.t2,border:"1px solid "+(msForm.kind==="rate"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>Rate-based (per item)</button>
+                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="rate"?T.blu:T.surfaceB,color:msForm.kind==="rate"?"white":T.t2,border:"1px solid "+(msForm.kind==="rate"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>📋 Item-wise</button>
               <button onClick={()=>setMsForm(p=>({...p,kind:"percent"}))}
-                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="percent"?T.blu:T.surfaceB,color:msForm.kind==="percent"?"white":T.t2,border:"1px solid "+(msForm.kind==="percent"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>%-based (estimate value)</button>
+                style={{padding:"7px 14px",borderRadius:6,background:msForm.kind==="percent"?T.blu:T.surfaceB,color:msForm.kind==="percent"?"white":T.t2,border:"1px solid "+(msForm.kind==="percent"?T.blu:T.b1),fontSize:12,fontWeight:700,cursor:"pointer"}}>📊 % of Order Value</button>
             </div>
 
-            {msForm.kind === "rate" && (<>
-              <label style={lblS}>Estimate Item</label>
-              <select value={msForm.estimate_item_id||""} onChange={e=>setMsForm(p=>({...p,estimate_item_id:parseInt(e.target.value)||null}))} style={{...inpS,marginBottom:8}}>
-                <option value="">— pick an item —</option>
-                {(estDetail?.sections||[]).flatMap(s => s.items).map(it => (
-                  <option key={it.id} value={it.id}>{it.description} ({fmtC(it.rate)}/{it.unit}){it.library_item_id?" 📚":""}</option>
-                ))}
-              </select>
-              {/* "Use Library Stages" — visible when the picked item came from a library row
-                  that has a linked stage breakup. Calls apply-library-stages and closes the modal. */}
-              {(() => {
-                if (!msForm.estimate_item_id) return null;
-                const it = (estDetail?.sections||[]).flatMap(s => s.items).find(x => x.id === msForm.estimate_item_id);
-                if (!it || !it.library_item_id) return null;
-                const libItem = libItems.find(x => parseInt(x.id) === parseInt(it.library_item_id));
-                const stages = parseInt(libItem?.stage_count || 0);
-                if (stages === 0) return (
-                  <div style={{marginBottom:12,padding:"7px 10px",background:T.surfaceB,borderRadius:5,fontSize:11,color:T.t3}}>
-                    📚 Library item — but no stages defined yet. Add stages in Master Library to enable one-click apply.
-                  </div>
-                );
-                return (
-                  <div style={{marginBottom:12,padding:"8px 12px",background:T.grnL,border:"1px solid "+T.grnM,borderRadius:6,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:11.5,color:T.grn}}>📚 <b>{libItem.name}</b> has {stages} library stage{stages>1?"s":""} pre-loaded.</span>
-                    <button onClick={async()=>{
-                        setSaving(true);
-                        const r = await api.post("/customer-estimates/"+selEst.id+"/items/"+it.id+"/apply-library-stages", {}).catch(()=>({success:false}));
-                        setSaving(false);
-                        if (r.success) {
-                          setShowSetMs(false);
-                          await reloadSel();
-                        } else alert(r.message||"Failed");
-                      }}
-                      disabled={saving}
-                      style={{padding:"5px 12px",background:T.grn,color:"white",border:"none",borderRadius:5,fontSize:11,fontWeight:700,cursor:saving?"default":"pointer"}}>
-                      {saving?"Applying…":"Use Library Stages"}
+            {msForm.kind === "rate" && (() => {
+              const allItems = (estDetail?.sections||[]).flatMap(s =>
+                (s.items||[]).map(it => ({ ...it, _sectionTitle: s.title }))
+              );
+              const pickedItems = msForm.pickedItemIds
+                .map(id => allItems.find(x => x.id === id))
+                .filter(Boolean);
+              const patchItemStages = (itemId, updater) => {
+                setMsForm(p => {
+                  const cur = p.itemStages[itemId] || [{ seq:0, name:"", cum_rate:"" }];
+                  return { ...p, itemStages: { ...p.itemStages, [itemId]: updater(cur) } };
+                });
+              };
+              const removePicked = (itemId) => {
+                setMsForm(p => ({
+                  ...p,
+                  pickedItemIds: p.pickedItemIds.filter(id => id !== itemId),
+                  itemStages: Object.fromEntries(Object.entries(p.itemStages).filter(([k]) => parseInt(k) !== itemId)),
+                  expandedItemId: p.expandedItemId === itemId ? null : p.expandedItemId,
+                }));
+              };
+              return (<>
+                {/* Picker trigger — opens side drawer */}
+                {pickedItems.length === 0 ? (
+                  <div style={{padding:"22px 16px",background:T.surfaceB,border:"1.5px dashed "+T.b1,borderRadius:8,textAlign:"center",marginBottom:12}}>
+                    <div style={{fontSize:12.5,color:T.t3,marginBottom:8}}>No items picked yet</div>
+                    <button onClick={()=>{ setItemPickerSearch(""); setItemPickerOpen(true); }}
+                      style={{background:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      📚 Pick Items from BOQ
                     </button>
                   </div>
-                );
-              })()}
-              <div style={{display:"grid",gridTemplateColumns:"40px 1fr 140px 32px",gap:6,marginBottom:6}}>
-                {["#","Stage Name","Cum Rate","" ].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
-              </div>
-              {msForm.rateMs.map((m, mi) => (
-                <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 140px 32px",gap:6,marginBottom:4}}>
-                  <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
-                  <input value={m.name} onChange={e=>{const arr=[...msForm.rateMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,rateMs:arr}));}} placeholder="e.g. Footing" style={inpS}/>
-                  <input type="number" value={m.cum_rate} onChange={e=>{const arr=[...msForm.rateMs];arr[mi]={...arr[mi],cum_rate:e.target.value};setMsForm(p=>({...p,rateMs:arr}));}} placeholder="cum ₹/unit" style={inpS}/>
-                  <button onClick={()=>{const arr=msForm.rateMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,rateMs:arr.length?arr:[{seq:0,name:"",cum_rate:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
-                </div>
-              ))}
-              <button onClick={()=>setMsForm(p=>({...p,rateMs:[...p.rateMs,{seq:p.rateMs.length,name:"",cum_rate:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Stage</button>
-              <div style={{marginTop:10,padding:"8px 10px",background:T.surfaceB,borderRadius:5,fontSize:10.5,color:T.t3}}>Last cum_rate should match the item rate. If not, you'll get a warning (saved anyway).</div>
-            </>)}
+                ) : (
+                  <div style={{marginBottom:12}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6,gap:8}}>
+                      <span style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
+                        Picked Items ({pickedItems.length})
+                      </span>
+                      <div style={{display:"flex",gap:6}}>
+                        {/* Bulk: turn every picked item into a single 'Complete' milestone
+                            at its full rate. Saves clicks when stages aren't needed. */}
+                        <button onClick={()=>{
+                            setMsForm(p => {
+                              const next = { ...p.itemStages };
+                              for (const itm of pickedItems) {
+                                next[itm.id] = [{ seq:0, name:"Complete", cum_rate: String(parseFloat(itm.rate)||0) }];
+                              }
+                              return { ...p, itemStages: next };
+                            });
+                          }}
+                          title="Each picked item becomes a single 'Complete' milestone at its full rate"
+                          style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #FCD34D",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          ✓ All = 1 milestone each
+                        </button>
+                        <button onClick={()=>{ setItemPickerSearch(""); setItemPickerOpen(true); }}
+                          style={{background:T.bluL,color:T.blu,border:"1px solid "+T.bluM,borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                          + Pick More
+                        </button>
+                      </div>
+                    </div>
+                    {/* Per-item accordion: header bar with stage count, click to expand stage editor */}
+                    {pickedItems.map((it, idx) => {
+                      const stages   = msForm.itemStages[it.id] || [{ seq:0, name:"", cum_rate:"" }];
+                      const expanded = msForm.expandedItemId === it.id;
+                      const filledCount = stages.filter(s => s.name && s.cum_rate).length;
+                      const cumRateSum  = stages.reduce((s,m) => Math.max(s, parseFloat(m.cum_rate)||0), 0);
+                      const rateMismatch = cumRateSum > 0 && Math.abs(cumRateSum - parseFloat(it.rate)) > 0.01;
+                      // Library template chip — surfaces apply-library-stages
+                      // when the estimate item came from a library row with stages.
+                      const libItem = libItems.find(x => parseInt(x.id) === parseInt(it.library_item_id));
+                      const libStageCount = parseInt(libItem?.stage_count || 0);
+                      return (
+                        <div key={it.id} style={{border:"1px solid "+T.b1,borderRadius:7,marginBottom:6,overflow:"hidden",background:"white"}}>
+                          <div onClick={()=>setMsForm(p=>({...p,expandedItemId: expanded ? null : it.id}))}
+                            style={{padding:"8px 12px",background: expanded ? T.bluL : T.surfaceB,borderBottom: expanded ? "1px solid "+T.bluM : "none",cursor:"pointer",display:"flex",alignItems:"center",gap:10}}>
+                            <span style={{width:20,height:20,borderRadius:"50%",background:T.blu,color:"white",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                              {idx+1}
+                            </span>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{fontSize:12,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
+                              <div style={{fontSize:10,color:T.t4,marginTop:1}}>
+                                {it._sectionTitle} · {fmtC(it.rate)}/{it.unit}
+                                {filledCount > 0 && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>· {filledCount} milestone{filledCount>1?"s":""}</span>}
+                                {rateMismatch && <span style={{color:"#92400E",marginLeft:6,fontWeight:600}}>⚠ rate mismatch</span>}
+                              </div>
+                            </div>
+                            <button onClick={(e)=>{ e.stopPropagation(); removePicked(it.id); }}
+                              title="Remove from picked items"
+                              style={{background:T.redL,color:T.red,border:"none",borderRadius:4,width:22,height:22,fontSize:13,cursor:"pointer"}}>×</button>
+                            <span style={{fontSize:10,color:T.t4}}>{expanded ? "▴" : "▾"}</span>
+                          </div>
+                          {expanded && (
+                            <div style={{padding:"10px 12px"}}>
+                              {/* Library template chip */}
+                              {it.library_item_id && libStageCount > 0 && (
+                                <div style={{marginBottom:10,padding:"7px 10px",background:T.grnL,border:"1px solid "+T.grnM,borderRadius:5,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                  <span style={{fontSize:11,color:T.grn}}>📚 <b>{libItem.name}</b> has {libStageCount} library stage{libStageCount>1?"s":""}</span>
+                                  <button onClick={async()=>{
+                                      setSaving(true);
+                                      const r = await api.post("/customer-estimates/"+selEst.id+"/items/"+it.id+"/apply-library-stages", {}).catch(()=>({success:false}));
+                                      setSaving(false);
+                                      if (r.success) {
+                                        // Remove this item from picked list since it's now saved
+                                        removePicked(it.id);
+                                        await reloadSel();
+                                      } else alert(r.message||"Failed");
+                                    }}
+                                    disabled={saving}
+                                    style={{padding:"4px 10px",background:T.grn,color:"white",border:"none",borderRadius:4,fontSize:10.5,fontWeight:700,cursor:saving?"default":"pointer"}}>
+                                    {saving?"Applying…":"Apply Library Stages"}
+                                  </button>
+                                </div>
+                              )}
+                              <div style={{display:"grid",gridTemplateColumns:"30px 1fr 130px 28px",gap:6,marginBottom:4}}>
+                                {["#","Milestone Name","Cumulative ₹/unit",""].map(h=><span key={h} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                              </div>
+                              {stages.map((m, mi) => (
+                                <div key={mi} style={{display:"grid",gridTemplateColumns:"30px 1fr 130px 28px",gap:6,marginBottom:4}}>
+                                  <span style={{fontSize:11,color:T.t4,paddingTop:7}}>{mi+1}</span>
+                                  <input value={m.name}
+                                    onChange={e=>patchItemStages(it.id, arr => { const next=[...arr]; next[mi]={...next[mi],name:e.target.value}; return next; })}
+                                    placeholder="e.g. Footing complete" style={{...inpS,padding:"5px 8px",fontSize:11.5}}/>
+                                  <input type="number" value={m.cum_rate}
+                                    onChange={e=>patchItemStages(it.id, arr => { const next=[...arr]; next[mi]={...next[mi],cum_rate:e.target.value}; return next; })}
+                                    placeholder="cum ₹/unit" style={{...inpS,padding:"5px 8px",fontSize:11.5}}/>
+                                  <button onClick={()=>patchItemStages(it.id, arr => {
+                                      const next = arr.filter((_,i)=>i!==mi);
+                                      return next.length ? next : [{seq:0,name:"",cum_rate:""}];
+                                    })}
+                                    style={{background:T.redL,color:T.red,border:"none",borderRadius:4,fontSize:13,cursor:"pointer"}}>×</button>
+                                </div>
+                              ))}
+                              <div style={{marginTop:4,display:"flex",gap:6,flexWrap:"wrap"}}>
+                                <button onClick={()=>patchItemStages(it.id, arr => [...arr, { seq:arr.length, name:"", cum_rate:"" }])}
+                                  style={{background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:4,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
+                                  + Add Milestone
+                                </button>
+                                {/* "Item itself = 1 milestone" shortcut. Replaces all stages
+                                    with a single 'Complete' milestone at the full item rate.
+                                    Useful when no intermediate stages are needed (e.g.
+                                    "1000 sqft ground beam — bill on completion"). */}
+                                <button onClick={()=>patchItemStages(it.id, () => ([
+                                    { seq:0, name:"Complete", cum_rate: String(parseFloat(it.rate) || 0) }
+                                  ]))}
+                                  title={`Replace stages with one milestone "Complete" at ₹${parseFloat(it.rate)||0}/unit`}
+                                  style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #FCD34D",borderRadius:4,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
+                                  ✓ Use whole item as 1 milestone
+                                </button>
+                              </div>
+                              {rateMismatch && (
+                                <div style={{marginTop:8,padding:"6px 9px",background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:4,fontSize:10.5,color:"#92400E"}}>
+                                  ⚠ Last cumulative ₹{cumRateSum.toFixed(2)} ≠ item rate ₹{parseFloat(it.rate).toFixed(2)} — saved anyway with warning.
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>);
+            })()}
 
-            {msForm.kind === "percent" && (<>
-              <div style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 32px",gap:6,marginBottom:6}}>
-                {["#","Stage Name","%",""].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
-              </div>
-              {msForm.pctMs.map((m, mi) => (
-                <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 100px 32px",gap:6,marginBottom:4}}>
-                  <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
-                  <input value={m.name} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="e.g. Foundation" style={inpS}/>
-                  <input type="number" value={m.pct} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],pct:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="%" style={inpS}/>
-                  <button onClick={()=>{const arr=msForm.pctMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,pctMs:arr.length?arr:[{seq:0,name:"",pct:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
+            {msForm.kind === "percent" && (() => {
+              // Live aggregates for the % editor.
+              const orderValue = parseFloat(selEst.total_value) || 0;
+              const pctSum = msForm.pctMs.reduce((s,m) => s + (parseFloat(m.pct) || 0), 0);
+              const remaining = +(100 - pctSum).toFixed(2);
+              const sumOk  = Math.abs(pctSum - 100) < 0.01;
+              // Preset templates — one-click fill
+              const applyPreset = (splits, names) => {
+                setMsForm(p => ({
+                  ...p,
+                  pctMs: splits.map((pct, i) => ({ seq:i, name: names[i] || ("Milestone "+(i+1)), pct: String(pct) }))
+                }));
+              };
+              const distributeRemaining = () => {
+                if (Math.abs(remaining) < 0.01) return;
+                // Distribute remaining across rows whose pct is blank/zero.
+                // If all rows are filled, dump into the last row.
+                const blanks = msForm.pctMs.filter(m => !parseFloat(m.pct)).length;
+                setMsForm(p => {
+                  const arr = [...p.pctMs];
+                  if (blanks > 0) {
+                    const each = +(remaining / blanks).toFixed(2);
+                    return { ...p, pctMs: arr.map(m => parseFloat(m.pct) ? m : { ...m, pct: String(each) }) };
+                  }
+                  // Fill into last row instead
+                  if (!arr.length) return p;
+                  const last = arr[arr.length-1];
+                  arr[arr.length-1] = { ...last, pct: String(+(parseFloat(last.pct||0) + remaining).toFixed(2)) };
+                  return { ...p, pctMs: arr };
+                });
+              };
+              return (<>
+                <div style={{padding:"7px 10px",background:T.surfaceB,borderRadius:6,fontSize:11,color:T.t3,marginBottom:10,display:"flex",justifyContent:"space-between"}}>
+                  <span>Order value</span>
+                  <span style={{fontWeight:700,color:T.t1}}>{fmtC(orderValue)}</span>
                 </div>
-              ))}
-              <button onClick={()=>setMsForm(p=>({...p,pctMs:[...p.pctMs,{seq:p.pctMs.length,name:"",pct:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Stage</button>
-              <div style={{marginTop:10,padding:"8px 10px",background:T.surfaceB,borderRadius:5,fontSize:10.5,color:T.t3}}>Total should be 100%. Mismatch shows a warning (saved anyway).</div>
-            </>)}
+                {/* Preset chips — quick splits */}
+                <div style={{display:"flex",gap:5,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+                  <span style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Quick:</span>
+                  {[
+                    { label:"30 / 40 / 30",          splits:[30,40,30],          names:["Advance","On Progress","On Handover"] },
+                    { label:"40 / 30 / 20 / 10",     splits:[40,30,20,10],       names:["Booking","Slab","Finishing","Handover"] },
+                    { label:"25 / 25 / 25 / 25",     splits:[25,25,25,25],       names:["Stage 1","Stage 2","Stage 3","Stage 4"] },
+                    { label:"50 / 50",                splits:[50,50],             names:["Advance","Completion"] },
+                  ].map(p => (
+                    <button key={p.label} onClick={()=>applyPreset(p.splits, p.names)}
+                      style={{background:"white",color:T.blu,border:"1px solid "+T.bluM,borderRadius:14,padding:"3px 9px",fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                {/* Editor table: # | Name | % | ₹ amount | × */}
+                <div style={{display:"grid",gridTemplateColumns:"40px 1fr 80px 120px 32px",gap:6,marginBottom:6}}>
+                  {["#","Milestone Name","%","₹ amount",""].map(h=><span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                </div>
+                {msForm.pctMs.map((m, mi) => {
+                  const pctVal = parseFloat(m.pct) || 0;
+                  const amt    = (orderValue * pctVal) / 100;
+                  return (
+                    <div key={mi} style={{display:"grid",gridTemplateColumns:"40px 1fr 80px 120px 32px",gap:6,marginBottom:4,alignItems:"center"}}>
+                      <span style={{fontSize:12,color:T.t4,paddingTop:8}}>{mi+1}</span>
+                      <input value={m.name} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],name:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="e.g. Foundation" style={inpS}/>
+                      <input type="number" value={m.pct} onChange={e=>{const arr=[...msForm.pctMs];arr[mi]={...arr[mi],pct:e.target.value};setMsForm(p=>({...p,pctMs:arr}));}} placeholder="%" style={{...inpS,textAlign:"right"}}/>
+                      <span style={{padding:"7px 10px",background:T.surfaceB,borderRadius:6,fontSize:12,fontWeight:600,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(amt)}</span>
+                      <button onClick={()=>{const arr=msForm.pctMs.filter((_,i)=>i!==mi);setMsForm(p=>({...p,pctMs:arr.length?arr:[{seq:0,name:"",pct:""}]}));}} style={{background:T.redL,color:T.red,border:"none",borderRadius:5,fontSize:14,cursor:"pointer"}}>×</button>
+                    </div>
+                  );
+                })}
+                <button onClick={()=>setMsForm(p=>({...p,pctMs:[...p.pctMs,{seq:p.pctMs.length,name:"",pct:""}]}))} style={{marginTop:6,background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>+ Add Milestone</button>
+                {/* Live total row — green when ✓ 100%, amber when off */}
+                <div style={{marginTop:12,padding:"9px 12px",borderRadius:7,
+                             background: sumOk ? T.grnL : "#FFFBEB",
+                             border: "1px solid " + (sumOk ? T.grnM : "#FCD34D"),
+                             display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:11.5,fontWeight:700,color: sumOk ? T.grn : "#92400E"}}>
+                    {sumOk ? "✓ Total 100% — schedule covers full order value"
+                          : `Total ${pctSum.toFixed(2)}% — ${remaining > 0 ? remaining.toFixed(2) + "% remaining" : Math.abs(remaining).toFixed(2) + "% over"}`}
+                  </span>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:12,fontWeight:700,color: sumOk ? T.grn : "#92400E",fontVariantNumeric:"tabular-nums"}}>
+                      {fmtC((orderValue * pctSum) / 100)}
+                    </span>
+                    {!sumOk && Math.abs(remaining) > 0.01 && (
+                      <button onClick={distributeRemaining}
+                        style={{background:"#FEF3C7",border:"1px solid #FCD34D",color:"#92400E",borderRadius:5,padding:"3px 9px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
+                        {remaining > 0 ? "↻ Distribute remaining" : "↻ Trim excess"}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </>);
+            })()}
           </div>
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
             <button onClick={()=>setShowSetMs(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-            <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Save Milestones"}</button>
+            <button onClick={submitMilestones} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Save Schedule"}</button>
           </div>
         </div>
       </>)}
+
+      {/* ── DRAWER: Item Picker (Payment Schedule item-wise) ─────────
+          Side-slide panel with items grouped by section › category,
+          searchable, multi-select with pick-order numbered badges
+          (matches Library Add Item drawer UX). On Add Selected, items
+          land in msForm.pickedItemIds + each gets a default stage row. */}
+      {itemPickerOpen && estDetail && (() => {
+        const q = itemPickerSearch.trim().toLowerCase();
+        // Build groups: section title → category name → items
+        const sections = (estDetail.sections || []).map(sec => {
+          // Parse items into category groups using the [Category] prefix
+          // convention (same as BOQ tab render).
+          const catMap = {};
+          const catOrder = [];
+          for (const it of (sec.items || [])) {
+            const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
+            const catName = m ? m[1] : "";
+            const cleanDesc = m ? m[2] : (it.description || "");
+            if (!catMap[catName]) { catMap[catName] = []; catOrder.push(catName); }
+            // Apply search filter at item level
+            if (q && !cleanDesc.toLowerCase().includes(q) && !catName.toLowerCase().includes(q) && !sec.title.toLowerCase().includes(q)) continue;
+            catMap[catName].push({ ...it, _cleanDesc: cleanDesc, _catName: catName });
+          }
+          return { title: sec.title, catOrder, catMap };
+        }).filter(s => s.catOrder.some(c => s.catMap[c].length > 0));
+        const totalFiltered = sections.reduce((n, s) => n + s.catOrder.reduce((nn, c) => nn + s.catMap[c].length, 0), 0);
+        const togglePick = (itemId) => {
+          setMsForm(p => {
+            const isPicked = p.pickedItemIds.includes(itemId);
+            if (isPicked) {
+              return {
+                ...p,
+                pickedItemIds: p.pickedItemIds.filter(id => id !== itemId),
+                itemStages: Object.fromEntries(Object.entries(p.itemStages).filter(([k]) => parseInt(k) !== itemId)),
+              };
+            }
+            return {
+              ...p,
+              pickedItemIds: [...p.pickedItemIds, itemId],
+              itemStages: { ...p.itemStages, [itemId]: p.itemStages[itemId] || [{ seq:0, name:"", cum_rate:"" }] },
+              expandedItemId: p.expandedItemId || itemId,  // auto-expand first pick
+            };
+          });
+        };
+        return (<>
+          <div onClick={()=>setItemPickerOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:320}}/>
+          <div style={{position:"fixed",top:0,right:0,bottom:0,width:440,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 24px rgba(0,0,0,0.2)",zIndex:321,display:"flex",flexDirection:"column"}}>
+            {/* Header */}
+            <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <div style={{fontSize:14,fontWeight:700}}>Pick Items for Schedule</div>
+                <button onClick={()=>setItemPickerOpen(false)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.65)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+              </div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>
+                {selEst.estimate_no} · {totalFiltered} item{totalFiltered === 1 ? "" : "s"}
+                {msForm.pickedItemIds.length > 0 && <> · <span style={{color:"#FCD34D",fontWeight:600}}>{msForm.pickedItemIds.length} picked</span></>}
+              </div>
+            </div>
+            {/* Search */}
+            <div style={{padding:"10px 18px",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
+              <input value={itemPickerSearch} onChange={e=>setItemPickerSearch(e.target.value)}
+                placeholder="Search items by name or category…" autoFocus
+                style={{width:"100%",padding:"7px 11px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            {/* List */}
+            <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
+              {sections.length === 0 && (
+                <div style={{padding:"40px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                  No items match "{itemPickerSearch}"
+                </div>
+              )}
+              {sections.map((sec) => (
+                <div key={sec.title} style={{marginBottom:4}}>
+                  {/* Section header */}
+                  <div style={{padding:"6px 18px",background:T.bluL,borderTop:"1px solid "+T.bluM,borderBottom:"1px solid "+T.bluM,fontSize:10,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".5px"}}>
+                    {sec.title} · {sec.catOrder.reduce((n,c)=>n+sec.catMap[c].length,0)}
+                  </div>
+                  {sec.catOrder.map(catName => {
+                    const items = sec.catMap[catName] || [];
+                    if (items.length === 0) return null;
+                    return (
+                      <React.Fragment key={catName || "__none__"}>
+                        {catName && (
+                          <div style={{padding:"4px 18px 4px 24px",background:"#F8FAFC",fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".3px"}}>
+                            {catName} · {items.length}
+                          </div>
+                        )}
+                        {items.map(it => {
+                          const pickIdx = msForm.pickedItemIds.indexOf(it.id);
+                          const isPicked = pickIdx >= 0;
+                          return (
+                            <div key={it.id} onClick={()=>togglePick(it.id)}
+                              style={{padding:"8px 18px",borderBottom:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",gap:10,background: isPicked ? "#EFF6FF" : "white"}}
+                              onMouseEnter={e=>{ if(!isPicked) e.currentTarget.style.background="#F8FAFC"; }}
+                              onMouseLeave={e=>{ if(!isPicked) e.currentTarget.style.background="white"; }}>
+                              {/* Checkbox / pick-order badge */}
+                              {isPicked ? (
+                                <span style={{width:22,height:22,borderRadius:"50%",background:T.blu,color:"white",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                  {pickIdx + 1}
+                                </span>
+                              ) : (
+                                <span style={{width:22,height:22,borderRadius:4,border:"1.5px solid "+T.b1,flexShrink:0}}/>
+                              )}
+                              <div style={{flex:1,minWidth:0}}>
+                                <div style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                  {it._cleanDesc}
+                                  {it.library_item_id && <span style={{marginLeft:5,fontSize:11}}>📚</span>}
+                                </div>
+                                <div style={{fontSize:10,color:T.t4,marginTop:1}}>
+                                  {fmtC(it.rate)}/{it.unit}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              ))}
+            </div>
+            {/* Footer */}
+            <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB}}>
+              <button onClick={()=>setItemPickerOpen(false)}
+                style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                Done
+              </button>
+              <span style={{fontSize:11.5,color:T.t3}}>
+                {msForm.pickedItemIds.length} item{msForm.pickedItemIds.length === 1 ? "" : "s"} selected
+              </span>
+            </div>
+          </div>
+        </>);
+      })()}
 
       {/* ── MODAL: Library Picker ────────────────────────────────
           Pick a library item to populate an estimate row. City+package
@@ -3168,6 +3859,167 @@ function TabEstimate({ project }) {
 
 // TAB 4 — PARTY
 // ═══════════════════════════════════════════════════════════════════
+
+// Reuse the full-featured Create Transaction modal from FinanceModule
+// (with bank account, MOP, duplicate-payment guard, GRN-link logic).
+// Project Detail Party tab passes lockParty+lockProject so those
+// fields stay read-only — same modal, restricted context.
+import { CreateTransactionModal } from "./FinanceModule";
+
+// ── Lightweight Add-Party modal (kept inline) ────────────────────
+// Only used for the "+ Add Party" action — the full Finance modal
+// doesn't have a party-creation flow at its root, so a small inline
+// form covers that. Receipt / Payment / Bill go through the full
+// CreateTransactionModal imported above (with bank account + MOP).
+function AddPartyModal({ open, onClose, onSaved }) {
+  // Sirf name + type compulsory; baki sabhi optional. Backend
+  // /finance/parties POST handles full payload (phone, email, gstin,
+  // pan, address, city, bank fields, opening_balance, credit_days).
+  const blank = {
+    name: "", type: "Supplier",
+    phone: "", email: "", gstin: "", pan: "",
+    address: "", city: "",
+    bank_name: "", bank_account: "", ifsc: "",
+    opening_balance: "", credit_days: "",
+  };
+  const [form, setForm] = useState(blank);
+  const [saving, setSaving] = useState(false);
+  const [err, setErr] = useState("");
+  const [showOptional, setShowOptional] = useState(false);
+
+  useEffect(() => {
+    if (open) { setForm(blank); setErr(""); setSaving(false); setShowOptional(false); }
+  }, [open]);
+
+  if (!open) return null;
+
+  const set = (k) => (e) => setForm(p => ({...p, [k]: e.target.value}));
+
+  const submit = async () => {
+    if (!form.name.trim()) { setErr("Party name zaroori hai"); return; }
+    setSaving(true); setErr("");
+    try {
+      const payload = {
+        name: form.name.trim(),
+        type: form.type,
+        // Optional fields — null when blank so backend keeps defaults
+        phone:        form.phone.trim()        || null,
+        email:        form.email.trim()        || null,
+        gstin:        form.gstin.trim()        || null,
+        pan:          form.pan.trim()          || null,
+        address:      form.address.trim()      || null,
+        city:         form.city.trim()         || null,
+        bank_name:    form.bank_name.trim()    || null,
+        bank_account: form.bank_account.trim() || null,
+        ifsc:         form.ifsc.trim()         || null,
+        opening_balance: form.opening_balance ? parseFloat(form.opening_balance) : 0,
+        credit_days:     form.credit_days     ? parseInt(form.credit_days)       : 7,
+      };
+      const r = await api.post("/finance/parties", payload);
+      if (!r?.success) { setErr(r?.message || "Save failed"); setSaving(false); return; }
+      onSaved && onSaved();
+      onClose();
+    } catch (e) { setErr(e?.message || "Save failed"); setSaving(false); }
+  };
+
+  const lbl = (txt) => (
+    <label style={{fontSize:10.5, fontWeight:600, color:T.t4, textTransform:"uppercase", letterSpacing:.4, display:"block", marginBottom:4}}>{txt}</label>
+  );
+  const ip = {width:"100%", padding:"8px 10px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:12.5, outline:"none", boxSizing:"border-box", fontFamily:"inherit"};
+
+  return (
+    <div onClick={onClose}
+      style={{position:"fixed", inset:0, background:"rgba(15,23,42,0.5)", zIndex:300,
+        display:"flex", alignItems:"center", justifyContent:"center", padding:14}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{background:T.surface, borderRadius:12, padding:"18px 20px", width:560, maxWidth:"96vw",
+          maxHeight:"90vh", overflowY:"auto",
+          boxShadow:"0 12px 40px rgba(0,0,0,0.25)", borderTop:`4px solid ${T.blu}`}}>
+        <div style={{display:"flex", justifyContent:"space-between", alignItems:"flex-start", marginBottom:14}}>
+          <div>
+            <div style={{fontSize:15, fontWeight:700, color:T.t1}}>Add New Party</div>
+            <div style={{fontSize:11, color:T.t4, marginTop:2}}>Sirf Name + Type compulsory · baki sab optional</div>
+          </div>
+          <button onClick={onClose} style={{background:"none", border:"none", cursor:"pointer", fontSize:20, color:T.t4, lineHeight:1}}>×</button>
+        </div>
+
+        {/* Required basics */}
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12}}>
+          <div>
+            {lbl("Party Name *")}
+            <input value={form.name} onChange={set("name")} placeholder="e.g. abhay traders" autoFocus style={ip}/>
+          </div>
+          <div>
+            {lbl("Type *")}
+            <select value={form.type} onChange={set("type")} style={{...ip, background:T.surface}}>
+              {["Client","Supplier","Material Supplier","Sub-Con","Labour Vendor","Other Vendor"].map(t =>
+                <option key={t} value={t}>{t}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {/* Toggle optional sections */}
+        <button onClick={()=>setShowOptional(s=>!s)}
+          style={{width:"100%", padding:"7px 10px", marginBottom:12, borderRadius:7, border:`1px dashed ${T.b1}`, background:T.surfaceB, color:T.blu, fontSize:11.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit"}}>
+          {showOptional ? "− Hide optional details" : "+ Add optional details (contact, GST, bank, etc)"}
+        </button>
+
+        {showOptional && (
+          <>
+            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>Contact & Tax</div>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:8}}>
+              <div>{lbl("Phone")}<input value={form.phone} onChange={set("phone")} placeholder="10-digit" style={ip}/></div>
+              <div>{lbl("Email")}<input value={form.email} onChange={set("email")} placeholder="optional" style={ip}/></div>
+              <div>{lbl("GSTIN")}<input value={form.gstin} onChange={set("gstin")} placeholder="15-char GSTIN" style={ip}/></div>
+              <div>{lbl("PAN")}<input value={form.pan} onChange={set("pan")} placeholder="optional" style={ip}/></div>
+            </div>
+            <div style={{display:"grid", gridTemplateColumns:"2fr 1fr", gap:10, marginBottom:14}}>
+              <div>{lbl("Address")}<input value={form.address} onChange={set("address")} placeholder="street / locality" style={ip}/></div>
+              <div>{lbl("City")}<input value={form.city} onChange={set("city")} placeholder="optional" style={ip}/></div>
+            </div>
+
+            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>Bank (optional)</div>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:14}}>
+              <div>{lbl("Bank Name")}<input value={form.bank_name} onChange={set("bank_name")} placeholder="e.g. HDFC" style={ip}/></div>
+              <div>{lbl("Account No.")}<input value={form.bank_account} onChange={set("bank_account")} placeholder="account" style={ip}/></div>
+              <div>{lbl("IFSC")}<input value={form.ifsc} onChange={set("ifsc")} placeholder="branch IFSC" style={ip}/></div>
+            </div>
+
+            <div style={{fontSize:10.5, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:.5, marginBottom:6}}>Finance (optional)</div>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:12}}>
+              <div>
+                {lbl("Opening Balance (₹)")}
+                <input type="number" value={form.opening_balance} onChange={set("opening_balance")} placeholder="0" style={ip}/>
+                <div style={{fontSize:10, color:T.t4, marginTop:3}}>Pichla owed amount — backend ise live_balance me jod deta hai</div>
+              </div>
+              <div>
+                {lbl("Credit Days")}
+                <input type="number" value={form.credit_days} onChange={set("credit_days")} placeholder="7" style={ip}/>
+                <div style={{fontSize:10, color:T.t4, marginTop:3}}>Default 7 din — bill ka due-date is se calculate hota hai</div>
+              </div>
+            </div>
+          </>
+        )}
+
+        <div style={{fontSize:10.5, color:T.t4, background:T.surfaceB, padding:"7px 10px", borderRadius:6, border:`1px solid ${T.b1}`, marginBottom:12}}>
+          Party banane ke baad iss tab me appear hone ke liye iske saath at-least ek transaction (Receipt / Payment / Bill) is project pe karna padega.
+        </div>
+
+        {err && <div style={{marginBottom:10, padding:"8px 10px", borderRadius:6, background:T.redL, border:`1px solid ${T.redM}`, color:T.red, fontSize:11.5}}>{err}</div>}
+
+        <div style={{display:"flex", gap:8}}>
+          <button onClick={onClose} disabled={saving}
+            style={{flex:1, padding:"9px", border:`1px solid ${T.b2}`, borderRadius:7, background:T.surface, color:T.t3, fontSize:12.5, fontWeight:600, cursor:"pointer", fontFamily:"inherit"}}>Cancel</button>
+          <button onClick={submit} disabled={saving}
+            style={{flex:2, padding:"9px", border:"none", borderRadius:7, background:T.blu, color:"#fff", fontSize:12.5, fontWeight:700, cursor:saving?"wait":"pointer", fontFamily:"inherit", opacity:saving?0.7:1}}>
+            {saving ? "Saving..." : "Add Party"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TabParty({ projectId, projectName }) {
   // ── Live data: parties + this-project's transactions ─────────
   // Party tab on a project detail page shows only parties that have
@@ -3177,7 +4029,15 @@ function TabParty({ projectId, projectName }) {
   const [selP, setSelP] = useState(null);
   const [allParties, setAllParties] = useState([]);
   const [projTxns, setProjTxns] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [projectsList, setProjectsList] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Two distinct modals:
+  //  - txnModal {type, partyName}  → full CreateTransactionModal with
+  //                                  party + project locked
+  //  - showAddParty (bool)         → inline AddPartyModal
+  const [txnModal, setTxnModal] = useState(null);
+  const [showAddParty, setShowAddParty] = useState(false);
   const typeS = {
     "Client":{c:T.grn,bg:T.grnL},
     "client":{c:T.grn,bg:T.grnL},
@@ -3192,17 +4052,23 @@ function TabParty({ projectId, projectName }) {
     "staff":{c:T.amb,bg:T.ambL},
   };
 
-  useEffect(() => {
+  const reload = useCallback(() => {
     if (!projectId) return;
     setLoading(true);
     Promise.all([
       api.get("/finance/parties"),
       api.get("/finance/transactions?project_id=" + projectId + "&limit=2000"),
-    ]).then(([pRes, tRes]) => {
+      api.get("/finance/accounts"),
+      api.get("/projects"),
+    ]).then(([pRes, tRes, aRes, prRes]) => {
       if (pRes?.success && Array.isArray(pRes.data)) setAllParties(pRes.data);
       if (tRes?.success && Array.isArray(tRes.data)) setProjTxns(tRes.data);
+      if (aRes?.success && Array.isArray(aRes.data)) setAccounts(aRes.data);
+      if (prRes?.success && Array.isArray(prRes.data)) setProjectsList(prRes.data.map(p=>p.name));
     }).catch(()=>{}).finally(()=>setLoading(false));
   }, [projectId]);
+
+  useEffect(() => { reload(); }, [reload]);
 
   // Classify txn impact on party balance — vendor side (we owe them
   // when bill is raised, owe less when we pay) vs client side (they
@@ -3218,44 +4084,59 @@ function TabParty({ projectId, projectName }) {
       const myTxns = projTxns.filter(t => Number(t.party_id) === Number(p.id));
       if (myTxns.length === 0) return null; // skip parties with no activity on this project
       const isVendor = isVendorType(p.type);
-      // Vendor: bill = credit (we owe), payment = debit (we paid)
-      // Client: invoice = debit (they owe), receipt = credit (they paid)
+      // Sort chronologically OLDEST first so running balance accumulates
+      // naturally top-down (proper ledger view).
+      const sortedTxns = [...myTxns].sort((a,b) => {
+        const da = a.date ? new Date(a.date).getTime() : 0;
+        const db = b.date ? new Date(b.date).getTime() : 0;
+        if (da !== db) return da - db;
+        return (a.id||0) - (b.id||0);
+      });
+      // Direction convention:
+      //   Vendor side  → CR = bill / purchase (we owe more)
+      //                  DR = payment (we paid)
+      //                  running balance = Σ CR − Σ DR  (positive = To Pay)
+      //   Client side  → DR = invoice raised (they owe)
+      //                  CR = receipt received (they paid)
+      //                  running balance = Σ DR − Σ CR  (positive = To Receive)
       let credit = 0, debit = 0;
+      let running = 0;
       const txnRows = [];
-      for (const t of myTxns) {
+      for (const t of sortedTxns) {
         const amt = parseFloat(t.amount) || 0;
         const type = t.type || "";
         let isCR;
         if (isVendor) {
-          // Bills are credits for vendor (party balance increases — we owe more)
-          if (["material_purchase","subcon_expense","site_expense","party_payment"].includes(type) || /bill/i.test(t.description||"")) isCR = true;
-          else if (["payment","party_payment"].includes(type) && !/bill/i.test(t.description||"")) isCR = false;
-          else isCR = type === "receipt" ? false : true; // default: bill-like
-          // simpler: payment to vendor = debit; everything else (purchase/bill) = credit
-          if (type === "payment") isCR = false;
+          // payment / party_payment = DR (we paid); bills = CR (we owe)
+          if (type === "payment" || type === "party_payment") isCR = false;
           else if (type === "material_purchase" || type === "subcon_expense" || type === "site_expense") isCR = true;
-          else if (type === "party_payment") isCR = false; // paying party = debit
-          else isCR = false;
+          else if (type === "receipt") isCR = true; // money in from staff/vendor reimbursement
+          else isCR = true; // default bill-like
         } else {
-          // Client: receipt = credit, sales_invoice = debit
+          // Client: receipt = CR, sales_invoice = DR
           if (type === "receipt") isCR = true;
           else if (type === "sales_invoice") isCR = false;
           else isCR = false;
         }
-        if (isCR) credit += amt;
-        else debit += amt;
+        if (isCR) credit += amt; else debit += amt;
+        // Running balance — accumulates in the party's natural direction
+        if (isVendor) running += isCR ? amt : -amt;
+        else          running += isCR ? -amt : amt;
         txnRows.push({
           id: t.id,
           date: t.date ? new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "",
-          note: t.description || t.note || type,
+          project: t.project_name || "",         // project tag for ledger column
+          // Only show the USER-typed note. `description` is auto-generated
+          // ("Payment Made — party — project") which would duplicate the
+          // Type / Project / (party-already-selected) columns. Empty → "—".
+          note: (t.note || "").trim(),
           type: type.replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()),
           amount: amt,
           cr: isCR,
+          runBal: running,    // signed: positive = To Pay (vendor) / To Receive (client)
         });
       }
-      // For vendor: positive balance = we owe (To Pay, red)
-      // For client: positive balance = they owe us (To Receive, green)
-      const net = credit - debit;
+      const net = running;
       const balance = Math.abs(net);
       const balPositive = isVendor ? net <= 0 : net >= 0;
       const balLabel = isVendor
@@ -3265,25 +4146,174 @@ function TabParty({ projectId, projectName }) {
         id: p.id,
         name: p.name,
         type: p.type || "Other",
+        isVendor,
         balance, balPositive, balLabel,
-        txnRows: txnRows.sort((a,b)=>b.id-a.id),
+        txnRows,   // already chronological — oldest first for ledger
       };
     }).filter(Boolean).sort((a,b)=>b.balance-a.balance);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [allParties, projTxns]);
 
-  // Keep selection in sync when list reloads (e.g., re-select if id still present)
+  // Keep selection in sync when partyRows recompute. Dep on partyRows
+  // (not just .length) so the ledger refreshes after a new txn is added
+  // to an EXISTING party — otherwise selP.txnRows would stay stale.
   useEffect(() => {
-    if (selP && !partyRows.find(p => p.id === selP.id)) setSelP(null);
-    else if (selP) setSelP(partyRows.find(p => p.id === selP.id) || null);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyRows.length]);
+    if (!selP) return;
+    const match = partyRows.find(p => p.id === selP.id);
+    if (!match) setSelP(null);
+    else if (match !== selP) setSelP(match);
+  }, [partyRows]);
+
+  // Small HTML-entity escaper for safe template-literal injection
+  // (party names, types, descriptions can contain quotes / brackets).
+  const escapeHTML = (s) => String(s||"").replace(/[&<>"']/g, c =>
+    ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+
+  // ── PDF export: open print window with project-party ledger ─────
+  // Self-contained — no Reports module dependency. Sender / receiver
+  // direction (CR / DR) already computed on selP.txnRows.
+  const exportPartyLedgerPDF = (party, project) => {
+    if (!party) return;
+    const today = new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"});
+    const isVendor = !!party.isVendor;
+    // Per-row CR / DR / Running Balance — sign convention matches the UI.
+    const rows = party.txnRows.map(t => {
+      const balAbs = Math.abs(t.runBal||0);
+      const balGood= isVendor ? (t.runBal<=0) : (t.runBal>=0);
+      const balSfx = (t.runBal||0)===0 ? "" :
+                     isVendor ? (t.runBal>0 ? "Cr" : "Dr")
+                              : (t.runBal>0 ? "Dr" : "Cr");
+      const proj   = t.project || project || "";
+      const hasNote= !!(t.note && t.note.trim());
+      return `
+      <tr>
+        <td>${t.date}</td>
+        <td style="color:#6B7280">${escapeHTML(proj) || "—"}</td>
+        <td style="${hasNote ? "" : "color:#9CA3AF;font-style:italic"}">${hasNote ? escapeHTML(t.note) : "—"}</td>
+        <td><span style="font-size:9.5px;padding:2px 7px;border-radius:10px;background:#F8F9FB;color:#4B5563">${escapeHTML(t.type)}</span></td>
+        <td style="text-align:right;font-weight:600;color:${t.cr ? "#059669" : "#CBD5E1"};font-variant-numeric:tabular-nums">
+          ${t.cr ? `₹${(t.amount||0).toLocaleString("en-IN")}` : "—"}
+        </td>
+        <td style="text-align:right;font-weight:600;color:${!t.cr ? "#DC2626" : "#CBD5E1"};font-variant-numeric:tabular-nums">
+          ${!t.cr ? `₹${(t.amount||0).toLocaleString("en-IN")}` : "—"}
+        </td>
+        <td style="text-align:right;font-weight:700;color:${balAbs===0?"#9CA3AF":(balGood?"#059669":"#DC2626")};font-variant-numeric:tabular-nums">
+          ${balAbs===0 ? "₹0.00" : `₹${balAbs.toLocaleString("en-IN")} ${balSfx}`}
+        </td>
+      </tr>`;
+    }).join("");
+    const totalCR = party.txnRows.filter(t=>t.cr).reduce((s,t)=>s+(t.amount||0),0);
+    const totalDR = party.txnRows.filter(t=>!t.cr).reduce((s,t)=>s+(t.amount||0),0);
+    const lastBal = party.txnRows.length ? (party.txnRows[party.txnRows.length-1].runBal||0) : 0;
+    const closeAbs= Math.abs(lastBal);
+    const closeGood= isVendor ? (lastBal<=0) : (lastBal>=0);
+    const closeSfx = lastBal===0 ? "" :
+                     isVendor ? (lastBal>0 ? "Cr" : "Dr")
+                              : (lastBal>0 ? "Dr" : "Cr");
+    const w = window.open("", "_blank");
+    if (!w) { window.alert("Print window blocked — allow pop-ups for this site."); return; }
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"/>
+      <title>${escapeHTML(party.name)} — ${escapeHTML(project||"Project")}</title>
+      <style>
+        body{font-family:'Segoe UI',system-ui,sans-serif;color:#111827;margin:24px;font-size:13px}
+        h1{font-size:18px;margin:0 0 4px}
+        .sub{font-size:11px;color:#6B7280;margin-bottom:16px}
+        .meta{display:flex;gap:24px;margin-bottom:14px;padding:10px 14px;background:#F8F9FB;border-radius:6px;border:1px solid #E5E7EB}
+        .meta div{display:flex;gap:5px;align-items:center}
+        .meta .l{font-size:10.5px;color:#6B7280;text-transform:uppercase;letter-spacing:.3px}
+        .meta .v{font-size:12.5px;font-weight:600}
+        table{width:100%;border-collapse:collapse;font-size:11.5px}
+        th{background:#F8F9FB;color:#374151;font-weight:600;text-align:left;padding:8px 10px;border-bottom:2px solid #E5E7EB;font-size:10.5px;text-transform:uppercase;letter-spacing:.3px}
+        td{padding:8px 10px;border-bottom:1px solid #F3F4F6}
+        tr:last-child td{border-bottom:none}
+        .totals{margin-top:14px;display:flex;justify-content:flex-end;gap:30px;font-size:11.5px;padding:10px 14px;background:#F8F9FB;border-radius:6px;border:1px solid #E5E7EB}
+        .totals .cr{color:#059669;font-weight:700}
+        .totals .dr{color:#DC2626;font-weight:700}
+        .totals .net{color:${party.balPositive?"#059669":"#DC2626"};font-weight:800}
+        .footer{margin-top:24px;font-size:10px;color:#9CA3AF;text-align:center}
+        @media print { body{margin:12mm} }
+      </style></head><body>
+        <h1>${escapeHTML(party.name)}</h1>
+        <div class="sub">Party Ledger — ${escapeHTML(project||"Project")} · Generated ${today}</div>
+        <div class="meta">
+          <div><span class="l">Type:</span> <span class="v">${escapeHTML(party.type)}</span></div>
+          <div><span class="l">Status:</span> <span class="v">${escapeHTML(party.balLabel)}</span></div>
+          <div><span class="l">Balance:</span> <span class="v" style="color:${party.balPositive?"#059669":"#DC2626"}">₹${(party.balance||0).toLocaleString("en-IN")}</span></div>
+          <div><span class="l">Entries:</span> <span class="v">${party.txnRows.length}</span></div>
+        </div>
+        <table>
+          <tr>
+            <th style="width:70px">Date</th>
+            <th style="width:110px">Project</th>
+            <th>Note</th>
+            <th style="width:100px">Type</th>
+            <th style="text-align:right;width:85px">CR ₹</th>
+            <th style="text-align:right;width:85px">DR ₹</th>
+            <th style="text-align:right;width:115px">Balance</th>
+          </tr>
+          ${party.txnRows.length ? `<tr style="background:#F8F9FB"><td colspan="6" style="font-style:italic;color:#6B7280">Opening Balance</td><td style="text-align:right;font-weight:600;color:#6B7280">₹0.00</td></tr>` : ""}
+          ${rows || `<tr><td colspan="7" style="text-align:center;padding:30px;color:#9CA3AF">No transactions</td></tr>`}
+          ${party.txnRows.length ? `<tr style="background:#F8F9FB;border-top:2px solid #D1D5DB">
+            <td colspan="4" style="font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:10.5px">Closing Balance</td>
+            <td style="text-align:right;font-weight:700;color:#059669">₹${totalCR.toLocaleString("en-IN")}</td>
+            <td style="text-align:right;font-weight:700;color:#DC2626">₹${totalDR.toLocaleString("en-IN")}</td>
+            <td style="text-align:right;font-weight:800;color:${closeAbs===0?"#9CA3AF":(closeGood?"#059669":"#DC2626")}">
+              ${closeAbs===0 ? "₹0.00" : `₹${closeAbs.toLocaleString("en-IN")} ${closeSfx}`}
+            </td>
+          </tr>` : ""}
+        </table>
+        <div class="totals">
+          <div>Total Credits: <span class="cr">₹${totalCR.toLocaleString("en-IN")}</span></div>
+          <div>Total Debits: <span class="dr">₹${totalDR.toLocaleString("en-IN")}</span></div>
+          <div>Net Balance: <span class="net">${party.balPositive?"":"−"}₹${party.balance.toLocaleString("en-IN")} (${escapeHTML(party.balLabel)})</span></div>
+        </div>
+        <div class="footer">Generated by GB Buildcon · Project-scoped ledger</div>
+      </body></html>`);
+    w.document.close();
+    setTimeout(()=>w.print(), 400);
+  };
+
+  // Map button kind → the actual transaction "type" string that
+  // CreateTransactionModal expects. Vendor / client direction is
+  // resolved INSIDE the modal based on the party's library type,
+  // so we just need the right top-level type per button kind.
+  const txnTypeFor = (kind, party) => {
+    const isVendor = String(party?.type||"").toLowerCase();
+    const isSupplier = isVendor.includes("supplier") || (isVendor.includes("material") && !isVendor.includes("subcon"));
+    const isSubcon = isVendor.includes("subcon") || isVendor.includes("sub-con");
+    if (kind === "receipt") return "Payment Received";
+    if (kind === "payment") return "Payment Made";
+    // bill kind → choose between Material Purchase Bill / Sub-Con Bill / Sales Invoice
+    if (kind === "bill") {
+      if (isSubcon) return "Sub-Con Bill";
+      if (isSupplier) return "Material Purchase Bill";
+      return "Sales Invoice";  // client → invoice
+    }
+    return "Payment Made";
+  };
 
   return (
     <div style={{padding:"16px 18px", display:"flex", gap:14, height:"100%"}}>
+      {/* + Add Party modal */}
+      <AddPartyModal open={showAddParty} onClose={()=>setShowAddParty(false)} onSaved={reload}/>
+      {/* Full Create Transaction modal — same one Finance tab uses,
+          with party + project pinned to the current context. */}
+      {txnModal && (
+        <CreateTransactionModal
+          type={txnModal.type}
+          preParty={txnModal.partyName}
+          preProject={projectName}
+          lockParty={true}
+          lockProject={true}
+          onClose={()=>setTxnModal(null)}
+          dbParties={allParties}
+          dbAccounts={accounts}
+          dbProjects={projectsList}
+          onSaved={()=>{ setTxnModal(null); reload(); }}
+        />
+      )}
       <div style={{width:290, flexShrink:0}}>
         <Panel style={{overflow:"hidden"}}>
-          <PHead title={`Parties (${partyRows.length})`} action={<AddBtn label="Add Party"/>}/>
+          <PHead title={`Parties (${partyRows.length})`} action={<AddBtn label="Add Party" onClick={()=>setShowAddParty(true)}/>}/>
           {loading && (
             <div style={{padding:"30px 16px", textAlign:"center", color:T.t4, fontSize:12}}>Loading parties...</div>
           )}
@@ -3318,7 +4348,7 @@ function TabParty({ projectId, projectName }) {
         <Panel style={{height:"100%", overflow:"hidden", display:"flex", flexDirection:"column"}}>
           {selP?(
             <>
-              <PHead title={`${selP.name}  ·  ${projectName||"Project"}`} action={<SecBtn label="Export PDF"/>}/>
+              <PHead title={`${selP.name}  ·  ${projectName||"Project"}`} action={<SecBtn label="Export PDF" onClick={()=>exportPartyLedgerPDF(selP, projectName)}/>}/>
               <div style={{padding:"8px 15px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", gap:20}}>
                 {[["Type",selP.type],["Balance",`₹${fmtN(selP.balance)}`],["Status",selP.balLabel]].map(([l,v])=>(
                   <div key={l} style={{display:"flex", gap:6, alignItems:"center"}}>
@@ -3331,21 +4361,95 @@ function TabParty({ projectId, projectName }) {
                 </div>
               </div>
               <div style={{flex:1, overflowY:"auto"}}>
-                <THead cols="80px 1fr 130px 110px" headers={["Date","Description","Type","Amount"]}/>
-                {selP.txnRows.map((txn,i)=>(
-                  <div key={i} style={{display:"grid", gridTemplateColumns:"80px 1fr 130px 110px", padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", borderLeft:`3px solid ${txn.cr?T.grn:T.red}33`, transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <span style={{fontSize:11.5, color:T.t4}}>{txn.date}</span>
-                    <span style={{fontSize:12.5, color:T.t1, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={txn.note}>{txn.note}</span>
-                    <Pill label={txn.type} c={T.slt} bg={T.sltL}/>
-                    <span style={{fontSize:13, fontWeight:700, color:txn.cr?T.grn:T.red, fontVariantNumeric:"tabular-nums"}}>{txn.cr?"+":"−"} ₹{fmtN(txn.amount)}</span>
-                  </div>
-                ))}
-                {selP.txnRows.length===0&&<div style={{padding:"40px 20px", textAlign:"center", color:T.t4, fontSize:13}}>No transactions on this project</div>}
+                {(() => {
+                  // 7-column grid: Date | Project | Note | Type | CR | DR | Balance
+                  const COLS = "72px 110px 1fr 105px 92px 92px 118px";
+                  return (
+                    <>
+                      <THead cols={COLS} headers={["Date","Project","Note","Type","CR ₹","DR ₹","Balance"]}/>
+                      {/* Opening balance row — project-scoped ledger always starts at 0 */}
+                      {selP.txnRows.length>0 && (
+                        <div style={{display:"grid", gridTemplateColumns:COLS, padding:"7px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", background:T.surfaceB}}>
+                          <span style={{fontSize:11, color:T.t4, fontStyle:"italic"}}>—</span>
+                          <span style={{fontSize:11, color:T.t4, fontStyle:"italic"}}>—</span>
+                          <span style={{fontSize:12, color:T.t3, fontStyle:"italic", fontWeight:500}}>Opening Balance</span>
+                          <span style={{fontSize:10.5, color:T.t4, fontStyle:"italic"}}>—</span>
+                          <span style={{fontSize:12, color:T.t4, textAlign:"right"}}>—</span>
+                          <span style={{fontSize:12, color:T.t4, textAlign:"right"}}>—</span>
+                          <span style={{fontSize:12, fontWeight:600, color:T.t4, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>₹0.00</span>
+                        </div>
+                      )}
+                      {selP.txnRows.map((txn,i)=>{
+                        // Ledger sign convention (party-side):
+                        //   vendor: runBal > 0 → "Cr" (we owe them)        → red
+                        //   vendor: runBal < 0 → "Dr" (advance paid)        → green
+                        //   client: runBal > 0 → "Dr" (they owe us)         → green
+                        //   client: runBal < 0 → "Cr" (advance received)    → red
+                        const balAbs = Math.abs(txn.runBal||0);
+                        const balGood = selP.isVendor ? (txn.runBal<=0) : (txn.runBal>=0);
+                        const balSfx  = txn.runBal===0 ? "" :
+                                        selP.isVendor
+                                          ? (txn.runBal>0 ? "Cr" : "Dr")
+                                          : (txn.runBal>0 ? "Dr" : "Cr");
+                        const proj = txn.project || projectName || "";
+                        const hasNote = !!txn.note;
+                        return (
+                          <div key={i} style={{display:"grid", gridTemplateColumns:COLS, padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, alignItems:"center", borderLeft:`3px solid ${txn.cr?T.grn:T.red}33`, transition:"background .1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                            <span style={{fontSize:11.5, color:T.t4}}>{txn.date}</span>
+                            <span style={{fontSize:11.5, color:T.t3, fontWeight:500, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={proj}>{proj || "—"}</span>
+                            <span style={{fontSize:12.5, color:hasNote?T.t1:T.t4, fontWeight:hasNote?500:400, fontStyle:hasNote?"normal":"italic", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}} title={txn.note}>
+                              {hasNote ? txn.note : "—"}
+                            </span>
+                            <Pill label={txn.type} c={T.slt} bg={T.sltL}/>
+                            <span style={{fontSize:12.5, fontWeight:600, color:txn.cr?T.grn:T.b2, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
+                              {txn.cr ? `₹${fmtN(txn.amount)}` : "—"}
+                            </span>
+                            <span style={{fontSize:12.5, fontWeight:600, color:!txn.cr?T.red:T.b2, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
+                              {!txn.cr ? `₹${fmtN(txn.amount)}` : "—"}
+                            </span>
+                            <span style={{fontSize:12.5, fontWeight:700, color:balAbs===0?T.t4:(balGood?T.grn:T.red), fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
+                              {balAbs===0 ? "₹0.00" : `₹${fmtN(balAbs)} ${balSfx}`}
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {/* Closing total row */}
+                      {selP.txnRows.length>0 && (()=>{
+                        const lastBal = selP.txnRows[selP.txnRows.length-1].runBal||0;
+                        const totalCR = selP.txnRows.filter(t=>t.cr).reduce((s,t)=>s+(t.amount||0),0);
+                        const totalDR = selP.txnRows.filter(t=>!t.cr).reduce((s,t)=>s+(t.amount||0),0);
+                        const closeAbs = Math.abs(lastBal);
+                        const closeGood = selP.isVendor ? (lastBal<=0) : (lastBal>=0);
+                        const closeSfx  = lastBal===0 ? "" :
+                                          selP.isVendor
+                                            ? (lastBal>0 ? "Cr" : "Dr")
+                                            : (lastBal>0 ? "Dr" : "Cr");
+                        return (
+                          <div style={{display:"grid", gridTemplateColumns:COLS, padding:"10px 15px", borderTop:`2px solid ${T.b2}`, alignItems:"center", background:T.surfaceB, fontWeight:700}}>
+                            <span/>
+                            <span/>
+                            <span style={{fontSize:12, color:T.t2, fontWeight:700, textTransform:"uppercase", letterSpacing:.3}}>Closing Balance</span>
+                            <span/>
+                            <span style={{fontSize:12.5, color:T.grn, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>₹{fmtN(totalCR)}</span>
+                            <span style={{fontSize:12.5, color:T.red, fontVariantNumeric:"tabular-nums", textAlign:"right"}}>₹{fmtN(totalDR)}</span>
+                            <span style={{fontSize:13, fontWeight:800, color:closeAbs===0?T.t4:(closeGood?T.grn:T.red), fontVariantNumeric:"tabular-nums", textAlign:"right"}}>
+                              {closeAbs===0 ? "₹0.00" : `₹${fmtN(closeAbs)} ${closeSfx}`}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                      {selP.txnRows.length===0&&<div style={{padding:"40px 20px", textAlign:"center", color:T.t4, fontSize:13}}>No transactions on this project</div>}
+                    </>
+                  );
+                })()}
               </div>
               <div style={{padding:"9px 15px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:8}}>
-                <button style={{flex:1, padding:"7px", border:`1px solid ${T.grnM}`, borderRadius:6, background:T.grnL, color:T.grn, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Receipt</button>
-                <button style={{flex:1, padding:"7px", border:`1px solid ${T.redM}`, borderRadius:6, background:T.redL, color:T.red, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Payment</button>
-                <button style={{flex:1, padding:"7px", border:`1px solid ${T.b2}`, borderRadius:6, background:T.surface, color:T.t2, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Bill</button>
+                <button onClick={()=>setTxnModal({type:txnTypeFor("receipt", selP), partyName:selP.name})}
+                  style={{flex:1, padding:"7px", border:`1px solid ${T.grnM}`, borderRadius:6, background:T.grnL, color:T.grn, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Receipt</button>
+                <button onClick={()=>setTxnModal({type:txnTypeFor("payment", selP), partyName:selP.name})}
+                  style={{flex:1, padding:"7px", border:`1px solid ${T.redM}`, borderRadius:6, background:T.redL, color:T.red, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Payment</button>
+                <button onClick={()=>setTxnModal({type:txnTypeFor("bill", selP), partyName:selP.name})}
+                  style={{flex:1, padding:"7px", border:`1px solid ${T.b2}`, borderRadius:6, background:T.surface, color:T.t2, fontSize:12, fontWeight:600, cursor:"pointer"}}>+ Bill</button>
               </div>
             </>
           ):(

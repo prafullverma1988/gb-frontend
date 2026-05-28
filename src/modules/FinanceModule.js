@@ -556,7 +556,7 @@ function BillConflictModal({data, onCancel, onViewExisting, onForceNew}){
 }
 
 // ─── CREATE TRANSACTION MODAL ─────────────────────────────────
-function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN,settlesRef}){
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject}){
   const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
   const UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"];
   const INV_UNITS=["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"];
@@ -644,12 +644,19 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Project default: bills / GRN-prefilled forms keep project-level (their
   // semantics demand project attribution); pure payments default to
   // company-level ("" = no project). Staff payee → forced company-level
-  // (handled in render + payload below).
-  const _projectDefault = prefillGRN?.project
+  // (handled in render + payload below). preProject prop wins when set
+  // (used when modal is opened from inside a specific project context).
+  const _projectDefault = preProject
+    || prefillGRN?.project
     || (isMaterial || isSubcon ? (PROJECTS_LIST[0] || "") : "");
   const [project,setProject]=useState(_projectDefault);
-  // GRN-prefilled fields are locked (vendor / project / delivery date / material+qty)
+  // GRN-prefilled fields are locked (vendor / project / delivery date / material+qty).
+  // When opened from Project Detail's Party tab, lockParty + lockProject
+  // pin those same fields without the GRN link — same readonly UI.
   const isFromGRN = !!prefillGRN;
+  const partyLocked = isFromGRN || !!lockParty;
+  const projectLocked = isFromGRN || !!lockProject;
+  const lockTag = (locked) => locked && !isFromGRN ? " (locked)" : isFromGRN ? " (from GRN)" : "";
   const grnItemCount = (prefillGRN?.items?.length)||0;
   const [account,setAccount]=useState(ACCOUNTS_LIST[0]);
   const [toAccount,setToAccount]=useState(ACCOUNTS_LIST[1]);
@@ -810,20 +817,32 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Transaction (no prefillGRN), auto-detect unbilled GRNs for the selected
   // vendor and suggest linking. Without this, bills save with grn_id=null →
   // GRN stays in Unbilled list + opens door to silent duplicate billing.
+  //
+  // Context-aware filtering:
+  //   - If projectLocked + project set (e.g. opened from Project Detail's
+  //     Party tab): show ONLY the GRNs that belong to THIS project. A
+  //     vendor's GRNs for other projects are irrelevant in that context
+  //     and the dropdown would only invite a wrong-project linkage.
+  //   - Company-level (no lock): show all vendor's unbilled GRNs (legacy
+  //     behaviour — user picks which project the GRN belongs to anyway).
   const [availableGRNs,setAvailableGRNs]=useState([]);
   const [selectedGRNId,setSelectedGRNId]=useState(null); // when user picks from dropdown
   useEffect(()=>{
-    // Skip — this flow only matters for fresh material bill (no prefill)
     if(!isMaterial||isFromGRN||!party){ setAvailableGRNs([]); return; }
     let cancelled=false;
     api.get("/procurement/grns?unbilled=1").then(res=>{
       if(cancelled||!res?.success) return;
       const partyL=String(party).toLowerCase().trim();
-      const matches=(res.data||[]).filter(g=>(g.vendor_name||"").toLowerCase().trim()===partyL);
+      let matches=(res.data||[]).filter(g=>(g.vendor_name||"").toLowerCase().trim()===partyL);
+      // Project-locked context → only this project's unbilled GRNs
+      if (projectLocked && project) {
+        const projL = String(project).toLowerCase().trim();
+        matches = matches.filter(g => String(g.project_name||"").toLowerCase().trim() === projL);
+      }
       setAvailableGRNs(matches);
     }).catch(()=>{});
     return ()=>{ cancelled=true; };
-  },[party,isMaterial,isFromGRN]);
+  },[party,project,projectLocked,isMaterial,isFromGRN]);
 
   // Pick a GRN from the dropdown — replaces current rows with GRN items + locks them
   const pickGRN=(grnId)=>{
@@ -1230,12 +1249,16 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 </div>
                 <div>
-                  {lbl("Client / Billed To *",T.grn)}
-                  <LibrarySelect type="client" value={party} onChange={setParty} placeholder="Select client..." accent={T.grn}/>
+                  {lbl("Client / Billed To *"+lockTag(partyLocked),T.grn)}
+                  {partyLocked
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
+                    : <LibrarySelect type="client" value={party} onChange={setParty} placeholder="Select client..." accent={T.grn}/>}
                 </div>
                 <div>
-                  {lbl("Project")}
-                  <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>
+                  {lbl("Project"+lockTag(projectLocked))}
+                  {projectLocked
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
+                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>}
                 </div>
               </>
             )}
@@ -1256,14 +1279,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                         style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>}
                 </div>
                 <div>
-                  {lbl("Supplier / Party *"+(isFromGRN?" (from GRN)":""))}
-                  {isFromGRN
+                  {lbl("Supplier / Party *"+lockTag(partyLocked))}
+                  {partyLocked
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
                     : <LibrarySelect type="supplier" value={party} onChange={setParty} placeholder="Select supplier..."/>}
                 </div>
                 <div>
-                  {lbl("Project"+(isFromGRN?" (from GRN)":""))}
-                  {isFromGRN
+                  {lbl("Project"+lockTag(projectLocked))}
+                  {projectLocked
                     ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
                     : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>}
                 </div>
@@ -1287,12 +1310,16 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 </div>
                 <div>
-                  {lbl("Contractor / Party *")}
-                  <LibrarySelect type="subcon" value={party} onChange={setParty} placeholder="Select contractor..." accent={T.slt}/>
+                  {lbl("Contractor / Party *"+lockTag(partyLocked))}
+                  {partyLocked
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
+                    : <LibrarySelect type="subcon" value={party} onChange={setParty} placeholder="Select contractor..." accent={T.slt}/>}
                 </div>
                 <div>
-                  {lbl("Project")}
-                  <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>
+                  {lbl("Project"+lockTag(projectLocked))}
+                  {projectLocked
+                    ? <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"—"}</div>
+                    : <SearchSelect options={PROJECTS_LIST} value={project} onChange={setProject} placeholder="Select project..."/>}
                 </div>
               </>
             )}
@@ -1328,8 +1355,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 </div>
                 <div>
-                  {lbl(type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":isSiteExpense?"Recipient (free text)":"Party *")}
-                  {isSiteExpense ? (
+                  {lbl((type==="Payment Received"?"Received From *":type==="Payment Made"?"Paid To *":isSiteExpense?"Recipient (free text)":"Party *")+lockTag(partyLocked))}
+                  {partyLocked ? (
+                    <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,fontWeight:600,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{party||"—"}</div>
+                  ) : isSiteExpense ? (
                     <input value={party} onChange={e=>setParty(e.target.value)}
                       placeholder="e.g. Site supervisor, transport, tea-stall"
                       style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
@@ -1350,13 +1379,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   )}
                 </div>
                 <div>
-                  {lbl("Project")}
-                  {/* Staff payee → wallet operations are inherently company-
-                      level (wallet sits at the company, not a project). Lock
-                      to "Company / Office" and disable the picker.
-                      Non-staff → "Company / Office" + project list; default
-                      blank ("") means company-level. */}
-                  {partyObj?.is_staff===1 ? (
+                  {lbl("Project"+lockTag(projectLocked))}
+                  {/* Project locked when invoked from Project Detail OR GRN;
+                      Staff payee → wallet operations are inherently company-
+                      level (wallet sits at the company, not a project) and
+                      locks to "Company / Office". Otherwise editable
+                      SearchSelect with "Company / Office" + project list. */}
+                  {projectLocked ? (
+                    <div style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surfaceB,fontSize:12.5,color:T.t2,display:"flex",alignItems:"center",gap:6}}><span>🔒</span>{project||"Company / Office"}</div>
+                  ) : partyObj?.is_staff===1 ? (
                     <div style={{padding:"7px 9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,color:T.t3,display:"flex",alignItems:"center",gap:6}}>
                       <IcBank size={12} color={T.t4}/>
                       <span>Company / Office</span>
@@ -1458,8 +1489,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 <div style={{padding:"9px 12px",background:T.ambL,borderBottom:`1px solid ${T.ambM}`,display:"flex",gap:9,alignItems:"center",flexWrap:"wrap"}}>
                   <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke={T.amb} strokeWidth="2.2" strokeLinecap="round" style={{flexShrink:0}}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
                   <div style={{flex:1,minWidth:200}}>
-                    <div style={{fontSize:11.5,fontWeight:700,color:T.amb}}>{party} ke {availableGRNs.length} unbilled GRN hai</div>
-                    <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>Bill ko GRN se link karne se duplicate billing avoid hoti hai</div>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.amb}}>
+                      {party} ke {projectLocked && project ? `${project} project me ` : ""}
+                      {availableGRNs.length} unbilled GRN {availableGRNs.length===1?"hai":"hain"}
+                    </div>
+                    <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>
+                      {projectLocked && project
+                        ? "Sirf is project ke GRNs filter ho rahe hain — bill link karne se duplicate billing avoid hoti hai"
+                        : "Bill ko GRN se link karne se duplicate billing avoid hoti hai"}
+                    </div>
                   </div>
                   <select value={selectedGRNId||""} onChange={e=>pickGRN(e.target.value?parseInt(e.target.value):null)}
                     style={{height:32,padding:"0 9px",borderRadius:6,border:`1.5px solid ${selectedGRNId?T.grn:T.amb}`,background:selectedGRNId?T.grnL:T.surface,fontSize:12,fontWeight:600,color:selectedGRNId?T.grn:T.amb,outline:"none",cursor:"pointer",fontFamily:"inherit",minWidth:200}}>
@@ -2801,25 +2839,64 @@ function FinanceModule(){
       return {...t,dr:partyDr};
     });
 
-    const sorted=[...remapped].reverse();
+    // Chronological sort — oldest first — so running balance accumulates
+    // top-down like a real ledger book. Final display order is also
+    // oldest-first; closing balance appears on the last row.
+    // Prefer dateRaw (ISO from API) for accurate sort; fall back to
+    // formatted date string and finally to insertion id.
+    const sorted=[...remapped].sort((a,b)=>{
+      const da=a.dateRaw?new Date(a.dateRaw).getTime():(a.date?new Date(a.date).getTime():0);
+      const db=b.dateRaw?new Date(b.dateRaw).getTime():(b.date?new Date(b.date).getTime():0);
+      if(da!==db) return da-db;
+      return (a.id||0)-(b.id||0);
+    });
     let runBal=0;
     return sorted.reduce((acc,t)=>{
       runBal += t.dr ? -t.amount : t.amount;
       return [...acc,{...t,runBal}];
-    },[]).reverse();
+    },[]);
   };
   const downloadLedgerCSV=(party)=>{
     const rows=getLedgerRows(party);
     downloadCSV(`${party.name.replace(/\s+/g,"_")}_Ledger.csv`,[
       ["Party Ledger:",party.name],["Type:",party.type],["Balance:",party.balance,party.balType],[],
-      ["Date","Type","Site","Note","Received (CR)","Payment (DR)","Balance","Status"],
-      ...rows.map(t=>[t.date,t.txnType||t.type||"",t.project||"",t.note||"",!t.dr?t.amount:"",t.dr?t.amount:"",`${Math.abs(t.runBal)} ${t.runBal>=0?"CR":"DR"}`,t.status||""]),
+      ["Date","Project","Note","Type","CR","DR","Balance"],
+      ...rows.map(t=>[t.date,t.project||"",t.note||"",t.txnType||t.type||"",!t.dr?t.amount:"",t.dr?t.amount:"",`${Math.abs(t.runBal||0)} ${(t.runBal||0)>0?"Cr":(t.runBal||0)<0?"Dr":""}`.trim()]),
     ]);
   };
   const downloadLedgerPDF=(party)=>{
     const rows=getLedgerRows(party);
-    const rowsHTML=rows.map(t=>`<tr><td style="color:#6B7280;white-space:nowrap">${t.date}</td><td>${t.note}${t.status?` <span style="font-size:10px;padding:1px 5px;border-radius:10px;background:${t.status==="paid"?"#ECFDF5":"#FEF2F2"};color:${t.status==="paid"?"#059669":"#DC2626"}">${t.status}</span>`:""}</td><td style="text-align:right;color:#059669;font-weight:700">${!t.dr?"₹"+fmtN(t.amount):""}</td><td style="text-align:right;color:#DC2626;font-weight:700">${t.dr?"₹"+fmtN(t.amount):""}</td><td style="text-align:right;color:${t.runBal>=0?"#059669":"#DC2626"};font-weight:700">₹${fmtN(Math.abs(t.runBal))} ${t.runBal>=0?"CR":"DR"}</td></tr>`).join("");
-    printHTML(`Party Ledger — ${party.name}`,`<h2>Party Ledger — ${party.name}</h2><p>${party.type} &nbsp;|&nbsp; Balance: <strong>₹${fmtN(party.balance)}</strong> (${party.balType})</p><table><tr><th>Date</th><th>Description</th><th style="text-align:right">Received (CR)</th><th style="text-align:right">Bill/Paid Out (DR)</th><th style="text-align:right">Balance</th></tr>${rowsHTML}</table><p class="footer">Generated by Company · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
+    const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
+    const rowsHTML=rows.map(t=>{
+      const typeLabel=TYPE_LABELS[t.txnType]||t.type||t.txnType||"Transaction";
+      const proj=t.project||t.project_name||"";
+      const noteTxt=(t.note||"").trim();
+      const hasNote=!!noteTxt;
+      const balAbs=Math.abs(t.runBal||0);
+      const balGood=(t.runBal||0)<=0;
+      const balSfx=(t.runBal||0)===0?"":((t.runBal||0)>0?"Cr":"Dr");
+      return `<tr>
+        <td style="color:#6B7280;white-space:nowrap">${t.date}</td>
+        <td style="color:#6B7280">${proj||"—"}</td>
+        <td style="${hasNote?"":"color:#9CA3AF;font-style:italic"}">${hasNote?noteTxt:"—"}</td>
+        <td><span style="font-size:9.5px;padding:2px 7px;border-radius:10px;background:#F8F9FB;color:#4B5563">${typeLabel}</span></td>
+        <td style="text-align:right;color:${!t.dr?"#059669":"#CBD5E1"};font-weight:600">${!t.dr?`₹${fmtN(t.amount)}`:"—"}</td>
+        <td style="text-align:right;color:${t.dr?"#DC2626":"#CBD5E1"};font-weight:600">${t.dr?`₹${fmtN(t.amount)}`:"—"}</td>
+        <td style="text-align:right;color:${balAbs===0?"#9CA3AF":(balGood?"#059669":"#DC2626")};font-weight:700">${balAbs===0?"₹0.00":`₹${fmtN(balAbs)} ${balSfx}`}</td>
+      </tr>`;
+    }).join("");
+    const totalCR=rows.reduce((s,r)=>s+(!r.dr?(r.amount||0):0),0);
+    const totalDR=rows.reduce((s,r)=>s+(r.dr?(r.amount||0):0),0);
+    const lastBal=rows.length?(rows[rows.length-1].runBal||0):0;
+    const closeAbs=Math.abs(lastBal);
+    const closeGood=lastBal<=0;
+    const closeSfx=lastBal===0?"":(lastBal>0?"Cr":"Dr");
+    const ob=parseFloat(party.opening_balance||0);
+    const obAbs=Math.abs(ob);
+    const obSfx=ob===0?"":(ob>0?"Cr":"Dr");
+    const openingHTML=rows.length?`<tr style="background:#F8F9FB"><td colspan="6" style="font-style:italic;color:#6B7280">Opening Balance</td><td style="text-align:right;font-weight:600;color:#6B7280">${obAbs===0?"₹0.00":`₹${fmtN(obAbs)} ${obSfx}`}</td></tr>`:"";
+    const closingHTML=rows.length?`<tr style="background:#F8F9FB;border-top:2px solid #D1D5DB"><td colspan="4" style="font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:10.5px">Closing Balance</td><td style="text-align:right;font-weight:700;color:#059669">₹${fmtN(totalCR)}</td><td style="text-align:right;font-weight:700;color:#DC2626">₹${fmtN(totalDR)}</td><td style="text-align:right;font-weight:800;color:${closeAbs===0?"#9CA3AF":(closeGood?"#059669":"#DC2626")}">${closeAbs===0?"₹0.00":`₹${fmtN(closeAbs)} ${closeSfx}`}</td></tr>`:"";
+    printHTML(`Party Ledger — ${party.name}`,`<h2>Party Ledger — ${party.name}</h2><p>${party.type} &nbsp;|&nbsp; Balance: <strong>₹${fmtN(party.balance)}</strong> (${party.balType})</p><table><tr><th style="width:70px">Date</th><th style="width:110px">Project</th><th>Note</th><th style="width:130px">Type</th><th style="text-align:right;width:85px">CR ₹</th><th style="text-align:right;width:85px">DR ₹</th><th style="text-align:right;width:115px">Balance</th></tr>${openingHTML}${rowsHTML||`<tr><td colspan="7" style="text-align:center;padding:30px;color:#9CA3AF">No transactions</td></tr>`}${closingHTML}</table><p class="footer">Generated by Company · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
   };
 
   // ── Transaction CSV/PDF ──────────────────────────────────────
@@ -2896,10 +2973,15 @@ function FinanceModule(){
       <div style={{padding:"14px 18px 10px",flexShrink:0}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
           {curTiles.map((s,i)=>{const TileIcon=s.Icon;return(
-            <div key={i} style={{padding:"13px 15px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
-              <div style={{fontSize:10,color:T.t3,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",marginBottom:5}}>{s.l}</div>
-              <div style={{fontSize:22,fontWeight:700,color:T.t1,letterSpacing:"-.5px",lineHeight:1}}>{s.v}</div>
-              <div style={{fontSize:11,color:T.t4,marginTop:4}}>{s.sub}</div>
+            <div key={i} style={{padding:"16px 20px",background:"#FFFFFF",border:"1px solid #E2E8F0",borderRadius:"12px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:10.5,color:"#64748B",fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",marginBottom:5}}>{s.l}</div>
+                <div style={{fontSize:24,fontWeight:700,color:"#0F172A",letterSpacing:"-.5px",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.v}</div>
+                <div style={{fontSize:11.5,color:"#94A3B8",marginTop:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.sub}</div>
+              </div>
+              <div style={{width:38,height:38,borderRadius:"50%",background:"#F1F5F9",color:"#475569",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:10}}>
+                {TileIcon ? <TileIcon size={16} color="currentColor"/> : null}
+              </div>
             </div>
           );})}
         </div>
@@ -2907,21 +2989,21 @@ function FinanceModule(){
 
       {/* ── Tab bar ── */}
       <div style={{margin:"8px 18px 0",flexShrink:0}}>
-        <div style={{background:"#0D1B2A",borderRadius:10,padding:"0 8px",display:"flex",alignItems:"center",gap:4,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
-          <div style={{display:"flex",flex:1}}>
+        <div style={{background:"#F1F5F9",borderRadius:10,padding:"4px",display:"flex",alignItems:"center",gap:4}}>
+          <div style={{display:"flex",flex:1,overflowX:"auto",gap:2}}>
             {TABS.map(t=>(
               <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{padding:"11px 15px",border:"none",background:"none",fontSize:12.5,fontWeight:tab===t.id?600:400,color:tab===t.id?"white":"rgba(255,255,255,0.45)",cursor:"pointer",borderBottom:tab===t.id?"2px solid #2563EB":"2px solid transparent",transition:"all 0.15s",whiteSpace:"nowrap"}}>
+                style={{padding:"8px 14px",border:"none",background:tab===t.id?"#FFFFFF":"none",fontSize:12.5,fontWeight:tab===t.id?600:500,color:tab===t.id?"#0F172A":"#64748B",cursor:"pointer",borderRadius:6,boxShadow:tab===t.id?"0 2px 6px rgba(0,0,0,0.05)":"none",transition:"all 0.15s",whiteSpace:"nowrap"}}>
                 {t.l}
               </button>
             ))}
           </div>
-          <div style={{display:"flex",gap:6,padding:"6px 0",alignItems:"center"}}>
+          <div style={{display:"flex",gap:6,padding:"2px 0",alignItems:"center",flexShrink:0}}>
             {/* Manual refresh */}
             <button onClick={refreshAll} title="Refresh all data"
-              style={{display:"flex",alignItems:"center",gap:4,padding:"5px 9px",borderRadius:6,
-                border:"1px solid rgba(255,255,255,0.15)",background:"rgba(255,255,255,0.07)",
-                fontSize:11,color:"rgba(255,255,255,0.7)",cursor:"pointer",fontFamily:"inherit",
+              style={{display:"flex",alignItems:"center",gap:4,padding:"6px 11px",borderRadius:6,
+                border:"1px solid #CBD5E1",background:"#FFFFFF",
+                fontSize:11,color:"#475569",cursor:"pointer",fontFamily:"inherit",fontWeight:500,
                 opacity:(loading.txns||loading.payreqs||loading.pendpmts)?0.5:1}}>
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"
                 style={{animation:(loading.txns||loading.payreqs||loading.pendpmts)?"spin 1s linear infinite":"none"}}>
@@ -2931,7 +3013,7 @@ function FinanceModule(){
             </button>
             {/* Accounts dropdown */}
             <div style={{position:"relative"}}>
-              <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 10px",borderRadius:6,border:`1px solid ${showAccPanel?"rgba(96,165,250,0.6)":"rgba(255,255,255,0.2)"}`,background:showAccPanel?"rgba(96,165,250,0.15)":"rgba(255,255,255,0.08)",fontSize:11.5,fontWeight:600,color:"rgba(255,255,255,0.85)",cursor:"pointer"}}>
+              <button onClick={()=>setShowAccPanel(!showAccPanel)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 11px",borderRadius:6,border:`1px solid ${showAccPanel?"#1E40AF":"#CBD5E1"}`,background:"#FFFFFF",fontSize:11.5,fontWeight:600,color:"#475569",cursor:"pointer"}}>
                 <IcBank size={13} color="currentColor"/> Accounts <IcDown size={10} color="currentColor"/>
               </button>
               {showAccPanel&&(<>
@@ -3147,6 +3229,9 @@ function FinanceModule(){
                             "party_payment","subcon_expense","wallet_payment","wallet_topup"];
                           setApiLedger(prev=>({...prev,[p.id]:res.data.map(t=>({
                             id:t.id,
+                            // Preserve raw ISO for accurate chronological sort;
+                            // `date` is the user-facing short form.
+                            dateRaw:t.date||null,
                             date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
                             note:t.note||t.narration||"",         // actual note field
                             sub:t.description||"",                // full description
@@ -3204,13 +3289,34 @@ function FinanceModule(){
                     <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:27,padding:"0 9px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
                     <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={15}/></button>
                   </div>
-                  <div style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0,gap:4}}>
-                    {["Date","Type","Site","Note","Received (CR)","Payment (DR)","Balance","Status"].map((h,i)=>(
+                  {/* Clean 7-col ledger: Date | Project | Note | Type | CR | DR | Balance
+                      Matches the project-level Party tab for visual consistency. */}
+                  <div style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0,gap:4}}>
+                    {["Date","Project","Note","Type","CR ₹","DR ₹","Balance"].map((h,i)=>(
                       <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i>=4?"right":"left",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h}</span>
                     ))}
                   </div>
                   <div style={{flex:1,overflowY:"auto"}}>
                     {ledgerRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
+                    {/* Opening balance row — uses party.opening_balance if set, else 0 */}
+                    {ledgerRows.length>0 && (()=>{
+                      const ob = parseFloat(selParty.opening_balance||0);
+                      const obAbs = Math.abs(ob);
+                      const obSfx = ob===0 ? "" : (isVendorPty ? (ob>0?"Cr":"Dr") : (ob>0?"Dr":"Cr"));
+                      return (
+                        <div style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"7px 14px",gap:4,background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
+                          <span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>—</span>
+                          <span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>—</span>
+                          <span style={{fontSize:12,color:T.t3,fontStyle:"italic",fontWeight:500}}>Opening Balance</span>
+                          <span style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>—</span>
+                          <span style={{fontSize:12,color:T.t4,textAlign:"right"}}>—</span>
+                          <span style={{fontSize:12,color:T.t4,textAlign:"right"}}>—</span>
+                          <span style={{fontSize:12,fontWeight:600,color:T.t4,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>
+                            {obAbs===0 ? "₹0.00" : `₹${fmtN(obAbs)} ${obSfx}`}
+                          </span>
+                        </div>
+                      );
+                    })()}
                     {ledgerRows.map(txn=>(
                       <div key={txn.id}>
                         {(()=>{
@@ -3223,38 +3329,55 @@ function FinanceModule(){
                             const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
                             const typeLabel=TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
                             const siteLabel=txn.project||txn.project_name||"";
-                            // note = user's remark, sub/description = auto-generated full text
-                            const noteLabel=txn.note&&txn.note.trim()&&txn.note!==txn.sub?txn.note.trim():(txn.sub||"");
+                            // ONLY user-typed note. `sub` (= auto-generated description
+                            // "Payment Made — party — project") would just duplicate
+                            // the Type / Project columns and add clutter.
+                            const noteLabel=(txn.note||"").trim();
+                            const hasNote = !!noteLabel;
+                            // Ledger sign convention — matches project-level Party tab:
+                            //   vendor: runBal > 0 → "Cr" (we owe them)        → red
+                            //   vendor: runBal < 0 → "Dr" (advance paid)        → green
+                            //   client: runBal > 0 → "Cr" (we owe them)        → red  (wait — for client runBal>0 = they paid more, advance recvd → Cr → red)
+                            //   client: runBal < 0 → "Dr" (they owe us)        → green
+                            // Note: runBal here = CR_total - DR_total (positive = credit balance).
+                            // For vendor: credit balance = "To Pay" (we owe them) → red, Cr suffix.
+                            // For client: credit balance = "Advance Received" → red, Cr suffix.
+                            //             debit balance  = "To Receive" → green, Dr suffix.
+                            const balAbs = Math.abs(txn.runBal||0);
+                            const balGood = isVendorPty ? (txn.runBal<=0) : (txn.runBal<=0);
+                            const balSfx  = (txn.runBal||0)===0 ? "" : (txn.runBal>0 ? "Cr" : "Dr");
                             return(
                           <div onClick={()=>setSelTxn(txn)}
-                            style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"8px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",transition:"background 0.1s"}}
+                            style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"9px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",borderLeft:`3px solid ${!txn.dr?T.grn:T.red}33`,transition:"background 0.1s"}}
                             onMouseEnter={e=>{if(!isExpanded)e.currentTarget.style.background=T.surfaceB;}}
                             onMouseLeave={e=>{if(!isExpanded)e.currentTarget.style.background="none";}}>
                             {/* 1. Date */}
-                            <span style={{fontSize:11,color:T.t4,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
-                            {/* 2. Type */}
-                            <div style={{display:"flex",flexDirection:"column",gap:2}}>
-                              <span style={{fontSize:11.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{typeLabel}</span>
-                              {isBillType&&<span onClick={e=>{e.stopPropagation();setSelBill(isExpanded?null:txn.id);}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer"}}>{isExpanded?"▲ hide":"▼ view bill"}{hasItems?` (${txn.items.length})`:""}</span>}
+                            <span style={{fontSize:11.5,color:T.t4,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
+                            {/* 2. Project */}
+                            <span style={{fontSize:11.5,color:T.t3,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={siteLabel}>{siteLabel||"—"}</span>
+                            {/* 3. Note (user-typed only) */}
+                            <span style={{fontSize:12,color:hasNote?T.t1:T.t4,fontWeight:hasNote?500:400,fontStyle:hasNote?"normal":"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={noteLabel}>
+                              {hasNote ? noteLabel : "—"}
+                            </span>
+                            {/* 4. Type — with optional bill-expand toggle below */}
+                            <div style={{display:"flex",flexDirection:"column",gap:1}}>
+                              <span style={{display:"inline-block",background:T.sltL,color:T.slt,fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:12,border:`1px solid ${T.slt}33`,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",width:"fit-content",maxWidth:"100%"}}>{typeLabel}</span>
+                              {isBillType&&<span onClick={e=>{e.stopPropagation();setSelBill(isExpanded?null:txn.id);}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1}}>{isExpanded?"▲ hide":"▼ view bill"}{hasItems?` (${txn.items.length})`:""}</span>}
                             </div>
-                            {/* 3. Site/Project */}
-                            <span style={{fontSize:11,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{siteLabel}</span>
-                            {/* 4. Note */}
-                            <span style={{fontSize:11,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{noteLabel||"—"}</span>
-                            {/* 5. Received CR */}
-                            <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{!txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
-                            {/* 6. Payment DR */}
-                            <span style={{fontSize:12.5,fontWeight:700,color:T.red,textAlign:"right"}}>{txn.dr?`₹${fmtN(txn.amount)}`:""}</span>
-                            {/* 7. Balance — CR/DR label stays accounting-accurate.
-                                Colour is meaning-based: for a vendor a CR
-                                running balance means WE OWE → red. For a
-                                client a CR balance is money in our favour →
-                                green. */}
-                            <span style={{fontSize:12,fontWeight:700,color:(isVendorPty?(txn.runBal>0?T.red:T.grn):(txn.runBal>=0?T.grn:T.red)),textAlign:"right",whiteSpace:"nowrap"}}>₹{fmtN(Math.abs(txn.runBal))} <span style={{fontSize:9}}>{txn.runBal>=0?"CR":"DR"}</span></span>
-                            {/* 8. Status */}
-                            <div style={{display:"flex",justifyContent:"center"}}>
-                              {txn.status&&<span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:10,background:txn.status==="paid"?T.grnL:txn.status==="approved"?T.bluL:T.ambL,color:txn.status==="paid"?T.grn:txn.status==="approved"?T.blu:T.amb,border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="approved"?T.bluM:T.ambM}`,whiteSpace:"nowrap"}}>{txn.status}</span>}
-                            </div>
+                            {/* 5. CR */}
+                            <span style={{fontSize:12.5,fontWeight:600,color:!txn.dr?T.grn:T.b2,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>
+                              {!txn.dr ? `₹${fmtN(txn.amount)}` : "—"}
+                            </span>
+                            {/* 6. DR */}
+                            <span style={{fontSize:12.5,fontWeight:600,color:txn.dr?T.red:T.b2,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>
+                              {txn.dr ? `₹${fmtN(txn.amount)}` : "—"}
+                            </span>
+                            {/* 7. Running balance — Cr (red) means we owe (vendor) or
+                                we received advance (client). Dr (green) means we paid
+                                advance (vendor) or they owe us (client). */}
+                            <span style={{fontSize:12.5,fontWeight:700,color:balAbs===0?T.t4:(balGood?T.grn:T.red),fontVariantNumeric:"tabular-nums",textAlign:"right",whiteSpace:"nowrap"}}>
+                              {balAbs===0 ? "₹0.00" : `₹${fmtN(balAbs)} ${balSfx}`}
+                            </span>
                           </div>
                             );
                           })()}
@@ -3307,15 +3430,26 @@ function FinanceModule(){
                       </div>
                     ))}
                   </div>
-                  {ledgerRows.length>0&&(
-                    <div style={{display:"grid",gridTemplateColumns:"72px 110px 100px 1fr 100px 110px 110px 70px",padding:"8px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
-                      <span style={{fontSize:11,fontWeight:700,color:T.t1,gridColumn:"1/5"}}>TOTAL</span>
-                      <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.grn}}>₹{fmtN(totalCR)}</span>
-                      <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:T.red}}>₹{fmtN(totalDR)}</span>
-                      <span style={{textAlign:"right",fontSize:12,fontWeight:800,color:ledgerClosing>0?T.amb:T.grn}}>₹{fmtN(computedBal)} <span style={{fontSize:10}}>{computedBalType}</span></span>
-                      <span/>
-                    </div>
-                  )}
+                  {ledgerRows.length>0&&(()=>{
+                    // Closing-balance row — same Cr/Dr suffix + color rules
+                    // as individual rows so the table tells a coherent story.
+                    const closeAbs = Math.abs(ledgerClosing);
+                    const closeGood= ledgerClosing<=0;  // matches per-row balGood
+                    const closeSfx = ledgerClosing===0 ? "" : (ledgerClosing>0?"Cr":"Dr");
+                    return (
+                      <div style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"10px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
+                        <span/>
+                        <span/>
+                        <span style={{fontSize:12,color:T.t2,fontWeight:700,textTransform:"uppercase",letterSpacing:.3}}>Closing Balance</span>
+                        <span/>
+                        <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.grn,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(totalCR)}</span>
+                        <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.red,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(totalDR)}</span>
+                        <span style={{textAlign:"right",fontSize:13,fontWeight:800,color:closeAbs===0?T.t4:(closeGood?T.grn:T.red),fontVariantNumeric:"tabular-nums",whiteSpace:"nowrap"}}>
+                          {closeAbs===0 ? "₹0.00" : `₹${fmtN(closeAbs)} ${closeSfx}`}
+                        </span>
+                      </div>
+                    );
+                  })()}
                   {/* ── Integrated action buttons ── */}
                   <div style={{padding:"9px 14px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:7,flexShrink:0,background:T.surfaceB}}>
                     <button onClick={()=>openTxn("Payment Received",selParty.name)}
@@ -3442,213 +3576,20 @@ function FinanceModule(){
                       <span style={{fontSize:13,fontWeight:800,color:amtColor,textAlign:"right",whiteSpace:"nowrap"}}>{amtPrefix}₹{fmtN(txn.amount)}</span>
                       {/* 7. Status */}
                       <div style={{display:"flex",justifyContent:"center"}}>
-                        <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:10,background:txn.status==="paid"?T.grnL:txn.status==="approved"?T.bluL:T.ambL,color:txn.status==="paid"?T.grn:txn.status==="approved"?T.blu:T.amb,whiteSpace:"nowrap"}}>{txn.status||"—"}</span>
+                        <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:10,background:txn.status==="paid"?T.grnL:txn.status==="unpaid"?T.redL:T.ambL,color:txn.status==="paid"?T.grn:txn.status==="unpaid"?T.red:T.amb,border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="unpaid"?T.redM:T.ambM}`,whiteSpace:"nowrap"}}>{txn.status||"—"}</span>
                       </div>
                     </div>
                   );
                 });
               })()}
-              {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No entries found</div>}
+              {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
               </div>
-              {/* Footer totals */}
-              {txnFiltered.length>0&&(()=>{const cl=totalBal+tIn-tOut;return(
-                <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
-                  <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {txnFiltered.length} entries</span>
-                  <span style={{fontSize:13,fontWeight:800,color:cl>=0?T.grn:T.red,textAlign:"right"}}>₹{fmtN(tIn-tOut)}</span>
-                  <span style={{fontSize:13,fontWeight:800,color:cl>=0?T.blu:T.red,textAlign:"right"}}>₹{fmtN(Math.abs(cl))}</span>
-                </div>
-              );})()}
-            </div>
-          </div>
-        )}
-        {/* CASH BOOK TAB */}
-        {tab==="cashbook"&&(
-          <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-            {/* Toolbar */}
-            <div style={{background:T.surface,borderRadius:8,padding:"8px 14px",marginBottom:10,border:`1px solid ${T.b1}`,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
-              <div style={{position:"relative",flex:1,minWidth:160}}>
-                <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                <input placeholder="Search narration or party..." style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface}}/>
+              {/* Footer totals — In / Out for the filtered set */}
+              <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
+                <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {txnFiltered.length} entries</span>
+                <span style={{fontSize:13,fontWeight:800,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>+ ₹{fmtN(tIn)} &nbsp;/&nbsp; − ₹{fmtN(tOut)}</span>
+                <span/>
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:5}}>
-                <IcCalDue size={13} color={T.t4}/>
-                <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
-                <span style={{fontSize:11,color:T.t4}}>to</span>
-                <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
-              </div>
-              <button onClick={()=>openTxn("Payment Received")} style={{height:31,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,cursor:"pointer",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
-                <IcRecv size={13} color={T.grn}/> Receipt
-              </button>
-              <button onClick={()=>openTxn("Payment Made")} style={{height:31,padding:"0 12px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,cursor:"pointer",fontSize:11.5,fontWeight:700,display:"flex",alignItems:"center",gap:4}}>
-                <IcSend size={13} color={T.red}/> Payment
-              </button>
-              <button onClick={()=>{
-                const rows=[["#","Date","Voucher","Narration","Party","Receipt(Cr)","Payment(Dr)","Balance"]];
-                const sorted=[...cbTxns].sort((a,b)=>a.ds-b.ds);
-                // Same opening-balance trick as the table: start from
-                // closing - seen_CR + seen_DR so the running balance
-                // matches what the table shows on screen.
-                const _cr = sorted.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-                const _dr = sorted.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
-                let rb=totalBal-_cr+_dr;
-                sorted.forEach((t,i)=>{rb+=t.dr?-t.amount:t.amount;rows.push([i+1,t.date,`CB-${String(t.id).padStart(3,"0")}`,t.sub||t.type,t.party,!t.dr?t.amount:"",t.dr?t.amount:"",rb]);});
-                downloadCSV("CashBook.csv",rows);
-              }} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
-            </div>
-
-            {/* Table — Books of Account format: Date|Type|Party|Site|Note|Received|Payment|Balance|Status */}
-            <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-              {/* Sticky header */}
-              <div style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,flexShrink:0,gap:4}}>
-                {["Date","Type","Party","Site","Note","Received (CR)","Payment (DR)","Balance","Account","MOP","Entry By"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9,fontWeight:700,color:i===5?T.grn:i===6?T.red:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i>=5&&i<=7?"right":"left",whiteSpace:"nowrap"}}>{h}</span>
-                ))}
-              </div>
-              {/* Scrollable body — ALL transactions including internal */}
-              <div style={{flex:1,overflowY:"auto"}}>
-              {(()=>{
-                const CB_TYPE_META={
-                  "Payment In":     {label:"Payment In",      color:T.grn, bg:T.grnL, dir:"in"},
-                  "Payment Out":    {label:"Payment Out",     color:T.red, bg:T.redL, dir:"out"},
-                  "Material Purchase":{label:"Material Purchase",color:T.red,bg:T.redL,dir:"out"},
-                  "Site Expense":   {label:"Site Expense",    color:T.red, bg:T.redL, dir:"out"},
-                  "Party Payment":  {label:"Party Payment",   color:T.red, bg:T.redL, dir:"out"},
-                  "Sub-Con Expense":{label:"Sub-Con",         color:T.red, bg:T.redL, dir:"out"},
-                  "Sales Invoice":  {label:"Sales Invoice",   color:T.grn, bg:T.grnL, dir:"in"},
-                  "Bank Transfer":  {label:"Bank Transfer",   color:T.t3,  bg:T.b1,   dir:"transfer"},
-                  "Wallet Payment": {label:"Wallet Out",      color:T.red, bg:T.redL, dir:"out"},
-                  "Wallet Top-up":  {label:"Wallet Top-up",   color:T.slt, bg:T.sltL, dir:"internal"},
-                  "Material Return":{label:"Material Return", color:T.grn, bg:T.grnL, dir:"in"},
-                };
-                // Cash book table uses the same whitelist as the tiles
-                // (isCashEvent above) — keeps tiles + table in sync.
-                //
-                // ── Running balance arithmetic ──────────────────────
-                // totalBal = current (closing) balance of all accounts.
-                // To show "balance after each txn" with txns in date-asc
-                // order, we need to start from the OPENING balance, not
-                // closing. Opening = closing - credits_seen + debits_seen
-                // for the visible cash events. Each txn then adds CR or
-                // subtracts DR, and the running balance after the LAST
-                // txn equals totalBal (closing) by construction.
-                //
-                // Why this matters: earlier the code started from
-                // totalBal and walked forward — the first row showed a
-                // balance EQUAL TO closing + (first txn's effect), so
-                // every row looked shifted up by (closing − opening).
-                // Users saw CR-debits / DR-credits in the running
-                // column, which is the visual inverse of what they
-                // expect.
-                const cbAll=[...activeTxns].filter(t=>{
-                  if (!isCashEvent(t)) return false;
-                  if(chipCB==="Receipts") return !t.dr;
-                  if(chipCB==="Payments") return t.dr;
-                  return true;
-                }).sort((a,b)=>{
-                  const {col,dir}=sortCB; const mul=dir==="asc"?1:-1;
-                  if(col==="party2") return ((a.party||"")>(b.party||"")? 1:-1)*mul;
-                  if(col==="project3") return ((a.project||"")>(b.project||"")? 1:-1)*mul;
-                  if(col==="account8") return ((a.account||"")>(b.account||"")? 1:-1)*mul;
-                  if(col==="mop9") return ((a.mop||"")>(b.mop||"")? 1:-1)*mul;
-                  if(col==="entryBy10") return ((a.entryBy||"")>(b.entryBy||"")? 1:-1)*mul;
-                  // default: date asc for running balance
-                  return (a.ds-b.ds)*(sortCB.col==="date0"?mul:1);
-                });
-                // Compute opening from closing by reversing every visible
-                // txn (BT is direction-neutral when no destination → skip).
-                const _seenCR = cbAll.filter(t => {
-                  const isBT = t.txnType==="bank_transfer"||t.type==="Bank Transfer";
-                  if (isBT) return false;
-                  return !t.dr;
-                }).reduce((s,t)=>s+t.amount,0);
-                const _seenDR = cbAll.filter(t => {
-                  const isBT = t.txnType==="bank_transfer"||t.type==="Bank Transfer";
-                  if (isBT && !t.to_account_name) return false;
-                  return t.dr || isBT; // BT with destination = source debited
-                }).reduce((s,t)=>s+t.amount,0);
-                let runBal = totalBal - _seenCR + _seenDR;
-                // The opening_balance value used as the cash-book starting
-                // point. Captured here so the standalone first row can
-                // display it verbatim (independent of any txn rendering).
-                const openingForRow = runBal;
-                const openingRow = (
-                  <div key="__opening__"
-                    style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"10px 14px",gap:4,borderBottom:`2px solid ${T.bluM||T.b1}`,alignItems:"center",background:T.bluL+"55",fontWeight:600}}>
-                    <span style={{fontSize:11.5,color:T.t3,fontWeight:600,whiteSpace:"nowrap"}}>—</span>
-                    <span style={{fontSize:10.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"3px 9px",borderRadius:20,whiteSpace:"nowrap",border:`1px solid ${T.bluM}`}}>Opening Balance</span>
-                    <span style={{fontSize:11.5,color:T.t3,fontStyle:"italic"}}>Before period</span>
-                    <span style={{fontSize:11,color:T.t4}}>—</span>
-                    <span style={{fontSize:11.5,color:T.t3,fontStyle:"italic"}}>Carry-forward from prior transactions</span>
-                    <span style={{textAlign:"right",fontSize:12.5,color:T.t4}}>—</span>
-                    <span style={{textAlign:"right",fontSize:12.5,color:T.t4}}>—</span>
-                    <span style={{fontSize:13,fontWeight:800,color:openingForRow>=0?T.blu:T.red,textAlign:"right"}}>{openingForRow<0?"-":""}₹{fmtN(Math.abs(openingForRow))}</span>
-                    <span style={{fontSize:11,color:T.t4}}>All accounts</span>
-                    <span style={{fontSize:10.5,color:T.t4}}>—</span>
-                    <span style={{fontSize:11,color:T.t4}}>System</span>
-                  </div>
-                );
-                const txnRows = cbAll.map((txn,i)=>{
-                  const meta=CB_TYPE_META[txn.type]||{label:txn.type||"Transaction",color:T.t3,bg:T.b1,dir:txn.dr?"out":"in"};
-                  const isBT=txn.txnType==="bank_transfer"||txn.type==="Bank Transfer";
-                  // Extract note: prefer txn.note field; fallback: parse from description (last segment after " — ")
-                  const _rawNote=txn.note&&txn.note.trim()?txn.note.trim():"";
-                  const _descParts=(txn.sub||"").split(" — ");
-                  const _descNote=_descParts.length>=4?_descParts[_descParts.length-1].trim():"";
-                  const noteText=_rawNote||_descNote||"";
-
-                  const partyLabel=isBT
-                    ?(txn.account?(txn.account+(txn.to_account_name?" → "+txn.to_account_name:"")):"Internal Transfer")
-                    :(txn.party||"—");
-                  // Bank Transfer: source = DR (payment out), internal = neutral
-                  // For cash book running balance: BT debits source account
-                  const isCR=isBT?false:!txn.dr;
-                  const isInternal=isBT&&!txn.to_account_name; // BT with no destination = just show neutral
-                  if(!isInternal){if(isCR) runBal+=txn.amount; else runBal-=txn.amount;}
-                  return(
-                    <div key={txn.id||i}
-                      onClick={()=>setSelTxn(txn)}
-                      style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"8px 14px",gap:4,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"pointer"}}
-                      onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
-                      onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
-                      <span style={{fontSize:11.5,color:T.t3,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
-                      <span style={{fontSize:10.5,fontWeight:700,color:meta.color,background:meta.bg,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"inline-block",maxWidth:"100%"}}>{meta.label}</span>
-                      <span style={{fontSize:11.5,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{partyLabel}</span>
-                      <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isBT?"—":(txn.project||"—")}</span>
-                      <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{noteText||"—"}</span>
-                      <span style={{fontSize:12.5,fontWeight:isCR?700:400,color:isCR?T.grn:T.t4,textAlign:"right"}}>{isCR?`₹${fmtN(txn.amount)}`:"—"}</span>
-                      <span style={{fontSize:12.5,fontWeight:!isCR?700:400,color:!isCR?T.red:T.t4,textAlign:"right"}}>{!isCR?`₹${fmtN(txn.amount)}`:"—"}</span>
-                      {/* Sign-aware: when balance is negative, prepend "-"
-                          so "₹79,010" doesn't look identical to a positive
-                          ₹79,010. Red tint still indicates negative. */}
-                      <span style={{fontSize:12,fontWeight:700,color:runBal>=0?T.t1:T.red,textAlign:"right"}}>{runBal<0?"-":""}₹{fmtN(Math.abs(runBal))}</span>
-                      <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.account||"—"}</span>
-                      <span style={{fontSize:10.5,fontWeight:600,color:T.t2,background:T.surfaceB,padding:"1px 5px",borderRadius:5,whiteSpace:"nowrap",textTransform:"uppercase"}}>{(txn.mop||"").replace("_"," ")||"—"}</span>
-                      <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.entryBy||"—"}</span>
-                    </div>
-                  );
-                });
-                // Render: opening balance row first, then the txn rows
-                // chronologically. Both share the same grid layout for
-                // visual alignment.
-                return [openingRow, ...txnRows];
-              })()}
-              {activeTxns.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
-              </div>
-              {/* Footer totals */}
-              {(()=>{
-                const cbAllTotal=[...activeTxns];
-                const cbTotalIn=cbAllTotal.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
-                const cbTotalOut=cbAllTotal.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
-                const cbClosing=totalBal+cbTotalIn-cbTotalOut;
-                return(
-                <div style={{display:"grid",gridTemplateColumns:"70px 115px 125px 100px 1fr 95px 95px 95px 90px 70px 90px",padding:"9px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
-                <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {activeTxns.length} entries</span>
-                <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(cbIn)}</span>
-                <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(cbOut)}</span>
-                <span/><span/><span/><span/>
-              </div>
-                );
-              })()}
             </div>
           </div>
         )}
@@ -4713,3 +4654,9 @@ function FinanceModule(){
 }
 
 export default FinanceModule;
+// Named export so ProjectDetailPage's Party tab can reuse the same
+// full-featured Create Transaction modal (with bank account, MOP,
+// duplicate-payment guard, GRN-link logic etc.) — passing lockParty
+// + lockProject to keep those fields read-only when invoked from
+// inside a specific project's context.
+export { CreateTransactionModal };

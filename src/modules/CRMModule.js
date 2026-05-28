@@ -1,5 +1,5 @@
-import { useState, useEffect, useRef, useCallback } from "react";
-import api from "../config/api";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import api, { API_BASE, getToken } from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import { Credit } from "../components/Credit";
 import LeadDesignDrawer from "../components/LeadDesignDrawer";
@@ -75,6 +75,13 @@ const STAGES=[
 
 const SOURCES=["Direct Call","Reference","Site Visit","Facebook Ad","Instagram","Google","Newspaper","Banner","Just Dial","Builder Fair","Other"];
 const PROJ_TYPES=["Residential","Commercial","Industrial","Interior","Renovation","Bungalow","Apartment","Villa","Township","Other"];
+
+// Stages that require city_id + construction_type_id (so the quotation
+// builder can match a rate package). Fresh "lead" or "soft_lead" allow
+// missing FKs; transitioning to anything in this set forces them.
+const NEEDS_RATES_STAGES = new Set(["followup", "proposal", "converted"]);
+const stageNeedsRates = (stageId) => NEEDS_RATES_STAGES.has(stageId);
+const leadHasRatesInfo = (lead) => !!(lead?.city_id && lead?.construction_type_id);
 // ASSIGNED_TO will be fetched from API (/crm/team)
 
 // ── NAV ──────────────────────────────────────────────────────────
@@ -457,9 +464,188 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
   const [uploading,setUploading]=useState(false);
   const [qForm,setQForm]=useState({title:"",amount:"",notes:""});
   const qFileRef=useRef(null);
+
+  // ── Phase 5: builder-generated quotes ──────────────────────────
+  const [builderQuotes,    setBuilderQuotes]    = useState([]);
+  const [builderOpen,      setBuilderOpen]      = useState(null); // null | { quoteId? }
+  const [builderLoading,   setBuilderLoading]   = useState(false);
+  // Library lookups for the inline city/type picker shown in Build Quote tab
+  const [bqCities,         setBqCities]         = useState([]);
+  const [bqCTypes,         setBqCTypes]         = useState([]);
+  // Picker state — null means "show pinned chips"; object means "edit mode"
+  const [bqEdit,           setBqEdit]           = useState(null); // null | { cityId, typeId }
+  const [bqSaving,         setBqSaving]         = useState(false);
+  const reloadBuilderQuotes = async () => {
+    setBuilderLoading(true);
+    try {
+      const r = await api.get("/library/leads/" + lead.id + "/quotations");
+      if (r?.success) setBuilderQuotes(r.data || []);
+    } catch (_) {}
+    setBuilderLoading(false);
+  };
+  useEffect(() => { reloadBuilderQuotes(); /* eslint-disable-next-line */ }, [lead.id]);
+  // Lazy-load city + construction-type lookups when Build Quote tab opens.
+  useEffect(() => {
+    if (tab !== "buildQuote") return;
+    if (bqCities.length && bqCTypes.length) return;
+    (async () => {
+      try {
+        const [cr, tr] = await Promise.all([
+          api.get("/library/cities"),
+          api.get("/library/construction-types"),
+        ]);
+        if (cr?.success) setBqCities(cr.data || []);
+        if (tr?.success) setBqCTypes(tr.data || []);
+      } catch (_) {}
+    })();
+    // eslint-disable-next-line
+  }, [tab]);
+  // Auto-open picker if lead is missing city/type so the user immediately
+  // sees the inputs (no extra click needed).
+  useEffect(() => {
+    if (tab !== "buildQuote") return;
+    if (!lead.city_id || !lead.construction_type_id) {
+      setBqEdit({ cityId: lead.city_id || "", typeId: lead.construction_type_id || "" });
+    } else {
+      setBqEdit(null);
+    }
+    // eslint-disable-next-line
+  }, [tab, lead.city_id, lead.construction_type_id]);
+
+  // Save the picked city + type to the lead via the same PATCH path
+  // updateLead uses → server PATCH + re-fetch → local state hydrates with
+  // joined names. Independent of stage.
+  const saveBuildQuoteRates = async () => {
+    if (!bqEdit?.cityId || !bqEdit?.typeId) return;
+    setBqSaving(true);
+    try {
+      await onUpdate(lead.id, {
+        cityId:             Number(bqEdit.cityId),
+        constructionTypeId: Number(bqEdit.typeId),
+      });
+      setBqEdit(null);
+    } finally { setBqSaving(false); }
+  };
   const stage=STAGES.find(s=>s.id===lead.stage);
   const ps=PRIO_S[lead.priority]||PRIO_S["Medium"];
   const diff=daysDiff(lead.contactDate);
+
+  // ── Stage-transition guard for Follow-Up / Proposal / Converted ──
+  // When the destination stage needs rate info (city + construction
+  // type) and the lead is missing one, show an inline picker before
+  // committing the transition. libCities/libCTypes load lazily on first
+  // Move-Stage tab open to avoid an upfront fetch for every lead drawer.
+  const [pendingMove,    setPendingMove]    = useState(null); // {stage} | null
+  const [moveCityId,     setMoveCityId]     = useState("");
+  const [moveTypeId,     setMoveTypeId]     = useState("");
+  const [moveSaving,     setMoveSaving]     = useState(false);
+  const [libCities,      setLibCities]      = useState([]);
+  const [libCTypes,      setLibCTypes]      = useState([]);
+  useEffect(() => {
+    if (tab !== "move") return;
+    if (libCities.length && libCTypes.length) return;
+    (async () => {
+      try {
+        const [cr, tr] = await Promise.all([
+          api.get("/library/cities"),
+          api.get("/library/construction-types"),
+        ]);
+        if (cr?.success) setLibCities(cr.data || []);
+        if (tr?.success) setLibCTypes(tr.data || []);
+      } catch (_) {}
+    })();
+    // Prefill from lead's existing FKs (if any)
+    setMoveCityId(lead.city_id || "");
+    setMoveTypeId(lead.construction_type_id || "");
+    // eslint-disable-next-line
+  }, [tab]);
+  const tryMoveStage = (newStage) => {
+    if (stageNeedsRates(newStage) && !leadHasRatesInfo(lead)) {
+      setPendingMove({ stage: newStage });
+      return;
+    }
+    // M2: When moving to "converted", intercept → show "Create Project?"
+    // panel (project name + optional final-quote selector + Skip). Direct
+    // stage-only move stays available via the Skip path inside that panel.
+    if (newStage === "converted" && !lead.converted_project_id) {
+      setConvertOpen(true);
+      return;
+    }
+    onUpdate(lead.id, { stage: newStage });
+    onClose();
+  };
+  const confirmMoveWithRates = async () => {
+    if (!pendingMove) return;
+    if (!moveCityId || !moveTypeId) return;
+    setMoveSaving(true);
+    try {
+      await onUpdate(lead.id, {
+        stage:                pendingMove.stage,
+        cityId:               Number(moveCityId),
+        constructionTypeId:   Number(moveTypeId),
+      });
+      setPendingMove(null);
+      // If user was actually trying to move to "converted", surface the
+      // project-creation panel now that rates are set.
+      if (pendingMove.stage === "converted") setConvertOpen(true);
+      else onClose();
+    } finally { setMoveSaving(false); }
+  };
+
+  // ── M2: Convert-to-project panel state ─────────────────────────
+  const [convertOpen,   setConvertOpen]   = useState(false);
+  const [convertForm,   setConvertForm]   = useState({});
+  const [convertQuotes, setConvertQuotes] = useState([]);
+  const [convertSaving, setConvertSaving] = useState(false);
+  useEffect(() => {
+    if (!convertOpen) return;
+    setConvertForm({
+      project_name: `${lead.name} — Project`,
+      start_date:   new Date().toISOString().split("T")[0],
+      end_date:     "",
+      quote_id:     "",       // empty = no final quote selected
+      boq_value:    lead.budget || 0,
+    });
+    // Lazy-load quotes (any status; user picks which is "final" — usually Accepted)
+    (async () => {
+      try {
+        const r = await api.get("/library/leads/" + lead.id + "/quotations");
+        if (r?.success) setConvertQuotes(r.data || []);
+      } catch (_) {}
+    })();
+    // eslint-disable-next-line
+  }, [convertOpen]);
+  const cancelConvert = () => { if (!convertSaving) setConvertOpen(false); };
+  const confirmConvertWithProject = async () => {
+    if (!convertForm.project_name?.trim()) return;
+    setConvertSaving(true);
+    try {
+      const body = {
+        project_name: convertForm.project_name.trim(),
+        start_date:   convertForm.start_date || null,
+        end_date:     convertForm.end_date || null,
+        boq_value:    Number(convertForm.boq_value) || 0,
+      };
+      if (convertForm.quote_id) body.quote_id = Number(convertForm.quote_id);
+      const r = await api.post("/crm/leads/" + lead.id + "/convert-to-project", body);
+      if (!r?.success) { alert(r?.message || "Could not convert"); setConvertSaving(false); return; }
+      // Mirror lead.stage to 'converted' locally
+      if (typeof onUpdate === "function") onUpdate(lead.id, { stage: "converted" });
+      setConvertOpen(false);
+      onClose();
+    } catch (e) {
+      alert("Convert failed: " + (e?.message || ""));
+    } finally { setConvertSaving(false); }
+  };
+  const skipConvert = async () => {
+    // Just mark stage='converted' without creating a project
+    setConvertSaving(true);
+    try {
+      await onUpdate(lead.id, { stage: "converted" });
+      setConvertOpen(false);
+      onClose();
+    } finally { setConvertSaving(false); }
+  };
 
   // Load quotations
   useEffect(()=>{
@@ -590,7 +776,14 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
 
       {/* Inner tabs */}
       <div style={{background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",flexShrink:0,overflowX:"auto"}}>
-        {[{id:"overview",l:"Overview"},{id:"followup",l:`Follow Ups (${history.length})`},{id:"quotations",l:`Quotations (${quotations.length})`},{id:"contact",l:"Contact Date"},{id:"move",l:"Move Stage"}].map(t=>(
+        {[
+          {id:"overview", l:"Overview"},
+          {id:"followup", l:`Follow Ups (${history.length})`},
+          {id:"buildQuote", l:`Build Quote (${builderQuotes.length})`},
+          {id:"quotations", l:`PDF Quotes (${quotations.length})`},
+          {id:"contact",  l:"Contact Date"},
+          {id:"move",     l:"Move Stage"},
+        ].map(t=>(
           <button key={t.id} onClick={()=>setTab(t.id)}
             style={{padding:"10px 14px",border:"none",background:"none",fontSize:12,fontWeight:tab===t.id?700:400,color:tab===t.id?T.blu:T.t3,borderBottom:tab===t.id?`2px solid ${T.blu}`:"2px solid transparent",cursor:"pointer",whiteSpace:"nowrap",fontFamily:"inherit"}}>
             {t.l}
@@ -784,52 +977,2082 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
           </div>
         )}
 
+        {/* BUILD QUOTE — Phase 5 */}
+        {tab==="buildQuote"&&(() => {
+          const hasRates = !!(lead.city_id && lead.construction_type_id);
+          const STATUS_PILL = {
+            Draft:    { bg:"#FEF3C7", fg:"#92400E", dot:"#F59E0B" },
+            Sent:     { bg:"#DBEAFE", fg:"#1E40AF", dot:"#2563EB" },
+            Accepted: { bg:"#D1FAE5", fg:"#065F46", dot:"#059669" },
+            Rejected: { bg:"#FEE2E2", fg:"#991B1B", dot:"#DC2626" },
+            Expired:  { bg:"#E5E7EB", fg:"#4B5563", dot:"#6B7280" },
+          };
+          const inr = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
+          const ageHuman = (dt) => {
+            if (!dt) return "—";
+            const d = new Date(dt);
+            const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+            return days === 0 ? "today" : days === 1 ? "1 day ago" : days + " days ago";
+          };
+          // Phase 9: backend handles lead-stage side-effects + timeline log
+          // on every status transition. Frontend just calls the endpoint
+          // and reacts to the new lead_stage_after returned by the server.
+          const transition = async (qid, status, confirmMsg) => {
+            if (confirmMsg && !window.confirm(confirmMsg)) return;
+            const r = await api.post("/library/quotations/" + qid + "/status", { status });
+            if (!r?.success) return alert(r?.message || "Failed");
+            // Mirror server-side lead stage change into local state.
+            if (r.data?.lead_stage_after && r.data.lead_stage_after !== lead.stage) {
+              if (typeof onUpdate === "function") onUpdate(lead.id, { stage: r.data.lead_stage_after });
+            }
+            reloadBuilderQuotes();
+          };
+          const sendQuote = async (qid) => {
+            if (!window.confirm("Send this quotation to the client? It will become read-only after sending.")) return;
+            await transition(qid, "Sent");
+          };
+          const reviseQuote = async (q) => {
+            if (!window.confirm(`Create a revised copy of ${q.quote_no} as a new Draft?`)) return;
+            const r = await api.post("/library/quotations/" + q.id + "/duplicate", {});
+            if (!r?.success) return alert(r?.message || "Failed");
+            reloadBuilderQuotes();
+            // Open the new draft in the builder for immediate edits.
+            if (r.data?.id) setBuilderOpen({ quoteId: r.data.id });
+          };
+          // WhatsApp share — opens wa.me with a Hinglish pre-filled message.
+          // PDF link can't be embedded (download requires auth) — user
+          // attaches the file manually on their device after downloading.
+          const shareWhatsApp = (q) => {
+            const phone = (lead.phone || "").replace(/\D/g, "");
+            if (!phone) return alert("Lead has no phone number");
+            const firstName = (lead.name || "").split(" ")[0] || "Sir/Ma'am";
+            const total = "₹" + Math.round(Number(q.grand_total) || 0).toLocaleString("en-IN");
+            const msg = [
+              `Namaskar ${firstName} ji 🙏`,
+              ``,
+              `Aapka quotation taiyar hai:`,
+              `• Quote No: *${q.quote_no}*`,
+              `• Package: ${q.package_name || ""}`,
+              `• Grand Total: *${total}*`,
+              `• Validity: ${q.validity_days || 30} days`,
+              ``,
+              `PDF aapko alag se share karta hu. Kripya review karein aur apne vichar batayein.`,
+              ``,
+              `— GB Buildcon`,
+            ].join("\n");
+            const intlPhone = phone.length === 10 ? "91" + phone : phone;
+            window.open("https://wa.me/" + intlPhone + "?text=" + encodeURIComponent(msg), "_blank");
+          };
+          const delQuote = async (qid) => {
+            if (!window.confirm("Delete this quotation? This soft-deletes the row.")) return;
+            const r = await api.del("/library/quotations/" + qid);
+            if (r?.success) reloadBuilderQuotes();
+            else alert(r?.message || "Failed");
+          };
+          const cityName = lead.city_name || bqCities.find(c => Number(c.id) === Number(lead.city_id))?.name || "—";
+          const typeName = lead.construction_type_name || bqCTypes.find(c => Number(c.id) === Number(lead.construction_type_id))?.name || "—";
+          return (
+            <div>
+              <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                <div style={{ fontSize:12.5, color:T.t2 }}>
+                  Live quotations built from your rate library.
+                </div>
+                <button onClick={() => hasRates && setBuilderOpen({ quoteId: null })}
+                  disabled={!hasRates}
+                  title={hasRates ? "Open quote builder" : "Set City + Construction Type below first"}
+                  style={{
+                    padding:"8px 14px", borderRadius:7,
+                    background: hasRates ? T.blu : "#E5E7EB",
+                    color: hasRates ? "white" : "#9CA3AF",
+                    border:"none", fontSize:12.5, fontWeight:700,
+                    cursor: hasRates ? "pointer" : "not-allowed",
+                    display:"flex", alignItems:"center", gap:6,
+                  }}>
+                  <IcAdd size={13} color={hasRates ? "white" : "#9CA3AF"}/> Create New Quote
+                </button>
+              </div>
+
+              {/* ── City + Construction Type pinned panel ─────────────
+                  Always visible at top of Build Quote tab. If lead has
+                  both FKs set → shows chips with a "Change" link. If
+                  missing → auto-opens dropdowns. Independent of pipeline
+                  stage, so the user can build a quote at any stage. */}
+              <div style={{ marginBottom:14, padding:"10px 12px",
+                            background: bqEdit ? "#F0F9FF" : "#F8FAFC",
+                            border:"1px solid " + (bqEdit ? "#BFDBFE" : "#E5E7EB"),
+                            borderRadius:8 }}>
+                {bqEdit ? (
+                  <>
+                    <div style={{ fontSize:10.5, fontWeight:700, color:T.t4,
+                                  textTransform:"uppercase", letterSpacing:".4px", marginBottom:8 }}>
+                      {hasRates ? "Change city / construction type" : "Set city + construction type"}
+                    </div>
+                    <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:8, marginBottom:8 }}>
+                      <div>
+                        <label style={{ fontSize:9.5, fontWeight:600, color:T.t4, display:"block", marginBottom:3, textTransform:"uppercase" }}>City</label>
+                        <select value={bqEdit.cityId} onChange={e => setBqEdit(p => ({ ...p, cityId: e.target.value }))}
+                          style={{ width:"100%", padding:"7px 9px", borderRadius:6,
+                                   border:`1.5px solid ${bqEdit.cityId ? T.b1 : "#FCA5A5"}`,
+                                   background:bqEdit.cityId ? T.surface : "#FEF2F2",
+                                   fontSize:12.5, color:T.t1, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}>
+                          <option value="">Select city...</option>
+                          {bqCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                        </select>
+                      </div>
+                      <div>
+                        <label style={{ fontSize:9.5, fontWeight:600, color:T.t4, display:"block", marginBottom:3, textTransform:"uppercase" }}>Construction Type</label>
+                        <select value={bqEdit.typeId} onChange={e => setBqEdit(p => ({ ...p, typeId: e.target.value }))}
+                          style={{ width:"100%", padding:"7px 9px", borderRadius:6,
+                                   border:`1.5px solid ${bqEdit.typeId ? T.b1 : "#FCA5A5"}`,
+                                   background:bqEdit.typeId ? T.surface : "#FEF2F2",
+                                   fontSize:12.5, color:T.t1, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}>
+                          <option value="">Select type...</option>
+                          {bqCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
+                      {hasRates && (
+                        <button onClick={() => setBqEdit(null)} disabled={bqSaving}
+                          style={{ padding:"6px 12px", borderRadius:5, background:T.surface,
+                                   border:`1px solid ${T.b1}`, fontSize:11.5, fontWeight:600,
+                                   color:T.t3, cursor:bqSaving?"not-allowed":"pointer" }}>
+                          Cancel
+                        </button>
+                      )}
+                      <button onClick={saveBuildQuoteRates}
+                        disabled={bqSaving || !bqEdit.cityId || !bqEdit.typeId}
+                        style={{ padding:"6px 14px", borderRadius:5,
+                                 background:(bqSaving||!bqEdit.cityId||!bqEdit.typeId)?T.b1:T.blu,
+                                 color:(bqSaving||!bqEdit.cityId||!bqEdit.typeId)?T.t4:"white",
+                                 border:"none", fontSize:11.5, fontWeight:700,
+                                 cursor:(bqSaving||!bqEdit.cityId||!bqEdit.typeId)?"not-allowed":"pointer" }}>
+                        {bqSaving ? "Saving…" : (hasRates ? "Save Changes" : "Save & Continue")}
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap" }}>
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, padding:"4px 10px", borderRadius:5, background:"#E0F2FE", color:"#075985", fontWeight:600 }}>
+                      📍 {cityName}
+                    </span>
+                    <span style={{ display:"inline-flex", alignItems:"center", gap:5, fontSize:11.5, padding:"4px 10px", borderRadius:5, background:"#FCE7F3", color:"#9D174D", fontWeight:600 }}>
+                      🏗️ {typeName}
+                    </span>
+                    <button onClick={() => setBqEdit({ cityId: lead.city_id || "", typeId: lead.construction_type_id || "" })}
+                      style={{ marginLeft:"auto", background:"transparent", border:`1px solid ${T.b1}`,
+                               color:T.t3, padding:"4px 10px", borderRadius:5, fontSize:11, fontWeight:600, cursor:"pointer" }}>
+                      Change
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {builderLoading && builderQuotes.length === 0 && (
+                <div style={{ padding:"18px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>Loading…</div>
+              )}
+
+              {!builderLoading && builderQuotes.length === 0 && (
+                <div style={{ padding:"24px 14px", textAlign:"center", color:"#9CA3AF", fontSize:12.5,
+                              border:"1px dashed #CBD5E1", borderRadius:8, background:"#F8FAFC" }}>
+                  No quotations built yet for this lead.
+                </div>
+              )}
+
+              {builderQuotes.map(q => {
+                const pill = STATUS_PILL[q.status] || STATUS_PILL.Draft;
+                const isDraft = q.status === "Draft";
+                const isSent  = q.status === "Sent";
+                return (
+                  <div key={q.id}
+                    style={{ display:"flex", alignItems:"center", gap:12, padding:"10px 12px",
+                             marginBottom:6, background:"white", border:`1px solid ${T.b1}`, borderRadius:7 }}>
+                    <span style={{ padding:"2px 8px", fontSize:10.5, fontWeight:700, borderRadius:4,
+                                   background:pill.bg, color:pill.fg, display:"inline-flex", gap:5, alignItems:"center", flexShrink:0 }}>
+                      <span style={{ width:6, height:6, borderRadius:"50%", background:pill.dot }}/>
+                      {q.status}
+                    </span>
+                    <div style={{ fontWeight:700, fontSize:12.5, color:"#0F172A", flexShrink:0, minWidth:115 }}>{q.quote_no}</div>
+                    <div style={{ fontSize:12, color:"#475569", flex:1, minWidth:0, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                      {q.package_name || "—"}
+                    </div>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#059669", flexShrink:0 }}>
+                      ₹{inr(q.grand_total)}
+                    </div>
+                    <div style={{ fontSize:10.5, color:"#94A3B8", flexShrink:0, minWidth:80, textAlign:"right" }}>{ageHuman(q.created_at)}</div>
+                    {/* Action toolbar — PDF, WhatsApp share + status-specific actions */}
+                    <div style={{ display:"flex", gap:5, flexShrink:0 }}>
+                      <button onClick={() => downloadQuotePdf(q.id, q.quote_no)}
+                        title="Download PDF"
+                        style={{ padding:"5px 8px", fontSize:13, fontWeight:600, borderRadius:5,
+                                 background:"white", border:`1px solid ${T.b1}`, color:"#475569", cursor:"pointer", lineHeight:1 }}>
+                        📄
+                      </button>
+                      {/* WhatsApp share — only when lead has a phone */}
+                      {lead.phone && (
+                        <button onClick={() => shareWhatsApp(q)}
+                          title="Share via WhatsApp"
+                          style={{ padding:"5px 8px", fontSize:13, fontWeight:600, borderRadius:5,
+                                   background:"white", border:"1px solid #BBF7D0", color:"#15803D", cursor:"pointer", lineHeight:1 }}>
+                          📱
+                        </button>
+                      )}
+                      {isDraft && (
+                        <>
+                          <button onClick={() => setBuilderOpen({ quoteId: q.id })}
+                            title="Edit draft"
+                            style={{ padding:"5px 10px", fontSize:11, fontWeight:600, borderRadius:5,
+                                     background:"white", border:`1px solid ${T.b1}`, color:T.t2, cursor:"pointer" }}>
+                            Edit
+                          </button>
+                          <button onClick={() => sendQuote(q.id)}
+                            title="Mark as Sent + move lead to Proposal"
+                            style={{ padding:"5px 10px", fontSize:11, fontWeight:700, borderRadius:5,
+                                     background:T.blu, border:"none", color:"white", cursor:"pointer" }}>
+                            Send
+                          </button>
+                        </>
+                      )}
+                      {isSent && (
+                        <>
+                          <button onClick={() => transition(q.id, "Accepted", "Mark this quotation as Accepted by the client? Lead will move to Converted.")}
+                            style={{ padding:"5px 10px", fontSize:11, fontWeight:700, borderRadius:5,
+                                     background:"#10B981", border:"none", color:"white", cursor:"pointer" }}>
+                            Accept
+                          </button>
+                          <button onClick={() => transition(q.id, "Rejected", "Mark this quotation as Rejected?")}
+                            style={{ padding:"5px 10px", fontSize:11, fontWeight:600, borderRadius:5,
+                                     background:"white", border:"1px solid #FCA5A5", color:"#DC2626", cursor:"pointer" }}>
+                            Reject
+                          </button>
+                        </>
+                      )}
+                      {!isDraft && !isSent && (
+                        <button onClick={() => setBuilderOpen({ quoteId: q.id })}
+                          title="View"
+                          style={{ padding:"5px 10px", fontSize:11, fontWeight:600, borderRadius:5,
+                                   background:"white", border:`1px solid ${T.b1}`, color:T.t2, cursor:"pointer" }}>
+                          View
+                        </button>
+                      )}
+                      {/* Revise (duplicate) — available on every non-Draft status */}
+                      {!isDraft && (
+                        <button onClick={() => reviseQuote(q)}
+                          title="Create a new Draft revised from this quote"
+                          style={{ padding:"5px 10px", fontSize:11, fontWeight:600, borderRadius:5,
+                                   background:"white", border:"1px solid #C4B5FD", color:"#5B21B6", cursor:"pointer" }}>
+                          Revise
+                        </button>
+                      )}
+                      {isDraft && (
+                        <button onClick={() => delQuote(q.id)}
+                          title="Delete draft"
+                          style={{ padding:"5px 8px", fontSize:12, fontWeight:700, borderRadius:5,
+                                   background:"transparent", border:"1px solid #FCA5A5", color:"#DC2626", cursor:"pointer" }}>
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          );
+        })()}
+
         {/* MOVE STAGE */}
         {tab==="move"&&(
           <div>
             <div style={{fontSize:12.5,color:T.t2,marginBottom:14}}>Move <strong>{lead.name}</strong> to a different pipeline stage:</div>
-            {STAGES.map(s=>{
+
+            {!pendingMove && !convertOpen && STAGES.map(s=>{
               const isCurrentStage=s.id===lead.stage;
+              const needsRates  = stageNeedsRates(s.id) && !leadHasRatesInfo(lead);
               return(
-                <button key={s.id} onClick={()=>{if(!isCurrentStage){onUpdate(lead.id,{stage:s.id});onClose();}}}
+                <button key={s.id} onClick={()=>{if(!isCurrentStage) tryMoveStage(s.id);}}
                   style={{width:"100%",display:"flex",alignItems:"center",gap:12,padding:"12px 14px",borderRadius:9,border:`2px solid ${isCurrentStage?s.color:T.b1}`,background:isCurrentStage?s.bg:T.surface,marginBottom:8,cursor:isCurrentStage?"default":"pointer",transition:"all .15s"}}
                   onMouseEnter={e=>{if(!isCurrentStage){e.currentTarget.style.borderColor=s.color;e.currentTarget.style.background=s.bg;}}}
                   onMouseLeave={e=>{if(!isCurrentStage){e.currentTarget.style.borderColor=T.b1;e.currentTarget.style.background=T.surface;}}}>
                   <div style={{width:12,height:12,borderRadius:"50%",background:s.color,flexShrink:0}}/>
                   <div style={{flex:1,textAlign:"left"}}>
-                    <div style={{fontSize:13,fontWeight:600,color:isCurrentStage?s.color:T.t1}}>{s.label} {isCurrentStage&&"← Current"}</div>
+                    <div style={{fontSize:13,fontWeight:600,color:isCurrentStage?s.color:T.t1}}>
+                      {s.label} {isCurrentStage&&"← Current"}
+                      {needsRates && (
+                        <span style={{marginLeft:6,padding:"1px 7px",fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3,letterSpacing:".2px",verticalAlign:"middle"}}>
+                          NEEDS CITY + TYPE
+                        </span>
+                      )}
+                    </div>
                     <div style={{fontSize:11,color:T.t4}}>{s.desc}</div>
                   </div>
                   {!isCurrentStage&&<IcMove size={14} color={T.t4}/>}
                 </button>
               );
             })}
+
+            {/* Inline rates picker — opens when the user picks a Follow-Up
+                / Proposal / Converted destination on a lead that doesn't
+                yet have city + construction type set. */}
+            {pendingMove && (
+              <div style={{padding:14,borderRadius:10,border:`2px solid ${T.blu}`,background:"#F0F9FF"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#0F172A",marginBottom:4}}>
+                  Set City + Construction Type
+                </div>
+                <div style={{fontSize:11.5,color:"#475569",marginBottom:14}}>
+                  Required to move to <strong>{STAGES.find(s=>s.id===pendingMove.stage)?.label}</strong> so we can match the right rate package for quotations.
+                </div>
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>City *</label>
+                  <select value={moveCityId} onChange={e => setMoveCityId(e.target.value)}
+                    style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${moveCityId?T.b1:"#FCA5A5"}`,background:moveCityId?T.surface:"#FEF2F2",fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                    <option value="">Select city...</option>
+                    {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Construction Type *</label>
+                  <select value={moveTypeId} onChange={e => setMoveTypeId(e.target.value)}
+                    style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${moveTypeId?T.b1:"#FCA5A5"}`,background:moveTypeId?T.surface:"#FEF2F2",fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                    <option value="">Select type...</option>
+                    {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                  </select>
+                </div>
+                <div style={{display:"flex",gap:8}}>
+                  <button onClick={() => setPendingMove(null)} disabled={moveSaving}
+                    style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:moveSaving?"not-allowed":"pointer"}}>
+                    Back
+                  </button>
+                  <button onClick={confirmMoveWithRates}
+                    disabled={moveSaving || !moveCityId || !moveTypeId}
+                    style={{flex:2,padding:"9px",borderRadius:7,
+                            background:(moveSaving||!moveCityId||!moveTypeId)?T.b1:T.blu,
+                            color:(moveSaving||!moveCityId||!moveTypeId)?T.t4:"white",
+                            border:"none",fontSize:12.5,fontWeight:700,
+                            cursor:(moveSaving||!moveCityId||!moveTypeId)?"not-allowed":"pointer"}}>
+                    {moveSaving ? "Saving…" : "Set & Move"}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* ─── M2: CONVERT → PROJECT PANEL ─────────────────────
+                Opens when user clicks "Converted" stage. Lets them
+                create the construction project (or skip). Quote
+                dropdown is optional — saved on project.crm_quote_id
+                so Estimate Builder can default to that quote. */}
+            {convertOpen && (
+              <div style={{padding:14,borderRadius:10,border:"2px solid #10B981",background:"#F0FDF4"}}>
+                <div style={{fontSize:13,fontWeight:700,color:"#065F46",marginBottom:4}}>
+                  Convert to Project
+                </div>
+                <div style={{fontSize:11.5,color:"#047857",marginBottom:14}}>
+                  Create a construction project carrying over <strong>{lead.name}</strong>'s info (city, type, customer).
+                  Optionally pick a final quote — the Estimate Builder will start from it.
+                </div>
+
+                <div style={{marginBottom:10}}>
+                  <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Project Name *</label>
+                  <input value={convertForm.project_name || ""}
+                    onChange={e => setConvertForm(p => ({ ...p, project_name: e.target.value }))}
+                    placeholder={`${lead.name} — Project`} autoFocus
+                    style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${convertForm.project_name?.trim()?T.b1:"#FCA5A5"}`,background:convertForm.project_name?.trim()?T.surface:"#FEF2F2",fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>Start Date</label>
+                    <input type="date" value={convertForm.start_date || ""}
+                      onChange={e => setConvertForm(p => ({ ...p, start_date: e.target.value }))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                  </div>
+                  <div>
+                    <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>End Date</label>
+                    <input type="date" value={convertForm.end_date || ""}
+                      onChange={e => setConvertForm(p => ({ ...p, end_date: e.target.value }))}
+                      style={{width:"100%",padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                  </div>
+                </div>
+
+                {convertQuotes.length > 0 && (
+                  <div style={{marginBottom:14}}>
+                    <label style={{fontSize:10,fontWeight:700,color:T.t4,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>
+                      Final Quote (optional)
+                    </label>
+                    <select value={convertForm.quote_id || ""}
+                      onChange={e => setConvertForm(p => ({ ...p, quote_id: e.target.value }))}
+                      style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+                      <option value="">— None / decide later —</option>
+                      {convertQuotes.map(q => (
+                        <option key={q.id} value={q.id}>
+                          {q.quote_no} · {q.status} · ₹{Math.round(Number(q.grand_total)||0).toLocaleString("en-IN")}
+                        </option>
+                      ))}
+                    </select>
+                    <div style={{fontSize:10.5,color:"#64748B",marginTop:4}}>
+                      💡 Pick the quote you settled on. Estimate Builder will pre-fill from it.
+                      Skip to keep all quotes available later.
+                    </div>
+                  </div>
+                )}
+
+                <div style={{display:"flex",gap:6}}>
+                  <button onClick={cancelConvert} disabled={convertSaving}
+                    style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:convertSaving?"not-allowed":"pointer"}}>
+                    Back
+                  </button>
+                  <button onClick={skipConvert} disabled={convertSaving}
+                    title="Mark lead Converted without creating a project"
+                    style={{flex:1,padding:"9px",borderRadius:7,background:"white",border:`1px dashed ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:convertSaving?"not-allowed":"pointer"}}>
+                    Skip — Just Convert
+                  </button>
+                  <button onClick={confirmConvertWithProject}
+                    disabled={convertSaving || !convertForm.project_name?.trim()}
+                    style={{flex:2,padding:"9px",borderRadius:7,
+                            background:(convertSaving||!convertForm.project_name?.trim())?"#9CA3AF":"#10B981",
+                            color:"white",border:"none",fontSize:12.5,fontWeight:700,
+                            cursor:(convertSaving||!convertForm.project_name?.trim())?"not-allowed":"pointer"}}>
+                    {convertSaving ? "Creating…" : "Create Project & Convert"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
     </div>
     <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+
+    {/* Phase 5: Quote Builder modal — opens full-screen over the drawer */}
+    {builderOpen && (
+      <QuoteBuilderModal
+        lead={lead}
+        quoteId={builderOpen.quoteId}
+        onClose={() => setBuilderOpen(null)}
+        onSaved={() => reloadBuilderQuotes()}
+      />
+    )}
   </>);
 }
 
+// ─────────────────────────────────────────────────────────────────
+// QUOTE BUILDER MODAL  (Phase 5)
+// Full-screen overlay. Two steps: package picker → builder.
+// Package picker is filtered by lead's construction_type_id.
+// Builder lets user edit section area + category area override +
+// per-item rate/addon/description overrides + terms/notes.
+// Live compute mirrors backend computeQuotationTotals.
+// ─────────────────────────────────────────────────────────────────
+const inrIN = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
+const isSet = (v) => v !== null && v !== undefined && v !== "";
+
+// Download a quotation as PDF. fetch + blob + temp <a> click → triggers
+// browser download with the quote_no as filename. We can't use a plain
+// <a href> because the route requires the Authorization header (JWT).
+async function downloadQuotePdf(quoteId, quoteNo) {
+  try {
+    const token = getToken();
+    const res = await fetch(`${API_BASE}/library/quotations/${quoteId}/pdf`, {
+      headers: token ? { Authorization: "Bearer " + token } : {},
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => "");
+      alert("PDF download failed: " + (txt || res.status));
+      return;
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = (quoteNo || "quotation") + ".pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1500);
+  } catch (e) {
+    alert("PDF download failed: " + (e?.message || e));
+  }
+}
+
+function QuoteBuilderModal({ lead, quoteId: editQuoteId, onClose, onSaved }){
+  // ── Step state ─────────────────────────────────────────────────
+  const [step, setStep] = useState(editQuoteId ? "loading" : "package");
+  const [loadError, setLoadError] = useState("");
+
+  // ── Package picker state ───────────────────────────────────────
+  const [allPackages, setAllPackages] = useState([]);
+  const [selectedPackage, setSelectedPackage] = useState(null);
+
+  // ── Builder state ──────────────────────────────────────────────
+  const [pkgStructures, setPkgStructures] = useState([]);
+  const [pkgCategories, setPkgCategories] = useState([]);
+  const [pkgItems, setPkgItems] = useState({});     // { [sid]: pcrRows[] }
+  const [measurements, setMeasurements] = useState({ sections: {} });
+  const [validity, setValidity] = useState(30);
+  const [terms, setTerms] = useState("");
+  const [notes, setNotes] = useState("");
+  const [quoteId, setQuoteId] = useState(editQuoteId || null);
+  const [quoteNo, setQuoteNo] = useState("");
+  const [status, setStatus] = useState("Draft");
+  const [savedGrandTotal, setSavedGrandTotal] = useState(0);
+  const [showSettings, setShowSettings] = useState(false);
+
+  // ── Save state ─────────────────────────────────────────────────
+  const [saving, setSaving] = useState(false);
+  const [sendingStage, setSendingStage] = useState(false);
+
+  // ── UI fold state ──────────────────────────────────────────────
+  const [collapsedSections, setCollapsedSections] = useState({});
+  const [collapsedCats, setCollapsedCats] = useState({});
+
+  // ── Edit-mode toggle ───────────────────────────────────────────
+  // Default = view mode (read-only base/add_on/description + + Add
+  // buttons hidden). Area / per-item Qty stay editable regardless —
+  // those are the QUOTE's primary inputs that a salesperson changes
+  // per client. "✎ Edit Package" click flips into edit mode, where
+  // structural changes (add section/category/item) + master rate
+  // edits become available.
+  const [editMode, setEditMode] = useState(false);
+
+  // ── Inline-edit state (Add Section / Category / Item from builder) ──
+  // All structural adds PERSIST to the library so future quotes also see
+  // them. Per-item rate/qty tweaks stay quote-scoped in measurements.
+  const [pkgEditOpen,     setPkgEditOpen]     = useState(false);
+  const [pkgEditForm,     setPkgEditForm]     = useState({});
+  const [pkgEditSaving,   setPkgEditSaving]   = useState(false);
+  const [addSecModal,     setAddSecModal]     = useState(false);
+  const [addSecForm,      setAddSecForm]      = useState({ name: "", default_qty: 0, unit: "sqft", per_item_qty: false });
+  const [addSecSaving,    setAddSecSaving]    = useState(false);
+  const [addCatDrawer,    setAddCatDrawer]    = useState(null); // {structure_id, section_name}
+  const [addCatPicks,     setAddCatPicks]     = useState([]);   // ordered ids
+  const [addCatNewForm,   setAddCatNewForm]   = useState(null);
+  const [addCatSaving,    setAddCatSaving]    = useState(false);
+  const [addItemDrawer,   setAddItemDrawer]   = useState(null); // {structure_id, category_id, ...}
+  const [addItemPicks,    setAddItemPicks]    = useState([]);
+  const [addItemSearch,   setAddItemSearch]   = useState("");
+  const [addItemNewForm,  setAddItemNewForm]  = useState(null);
+  const [addItemSaving,   setAddItemSaving]   = useState(false);
+  // Master library lookups for the Add Category / Item drawers
+  const [allWorkCats,     setAllWorkCats]     = useState([]);
+  const [allBoqItems,     setAllBoqItems]     = useState([]);
+  const [allUoms,         setAllUoms]         = useState([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [wc, bi, u] = await Promise.all([
+          api.get("/library/work-categories"),
+          api.get("/library/boq-items"),
+          api.get("/library/uom").catch(() => ({ success: false })),
+        ]);
+        if (wc?.success) setAllWorkCats(wc.data || []);
+        if (bi?.success) setAllBoqItems(bi.data || []);
+        if (u?.success)  setAllUoms(u.data || []);
+      } catch (_) {}
+    })();
+  }, []);
+  const toggleCatPick  = (id) => setAddCatPicks(p => {
+    const idx = p.indexOf(id); return idx >= 0 ? p.filter(x => x !== id) : [...p, id];
+  });
+  const toggleItemPick = (id) => setAddItemPicks(p => {
+    const idx = p.indexOf(id); return idx >= 0 ? p.filter(x => x !== id) : [...p, id];
+  });
+
+  // ── Initial load: either fresh (need packages) or edit existing draft ──
+  useEffect(() => {
+    if (editQuoteId) {
+      // Loading existing quote
+      (async () => {
+        try {
+          const r = await api.get("/library/quotations/" + editQuoteId);
+          if (!r?.success) throw new Error(r?.message || "Could not load quotation");
+          const q = r.data;
+          setQuoteId(q.id);
+          setQuoteNo(q.quote_no);
+          setStatus(q.status);
+          setSavedGrandTotal(Number(q.grand_total) || 0);
+          setValidity(Number(q.validity_days) || 30);
+          setTerms(q.terms || "");
+          setNotes(q.notes || "");
+          // Hydrate package + sections + categories + items
+          const pkgRes = await api.get("/library/rate-packages");
+          const pkg = pkgRes.success
+            ? (pkgRes.data || []).find(p => p.id === q.package_id)
+            : null;
+          setSelectedPackage(pkg || { id: q.package_id, name: q.package_name });
+          await loadPackageTree(q.package_id, lead.city_id);
+          setMeasurements(q.measurements && q.measurements.sections ? q.measurements : { sections: {} });
+          setStep("build");
+        } catch (e) {
+          setLoadError(e.message || "Load failed");
+          setStep("package");
+        }
+      })();
+    } else {
+      // Fresh quote — load packages, filter by construction_type
+      (async () => {
+        try {
+          const r = await api.get("/library/rate-packages");
+          if (r?.success) setAllPackages(r.data || []);
+        } catch (_) {}
+      })();
+    }
+    // eslint-disable-next-line
+  }, []);
+
+  // ── Load package tree (structures + categories + per-section items) ──
+  const loadPackageTree = async (pkgId, cityId) => {
+    const [sr, cr] = await Promise.all([
+      api.get("/library/packages/" + pkgId + "/structures"),
+      api.get("/library/packages/" + pkgId + "/categories"),
+    ]);
+    const structs = sr?.success ? (sr.data || []) : [];
+    const catRows = cr?.success ? (cr.data || []) : [];
+    setPkgStructures(structs);
+    setPkgCategories(catRows);
+    // Parallel item fetch per section
+    const itemResults = await Promise.all(structs.map(s =>
+      api.get(`/library/rate-matrix?package_id=${pkgId}&city_id=${cityId}&structure_id=${s.id}`)
+        .then(r => [s.id, r?.success ? (r.data || []) : []])
+        .catch(() => [s.id, []])
+    ));
+    const itemMap = {};
+    for (const [sid, rows] of itemResults) itemMap[sid] = rows;
+    setPkgItems(itemMap);
+    return { structs, catRows };
+  };
+  // Refresh tree after structural edits (add section/category/item).
+  // Preserves existing measurements for known sections/categories and
+  // initialises defaults for newly-added ones.
+  const refreshPackageTree = async () => {
+    if (!selectedPackage) return;
+    const { structs } = await loadPackageTree(selectedPackage.id, lead.city_id);
+    setMeasurements(m => {
+      const next = { ...m, sections: { ...(m.sections || {}) } };
+      for (const s of structs) {
+        if (!next.sections[s.id]) {
+          next.sections[s.id] = { area: Number(s.default_qty) || 0, categories: {} };
+        }
+      }
+      return next;
+    });
+  };
+
+  // ── EDIT PACKAGE basics — name + sqft_rate + description ─────
+  const openEditPkg = () => {
+    if (!selectedPackage) return;
+    setPkgEditForm({
+      name:        selectedPackage.name || "",
+      sqft_rate:   selectedPackage.sqft_rate || 0,
+      description: selectedPackage.description || "",
+    });
+    setPkgEditOpen(true);
+  };
+  const saveEditPkg = async () => {
+    if (!selectedPackage || !pkgEditForm.name?.trim()) return;
+    setPkgEditSaving(true);
+    const r = await api.put("/library/rate-packages/" + selectedPackage.id, {
+      name:        pkgEditForm.name.trim(),
+      sqft_rate:   Number(pkgEditForm.sqft_rate) || 0,
+      description: pkgEditForm.description || "",
+      construction_type_id: selectedPackage.construction_type_id,
+    });
+    setPkgEditSaving(false);
+    if (r?.success) {
+      setSelectedPackage(p => ({ ...p, ...pkgEditForm }));
+      setPkgEditOpen(false);
+    } else alert(r?.message || "Save failed");
+  };
+
+  // ── ADD SECTION — POSTs to library, then refresh tree ────────
+  const openAddSec = () => {
+    setAddSecForm({ name: "", default_qty: 0, unit: "sqft", per_item_qty: false });
+    setAddSecModal(true);
+  };
+  const saveAddSec = async () => {
+    if (!selectedPackage || !addSecForm.name?.trim()) return;
+    setAddSecSaving(true);
+    const r = await api.post("/library/packages/" + selectedPackage.id + "/structures", {
+      name:         addSecForm.name.trim(),
+      unit:         addSecForm.unit || "sqft",
+      rate:         0,
+      default_qty:  Number(addSecForm.default_qty) || 0,
+      per_item_qty: !!addSecForm.per_item_qty,
+    });
+    setAddSecSaving(false);
+    if (r?.success) {
+      await refreshPackageTree();
+      setAddSecModal(false);
+    } else alert(r?.message || "Save failed");
+  };
+
+  // ── ADD CATEGORY drawer (per section) — multi-pick + create new ─
+  const openAddCat = (sec) => {
+    setAddCatPicks([]); setAddCatNewForm(null);
+    setAddCatDrawer({ structure_id: sec.id, section_name: sec.name });
+  };
+  const confirmAddCat = async () => {
+    if (!addCatDrawer || !selectedPackage) return;
+    setAddCatSaving(true);
+    // sort_order = append after existing in this section
+    const existingMax = pkgCategories
+      .filter(c => c.structure_id === addCatDrawer.structure_id)
+      .reduce((mx, c) => Math.max(mx, Number(c.sort_order) || 0), 0);
+    for (let i = 0; i < addCatPicks.length; i++) {
+      const id = addCatPicks[i];
+      const nm = allWorkCats.find(c => c.id === id)?.name;
+      if (!nm) continue;
+      await api.post("/library/packages/" + selectedPackage.id + "/categories", {
+        structure_id:  addCatDrawer.structure_id,
+        category_name: nm,
+        sort_order:    existingMax + 1 + i,
+      });
+    }
+    setAddCatSaving(false);
+    await refreshPackageTree();
+    setAddCatDrawer(null);
+  };
+  const createAndAddCat = async () => {
+    if (!addCatNewForm?.name?.trim() || !addCatDrawer || !selectedPackage) return;
+    setAddCatSaving(true);
+    const wr = await api.post("/library/work-categories", {
+      name: addCatNewForm.name.trim(),
+      code: (addCatNewForm.code || "").trim(),
+      description: (addCatNewForm.desc || "").trim(),
+    });
+    if (wr?.success) {
+      const existingMax = pkgCategories
+        .filter(c => c.structure_id === addCatDrawer.structure_id)
+        .reduce((mx, c) => Math.max(mx, Number(c.sort_order) || 0), 0);
+      await api.post("/library/packages/" + selectedPackage.id + "/categories", {
+        structure_id:  addCatDrawer.structure_id,
+        category_name: addCatNewForm.name.trim(),
+        sort_order:    existingMax + 1,
+      });
+      const wcRes = await api.get("/library/work-categories");
+      if (wcRes?.success) setAllWorkCats(wcRes.data || []);
+      await refreshPackageTree();
+      setAddCatNewForm(null);
+    } else alert(wr?.message || "Failed");
+    setAddCatSaving(false);
+  };
+
+  // ── ADD ITEM drawer (per category) — multi-pick + create new ───
+  const openAddItem = (sec, cat) => {
+    setAddItemPicks([]); setAddItemSearch(""); setAddItemNewForm(null);
+    setAddItemDrawer({
+      structure_id:  sec.id, section_name: sec.name,
+      category_id:   cat.id, category_name: cat.name,
+    });
+  };
+  const confirmAddItems = async () => {
+    if (!addItemDrawer || !selectedPackage) return;
+    setAddItemSaving(true);
+    // Insert the picked items into package_city_rates via /rate-matrix/bulk.
+    // We need to PRESERVE existing items in this section + APPEND new ones.
+    const sid   = addItemDrawer.structure_id;
+    const catId = addItemDrawer.category_id;
+    const existing = (pkgItems[sid] || []).map(r => ({
+      item_id:     r.item_id,
+      category_id: r.category_id,
+      base_rate:   (Number(r.rate) || 0) - (Number(r.add_on_rate) || 0),
+      add_on_rate: Number(r.add_on_rate) || 0,
+      description: r.description || "",
+      qty:         Number(r.qty) || 0,
+    }));
+    const existingIds = new Set(existing.map(r => r.item_id));
+    const fresh = addItemPicks
+      .filter(id => !existingIds.has(id))
+      .map(id => {
+        const bi = allBoqItems.find(x => x.id === id);
+        return {
+          item_id:     id,
+          category_id: catId,
+          base_rate:   Number(bi?.base_rate) || 0,
+          add_on_rate: 0,
+          description: "",
+          qty:         0,
+        };
+      });
+    const all = [...existing, ...fresh];
+    const r = await api.post("/library/rate-matrix/bulk", {
+      package_id:   selectedPackage.id,
+      city_id:      lead.city_id,
+      structure_id: sid,
+      items:        all,
+    });
+    setAddItemSaving(false);
+    if (r?.success) {
+      await refreshPackageTree();
+      setAddItemDrawer(null);
+    } else alert(r?.message || "Failed");
+  };
+  const createAndAddItem = async () => {
+    if (!addItemNewForm?.name?.trim() || !addItemDrawer || !selectedPackage) return;
+    setAddItemSaving(true);
+    const cr = await api.post("/library/boq-items", {
+      name:        addItemNewForm.name.trim(),
+      category:    addItemNewForm.category || addItemDrawer.category_name,
+      unit:        addItemNewForm.unit || "Sq.Ft",
+      base_rate:   Number(addItemNewForm.base_rate) || 0,
+      description: "",
+    });
+    if (cr?.success && cr.data) {
+      // Refresh master library + immediately insert into the pcr scope
+      setAllBoqItems(p => [cr.data, ...p]);
+      const sid = addItemDrawer.structure_id;
+      const catId = addItemDrawer.category_id;
+      const existing = (pkgItems[sid] || []).map(r => ({
+        item_id: r.item_id, category_id: r.category_id,
+        base_rate: (Number(r.rate)||0) - (Number(r.add_on_rate)||0),
+        add_on_rate: Number(r.add_on_rate) || 0,
+        description: r.description || "",
+        qty: Number(r.qty) || 0,
+      }));
+      existing.push({
+        item_id: cr.data.id, category_id: catId,
+        base_rate: Number(cr.data.base_rate) || 0,
+        add_on_rate: 0, description: "", qty: 0,
+      });
+      await api.post("/library/rate-matrix/bulk", {
+        package_id:   selectedPackage.id,
+        city_id:      lead.city_id,
+        structure_id: sid,
+        items:        existing,
+      });
+      await refreshPackageTree();
+      setAddItemNewForm(null);
+    } else alert(cr?.message || "Save failed");
+    setAddItemSaving(false);
+  };
+
+  // ── Per-item qty override patcher (quote-scoped) ──────────────
+  const patchItemQtyOverride = (sid, cid, itemId, val) => {
+    setMeasurements(m => {
+      const sec = m.sections[sid] || { area: 0, categories: {} };
+      const cat = sec.categories[cid] || {};
+      const items = cat.items || {};
+      const cur = items[itemId] || {};
+      const next = { ...cur };
+      if (val === "" || val === null) delete next.qty_override;
+      else next.qty_override = val;
+      const allEmpty = !isSet(next.base_rate_override) && !isSet(next.add_on_override)
+                    && !isSet(next.description_override) && !isSet(next.qty_override);
+      const nextItems = { ...items };
+      if (allEmpty) delete nextItems[itemId];
+      else nextItems[itemId] = next;
+      return {
+        sections: {
+          ...m.sections,
+          [sid]: { ...sec, categories: { ...sec.categories, [cid]: { ...cat, items: nextItems } } },
+        },
+      };
+    });
+  };
+
+  // ── Package picked → load tree + initialize measurements ──────
+  const pickPackage = async (pkg) => {
+    setSelectedPackage(pkg);
+    setStep("loading");
+    const { structs } = await loadPackageTree(pkg.id, lead.city_id);
+    // Default measurements: each section's area = its default_qty
+    const initSections = {};
+    for (const s of structs) {
+      initSections[s.id] = {
+        area: Number(s.default_qty) || 0,
+        categories: {},
+      };
+    }
+    setMeasurements({ sections: initSections });
+    setStep("build");
+  };
+
+  // ── Measurement patchers ───────────────────────────────────────
+  const patchSection = (sid, patch) => setMeasurements(m => ({
+    sections: {
+      ...m.sections,
+      [sid]: { ...(m.sections[sid] || { area: 0, categories: {} }), ...patch },
+    },
+  }));
+  const patchCategory = (sid, cid, patch) => setMeasurements(m => {
+    const sec = m.sections[sid] || { area: 0, categories: {} };
+    return {
+      sections: {
+        ...m.sections,
+        [sid]: {
+          ...sec,
+          categories: {
+            ...sec.categories,
+            [cid]: { ...(sec.categories[cid] || {}), ...patch },
+          },
+        },
+      },
+    };
+  });
+  const patchItem = (sid, cid, itemId, patch) => setMeasurements(m => {
+    const sec = m.sections[sid] || { area: 0, categories: {} };
+    const cat = sec.categories[cid] || {};
+    const items = cat.items || {};
+    const cur = items[itemId] || {};
+    const nextItem = { ...cur, ...patch };
+    // Drop entry if all overrides cleared (cleaner JSON)
+    const allEmpty = !isSet(nextItem.base_rate_override)
+                  && !isSet(nextItem.add_on_override)
+                  && !isSet(nextItem.description_override);
+    const nextItems = { ...items };
+    if (allEmpty) delete nextItems[itemId];
+    else nextItems[itemId] = nextItem;
+    return {
+      sections: {
+        ...m.sections,
+        [sid]: {
+          ...sec,
+          categories: {
+            ...sec.categories,
+            [cid]: { ...cat, items: nextItems },
+          },
+        },
+      },
+    };
+  });
+  const resetItemRow = (sid, cid, itemId) => patchItem(sid, cid, itemId, {
+    base_rate_override: null,
+    add_on_override: null,
+    description_override: null,
+  });
+
+  // ── Live compute (mirrors backend computeQuotationTotals) ──────
+  const breakdown = useMemo(() => {
+    if (step !== "build") return { grandTotal: 0, sections: [] };
+    let grand = 0;
+    const sections = pkgStructures.map(s => {
+      const sm = measurements.sections[s.id] || {};
+      const sArea = isSet(sm.area) ? Number(sm.area) || 0 : Number(s.default_qty || 0);
+      const perItem = !!Number(s.per_item_qty);
+      const sCats = pkgCategories
+        .filter(c => c.structure_id === s.id)
+        .sort((a,b) => (a.sort_order||0) - (b.sort_order||0) || a.id - b.id);
+      let sTotal = 0;
+      const catRows = sCats.map(c => {
+        const cm = (sm.categories && sm.categories[c.id]) || {};
+        const cArea = isSet(cm.area_override) ? Number(cm.area_override) || 0 : sArea;
+        const items = (pkgItems[s.id] || []).filter(it => Number(it.category_id) === Number(c.id));
+        const itemOverrides = cm.items || {};
+        let cBase = 0, cAddOn = 0, cItemTotalSum = 0;
+        const itemRows = items.map(it => {
+          const ov = itemOverrides[it.item_id] || {};
+          const masterBase  = (Number(it.rate) || 0) - (Number(it.add_on_rate) || 0);
+          const masterAddOn = Number(it.add_on_rate) || 0;
+          const masterDesc  = it.description || "";
+          const masterQty   = Number(it.qty) || 0;
+          const base  = isSet(ov.base_rate_override)   ? Number(ov.base_rate_override)   || 0 : masterBase;
+          const addOn = isSet(ov.add_on_override)      ? Number(ov.add_on_override)      || 0 : masterAddOn;
+          const desc  = isSet(ov.description_override) ? ov.description_override            : masterDesc;
+          // Per-item mode: each item carries its own qty (override > pcr master).
+          // Uniform mode: every item shares cArea.
+          const effQty = perItem
+            ? (isSet(ov.qty_override) ? Number(ov.qty_override) || 0 : masterQty)
+            : cArea;
+          const total = (base + addOn) * effQty;
+          cBase += base; cAddOn += addOn; cItemTotalSum += total;
+          return {
+            item_id: it.item_id, base, addOn, desc, qty: effQty, total,
+            masterBase, masterAddOn, masterDesc, masterQty,
+            hasOverride: base !== masterBase || addOn !== masterAddOn || desc !== masterDesc
+                       || (perItem && isSet(ov.qty_override) && Number(ov.qty_override) !== masterQty),
+          };
+        });
+        // Category total: per-item mode → Σ item totals (each qty-weighted)
+        //                 uniform mode → (Σ base + Σ addOn) × cArea
+        const cTotal = perItem ? cItemTotalSum : (cBase + cAddOn) * cArea;
+        sTotal += cTotal;
+        return { ...c, area: cArea, base: cBase, addOn: cAddOn, total: cTotal, items: itemRows };
+      });
+      grand += sTotal;
+      return { ...s, area: sArea, per_item_qty: perItem ? 1 : 0, total: sTotal, categories: catRows };
+    });
+    return { grandTotal: grand, sections };
+    // eslint-disable-next-line
+  }, [measurements, pkgStructures, pkgCategories, pkgItems, step]);
+
+  // ── Save flows ─────────────────────────────────────────────────
+  const saveDraft = async () => {
+    if (!selectedPackage) return;
+    setSaving(true);
+    try {
+      let res;
+      if (quoteId) {
+        res = await api.put("/library/quotations/" + quoteId, {
+          measurements, validity_days: validity, terms, notes,
+        });
+      } else {
+        res = await api.post("/library/quotations", {
+          lead_id: lead.id, package_id: selectedPackage.id,
+          measurements, validity_days: validity, terms, notes,
+        });
+      }
+      if (!res?.success) { alert(res?.message || "Save failed"); return null; }
+      const q = res.data;
+      setQuoteId(q.id); setQuoteNo(q.quote_no);
+      setStatus(q.status); setSavedGrandTotal(Number(q.grand_total) || 0);
+      if (onSaved) onSaved();
+      return q;
+    } finally { setSaving(false); }
+  };
+
+  const saveAndSend = async () => {
+    const q = await saveDraft();
+    if (!q) return;
+    // Backend handles the Sent → lead.stage='proposal' side-effect +
+    // crm_followups timeline entry. We just call the status endpoint.
+    setSendingStage(true);
+    try {
+      const sr = await api.post("/library/quotations/" + q.id + "/status", { status: "Sent" });
+      if (!sr?.success) { alert(sr?.message || "Could not mark Sent"); return; }
+      if (onSaved) onSaved();
+      onClose();
+    } finally { setSendingStage(false); }
+  };
+
+  // ── Disabled-state derivations ─────────────────────────────────
+  const readOnly = status !== "Draft";
+  // canEdit = user is in edit mode AND quote is not status-locked.
+  // Controls master rate edits + + Add buttons. Area/Qty inputs ignore
+  // canEdit and gate on !readOnly only (they're quote-essential).
+  const canEdit  = editMode && !readOnly;
+  const hasMeasurements = pkgStructures.length > 0;
+  const canSave = hasMeasurements && !readOnly && !saving && !sendingStage;
+
+  // ── Filtered packages for picker ───────────────────────────────
+  const filteredPackages = allPackages.filter(p =>
+    !lead.construction_type_id || Number(p.construction_type_id) === Number(lead.construction_type_id)
+  );
+
+  // ── PALETTE ────────────────────────────────────────────────────
+  const COL_DARK    = "#0F172A";
+  const COL_DARK2   = "#1E293B";
+  const COL_CAT_BG  = "#F1F5F9";
+  const COL_AMBER   = "#F59E0B";
+  const COL_TEAL    = "#0D9488";
+  const COL_TEAL_BG = "#CCFBF1";
+  const COL_GREEN   = "#059669";
+  const COL_BLUE    = "#2563EB";
+  const COL_RED     = "#EF4444";
+
+  // Status pill
+  const statusColor = {
+    Draft:    { bg:"#FEF3C7", fg:"#92400E", dot:"#F59E0B" },
+    Sent:     { bg:"#DBEAFE", fg:"#1E40AF", dot:"#2563EB" },
+    Accepted: { bg:"#D1FAE5", fg:"#065F46", dot:"#059669" },
+    Rejected: { bg:"#FEE2E2", fg:"#991B1B", dot:"#DC2626" },
+    Expired:  { bg:"#E5E7EB", fg:"#4B5563", dot:"#6B7280" },
+  }[status] || { bg:"#FEF3C7", fg:"#92400E", dot:"#F59E0B" };
+
+  return (
+    <div style={{ position:"fixed", inset:0, background:"white", zIndex:900,
+                  display:"flex", flexDirection:"column", fontFamily:"inherit" }}>
+      {/* ─── HEADER ───────────────────────────────────────────── */}
+      <div style={{ background:COL_DARK, padding:"12px 24px", color:"white",
+                    display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <div>
+          <div style={{ fontSize:14, fontWeight:700, display:"flex", gap:10, alignItems:"center" }}>
+            {step === "package" ? "New Quotation" : (quoteNo || "New Quotation")}
+            {step === "build" && (
+              <span style={{ padding:"2px 9px", fontSize:10.5, fontWeight:700, borderRadius:4,
+                             background:statusColor.bg, color:statusColor.fg, display:"inline-flex", gap:5, alignItems:"center" }}>
+                <span style={{ width:7, height:7, borderRadius:"50%", background:statusColor.dot }}/>
+                {status}
+              </span>
+            )}
+          </div>
+          <div style={{ fontSize:11, color:"rgba(255,255,255,0.55)", marginTop:2 }}>
+            {lead.name} · {lead.city_name || lead.city || "—"} · {lead.construction_type_name || lead.projType || "—"}
+            {step === "build" && selectedPackage && <> · <strong style={{color:"white"}}>{selectedPackage.name}</strong></>}
+          </div>
+        </div>
+        <button onClick={onClose} disabled={saving || sendingStage}
+          style={{ background:"none", border:"none", color:"rgba(255,255,255,0.6)",
+                   fontSize:26, cursor:(saving||sendingStage)?"not-allowed":"pointer", lineHeight:1 }}>×</button>
+      </div>
+
+      {/* ─── BODY ─────────────────────────────────────────────── */}
+      <div style={{ flex:1, overflowY:"auto", background:"#F8FAFC" }}>
+        {step === "loading" && (
+          <div style={{ padding:"60px 20px", textAlign:"center", color:"#64748B", fontSize:13 }}>
+            Loading quotation…
+          </div>
+        )}
+
+        {/* STEP 1: PACKAGE PICKER */}
+        {step === "package" && (
+          <div style={{ maxWidth:880, margin:"0 auto", padding:"24px 20px" }}>
+            <div style={{ fontSize:11, fontWeight:700, color:"#6B7280", textTransform:"uppercase",
+                          letterSpacing:".5px", marginBottom:8 }}>
+              Pick a package
+            </div>
+            {loadError && (
+              <div style={{ padding:"10px 14px", background:"#FEE2E2", border:"1px solid #FECACA",
+                            borderRadius:8, color:"#991B1B", fontSize:12.5, marginBottom:14 }}>
+                ⚠️ {loadError}
+              </div>
+            )}
+            {filteredPackages.length === 0 ? (
+              <div style={{ padding:"30px 18px", background:"white", border:"1px dashed #CBD5E1",
+                            borderRadius:10, textAlign:"center", color:"#64748B", fontSize:13 }}>
+                No packages defined for <strong>{lead.construction_type_name || "this construction type"}</strong> yet.
+                <div style={{ marginTop:6, fontSize:12, color:"#9CA3AF" }}>
+                  Go to <strong>Library → Client BOQ Rate</strong> to set one up.
+                </div>
+              </div>
+            ) : (
+              <div style={{ display:"grid", gridTemplateColumns:"repeat(auto-fill, minmax(220px, 1fr))", gap:12 }}>
+                {filteredPackages.map(pkg => (
+                  <div key={pkg.id} onClick={() => pickPackage(pkg)}
+                    style={{ padding:"16px 18px", background:"white", borderRadius:10,
+                             border:"2px solid #E5E7EB", cursor:"pointer", transition:"all .15s" }}
+                    onMouseEnter={e => { e.currentTarget.style.borderColor = COL_BLUE; e.currentTarget.style.boxShadow = "0 4px 12px rgba(37,99,235,0.12)"; }}
+                    onMouseLeave={e => { e.currentTarget.style.borderColor = "#E5E7EB"; e.currentTarget.style.boxShadow = "none"; }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:"#0F172A", marginBottom:4 }}>{pkg.name}</div>
+                    {pkg.sqft_rate > 0 && (
+                      <div style={{ fontSize:12, color:"#64748B" }}>Rs.{inrIN(pkg.sqft_rate)}/sqft</div>
+                    )}
+                    {pkg.description && (
+                      <div style={{ fontSize:11, color:"#94A3B8", marginTop:6, lineHeight:1.4 }}>{pkg.description}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* STEP 2: BUILDER */}
+        {step === "build" && (
+          <div style={{ maxWidth:1180, margin:"0 auto", padding:"16px 20px 24px" }}>
+            {/* Drift banner — backend computed_grand_total vs saved grand_total */}
+            {quoteId && Math.abs(breakdown.grandTotal - savedGrandTotal) > 0.5 && !readOnly && (
+              <div style={{ padding:"9px 14px", background:"#FFFBEB", border:"1px solid #FCD34D",
+                            borderRadius:8, color:"#92400E", fontSize:12, marginBottom:12 }}>
+                💡 Master rates or your edits changed since last save. Save Draft to sync.
+              </div>
+            )}
+
+            {/* Quote settings (collapsible) */}
+            <div style={{ background:"white", borderRadius:10, border:"1px solid #E5E7EB", marginBottom:14 }}>
+              <div onClick={() => setShowSettings(s => !s)}
+                style={{ padding:"10px 14px", cursor:"pointer", display:"flex", alignItems:"center", gap:10,
+                         borderBottom: showSettings ? "1px solid #E5E7EB" : "none" }}>
+                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth={2.5}
+                  style={{ transition:"transform .15s", transform: showSettings ? "rotate(90deg)" : "rotate(0deg)" }}>
+                  <polyline points="9 18 15 12 9 6"/>
+                </svg>
+                <span style={{ fontSize:12, fontWeight:700, color:"#0F172A", textTransform:"uppercase", letterSpacing:".4px" }}>
+                  Quote Settings
+                </span>
+                <span style={{ fontSize:11, color:"#64748B", marginLeft:"auto" }}>
+                  Validity: {validity} days
+                </span>
+              </div>
+              {showSettings && (
+                <div style={{ padding:"14px" }}>
+                  <div style={{ display:"grid", gridTemplateColumns:"140px 1fr", gap:14, marginBottom:10 }}>
+                    <div>
+                      <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>Validity (days)</label>
+                      <input type="number" value={validity}
+                        onChange={e => setValidity(Number(e.target.value) || 0)}
+                        disabled={readOnly}
+                        style={{ width:"100%", padding:"7px 9px", borderRadius:6, border:"1.5px solid #D1D5DB", fontSize:12.5, outline:"none", fontFamily:"inherit", textAlign:"right", boxSizing:"border-box" }}/>
+                    </div>
+                    <div>
+                      <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>Notes (internal)</label>
+                      <input value={notes} onChange={e => setNotes(e.target.value)}
+                        disabled={readOnly} placeholder="Optional"
+                        style={{ width:"100%", padding:"7px 9px", borderRadius:6, border:"1.5px solid #D1D5DB", fontSize:12.5, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
+                    </div>
+                  </div>
+                  <div>
+                    <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:4, textTransform:"uppercase" }}>Terms &amp; Conditions</label>
+                    <textarea value={terms} onChange={e => setTerms(e.target.value)}
+                      disabled={readOnly} rows={3} placeholder="Payment terms, warranty, exclusions..."
+                      style={{ width:"100%", padding:"7px 9px", borderRadius:6, border:"1.5px solid #D1D5DB", fontSize:12, outline:"none", fontFamily:"inherit", resize:"vertical", boxSizing:"border-box" }}/>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Package controls — Edit toggle + (when ON) basics modal + Add Section */}
+            {!readOnly && (
+              <div style={{ display:"flex", gap:8, justifyContent:"space-between", alignItems:"center", marginBottom:10 }}>
+                <div style={{ display:"flex", gap:8, alignItems:"center" }}>
+                  <button onClick={() => setEditMode(m => !m)}
+                    title={canEdit ? "Exit edit mode — back to quoting view" : "Unlock structural edits + master rate changes"}
+                    style={{ padding:"6px 14px", borderRadius:6,
+                             background: canEdit ? "#10B981" : "white",
+                             border:"1.5px solid " + (canEdit ? "#10B981" : "#94A3B8"),
+                             color: canEdit ? "white" : "#334155",
+                             fontSize:11.5, fontWeight:700, cursor:"pointer",
+                             display:"flex", alignItems:"center", gap:5 }}>
+                    {canEdit ? "✓ Done Editing" : "✎ Edit Package"}
+                  </button>
+                  {canEdit && (
+                    <button onClick={openEditPkg}
+                      title="Edit package name / per-sqft rate / description"
+                      style={{ padding:"6px 11px", borderRadius:6, background:"white",
+                               border:"1px dashed #94A3B8", fontSize:11, fontWeight:600,
+                               color:"#475569", cursor:"pointer" }}>
+                      Package basics…
+                    </button>
+                  )}
+                </div>
+                {canEdit && (
+                  <button onClick={openAddSec}
+                    style={{ padding:"6px 12px", borderRadius:6, background:"white",
+                             border:"1.5px solid " + COL_DARK, fontSize:11.5, fontWeight:700,
+                             color: COL_DARK, cursor:"pointer" }}>
+                    + Add Section
+                  </button>
+                )}
+              </div>
+            )}
+
+            {/* Sections tree */}
+            {breakdown.sections.length === 0 ? (
+              <div style={{ padding:"30px 18px", background:"white", border:"1px dashed #CBD5E1",
+                            borderRadius:10, textAlign:"center", color:"#64748B", fontSize:13 }}>
+                This package has no sections yet. {!readOnly && <span>Click <strong>+ Add Section</strong> above.</span>}
+              </div>
+            ) : breakdown.sections.map(sec => {
+              const sCollapsed = !!collapsedSections[sec.id];
+              const noAreaHint = sec.area === 0;
+              const secPerItem = !!sec.per_item_qty;
+              return (
+                <div key={sec.id}
+                  style={{ background:"white", borderRadius:10, border:"1px solid #E5E7EB", marginBottom:12, overflow:"hidden" }}>
+                  {/* Section header */}
+                  <div style={{ display:"flex", alignItems:"center", gap:10, padding:"11px 16px", background:COL_DARK, color:"white" }}>
+                    <span onClick={() => setCollapsedSections(p => ({ ...p, [sec.id]: !p[sec.id] }))}
+                      style={{ cursor:"pointer", display:"flex" }}>
+                      <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth={2.5}
+                        style={{ transition:"transform .15s", transform: sCollapsed ? "rotate(0deg)" : "rotate(90deg)" }}>
+                        <polyline points="9 18 15 12 9 6"/>
+                      </svg>
+                    </span>
+                    <span style={{ fontWeight:700, fontSize:14, color:"white" }}>{sec.name}</span>
+                    <span style={{ fontSize:11, color:"rgba(255,255,255,0.45)" }}>
+                      · {sec.categories.length} categ{sec.categories.length === 1 ? "ory" : "ories"}
+                    </span>
+                    {noAreaHint && !readOnly && !secPerItem && (
+                      <span style={{ marginLeft:6, padding:"2px 8px", fontSize:10.5, fontWeight:600,
+                                     background:"rgba(252,211,77,0.18)", color:"#FCD34D", borderRadius:4, border:"1px solid rgba(252,211,77,0.35)" }}>
+                        set area
+                      </span>
+                    )}
+                    {secPerItem && (
+                      <span style={{ marginLeft:6, padding:"2px 8px", fontSize:10, fontWeight:700,
+                                     background:"rgba(245,158,11,0.22)", color:"#FCD34D",
+                                     border:"1px solid #F59E0B", borderRadius:4,
+                                     letterSpacing:".3px", textTransform:"uppercase" }}>
+                        Per-item Qty
+                      </span>
+                    )}
+                    <div style={{ marginLeft:"auto", display:"flex", gap:12, alignItems:"center", fontSize:11.5, fontWeight:600 }}>
+                      {/* Aggregates only when in uniform mode — per-item mode
+                          totals are item-by-item so per-sqft / aggregated Area
+                          are mathematically meaningless. */}
+                      {!secPerItem && (
+                        <>
+                          <span style={{ padding:"3px 9px", background:COL_TEAL_BG, color:COL_TEAL, borderRadius:4, fontWeight:700 }}>
+                            Rs.{inrIN(sec.base + sec.addOn || 0)}/{sec.unit || "sqft"}
+                          </span>
+                          <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+                            <span style={{ color:"rgba(255,255,255,0.55)", fontSize:11, textTransform:"uppercase" }}>Area</span>
+                            {readOnly ? (
+                              <span style={{ padding:"4px 8px", color:"white", fontWeight:700, fontSize:12 }}>{inrIN(sec.area)}</span>
+                            ) : (
+                              <input type="number" value={sec.area}
+                                onChange={e => patchSection(sec.id, { area: e.target.value })}
+                                style={{ width:80, padding:"5px 8px", borderRadius:5, textAlign:"right",
+                                         fontFamily:"inherit", fontSize:12, fontWeight:700,
+                                         border:"1.5px solid rgba(255,255,255,0.2)",
+                                         background:"rgba(255,255,255,0.08)", color:"white", outline:"none" }}/>
+                            )}
+                          </span>
+                        </>
+                      )}
+                      <span style={{ color:"rgba(255,255,255,0.6)" }}>Total <strong style={{ color:COL_TEAL_BG, fontSize:13 }}>Rs.{inrIN(sec.total)}</strong></span>
+                    </div>
+                  </div>
+
+                  {/* Categories */}
+                  {!sCollapsed && (
+                    <div style={{ padding:10 }}>
+                      {sec.categories.length === 0 && (
+                        <div style={{ padding:"14px 12px", textAlign:"center", color:"#9CA3AF", fontSize:12.5 }}>
+                          No categories.
+                        </div>
+                      )}
+                      {sec.categories.map(cat => {
+                        const catKey = `${sec.id}:${cat.id}`;
+                        const catCollapsed = !!collapsedCats[catKey];
+                        const cm = measurements.sections[sec.id]?.categories?.[cat.id] || {};
+                        const overrideVal = isSet(cm.area_override) ? String(cm.area_override) : "";
+                        return (
+                          <div key={cat.id} style={{ marginBottom:10, border:"1px solid #E5E7EB", borderRadius:8, overflow:"hidden" }}>
+                            {/* Category header */}
+                            <div style={{ display:"flex", alignItems:"center", gap:8, padding:"8px 12px", background:COL_CAT_BG, borderBottom: catCollapsed ? "none" : "1px solid #E5E7EB" }}>
+                              <span onClick={() => setCollapsedCats(p => ({ ...p, [catKey]: !p[catKey] }))}
+                                style={{ cursor:"pointer", display:"flex" }}>
+                                <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth={2.5}
+                                  style={{ transition:"transform .15s", transform: catCollapsed ? "rotate(0deg)" : "rotate(90deg)" }}>
+                                  <polyline points="9 18 15 12 9 6"/>
+                                </svg>
+                              </span>
+                              <span style={{ fontWeight:700, fontSize:12.5, color:"#0F172A" }}>{cat.name}</span>
+                              <span style={{ fontSize:10.5, color:"#94A3B8" }}>· {cat.items.length} item{cat.items.length === 1 ? "" : "s"}</span>
+                              <div style={{ marginLeft:"auto", display:"flex", gap:10, alignItems:"center", fontSize:11, fontWeight:600 }}>
+                                {/* Category Area override hidden when section uses per-item qty */}
+                                {!secPerItem && (
+                                  <span style={{ display:"flex", alignItems:"center", gap:4 }}>
+                                    <span style={{ color:"#64748B", fontSize:10.5, textTransform:"uppercase" }}>Area</span>
+                                    {readOnly ? (
+                                      <span style={{ padding:"3px 7px", color:"#0F172A", fontWeight:700, fontSize:12 }}>{inrIN(cat.area)}</span>
+                                    ) : (
+                                      <input type="number" value={overrideVal}
+                                        onChange={e => patchCategory(sec.id, cat.id, { area_override: e.target.value === "" ? null : e.target.value })}
+                                        placeholder={String(sec.area)}
+                                        title={overrideVal ? "Override active — clear to inherit section's area" : `Inherits ${sec.area} from section`}
+                                        style={{ width:70, padding:"4px 7px", borderRadius:5, textAlign:"right",
+                                                 fontFamily:"inherit", fontSize:11.5, fontWeight:700,
+                                                 border:"1.5px solid " + (overrideVal ? COL_AMBER : "#CBD5E1"),
+                                                 background: overrideVal ? "#FFFBEB" : "white",
+                                                 color: overrideVal ? "#92400E" : "#0F172A", outline:"none" }}/>
+                                    )}
+                                  </span>
+                                )}
+                                <span style={{ color:"#64748B" }}>Total <strong style={{ color:COL_GREEN }}>Rs.{inrIN(cat.total)}</strong></span>
+                              </div>
+                            </div>
+
+                            {/* Items */}
+                            {!catCollapsed && (
+                              <table style={{ width:"100%", borderCollapse:"collapse" }}>
+                                <thead>
+                                  <tr style={{ background:"#FAFAFA" }}>
+                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>Item</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase", width:100 }}>Base</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_AMBER, textTransform:"uppercase", width:100 }}>Add-on</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"left", fontSize:10, fontWeight:700, color:"#64748B", textTransform:"uppercase" }}>Description</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_TEAL, textTransform:"uppercase", width:70 }}>Area</th>
+                                    <th style={{ padding:"7px 12px", textAlign:"right", fontSize:10, fontWeight:700, color:COL_GREEN, textTransform:"uppercase", width:110 }}>Total</th>
+                                    <th style={{ width:36 }}/>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {cat.items.length === 0 && (
+                                    <tr><td colSpan={7} style={{ padding:"12px", textAlign:"center", color:"#9CA3AF", fontSize:12 }}>No items.</td></tr>
+                                  )}
+                                  {cat.items.map((it, idx) => {
+                                    // Look up master item name from boqItems? We don't have it here.
+                                    // Instead use the pcr row's item_id mapping — we'd need to join.
+                                    // Pull name from pkgItems master rows via a quick find.
+                                    const pcr = (pkgItems[sec.id] || []).find(p => p.item_id === it.item_id) || {};
+                                    const itemName = pcr.item_name || pcr.name || ("Item #" + it.item_id);
+                                    const itemUnit = pcr.unit || "—";
+                                    const overrideEntry = measurements.sections[sec.id]?.categories?.[cat.id]?.items?.[it.item_id] || {};
+                                    const baseVal  = isSet(overrideEntry.base_rate_override)   ? overrideEntry.base_rate_override   : "";
+                                    const addOnVal = isSet(overrideEntry.add_on_override)      ? overrideEntry.add_on_override      : "";
+                                    const descVal  = isSet(overrideEntry.description_override) ? overrideEntry.description_override : "";
+                                    return (
+                                      <tr key={it.item_id} style={{ background: it.hasOverride ? "#FFFBEB" : (idx % 2 === 0 ? "white" : "#FAFAFA"), borderBottom:"1px solid #F3F4F6" }}>
+                                        <td style={{ padding:"8px 12px", fontWeight:600, fontSize:12.5, color:"#0F172A" }}>
+                                          {itemName}
+                                          {it.hasOverride && (
+                                            <span style={{ marginLeft:6, padding:"1px 6px", fontSize:9.5, fontWeight:700, background:COL_AMBER, color:"white", borderRadius:3 }}>EDITED</span>
+                                          )}
+                                          <div style={{ fontSize:10, color:"#94A3B8", marginTop:1 }}>{itemUnit}</div>
+                                        </td>
+                                        <td style={{ padding:"8px 12px", textAlign:"right" }}>
+                                          {canEdit ? (
+                                            <input type="number" value={baseVal} placeholder={String(it.masterBase)}
+                                              onChange={e => patchItem(sec.id, cat.id, it.item_id, { base_rate_override: e.target.value === "" ? null : e.target.value })}
+                                              title={`Master: Rs.${inrIN(it.masterBase)} · leave blank to use master`}
+                                              style={{ width:90, padding:"5px 7px", borderRadius:5, textAlign:"right", fontFamily:"inherit", fontSize:12.5,
+                                                       border:"1.5px solid " + (baseVal !== "" ? COL_AMBER : "#E5E7EB"),
+                                                       background: baseVal !== "" ? "#FFFBEB" : "white", outline:"none",
+                                                       color: baseVal !== "" ? "#92400E" : "#0F172A", fontWeight: baseVal !== "" ? 700 : 500 }}/>
+                                          ) : (
+                                            <span style={{ fontSize:12.5, fontWeight:600 }}>{inrIN(it.base)}</span>
+                                          )}
+                                        </td>
+                                        <td style={{ padding:"8px 12px", textAlign:"right" }}>
+                                          {canEdit ? (
+                                            <input type="number" value={addOnVal} placeholder={String(it.masterAddOn)}
+                                              onChange={e => patchItem(sec.id, cat.id, it.item_id, { add_on_override: e.target.value === "" ? null : e.target.value })}
+                                              title={`Master: Rs.${inrIN(it.masterAddOn)} · leave blank to use master`}
+                                              style={{ width:90, padding:"5px 7px", borderRadius:5, textAlign:"right", fontFamily:"inherit", fontSize:12.5,
+                                                       border:"1.5px solid " + (addOnVal !== "" ? COL_AMBER : "#E5E7EB"),
+                                                       background: addOnVal !== "" ? "#FFFBEB" : "white", outline:"none",
+                                                       color: COL_AMBER, fontWeight: addOnVal !== "" ? 700 : 500 }}/>
+                                          ) : (
+                                            <span style={{ fontSize:12.5, fontWeight:600, color:COL_AMBER }}>{inrIN(it.addOn)}</span>
+                                          )}
+                                        </td>
+                                        <td style={{ padding:"8px 12px" }}>
+                                          {canEdit ? (
+                                            <input type="text" value={descVal} placeholder={it.masterDesc || "Optional"}
+                                              onChange={e => patchItem(sec.id, cat.id, it.item_id, { description_override: e.target.value || null })}
+                                              title={it.masterDesc ? `Master: ${it.masterDesc}` : "Leave blank to use master"}
+                                              style={{ width:"100%", padding:"5px 9px", borderRadius:5, fontFamily:"inherit", fontSize:11.5,
+                                                       border:"1.5px solid " + (descVal ? COL_AMBER : "#E5E7EB"),
+                                                       background: descVal ? "#FFFBEB" : "white", outline:"none", boxSizing:"border-box" }}/>
+                                          ) : (
+                                            <span style={{ fontSize:11.5, color:"#475569" }}>{it.desc || "—"}</span>
+                                          )}
+                                        </td>
+                                        {/* Area / Qty column. Per-item mode + editable: amber qty input
+                                            for THIS quote (stored as qty_override in measurements).
+                                            Uniform mode: shows category/section area. */}
+                                        <td style={{ padding:"8px 12px", textAlign:"right", fontSize:12, color:COL_TEAL, fontWeight:600 }}>
+                                          {secPerItem && !readOnly ? (
+                                            (() => {
+                                              const itOv = measurements.sections[sec.id]?.categories?.[cat.id]?.items?.[it.item_id] || {};
+                                              const qVal = isSet(itOv.qty_override) ? String(itOv.qty_override) : "";
+                                              return (
+                                                <input type="number" value={qVal}
+                                                  onChange={e => patchItemQtyOverride(sec.id, cat.id, it.item_id, e.target.value)}
+                                                  placeholder={String(it.masterQty || 0)}
+                                                  title={`Master qty: ${it.masterQty || 0} — leave blank to use master`}
+                                                  style={{ width:70, padding:"5px 7px", borderRadius:5, textAlign:"right",
+                                                           fontFamily:"inherit", fontSize:12.5,
+                                                           border:"1.5px solid " + (qVal ? COL_AMBER : "#E5E7EB"),
+                                                           background: qVal ? "#FFFBEB" : "white", outline:"none",
+                                                           color: COL_TEAL, fontWeight: 700 }}/>
+                                              );
+                                            })()
+                                          ) : (
+                                            inrIN(it.qty != null ? it.qty : cat.area)
+                                          )}
+                                        </td>
+                                        <td style={{ padding:"8px 12px", textAlign:"right", fontSize:13, fontWeight:700, color:COL_GREEN }}>
+                                          Rs.{inrIN(it.total)}
+                                        </td>
+                                        <td style={{ padding:"8px 6px", textAlign:"center" }}>
+                                          {it.hasOverride && canEdit && (
+                                            <button onClick={() => resetItemRow(sec.id, cat.id, it.item_id)}
+                                              title="Reset to master rates"
+                                              style={{ background:"transparent", border:"1px solid #E5E7EB", color:"#64748B", borderRadius:4, width:22, height:22, fontSize:11, cursor:"pointer" }}>
+                                              ↺
+                                            </button>
+                                          )}
+                                        </td>
+                                      </tr>
+                                    );
+                                  })}
+                                </tbody>
+                              </table>
+                            )}
+                            {/* + Add Item per category — only in edit mode */}
+                            {!catCollapsed && canEdit && (
+                              <div style={{ padding:"7px 12px", borderTop:"1px solid #F3F4F6", background:"#FAFAFA" }}>
+                                <button onClick={() => openAddItem(sec, cat)}
+                                  style={{ background:"transparent", border:"1px dashed #BFDBFE",
+                                           color: COL_BLUE, borderRadius:5,
+                                           padding:"4px 11px", fontSize:11, fontWeight:700, cursor:"pointer" }}>
+                                  + Add Item to {cat.name}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {/* + Add Category at section bottom — only in edit mode */}
+                      {canEdit && (
+                        <div style={{ paddingTop:6, textAlign:"right" }}>
+                          <button onClick={() => openAddCat(sec)}
+                            style={{ background:"white", border:"1px dashed #94A3B8",
+                                     color:"#475569", borderRadius:6,
+                                     padding:"5px 13px", fontSize:11.5, fontWeight:700, cursor:"pointer" }}>
+                            + Add Category
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+
+            {/* Grand Total bar */}
+            {breakdown.sections.length > 0 && (
+              <div style={{ marginTop:10, padding:"14px 20px", background:COL_DARK, color:"white",
+                            borderRadius:10, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                <span style={{ fontSize:13, fontWeight:700, textTransform:"uppercase", letterSpacing:".4px", color:"rgba(255,255,255,0.7)" }}>
+                  Grand Total
+                </span>
+                <span style={{ fontSize:20, fontWeight:700, color:COL_TEAL_BG }}>
+                  Rs.{inrIN(breakdown.grandTotal)}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* ─── FOOTER ─────────────────────────────────────────── */}
+      {step === "build" && (
+        <div style={{ borderTop:"1px solid #E5E7EB", background:"white",
+                      padding:"12px 24px", display:"flex", gap:8, alignItems:"center" }}>
+          {!editQuoteId && !quoteId && (
+            <button onClick={() => setStep("package")} disabled={saving || sendingStage}
+              style={{ padding:"9px 16px", borderRadius:7, border:"1px solid #D1D5DB", background:"white",
+                       fontSize:12.5, color:"#475569", fontWeight:600, cursor:(saving||sendingStage)?"not-allowed":"pointer" }}>
+              ← Back to Packages
+            </button>
+          )}
+          <div style={{ marginLeft:"auto", display:"flex", gap:8, alignItems:"center" }}>
+            {/* PDF download + WhatsApp share — only when quote saved */}
+            {quoteId && (
+              <button onClick={() => downloadQuotePdf(quoteId, quoteNo)}
+                title="Download as PDF"
+                style={{ padding:"9px 14px", borderRadius:7, background:"white", border:"1.5px solid #94A3B8",
+                         fontSize:12.5, fontWeight:700, color:"#334155", cursor:"pointer",
+                         display:"flex", alignItems:"center", gap:6 }}>
+                📄 Download PDF
+              </button>
+            )}
+            {quoteId && lead.phone && (
+              <button onClick={() => {
+                  const phone = (lead.phone || "").replace(/\D/g, "");
+                  if (!phone) return;
+                  const firstName = (lead.name || "").split(" ")[0] || "Sir/Ma'am";
+                  const total = "₹" + Math.round(Number(breakdown.grandTotal) || Number(savedGrandTotal) || 0).toLocaleString("en-IN");
+                  const msg = [
+                    `Namaskar ${firstName} ji 🙏`, ``,
+                    `Aapka quotation taiyar hai:`,
+                    `• Quote No: *${quoteNo}*`,
+                    `• Package: ${selectedPackage?.name || ""}`,
+                    `• Grand Total: *${total}*`,
+                    `• Validity: ${validity || 30} days`, ``,
+                    `PDF aapko alag se share karta hu. Kripya review karein aur apne vichar batayein.`, ``,
+                    `— GB Buildcon`,
+                  ].join("\n");
+                  const intl = phone.length === 10 ? "91" + phone : phone;
+                  window.open("https://wa.me/" + intl + "?text=" + encodeURIComponent(msg), "_blank");
+                }}
+                title="Share via WhatsApp"
+                style={{ padding:"9px 14px", borderRadius:7, background:"#F0FDF4", border:"1.5px solid #86EFAC",
+                         fontSize:12.5, fontWeight:700, color:"#166534", cursor:"pointer",
+                         display:"flex", alignItems:"center", gap:6 }}>
+                📱 WhatsApp
+              </button>
+            )}
+            <button onClick={onClose} disabled={saving || sendingStage}
+              style={{ padding:"9px 18px", borderRadius:7, background:"#F8FAFC", border:"1px solid #D1D5DB",
+                       fontSize:12.5, fontWeight:600, color:"#374151", cursor:(saving||sendingStage)?"not-allowed":"pointer" }}>
+              Cancel
+            </button>
+            {!readOnly && (
+              <>
+                <button onClick={saveDraft} disabled={!canSave}
+                  style={{ padding:"9px 18px", borderRadius:7, background: canSave ? "white" : "#F1F5F9",
+                           border:"1.5px solid " + (canSave ? COL_BLUE : "#D1D5DB"),
+                           color: canSave ? COL_BLUE : "#9CA3AF",
+                           fontSize:12.5, fontWeight:700, cursor: canSave ? "pointer" : "not-allowed" }}>
+                  {saving ? "Saving…" : "Save Draft"}
+                </button>
+                <button onClick={saveAndSend} disabled={!canSave}
+                  style={{ padding:"9px 22px", borderRadius:7,
+                           background: canSave ? COL_BLUE : "#9CA3AF",
+                           color:"white", border:"none", fontSize:12.5, fontWeight:700,
+                           cursor: canSave ? "pointer" : "not-allowed" }}>
+                  {sendingStage ? "Sending…" : "Save & Send"}
+                </button>
+              </>
+            )}
+            {readOnly && (
+              <span style={{ padding:"9px 18px", fontSize:12, color:"#64748B" }}>
+                This quote is <strong>{status}</strong>. Read-only.
+              </span>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          EDIT PACKAGE MODAL — basics only (name + sqft_rate + description).
+          For deep edits (sections / items / category renames) use Library.
+      ═══════════════════════════════════════════════════════════════ */}
+      {pkgEditOpen && (
+        <>
+          <div onClick={() => !pkgEditSaving && setPkgEditOpen(false)}
+            style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", zIndex:920 }}/>
+          <div onClick={e => e.stopPropagation()}
+            style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)",
+                     width:"min(460px,95vw)", background:"white", borderRadius:12, zIndex:921,
+                     boxShadow:"0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ background:COL_DARK, padding:"13px 18px", borderRadius:"12px 12px 0 0",
+                          display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>Edit Package</div>
+                <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>
+                  Changes save to library — affects future quotes too
+                </div>
+              </div>
+              <button onClick={() => !pkgEditSaving && setPkgEditOpen(false)}
+                style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
+            </div>
+            <div style={{ padding:18 }}>
+              <div style={{ marginBottom:10 }}>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Name *</label>
+                <input autoFocus value={pkgEditForm.name || ""}
+                  onChange={e => setPkgEditForm(p => ({ ...p, name: e.target.value }))}
+                  style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
+                           fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+              </div>
+              <div style={{ marginBottom:10 }}>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Per-sqft Rate (Rs.)</label>
+                <input type="number" value={pkgEditForm.sqft_rate ?? 0}
+                  onChange={e => setPkgEditForm(p => ({ ...p, sqft_rate: e.target.value }))}
+                  style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
+                           fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"right" }}/>
+              </div>
+              <div>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Description</label>
+                <input value={pkgEditForm.description || ""}
+                  onChange={e => setPkgEditForm(p => ({ ...p, description: e.target.value }))}
+                  placeholder="Optional"
+                  style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
+                           fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+              </div>
+            </div>
+            <div style={{ padding:"12px 16px", borderTop:"1px solid #E5E7EB", display:"flex", gap:8, background:"#F9FAFB" }}>
+              <button onClick={() => !pkgEditSaving && setPkgEditOpen(false)} disabled={pkgEditSaving}
+                style={{ flex:1, padding:"9px", borderRadius:6, border:"1px solid #D1D5DB",
+                         background:"white", fontSize:13, color:"#374151", cursor: pkgEditSaving ? "not-allowed":"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={saveEditPkg} disabled={pkgEditSaving || !pkgEditForm.name?.trim()}
+                style={{ flex:2, padding:"9px", borderRadius:6,
+                         background:(pkgEditSaving||!pkgEditForm.name?.trim())?"#9CA3AF":COL_BLUE,
+                         color:"white", border:"none", fontSize:13, fontWeight:700,
+                         cursor:(pkgEditSaving||!pkgEditForm.name?.trim())?"not-allowed":"pointer" }}>
+                {pkgEditSaving ? "Saving…" : "Save"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          ADD SECTION MODAL (centered)
+      ═══════════════════════════════════════════════════════════════ */}
+      {addSecModal && (
+        <>
+          <div onClick={() => !addSecSaving && setAddSecModal(false)}
+            style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)", zIndex:920 }}/>
+          <div onClick={e => e.stopPropagation()}
+            style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)",
+                     width:"min(460px,95vw)", background:"white", borderRadius:12, zIndex:921,
+                     boxShadow:"0 24px 64px rgba(0,0,0,0.35)" }}>
+            <div style={{ background:COL_DARK, padding:"13px 18px", borderRadius:"12px 12px 0 0",
+                          display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+              <div>
+                <div style={{ fontSize:14, fontWeight:700, color:"white" }}>Add Section</div>
+                <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>
+                  Saves to library. Package: {selectedPackage?.name}
+                </div>
+              </div>
+              <button onClick={() => !addSecSaving && setAddSecModal(false)}
+                style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
+            </div>
+            <div style={{ padding:18 }}>
+              <div style={{ marginBottom:10 }}>
+                <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Name *</label>
+                <input autoFocus value={addSecForm.name}
+                  onChange={e => setAddSecForm(p => ({ ...p, name: e.target.value }))}
+                  placeholder="e.g. Ground Floor, Other Civil Work"
+                  style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
+                           fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box" }}/>
+              </div>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+                <div>
+                  <label style={{ fontSize:10, fontWeight:700, color:COL_TEAL, display:"block", marginBottom:3, textTransform:"uppercase" }}>Area / Qty</label>
+                  <input type="number" value={addSecForm.default_qty}
+                    onChange={e => setAddSecForm(p => ({ ...p, default_qty: e.target.value }))}
+                    placeholder="0"
+                    style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid " + COL_TEAL_BG,
+                             fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", textAlign:"right", background:"#F0FDFA" }}/>
+                </div>
+                <div>
+                  <label style={{ fontSize:10, fontWeight:700, color:"#6B7280", display:"block", marginBottom:3, textTransform:"uppercase" }}>Unit</label>
+                  <select value={addSecForm.unit}
+                    onChange={e => setAddSecForm(p => ({ ...p, unit: e.target.value }))}
+                    style={{ width:"100%", padding:"8px 11px", borderRadius:6, border:"1.5px solid #D1D5DB",
+                             fontSize:13, fontFamily:"inherit", outline:"none", boxSizing:"border-box", background:"white" }}>
+                    <option value="sqft">sqft</option>
+                    <option value="lump_sum">lump sum</option>
+                    <option value="rft">rft</option>
+                    <option value="nos">nos</option>
+                    <option value="cubic_ft">cubic ft</option>
+                  </select>
+                </div>
+              </div>
+              {/* Per-item qty toggle */}
+              <div style={{ padding:"9px 11px", background: addSecForm.per_item_qty ? "#FFFBEB" : "#F9FAFB",
+                            border:"1.5px solid " + (addSecForm.per_item_qty ? "#FCD34D" : "#E5E7EB"),
+                            borderRadius:6, cursor:"pointer", userSelect:"none" }}
+                onClick={() => setAddSecForm(p => ({ ...p, per_item_qty: !p.per_item_qty }))}>
+                <label style={{ display:"flex", alignItems:"center", gap:9, cursor:"pointer" }}>
+                  <input type="checkbox" checked={!!addSecForm.per_item_qty} onChange={() => {}}
+                    style={{ width:15, height:15, cursor:"pointer", flexShrink:0 }}/>
+                  <div>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:"#0F172A" }}>
+                      Per-item quantity {addSecForm.per_item_qty ? "(ON)" : "(OFF — uniform area)"}
+                    </div>
+                    <div style={{ fontSize:10, color:"#6B7280", marginTop:1 }}>
+                      Each item has its own qty. Best for mixed sections like Other Civil Work.
+                    </div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <div style={{ padding:"12px 16px", borderTop:"1px solid #E5E7EB", display:"flex", gap:8, background:"#F9FAFB" }}>
+              <button onClick={() => !addSecSaving && setAddSecModal(false)} disabled={addSecSaving}
+                style={{ flex:1, padding:"9px", borderRadius:6, border:"1px solid #D1D5DB",
+                         background:"white", fontSize:13, color:"#374151", cursor: addSecSaving?"not-allowed":"pointer" }}>
+                Cancel
+              </button>
+              <button onClick={saveAddSec} disabled={addSecSaving || !addSecForm.name?.trim()}
+                style={{ flex:2, padding:"9px", borderRadius:6,
+                         background:(addSecSaving||!addSecForm.name?.trim())?"#9CA3AF":COL_BLUE,
+                         color:"white", border:"none", fontSize:13, fontWeight:700,
+                         cursor:(addSecSaving||!addSecForm.name?.trim())?"not-allowed":"pointer" }}>
+                {addSecSaving ? "Adding…" : "Add Section"}
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          ADD CATEGORY DRAWER (right slide-over, multi-pick + create new)
+      ═══════════════════════════════════════════════════════════════ */}
+      {addCatDrawer && (() => {
+        const alreadyInSection = new Set(
+          pkgCategories.filter(c => c.structure_id === addCatDrawer.structure_id).map(c => c.category_name)
+        );
+        return (
+          <>
+            <div onClick={() => !addCatSaving && setAddCatDrawer(null)}
+              style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.45)", zIndex:920 }}/>
+            <div onClick={e => e.stopPropagation()}
+              style={{ position:"fixed", top:0, right:0, bottom:0, width:"min(400px,95vw)",
+                       background:"white", zIndex:921, boxShadow:"-12px 0 32px rgba(0,0,0,0.18)",
+                       display:"flex", flexDirection:"column" }}>
+              <div style={{ background:COL_DARK, padding:"13px 16px", color:"white",
+                            display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700 }}>Add Category</div>
+                  <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1 }}>Section: {addCatDrawer.section_name}</div>
+                </div>
+                <button onClick={() => !addCatSaving && setAddCatDrawer(null)}
+                  style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
+              </div>
+              <div style={{ flex:1, overflowY:"auto", padding:12 }}>
+                {allWorkCats.map(c => {
+                  const exists = alreadyInSection.has(c.name);
+                  const pickIdx = addCatPicks.indexOf(c.id);
+                  const isPicked = pickIdx >= 0;
+                  return (
+                    <label key={c.id}
+                      style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 10px", borderRadius:6,
+                               cursor: exists ? "not-allowed" : "pointer",
+                               background: exists ? "#F3F4F6" : (isPicked ? "#EFF6FF" : "white"),
+                               border: "1px solid " + (isPicked ? "#BFDBFE" : "#E5E7EB"),
+                               marginBottom:5, opacity: exists ? 0.55 : 1 }}>
+                      <input type="checkbox" disabled={exists} checked={isPicked}
+                        onChange={() => toggleCatPick(c.id)}
+                        style={{ width:16, height:16 }}/>
+                      {isPicked && (
+                        <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center",
+                                       width:20, height:20, borderRadius:"50%", background:COL_BLUE,
+                                       color:"white", fontSize:10.5, fontWeight:700, flexShrink:0 }}>
+                          {pickIdx + 1}
+                        </span>
+                      )}
+                      <span style={{ flex:1 }}>
+                        <span style={{ fontSize:12.5, fontWeight:600, color:"#0F172A" }}>{c.name}</span>
+                        {exists && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>(already added)</span>}
+                      </span>
+                    </label>
+                  );
+                })}
+                <div style={{ marginTop:12, paddingTop:12, borderTop:"1px dashed #E5E7EB" }}>
+                  {addCatNewForm === null ? (
+                    <button onClick={() => setAddCatNewForm({ name:"", code:"", desc:"" })}
+                      style={{ width:"100%", padding:"8px 12px", background:"#F0FDF4",
+                               border:"1px dashed #10B981", color:"#10B981",
+                               borderRadius:6, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                      + Create new category
+                    </button>
+                  ) : (
+                    <div style={{ padding:10, background:"#F9FAFB", borderRadius:6, border:"1px solid #E5E7EB" }}>
+                      <input autoFocus value={addCatNewForm.name}
+                        onChange={e => setAddCatNewForm(p => ({ ...p, name: e.target.value }))}
+                        placeholder="Name"
+                        style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
+                                 fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
+                      <input value={addCatNewForm.code}
+                        onChange={e => setAddCatNewForm(p => ({ ...p, code: e.target.value.toUpperCase() }))}
+                        placeholder="Code (optional)"
+                        style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
+                                 fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={() => setAddCatNewForm(null)}
+                          style={{ flex:1, padding:6, borderRadius:5, background:"white",
+                                   border:"1px solid #D1D5DB", fontSize:11.5, color:"#6B7280", cursor:"pointer" }}>
+                          Cancel
+                        </button>
+                        <button onClick={createAndAddCat} disabled={addCatSaving || !addCatNewForm.name?.trim()}
+                          style={{ flex:2, padding:6, borderRadius:5,
+                                   background: (addCatSaving||!addCatNewForm.name?.trim())?"#9CA3AF":"#10B981",
+                                   color:"white", border:"none", fontSize:11.5, fontWeight:700,
+                                   cursor: (addCatSaving||!addCatNewForm.name?.trim())?"not-allowed":"pointer" }}>
+                          {addCatSaving ? "Saving…" : "Create + Add"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ padding:"12px 14px", borderTop:"1px solid #E5E7EB", display:"flex", gap:8 }}>
+                <button onClick={() => !addCatSaving && setAddCatDrawer(null)} disabled={addCatSaving}
+                  style={{ flex:1, padding:"8px", borderRadius:6, border:"1px solid #D1D5DB",
+                           background:"white", fontSize:12, color:"#374151", cursor: addCatSaving?"not-allowed":"pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={confirmAddCat} disabled={addCatSaving || addCatPicks.length === 0}
+                  style={{ flex:2, padding:"8px", borderRadius:6,
+                           background:(addCatSaving||addCatPicks.length===0)?"#9CA3AF":COL_BLUE,
+                           color:"white", border:"none", fontSize:12, fontWeight:700,
+                           cursor:(addCatSaving||addCatPicks.length===0)?"not-allowed":"pointer" }}>
+                  {addCatSaving ? "Adding…" : `Add Selected (${addCatPicks.length})`}
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
+      {/* ═══════════════════════════════════════════════════════════════
+          ADD ITEM DRAWER (right slide-over, items grouped by master cat)
+      ═══════════════════════════════════════════════════════════════ */}
+      {addItemDrawer && (() => {
+        const sid = addItemDrawer.structure_id;
+        const alreadyHere = new Set((pkgItems[sid] || []).map(r => r.item_id));
+        const q = addItemSearch.trim().toLowerCase();
+        const filtered = allBoqItems.filter(i =>
+          !q || (i.name || "").toLowerCase().includes(q) || (i.category || "").toLowerCase().includes(q)
+        );
+        const grouped = filtered.reduce((acc, i) => {
+          const k = i.category || "Uncategorized";
+          (acc[k] ||= []).push(i);
+          return acc;
+        }, {});
+        return (
+          <>
+            <div onClick={() => !addItemSaving && setAddItemDrawer(null)}
+              style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.45)", zIndex:920 }}/>
+            <div onClick={e => e.stopPropagation()}
+              style={{ position:"fixed", top:0, right:0, bottom:0, width:"min(480px,95vw)",
+                       background:"white", zIndex:921, boxShadow:"-12px 0 32px rgba(0,0,0,0.18)",
+                       display:"flex", flexDirection:"column" }}>
+              <div style={{ background:COL_DARK, padding:"13px 16px", color:"white",
+                            display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:14, fontWeight:700 }}>Add Item</div>
+                  <div style={{ fontSize:10.5, color:"rgba(255,255,255,0.55)", marginTop:1,
+                                whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
+                    {addItemDrawer.section_name} › {addItemDrawer.category_name}
+                  </div>
+                </div>
+                <button onClick={() => !addItemSaving && setAddItemDrawer(null)}
+                  style={{ background:"none", border:"none", color:"rgba(255,255,255,0.5)", fontSize:22, cursor:"pointer", lineHeight:1 }}>×</button>
+              </div>
+              <div style={{ padding:"10px 14px", borderBottom:"1px solid #E5E7EB", background:"#F9FAFB" }}>
+                <input value={addItemSearch}
+                  onChange={e => setAddItemSearch(e.target.value)}
+                  placeholder="Search items…"
+                  style={{ width:"100%", padding:"7px 11px", borderRadius:6,
+                           border:"1.5px solid #E5E7EB", fontSize:12.5, outline:"none",
+                           fontFamily:"inherit", boxSizing:"border-box" }}/>
+              </div>
+              <div style={{ flex:1, overflowY:"auto", padding:"8px 0" }}>
+                {Object.entries(grouped).sort((a,b) => a[0].localeCompare(b[0])).map(([catName, items]) => (
+                  <div key={catName} style={{ marginBottom:4 }}>
+                    <div style={{ padding:"6px 14px", fontSize:10.5, fontWeight:700,
+                                  color:"#6B7280", textTransform:"uppercase",
+                                  background:"#F3F4F6", letterSpacing:".4px" }}>
+                      {catName} <span style={{ color:"#9CA3AF" }}>· {items.length}</span>
+                    </div>
+                    {items.map(i => {
+                      const here = alreadyHere.has(i.id);
+                      const pickIdx = addItemPicks.indexOf(i.id);
+                      const isPicked = pickIdx >= 0;
+                      return (
+                        <label key={i.id}
+                          style={{ display:"flex", alignItems:"center", gap:10,
+                                   padding:"8px 14px", cursor: here ? "not-allowed" : "pointer",
+                                   background: here ? "#F9FAFB" : (isPicked ? "#EFF6FF" : "white"),
+                                   borderBottom:"1px solid #F3F4F6",
+                                   opacity: here ? 0.55 : 1 }}>
+                          <input type="checkbox" disabled={here} checked={isPicked}
+                            onChange={() => toggleItemPick(i.id)}
+                            style={{ width:16, height:16 }}/>
+                          {isPicked && (
+                            <span style={{ display:"inline-flex", alignItems:"center", justifyContent:"center",
+                                           width:20, height:20, borderRadius:"50%", background:COL_BLUE,
+                                           color:"white", fontSize:10.5, fontWeight:700, flexShrink:0 }}>
+                              {pickIdx + 1}
+                            </span>
+                          )}
+                          <span style={{ flex:1, minWidth:0 }}>
+                            <div style={{ fontSize:12.5, fontWeight:600, color:"#0F172A" }}>
+                              {i.name}{here && <span style={{ marginLeft:8, fontSize:10, color:"#9CA3AF" }}>(already here)</span>}
+                            </div>
+                            <div style={{ fontSize:10.5, color:"#64748B", marginTop:1 }}>
+                              base Rs.{inrIN(i.base_rate)} · {i.unit}
+                            </div>
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                ))}
+                <div style={{ padding:"12px 14px", borderTop:"1px dashed #E5E7EB", marginTop:8 }}>
+                  {addItemNewForm === null ? (
+                    <button onClick={() => setAddItemNewForm({ name:"", unit:"Sq.Ft", category: addItemDrawer.category_name, base_rate:0 })}
+                      style={{ width:"100%", padding:"8px 12px", background:"#F0FDF4",
+                               border:"1px dashed #10B981", color:"#10B981",
+                               borderRadius:6, fontSize:12, fontWeight:700, cursor:"pointer" }}>
+                      + Create new item
+                    </button>
+                  ) : (
+                    <div style={{ padding:10, background:"#F9FAFB", borderRadius:6, border:"1px solid #E5E7EB" }}>
+                      <input autoFocus value={addItemNewForm.name}
+                        onChange={e => setAddItemNewForm(p => ({ ...p, name: e.target.value }))}
+                        placeholder="Item name"
+                        style={{ width:"100%", padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB",
+                                 fontSize:12, marginBottom:6, outline:"none", fontFamily:"inherit", boxSizing:"border-box" }}/>
+                      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:6, marginBottom:6 }}>
+                        <select value={addItemNewForm.unit}
+                          onChange={e => setAddItemNewForm(p => ({ ...p, unit: e.target.value }))}
+                          style={{ padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB", fontSize:12, fontFamily:"inherit", background:"white" }}>
+                          {(allUoms.length > 0 ? allUoms.map(u => u.name) : ["Sq.Ft","Nos","Lump Sum","Running Ft","Kg","Point","Unit"]).map(u => <option key={u} value={u}>{u}</option>)}
+                        </select>
+                        <input type="number" value={addItemNewForm.base_rate}
+                          onChange={e => setAddItemNewForm(p => ({ ...p, base_rate: e.target.value }))}
+                          placeholder="Base rate"
+                          style={{ padding:"6px 9px", borderRadius:5, border:"1.5px solid #D1D5DB", fontSize:12, fontFamily:"inherit", textAlign:"right", boxSizing:"border-box" }}/>
+                      </div>
+                      <div style={{ display:"flex", gap:6 }}>
+                        <button onClick={() => setAddItemNewForm(null)}
+                          style={{ flex:1, padding:6, borderRadius:5, background:"white",
+                                   border:"1px solid #D1D5DB", fontSize:11.5, color:"#6B7280", cursor:"pointer" }}>
+                          Cancel
+                        </button>
+                        <button onClick={createAndAddItem} disabled={addItemSaving || !addItemNewForm.name?.trim()}
+                          style={{ flex:2, padding:6, borderRadius:5,
+                                   background:(addItemSaving||!addItemNewForm.name?.trim())?"#9CA3AF":"#10B981",
+                                   color:"white", border:"none", fontSize:11.5, fontWeight:700,
+                                   cursor:(addItemSaving||!addItemNewForm.name?.trim())?"not-allowed":"pointer" }}>
+                          {addItemSaving ? "Saving…" : "Create + Add"}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div style={{ padding:"12px 14px", borderTop:"1px solid #E5E7EB", display:"flex", gap:8 }}>
+                <button onClick={() => !addItemSaving && setAddItemDrawer(null)} disabled={addItemSaving}
+                  style={{ flex:1, padding:"8px", borderRadius:6, border:"1px solid #D1D5DB",
+                           background:"white", fontSize:12, color:"#374151", cursor: addItemSaving?"not-allowed":"pointer" }}>
+                  Cancel
+                </button>
+                <button onClick={confirmAddItems} disabled={addItemSaving || addItemPicks.length === 0}
+                  style={{ flex:2, padding:"8px", borderRadius:6,
+                           background:(addItemSaving||addItemPicks.length===0)?"#9CA3AF":COL_BLUE,
+                           color:"white", border:"none", fontSize:12, fontWeight:700,
+                           cursor:(addItemSaving||addItemPicks.length===0)?"not-allowed":"pointer" }}>
+                  {addItemSaving ? "Adding…" : `Add Selected (${addItemPicks.length})`}
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+    </div>
+  );
+}
+
 // ── ADD LEAD MODAL ───────────────────────────────────────────────
+// Phase 4: City + Construction Type are library-sourced dropdowns,
+// OPTIONAL at this stage (fresh leads often arrive with just name +
+// phone). They become MANDATORY when the lead is moved to "Follow Up"
+// or beyond — that guard lives in the Move-Stage flow. The lead row
+// stores both FK ids (cityId, constructionTypeId) AND the legacy
+// text columns (city, projType) so older reports keep working.
 function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
   const ASSIGNED_TO=assignedToList||[];
-  const [form,setForm]=useState({name:"",phone:"",email:"",city:"",projType:"Residential",budget:"",source:"Direct Call",assignedTo:ASSIGNED_TO[0]||"",stage:defaultStage||"lead",priority:"Medium",contactDate:"",notes:"",tags:""});
+  const [form,setForm]=useState({
+    name:"", phone:"", email:"",
+    city:"", cityId:"",
+    projType:"", constructionTypeId:"",
+    budget:"", source:"Direct Call",
+    assignedTo:ASSIGNED_TO[0]||"", stage:defaultStage||"lead",
+    priority:"Medium", contactDate:"", notes:"", tags:""
+  });
   const [show,setShow]=useState(false);
   const upd=(k)=>e=>setForm(p=>({...p,[k]:e.target.value}));
+
+  // Library lookups for city + construction-type dropdowns.
+  const [libCities, setLibCities] = useState([]);
+  const [libCTypes, setLibCTypes] = useState([]);
+  useEffect(() => {
+    (async () => {
+      try {
+        const [cr, tr] = await Promise.all([
+          api.get("/library/cities"),
+          api.get("/library/construction-types"),
+        ]);
+        if (cr?.success) setLibCities(cr.data || []);
+        if (tr?.success) setLibCTypes(tr.data || []);
+      } catch (_) {}
+    })();
+  }, []);
+
+  // Helpers — keep id + name in sync.
+  const pickCity = (cid) => {
+    const c = libCities.find(x => String(x.id) === String(cid));
+    setForm(p => ({ ...p, cityId: cid || "", city: c?.name || "" }));
+  };
+  const pickCType = (tid) => {
+    const t = libCTypes.find(x => String(x.id) === String(tid));
+    setForm(p => ({ ...p, constructionTypeId: tid || "", projType: t?.name || "" }));
+  };
+
   const FIELDS=[
     {l:"Full Name *",k:"name",type:"input",ph:"Client full name",col:2},
     {l:"Phone *",k:"phone",type:"input",ph:"10-digit mobile",col:1},
     {l:"Email",k:"email",type:"input",ph:"email@gmail.com",col:1},
-    {l:"City",k:"city",type:"input",ph:"Raipur, Durg...",col:1},
     {l:"Budget (₹)",k:"budget",type:"number",ph:"e.g. 3500000",col:1},
-    {l:"Project Type",k:"projType",type:"select",opts:PROJ_TYPES,col:1},
     {l:"Lead Source",k:"source",type:"select",opts:SOURCES,col:1},
     {l:"Assigned To",k:"assignedTo",type:"select",opts:ASSIGNED_TO,col:1},
     {l:"Initial Stage",k:"stage",type:"select",opts:STAGES.map(s=>s.id),col:1},
     {l:"Priority",k:"priority",type:"select",opts:["High","Medium","Low"],col:1},
   ];
+
+  // Required gates — only name + phone are mandatory at fresh-lead time.
+  // City + Construction Type are enforced when moving to Follow Up or beyond.
+  const canSave = form.name.trim() && form.phone.trim();
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(560px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -850,7 +3073,42 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
               }
             </div>
           ))}
+
+          {/* ── City — library-sourced, optional at lead-creation ── */}
+          <div>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
+              City
+            </label>
+            <select value={form.cityId} onChange={e => pickCity(e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,
+                      border:`1.5px solid ${T.b1}`, background:T.surface,
+                      fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+              <option value="">Select city (optional)...</option>
+              {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+
+          {/* ── Construction Type — library-sourced, optional at lead-creation ── */}
+          <div>
+            <label style={{fontSize:10,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>
+              Construction Type
+            </label>
+            <select value={form.constructionTypeId} onChange={e => pickCType(e.target.value)}
+              style={{width:"100%",padding:"8px 10px",borderRadius:7,
+                      border:`1.5px solid ${T.b1}`, background:T.surface,
+                      fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}>
+              <option value="">Select type (optional)...</option>
+              {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+          </div>
         </div>
+
+        {/* Soft hint — these become required at Follow-Up stage */}
+        {(!form.cityId || !form.constructionTypeId) && (
+          <div style={{padding:"7px 10px",background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:6,fontSize:11,color:"#92400E",marginBottom:10}}>
+            💡 You can skip City + Construction Type for now. They'll be required when this lead moves to <strong>Follow Up</strong> so the quotation builder can match the right rate package.
+          </div>
+        )}
 
         {/* Contact date */}
         <div style={{marginBottom:10}}>
@@ -880,9 +3138,9 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
       </div>
       <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
         <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-        <button onClick={()=>{if(form.name.trim()&&form.phone.trim()){onSave(form);onClose();}}} disabled={!form.name.trim()||!form.phone.trim()}
-          style={{flex:2,padding:"10px",borderRadius:7,background:form.name.trim()?T.blu:T.b1,color:form.name.trim()?"white":T.t4,fontSize:12.5,fontWeight:700,border:"none",cursor:form.name.trim()?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-          <IcAdd size={14} color={form.name.trim()?"white":T.t4}/> Add to Pipeline
+        <button onClick={()=>{if(canSave){onSave(form);onClose();}}} disabled={!canSave}
+          style={{flex:2,padding:"10px",borderRadius:7,background:canSave?T.blu:T.b1,color:canSave?"white":T.t4,fontSize:12.5,fontWeight:700,border:"none",cursor:canSave?"pointer":"not-allowed",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+          <IcAdd size={14} color={canSave?"white":T.t4}/> Add to Pipeline
         </button>
       </div>
     </div>
@@ -2112,11 +4370,25 @@ function CRMModule(){
   };
 
   const updateLead=async(id,update)=>{
-    // Optimistic update
+    // Optimistic update — note camelCase keys (cityId, constructionTypeId)
+    // will live alongside the snake_case ones in state until the re-fetch
+    // below replaces them with authoritative server values + joined names.
     setLeads(p=>p.map(l=>l.id===id?{...l,...update}:l));
     if(selLead?.id===id) setSelLead(p=>({...p,...update}));
     try{
       await api.patch("/crm/leads/"+id,update);
+      // Re-fetch authoritative state (with joined city_name +
+      // construction_type_name + snake_case FK columns). This is what
+      // makes city_id / construction_type_id propagate correctly into
+      // local state — the optimistic spread above writes camelCase keys
+      // that don't match the rest of the UI's snake_case reads.
+      try {
+        const fresh = await api.get("/crm/leads/" + id);
+        if (fresh?.success && fresh.data) {
+          setLeads(p=>p.map(l=>l.id===id?{...l,...fresh.data}:l));
+          if(selLead?.id===id) setSelLead(p=>({...p,...fresh.data}));
+        }
+      } catch(_) {}
       // Stage change prompts (non-blocking — stage already changed)
       if(update.stage==="proposal"){
         const lead=leads.find(l=>l.id===id);

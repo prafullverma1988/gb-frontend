@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import api from "../config/api";
 import apiCache from "../utils/apiCache";
 import { Credit } from "../components/Credit";
@@ -300,6 +300,8 @@ function NewProjectModal({onClose,onCreated}){
   const [form, setForm] = useState({
     // Common
     name:"", phone:"", city:"Raipur",
+    // FK fields — mandatory for construction projects.
+    cityId:"", constructionTypeId:"",
     // Solar specific
     address:"", system_kw:"3", install_type:"residential",
     bp_number:"", aadhaar_no:"", pan_no:"",
@@ -310,6 +312,33 @@ function NewProjectModal({onClose,onCreated}){
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const setF = (k,v) => setForm(p=>({...p,[k]:v}));
+
+  // ── Library lookups for City + Construction Type dropdowns ─────
+  // Construction projects MUST set city_id + construction_type_id so
+  // the Estimate Builder can resolve the correct rate package later.
+  const [libCities, setLibCities] = useState([]);
+  const [libCTypes, setLibCTypes] = useState([]);
+  useEffect(() => {
+    if (isSolar) return;
+    (async () => {
+      try {
+        const [cr, tr] = await Promise.all([
+          api.get("/library/cities"),
+          api.get("/library/construction-types"),
+        ]);
+        if (cr?.success) setLibCities(cr.data || []);
+        if (tr?.success) setLibCTypes(tr.data || []);
+      } catch (_) {}
+    })();
+  }, [isSolar]);
+  const pickCity = (cid) => {
+    const c = libCities.find(x => String(x.id) === String(cid));
+    setForm(p => ({ ...p, cityId: cid || "", city: c?.name || "" }));
+  };
+  const pickType = (tid) => {
+    const t = libCTypes.find(x => String(x.id) === String(tid));
+    setForm(p => ({ ...p, constructionTypeId: tid || "", type: (t?.name || "").toLowerCase() }));
+  };
 
   const inp = (label, key, ph, type="text", full=false) => (
     <div style={{gridColumn:full?"1/3":"auto"}}>
@@ -333,6 +362,9 @@ function NewProjectModal({onClose,onCreated}){
   const handleCreate = async () => {
     if (!form.name.trim()) return setError("Name required");
     if (isSolar && !form.address.trim()) return setError("Address required");
+    // For construction projects, City + Type are mandatory (FK enforced on backend too)
+    if (!isSolar && !form.cityId) return setError("City is required");
+    if (!isSolar && !form.constructionTypeId) return setError("Construction Type is required");
     setLoading(true); setError("");
     try {
       const projectName = isSolar
@@ -345,6 +377,8 @@ function NewProjectModal({onClose,onCreated}){
         client_name: isSolar ? form.name.trim() : form.client_name.trim(),
         client_phone: form.phone,
         city: form.city,
+        cityId: !isSolar ? Number(form.cityId) || null : null,
+        constructionTypeId: !isSolar ? Number(form.constructionTypeId) || null : null,
         site_address: isSolar ? form.address : "",
         type: isSolar ? form.install_type : form.type,
         project_type: isSolar ? "solar_epc" : "construction",
@@ -473,11 +507,38 @@ function NewProjectModal({onClose,onCreated}){
                 style={{width:"100%",padding:"9px 12px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,color:T.t1,background:T.bg,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
             </div>
             {inp("Client Name",  "client_name", "Client full name")}
-            {inp("City",         "city",         "City")}
-            {sel("Type",         "type",         [{v:"residential",l:"Residential"},{v:"commercial",l:"Commercial"},{v:"industrial",l:"Industrial"}])}
+            {/* City * — library-backed dropdown, mandatory */}
+            <div>
+              <label style={{fontSize:10.5,fontWeight:600,color:form.cityId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>City *</label>
+              <select value={form.cityId} onChange={e => pickCity(e.target.value)}
+                style={{width:"100%",padding:"9px 12px",borderRadius:7,
+                        border:`1.5px solid ${form.cityId?T.b1:"#FCA5A5"}`,
+                        background: form.cityId?T.bg:"#FEF2F2",
+                        fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}>
+                <option value="">Select city...</option>
+                {libCities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+              </select>
+            </div>
+            {/* Type * — library-backed dropdown, mandatory */}
+            <div>
+              <label style={{fontSize:10.5,fontWeight:600,color:form.constructionTypeId?T.t3:"#DC2626",display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".5px"}}>Type *</label>
+              <select value={form.constructionTypeId} onChange={e => pickType(e.target.value)}
+                style={{width:"100%",padding:"9px 12px",borderRadius:7,
+                        border:`1.5px solid ${form.constructionTypeId?T.b1:"#FCA5A5"}`,
+                        background: form.constructionTypeId?T.bg:"#FEF2F2",
+                        fontSize:13, color:T.t1, outline:"none", boxSizing:"border-box", fontFamily:"inherit"}}>
+                <option value="">Select type...</option>
+                {libCTypes.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            </div>
             {inp("BOQ Value (₹)","boq_value",    "e.g. 5000000", "number")}
             {inp("Start Date",   "start_date",   "", "date")}
             {inp("End Date",     "end_date",     "", "date")}
+            {(!form.cityId || !form.constructionTypeId) && (
+              <div style={{gridColumn:"1/3",padding:"8px 11px",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,fontSize:11.5,color:"#991B1B"}}>
+                ⚠️ City + Type required so the Estimate Builder can match the right rate package later.
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -1353,6 +1414,28 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     setPoLoading(null);
   };
 
+  // ── Customer Estimate Amendment expand-in-card detail ─────────
+  // The drawer item already carries `notes` (the change reason) but
+  // we need the proposed_data tree (sections + items) to render the
+  // full diff. Fetched on first expand and cached.
+  const [expandedCeAmend,setExpandedCeAmend]=useState(null);
+  const [ceAmendCache,setCeAmendCache]=useState({});
+  const [ceAmendLoading,setCeAmendLoading]=useState(null);
+  const loadCeAmendDetail=async(estId, amendId)=>{
+    if(ceAmendCache[amendId]) return;
+    setCeAmendLoading(amendId);
+    try{
+      // /amendments?estimate_id=X returns all amendments for an estimate
+      // (with inflated `proposed`). Pick the one we want.
+      const r=await api.get("/customer-estimates/amendments?estimate_id="+estId);
+      if(r.success){
+        const row = (r.data||[]).find(a => a.id === amendId);
+        if (row) setCeAmendCache(p=>({...p,[amendId]:row}));
+      }
+    }catch(_){}
+    setCeAmendLoading(null);
+  };
+
   const load=async()=>{
     // Stale-while-revalidate: if we have a cached snapshot for this
     // mode, paint it INSTANTLY (no spinner), then silently refresh in
@@ -1489,7 +1572,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
 
   // ── Data splits by category ──────────────────────────────────────────
   const designItems   = data.centralized.filter(i=>i._source==="design");
-  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","purchase_order","labour_rate","salary_edit"].includes(i._source));
+  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","purchase_order","labour_rate","salary_edit"].includes(i._source));
   const paymentItems  = [
     ...data.centralized.filter(i=>i._source==="payment_request"),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
@@ -1605,6 +1688,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
           res=await api.patch("/subcon/ra-bills/"+item._source_id+"/status",{status:isRej?"Rejected":"Approved"});
         } else if(src==="wo_amendment"){
           res=await api.patch("/subcon/amendments/"+item._source_id+"/action",{status:isRej?"Rejected":"Approved"});
+        } else if(src==="ce_amendment"){
+          res=await api.patch("/customer-estimates/amendments/"+item._source_id+"/action",{status:isRej?"Rejected":"Approved"});
         } else if(src==="labour_rate"){
           res=await api.patch("/approvals/labour-rate/"+item._source_id+"/action",{action:isRej?"reject":"approve"});
         } else if(src==="salary_edit"){
@@ -1623,6 +1708,14 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     const isPO = src==="purchase_order";
     const isPoExpanded = isPO && expandedPo===item._source_id;
     const poDetail = isPO ? poCache[item._source_id] : null;
+    const isCeAmend = src==="ce_amendment";
+    const isCeAmendExpanded = isCeAmend && expandedCeAmend===item._source_id;
+    const ceAmendDetail = isCeAmend ? ceAmendCache[item._source_id] : null;
+    const toggleCeAmendExpand = ()=>{
+      const next = isCeAmendExpanded ? null : item._source_id;
+      setExpandedCeAmend(next);
+      if (next && item.estimate_id) loadCeAmendDetail(item.estimate_id, item._source_id);
+    };
     const togglePoExpand = ()=>{
       const next = isPoExpanded ? null : item._source_id;
       setExpandedPo(next);
@@ -1631,6 +1724,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     const goToProject = ()=>{
       if (!item.project_id || !onSelectProject) return;
       const tabFor = src==="ra_bill"||src==="wo_amendment" ? "subcon"
+                   : src==="ce_amendment" ? "estimate"
                    : src==="design" ? "design"
                    : src==="material_request"||src==="purchase_order" ? "material"
                    : src==="payment_request" ? "transaction"
@@ -1795,6 +1889,106 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
             <span style={{fontSize:8}}>{isRaExpanded?"▲":"▼"}</span>
             {isRaExpanded?"Hide bill detail":"View bill detail"}
           </button>
+        )}
+        {isCeAmend&&(
+          <button onClick={toggleCeAmendExpand}
+            style={{marginTop:7,width:"100%",padding:"6px 8px",borderRadius:6,background:isCeAmendExpanded?T.bluL:"transparent",border:`1px solid ${isCeAmendExpanded?T.bluM:T.b1}`,color:isCeAmendExpanded?T.blu:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+            <span style={{fontSize:8}}>{isCeAmendExpanded?"▲":"▼"}</span>
+            {isCeAmendExpanded?"Hide amendment detail":"View amendment detail"}
+          </button>
+        )}
+        {isCeAmend&&isCeAmendExpanded&&(
+          <div style={{marginTop:8,borderTop:`1px solid ${T.b1}`,paddingTop:10}}>
+            {ceAmendLoading===item._source_id&&!ceAmendDetail?(
+              <div style={{textAlign:"center",padding:"18px 0",color:T.t4,fontSize:12}}>
+                <div style={{width:18,height:18,border:`2px solid ${T.b1}`,borderTopColor:T.blu,borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}/>
+                Loading amendment…
+              </div>
+            ):ceAmendDetail?(()=>{
+              const proposed   = ceAmendDetail.proposed || {};
+              const form       = proposed.proposed_form || {};
+              const sections   = proposed.proposed_sections || [];
+              const grandTotal = sections.reduce((s,sec)=> s + (sec.items||[]).reduce((ss,it)=> ss + (parseFloat(it.qty)||0)*(parseFloat(it.rate)||0), 0), 0);
+              const headerFields = [
+                ["Retention %", form.retention_pct],
+                ["TDS %",       form.tds_pct],
+                ["Tax %",       form.tax_pct],
+                ["Start",       form.start_date],
+                ["End",         form.end_date],
+                ["Description", form.description],
+              ].filter(([_,v])=> v !== undefined && v !== null && v !== "");
+              return (<>
+                {/* Change reason — most important context for admin */}
+                <div style={{background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:6,padding:"7px 10px",marginBottom:8}}>
+                  <div style={{fontSize:8.5,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Change Reason</div>
+                  <div style={{fontSize:11.5,color:"#78350F",lineHeight:1.4}}>{ceAmendDetail.reason||"—"}</div>
+                </div>
+                {/* Proposed header diffs */}
+                {headerFields.length>0&&(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:4,marginBottom:8}}>
+                    {headerFields.map(([l,v])=>(
+                      <div key={l} style={{background:T.surfaceB,borderRadius:5,padding:"4px 6px"}}>
+                        <div style={{fontSize:8,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{l}</div>
+                        <div style={{fontSize:10.5,color:T.t1,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{String(v)}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {/* Total tile */}
+                <div style={{display:"grid",gridTemplateColumns:"1fr",gap:5,marginBottom:8}}>
+                  <div style={{textAlign:"center",background:T.grnL,borderRadius:5,padding:"5px"}}>
+                    <div style={{fontSize:8,color:T.grn,fontWeight:700,textTransform:"uppercase"}}>Proposed Grand Total</div>
+                    <div style={{fontSize:13,fontWeight:800,color:T.grn,marginTop:1}}>{"₹"+Number(grandTotal||0).toLocaleString("en-IN")}</div>
+                  </div>
+                </div>
+                {/* Sections + items */}
+                <div style={{border:`1px solid ${T.b1}`,borderRadius:6,overflow:"hidden",fontSize:11}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",background:"#1E293B",padding:"5px 8px",gap:4}}>
+                    {["Description","Unit","Qty","Rate","Amount"].map((h,i)=>(
+                      <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>1?"right":"left",textTransform:"uppercase"}}>{h}</div>
+                    ))}
+                  </div>
+                  {sections.length===0&&<div style={{padding:"14px 0",textAlign:"center",color:T.t4,fontSize:11}}>No sections</div>}
+                  {sections.map((sec,si)=>{
+                    // Mode is part of the proposed payload (round-tripped
+                    // from the builder). Render section bar accordingly.
+                    const secPerItem = !!Number(sec.per_item_qty);
+                    const secItems   = sec.items || [];
+                    const secQtySum  = secItems.reduce((s,i)=>s+(parseFloat(i.qty)||0),0);
+                    const secArea    = parseFloat(secItems[0]?.qty)||0;
+                    const secQtyShow = secPerItem ? secQtySum : secArea;
+                    const secTotal   = secItems.reduce((s,i)=>s+((parseFloat(i.qty)||0)*(parseFloat(i.rate)||0)),0);
+                    const secRateSum = secItems.reduce((s,i)=>s+(parseFloat(i.rate)||0),0);
+                    return (
+                      <React.Fragment key={si}>
+                        <div style={{padding:"4px 8px",background:T.bluL,borderTop:`1px solid ${T.b1}`,fontSize:10,fontWeight:700,color:T.blu,display:"flex",alignItems:"center",gap:8}}>
+                          <span style={{flex:1}}>
+                            {sec.title||"Section"}
+                            {secPerItem && <span style={{marginLeft:6,padding:"0 5px",fontSize:8.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3}}>PER-ITEM</span>}
+                          </span>
+                          <span style={{fontVariantNumeric:"tabular-nums"}}>Qty {Math.round(secQtyShow).toLocaleString("en-IN")}</span>
+                          {!secPerItem && <span style={{fontVariantNumeric:"tabular-nums"}}>{"₹"+Number(secRateSum||0).toLocaleString("en-IN")}/sqft</span>}
+                          <span style={{color:T.grn,fontVariantNumeric:"tabular-nums",minWidth:70,textAlign:"right"}}>{"₹"+Number(secTotal||0).toLocaleString("en-IN")}</span>
+                        </div>
+                        {secItems.map((it,ii)=>{
+                          const amt=(parseFloat(it.qty)||0)*(parseFloat(it.rate)||0);
+                          return (
+                            <div key={ii} style={{display:"grid",gridTemplateColumns:"1.7fr 36px 50px 60px 70px",padding:"5px 8px",gap:4,borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
+                              <div style={{color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
+                              <div style={{color:T.t3}}>{it.unit}</div>
+                              <div style={{color:T.t1,textAlign:"right",fontWeight:600}}>{parseFloat(it.qty||0)}</div>
+                              <div style={{color:T.blu,textAlign:"right"}}>{"₹"+Number(it.rate||0).toLocaleString("en-IN")}</div>
+                              <div style={{color:T.grn,textAlign:"right",fontWeight:700}}>{"₹"+Number(amt||0).toLocaleString("en-IN")}</div>
+                            </div>
+                          );
+                        })}
+                      </React.Fragment>
+                    );
+                  })}
+                </div>
+              </>);
+            })():null}
+          </div>
         )}
         {isRaBill&&isRaExpanded&&(
           <div style={{marginTop:8,borderTop:`1px solid ${T.b1}`,paddingTop:10}}>
