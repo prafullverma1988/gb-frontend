@@ -8126,7 +8126,6 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
   const [list, setList] = useState(null);
   const [selected, setSelected] = useState(null);
   const [startDate, setStartDate] = useState("");
-  const [wipeExisting, setWipeExisting] = useState(false);
   const [includeBOQ, setIncludeBOQ] = useState(true);
   const [applying, setApplying] = useState(false);
   const [error, setError] = useState("");
@@ -8143,10 +8142,10 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
     setError("");
     if (!selected) { setError("Pick a template first"); return; }
     const tpl = list.find(t => t.id === selected);
-    if (wipeExisting && !await window.confirmAsync(`⚠️ This will DELETE all existing Gantt tasks for this project before loading "${tpl?.name}".\n\nTodos (in the To-Do tab) are not affected.\n\nContinue?`)) return;
+    if (!await window.confirmAsync(`"${tpl?.name}" load karein?\n\nProject ke maujooda Gantt tasks REPLACE ho jaayenge — sirf yeh template rahega. (To-Do tab affect nahi hota.)\n\nContinue?`)) return;
     setApplying(true);
     try {
-      const body = { template_id: selected, wipe_existing: wipeExisting, include_boq: includeBOQ };
+      const body = { template_id: selected, wipe_existing: true, include_boq: includeBOQ };
       if (startDate) body.start_date = startDate;
       const r = await api.taskTemplates.apply(projectId, body);
       if (!r.success) throw new Error(r.message || "Apply failed");
@@ -8215,14 +8214,13 @@ function TaskTemplatePickerModal({ projectId, onClose, onApplied }) {
                   style={{width:"100%",padding:"7px 10px",border:"1.5px solid #D1D5DB",borderRadius:6,fontSize:12.5,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                 <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>Leave blank to use the project's own start date.</div>
               </div>
-              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#374151",marginBottom:6,cursor:"pointer"}}>
+              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#374151",marginBottom:8,cursor:"pointer"}}>
                 <input type="checkbox" checked={includeBOQ} onChange={e=>setIncludeBOQ(e.target.checked)}/>
                 <span>Include BOQ items (recommended)</span>
               </label>
-              <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:"#B91C1C",fontWeight:600,cursor:"pointer"}}>
-                <input type="checkbox" checked={wipeExisting} onChange={e=>setWipeExisting(e.target.checked)}/>
-                <span>⚠ Delete existing Gantt tasks before loading</span>
-              </label>
+              <div style={{display:"flex",alignItems:"center",gap:7,fontSize:11.5,color:"#92400E",background:"#FFFBEB",border:"1px solid #FDE68A",borderRadius:6,padding:"7px 10px"}}>
+                <span>🔄</span><span>Template load karne par project ke <b>maujooda Gantt tasks replace</b> ho jaayenge (sirf yeh template rahega). Start-date lock ke baad template change nahi hota.</span>
+              </div>
             </div>
           )}
         </div>
