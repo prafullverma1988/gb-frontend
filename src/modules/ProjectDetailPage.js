@@ -1542,6 +1542,10 @@ function TabEstimate({ project }) {
   const [summary, setSummary] = useState(null);
   const [invoices, setInvoices] = useState([]);
   const [payments, setPayments] = useState([]);
+  // Standalone manual invoices (estimate_id=NULL, project-level ad-hoc)
+  // shown in a separate section at the bottom of Invoices tab so they
+  // don't get lost after scoping the main list to a specific estimate.
+  const [standaloneInvoices, setStandaloneInvoices] = useState([]);
   const [milestones, setMilestones] = useState({ rate_by_item:{}, percent:[] });
   const [subTab, setSubTab] = useState("boq");
   const [loading, setLoading] = useState(true);
@@ -1588,11 +1592,188 @@ function TabEstimate({ project }) {
   // Form state — New Invoice (milestone OR manual)
   const [invForm, setInvForm] = useState({
     source: "milestone", invoice_date: localYMD(), remark: "",
-    items: [],  // milestone-based: [{milestone_id, cumulative_qty}]
+    items: [],  // milestone-based: [{milestone_id, this_qty}] (PS-17: qty per click, not cumulative)
     manualItems: [{ description:"", qty:"", rate:"" }],
     tax_pct: 0, retention_pct: 0, tds_pct: 0,
     customer_name: "",
+    // ── Over-billing mode (P2+ feature) ─────────────────────────
+    // User-driven per-invoice toggle. When ON:
+    //   • Fully-billed milestones become re-enabled (allow extra qty)
+    //   • Qty input doesn't clamp at remaining_qty
+    //   • Reason field becomes compulsory
+    //   • Submit auto-splits qty > remaining into 2 linked invoices
+    //     (one normal for BOQ portion, one over-bill for excess)
+    overBillMode: false,
+    overBillReason: "",
   });
+  // PS-18: Invoice detail side-slide drawer
+  // Click any invoice card → fetch enriched detail (project, estimate,
+  // creator, trigger task, items with milestone names, payments) →
+  // open right-side drawer with full audit + edit/delete controls.
+  const [invDetailFor,  setInvDetailFor]  = useState(null);  // invoice id
+  const [invDetail,     setInvDetail]     = useState(null);  // full payload
+  const [invDetailLoading, setInvDetailLoading] = useState(false);
+  const openInvoiceDetail = async (invId) => {
+    setInvDetailFor(invId);
+    setInvDetail(null);
+    setInvDetailLoading(true);
+    const r = await api.get("/customer-estimates/invoices/"+invId).catch(()=>({success:false}));
+    setInvDetailLoading(false);
+    if (r?.success) setInvDetail(r.data);
+    else setInvDetailFor(null);
+  };
+  const closeInvoiceDetail = () => { setInvDetailFor(null); setInvDetail(null); };
+  // PS-19: Download invoice as PDF. fetch+blob (route needs JWT header so a
+  // plain <a href> won't work). Filename = invoice_no.
+  const downloadInvoicePdf = async (invId, invNo) => {
+    try {
+      const token = localStorage.getItem("gb_token");
+      const res = await fetch(`${API_BASE}/customer-estimates/invoices/${invId}/pdf`, {
+        headers: token ? { Authorization: "Bearer " + token } : {},
+      });
+      if (!res.ok) {
+        const txt = await res.text().catch(()=>"");
+        alert("PDF download failed: " + (txt || res.status));
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = (invNo || "invoice") + ".pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (e) {
+      alert("PDF download failed: " + (e?.message || e));
+    }
+  };
+  // PS-19/20: Edit an invoice.
+  //   • Manual invoice → full New Invoice modal preloaded (items editable).
+  //   • Milestone / auto invoice → compact header editor (date, remark,
+  //     retention/TDS/tax %). Line items stay locked because they derive
+  //     from the schedule + task progress — editing them in isolation
+  //     would desync the billing ledger.
+  const editInvoice = (inv) => {
+    if (inv.source === "manual") {
+      setInvForm({
+        source: "manual",
+        invoice_date: (inv.invoice_date || "").slice(0,10) || localYMD(),
+        remark: inv.remark || "",
+        items: [],
+        manualItems: (inv.items || []).map(it => ({
+          description: it.clean_description || it.description || "",
+          qty: String(it.qty || ""),
+          rate: String(it.rate || ""),
+        })),
+        tax_pct: parseFloat(inv.tax_pct || 0),
+        retention_pct: parseFloat(inv.retention_pct || 0),
+        tds_pct: parseFloat(inv.tds_pct || 0),
+        customer_name: inv.customer_name || "",
+        _editId: inv.id,
+      });
+      closeInvoiceDetail();
+      setShowNewInv(true);
+    } else {
+      // Milestone / auto → compact header editor
+      setHdrEditForm({
+        id: inv.id,
+        invoice_no: inv.invoice_no,
+        gross_amount: parseFloat(inv.gross_amount) || 0,
+        invoice_date: (inv.invoice_date || "").slice(0,10) || localYMD(),
+        remark: inv.remark || "",
+        retention_pct: parseFloat(inv.retention_pct) || 0,
+        tds_pct: parseFloat(inv.tds_pct) || 0,
+        tax_pct: parseFloat(inv.tax_pct) || 0,
+      });
+      closeInvoiceDetail();
+    }
+  };
+  // Compact invoice-header editor state (milestone/auto invoices)
+  const [hdrEditForm, setHdrEditForm] = useState(null);
+  const [hdrEditSaving, setHdrEditSaving] = useState(false);
+  const submitHdrEdit = async () => {
+    if (!hdrEditForm) return;
+    const gross = parseFloat(hdrEditForm.gross_amount) || 0;
+    const retPct = parseFloat(hdrEditForm.retention_pct) || 0;
+    const tdsPct = parseFloat(hdrEditForm.tds_pct) || 0;
+    const taxPct = parseFloat(hdrEditForm.tax_pct) || 0;
+    const r2 = (n) => Math.round((parseFloat(n)||0) * 100) / 100;
+    const retAmt = r2(gross * retPct / 100);
+    const tdsAmt = r2(gross * tdsPct / 100);
+    const taxAmt = r2(gross * taxPct / 100);
+    const netRec = r2(gross - retAmt - tdsAmt + taxAmt);
+    setHdrEditSaving(true);
+    const r = await api.put("/customer-estimates/invoices/" + hdrEditForm.id, {
+      invoice_date: hdrEditForm.invoice_date,
+      remark: hdrEditForm.remark,
+      retention_pct: retPct, retention_amt: retAmt,
+      tds_pct: tdsPct, tds_amt: tdsAmt,
+      tax_pct: taxPct, tax_amt: taxAmt,
+      net_receivable: netRec,
+    }).catch(e => ({ success:false, message:e.message }));
+    setHdrEditSaving(false);
+    if (!r?.success) { alert(r?.message || "Save failed"); return; }
+    setHdrEditForm(null);
+    await reloadSel();
+  };
+
+  // Billing ledger — per-milestone planned/billed/remaining (PS-17)
+  // Loaded when New Invoice (milestone) modal opens. Frontend uses this
+  // for: progress bars, "fully invoiced" disabled state, qty clamping.
+  const [billingLedger, setBillingLedger] = useState(null);
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const loadBillingLedger = async (estId) => {
+    if (!estId) return;
+    setLedgerLoading(true);
+    const r = await api.get("/customer-estimates/"+estId+"/billing-ledger").catch(()=>({success:false}));
+    setLedgerLoading(false);
+    if (r?.success) setBillingLedger(r.data);
+  };
+  // Helper to open New Invoice (milestone) — preloads ledger so the modal
+  // renders fresh remaining/billed numbers every time.
+  const openNewInvoice = async () => {
+    setInvForm(p=>({...p, source:"milestone", items:[], remark:""}));
+    setShowNewInv(true);
+    if (selEst?.id) loadBillingLedger(selEst.id);
+  };
+
+  // ── Build lookup maps from billingLedger so Payment Schedule rows
+  // can show "Billed X · Remaining Y" per BOQ item and per milestone
+  // without changing the original render structure. Empty when ledger
+  // isn't loaded yet — UI gracefully degrades to the old plain numbers.
+  const ledgerByItemId = useMemo(() => {
+    const m = {};
+    if (billingLedger?.mode === "milestone_rate" && Array.isArray(billingLedger.items)) {
+      for (const it of billingLedger.items) {
+        if (it?.item_id != null) m[it.item_id] = it;
+      }
+    }
+    return m;
+  }, [billingLedger]);
+  const ledgerByMsId = useMemo(() => {
+    const m = {};
+    if (billingLedger?.mode === "milestone_rate" && Array.isArray(billingLedger.items)) {
+      for (const it of billingLedger.items) {
+        for (const ms of (it.milestones || [])) {
+          if (ms?.milestone_id != null) m[ms.milestone_id] = ms;
+        }
+      }
+    }
+    return m;
+  }, [billingLedger]);
+  // Auto-load the billing ledger when user lands on Payment Schedule sub-tab.
+  // Without this the per-item "Billed/Remaining" badges would only populate
+  // after the user opens the New Invoice modal once (modal also loads the
+  // same ledger). Re-runs on selEst change so switching between estimates
+  // refreshes the data.
+  useEffect(() => {
+    if (subTab === "milestone" && selEst?.id) {
+      loadBillingLedger(selEst.id);
+    }
+  }, [subTab, selEst?.id]);
+
   // Form state — Record Payment
   const [payForm, setPayForm] = useState({
     amount_received:"", payment_date: localYMD(), payment_mode:"Bank Transfer",
@@ -1658,6 +1839,17 @@ function TabEstimate({ project }) {
     const r = await api.get("/customer-estimates/amendments?estimate_id=" + estId).catch(()=>({success:false}));
     if (r.success) setAmendments(r.data || []);
   };
+
+  // Refetch linked-task progress whenever the user lands on the Payment
+  // Schedule tab. Task progress can change in the Tasks tab without the
+  // schedule tab knowing — this keeps chips in sync. Also covers the
+  // "open estimate then switch to schedule" first-view case.
+  useEffect(() => {
+    if (subTab === "milestone" && selEst?.id && selEst.billing_method === "milestone_rate") {
+      loadLinkedTasks(selEst.id);
+    }
+    // eslint-disable-next-line
+  }, [subTab, selEst?.id]);
 
   // Seed the edit form from the currently-selected estimate's detail
   const openEditBoq = () => {
@@ -1857,10 +2049,12 @@ function TabEstimate({ project }) {
     const [det, sum, inv, pay, ms] = await Promise.all([
       api.get("/customer-estimates/"+est.id).catch(()=>({success:false})),
       api.get("/customer-estimates/"+est.id+"/summary").catch(()=>({success:false})),
-      // List by project_id (not estimate_id) so manual invoices for this project
-      // appear alongside estimate-linked ones — single tab, source chip distinguishes.
-      api.get("/customer-estimates/invoices/list?project_id="+projectId).catch(()=>({success:false})),
-      api.get("/customer-estimates/payments/list?project_id="+projectId).catch(()=>({success:false})),
+      // Scope invoices + payments to THE SELECTED ESTIMATE so multi-customer
+      // projects (e.g., different flats in same tower, each with own estimate)
+      // don't cross-contaminate. Standalone manual invoices (estimate_id=NULL)
+      // are loaded separately below as "Project-level manual invoices".
+      api.get("/customer-estimates/invoices/list?estimate_id="+est.id).catch(()=>({success:false})),
+      api.get("/customer-estimates/payments/list?estimate_id="+est.id).catch(()=>({success:false})),
       api.get("/customer-estimates/"+est.id+"/milestones").catch(()=>({success:false})),
     ]);
     if (det.success) {
@@ -1874,6 +2068,13 @@ function TabEstimate({ project }) {
     if (pay.success) setPayments(pay.data||[]);
     if (ms.success)  setMilestones(ms.data||{rate_by_item:{},percent:[]});
     loadAmendments(est.id);
+    loadLinkedTasks(est.id);
+    // Pull standalone (no-estimate) manual invoices for this project once.
+    // Same payload regardless of which estimate is selected — they're
+    // project-level by definition.
+    api.get("/customer-estimates/invoices/list?project_id="+projectId+"&standalone=1")
+      .then(r => { if (r?.success) setStandaloneInvoices(r.data || []); })
+      .catch(()=>{});
   };
 
   const reloadSel = async () => { if (selEst) await selectEst(selEst); };
@@ -1914,6 +2115,14 @@ function TabEstimate({ project }) {
 
   const submitInvoice = async () => {
     if (!selEst && invForm.source === "milestone") return alert("Select an estimate first");
+
+    // ── Over-Billing Mode validation ─────────────────────────────
+    // Reason is compulsory when mode is on. Frontend guard saves a
+    // round-trip; backend also enforces with OVER_BILL_REASON_REQUIRED.
+    if (invForm.overBillMode && !invForm.overBillReason.trim()) {
+      return alert("Over-Billing Mode is on. Please add a reason (compulsory for audit trail).");
+    }
+
     setSaving(true);
     let body;
     if (invForm.source === "manual") {
@@ -1928,22 +2137,138 @@ function TabEstimate({ project }) {
         tds_pct: parseFloat(invForm.tds_pct||0),
         tax_pct: parseFloat(invForm.tax_pct||0),
         items,
+        // Over-bill flags pass through on manual invoices too.
+        is_over_bill:     invForm.overBillMode ? 1 : 0,
+        over_bill_reason: invForm.overBillMode ? invForm.overBillReason.trim() : null,
       };
     } else {
       const items = invForm.items.filter(i => i.milestone_id);
       if (items.length === 0) { setSaving(false); return alert("Select at least one milestone"); }
-      body = {
+
+      // Translate this_qty → cumulative_qty for the backend.
+      // Ledger has billed_qty per milestone; cumulative = billed + this_qty.
+      const ledgerByMs = {};
+      if (billingLedger?.mode === "milestone_rate") {
+        for (const it of (billingLedger.items || [])) {
+          for (const m of (it.milestones || [])) ledgerByMs[m.milestone_id] = m;
+        }
+      }
+
+      // ── Auto-split logic for Over-Billing Mode (user's Case 3) ──
+      // For each picked milestone, compute normal vs over portions.
+      // If ANY milestone needs splitting → fire 2 sequential API calls:
+      //   Call 1: normal invoice (in-BOQ portions only), is_over_bill=false
+      //   Call 2: over invoice (excess portions only), is_over_bill=true,
+      //           linked_invoice_id = Call 1's id, over_bill_reason
+      // If only FULL_OVER (no normal portion anywhere) → single over-bill call.
+      // If no over-billing at all → single normal call (existing behavior).
+      const normalItems = [];
+      const overItems   = [];
+      for (const i of items) {
+        const ms = ledgerByMs[i.milestone_id];
+        const remainingQty = ms ? (Number(ms.remaining_qty) || 0) : 0;
+        const billedQty    = ms ? (Number(ms.billed_qty)    || 0) : 0;
+        const thisQty      = parseFloat(i.this_qty) || 0;
+        const normalQ = Math.min(thisQty, Math.max(0, remainingQty));
+        const overQ   = Math.max(0, thisQty - Math.max(0, remainingQty));
+        if (normalQ > 0) {
+          normalItems.push({
+            milestone_id: i.milestone_id,
+            cumulative_qty: billedQty + normalQ,
+          });
+        }
+        if (overQ > 0) {
+          // Over portion: cumulative_qty = total billed + normal portion
+          // (which is now billed by the normal invoice) + the over qty.
+          overItems.push({
+            milestone_id: i.milestone_id,
+            cumulative_qty: billedQty + normalQ + overQ,
+          });
+        }
+      }
+
+      const baseBody = (msItems, opts = {}) => ({
         estimate_id: selEst.id,
-        invoice_date: invForm.invoice_date, remark: invForm.remark,
-        items,
-      };
+        invoice_date: invForm.invoice_date,
+        remark: invForm.remark,
+        items: msItems,
+        ...opts,
+      });
+
+      // Helper: post one invoice, with single retry on transient network error.
+      const postOne = (payload) =>
+        api.post("/customer-estimates/invoices", payload).catch(() => ({ success: false }));
+
+      let firstId = null;
+
+      // CASE A: nothing to bill normally AND nothing to over-bill
+      //   → shouldn't happen (caller has at least one milestone)
+      //   but guard against zero-amount edge.
+      if (normalItems.length === 0 && overItems.length === 0) {
+        setSaving(false);
+        return alert("Nothing to bill — all selected milestones resolved to 0 qty.");
+      }
+
+      // CASE B: ONLY normal items (no over) — single normal call (existing path).
+      if (overItems.length === 0) {
+        body = baseBody(normalItems);
+      }
+      // CASE C: ONLY over items (no in-BOQ portion) — Case 1 from user spec.
+      //   Single over-bill invoice. Reason already validated above.
+      else if (normalItems.length === 0) {
+        if (!invForm.overBillMode) {
+          setSaving(false);
+          return alert("⚠ One or more milestones are fully billed but you've entered extra quantity.\n\nTo proceed:\n• Click '+ Over-Billing' toggle at the top of the modal\n• Add a reason explaining the extra work\n• Save\n\nOr reduce the quantity to stay within BOQ.");
+        }
+        body = baseBody(overItems, {
+          is_over_bill: 1,
+          over_bill_reason: invForm.overBillReason.trim(),
+        });
+      }
+      // CASE D: BOTH portions — Case 3 from user spec.
+      //   Send normal first → linked over-bill invoice second.
+      else {
+        if (!invForm.overBillMode) {
+          setSaving(false);
+          return alert("⚠ Some quantities exceed BOQ remaining.\n\nTo proceed:\n• Click '+ Over-Billing' toggle at the top of the modal\n• Add a reason for the extra qty\n• System will auto-split into 2 linked invoices (BOQ portion + over-bill portion)\n\nOr reduce qty to fit within remaining.");
+        }
+        const firstBody = baseBody(normalItems);
+        const r1 = await postOne(firstBody);
+        if (!r1.success || !r1.data?.id) {
+          setSaving(false);
+          return alert("Normal portion save failed: " + (r1.message || "Server error"));
+        }
+        firstId = r1.data.id;
+        // Now send over-bill linked to first.
+        body = baseBody(overItems, {
+          is_over_bill: 1,
+          over_bill_reason: invForm.overBillReason.trim(),
+          linked_invoice_id: firstId,
+        });
+      }
     }
-    const r = await api.post("/customer-estimates/invoices", body).catch(()=>({success:false}));
+
+    // Edit path (PS-19): manual invoice being edited → PUT instead of POST.
+    const r = invForm._editId
+      ? await api.put("/customer-estimates/invoices/" + invForm._editId, body).catch(()=>({success:false}))
+      : await api.post("/customer-estimates/invoices", body).catch(()=>({success:false}));
     setSaving(false);
+
+    // Handle the backend's 422 WOULD_OVER_BILL response — surfaces when
+    // user submits without Over-Billing Mode but qty exceeded BOQ.
+    if (!r.success && r.code === "WOULD_OVER_BILL" && Array.isArray(r.items)) {
+      const lines = r.items.map(it =>
+        `• ${it.description}: BOQ ${it.boq_qty}, already billed ${it.already_billed}, over by ${it.over_by_qty}`
+      ).join("\n");
+      alert("Some items exceed BOQ:\n\n" + lines + "\n\nTurn on Over-Billing Mode + add a reason to proceed.");
+      return;
+    }
+
     if (r.success) {
       setShowNewInv(false);
       setInvForm({ source:"milestone", invoice_date: localYMD(), remark:"", items:[],
-        manualItems:[{description:"",qty:"",rate:""}], tax_pct:0, retention_pct:0, tds_pct:0, customer_name:"" });
+        manualItems:[{description:"",qty:"",rate:""}], tax_pct:0, retention_pct:0, tds_pct:0, customer_name:"",
+        overBillMode: false, overBillReason: "" });
       await reloadSel();
       if (!selEst) await loadEstimates();
     } else alert(r.message || "Failed");
@@ -1968,45 +2293,138 @@ function TabEstimate({ project }) {
     } else alert(r.message || "Failed");
   };
 
-  // ── Module C: Sync schedule milestones to project_tasks ──────
-  // Soft-banner offer appears after a successful schedule save. User can
-  // accept (creates matching tasks + back-links task_id on milestones) or
-  // dismiss. Dismissal sticks for this session — they can re-trigger via
-  // the "Sync to tasks" button on the Payment Schedule tab header.
-  const [syncBanner, setSyncBanner]       = useState(null); // { milestoneCount } | null
-  const [syncBannerDismissed, setSyncBannerDismissed] = useState(false);
-  const [syncToast, setSyncToast]         = useState(null); // { created, taskIds } | null
-  const [syncing, setSyncing]             = useState(false);
+  // ── Module C (pivoted): link milestones to EXISTING project tasks ────
+  // No new task creation. User picks a task from the project's existing
+  // task list and sets a trigger_pct (default 100). When the task's
+  // progress reaches trigger_pct, the milestone becomes eligible for
+  // auto-billing (Module B's hook will fire — Module B+ work).
+  const [linkedTasks,   setLinkedTasks]   = useState({});       // { [milestone_id]: {task_id, task_name, progress, trigger_pct, eligible} }
+  const [taskPickerFor, setTaskPickerFor] = useState(null);     // milestone id currently being linked
+  const [projectTasks,  setProjectTasks]  = useState([]);       // all project_tasks for picker
+  const [taskPickerSearch, setTaskPickerSearch] = useState("");
+  const [linkTriggerPct, setLinkTriggerPct] = useState(100);
+  const [linkSelectedTaskId, setLinkSelectedTaskId] = useState(null);
+  const [linking, setLinking]             = useState(false);
 
-  const runSyncTasks = async (silent = false) => {
-    if (!selEst) return;
-    setSyncing(true);
-    const r = await api.post("/customer-estimates/"+selEst.id+"/milestones/sync-tasks", { only_unlinked: true })
-      .catch(e => ({ success:false, message:e.message }));
-    setSyncing(false);
-    if (!r?.success) { alert(r?.message || "Sync failed"); return; }
-    setSyncBanner(null);
-    if (!silent) {
-      // Capture the newly-created task ids for undo. We don't get them back
-      // from the bulk endpoint, so re-fetch milestones to read fresh task_ids.
-      const m = await api.get("/customer-estimates/"+selEst.id+"/milestones").catch(()=>({success:false}));
-      const taskIds = m?.success
-        ? Object.values(m.data?.rate_by_item || {}).flat().map(x => x.task_id).filter(Boolean)
-        : [];
-      setSyncToast({ created: r.data?.created || 0, skipped: r.data?.skipped || 0, taskIds });
-      // Auto-dismiss toast after 10s
-      setTimeout(() => setSyncToast(curr => curr?.created === r.data?.created ? null : curr), 10000);
+  const [linkedTasksLoading, setLinkedTasksLoading] = useState(false);
+  const [linkedTasksLastFetch, setLinkedTasksLastFetch] = useState(null);
+  const loadLinkedTasks = async (estId) => {
+    if (!estId) return;
+    setLinkedTasksLoading(true);
+    const r = await api.get("/customer-estimates/"+estId+"/linked-tasks").catch(()=>({success:false}));
+    setLinkedTasksLoading(false);
+    if (r?.success) {
+      setLinkedTasks(r.data || {});
+      setLinkedTasksLastFetch(Date.now());
     }
+    // Also refresh the project task list so the picker shows latest progress
+    if (projectId) {
+      api.get("/projects/"+projectId+"/tasks").then(r2 => {
+        if (r2?.success) setProjectTasks(r2.data || []);
+      }).catch(()=>{});
+    }
+  };
+  // Load the project's full WBS task list (same source as the Tasks tab:
+  // /tasks?project_id — NOT /projects/:id/tasks which is todo-only). This
+  // gives parent + child tasks so the link drawer can show the hierarchy.
+  const reloadProjectTasks = async () => {
+    if (!projectId) return [];
+    const r = await api.get("/tasks?project_id="+projectId).catch(()=>({success:false}));
+    const rows = r?.success ? (r.data || []) : [];
+    setProjectTasks(rows);
+    return rows;
+  };
+  const openTaskPicker = async (milestoneId) => {
+    const existing = linkedTasks[milestoneId];
+    setLinkSelectedTaskId(existing?.task_id || null);
+    setLinkTriggerPct(existing?.trigger_pct ?? 100);
+    setTaskPickerSearch("");
+    setTaskPickerExpanded({});
+    setTaskPickerFor(milestoneId);
+    // Always refetch so newly-created tasks appear immediately.
+    await reloadProjectTasks();
+  };
+  // Expand/collapse state for parent task rows in the picker
+  const [taskPickerExpanded, setTaskPickerExpanded] = useState({});
+  // Create-task modal (reuses PTAddTask) launched from the link drawer
+  const [showCreateTaskFor, setShowCreateTaskFor] = useState(false);
+  const createTaskFromPicker = async (form) => {
+    if (!projectId) return;
+    const dur = form.duration || (form.baseStart && form.baseEnd
+      ? Math.round((new Date(form.baseEnd) - new Date(form.baseStart)) / 86400000) + 1 : 0);
+    const r = await api.post("/tasks", {
+      project_id: projectId,
+      parent_id: null,
+      name: form.name,
+      category: form.category,
+      tag: form.tag || "",
+      assigned_to: null,
+      base_start: form.baseStart || null,
+      base_end: form.baseEnd || null,
+      duration: dur,
+      dependencies: form.dependencies || [],
+      dhyan_rakhen: form.dhyanRakhen || null,
+    }).catch(e => ({ success:false, message:e.message }));
+    if (!r?.success) { alert(r?.message || "Task create failed"); return; }
+    setShowCreateTaskFor(false);
+    const rows = await reloadProjectTasks();
+    // Auto-select the freshly created task in the picker
+    const newId = r.data?.id || r.data?.insertId;
+    if (newId) setLinkSelectedTaskId(newId);
+  };
+  const confirmLinkTask = async () => {
+    if (!taskPickerFor || !linkSelectedTaskId) return;
+    setLinking(true);
+    const r = await api.put("/customer-estimates/milestones/rate/"+taskPickerFor+"/link", {
+      task_id: linkSelectedTaskId, trigger_pct: linkTriggerPct,
+    }).catch(e => ({ success:false, message:e.message }));
+    setLinking(false);
+    if (!r?.success) { alert(r?.message || "Link failed"); return; }
+    setTaskPickerFor(null);
+    await loadLinkedTasks(selEst.id);
+  };
+  const unlinkTask = async (milestoneId) => {
+    if (!window.confirm("Unlink this milestone from its task?")) return;
+    const r = await api.del("/customer-estimates/milestones/rate/"+milestoneId+"/link")
+      .catch(e => ({ success:false, message:e.message }));
+    if (!r?.success) { alert(r?.message || "Unlink failed"); return; }
+    await loadLinkedTasks(selEst.id);
+  };
+
+  // ── Auto-bill invoice preview (Module D follow-up) ────────────
+  // When an auto-bill invoice is created in Draft state, admin clicks
+  // "Review Preview" → this modal loads /invoices/:id/preview which
+  // returns invoice + items + the triggering task with its progress.
+  // Admin can Confirm & Submit (→ Submitted) or Reject (→ delete draft).
+  const [previewInv, setPreviewInv]       = useState(null); // {invoice, items, trigger_task}
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [previewConfirming, setPreviewConfirming] = useState(false);
+  const openInvoicePreview = async (invId) => {
+    setPreviewLoading(true);
+    const r = await api.get("/customer-estimates/invoices/"+invId+"/preview").catch(()=>({success:false}));
+    setPreviewLoading(false);
+    if (!r?.success) { alert(r?.message || "Failed to load preview"); return; }
+    setPreviewInv(r.data);
+  };
+  const confirmAutoInvoice = async () => {
+    if (!previewInv?.invoice?.id) return;
+    setPreviewConfirming(true);
+    const r = await api.patch("/customer-estimates/invoices/"+previewInv.invoice.id+"/confirm")
+      .catch(e => ({ success:false, message:e.message }));
+    setPreviewConfirming(false);
+    if (!r?.success) { alert(r?.message || "Confirm failed"); return; }
+    setPreviewInv(null);
     await reloadSel();
   };
-  const undoSyncTasks = async () => {
-    if (!syncToast?.taskIds?.length || !selEst) return;
-    setSyncing(true);
-    const r = await api.post("/customer-estimates/"+selEst.id+"/milestones/sync-tasks/undo", { task_ids: syncToast.taskIds })
+  const rejectAutoInvoice = async () => {
+    if (!previewInv?.invoice?.id) return;
+    if (!window.confirm("Reject and delete this auto-generated draft invoice?\n\nThe milestone will become eligible again on next trigger.")) return;
+    setPreviewConfirming(true);
+    const r = await api.del("/customer-estimates/invoices/"+previewInv.invoice.id)
       .catch(e => ({ success:false, message:e.message }));
-    setSyncing(false);
-    if (!r?.success) { alert(r?.message || "Undo failed"); return; }
-    setSyncToast(null);
+    setPreviewConfirming(false);
+    if (!r?.success) { alert(r?.message || "Reject failed"); return; }
+    setPreviewInv(null);
     await reloadSel();
   };
 
@@ -2016,15 +2434,22 @@ function TabEstimate({ project }) {
   //                                  pre-picked + its stages loaded.
   //   - editPercentSchedule()     → opens % mode with existing pct stages.
   const editRateSchedule = (itemId) => {
+    // Value-driven (PS-22): load per-milestone rate (inc_rate) + qty.
+    const itm = (estDetail?.sections||[]).flatMap(s=>s.items).find(x=>x.id===itemId);
     const stored = (milestones.rate_by_item[itemId] || [])
       .slice()
       .sort((a,b) => a.seq - b.seq)
-      .map(m => ({ seq:m.seq, name:m.name||"", cum_rate: String(m.cum_rate||"") }));
+      .map(m => ({
+        seq: m.seq,
+        name: m.name || "",
+        rate: String(m.inc_rate || ""),
+        qty: m.qty != null ? String(m.qty) : (itm ? String(parseFloat(itm.qty)||0) : ""),
+      }));
     setMsForm(p => ({
       ...p,
       kind: "rate",
       pickedItemIds: [itemId],
-      itemStages: { [itemId]: stored.length ? stored : [{seq:0,name:"",cum_rate:""}] },
+      itemStages: { [itemId]: stored.length ? stored : [{seq:0,name:"",rate:"",qty:""}] },
       expandedItemId: itemId,
     }));
     setShowSetMs(true);
@@ -2059,20 +2484,37 @@ function TabEstimate({ project }) {
     setSaving(true);
     let r;
     if (msForm.kind === "rate") {
-      // Multi-item flow — iterate pickedItemIds and batch-send their stages.
-      // Backend POST /milestones/rate already accepts { items: [...] } so one
-      // call covers all picked items.
+      // Value-driven (PS-22): each milestone carries its own rate + qty.
+      // Block save if any item is over-allocated (Σ value > item value).
+      const allItems = (estDetail?.sections||[]).flatMap(s => s.items);
+      const itemById = {}; for (const x of allItems) itemById[x.id] = x;
+      for (const itemId of msForm.pickedItemIds) {
+        const it = itemById[itemId];
+        if (!it) continue;
+        const itemTotal = (parseFloat(it.rate)||0) * (parseFloat(it.qty)||0);
+        const allocated = (msForm.itemStages[itemId] || [])
+          .reduce((s,m) => s + (parseFloat(m.rate)||0) * (parseFloat(m.qty)||0), 0);
+        if (allocated - itemTotal > 0.5) {
+          setSaving(false);
+          return alert(`"${(it.description||"").replace(/^\[[^\]]+\]\s*/,"")}" is over-allocated.\n\nMilestone values (₹${Math.round(allocated).toLocaleString("en-IN")}) exceed item value (₹${Math.round(itemTotal).toLocaleString("en-IN")}). Reduce a milestone before saving.`);
+        }
+      }
       const itemsPayload = msForm.pickedItemIds
         .map(itemId => {
           const stages = (msForm.itemStages[itemId] || [])
-            .filter(m => m.name && m.cum_rate)
-            .map((m,i) => ({ seq:i, name:m.name, cum_rate: parseFloat(m.cum_rate) }));
+            .filter(m => m.name && m.rate && m.qty)
+            .map((m,i) => ({
+              seq:i,
+              name:m.name,
+              rate: parseFloat(m.rate),     // value-driven: per-milestone ₹/unit
+              qty:  parseFloat(m.qty),
+            }));
           return stages.length > 0 ? { estimate_item_id: itemId, milestones: stages } : null;
         })
         .filter(Boolean);
       if (itemsPayload.length === 0) {
         setSaving(false);
-        return alert("Pick at least one item and add at least one milestone to it.");
+        return alert("Pick at least one item and add at least one milestone with rate + qty.");
       }
       if (selEst.billing_method !== "milestone_rate") {
         await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"milestone_rate"});
@@ -2105,12 +2547,6 @@ function TabEstimate({ project }) {
       });
       await reloadSel();
       if (r.data?.warnings?.length) alert("Saved with warnings:\n" + r.data.warnings.join("\n"));
-      // Module C: offer to sync milestones to tasks. Only for rate mode
-      // (% mode milestones aren't item-specific so task sync wouldn't be
-      // 1:1 anyway). Don't re-prompt if user explicitly dismissed earlier.
-      if (msForm.kind === "rate" && justSavedMilestones > 0 && !syncBannerDismissed) {
-        setSyncBanner({ milestoneCount: justSavedMilestones });
-      }
     } else alert(r.message || "Failed");
   };
 
@@ -2392,31 +2828,40 @@ function TabEstimate({ project }) {
               )}
               {subTab==="milestone" && (
                 <>
-                  {/* 🔗 Sync to tasks — opt-in trigger for users who skipped
-                      the post-save banner. Counts how many milestones still
-                      need linking and shows the count inline. Disabled when
-                      every milestone is already linked. (Module C) */}
-                  {selEst.billing_method === "milestone_rate" && (() => {
-                    const allMs = Object.values(milestones.rate_by_item || {}).flat();
-                    const unlinked = allMs.filter(m => !m.task_id).length;
-                    if (allMs.length === 0) return null;
-                    return (
-                      <button onClick={()=>runSyncTasks(false)}
-                        disabled={syncing || unlinked === 0}
-                        title={unlinked === 0
-                          ? "All milestones already linked to project tasks"
-                          : `Create ${unlinked} project task${unlinked === 1 ? "" : "s"} linked to milestones`}
-                        style={{
-                          background: unlinked === 0 ? T.surfaceB : "#EFF6FF",
-                          color: unlinked === 0 ? T.t4 : T.blu,
-                          border:"1px solid " + (unlinked === 0 ? T.b1 : T.bluM),
-                          borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:700,
-                          cursor: (syncing || unlinked === 0) ? "default" : "pointer",
-                        }}>
-                        🔗 {unlinked === 0 ? "All synced" : `Sync ${unlinked} to tasks`}
-                      </button>
-                    );
-                  })()}
+                  {/* ↻ Refresh chip — pulls latest task progress from the
+                      Tasks tab. Useful when user updates progress elsewhere
+                      and wants to see if the milestone chip flips to
+                      "ready to bill". Also auto-refreshes on tab switch. */}
+                  {selEst.billing_method === "milestone_rate" && (
+                    <button onClick={async()=>{
+                        // Refresh progress also sweeps for any newly-eligible
+                        // milestones that need auto-bill drafts. Two-in-one
+                        // affordance — fast feedback loop for the PM.
+                        await loadLinkedTasks(selEst.id);
+                        if (selEst.auto_bill_on_complete) {
+                          const sw = await api.post("/customer-estimates/"+selEst.id+"/auto-bill-sweep")
+                            .catch(e => ({ success:false, message:e.message }));
+                          if (sw?.success && sw.data?.created?.length > 0) {
+                            alert(sw.data.created.length + " draft invoice" + (sw.data.created.length === 1 ? "" : "s") + " created for newly-eligible milestones. Review them in the Invoices tab.");
+                            await reloadSel();
+                          }
+                        }
+                      }}
+                      disabled={linkedTasksLoading}
+                      title={selEst.auto_bill_on_complete
+                        ? "Refresh task progress + create drafts for any newly-eligible milestones"
+                        : "Refresh task progress on milestones"}
+                      style={{
+                        background:"white",
+                        color:T.t3,
+                        border:"1px solid "+T.b1,
+                        borderRadius:14,padding:"4px 10px",fontSize:10.5,fontWeight:600,
+                        cursor: linkedTasksLoading ? "default" : "pointer",
+                        display:"flex",alignItems:"center",gap:4,
+                      }}>
+                      {linkedTasksLoading ? "Refreshing…" : "↻ Refresh progress"}
+                    </button>
+                  )}
                   {/* 🤖 Auto-billing toggle — single estimate-level switch
                       (Module B). When ON + a linked task hits "Complete",
                       the future hook will auto-create a DRAFT invoice. Off
@@ -2436,6 +2881,19 @@ function TabEstimate({ project }) {
                       if (!r?.success) { alert(r?.message || "Failed"); return; }
                       // Optimistic local update — full reload would jump scroll
                       setSelEst(prev => prev ? { ...prev, auto_bill_on_complete: next ? 1 : 0 } : prev);
+                      // When turning ON: sweep for already-eligible milestones.
+                      // Tasks that were already past trigger before the toggle
+                      // was enabled won't fire via PUT hook, so sweep catches them.
+                      if (next) {
+                        const sw = await api.post("/customer-estimates/"+selEst.id+"/auto-bill-sweep")
+                          .catch(e => ({ success:false, message:e.message }));
+                        if (sw?.success && sw.data?.created?.length > 0) {
+                          alert("Auto-billing ON.\n\n" +
+                                sw.data.created.length + " draft invoice" + (sw.data.created.length === 1 ? "" : "s") +
+                                " created for already-eligible milestones.\nReview them in the Invoices tab.");
+                          await reloadSel();
+                        }
+                      }
                     }}
                     title={selEst.auto_bill_on_complete
                       ? "Auto-billing is ON. Click to turn off."
@@ -2511,7 +2969,7 @@ function TabEstimate({ project }) {
                 </>
               )}
               {subTab==="invoice" && (<>
-                <button onClick={()=>{ setInvForm(p=>({...p,source:"milestone"})); setShowNewInv(true); }}
+                <button onClick={openNewInvoice}
                   style={{background:T.blu,color:"white",border:"none",borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                   + Invoice
                 </button>
@@ -2651,101 +3109,197 @@ function TabEstimate({ project }) {
             {/* MILESTONES TAB */}
             {subTab==="milestone" && (
               <div>
-                {/* Module C: Soft sync banner — appears after schedule save.
-                    User can accept (creates tasks + back-links), or Skip.
-                    Skip sticks for the session. They can always re-trigger
-                    via the "🔗 Sync to tasks" header button. */}
-                {syncBanner && (
-                  <div style={{padding:"10px 14px",background:"#EFF6FF",border:"1px solid "+T.bluM,borderRadius:8,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12}}>
-                    <div style={{flex:1}}>
-                      <div style={{fontSize:12.5,fontWeight:700,color:T.t1,marginBottom:2}}>
-                        ✨ Want matching tasks in this project?
-                      </div>
-                      <div style={{fontSize:11,color:T.t3,lineHeight:1.4}}>
-                        Create {syncBanner.milestoneCount} project task{syncBanner.milestoneCount === 1 ? "" : "s"} linked to these milestones.
-                        When a task is marked Complete, the linked milestone is ready to bill.
-                      </div>
-                    </div>
-                    <div style={{display:"flex",gap:6}}>
-                      <button onClick={()=>{ setSyncBanner(null); setSyncBannerDismissed(true); }}
-                        disabled={syncing}
-                        style={{background:"transparent",border:"1px solid "+T.b1,color:T.t3,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:600,cursor: syncing?"default":"pointer"}}>
-                        Skip
-                      </button>
-                      <button onClick={()=>runSyncTasks(false)}
-                        disabled={syncing}
-                        style={{background:T.blu,border:"none",color:"white",borderRadius:5,padding:"5px 14px",fontSize:11,fontWeight:700,cursor: syncing?"default":"pointer"}}>
-                        {syncing ? "Creating…" : "Create tasks"}
-                      </button>
-                    </div>
-                  </div>
-                )}
-                {/* Undo toast — visible for 10s after sync */}
-                {syncToast && (
-                  <div style={{padding:"9px 14px",background:"#0F172A",color:"white",borderRadius:8,marginBottom:10,display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,boxShadow:"0 4px 14px rgba(0,0,0,0.18)"}}>
-                    <div style={{fontSize:12,fontWeight:600}}>
-                      ✓ Created {syncToast.created} task{syncToast.created === 1 ? "" : "s"} linked to milestones
-                      {syncToast.skipped > 0 && <span style={{color:"rgba(255,255,255,0.5)",fontWeight:400,marginLeft:6}}>· {syncToast.skipped} already linked</span>}
-                    </div>
-                    <div style={{display:"flex",gap:6}}>
-                      <button onClick={undoSyncTasks} disabled={syncing}
-                        style={{background:"rgba(255,255,255,0.12)",border:"none",color:"white",borderRadius:5,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor: syncing?"default":"pointer"}}>
-                        ↺ Undo
-                      </button>
-                      <button onClick={()=>setSyncToast(null)} disabled={syncing}
-                        style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:14,cursor:"pointer",padding:"0 4px"}}>×</button>
-                    </div>
-                  </div>
-                )}
                 {selEst.billing_method === "manual" && (
                   <div style={{padding:"24px",textAlign:"center",color:T.t3,background:T.surface,border:"1px dashed "+T.b1,borderRadius:8}}>
                     <div style={{fontSize:13,marginBottom:6}}>This estimate uses <b>manual</b> billing (per-item cumulative qty).</div>
                     <div style={{fontSize:11.5,color:T.t4}}>Click <b>+ Set Schedule</b> to switch to milestone-based (item-wise rate or % of order value).</div>
                   </div>
                 )}
-                {selEst.billing_method === "milestone_rate" && (estDetail?.sections||[]).map(sec =>
-                  (sec.items||[]).map(it => {
-                    const ms = milestones.rate_by_item[it.id] || [];
-                    const hasSchedule = ms.length > 0;
-                    return (
-                      <div key={it.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:10}}>
-                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8,gap:8}}>
-                          <div style={{fontSize:12.5,fontWeight:700,color:T.t1,flex:1}}>{it.description}</div>
-                          <div style={{fontSize:11,color:T.t3}}>Item rate: <b>{fmtC(it.rate)}</b></div>
-                          {/* Edit / Delete affordances — visible when a schedule exists for this item */}
-                          {hasSchedule && (
-                            <div style={{display:"flex",gap:5}}>
-                              <button onClick={()=>editRateSchedule(it.id)}
-                                title="Edit schedule"
-                                style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
-                                ✎
-                              </button>
-                              <button onClick={()=>deleteRateSchedule(it.id, it.description)}
-                                title="Delete schedule"
-                                style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:26,height:26,fontSize:12,cursor:"pointer",lineHeight:1}}>
-                                🗑
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                        {!hasSchedule && <div style={{fontSize:11.5,color:T.t4,fontStyle:"italic"}}>No payment schedule set. Use + Set Schedule.</div>}
-                        {hasSchedule && (
-                          <div style={{display:"grid",gridTemplateColumns:"30px 1fr 100px 100px",gap:6,padding:"4px 0",borderBottom:"1px solid "+T.b1,marginBottom:4}}>
-                            {["#","Milestone","Cumulative ₹/unit","Incremental"].map(h => <span key={h} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
-                          </div>
-                        )}
-                        {ms.map(m => (
-                          <div key={m.id} style={{display:"grid",gridTemplateColumns:"30px 1fr 100px 100px",gap:6,padding:"4px 0",fontSize:12}}>
-                            <span style={{color:T.t4}}>{m.seq+1}</span>
-                            <span style={{color:T.t1}}>{m.name}</span>
-                            <span style={{color:T.t2,textAlign:"right",paddingRight:8}}>{fmtC(m.cum_rate)}</span>
-                            <span style={{color:T.blu,textAlign:"right",paddingRight:8,fontWeight:600}}>{fmtC(m.inc_rate)}</span>
-                          </div>
-                        ))}
+                {selEst.billing_method === "milestone_rate" && (estDetail?.sections||[]).map(sec => {
+                  // Group items by parsed [Category] prefix — same convention
+                  // as BOQ tab. Renders Section › Category › Item › Milestones.
+                  const groups = {}; const catOrder = [];
+                  for (const it of (sec.items || [])) {
+                    const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
+                    const catName = m ? m[1] : "";
+                    const cleanDesc = m ? m[2] : (it.description || "");
+                    if (!groups[catName]) { groups[catName] = []; catOrder.push(catName); }
+                    groups[catName].push({ ...it, _cleanDesc: cleanDesc });
+                  }
+                  const secTotal = (sec.items||[]).reduce((s,i)=> s + parseFloat(i.amount||0), 0);
+                  return (
+                    <div key={sec.id} style={{marginBottom:14}}>
+                      {/* Section header — light-blue estimate theme */}
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"9px 14px",background:T.bluL,borderRadius:"8px 8px 0 0",border:"1px solid "+T.bluM,borderBottom:"none"}}>
+                        <span style={{fontSize:12.5,fontWeight:800,color:T.blu,letterSpacing:".3px"}}>{sec.title}</span>
+                        <span style={{fontSize:12,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums"}}>{fmtC(secTotal)}</span>
                       </div>
-                    );
-                  })
-                )}
+                      <div style={{border:"1px solid "+T.bluM,borderTop:"none",borderRadius:"0 0 8px 8px",overflow:"hidden"}}>
+                        {catOrder.map((catName, ci) => {
+                          const items = groups[catName] || [];
+                          const catTotal = items.reduce((s,i)=> s + parseFloat(i.amount||0), 0);
+                          return (
+                            <div key={catName || "__none__"}>
+                              {/* Category sub-header */}
+                              {catName && (
+                                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 14px 6px 18px",background:"#F1F5F9",borderTop: ci>0 ? "1px solid "+T.b1 : "none",borderLeft:"3px solid "+T.bluM}}>
+                                  <span style={{fontSize:11,fontWeight:700,color:T.t1,letterSpacing:".2px"}}>
+                                    {catName}<span style={{fontSize:10,color:T.t4,fontWeight:500,marginLeft:6}}>· {items.length} item{items.length===1?"":"s"}</span>
+                                  </span>
+                                  <span style={{fontSize:11,fontWeight:700,color:T.t2,fontVariantNumeric:"tabular-nums"}}>{fmtC(catTotal)}</span>
+                                </div>
+                              )}
+                              {/* Items + their milestones */}
+                              {items.map(it => {
+                                const ms = milestones.rate_by_item[it.id] || [];
+                                const hasSchedule = ms.length > 0;
+                                // Pull live billing state from the loaded ledger
+                                // (auto-loaded when this tab is active). Falls
+                                // back to a zeroed shape so the UI doesn't
+                                // crash if the ledger hasn't loaded yet.
+                                const lit = ledgerByItemId[it.id] || null;
+                                const boqQty   = parseFloat(it.qty)  || 0;
+                                const boqRate  = parseFloat(it.rate) || 0;
+                                const boqValue = boqQty * boqRate;
+                                const billedQty   = lit ? (Number(lit.total_billed) || 0)    : 0;
+                                const remainQty   = lit ? (Number(lit.total_remaining) || 0) : boqQty;
+                                const billedValue = billedQty * boqRate;
+                                const remainValue = remainQty * boqRate;
+                                const pctBilled   = boqQty > 0 ? Math.min(100, (billedQty / boqQty) * 100) : 0;
+                                const isFully     = pctBilled >= 99.99;
+                                return (
+                                  <div key={it.id} style={{padding:"10px 14px",borderTop:"1px solid "+T.b1,background:T.surface}}>
+                                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom: hasSchedule?8:4,gap:8}}>
+                                      <div style={{fontSize:12,fontWeight:700,color:T.t1,flex:1}}>
+                                        {it._cleanDesc}
+                                        <span style={{fontSize:10.5,color:T.t4,fontWeight:500,marginLeft:8}}>· {boqQty} {it.unit} @ {fmtC(boqRate)}/unit = {fmtC(boqValue)}</span>
+                                      </div>
+                                      {hasSchedule && (
+                                        <div style={{display:"flex",gap:5}}>
+                                          <button onClick={()=>editRateSchedule(it.id)} title="Edit schedule"
+                                            style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>✎</button>
+                                          <button onClick={()=>deleteRateSchedule(it.id, it._cleanDesc)} title="Delete schedule"
+                                            style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,width:24,height:24,fontSize:11,cursor:"pointer",lineHeight:1}}>🗑</button>
+                                        </div>
+                                      )}
+                                    </div>
+                                    {/* ── Item-level billing summary (P2+ enhancement) ──
+                                        Three-stat chip row: BOQ / Billed / Remaining
+                                        with qty + value + progress bar. Renders only
+                                        when the ledger has loaded so users don't see
+                                        a confusing "0 billed" while it's still fetching. */}
+                                    {hasSchedule && lit && (
+                                      <div style={{marginBottom:8,padding:"7px 10px",background:T.surfaceB,borderRadius:6,border:"1px solid "+T.b1}}>
+                                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:6}}>
+                                          <div>
+                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>Total (BOQ)</div>
+                                            <div style={{fontSize:12,fontWeight:700,color:T.t1,fontVariantNumeric:"tabular-nums"}}>{boqQty} {it.unit}</div>
+                                            <div style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>{fmtC(boqValue)}</div>
+                                          </div>
+                                          <div>
+                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>Billed</div>
+                                            <div style={{fontSize:12,fontWeight:700,color:billedQty>0?T.amb:T.t4,fontVariantNumeric:"tabular-nums"}}>{billedQty} {it.unit}</div>
+                                            <div style={{fontSize:10.5,color:billedQty>0?T.amb:T.t4,fontVariantNumeric:"tabular-nums"}}>{fmtC(billedValue)}</div>
+                                          </div>
+                                          <div>
+                                            <div style={{fontSize:9,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px"}}>Remaining</div>
+                                            <div style={{fontSize:12,fontWeight:700,color:remainQty>0?T.grn:T.t4,fontVariantNumeric:"tabular-nums"}}>{remainQty} {it.unit}</div>
+                                            <div style={{fontSize:10.5,color:remainQty>0?T.grn:T.t4,fontVariantNumeric:"tabular-nums"}}>{fmtC(remainValue)}</div>
+                                          </div>
+                                        </div>
+                                        <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                          <div style={{flex:1,height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}>
+                                            <div style={{width: pctBilled+"%",height:"100%",background: isFully ? T.amb : (pctBilled >= 50 ? T.blu : T.grn),transition:"width .3s"}}/>
+                                          </div>
+                                          <span style={{fontSize:10.5,fontWeight:700,color: isFully ? T.amb : T.t3,minWidth:42,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>
+                                            {isFully ? "✓ FULL" : pctBilled.toFixed(0)+"%"}
+                                          </span>
+                                        </div>
+                                      </div>
+                                    )}
+                                    {!hasSchedule && <div style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>No payment schedule set. Use + Set Schedule.</div>}
+                                    {hasSchedule && (
+                                      <>
+                                        {/* Milestone column header — clear Qty / Rate / Bill Value */}
+                                        <div style={{display:"grid",gridTemplateColumns:"26px 1fr 70px 85px 100px",gap:6,padding:"4px 0",borderBottom:"1px solid "+T.b1,marginBottom:2}}>
+                                          {["#","Milestone","Qty","Rate","Bill Value"].map((h,i) => <span key={h} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:i>=2?"right":"left",paddingRight:(i===2||i===3)?6:0}}>{h}</span>)}
+                                        </div>
+                                        {ms.map(m => {
+                                          const linked = linkedTasks[m.id];
+                                          const mQty = (m.qty != null ? parseFloat(m.qty) : parseFloat(it.qty)) || 0;
+                                          const mRate = parseFloat(m.inc_rate) || 0;
+                                          const billVal = mQty * mRate;
+                                          // Live billing state for this milestone from the loaded ledger.
+                                          const mls = ledgerByMsId[m.id] || null;
+                                          const mBilledQty = mls ? (Number(mls.billed_qty) || 0)    : 0;
+                                          const mRemainQty = mls ? (Number(mls.remaining_qty) || 0) : mQty;
+                                          const mStatus    = mls?.status || "unbilled";
+                                          return (
+                                            <div key={m.id} style={{padding:"4px 0",fontSize:12,borderBottom:"1px solid "+T.b1}}>
+                                              <div style={{display:"grid",gridTemplateColumns:"26px 1fr 70px 85px 100px",gap:6,alignItems:"center"}}>
+                                                <span style={{color:T.t4}}>{m.seq+1}</span>
+                                                <span style={{color:T.t1,fontWeight:600}}>{m.name}</span>
+                                                <span style={{color:T.t2,textAlign:"right",paddingRight:6,fontVariantNumeric:"tabular-nums"}}>{mQty}</span>
+                                                <span style={{color:T.t2,textAlign:"right",paddingRight:6,fontVariantNumeric:"tabular-nums"}}>{fmtC(mRate)}</span>
+                                                <span style={{color:T.grn,textAlign:"right",fontWeight:700,fontVariantNumeric:"tabular-nums"}}>{fmtC(billVal)}</span>
+                                              </div>
+                                              {/* Per-milestone live billing state — only render
+                                                  when we actually have ledger data AND something
+                                                  has been billed. Avoids clutter on un-billed rows. */}
+                                              {mls && mBilledQty > 0 && (
+                                                <div style={{paddingLeft:26,paddingTop:2,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                                                  <span style={{padding:"1px 7px",fontSize:10,fontWeight:700,borderRadius:10,
+                                                                background: mStatus === "fully_billed" ? "#FEF3C7" : T.grnL,
+                                                                color:      mStatus === "fully_billed" ? "#92400E" : T.grn,
+                                                                border:"1px solid " + (mStatus === "fully_billed" ? "#FCD34D" : T.grnM)}}>
+                                                    {mStatus === "fully_billed" ? "✓ FULLY BILLED" : "PARTIAL"}
+                                                  </span>
+                                                  <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>
+                                                    Billed <b style={{color:T.amb}}>{mBilledQty}</b> {it.unit} = <b style={{color:T.amb}}>{fmtC(mBilledQty * mRate)}</b>
+                                                  </span>
+                                                  {mRemainQty > 0 && (
+                                                    <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>
+                                                      · Remaining <b style={{color:T.grn}}>{mRemainQty}</b> {it.unit} = <b style={{color:T.grn}}>{fmtC(mRemainQty * mRate)}</b>
+                                                    </span>
+                                                  )}
+                                                </div>
+                                              )}
+                                              {/* Task link chip / Link button */}
+                                              <div style={{paddingLeft:26,paddingTop:4,paddingBottom:2,display:"flex",alignItems:"center",gap:8}}>
+                                                {linked ? (
+                                                  <>
+                                                    <span style={{display:"inline-flex",alignItems:"center",gap:6,padding:"3px 8px",borderRadius:14,background: linked.eligible ? "#DCFCE7" : T.bluL,border:"1px solid "+ (linked.eligible ? "#86EFAC" : T.bluM),fontSize:10.5,fontWeight:600,color: linked.eligible ? "#15803D" : T.blu}}>
+                                                      🔗 {linked.task_name}
+                                                      <span style={{color: linked.eligible ? "#15803D" : T.t3,fontWeight:500}}>· {linked.progress}% / trigger @ {linked.trigger_pct}%</span>
+                                                      {linked.eligible && <span style={{fontSize:10}}>✓ ready to bill</span>}
+                                                    </span>
+                                                    <button onClick={()=>openTaskPicker(m.id)} title="Change link or trigger %"
+                                                      style={{background:"none",border:"none",color:T.t3,fontSize:11,cursor:"pointer",padding:"0 4px"}}>✎</button>
+                                                    <button onClick={()=>unlinkTask(m.id)} title="Unlink from task"
+                                                      style={{background:"none",border:"none",color:T.red,fontSize:12,cursor:"pointer",padding:"0 4px"}}>×</button>
+                                                  </>
+                                                ) : (
+                                                  <button onClick={()=>openTaskPicker(m.id)}
+                                                    style={{background:"transparent",border:"1px dashed "+T.b1,color:T.t3,borderRadius:14,padding:"3px 10px",fontSize:10.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:4}}>
+                                                    🔗 Link to task
+                                                  </button>
+                                                )}
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
                 {selEst.billing_method === "milestone_percent" && (
                   <div style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
@@ -2789,18 +3343,66 @@ function TabEstimate({ project }) {
               <div>
                 {invoices.length === 0 && <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No invoices yet</div>}
                 {invoices.map(inv => {
-                  const stC = inv.status==="Paid"?T.grn:inv.status==="Approved"?T.blu:inv.status==="Submitted"?T.amb:T.t4;
+                  // Color-code the left accent + status pill by lifecycle stage
+                  const stC = inv.status==="Paid" ? T.grn
+                            : inv.status==="Approved" ? T.blu
+                            : inv.status==="Submitted" ? T.amb
+                            : inv.status==="Draft" ? "#7C3AED"  // purple for Draft (auto-bill preview)
+                            : T.t4;
+                  const isAutoDraft = inv.source === "auto" && inv.status === "Draft";
                   return (
-                    <div key={inv.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+stC}}>
+                    <div key={inv.id}
+                      onClick={(e)=>{ e.stopPropagation(); openInvoiceDetail(inv.id); }}
+                      onMouseEnter={e=>{ e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)"; e.currentTarget.style.transform="translateY(-1px)"; }}
+                      onMouseLeave={e=>{ e.currentTarget.style.boxShadow="none"; e.currentTarget.style.transform="none"; }}
+                      style={{
+                        background:T.surface,
+                        border: isAutoDraft ? "1.5px solid #C4B5FD" : "1px solid "+T.b1,
+                        borderRadius:8,padding:"12px 14px",marginBottom:8,
+                        borderLeft:"3px solid "+stC,
+                        cursor:"pointer",
+                        transition:"all .15s ease",
+                      }}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
                         <div>
                           <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{inv.invoice_no}</span>
                           {inv.source==="manual" && <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:T.purL,color:T.pur,border:"1px solid "+T.pur}}>MANUAL</span>}
+                          {inv.source==="auto" && <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#EDE9FE",color:"#6D28D9",border:"1px solid #C4B5FD"}}>🤖 AUTO</span>}
+                          {inv.is_over_bill==1 && <span title={inv.over_bill_reason||"Over-bill invoice"} style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>🔴 OVER-BILL</span>}
                           <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>{inv.invoice_date}</span>
                         </div>
                         <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{inv.status}</span>
                       </div>
-                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
+                      {isAutoDraft && (
+                        <div style={{padding:"7px 10px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:6,marginBottom:8,fontSize:11,color:"#5B21B6",lineHeight:1.45}}>
+                          ⏳ Auto-generated from task progress. Click to review preview before confirming.
+                        </div>
+                      )}
+                      {/* ── Item summary line (P2+ enhancement) ──
+                          Tells the user WHAT was billed at a glance, without
+                          opening the drawer. Strips the "[Category] " prefix
+                          for cleaner display. Falls back gracefully if the
+                          summary fields aren't populated (older backend). */}
+                      {inv.item_count > 0 && (() => {
+                        const cleanDesc = (inv.first_item_desc || "").replace(/^\[[^\]]+\]\s*/, "").trim();
+                        const q = inv.first_item_boq_qty != null ? parseFloat(inv.first_item_boq_qty) : parseFloat(inv.first_item_qty || 0);
+                        const u = inv.first_item_unit || "";
+                        return (
+                          <div style={{marginBottom:8,padding:"6px 10px",background:T.surfaceB,borderRadius:5,borderLeft:"2px solid "+T.bluM,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                            <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>Billed:</span>
+                            <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{cleanDesc || "(item)"}</span>
+                            {q > 0 && (
+                              <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>· {q} {u}</span>
+                            )}
+                            {inv.item_count > 1 && (
+                              <span style={{fontSize:10,fontWeight:600,padding:"1px 7px",background:T.bluL,color:T.blu,borderRadius:10,border:"1px solid "+T.bluM}}>
+                                + {inv.item_count - 1} more
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
+                      <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
                         {[{l:"Gross",v:fmtC(inv.gross_amount),c:T.t1},{l:"Retention",v:fmtC(inv.retention_amt),c:T.amb},{l:"TDS",v:fmtC(inv.tds_amt),c:T.red},{l:"Net Receivable",v:fmtC(inv.net_receivable),c:T.grn}].map(s => (
                           <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
                             <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
@@ -2808,23 +3410,76 @@ function TabEstimate({ project }) {
                           </div>
                         ))}
                       </div>
-                      <div style={{display:"flex",gap:8}}>
-                        {inv.status!=="Paid" && (
-                          <button onClick={()=>{ setPayForm(p=>({...p,amount_received:String(inv.net_receivable)})); setShowPay(inv.id); }}
-                            style={{padding:"6px 12px",borderRadius:5,background:T.grn,color:"white",border:"none",fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            ₹ Record Payment
-                          </button>
-                        )}
-                        {inv.status!=="Paid" && (
-                          <button onClick={()=>deleteInvoice(inv.id, inv.invoice_no)}
-                            style={{padding:"6px 12px",borderRadius:5,background:T.redL,color:T.red,border:"1px solid "+T.redM,fontSize:11,fontWeight:700,cursor:"pointer"}}>
-                            🗑 Delete
-                          </button>
-                        )}
+                      <div style={{marginTop:8,fontSize:10.5,color:T.t4,textAlign:"center",fontStyle:"italic"}}>
+                        Click anywhere to view full detail · record payment · delete
                       </div>
                     </div>
                   );
                 })}
+                {/* Standalone manual invoices (estimate_id=NULL) — project-level
+                    ad-hoc bills that don't belong to any specific estimate.
+                    Shown as a clearly separated section so they remain visible
+                    even after the main list is scoped to a specific estimate. */}
+                {standaloneInvoices.length > 0 && (
+                  <>
+                    <div style={{margin:"18px 0 10px",padding:"6px 12px",background:T.purL,borderRadius:6,fontSize:10,fontWeight:700,color:T.pur,textTransform:"uppercase",letterSpacing:".4px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span>📋 Standalone Manual Invoices · Not tied to any estimate ({standaloneInvoices.length})</span>
+                      <span style={{fontSize:9.5,color:T.t4,fontWeight:500,textTransform:"none",letterSpacing:0}}>Project-level ad-hoc</span>
+                    </div>
+                    {standaloneInvoices.map(inv => {
+                      const stC = inv.status==="Paid" ? T.grn : inv.status==="Approved" ? T.blu : inv.status==="Submitted" ? T.amb : T.t4;
+                      return (
+                        <div key={inv.id}
+                          onClick={(e)=>{ e.stopPropagation(); openInvoiceDetail(inv.id); }}
+                          onMouseEnter={e=>{ e.currentTarget.style.boxShadow="0 4px 12px rgba(0,0,0,0.06)"; e.currentTarget.style.transform="translateY(-1px)"; }}
+                          onMouseLeave={e=>{ e.currentTarget.style.boxShadow="none"; e.currentTarget.style.transform="none"; }}
+                          style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,padding:"12px 14px",marginBottom:8,borderLeft:"3px solid "+stC,cursor:"pointer",transition:"all .15s ease"}}>
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:6}}>
+                            <div>
+                              <span style={{fontSize:13,fontWeight:700,color:T.t1}}>{inv.invoice_no}</span>
+                              <span style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:T.purL,color:T.pur,border:"1px solid "+T.pur}}>MANUAL · STANDALONE</span>
+                              {inv.is_over_bill==1 && <span title={inv.over_bill_reason||"Over-bill invoice"} style={{marginLeft:8,fontSize:9.5,fontWeight:700,padding:"2px 6px",borderRadius:3,background:"#FEE2E2",color:"#991B1B",border:"1px solid #FCA5A5"}}>🔴 OVER-BILL</span>}
+                              <span style={{fontSize:10.5,color:T.t4,marginLeft:8}}>{inv.invoice_date}</span>
+                            </div>
+                            <span style={{fontSize:9.5,fontWeight:700,padding:"2px 8px",borderRadius:4,background:stC+"22",color:stC}}>{inv.status}</span>
+                          </div>
+                          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
+                            {[{l:"Gross",v:fmtC(inv.gross_amount),c:T.t1},{l:"Retention",v:fmtC(inv.retention_amt),c:T.amb},{l:"TDS",v:fmtC(inv.tds_amt),c:T.red},{l:"Net Receivable",v:fmtC(inv.net_receivable),c:T.grn}].map(s => (
+                              <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:6,padding:"6px 8px"}}>
+                                <div style={{fontSize:9,color:T.t4,textTransform:"uppercase"}}>{s.l}</div>
+                                <div style={{fontSize:13,fontWeight:800,color:s.c}}>{s.v}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {/* Item summary (P2+) — also shown on standalone manual invoices */}
+                          {inv.item_count > 0 && (() => {
+                            const cleanDesc = (inv.first_item_desc || "").replace(/^\[[^\]]+\]\s*/, "").trim();
+                            const q = inv.first_item_boq_qty != null ? parseFloat(inv.first_item_boq_qty) : parseFloat(inv.first_item_qty || 0);
+                            const u = inv.first_item_unit || "";
+                            return (
+                              <div style={{marginTop:8,padding:"6px 10px",background:T.surfaceB,borderRadius:5,borderLeft:"2px solid "+T.bluM,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>Billed:</span>
+                                <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>{cleanDesc || "(item)"}</span>
+                                {q > 0 && (
+                                  <span style={{fontSize:10.5,color:T.t3,fontVariantNumeric:"tabular-nums"}}>· {q} {u}</span>
+                                )}
+                                {inv.item_count > 1 && (
+                                  <span style={{fontSize:10,fontWeight:600,padding:"1px 7px",background:T.bluL,color:T.blu,borderRadius:10,border:"1px solid "+T.bluM}}>
+                                    + {inv.item_count - 1} more
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                          {inv.remark && <div style={{fontSize:10.5,color:T.t4,marginTop:8,fontStyle:"italic"}}>"{inv.remark}"</div>}
+                          <div style={{marginTop:6,fontSize:10.5,color:T.t4,textAlign:"center",fontStyle:"italic"}}>
+                            Click to view detail
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+                )}
               </div>
             )}
 
@@ -3221,18 +3876,84 @@ function TabEstimate({ project }) {
       </>)}
 
       {/* ── MODAL: New Invoice ──────────────────────────────────── */}
-      {showNewInv && (<>
-        <div onClick={()=>setShowNewInv(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+      {showNewInv && (() => {
+        // Closing must also clear the edit marker so a subsequent
+        // "+ Invoice" creates fresh (POST) rather than re-editing (PUT).
+        const closeInvModal = () => { setShowNewInv(false); setInvForm(p=>({...p, _editId: undefined })); };
+        return (<>
+        <div onClick={closeInvModal} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:680,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{invForm.source==="manual"?"New Manual Invoice":"New Invoice (from milestones)"}</div>
-            <button onClick={()=>setShowNewInv(false)} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
+            <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{invForm._editId ? "Edit Manual Invoice" : invForm.source==="manual"?"New Manual Invoice":"New Invoice (from milestones)"}</div>
+            <button onClick={closeInvModal} style={{background:"none",border:"none",fontSize:18,color:T.t3,cursor:"pointer"}}>×</button>
           </div>
           <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:14}}>
               <div><label style={lblS}>Invoice Date</label><input type="date" value={invForm.invoice_date} onChange={e=>setInvForm(p=>({...p,invoice_date:e.target.value}))} style={inpS}/></div>
               {invForm.source==="manual" && <div><label style={lblS}>Customer Name</label><input value={invForm.customer_name} onChange={e=>setInvForm(p=>({...p,customer_name:e.target.value}))} placeholder={selEst?.customer_name||"Customer"} style={inpS}/></div>}
               {invForm.source==="milestone" && selEst && <div><div style={{fontSize:11,color:T.t3,paddingTop:18}}><b>Estimate:</b> {selEst.estimate_no} ({selEst.billing_method})</div></div>}
+            </div>
+
+            {/* ── Over-Billing Mode toggle ──────────────────────────
+                Per-invoice user-driven flag for legitimate extra work
+                (design change, site condition, client addition). When
+                enabled, fully-billed items become selectable + qty
+                inputs allow exceeding BOQ remaining. Reason becomes
+                compulsory + auto-notifies admins on save. */}
+            <div style={{marginBottom:14,padding:"10px 12px",borderRadius:7,
+                         background: invForm.overBillMode ? "#FEF2F2" : T.surfaceB,
+                         border: "1px solid " + (invForm.overBillMode ? "#FCA5A5" : T.b1)}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color: invForm.overBillMode ? "#991B1B" : T.t1}}>
+                    {invForm.overBillMode ? "⚠ OVER-BILLING MODE ENABLED" : "Normal billing mode"}
+                  </div>
+                  <div style={{fontSize:10.5,color: invForm.overBillMode ? "#991B1B" : T.t3,marginTop:2,lineHeight:1.45}}>
+                    {invForm.overBillMode
+                      ? "Fully-billed items selectable. Qty can exceed remaining. Reason compulsory."
+                      : "BOQ-capped. Click toggle if extra work / site change needs over-billing."}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={()=>setInvForm(p=>({...p, overBillMode: !p.overBillMode, overBillReason: !p.overBillMode ? p.overBillReason : ""}))}
+                  style={{
+                    padding:"6px 12px",borderRadius:6,fontSize:11,fontWeight:700,cursor:"pointer",border:"none",
+                    background: invForm.overBillMode ? "#DC2626" : T.bluL,
+                    color: invForm.overBillMode ? "white" : T.blu,
+                  }}>
+                  {invForm.overBillMode ? "Turn OFF" : "+ Over-Billing"}
+                </button>
+              </div>
+              {invForm.overBillMode && (
+                <div style={{marginTop:10}}>
+                  <label style={{...lblS, color:"#991B1B", fontWeight:700}}>
+                    Reason <span style={{color:"#DC2626"}}>*</span> <span style={{fontWeight:400,fontSize:10}}>(compulsory — shown on invoice + client query)</span>
+                  </label>
+                  <textarea
+                    value={invForm.overBillReason}
+                    onChange={e=>setInvForm(p=>({...p,overBillReason:e.target.value}))}
+                    placeholder="e.g. Extra work due to design change — additional 250 qty for slab thickness increase per client approval dated 28-May-2026"
+                    rows={2}
+                    style={{...inpS, minHeight:50, resize:"vertical", fontFamily:"inherit", borderColor: invForm.overBillReason.trim() ? T.b1 : "#FCA5A5"}}
+                  />
+                  {/* Quick templates row */}
+                  <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:6}}>
+                    {[
+                      "Extra work due to design change",
+                      "Site condition change",
+                      "Client requested addition",
+                      "Material wastage compensation",
+                    ].map(t => (
+                      <button key={t} type="button"
+                        onClick={()=>setInvForm(p=>({...p, overBillReason: p.overBillReason ? p.overBillReason : t}))}
+                        style={{padding:"3px 8px",fontSize:9.5,fontWeight:600,background:"white",color:"#991B1B",border:"1px solid #FCA5A5",borderRadius:4,cursor:"pointer"}}>
+                        {t}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {invForm.source==="manual" && (<>
@@ -3256,57 +3977,225 @@ function TabEstimate({ project }) {
               </div>
             </>)}
 
+            {/* PS-17: Ledger-aware milestone selector with RA-bill discipline.
+                Each item shows a progress bar (planned vs billed). Each
+                milestone row shows: remaining/planned, rate, chip if
+                fully billed (disabled) or red-flag warning when over-bill
+                is allowed by company policy. */}
             {invForm.source==="milestone" && selEst && selEst.billing_method === "milestone_rate" && (<>
-              <div style={{fontSize:11,color:T.t3,marginBottom:8}}>Tick milestones to bill. Enter cumulative qty (0–{(estDetail?.sections||[]).flatMap(s=>s.items).reduce((m,i)=>Math.max(m,parseFloat(i.qty)||0),0)} max per item).</div>
-              {(estDetail?.sections||[]).flatMap(s => s.items).map(it => {
-                const ms = milestones.rate_by_item[it.id] || [];
-                if (ms.length === 0) return null;
+              {ledgerLoading && (
+                <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading billing ledger…</div>
+              )}
+              {!ledgerLoading && billingLedger?.mode === "milestone_rate" && (() => {
+                // overbillOK = company-level policy allow_overbill OR per-invoice user toggle (overBillMode)
+                const overbillOK = !!billingLedger.allow_overbill || invForm.overBillMode;
                 return (
-                  <div key={it.id} style={{marginBottom:12,border:"1px solid "+T.b1,borderRadius:6,padding:"8px 10px"}}>
-                    <div style={{fontSize:12,fontWeight:700,color:T.t1,marginBottom:6}}>{it.description} <span style={{color:T.t4,fontWeight:400}}>· qty {parseFloat(it.qty)} {it.unit}</span></div>
-                    {ms.map(m => {
-                      const picked = invForm.items.find(x => x.milestone_id === m.id);
+                  <>
+                    <div style={{fontSize:11,color:T.t3,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span>Tick milestones to bill. Qty defaults to remaining; {overbillOK ? "over-bill allowed with red flag" : "capped at remaining qty"}.</span>
+                      {overbillOK && <span style={{padding:"2px 7px",fontSize:9.5,fontWeight:700,background:"#FEE2E2",color:"#991B1B",borderRadius:3}}>OVER-BILL ENABLED</span>}
+                    </div>
+                    {billingLedger.items.map(it => {
+                      const pctBilled = it.total_planned > 0 ? Math.min(100, (it.total_billed / it.total_planned) * 100) : 0;
                       return (
-                        <div key={m.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 90px 120px",gap:6,alignItems:"center",padding:"3px 0"}}>
-                          <input type="checkbox" checked={!!picked}
+                        <div key={it.item_id} style={{marginBottom:12,border:"1px solid "+T.b1,borderRadius:7,padding:"10px 12px",background:"white"}}>
+                          {/* Item header: name + planned/billed/remaining + progress bar */}
+                          <div style={{marginBottom:8}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                              <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{it.description}</span>
+                              <span style={{fontSize:10.5,color:T.t3}}>
+                                Planned <b style={{color:T.t1}}>{it.total_planned}</b> {it.unit} · Billed <b style={{color:T.amb}}>{it.total_billed}</b> · Remaining <b style={{color:it.total_remaining > 0 ? T.grn : T.t4}}>{it.total_remaining}</b>
+                              </span>
+                            </div>
+                            <div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}>
+                              <div style={{width: pctBilled+"%",height:"100%",background: pctBilled >= 100 ? T.t4 : T.blu,transition:"width .2s"}}/>
+                            </div>
+                          </div>
+                          {/* Milestone rows */}
+                          {it.milestones.map(m => {
+                            const picked = invForm.items.find(x => x.milestone_id === m.milestone_id);
+                            const isFully = m.status === "fully_billed";
+                            // In over-bill mode, fully-billed milestones re-open for extra-work scenario.
+                            const isDisabled = isFully && !overbillOK;
+                            const enteredQty = parseFloat(picked?.this_qty) || 0;
+                            const remainingQty = Number(m.remaining_qty) || 0;
+                            const exceedsRemaining = enteredQty > remainingQty;
+                            // Split-aware breakdown for the user's Case 3 scenario:
+                            //   entered > remaining AND remaining > 0
+                            //   → normal portion (in BOQ) + over portion (excess)
+                            const normalPortion = Math.min(enteredQty, Math.max(0, remainingQty));
+                            const overPortion   = Math.max(0, enteredQty - Math.max(0, remainingQty));
+                            const isSplit       = exceedsRemaining && remainingQty > 0 && overPortion > 0;
+                            const isFullOver    = isFully && enteredQty > 0;
+                            // Show warning row when user has typed a qty
+                            // exceeding remaining AND over-bill mode is OFF.
+                            // Mode ON → split breakdown is enough (already shown).
+                            const showOverWarning = exceedsRemaining && !invForm.overBillMode;
+                            return (
+                              <div key={m.milestone_id} style={{borderTop:"1px dashed "+T.b1, opacity: isDisabled ? 0.55 : 1}}>
+                              <div style={{display:"grid",gridTemplateColumns:"24px 1fr 80px 120px 110px",gap:6,alignItems:"center",padding:"6px 0"}}>
+                                <input type="checkbox" checked={!!picked} disabled={isDisabled}
+                                  onChange={e => {
+                                    if (e.target.checked) {
+                                      // Default qty: remaining (0 when fully billed → user types extra)
+                                      const defaultQty = remainingQty > 0 ? String(remainingQty) : "";
+                                      setInvForm(p => ({...p, items:[...p.items, {milestone_id:m.milestone_id, this_qty: defaultQty}]}));
+                                    } else {
+                                      setInvForm(p => ({...p, items: p.items.filter(x => x.milestone_id !== m.milestone_id)}));
+                                    }
+                                  }}/>
+                                <div style={{minWidth:0}}>
+                                  <div style={{fontSize:12,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
+                                  <div style={{fontSize:10,color:T.t4,marginTop:1,display:"flex",gap:6,flexWrap:"wrap"}}>
+                                    {isFully ? <span style={{padding:"1px 6px",background: overbillOK ? "#FEE2E2" : T.surfaceB,color: overbillOK ? "#991B1B" : T.t3,borderRadius:3,fontWeight:600}}>{overbillOK ? "🔴 Fully billed — over-bill enabled" : "✓ Fully invoiced"}</span>
+                                             : m.status === "partial" ? <span>{m.billed_qty}/{m.planned_qty} billed · {m.remaining_qty} left</span>
+                                             : <span>{m.planned_qty} {it.unit}</span>}
+                                    {m.linked_task && (
+                                      <span style={{padding:"1px 6px",background:T.bluL,color:T.blu,borderRadius:3,fontWeight:600}}>
+                                        🔗 task @ {m.linked_task.progress}%
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                                <span style={{fontSize:11,color:T.t3,textAlign:"right",paddingRight:6,fontVariantNumeric:"tabular-nums"}}>{fmtC(m.rate)}/unit</span>
+                                <div>
+                                  {/* ── No silent clamp ──────────────────────
+                                      User feedback: silent reset confused users
+                                      (typed 300 → reverted to 200 without explanation).
+                                      Now we ACCEPT the typed value as-is and surface
+                                      a visible warning + action below. User can either
+                                      lower the qty OR turn on Over-Billing Mode + add
+                                      reason. Submit is also guarded server-side. */}
+                                  <input type="number" placeholder={String(remainingQty)} disabled={!picked || isDisabled}
+                                    value={picked?.this_qty || ""}
+                                    onChange={e => {
+                                      const v = e.target.value;
+                                      setInvForm(p => ({...p, items: p.items.map(x => x.milestone_id===m.milestone_id ? {...x, this_qty:v} : x)}));
+                                    }}
+                                    style={{...inpS,padding:"5px 8px",fontSize:11.5,
+                                            borderColor: exceedsRemaining ? "#DC2626" : T.b1,
+                                            borderWidth: exceedsRemaining ? 2 : 1,
+                                            background: exceedsRemaining ? "#FEF2F2" : "white",
+                                            color: exceedsRemaining ? "#991B1B" : T.t1,
+                                            fontWeight: exceedsRemaining ? 700 : 400}}/>
+                                </div>
+                                <span style={{fontSize:12,fontWeight:700,color:picked && enteredQty>0 ? (exceedsRemaining ? "#991B1B" : T.grn) : T.t4,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>
+                                  {picked && enteredQty > 0 ? fmtC(enteredQty * m.rate) : "—"}
+                                  {/* Split-aware over-bill breakdown — user-facing clarity */}
+                                  {isSplit && (
+                                    <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1,lineHeight:1.3}}>
+                                      🔴 SPLIT: {normalPortion} BOQ + {overPortion} over
+                                    </div>
+                                  )}
+                                  {isFullOver && !isSplit && (
+                                    <div style={{fontSize:8.5,color:"#991B1B",fontWeight:700,marginTop:1}}>
+                                      🔴 ALL OVER-BILL ({overPortion} qty)
+                                    </div>
+                                  )}
+                                </span>
+                              </div>
+                              {/* ── Over-bill warning ROW (P2+ UX fix) ──────
+                                  Fired when typed qty > remaining AND user
+                                  hasn't yet enabled Over-Billing Mode. Tells
+                                  them exactly what happened + what to do.
+                                  One-click "Turn ON Over-Billing" CTA so
+                                  they don't have to scroll back to the top. */}
+                              {showOverWarning && (
+                                <div style={{
+                                  margin:"4px 0 6px 26px",
+                                  padding:"7px 10px",
+                                  background:"#FEF2F2",
+                                  border:"1px solid #FCA5A5",
+                                  borderRadius:6,
+                                  display:"flex",
+                                  alignItems:"center",
+                                  gap:8,
+                                  flexWrap:"wrap",
+                                }}>
+                                  <span style={{fontSize:14}}>⚠️</span>
+                                  <div style={{flex:1,minWidth:180}}>
+                                    <div style={{fontSize:11.5,fontWeight:700,color:"#991B1B",lineHeight:1.4}}>
+                                      Over-billing detected — {enteredQty} {it.unit} entered, only {remainingQty} available
+                                    </div>
+                                    <div style={{fontSize:10.5,color:"#7F1D1D",marginTop:2,lineHeight:1.45}}>
+                                      Either reduce qty to {remainingQty}, or enable Over-Billing Mode + provide a reason explaining the extra work.
+                                    </div>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={()=>setInvForm(p=>({...p, overBillMode: true}))}
+                                    style={{
+                                      padding:"5px 10px",
+                                      borderRadius:5,
+                                      background:"#DC2626",
+                                      color:"white",
+                                      border:"none",
+                                      fontSize:10.5,
+                                      fontWeight:700,
+                                      cursor:"pointer",
+                                      whiteSpace:"nowrap",
+                                    }}>
+                                    Turn ON Over-Billing
+                                  </button>
+                                </div>
+                              )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                    {billingLedger.items.length === 0 && (
+                      <div style={{padding:"30px",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                        No milestones defined. Use <b>+ Set Schedule</b> first.
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </>)}
+
+            {/* % mode — same ledger pattern, but amounts instead of qty */}
+            {invForm.source==="milestone" && selEst && selEst.billing_method === "milestone_percent" && (<>
+              {ledgerLoading && <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading billing ledger…</div>}
+              {!ledgerLoading && billingLedger?.mode === "milestone_percent" && (() => {
+                const overbillOK = !!billingLedger.allow_overbill;
+                return (
+                  <div>
+                    <div style={{fontSize:11,color:T.t3,marginBottom:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span>Tick stages to bill. {overbillOK ? "Over-bill allowed with red flag." : "Each stage can be billed once."}</span>
+                      {overbillOK && <span style={{padding:"2px 7px",fontSize:9.5,fontWeight:700,background:"#FEE2E2",color:"#991B1B",borderRadius:3}}>OVER-BILL ENABLED</span>}
+                    </div>
+                    {billingLedger.stages.map(m => {
+                      const picked = invForm.items.find(x => x.milestone_id === m.milestone_id);
+                      const isFully = m.status === "fully_billed";
+                      return (
+                        <div key={m.milestone_id} style={{display:"grid",gridTemplateColumns:"24px 1fr 80px 140px 100px",gap:6,alignItems:"center",padding:"8px 8px",borderBottom:"1px solid "+T.b1, opacity: isFully ? 0.55 : 1}}>
+                          <input type="checkbox" checked={!!picked} disabled={isFully}
                             onChange={e => {
-                              if (e.target.checked) setInvForm(p => ({...p, items:[...p.items, {milestone_id:m.id, cumulative_qty:""}]}));
-                              else setInvForm(p => ({...p, items: p.items.filter(x => x.milestone_id !== m.id)}));
+                              if (e.target.checked) setInvForm(p => ({...p, items:[...p.items, {milestone_id:m.milestone_id}]}));
+                              else setInvForm(p => ({...p, items: p.items.filter(x => x.milestone_id !== m.milestone_id)}));
                             }}/>
-                          <span style={{fontSize:12,color:T.t1}}>{m.name}</span>
-                          <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8}}>inc {fmtC(m.inc_rate)}</span>
-                          <input type="number" placeholder="cum qty" disabled={!picked}
-                            value={picked?.cumulative_qty || ""}
-                            onChange={e => setInvForm(p => ({...p, items: p.items.map(x => x.milestone_id===m.id ? {...x, cumulative_qty:e.target.value} : x)}))}
-                            style={{...inpS,padding:"4px 8px",fontSize:11}}/>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{m.name}</div>
+                            <div style={{fontSize:10,color:T.t4,marginTop:1}}>
+                              {isFully ? <span style={{padding:"1px 6px",background:T.surfaceB,color:T.t3,borderRadius:3,fontWeight:600}}>✓ Fully invoiced</span>
+                                       : m.status === "partial" ? <span>{fmtC(m.billed_amount)} billed · {fmtC(m.remaining_amount)} left</span>
+                                       : <span>{fmtC(m.planned_amount)} planned</span>}
+                            </div>
+                          </div>
+                          <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{m.pct}%</span>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(m.planned_amount)}</span>
+                          <span style={{fontSize:11,color:T.t4,textAlign:"right"}}>
+                            {picked && <span style={{color:T.grn,fontWeight:700}}>billed</span>}
+                          </span>
                         </div>
                       );
                     })}
                   </div>
                 );
-              })}
+              })()}
             </>)}
-
-            {invForm.source==="milestone" && selEst && selEst.billing_method === "milestone_percent" && (
-              <div>
-                <div style={{fontSize:11,color:T.t3,marginBottom:8}}>Tick stages to bill (each stage can be billed once).</div>
-                {milestones.percent.map(m => {
-                  const picked = invForm.items.find(x => x.milestone_id === m.id);
-                  return (
-                    <div key={m.id} style={{display:"grid",gridTemplateColumns:"24px 1fr 80px 140px",gap:6,alignItems:"center",padding:"6px 8px",borderBottom:"1px solid "+T.b1}}>
-                      <input type="checkbox" checked={!!picked}
-                        onChange={e => {
-                          if (e.target.checked) setInvForm(p => ({...p, items:[...p.items, {milestone_id:m.id}]}));
-                          else setInvForm(p => ({...p, items: p.items.filter(x => x.milestone_id !== m.id)}));
-                        }}/>
-                      <span style={{fontSize:12,color:T.t1}}>{m.name}</span>
-                      <span style={{fontSize:11.5,color:T.t3,textAlign:"right",paddingRight:8}}>{parseFloat(m.pct)}%</span>
-                      <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{fmtC(m.amount)}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
 
             {invForm.source==="milestone" && selEst && selEst.billing_method === "manual" && (
               <div>
@@ -3333,11 +4222,12 @@ function TabEstimate({ project }) {
             )}
           </div>
           <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
-            <button onClick={()=>setShowNewInv(false)} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
-            <button onClick={submitInvoice} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":"Create Invoice"}</button>
+            <button onClick={closeInvModal} style={{padding:"7px 16px",borderRadius:6,background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button onClick={submitInvoice} disabled={saving} style={{padding:"7px 18px",borderRadius:6,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:saving?"default":"pointer"}}>{saving?"Saving…":(invForm._editId?"Save Changes":"Create Invoice")}</button>
           </div>
         </div>
-      </>)}
+      </>);
+      })()}
 
       {/* ── MODAL: Payment Schedule Setup ────────────────────────── */}
       {showSetMs && selEst && (<>
@@ -3364,8 +4254,47 @@ function TabEstimate({ project }) {
                 .filter(Boolean);
               const patchItemStages = (itemId, updater) => {
                 setMsForm(p => {
-                  const cur = p.itemStages[itemId] || [{ seq:0, name:"", cum_rate:"" }];
+                  const cur = p.itemStages[itemId] || [{ seq:0, name:"", rate:"", qty:"" }];
                   return { ...p, itemStages: { ...p.itemStages, [itemId]: updater(cur) } };
+                });
+              };
+              // PS-22 value-driven edit with last-row auto-balance.
+              // itemTotal = item.rate × item.qty (conserved invariant).
+              // Editing a NON-last row → recompute last row qty (keeping its
+              // rate) to absorb remaining. Editing the LAST row's rate →
+              // qty = target/rate; its qty → rate = target/qty.
+              const r3 = (n) => Math.round((parseFloat(n)||0) * 1000) / 1000;
+              const editStageField = (item, rowIdx, field, value) => {
+                patchItemStages(item.id, arr => {
+                  const rows = arr.map(r => ({ ...r }));
+                  rows[rowIdx][field] = value;
+                  const n = rows.length;
+                  if (n < 1) return rows;
+                  const itemTotal = (parseFloat(item.rate)||0) * (parseFloat(item.qty)||0);
+                  const lastIdx = n - 1;
+                  const valOf = (r) => (parseFloat(r.rate)||0) * (parseFloat(r.qty)||0);
+                  // Sum of all rows EXCEPT the last (the balancer)
+                  let others = 0;
+                  for (let i = 0; i < lastIdx; i++) others += valOf(rows[i]);
+                  const target = itemTotal - others;   // value the last row must hit
+                  if (rowIdx === lastIdx) {
+                    // Editing the balancing row itself — keep edited field,
+                    // derive the other from target.
+                    if (field === "rate") {
+                      const rt = parseFloat(rows[lastIdx].rate) || 0;
+                      rows[lastIdx].qty = rt > 0 ? String(r3(target / rt)) : rows[lastIdx].qty;
+                    } else if (field === "qty") {
+                      const q = parseFloat(rows[lastIdx].qty) || 0;
+                      rows[lastIdx].rate = q > 0 ? String(r3(target / q)) : rows[lastIdx].rate;
+                    }
+                  } else {
+                    // Edited an upstream row — rebalance the last row, keeping
+                    // its rate (or item rate as default), recompute its qty.
+                    const lastRate = parseFloat(rows[lastIdx].rate) || parseFloat(item.rate) || 0;
+                    rows[lastIdx].rate = String(lastRate);
+                    rows[lastIdx].qty  = lastRate > 0 ? String(r3(target / lastRate)) : rows[lastIdx].qty;
+                  }
+                  return rows;
                 });
               };
               const removePicked = (itemId) => {
@@ -3399,12 +4328,12 @@ function TabEstimate({ project }) {
                             setMsForm(p => {
                               const next = { ...p.itemStages };
                               for (const itm of pickedItems) {
-                                next[itm.id] = [{ seq:0, name:"Complete", cum_rate: String(parseFloat(itm.rate)||0) }];
+                                next[itm.id] = [{ seq:0, name:"Complete", rate: String(parseFloat(itm.rate)||0), qty: String(parseFloat(itm.qty)||0) }];
                               }
                               return { ...p, itemStages: next };
                             });
                           }}
-                          title="Each picked item becomes a single 'Complete' milestone at its full rate"
+                          title="Each picked item becomes a single 'Complete' milestone at its full rate × qty"
                           style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #FCD34D",borderRadius:5,padding:"4px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>
                           ✓ All = 1 milestone each
                         </button>
@@ -3416,11 +4345,15 @@ function TabEstimate({ project }) {
                     </div>
                     {/* Per-item accordion: header bar with stage count, click to expand stage editor */}
                     {pickedItems.map((it, idx) => {
-                      const stages   = msForm.itemStages[it.id] || [{ seq:0, name:"", cum_rate:"" }];
+                      const stages   = msForm.itemStages[it.id] || [{ seq:0, name:"", rate:"", qty:"" }];
                       const expanded = msForm.expandedItemId === it.id;
-                      const filledCount = stages.filter(s => s.name && s.cum_rate).length;
-                      const cumRateSum  = stages.reduce((s,m) => Math.max(s, parseFloat(m.cum_rate)||0), 0);
-                      const rateMismatch = cumRateSum > 0 && Math.abs(cumRateSum - parseFloat(it.rate)) > 0.01;
+                      const filledCount = stages.filter(s => s.name && s.rate && s.qty).length;
+                      // Value-driven conservation (PS-22)
+                      const itemTotal  = (parseFloat(it.rate)||0) * (parseFloat(it.qty)||0);
+                      const allocated  = stages.reduce((s,m) => s + (parseFloat(m.rate)||0) * (parseFloat(m.qty)||0), 0);
+                      const remaining  = itemTotal - allocated;
+                      const overAlloc  = remaining < -0.5;   // tolerance for rounding
+                      const balanced   = Math.abs(remaining) <= 0.5;
                       // Library template chip — surfaces apply-library-stages
                       // when the estimate item came from a library row with stages.
                       const libItem = libItems.find(x => parseInt(x.id) === parseInt(it.library_item_id));
@@ -3435,9 +4368,10 @@ function TabEstimate({ project }) {
                             <div style={{flex:1,minWidth:0}}>
                               <div style={{fontSize:12,fontWeight:700,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</div>
                               <div style={{fontSize:10,color:T.t4,marginTop:1}}>
-                                {it._sectionTitle} · {fmtC(it.rate)}/{it.unit}
+                                Item value <b style={{color:T.t2}}>{fmtC(itemTotal)}</b> ({fmtC(it.rate)} × {parseFloat(it.qty)})
                                 {filledCount > 0 && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>· {filledCount} milestone{filledCount>1?"s":""}</span>}
-                                {rateMismatch && <span style={{color:"#92400E",marginLeft:6,fontWeight:600}}>⚠ rate mismatch</span>}
+                                {overAlloc && <span style={{color:"#DC2626",marginLeft:6,fontWeight:700}}>⚠ over-allocated</span>}
+                                {!overAlloc && filledCount > 0 && balanced && <span style={{color:T.grn,marginLeft:6,fontWeight:600}}>✓ balanced</span>}
                               </div>
                             </div>
                             <button onClick={(e)=>{ e.stopPropagation(); removePicked(it.id); }}
@@ -3467,45 +4401,67 @@ function TabEstimate({ project }) {
                                   </button>
                                 </div>
                               )}
-                              <div style={{display:"grid",gridTemplateColumns:"30px 1fr 130px 28px",gap:6,marginBottom:4}}>
-                                {["#","Milestone Name","Cumulative ₹/unit",""].map(h=><span key={h} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>{h}</span>)}
+                              <div style={{display:"grid",gridTemplateColumns:"26px 1fr 80px 70px 95px 26px",gap:6,marginBottom:4}}>
+                                {["#","Milestone Name","Rate ₹/unit","Qty","Value","",].map((h,i)=><span key={h} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:i>=2&&i<=4?"right":"left",paddingRight:(i===2||i===3)?6:0}}>{h}</span>)}
                               </div>
-                              {stages.map((m, mi) => (
-                                <div key={mi} style={{display:"grid",gridTemplateColumns:"30px 1fr 130px 28px",gap:6,marginBottom:4}}>
-                                  <span style={{fontSize:11,color:T.t4,paddingTop:7}}>{mi+1}</span>
+                              {stages.map((m, mi) => {
+                                const isLast = mi === stages.length - 1 && stages.length > 1;
+                                const rowVal = (parseFloat(m.rate)||0) * (parseFloat(m.qty)||0);
+                                return (
+                                <div key={mi} style={{display:"grid",gridTemplateColumns:"26px 1fr 80px 70px 95px 26px",gap:6,marginBottom:4,alignItems:"center"}}>
+                                  <span style={{fontSize:11,color:T.t4,display:"flex",alignItems:"center",gap:2}}>
+                                    {mi+1}{isLast && <span title="Auto-balances to remaining value" style={{fontSize:10}}>⚖</span>}
+                                  </span>
                                   <input value={m.name}
                                     onChange={e=>patchItemStages(it.id, arr => { const next=[...arr]; next[mi]={...next[mi],name:e.target.value}; return next; })}
                                     placeholder="e.g. Footing complete" style={{...inpS,padding:"5px 8px",fontSize:11.5}}/>
-                                  <input type="number" value={m.cum_rate}
-                                    onChange={e=>patchItemStages(it.id, arr => { const next=[...arr]; next[mi]={...next[mi],cum_rate:e.target.value}; return next; })}
-                                    placeholder="cum ₹/unit" style={{...inpS,padding:"5px 8px",fontSize:11.5}}/>
+                                  <input type="number" value={m.rate || ""}
+                                    onChange={e=>editStageField(it, mi, "rate", e.target.value)}
+                                    placeholder={String(parseFloat(it.rate)||0)}
+                                    style={{...inpS,padding:"5px 8px",fontSize:11.5,textAlign:"right"}}/>
+                                  <input type="number" value={m.qty || ""}
+                                    onChange={e=>editStageField(it, mi, "qty", e.target.value)}
+                                    placeholder={String(parseFloat(it.qty)||0)}
+                                    style={{...inpS,padding:"5px 8px",fontSize:11.5,textAlign:"right"}}/>
+                                  <span style={{fontSize:11.5,fontWeight:700,color:T.grn,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(rowVal)}</span>
                                   <button onClick={()=>patchItemStages(it.id, arr => {
                                       const next = arr.filter((_,i)=>i!==mi);
-                                      return next.length ? next : [{seq:0,name:"",cum_rate:""}];
+                                      return next.length ? next : [{seq:0,name:"",rate:"",qty:""}];
                                     })}
                                     style={{background:T.redL,color:T.red,border:"none",borderRadius:4,fontSize:13,cursor:"pointer"}}>×</button>
                                 </div>
-                              ))}
-                              <div style={{marginTop:4,display:"flex",gap:6,flexWrap:"wrap"}}>
-                                <button onClick={()=>patchItemStages(it.id, arr => [...arr, { seq:arr.length, name:"", cum_rate:"" }])}
+                                );
+                              })}
+                              {/* Live allocation bar */}
+                              <div style={{marginTop:6,padding:"7px 10px",borderRadius:6,
+                                           background: overAlloc ? "#FEF2F2" : balanced ? "#ECFDF5" : T.surfaceB,
+                                           border:"1px solid " + (overAlloc ? "#FCA5A5" : balanced ? T.grnM : T.b1),
+                                           display:"flex",justifyContent:"space-between",alignItems:"center",fontSize:11}}>
+                                <span style={{color: overAlloc ? "#991B1B" : balanced ? "#065F46" : T.t3,fontWeight:600}}>
+                                  Allocated {fmtC(allocated)} / {fmtC(itemTotal)}
+                                </span>
+                                <span style={{fontWeight:700,fontVariantNumeric:"tabular-nums",
+                                              color: overAlloc ? "#DC2626" : balanced ? T.grn : T.amb}}>
+                                  {overAlloc ? "Over by " + fmtC(Math.abs(remaining)) : balanced ? "✓ Fully allocated" : "Remaining " + fmtC(remaining)}
+                                </span>
+                              </div>
+                              <div style={{marginTop:6,display:"flex",gap:6,flexWrap:"wrap"}}>
+                                <button onClick={()=>patchItemStages(it.id, arr => [...arr, { seq:arr.length, name:"", rate: String(parseFloat(it.rate)||0), qty:"" }])}
                                   style={{background:T.bluL,color:T.blu,border:"1px dashed "+T.bluM,borderRadius:4,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
                                   + Add Milestone
                                 </button>
-                                {/* "Item itself = 1 milestone" shortcut. Replaces all stages
-                                    with a single 'Complete' milestone at the full item rate.
-                                    Useful when no intermediate stages are needed (e.g.
-                                    "1000 sqft ground beam — bill on completion"). */}
+                                {/* "Item itself = 1 milestone" shortcut → rate + qty = item's */}
                                 <button onClick={()=>patchItemStages(it.id, () => ([
-                                    { seq:0, name:"Complete", cum_rate: String(parseFloat(it.rate) || 0) }
+                                    { seq:0, name:"Complete", rate: String(parseFloat(it.rate) || 0), qty: String(parseFloat(it.qty) || 0) }
                                   ]))}
-                                  title={`Replace stages with one milestone "Complete" at ₹${parseFloat(it.rate)||0}/unit`}
+                                  title={`Replace stages with one milestone "Complete" at ${fmtC(it.rate)}/unit × ${parseFloat(it.qty)||0}`}
                                   style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #FCD34D",borderRadius:4,padding:"4px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer"}}>
                                   ✓ Use whole item as 1 milestone
                                 </button>
                               </div>
-                              {rateMismatch && (
-                                <div style={{marginTop:8,padding:"6px 9px",background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:4,fontSize:10.5,color:"#92400E"}}>
-                                  ⚠ Last cumulative ₹{cumRateSum.toFixed(2)} ≠ item rate ₹{parseFloat(it.rate).toFixed(2)} — saved anyway with warning.
+                              {overAlloc && (
+                                <div style={{marginTop:8,padding:"6px 9px",background:"#FEF2F2",border:"1px solid #FCA5A5",borderRadius:4,fontSize:10.5,color:"#991B1B"}}>
+                                  ⚠ Milestone values exceed item value by {fmtC(Math.abs(remaining))}. Reduce a milestone — can't save until balanced.
                                 </div>
                               )}
                             </div>
@@ -3617,6 +4573,623 @@ function TabEstimate({ project }) {
           </div>
         </div>
       </>)}
+
+      {/* ── MODAL: Auto-Bill Invoice Preview ─────────────────────────
+          Shows complete audit context for a Draft auto-generated invoice:
+          item name, milestone, the task that triggered it (with current
+          progress %), qty, rate, amount, tax breakdown. Admin reviews
+          then Confirms (→ Submitted) or Rejects (deletes the draft). */}
+      {previewInv && (() => {
+        const inv = previewInv.invoice;
+        const items = previewInv.items || [];
+        const task = previewInv.trigger_task;
+        return (<>
+          <div onClick={()=>!previewConfirming && setPreviewInv(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:340,backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",top:"4vh",left:"50%",transform:"translateX(-50%)",width:760,maxWidth:"95vw",maxHeight:"92vh",background:T.surface,borderRadius:12,zIndex:341,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
+            {/* Header */}
+            <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"#F5F3FF"}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:"#5B21B6",display:"flex",alignItems:"center",gap:8}}>
+                  🤖 Auto-Invoice Preview · {inv.invoice_no}
+                </div>
+                <div style={{fontSize:11,color:"#7C3AED",marginTop:2}}>
+                  Review this draft. On Confirm, it becomes a live invoice.
+                </div>
+              </div>
+              <button onClick={()=>setPreviewInv(null)} disabled={previewConfirming}
+                style={{background:"none",border:"none",fontSize:20,color:"#7C3AED",cursor: previewConfirming?"not-allowed":"pointer"}}>×</button>
+            </div>
+            {/* Body */}
+            <div style={{padding:"16px 18px",overflowY:"auto",flex:1}}>
+              {/* Trigger audit panel */}
+              {task && (
+                <div style={{padding:"10px 12px",background:"#EFF6FF",border:"1px solid "+T.bluM,borderRadius:8,marginBottom:14}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>
+                    🔗 Triggered by Task
+                  </div>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                    <div style={{fontSize:13,fontWeight:700,color:T.t1,flex:1}}>{task.title || task.name}</div>
+                    <span style={{fontSize:11,color:T.t3}}>{task.status}</span>
+                    <span style={{fontSize:13,fontWeight:800,color:T.grn,fontVariantNumeric:"tabular-nums"}}>{task.progress}% complete</span>
+                  </div>
+                </div>
+              )}
+              {/* Invoice header — 4 cols: Customer | Project | Date | Source */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:10,marginBottom:14}}>
+                <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Customer</div>
+                  <div style={{fontSize:12.5,color:T.t1,marginTop:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={inv.customer_name || "—"}>{inv.customer_name || "—"}</div>
+                </div>
+                <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Project</div>
+                  <div style={{fontSize:12.5,color:T.t1,marginTop:2,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={inv.project_name || project?.name || "—"}>{inv.project_name || project?.name || "—"}</div>
+                </div>
+                <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Invoice Date</div>
+                  <div style={{fontSize:12.5,color:T.t1,marginTop:2,fontWeight:600}}>{inv.invoice_date}</div>
+                </div>
+                <div style={{background:T.surfaceB,borderRadius:7,padding:"8px 10px"}}>
+                  <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Source</div>
+                  <div style={{fontSize:12.5,color:"#6D28D9",marginTop:2,fontWeight:700}}>🤖 AUTO · DRAFT</div>
+                </div>
+              </div>
+              {/* Line items grid */}
+              <div style={{border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden",marginBottom:14}}>
+                <div style={{display:"grid",gridTemplateColumns:"1.7fr 1fr 60px 75px 90px 100px",padding:"7px 12px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
+                  {["Item","Milestone","Unit","Qty","Rate","Amount"].map((h,i) => (
+                    <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign: i>=2 ? "right" : "left", paddingRight: i===2||i===3||i===4 ? 8 : 0}}>{h}</span>
+                  ))}
+                </div>
+                {items.map((it, idx) => (
+                  <div key={idx} style={{display:"grid",gridTemplateColumns:"1.7fr 1fr 60px 75px 90px 100px",padding:"9px 12px",borderBottom: idx<items.length-1 ? "1px solid "+T.b1 : "none",alignItems:"center"}}>
+                    <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.clean_description || it.description}</span>
+                    <span style={{fontSize:11,color:T.blu,fontWeight:600}}>{it.milestone_name || "—"}</span>
+                    <span style={{fontSize:11,color:T.t3}}>{it.unit}</span>
+                    <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums",fontWeight:600}}>{parseFloat(it.qty)}</span>
+                    <span style={{fontSize:12,color:T.t2,textAlign:"right",paddingRight:8,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
+                    <span style={{fontSize:13,fontWeight:700,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(it.this_invoice_amount)}</span>
+                  </div>
+                ))}
+              </div>
+              {/* Tax breakdown */}
+              <div style={{display:"grid",gridTemplateColumns:"repeat(4, 1fr)",gap:8}}>
+                {[
+                  {l:"Gross",v:inv.gross_amount,c:T.t1},
+                  {l:`Retention ${inv.retention_pct}%`,v:inv.retention_amt,c:T.amb},
+                  {l:`TDS ${inv.tds_pct}%`,v:inv.tds_amt,c:T.red},
+                  {l:"Net Receivable",v:inv.net_receivable,c:T.grn},
+                ].map(s => (
+                  <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:7,padding:"9px 8px"}}>
+                    <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",fontWeight:700}}>{s.l}</div>
+                    <div style={{fontSize:14,fontWeight:800,color:s.c,marginTop:3}}>{fmtC(s.v)}</div>
+                  </div>
+                ))}
+              </div>
+              {inv.remark && (
+                <div style={{padding:"8px 11px",background:T.surfaceB,borderRadius:6,marginTop:12,fontSize:11,color:T.t3,fontStyle:"italic",lineHeight:1.5}}>
+                  {inv.remark}
+                </div>
+              )}
+            </div>
+            {/* Footer actions */}
+            <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB,gap:8}}>
+              <button onClick={rejectAutoInvoice} disabled={previewConfirming}
+                style={{background:"white",border:"1.5px solid "+T.redM,color:T.red,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor: previewConfirming?"default":"pointer"}}>
+                ✕ Reject Draft
+              </button>
+              <div style={{display:"flex",gap:8}}>
+                <button onClick={()=>setPreviewInv(null)} disabled={previewConfirming}
+                  style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor: previewConfirming?"default":"pointer"}}>
+                  Close
+                </button>
+                <button onClick={confirmAutoInvoice} disabled={previewConfirming}
+                  style={{background: previewConfirming ? T.t4 : T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 20px",fontSize:12,fontWeight:700,cursor: previewConfirming?"default":"pointer"}}>
+                  {previewConfirming ? "Submitting…" : "✓ Confirm & Submit"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </>);
+      })()}
+
+      {/* ── DRAWER: Invoice Detail (PS-18) ──────────────────────────
+          Right-side slide-in panel with full invoice audit context:
+          who/when created, project + estimate + customer, trigger task
+          (for auto-bills), items + tax breakdown, payments history.
+          Footer: Delete (destructive, with confirm) + Record Payment. */}
+      {invDetailFor && (() => {
+        const inv = invDetail || {};
+        const items = inv.items || [];
+        const payments = inv.payments || [];
+        const paid = payments.reduce((s,p) => s + (parseFloat(p.amount_received) || 0), 0);
+        const due = Math.max(0, (parseFloat(inv.net_receivable) || 0) - paid);
+        const stColor = inv.status === "Paid" ? T.grn
+                      : inv.status === "Approved" ? T.blu
+                      : inv.status === "Submitted" ? T.amb
+                      : inv.status === "Draft" ? "#7C3AED"
+                      : T.t4;
+        const isAuto = inv.source === "auto";
+        return (<>
+          {/* Use onMouseDown to avoid the same click that opened this drawer
+              bubbling up and landing on the overlay (which would close it
+              immediately on first open). */}
+          <div onMouseDown={closeInvoiceDetail} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:340,backdropFilter:"blur(2px)"}}/>
+          <div onClick={(e)=>e.stopPropagation()}
+            style={{position:"fixed",top:0,right:0,bottom:0,width:520,maxWidth:"95vw",background:T.surface,boxShadow:"-12px 0 32px rgba(0,0,0,0.2)",zIndex:341,display:"flex",flexDirection:"column"}}>
+            {/* Header */}
+            <div style={{padding:"14px 18px",background: isAuto ? "#F5F3FF" : T.t1,color: isAuto ? "#5B21B6" : "white",flexShrink:0,borderBottom: isAuto ? "1px solid #DDD6FE" : "none"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+                <div>
+                  <div style={{fontSize:11,fontWeight:600,opacity:0.7,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>
+                    {isAuto ? "🤖 Auto Invoice" : inv.source === "manual" ? "Manual Invoice" : "Customer Invoice"}
+                  </div>
+                  <div style={{fontSize:18,fontWeight:800,marginBottom:3}}>{inv.invoice_no || "—"}</div>
+                  <div style={{fontSize:11,opacity:0.7}}>
+                    {inv.invoice_date}
+                    {inv.estimate_no && <> · {inv.estimate_no}</>}
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <span style={{padding:"4px 10px",borderRadius:14,background: isAuto ? "white" : "rgba(255,255,255,0.15)",color: isAuto ? "#7C3AED" : "white",fontSize:10.5,fontWeight:700,border: isAuto ? "1px solid #DDD6FE" : "none"}}>
+                    {inv.status}
+                  </span>
+                  <button onClick={closeInvoiceDetail}
+                    style={{background:"none",border:"none",color: isAuto ? "#7C3AED" : "rgba(255,255,255,0.7)",fontSize:22,cursor:"pointer",lineHeight:1,padding:0}}>×</button>
+                </div>
+              </div>
+            </div>
+            {/* Body */}
+            <div style={{flex:1,overflowY:"auto"}}>
+              {/* ── OVER-BILL banner (P2+ feature) ─────────────────
+                  Prominently shown so anyone reviewing the invoice
+                  (especially in client conversations) understands
+                  WHY this invoice exists outside the BOQ + sees the
+                  reason captured at creation time. */}
+              {invDetail && invDetail.is_over_bill == 1 && (
+                <div style={{margin:"14px 18px 0",padding:"12px 14px",borderRadius:8,background:"#FEF2F2",border:"1px solid #FCA5A5"}}>
+                  <div style={{fontSize:12,fontWeight:800,color:"#991B1B",letterSpacing:".3px",textTransform:"uppercase",marginBottom:5,display:"flex",alignItems:"center",gap:6}}>
+                    🔴 Over-Bill Invoice
+                    {invDetail.linked_invoice_id && (
+                      <span style={{fontWeight:600,fontSize:10,padding:"2px 7px",background:"white",border:"1px solid #FCA5A5",borderRadius:10,letterSpacing:0,textTransform:"none"}}>
+                        🔗 Linked to normal portion: INV-{invDetail.linked_invoice_id}
+                      </span>
+                    )}
+                  </div>
+                  <div style={{fontSize:11.5,color:"#7F1D1D",lineHeight:1.5}}>
+                    <b>Reason:</b> {invDetail.over_bill_reason || "(no reason recorded)"}
+                  </div>
+                  <div style={{fontSize:10,color:"#991B1B",marginTop:6,fontStyle:"italic"}}>
+                    This invoice bills quantity beyond the original BOQ. Audit-relevant for client billing discussions.
+                  </div>
+                </div>
+              )}
+              {invDetailLoading && (
+                <div style={{textAlign:"center",padding:"40px 20px",color:T.t4,fontSize:13}}>
+                  Loading invoice…
+                </div>
+              )}
+              {!invDetailLoading && invDetail && (
+                <div style={{padding:"16px 18px"}}>
+                  {/* Audit / origin panel */}
+                  <div style={{background:T.surfaceB,borderRadius:8,padding:"12px 14px",marginBottom:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>
+                      Origin
+                    </div>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                      <div>
+                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>Project</div>
+                        <div style={{fontSize:12,color:T.t1,fontWeight:600}}>{inv.project_name || "—"}</div>
+                        {inv.city_name && <div style={{fontSize:10,color:T.t4}}>{inv.city_name}</div>}
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>Customer</div>
+                        <div style={{fontSize:12,color:T.t1,fontWeight:600}}>{inv.customer_name || "—"}</div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>Created by</div>
+                        <div style={{fontSize:12,color:T.t1,fontWeight:600}}>
+                          {inv.created_by_name ? inv.created_by_name : (isAuto ? "🤖 System (Auto-bill)" : "—")}
+                        </div>
+                      </div>
+                      <div>
+                        <div style={{fontSize:10,color:T.t4,marginBottom:2}}>Estimate</div>
+                        <div style={{fontSize:12,color:T.t1,fontWeight:600}}>{inv.estimate_no || "Ad-hoc (manual)"}</div>
+                        {inv.billing_method && <div style={{fontSize:10,color:T.t4}}>{inv.billing_method}</div>}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Trigger task panel — auto-bills only */}
+                  {isAuto && inv.triggered_by_task_id && (
+                    <div style={{background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+                      <div style={{fontSize:10,fontWeight:700,color:"#6D28D9",textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>
+                        🔗 Triggered by Task
+                      </div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{inv.trigger_task_title || inv.trigger_task_name || ("Task #"+inv.triggered_by_task_id)}</span>
+                        <span style={{fontSize:13,fontWeight:800,color:T.grn,fontVariantNumeric:"tabular-nums"}}>{inv.trigger_task_progress}%</span>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Items */}
+                  <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
+                    Line Items ({items.length})
+                  </div>
+                  <div style={{border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden",marginBottom:14}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1.5fr 90px 60px 75px 90px",padding:"7px 12px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
+                      {["Item","Milestone","Qty","Rate","Amount"].map((h,i) => (
+                        <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign: i>=2?"right":"left", paddingRight: (i===2||i===3)?6:0}}>{h}</span>
+                      ))}
+                    </div>
+                    {items.length === 0 && (
+                      <div style={{padding:"20px",textAlign:"center",color:T.t4,fontSize:11.5}}>No line items</div>
+                    )}
+                    {items.map((it, idx) => (
+                      <div key={idx} style={{display:"grid",gridTemplateColumns:"1.5fr 90px 60px 75px 90px",padding:"9px 12px",borderBottom: idx<items.length-1 ? "1px solid "+T.b1 : "none",alignItems:"center"}}>
+                        <span style={{fontSize:12,fontWeight:600,color:T.t1}}>{it.clean_description || it.description}</span>
+                        <span style={{fontSize:10.5,color:T.blu,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.milestone_name || "—"}</span>
+                        <span style={{fontSize:11.5,color:T.t2,textAlign:"right",paddingRight:6,fontVariantNumeric:"tabular-nums",fontWeight:600}}>{parseFloat(it.qty||0)}</span>
+                        <span style={{fontSize:11.5,color:T.t2,textAlign:"right",paddingRight:6,fontVariantNumeric:"tabular-nums"}}>{fmtC(it.rate)}</span>
+                        <span style={{fontSize:12.5,fontWeight:700,color:T.t1,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(it.this_invoice_amount)}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Tax breakdown */}
+                  <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
+                    Computation
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                    {[
+                      {l:"Gross",v:inv.gross_amount,c:T.t1,bold:false},
+                      {l:`Retention ${inv.retention_pct||0}%`,v:inv.retention_amt,c:T.amb,sign:"−"},
+                      {l:`TDS ${inv.tds_pct||0}%`,v:inv.tds_amt,c:T.red,sign:"−"},
+                      {l:`Tax ${inv.tax_pct||0}%`,v:inv.tax_amt,c:T.blu,sign:"+"},
+                    ].map(r => (
+                      <div key={r.l} style={{background:T.surfaceB,borderRadius:7,padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                        <span style={{fontSize:11,color:T.t3}}>{r.l}</span>
+                        <span style={{fontSize:13,fontWeight:700,color:r.c,fontVariantNumeric:"tabular-nums"}}>
+                          {r.sign||""}{fmtC(r.v)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Net + paid + due */}
+                  <div style={{background:"linear-gradient(135deg, #ECFDF5, #D1FAE5)",border:"1.5px solid "+T.grnM,borderRadius:8,padding:"12px 14px",marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
+                      <span style={{fontSize:11,fontWeight:700,color:"#065F46",textTransform:"uppercase",letterSpacing:".4px"}}>Net Receivable</span>
+                      <span style={{fontSize:18,fontWeight:800,color:"#065F46",fontVariantNumeric:"tabular-nums"}}>{fmtC(inv.net_receivable)}</span>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"#065F46"}}>
+                      <span>Received: <b>{fmtC(paid)}</b></span>
+                      <span>Due: <b style={{color: due > 0 ? T.red : T.grn}}>{fmtC(due)}</b></span>
+                    </div>
+                  </div>
+
+                  {/* Payments list */}
+                  {payments.length > 0 && (
+                    <>
+                      <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>
+                        Payments ({payments.length})
+                      </div>
+                      <div style={{border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden",marginBottom:14}}>
+                        {payments.map((p, idx) => (
+                          <div key={p.id} style={{display:"grid",gridTemplateColumns:"100px 1fr 100px",gap:8,padding:"9px 12px",alignItems:"center",borderBottom: idx<payments.length-1 ? "1px solid "+T.b1 : "none"}}>
+                            <span style={{fontSize:11.5,color:T.t3}}>{p.payment_date}</span>
+                            <span style={{fontSize:12,color:T.t1}}>
+                              {p.payment_mode}
+                              {p.reference_no && <span style={{color:T.t4}}> · {p.reference_no}</span>}
+                            </span>
+                            <span style={{fontSize:13,fontWeight:700,color:T.grn,textAlign:"right",fontVariantNumeric:"tabular-nums"}}>{fmtC(p.amount_received)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+
+                  {/* Remark */}
+                  {inv.remark && (
+                    <div style={{padding:"10px 12px",background:T.surfaceB,borderRadius:7,fontSize:11.5,color:T.t3,fontStyle:"italic",lineHeight:1.5,marginBottom:14}}>
+                      "{inv.remark}"
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+            {/* Footer actions */}
+            {!invDetailLoading && invDetail && (
+              <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,gap:8}}>
+                {inv.status !== "Paid" ? (
+                  <button onClick={()=>{ closeInvoiceDetail(); deleteInvoice(inv.id, inv.invoice_no); }}
+                    style={{background:"white",border:"1.5px solid "+T.redM,color:T.red,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    🗑 Delete Invoice
+                  </button>
+                ) : <span/>}
+                <div style={{display:"flex",gap:8}}>
+                  {/* PDF download — always available */}
+                  <button onClick={()=>downloadInvoicePdf(inv.id, inv.invoice_no)}
+                    style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    ⬇ PDF
+                  </button>
+                  {/* Edit — all non-Paid invoices. Manual → full item editor;
+                      milestone/auto → compact header editor (date/remark/%). */}
+                  {inv.status !== "Paid" && (
+                    <button onClick={()=>editInvoice(inv)}
+                      style={{background:"white",border:"1px solid "+T.bluM,color:T.blu,borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                      ✎ Edit
+                    </button>
+                  )}
+                  <button onClick={closeInvoiceDetail}
+                    style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                    Close
+                  </button>
+                  {inv.status !== "Paid" && inv.status !== "Draft" && due > 0 && (
+                    <button onClick={()=>{ closeInvoiceDetail(); setPayForm(p=>({...p,amount_received:String(due)})); setShowPay(inv.id); }}
+                      style={{background:T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      ₹ Record Payment
+                    </button>
+                  )}
+                  {inv.status === "Draft" && (
+                    <button onClick={()=>{ closeInvoiceDetail(); openInvoicePreview(inv.id); }}
+                      style={{background:"#7C3AED",color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                      Confirm & Submit
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </>);
+      })()}
+
+      {/* ── MODAL: Compact Invoice Header Editor (milestone/auto) ────
+          Edits date, remark + deduction % only. Line items stay locked
+          (they derive from the schedule). Net recomputed live from the
+          existing gross_amount. */}
+      {hdrEditForm && (() => {
+        const gross  = parseFloat(hdrEditForm.gross_amount) || 0;
+        const retPct = parseFloat(hdrEditForm.retention_pct) || 0;
+        const tdsPct = parseFloat(hdrEditForm.tds_pct) || 0;
+        const taxPct = parseFloat(hdrEditForm.tax_pct) || 0;
+        const retAmt = Math.round(gross * retPct) / 100;
+        const tdsAmt = Math.round(gross * tdsPct) / 100;
+        const taxAmt = Math.round(gross * taxPct) / 100;
+        const netRec = gross - retAmt - tdsAmt + taxAmt;
+        const set = (k,v) => setHdrEditForm(p => ({ ...p, [k]: v }));
+        return (<>
+          <div onClick={()=>!hdrEditSaving && setHdrEditForm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:350,backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:480,maxWidth:"95vw",background:T.surface,borderRadius:12,zIndex:351,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div>
+                <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Edit Invoice · {hdrEditForm.invoice_no}</div>
+                <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>Line items are locked (from schedule). Edit date, note &amp; deductions.</div>
+              </div>
+              <button onClick={()=>setHdrEditForm(null)} disabled={hdrEditSaving} style={{background:"none",border:"none",fontSize:20,color:T.t3,cursor:hdrEditSaving?"not-allowed":"pointer"}}>×</button>
+            </div>
+            <div style={{padding:"16px 18px"}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+                <div>
+                  <label style={lblS}>Invoice Date</label>
+                  <input type="date" value={hdrEditForm.invoice_date} onChange={e=>set("invoice_date", e.target.value)} style={inpS}/>
+                </div>
+                <div>
+                  <label style={lblS}>Gross (locked)</label>
+                  <input value={fmtC(gross)} disabled style={{...inpS,background:T.surfaceB,color:T.t3}}/>
+                </div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:12}}>
+                <div>
+                  <label style={lblS}>Retention %</label>
+                  <input type="number" value={hdrEditForm.retention_pct} onChange={e=>set("retention_pct", e.target.value)} style={{...inpS,textAlign:"right"}}/>
+                </div>
+                <div>
+                  <label style={lblS}>TDS %</label>
+                  <input type="number" value={hdrEditForm.tds_pct} onChange={e=>set("tds_pct", e.target.value)} style={{...inpS,textAlign:"right"}}/>
+                </div>
+                <div>
+                  <label style={lblS}>Tax %</label>
+                  <input type="number" value={hdrEditForm.tax_pct} onChange={e=>set("tax_pct", e.target.value)} style={{...inpS,textAlign:"right"}}/>
+                </div>
+              </div>
+              <div style={{marginBottom:12}}>
+                <label style={lblS}>Remark</label>
+                <input value={hdrEditForm.remark} onChange={e=>set("remark", e.target.value)} placeholder="Optional note" style={inpS}/>
+              </div>
+              {/* Live recompute preview */}
+              <div style={{background:"linear-gradient(135deg, #ECFDF5, #D1FAE5)",border:"1.5px solid "+T.grnM,borderRadius:8,padding:"10px 14px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10.5,color:"#065F46",marginBottom:4}}>
+                  <span>Retention −{fmtC(retAmt)}</span><span>TDS −{fmtC(tdsAmt)}</span><span>Tax +{fmtC(taxAmt)}</span>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                  <span style={{fontSize:11,fontWeight:700,color:"#065F46",textTransform:"uppercase",letterSpacing:".4px"}}>Net Receivable</span>
+                  <span style={{fontSize:18,fontWeight:800,color:"#065F46",fontVariantNumeric:"tabular-nums"}}>{fmtC(netRec)}</span>
+                </div>
+              </div>
+            </div>
+            <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"flex-end",gap:8}}>
+              <button onClick={()=>setHdrEditForm(null)} disabled={hdrEditSaving}
+                style={{background:T.surfaceB,border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:600,cursor:hdrEditSaving?"not-allowed":"pointer"}}>Cancel</button>
+              <button onClick={submitHdrEdit} disabled={hdrEditSaving}
+                style={{background:hdrEditSaving?T.t4:T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor:hdrEditSaving?"default":"pointer"}}>
+                {hdrEditSaving ? "Saving…" : "Save Changes"}
+              </button>
+            </div>
+          </div>
+        </>);
+      })()}
+
+      {/* ── DRAWER: Task Picker (link milestone → existing task) ─────
+          Right-side slide-in. Lists existing project_tasks (active),
+          searchable. User picks one + sets trigger_pct (0-100). On
+          confirm, PUT /milestones/rate/:msId/link saves the link.
+          No new task creation. */}
+      {taskPickerFor !== null && (() => {
+        const q = taskPickerSearch.trim().toLowerCase();
+        // Build hierarchy tree from flat task list (parent_id links).
+        const byId = {};
+        for (const t of projectTasks) byId[t.id] = { ...t, _children: [] };
+        const roots = [];
+        for (const t of projectTasks) {
+          const node = byId[t.id];
+          if (t.parent_id && byId[t.parent_id]) byId[t.parent_id]._children.push(node);
+          else roots.push(node);
+        }
+        // Flatten into an ordered display list honoring expand state.
+        // When searching, show ALL matches flat (ignore collapse).
+        const matchesQ = (t) => !q || (t.title || t.name || "").toLowerCase().includes(q) || (t.task_no||"").toLowerCase().includes(q);
+        const displayRows = [];
+        if (q) {
+          for (const t of projectTasks) if (matchesQ(t)) displayRows.push({ node: byId[t.id], depth: 0, searchHit: true });
+        } else {
+          const walk = (node, depth) => {
+            displayRows.push({ node, depth, searchHit: false });
+            if (node._children.length && taskPickerExpanded[node.id]) {
+              for (const c of node._children) walk(c, depth + 1);
+            }
+          };
+          for (const r of roots) walk(r, 0);
+        }
+        return (<>
+          <div onClick={()=>setTaskPickerFor(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:330}}/>
+          <div style={{position:"fixed",top:0,right:0,bottom:0,width:440,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 24px rgba(0,0,0,0.2)",zIndex:331,display:"flex",flexDirection:"column"}}>
+            {/* Header */}
+            <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <div style={{fontSize:14,fontWeight:700}}>Link to Project Task</div>
+                <button onClick={()=>setTaskPickerFor(null)} style={{background:"none",border:"none",color:"rgba(255,255,255,0.65)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+              </div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.55)"}}>
+                Pick an existing task and set the % completion that triggers billing
+              </div>
+            </div>
+            {/* Trigger % input — always visible at top */}
+            <div style={{padding:"12px 18px",background:T.surfaceB,borderBottom:"1px solid "+T.b1,flexShrink:0}}>
+              <label style={{fontSize:10,fontWeight:700,color:T.t3,display:"block",marginBottom:4,textTransform:"uppercase",letterSpacing:".4px"}}>
+                Trigger at task completion %
+              </label>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <input type="range" min={0} max={100} step={5}
+                  value={linkTriggerPct} onChange={e=>setLinkTriggerPct(parseInt(e.target.value)||0)}
+                  style={{flex:1}}/>
+                <input type="number" min={0} max={100} value={linkTriggerPct}
+                  onChange={e=>setLinkTriggerPct(Math.min(100, Math.max(0, parseInt(e.target.value)||0)))}
+                  style={{width:60,padding:"4px 7px",borderRadius:5,border:"1.5px solid "+T.b1,fontSize:12,textAlign:"right",fontFamily:"inherit"}}/>
+                <span style={{fontSize:12,fontWeight:700,color:T.blu}}>%</span>
+              </div>
+              <div style={{display:"flex",gap:5,marginTop:6}}>
+                {[25, 50, 75, 100].map(p => (
+                  <button key={p} onClick={()=>setLinkTriggerPct(p)}
+                    style={{flex:1,background: linkTriggerPct===p ? T.blu : "white",color: linkTriggerPct===p ? "white" : T.t3,border:"1px solid " + (linkTriggerPct===p ? T.blu : T.b1),borderRadius:4,padding:"3px 6px",fontSize:10.5,fontWeight:600,cursor:"pointer"}}>
+                    {p}%
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Search */}
+            <div style={{padding:"10px 18px",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
+              <input value={taskPickerSearch} onChange={e=>setTaskPickerSearch(e.target.value)}
+                placeholder="Search tasks…" autoFocus
+                style={{width:"100%",padding:"7px 11px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            {/* Task list — hierarchical (parent → expandable children) */}
+            <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
+              {projectTasks.length === 0 && (
+                <div style={{padding:"36px 20px",textAlign:"center"}}>
+                  <div style={{fontSize:12.5,color:T.t3,marginBottom:4}}>No tasks in this project yet.</div>
+                  <div style={{fontSize:11,color:T.t4,marginBottom:14}}>Create a task to link this milestone to it.</div>
+                  <button onClick={()=>setShowCreateTaskFor(true)}
+                    style={{background:T.blu,color:"white",border:"none",borderRadius:6,padding:"8px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                    + Create Task
+                  </button>
+                </div>
+              )}
+              {projectTasks.length > 0 && displayRows.length === 0 && (
+                <div style={{padding:"30px 20px",textAlign:"center",color:T.t4,fontSize:12.5}}>
+                  No tasks match "{taskPickerSearch}"
+                </div>
+              )}
+              {displayRows.map(({ node: t, depth }) => {
+                const isSel  = linkSelectedTaskId === t.id;
+                const taskName = t.title || t.name;
+                const progress = Number(t.progress) || 0;
+                const status   = t.status || "Not Started";
+                const statusColor = status === "Completed" ? T.grn : status === "Ongoing" ? T.blu : status === "Hold" ? T.red : T.t4;
+                const hasKids = (t._children || []).length > 0;
+                const isExpanded = !!taskPickerExpanded[t.id];
+                return (
+                  <div key={t.id} onClick={()=>setLinkSelectedTaskId(t.id)}
+                    style={{padding:"10px 18px 10px "+(18 + depth*18)+"px",borderBottom:"1px solid "+T.b1,cursor:"pointer",display:"flex",alignItems:"center",gap:8,background: isSel ? "#EFF6FF" : "white"}}
+                    onMouseEnter={e=>{ if(!isSel) e.currentTarget.style.background="#F8FAFC"; }}
+                    onMouseLeave={e=>{ if(!isSel) e.currentTarget.style.background="white"; }}>
+                    {/* Expand chevron for parents (collapse state); spacer for leaves */}
+                    {hasKids ? (
+                      <button onClick={(e)=>{ e.stopPropagation(); setTaskPickerExpanded(p=>({...p,[t.id]:!p[t.id]})); }}
+                        title={isExpanded?"Collapse":"Expand subtasks"}
+                        style={{background:"none",border:"none",cursor:"pointer",color:T.t3,fontSize:10,width:16,flexShrink:0,padding:0}}>
+                        {isExpanded ? "▼" : "▶"}
+                      </button>
+                    ) : <span style={{width:16,flexShrink:0}}/>}
+                    {/* Radio */}
+                    <span style={{width:18,height:18,borderRadius:"50%",border:"2px solid " + (isSel ? T.blu : T.b1),background: isSel ? T.blu : "white",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
+                      {isSel && <span style={{width:6,height:6,borderRadius:"50%",background:"white"}}/>}
+                    </span>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight: hasKids ? 700 : 600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        {taskName}
+                        {hasKids && <span style={{fontSize:9.5,color:T.t4,fontWeight:500,marginLeft:6}}>({t._children.length})</span>}
+                      </div>
+                      <div style={{fontSize:10,color:T.t4,marginTop:2,display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{padding:"1px 6px",borderRadius:3,background:statusColor+"22",color:statusColor,fontWeight:600}}>{status}</span>
+                        <span>· {progress}%</span>
+                        {t.task_no && <span>· {t.task_no}</span>}
+                      </div>
+                      <div style={{marginTop:5,height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
+                        <div style={{width: progress+"%",height:"100%",background: progress >= linkTriggerPct ? T.grn : T.blu, transition:"width .2s"}}/>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+              {/* Create-task affordance always present at the bottom too */}
+              {projectTasks.length > 0 && (
+                <div style={{padding:"10px 18px",borderTop:"1px solid "+T.b1}}>
+                  <button onClick={()=>setShowCreateTaskFor(true)}
+                    style={{width:"100%",background:"transparent",border:"1px dashed "+T.bluM,color:T.blu,borderRadius:6,padding:"7px",fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
+                    + Create New Task
+                  </button>
+                </div>
+              )}
+            </div>
+            {/* Footer */}
+            <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:T.surfaceB,gap:8}}>
+              <button onClick={()=>setTaskPickerFor(null)} disabled={linking}
+                style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 14px",fontSize:12,fontWeight:600,cursor: linking?"default":"pointer"}}>
+                Cancel
+              </button>
+              <button onClick={confirmLinkTask} disabled={linking || !linkSelectedTaskId}
+                style={{background: (!linkSelectedTaskId || linking) ? T.t4 : T.blu,color:"white",border:"none",borderRadius:6,padding:"7px 18px",fontSize:12,fontWeight:700,cursor: (!linkSelectedTaskId || linking) ? "default" : "pointer"}}>
+                {linking ? "Linking…" : "Link Task"}
+              </button>
+            </div>
+          </div>
+        </>);
+      })()}
+
+      {/* Create Task modal launched from the link drawer — reuses the same
+          PTAddTask form as the Tasks tab. On save → POST /tasks → refetch
+          the picker list → auto-select the new task. */}
+      {showCreateTaskFor && (
+        <PTAddTask
+          parent={null}
+          allTasks={(projectTasks || []).map(t => ({
+            id: t.id, no: t.task_no || "", name: t.title || t.name || "", level: 0,
+          }))}
+          onClose={()=>setShowCreateTaskFor(false)}
+          onSave={createTaskFromPicker}
+        />
+      )}
 
       {/* ── DRAWER: Item Picker (Payment Schedule item-wise) ─────────
           Side-slide panel with items grouped by section › category,
@@ -5077,6 +6650,61 @@ function fmtDate(d){
   return dd+"/"+m+"/"+y;
 }
 function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date()-new Date(t.baseEnd))/(1000*86400));return d>0?d:0;}
+// P3: execution delay vs the planned finish. Prefer the FROZEN original
+// baseline (so cascade/rebaseline doesn't hide slippage); fall back to the
+// current plan (base_end). kind: late | early | ontime | running | none
+function ptPlannedEnd(t){ return t.originalEnd || t.baseEnd || null; }
+function ptFinishVar(t){
+  const pe = ptPlannedEnd(t);
+  if(!pe) return {kind:"none",days:0};
+  const done = t.status==="Completed" || Number(t.progress)===100;
+  if(done){
+    if(!t.actualEnd) return {kind:"none",days:0};
+    const d = Math.round((new Date(t.actualEnd)-new Date(pe))/86400000);
+    if(d>0) return {kind:"late",days:d};
+    if(d<0) return {kind:"early",days:-d};
+    return {kind:"ontime",days:0};
+  }
+  const d = Math.round((new Date()-new Date(pe))/86400000);
+  if(d>0) return {kind:"running",days:d};
+  return {kind:"ontime",days:0};
+}
+// Phase-aware numbering: each top-level task = a PHASE (short code + colour);
+// every descendant gets CODE-NN in pre-order. Self-describing on mobile / flat
+// / filtered lists and pairs with phase filters. Pure display — DB task_no
+// is never touched. Returns { [taskId]: {code, phaseCode, phaseColor, phaseName, isPhase} }.
+const PT_PHASE_PALETTE=["#2563EB","#16A34A","#EA580C","#7C3AED","#DB2777","#0891B2","#65A30D","#CA8A04","#DC2626","#0D9488","#9333EA","#0EA5E9"];
+function ptPhaseCodes(roots){
+  const used=new Set(); const map={};
+  const derive=(name)=>{
+    const words=(name||"").toUpperCase().replace(/[^A-Z0-9 ]/g," ").split(/\s+/).filter(Boolean);
+    let base = words[0] ? words[0].slice(0,3) : "TSK";
+    if(base.length<2 && words[1]) base=(base+words[1]).slice(0,3);
+    base = base.replace(/[^A-Z0-9]/g,"") || "TSK";
+    let code=base, i=2; while(used.has(code)){ code=base+i; i++; } used.add(code); return code;
+  };
+  (roots||[]).forEach((phase,pi)=>{
+    const pc=derive(phase.name); const color=PT_PHASE_PALETTE[pi%PT_PHASE_PALETTE.length];
+    map[phase.id]={code:pc, phaseCode:pc, phaseColor:color, phaseName:phase.name, isPhase:true};
+    let counter=0;
+    const walk=(node)=>{ (node.children||[]).forEach(ch=>{ counter++; map[ch.id]={code:`${pc}-${String(counter).padStart(2,"0")}`, phaseCode:pc, phaseColor:color, phaseName:phase.name, isPhase:false}; walk(ch); }); };
+    walk(phase);
+  });
+  return map;
+}
+// P4: structured delay reasons — fixed keys (AI-ready) + Hinglish labels + colour.
+const PT_DELAY_REASONS=[
+  {key:"material",   label:"Material late",     color:"#DC2626"},
+  {key:"labour",     label:"Labour kam",        color:"#EA580C"},
+  {key:"weather",    label:"Mausam / Baarish",  color:"#0891B2"},
+  {key:"drawing",    label:"Drawing/Approval",  color:"#7C3AED"},
+  {key:"client",     label:"Client change",     color:"#DB2777"},
+  {key:"payment",    label:"Payment delay",     color:"#CA8A04"},
+  {key:"machinery",  label:"Machine kharab",    color:"#475569"},
+  {key:"contractor", label:"Thekedar issue",    color:"#9333EA"},
+  {key:"other",      label:"Other",             color:"#64748B"},
+];
+const PT_REASON_MAP=Object.fromEntries(PT_DELAY_REASONS.map(r=>[r.key,r]));
 
 function TabTasks({ projectId, isAdmin }) {
   const [tasks,setTasks]     = useState([]);
@@ -5104,11 +6732,36 @@ function TabTasks({ projectId, isAdmin }) {
   };
   useEffect(()=>{ loadBaselineStatus(); /* eslint-disable-next-line */ }, [projectId]);
 
+  // ── Schedule lifecycle: estimate → plan_locked → started ──
+  const [proj, setProj] = useState(null); // {plan_locked, start_locked, start_date}
+  const [startModal, setStartModal] = useState(null); // {mode:'anchor'|'lock'}
+  const loadProj = async () => {
+    if (!projectId) return;
+    try { const r = await api.get("/projects/"+projectId); if (r.success) setProj(r.data); } catch(_){}
+  };
+  useEffect(()=>{ loadProj(); /* eslint-disable-next-line */ }, [projectId]);
+  const canEditSchedule = isAdmin || !proj?.plan_locked;
+  const lockPlan = async () => {
+    if(!window.confirm("Plan lock karein? Iske baad sirf admin schedule (dates/duration/dependency) badal sakega.")) return;
+    try { await api.post("/projects/"+projectId+"/lock-plan",{}); } catch(_){}
+    loadProj();
+  };
+  const unlockPlan = async () => {
+    const reason = window.prompt("Plan unlock karne ka reason (min 5 char):"); if(!reason||reason.trim().length<5) return;
+    try { await api.post("/projects/"+projectId+"/unlock-plan",{reason}); } catch(_){}
+    loadProj();
+  };
+  const unlockStart = async () => {
+    const reason = window.prompt("Start date unlock karne ka reason (min 5 char):"); if(!reason||reason.trim().length<5) return;
+    try { await api.post("/projects/"+projectId+"/unlock-start",{reason}); } catch(_){}
+    loadProj();
+  };
+
   // ── COLUMN RESIZE (Option A: drag-handle, per-user localStorage) ──
   const BASE_COL_KEYS     = ["toggle","no","name","status","progress","start","end","days","assigned"];
   const BASELINE_COL_KEYS = ["blStart","blEnd","slip"];
   const COL_KEYS     = showBaseline ? [...BASE_COL_KEYS, ...BASELINE_COL_KEYS] : BASE_COL_KEYS;
-  const COL_LABELS   = {toggle:"", no:"No / TSK", name:"Task Name", status:"Status", progress:"Progress", start:"Start", end:"End", days:"Days", assigned:"Assigned", blStart:"BL Start", blEnd:"BL End", slip:"Slip"};
+  const COL_LABELS   = {toggle:"", no:"Phase / Code", name:"Task Name", status:"Status", progress:"Progress", start:"Start", end:"End", days:"Days", assigned:"Assigned", blStart:"BL Start", blEnd:"BL End", slip:"Slip"};
   const COL_DEFAULTS = {toggle:26, no:52, name:320, status:85, progress:100, start:82, end:82, days:44, assigned:80, blStart:82, blEnd:82, slip:64};
   const COL_RESIZABLE= {toggle:false, no:false, name:true, status:true, progress:true, start:true, end:true, days:false, assigned:true, blStart:true, blEnd:true, slip:false};
   const COL_MIN = 60, COL_MAX = 600, COL_STORE = "gb_task_col_widths_v1";
@@ -5207,9 +6860,54 @@ function TabTasks({ projectId, isAdmin }) {
   const [addParent,setAddParent]     = useState(null);
   const [showAdd,setShowAdd]         = useState(false);
   const [depSearch,setDepSearch]     = useState("");
+  const [cascadePreview,setCascadePreview]   = useState(null); // P2e: {taskId,base_start,base_end,changed,affected}
+  const [cascadeApplying,setCascadeApplying] = useState(false);
+  const [reasonMenu,setReasonMenu] = useState(null); // P4: {x,y,task}
+  const setDelayReason = async (task, key) => {
+    setReasonMenu(null);
+    try { await api.put("/tasks/"+task.id, { delay_reason: key || "" }); } catch(_){}
+    setTasks(updateInTree(tasks, task.id, { delay_reason: key || null }));
+  };
+  // P5: CPM data (critical path + slack) for the Gantt — fetched from the
+  // verified backend engine when the Gantt view is open.
+  const [cpmData,setCpmData] = useState(null); // {id: {is_critical, slack}}
 
   const allFlat = ptFlatten(tasks);
   const TEAM_PT = [...new Set(allFlat.map(t=>t.assignee).filter(Boolean))];
+  const phaseCodeMap = ptPhaseCodes(tasks); // id -> {code, phaseColor, phaseName, isPhase}
+
+  // P5: fetch CPM (critical path + slack) when Gantt is shown / structure changes
+  useEffect(()=>{
+    if(view!=="gantt"||!projectId){ return; }
+    let cancelled=false;
+    api.get("/tasks/cpm?project_id="+projectId).then(r=>{
+      if(cancelled||!r.success) return;
+      const m={}; (r.data?.tasks||[]).forEach(t=>{ m[t.id]={is_critical:t.is_critical,slack:t.slack}; });
+      setCpmData({ map:m, critical_path:r.data?.project?.critical_path||[] });
+    }).catch(()=>{});
+    return ()=>{ cancelled=true; };
+  },[view,projectId,allFlat.length]);
+
+  // Reload the full task tree from backend (used after cascade reschedule etc).
+  const refetchTasks = async () => {
+    const r = await api.get("/tasks?project_id=" + projectId);
+    if (!r.success) return;
+    const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
+    const map = {};
+    flat.forEach((t, idx) => {
+      t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
+      t.baseStart=t.base_start; t.baseEnd=t.base_end;
+      t.originalStart=t.original_start; t.originalEnd=t.original_end;
+      t.currentBaselineStart=t.current_baseline_start; t.currentBaselineEnd=t.current_baseline_end;
+      t.actualStart=t.actual_start; t.actualEnd=t.actual_end;
+      t.dhyanRakhen=t.dhyan_rakhen; t.lastUpdate=t.last_update;
+      t.assignee=t.assignee_name||t.assigned_to||""; t.serial=idx+1;
+      map[t.id]=t;
+    });
+    const roots=[];
+    flat.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
+    setTasks(roots);
+  };
 
   // Apply a saved filter
   const applyFilter=(f)=>{
@@ -5332,7 +7030,8 @@ function TabTasks({ projectId, isAdmin }) {
     const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
     const delay=ptDelayDays(t);
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
-    const lvl=lvlColors[Math.min(depth,6)];
+    const pcd=phaseCodeMap[t.id]||{};
+    const lvl=pcd.phaseColor||lvlColors[Math.min(depth,6)];
     const indent=depth*16;
     const GRID=GRID_TEMPLATE;
     const SEP={borderRight:"1px solid #F1F5F9"};
@@ -5361,10 +7060,9 @@ function TabTasks({ projectId, isAdmin }) {
             }
           </div>
 
-          {/* S.No T0001 */}
-          <div style={{padding:"0 5px",display:"flex",flexDirection:"column",justifyContent:"center",...SEP}}>
-            <span style={{fontSize:10.5,fontWeight:700,color:"#1E293B",lineHeight:1.3}}>{t.no}</span>
-            <span style={{fontSize:8,color:"#94A3B8",fontFamily:"monospace",lineHeight:1.3}}>{t.tsk_no||""}</span>
+          {/* Phase code pill (B+C: code + colour-by-phase) */}
+          <div style={{padding:"0 5px",display:"flex",alignItems:"center",...SEP}} title={pcd.phaseName||""}>
+            <span style={{display:"inline-block",fontSize:pcd.isPhase?10:9.5,fontWeight:700,fontFamily:"monospace",letterSpacing:.2,color:"white",background:pcd.phaseColor||"#64748B",padding:pcd.isPhase?"2px 7px":"1.5px 6px",borderRadius:5,whiteSpace:"nowrap",lineHeight:1.4}}>{pcd.code||t.no}</span>
           </div>
 
           {/* Task Name + hover buttons */}
@@ -5374,6 +7072,18 @@ function TabTasks({ projectId, isAdmin }) {
               <span style={{fontSize:depth===0?13:12.5,fontWeight:depth===0?600:depth===1?500:400,color:"#1E293B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
               {t.tag&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:8,fontWeight:600,padding:"1px 5px",borderRadius:3,flexShrink:0,whiteSpace:"nowrap"}}>{t.tag}</span>}
               {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:600,padding:"1px 4px",borderRadius:3,flexShrink:0}}>+{delay}d</span>}
+              {(()=>{const fv=ptFinishVar(t);
+                if(fv.kind==="late")   return <span style={{background:"#FEE2E2",color:"#DC2626",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>✓ {fv.days}d late</span>;
+                if(fv.kind==="early")  return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>✓ {fv.days}d early</span>;
+                if(fv.kind==="ontime"&&(t.status==="Completed"||Number(t.progress)===100)) return <span style={{background:"#DCFCE7",color:"#16A34A",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3,flexShrink:0}}>✓ on time</span>;
+                return null;})()}
+              {/* P4: delay reason chip — shown on late tasks; click to set/change */}
+              {(()=>{const fv=ptFinishVar(t); if(fv.kind!=="late"&&fv.kind!=="running") return null;
+                const r=t.delay_reason?PT_REASON_MAP[t.delay_reason]:null;
+                return r
+                  ? <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:t});}} title="Delay kaaron — badalne ke liye click" style={{background:r.color,color:"white",fontSize:8,fontWeight:700,padding:"1px 6px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>{r.label}</span>
+                  : <span onClick={e=>{e.stopPropagation();setReasonMenu({x:e.clientX,y:e.clientY,task:t});}} title="Delay ka kaaron set karo" style={{background:"#FEF3C7",color:"#92400E",border:"1px dashed #F59E0B",fontSize:8,fontWeight:700,padding:"0px 5px",borderRadius:3,flexShrink:0,cursor:"pointer",whiteSpace:"nowrap"}}>+ kaaron?</span>;
+              })()}
             </div>
             {/* Buttons on hover */}
             <div className="tsk-act" onClick={e=>e.stopPropagation()} style={{display:"none",alignItems:"center",gap:3,flexShrink:0,paddingLeft:5,background:"linear-gradient(to right,transparent,"+T.bluL+"dd 15%)"}}>
@@ -5407,37 +7117,45 @@ function TabTasks({ projectId, isAdmin }) {
             </div>
           </div>
 
-          {/* Start — click opens date picker */}
-          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:"pointer",position:"relative"}}
-            onClick={e=>{e.stopPropagation();e.currentTarget.querySelector("input").showPicker&&e.currentTarget.querySelector("input").showPicker();}}>
+          {/* Start — click opens date picker (locked → read-only) */}
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:canEditSchedule?"pointer":"default",position:"relative"}}
+            onClick={e=>{if(!canEditSchedule)return;e.stopPropagation();const inp=e.currentTarget.querySelector("input");inp&&inp.showPicker&&inp.showPicker();}}>
             <span style={{fontSize:10,color:T.t3,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtDate(t.baseStart)||"—"}</span>
-            <input type="date" defaultValue={t.baseStart||""}
+            {canEditSchedule && <input type="date" defaultValue={t.baseStart||""}
               style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%"}}
               onChange={async e=>{
                 const v=e.target.value;
                 await api.put("/tasks/"+t.id,{base_start:v});
                 setTasks(updateInTree(tasks,t.id,{baseStart:v}));
               }}
-              onClick={e=>e.stopPropagation()}/>
+              onClick={e=>e.stopPropagation()}/>}
           </div>
 
-          {/* End — click opens date picker */}
-          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:"pointer",position:"relative"}}
-            onClick={e=>{e.stopPropagation();e.currentTarget.querySelector("input").showPicker&&e.currentTarget.querySelector("input").showPicker();}}>
+          {/* End — click opens date picker (locked → read-only) */}
+          <div style={{padding:"0 6px",...SEP,display:"flex",alignItems:"center",height:"100%",cursor:canEditSchedule?"pointer":"default",position:"relative"}}
+            onClick={e=>{if(!canEditSchedule)return;e.stopPropagation();const inp=e.currentTarget.querySelector("input");inp&&inp.showPicker&&inp.showPicker();}}>
             <span style={{fontSize:10,color:delay>0?T.red:T.t3,fontWeight:delay>0?700:400,whiteSpace:"nowrap",pointerEvents:"none"}}>{fmtDate(t.baseEnd)||"—"}</span>
-            <input type="date" defaultValue={t.baseEnd||""}
+            {canEditSchedule && <input type="date" defaultValue={t.baseEnd||""}
               style={{position:"absolute",inset:0,opacity:0,cursor:"pointer",width:"100%"}}
               onChange={async e=>{
                 const v=e.target.value;
                 await api.put("/tasks/"+t.id,{base_end:v});
                 setTasks(updateInTree(tasks,t.id,{baseEnd:v}));
+                // P2: if dependents exist, offer to cascade the shift
+                const hasDependents = allFlat.some(x => (x.dependencies||[]).map(Number).includes(Number(t.id)));
+                if (v && hasDependents) {
+                  try {
+                    const pv = await api.post(`/tasks/${t.id}/reschedule`, { base_start:t.baseStart||null, base_end:v, mode:"preview" });
+                    if (pv.success && pv.data?.affected?.length) setCascadePreview({ taskId:t.id, base_start:t.baseStart||null, base_end:v, changed:pv.data.changed, affected:pv.data.affected });
+                  } catch(_){}
+                }
               }}
-              onClick={e=>e.stopPropagation()}/>
+              onClick={e=>e.stopPropagation()}/>}
           </div>
 
           {/* Days */}
           <div style={{padding:"0 4px",...SEP,display:"flex",alignItems:"center",justifyContent:"center",height:"100%"}}>
-            <span style={{fontSize:10,color:"#94A3B8",fontWeight:t.duration>0?500:400}}>{t.duration>0?t.duration+"d":"—"}</span>
+            {(()=>{const d=t.duration>0?t.duration:(t.baseStart&&t.baseEnd?Math.round((new Date(t.baseEnd)-new Date(t.baseStart))/86400000)+1:0);return <span style={{fontSize:10,color:"#94A3B8",fontWeight:d>0?500:400}}>{d>0?d+"d":"—"}</span>;})()}
           </div>
 
           {/* Assigned */}
@@ -5471,7 +7189,7 @@ function TabTasks({ projectId, isAdmin }) {
         {infoTask?.id===t.id&&(
           <div style={{padding:"10px 18px",background:"#FFFBEB",borderBottom:"1px solid #FDE68A",borderLeft:"3px solid "+lvl,display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8}}>
             {[
-              {l:"Task No",v:t.no||"—"},{l:"TSK",v:t.tsk_no||"—"},
+              {l:"Code",v:pcd.code||t.no||"—"},{l:"Phase",v:pcd.phaseName||"—"},
               {l:"Category",v:t.category||"—"},{l:"Status",v:t.status||"—"},
               {l:"Progress",v:(t.progress||0)+"%"},{l:"Assigned",v:t.assignee||"—"},
               {l:"Start",v:fmtDate(t.baseStart)},{l:"End",v:fmtDate(t.baseEnd)},
@@ -5517,8 +7235,49 @@ function TabTasks({ projectId, isAdmin }) {
     };
   })();
 
+  // ── P3+P4: execution-delay insight (ACTUAL dates) + delay-by-reason ──
+  const delayInsight = (()=>{
+    let doneLate=0, doneEarly=0, doneOnTime=0, running=0, slipSum=0, slipCnt=0;
+    let worst=null, lateNoReason=0;
+    const byReason={}; // key -> {count, days}
+    allFlat.forEach(t=>{
+      const fv=ptFinishVar(t);
+      if(fv.kind==="late"){ doneLate++; slipSum+=fv.days; slipCnt++; if(!worst||fv.days>worst.days) worst={...fv,t}; }
+      else if(fv.kind==="early"){ doneEarly++; slipSum-=fv.days; slipCnt++; }
+      else if(fv.kind==="ontime" && (t.status==="Completed"||Number(t.progress)===100)) doneOnTime++;
+      else if(fv.kind==="running"){ running++; if(!worst||fv.days>worst.days) worst={...fv,t}; }
+      // delay-by-reason (over late + running tasks)
+      if(fv.kind==="late"||fv.kind==="running"){
+        if(t.delay_reason && PT_REASON_MAP[t.delay_reason]){ const k=t.delay_reason; byReason[k]=byReason[k]||{count:0,days:0}; byReason[k].count++; byReason[k].days+=fv.days; }
+        else lateNoReason++;
+      }
+    });
+    const reasonRows = Object.entries(byReason)
+      .map(([k,v])=>({ key:k, ...PT_REASON_MAP[k], ...v }))
+      .sort((a,b)=>b.days-a.days);
+    const hasData = (doneLate+doneEarly+doneOnTime+running)>0;
+    const anyActual = allFlat.some(t=>t.actualStart||t.actualEnd);
+    return { doneLate, doneEarly, doneOnTime, running, avgSlip: slipCnt?Math.round(slipSum/slipCnt):0, worst, hasData, anyActual, reasonRows, lateNoReason };
+  })();
+
   return(
     <div style={{padding:"14px 18px",fontFamily:"'Segoe UI',sans-serif"}}>
+
+      {/* Schedule lifecycle: Estimate → Plan Locked → Started */}
+      <ScheduleLifecycleStrip
+        proj={proj} isAdmin={isAdmin}
+        onSetStart={()=>setStartModal({mode:"anchor"})}
+        onLockPlan={lockPlan} onUnlockPlan={unlockPlan}
+        onLockStart={()=>setStartModal({mode:"lock"})} onUnlockStart={unlockStart}
+      />
+
+      {/* Start-date modal (anchor in estimate / lock on green flag) */}
+      {startModal && <StartDateModal
+        mode={startModal.mode} projectId={projectId}
+        currentStart={proj?.start_date}
+        onClose={()=>setStartModal(null)}
+        onDone={async()=>{ setStartModal(null); await loadProj(); await refetchTasks(); }}
+      />}
 
       {/* Baseline Strip */}
       <BaselineStrip
@@ -5568,6 +7327,40 @@ function TabTasks({ projectId, isAdmin }) {
           </div>
         </>}
       </div>
+
+      {/* P3: Delay Insight banner — plain-language schedule health */}
+      {delayInsight.hasData && (delayInsight.doneLate>0 || delayInsight.running>0) ? (
+        <div style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 14px",marginBottom:12,background:"#FFF7ED",border:"1px solid #FED7AA",borderLeft:"4px solid #EA580C",borderRadius:8}}>
+          <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#EA580C" strokeWidth={2} style={{flexShrink:0,marginTop:1}}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12.5,color:"#7C2D12",lineHeight:1.5}}>
+              <b>Schedule alert:</b>
+              {delayInsight.doneLate>0 && <> {delayInsight.doneLate} task late finish hue</>}
+              {delayInsight.doneLate>0 && delayInsight.running>0 && <>,</>}
+              {delayInsight.running>0 && <> {delayInsight.running} abhi schedule se peeche chal rahe</>}.
+              {delayInsight.worst && <> Sabse bada slip: <b>{delayInsight.worst.t.no} {String(delayInsight.worst.t.name).slice(0,30)}</b> ({delayInsight.worst.days}d {delayInsight.worst.kind==="running"?"over":"late"}).</>}
+              {!delayInsight.anyActual && <span style={{color:"#9A3412"}}> {" "}Tip: progress update karne pe actual dates auto capture hoti hain.</span>}
+            </div>
+            {/* P4: delay-by-reason breakdown */}
+            {(delayInsight.reasonRows.length>0 || delayInsight.lateNoReason>0) && (
+              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:7,flexWrap:"wrap"}}>
+                <span style={{fontSize:9.5,fontWeight:700,color:"#9A3412",textTransform:"uppercase",letterSpacing:".3px"}}>Kaaron:</span>
+                {delayInsight.reasonRows.map(r=>(
+                  <span key={r.key} title={`${r.count} task, ${r.days} din`} style={{display:"inline-flex",alignItems:"center",gap:4,background:"white",border:`1px solid ${r.color}`,borderRadius:11,padding:"1px 8px",fontSize:10.5,fontWeight:600,color:r.color}}>
+                    <span style={{width:7,height:7,borderRadius:"50%",background:r.color}}/>{r.label} · {r.count} ({r.days}d)
+                  </span>
+                ))}
+                {delayInsight.lateNoReason>0 && <span style={{fontSize:10.5,color:"#B45309",fontStyle:"italic"}}>+ {delayInsight.lateNoReason} bina kaaron (set karo)</span>}
+              </div>
+            )}
+          </div>
+        </div>
+      ) : delayInsight.hasData ? (
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",marginBottom:12,background:"#F0FDF4",border:"1px solid #BBF7D0",borderLeft:"4px solid #16A34A",borderRadius:8}}>
+          <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke="#16A34A" strokeWidth={2.2} style={{flexShrink:0}}><path d="M20 6L9 17l-5-5"/></svg>
+          <div style={{fontSize:12.5,color:"#14532D"}}><b>On track</b> — abhi tak koi delay nahi{delayInsight.doneOnTime>0?<> ({delayInsight.doneOnTime} task time pe complete)</>:null}{delayInsight.doneEarly>0?<>, {delayInsight.doneEarly} jaldi</>:null}.</div>
+        </div>
+      ) : null}
 
       {/* Toolbar */}
       <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap"}}>
@@ -5801,7 +7594,7 @@ function TabTasks({ projectId, isAdmin }) {
       {/* GANTT VIEW — simple inline */}
       {view==="gantt"&&(
         <div style={{overflowX:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-          <PTGantt tasks={filtered}/>
+          <PTGantt tasks={filtered} cpm={cpmData} phaseCodeMap={phaseCodeMap}/>
         </div>
       )}
 
@@ -5893,9 +7686,58 @@ function TabTasks({ projectId, isAdmin }) {
 
       {/* Edit Task drawer */}
       {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
-        await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen });
-        setTasks(updateInTree(tasks,id,u)); setEditTask(null);
+        const orig = editTask;
+        await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen });
+        setTasks(updateInTree(tasks,id,{...u, delay_reason:u.delayReason||null, delay_note:u.delayNote||null})); setEditTask(null);
+        // P2e: if the dates moved AND other tasks depend on this one, offer to
+        // cascade the shift. The task itself is already saved above; the
+        // cascade (dependents) is an explicit, previewed, opt-in follow-up.
+        const datesChanged = (u.baseStart||"") !== (orig.baseStart||"") || (u.baseEnd||"") !== (orig.baseEnd||"");
+        const hasDependents = allFlat.some(t => (t.dependencies||[]).map(Number).includes(Number(id)));
+        if (datesChanged && hasDependents) {
+          try {
+            const pv = await api.post(`/tasks/${id}/reschedule`, { base_start:u.baseStart||null, base_end:u.baseEnd||null, mode:"preview" });
+            if (pv.success && pv.data?.affected?.length) {
+              setCascadePreview({ taskId:id, base_start:u.baseStart||null, base_end:u.baseEnd||null, changed:pv.data.changed, affected:pv.data.affected });
+            }
+          } catch(_) { /* preview failed — task itself is already saved, no-op */ }
+        }
       }}/>}
+
+      {/* P4: delay-reason picker (floating) */}
+      {reasonMenu && <>
+        <div onClick={()=>setReasonMenu(null)} style={{position:"fixed",inset:0,zIndex:998}}/>
+        <div style={{position:"fixed",left:Math.min(reasonMenu.x,window.innerWidth-210),top:Math.min(reasonMenu.y,window.innerHeight-330),zIndex:999,background:"white",borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:"1px solid #E5E7EB",width:200,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+          <div style={{padding:"8px 12px",borderBottom:"1px solid #F3F4F6",fontSize:10.5,fontWeight:700,color:"#92400E",textTransform:"uppercase",letterSpacing:".3px"}}>Delay ka kaaron?</div>
+          <div style={{maxHeight:280,overflowY:"auto",padding:"4px 0"}}>
+            {PT_DELAY_REASONS.map(r=>(
+              <button key={r.key} onClick={()=>setDelayReason(reasonMenu.task,r.key)}
+                style={{width:"100%",padding:"7px 12px",background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:8,fontSize:12.5,color:"#374151",textAlign:"left"}}
+                onMouseEnter={e=>e.currentTarget.style.background="#F9FAFB"} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                <span style={{width:9,height:9,borderRadius:"50%",background:r.color,flexShrink:0}}/>{r.label}
+              </button>
+            ))}
+            {reasonMenu.task?.delay_reason&&<button onClick={()=>setDelayReason(reasonMenu.task,"")}
+              style={{width:"100%",padding:"7px 12px",background:"none",border:"none",borderTop:"1px solid #F3F4F6",cursor:"pointer",fontSize:11.5,color:"#9CA3AF",textAlign:"left"}}>✕ Kaaron hatao</button>}
+          </div>
+        </div>
+      </>}
+
+      {/* Cascade reschedule preview (P2e) */}
+      {cascadePreview && <CascadePreviewModal
+        data={cascadePreview}
+        applying={cascadeApplying}
+        onClose={()=>setCascadePreview(null)}
+        onApply={async()=>{
+          setCascadeApplying(true);
+          try {
+            await api.post(`/tasks/${cascadePreview.taskId}/reschedule`, { base_start:cascadePreview.base_start, base_end:cascadePreview.base_end, mode:"apply" });
+            await refetchTasks();
+          } catch(e) { alert("Cascade failed: "+(e?.message||"error")); }
+          setCascadeApplying(false);
+          setCascadePreview(null);
+        }}
+      />}
 
       {/* Add Task modal */}
       {showAdd&&<PTAddTask parent={addParent} allTasks={allFlat} onClose={()=>{setShowAdd(false);setAddParent(null);}} onSave={async(form)=>{
@@ -5908,7 +7750,7 @@ function TabTasks({ projectId, isAdmin }) {
           assigned_to: null,
           base_start: form.baseStart || null,
           base_end: form.baseEnd || null,
-          duration: form.baseStart && form.baseEnd ? Math.round((new Date(form.baseEnd)-new Date(form.baseStart))/(1000*86400)) : 0,
+          duration: form.duration || 0,
           dependencies: form.dependencies || [],
           dhyan_rakhen: form.dhyanRakhen || null,
         });
@@ -6027,6 +7869,99 @@ function TabTasks({ projectId, isAdmin }) {
 // ═══════════════════════════════════════════════════════════════
 // BASELINE STRIP — header card showing current baseline status
 // ═══════════════════════════════════════════════════════════════
+// ── Schedule lifecycle strip (Estimate → Plan Locked → Started) ──
+function ScheduleLifecycleStrip({ proj, isAdmin, onSetStart, onLockPlan, onUnlockPlan, onLockStart, onUnlockStart }){
+  if(!proj) return null;
+  const stage = proj.start_locked ? "started" : proj.plan_locked ? "plan_locked" : "estimate";
+  const fmt = (d)=> d ? new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"numeric"}) : "—";
+  const stages = [{key:"estimate",label:"Estimate",icon:"📝"},{key:"plan_locked",label:"Plan Locked",icon:"📌"},{key:"started",label:"Started",icon:"🚦"}];
+  const curIdx = stages.findIndex(s=>s.key===stage);
+  const Btn = ({onClick,bg,color,bd,children})=>(<button onClick={onClick} style={{padding:"6px 12px",borderRadius:6,background:bg,color,border:bd||"none",fontSize:11,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>{children}</button>);
+  return(
+    <div style={{background:"#FFFFFF",border:"1px solid #E2E8F0",borderRadius:8,padding:"9px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        {stages.map((s,i)=>(
+          <React.Fragment key={s.key}>
+            <div style={{display:"flex",alignItems:"center",gap:5,opacity:i<=curIdx?1:0.4}}>
+              <span style={{width:20,height:20,borderRadius:"50%",background:i<curIdx?"#16A34A":i===curIdx?"#2563EB":"#E2E8F0",color:i<=curIdx?"white":"#94A3B8",fontSize:10,display:"flex",alignItems:"center",justifyContent:"center",fontWeight:700}}>{i<curIdx?"✓":i+1}</span>
+              <span style={{fontSize:11.5,fontWeight:i===curIdx?700:500,color:i===curIdx?"#1E293B":"#64748B"}}>{s.icon} {s.label}</span>
+            </div>
+            {i<stages.length-1 && <span style={{width:18,height:2,background:i<curIdx?"#16A34A":"#E2E8F0"}}/>}
+          </React.Fragment>
+        ))}
+      </div>
+      <div style={{flex:1,minWidth:200,fontSize:11,color:"#64748B"}}>
+        {stage==="estimate" && <>Tentative plan — client ko timeline dikhao. Start date set karke dates auto banao.</>}
+        {stage==="plan_locked" && <>Plan locked — sirf admin schedule badal sakta. Green flag aaye to start date lock karo.</>}
+        {stage==="started" && <><b style={{color:"#16A34A"}}>Started: {fmt(proj.start_date)}</b> · dates locked 🔒</>}
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+        {stage==="estimate" && isAdmin && <>
+          <Btn onClick={onSetStart} bg="white" color="#1D4ED8" bd="1px solid #93C5FD">📅 Set Start Date</Btn>
+          <Btn onClick={onLockPlan} bg="white" color="#5B21B6" bd="1px solid #A78BFA">🔒 Lock Plan</Btn>
+        </>}
+        {stage==="plan_locked" && isAdmin && <>
+          <Btn onClick={onLockStart} bg="linear-gradient(135deg,#EA580C,#C2410C)" color="white">🚦 Lock Start Date</Btn>
+          <Btn onClick={onUnlockPlan} bg="white" color="#64748B" bd="1px solid #CBD5E1">Unlock Plan</Btn>
+        </>}
+        {stage==="started" && isAdmin && <Btn onClick={onUnlockStart} bg="white" color="#64748B" bd="1px solid #CBD5E1">🔓 Unlock Start</Btn>}
+        {!isAdmin && stage!=="started" && <span style={{fontSize:10.5,color:"#94A3B8",fontStyle:"italic"}}>Admin / PM only</span>}
+      </div>
+    </div>
+  );
+}
+
+// ── Start-date modal: recalc (estimate) or lock (green flag) ──
+function StartDateModal({ mode, projectId, currentStart, onClose, onDone }){
+  const isLock = mode==="lock";
+  const [date,setDate] = useState(currentStart?String(currentStart).slice(0,10):"");
+  const [preview,setPreview] = useState(null);
+  const [loading,setLoading] = useState(false);
+  const [err,setErr] = useState("");
+  const endpoint = isLock?"lock-start":"anchor-schedule";
+  const run = async (m)=>{
+    if(!date){ setErr("Date select karo"); return null; }
+    setErr(""); setLoading(true);
+    try{ const r=await api.post(`/projects/${projectId}/${endpoint}`,{start_date:date,mode:m});
+      if(!r.success) throw new Error(r.message); return r.data;
+    }catch(e){ setErr(e.message||"Failed"); return null; } finally{ setLoading(false); }
+  };
+  const doPreview = async ()=>{ const d=await run("preview"); if(d) setPreview(d); };
+  const doApply = async ()=>{ const d=await run("apply"); if(d) onDone(); };
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center",backdropFilter:"blur(3px)"}} onMouseDown={e=>{if(e.target===e.currentTarget)onClose();}}>
+      <div style={{background:"white",borderRadius:14,width:520,maxWidth:"92%",boxShadow:"0 24px 64px rgba(0,0,0,0.4)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+        <div style={{background:isLock?"linear-gradient(135deg,#EA580C,#C2410C)":"linear-gradient(135deg,#2563EB,#1D4ED8)",padding:"16px 22px",color:"white"}}>
+          <div style={{fontSize:16,fontWeight:700}}>{isLock?"🚦 Lock Project Start Date":"📅 Set / Recalculate Start Date"}</div>
+          <div style={{fontSize:11,opacity:0.9,marginTop:3}}>{isLock?"Green flag — yeh date lock karne pe saari task dates isi se re-anchor ho jaayengi.":"Saari task dates is start se dependency ke hisaab se recalc hongi."}</div>
+        </div>
+        <div style={{padding:"18px 22px"}}>
+          {err && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{err}</div>}
+          <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>{isLock?"Real start date":"Start date"}</label>
+          <input type="date" value={date} onChange={e=>{setDate(e.target.value);setPreview(null);}} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #D1D5DB",borderRadius:7,fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
+          {!preview && <button onClick={doPreview} disabled={loading||!date} style={{width:"100%",padding:"10px",borderRadius:7,background:date?"#0F172A":"#CBD5E1",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:loading||!date?"default":"pointer"}}>{loading?"…":"Preview changes"}</button>}
+          {preview && <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"10px 12px",marginBottom:4}}>
+            <div style={{fontSize:12,fontWeight:700,color:"#1E293B",marginBottom:6}}>{preview.changed_count} tasks ki date badlegi</div>
+            <div style={{maxHeight:180,overflowY:"auto"}}>
+              {(preview.changes||[]).slice(0,8).map(c=>(
+                <div key={c.id} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11,padding:"3px 0",borderBottom:"1px solid #F1F5F9"}}>
+                  <span style={{color:"#475569",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><b style={{fontFamily:"monospace",fontSize:9.5,color:"#94A3B8"}}>{c.task_no}</b> {String(c.name).slice(0,22)}</span>
+                  <span style={{color:"#0F172A",whiteSpace:"nowrap"}}>{c.old_start||"—"} → <b>{c.new_start}</b></span>
+                </div>
+              ))}
+              {preview.changes?.length>8 && <div style={{fontSize:10.5,color:"#94A3B8",paddingTop:4}}>+ {preview.changes.length-8} aur…</div>}
+            </div>
+          </div>}
+        </div>
+        <div style={{padding:"0 22px 18px",display:"flex",gap:8}}>
+          <button onClick={onClose} disabled={loading} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#475569",fontSize:12.5,fontWeight:700,border:"1px solid #E2E8F0",cursor:"pointer"}}>Cancel</button>
+          <button onClick={doApply} disabled={loading||!preview} style={{flex:1.6,padding:"10px",borderRadius:7,background:preview?(isLock?"#C2410C":"#1D4ED8"):"#CBD5E1",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:preview&&!loading?"pointer":"default"}}>{loading?"…":(isLock?"🔒 Lock & Set Dates":"Apply Dates")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function BaselineStrip({ status, showCols, onToggleCols, onSet, onRebaseline, onHistory }) {
   if (!status) {
     return (
@@ -6087,6 +8022,7 @@ function BaselineStrip({ status, showCols, onToggleCols, onSet, onRebaseline, on
 function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
   const isSet = mode === "set";
   const [reason, setReason] = useState("");
+  const [baselineDate, setBaselineDate] = useState(new Date().toISOString().slice(0,10));
   const [rbMode, setRbMode] = useState("auto");
   const [shiftDays, setShiftDays] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -6098,10 +8034,10 @@ function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
     setLoading(true);
     try {
       if (isSet) {
-        const r = await api.baseline.set(projectId, { reason });
+        const r = await api.baseline.set(projectId, { reason, baseline_date: baselineDate || null });
         if (!r.success) throw new Error(r.message);
       } else {
-        const body = { reason, mode: rbMode };
+        const body = { reason, mode: rbMode, baseline_date: baselineDate || null };
         if (rbMode === "auto") body.shift_days = parseInt(shiftDays,10) || 0;
         else body.task_overrides = []; // UI for manual per-task is future work; submits empty to force validation
         const r = await api.baseline.rebaseline(projectId, body);
@@ -6122,6 +8058,13 @@ function RebaselineModal({ mode, projectId, onClose, onSuccess }) {
         </div>
         <div style={{padding:"18px 22px"}}>
           {error && <div style={{background:"#FEE2E2",color:"#991B1B",padding:"8px 12px",borderRadius:6,fontSize:12,marginBottom:12,border:"1px solid #FCA5A5"}}>{error}</div>}
+
+          <div style={{marginBottom:14}}>
+            <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>Baseline Date</label>
+            <input type="date" value={baselineDate} onChange={e=>setBaselineDate(e.target.value)}
+              style={{width:"100%",padding:"9px 12px",border:"1.5px solid #D1D5DB",borderRadius:7,fontSize:12.5,fontFamily:"inherit",outline:"none",boxSizing:"border-box"}}/>
+            <div style={{fontSize:10,color:"#9CA3AF",marginTop:3}}>Is snapshot ki pehchaan/tareekh (label) — version {isSet?"v1":"+1"} ke saath save hoga</div>
+          </div>
 
           <div style={{marginBottom:14}}>
             <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>Reason <span style={{color:"#EF4444"}}>*</span></label>
@@ -6385,16 +8328,35 @@ function BaselineHistoryModal({ projectId, canBaseline, onClose, onDeleted }) {
 }
 
 // ── Inline Gantt for project detail ──────────────────────────────
-function PTGantt({tasks}){
+function PTGantt({tasks, cpm, phaseCodeMap}){
+  const cmap=(cpm&&cpm.map)||{};
+  const pcm=phaseCodeMap||{};
+  const hasCpm=cpm&&Object.keys(cmap).length>0;
   const allFlat=(function flatD(list,depth=0,out=[]){list.forEach(t=>{out.push({...t,level:depth+1});if(t.children?.length)flatD(t.children,depth+1,out);});return out;})(tasks);
   const MONTHS=[];
   let d=new Date("2025-01-01");
   while(d<=new Date("2026-10-01")){MONTHS.push({y:d.getFullYear(),m:d.getMonth(),lbl:`${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]}${d.getFullYear()===2026?"'26":""}`});d=new Date(d.getFullYear(),d.getMonth()+1,1);}
   const ROW_H=26,LBL_W=180,MO_W=36,HDR_H=28,TOTAL_W=LBL_W+MONTHS.length*MO_W,TOTAL_H=HDR_H+allFlat.length*ROW_H;
   const pStart=new Date("2025-01-01");
-  const toX=(ds)=>{if(!ds)return null;const dd=(new Date(ds)-pStart)/(1000*86400);const tot=(new Date("2026-10-01")-pStart)/(1000*86400);return LBL_W+dd/tot*(MONTHS.length*MO_W);};
+  const totDays=(new Date("2026-10-01")-pStart)/(1000*86400);
+  const pxPerDay=(MONTHS.length*MO_W)/totDays;
+  const toX=(ds)=>{if(!ds)return null;const dd=(new Date(ds)-pStart)/(1000*86400);return LBL_W+dd/totDays*(MONTHS.length*MO_W);};
   const todayX=toX(new Date().toISOString().split("T")[0]);
+  // bar positions (for dependency arrows)
+  const pos={};
+  allFlat.forEach((t,i)=>{ pos[t.id]={y:HDR_H+i*ROW_H+ROW_H/2, bx1:toX(t.baseStart), bx2:toX(t.baseEnd)}; });
+  const LG={display:"flex",alignItems:"center",gap:5};
   return(
+   <div>
+    {/* P5 legend */}
+    <div style={{display:"flex",alignItems:"center",gap:16,padding:"7px 12px",fontSize:10.5,color:T.t3,borderBottom:`1px solid ${T.b1}`,flexWrap:"wrap",background:T.surfaceB}}>
+      <span style={LG}><span style={{width:18,height:5,borderRadius:2,background:T.blu,opacity:0.4}}/>Planned</span>
+      <span style={LG}><span style={{width:18,height:8,borderRadius:2,background:T.grn,opacity:0.85}}/>Actual</span>
+      <span style={LG}><span style={{width:18,height:5,borderRadius:2,background:"#DC2626"}}/><b style={{color:"#DC2626"}}>Critical path</b></span>
+      <span style={LG}><span style={{width:18,height:3,background:"#CBD5E1"}}/>Slack (buffer)</span>
+      <span style={LG}><svg width={22} height={9}><path d="M0,4.5 H15" stroke="#64748B" strokeWidth={1}/><path d="M15,1.5 L20,4.5 L15,7.5 Z" fill="#64748B"/></svg>Dependency</span>
+      {!hasCpm&&<span style={{color:T.t4,fontStyle:"italic"}}>critical path load ho raha…</span>}
+    </div>
     <svg width={TOTAL_W} height={TOTAL_H} style={{display:"block",fontFamily:"'Segoe UI',sans-serif",minWidth:TOTAL_W}}>
       <rect x={0} y={0} width={TOTAL_W} height={HDR_H} fill="#0D1B2A"/>
       <text x={10} y={HDR_H/2+4} fontSize={9.5} fill="rgba(255,255,255,0.55)" fontWeight="600">Task</text>
@@ -6409,20 +8371,42 @@ function PTGantt({tasks}){
         const bw=bx1&&bx2?Math.max(2,bx2-bx1):0;
         const aw=ax1?Math.max(2,(ax2-ax1)*t.progress/100):0;
         const indent=t.level*10;
+        const crit=cmap[t.id]?.is_critical;
+        const slack=cmap[t.id]?.slack;
+        const lbl=pcm[t.id]?.code||t.no;
         return(
           <g key={t.id}>
             <rect x={0} y={y} width={TOTAL_W} height={ROW_H} fill={i%2===0?T.surface:T.surfaceB}/>
+            {crit&&<rect x={0} y={y} width={3} height={ROW_H} fill="#DC2626"/>}
             <line x1={0} y1={y+ROW_H} x2={TOTAL_W} y2={y+ROW_H} stroke={T.b1} strokeWidth={0.5}/>
             {MONTHS.map((_,mi)=><line key={mi} x1={LBL_W+mi*MO_W} y1={y} x2={LBL_W+mi*MO_W} y2={y+ROW_H} stroke={T.b1} strokeWidth={0.5}/>)}
-            <text x={8+indent} y={y+ROW_H/2+4} fontSize={t.level===1?11:t.level===2?10:9.5} fontWeight={t.level===1?700:t.level===2?600:400} fill={T.t1}>{t.no} {t.name.slice(0,t.level===1?18:15)}{t.name.length>(t.level===1?18:15)?"…":""}</text>
-            {bx1&&bw>0&&<rect x={bx1} y={y+ROW_H/2-3} width={bw} height={5} rx={2} fill={T.blu} fillOpacity={0.35}/>}
-            {ax1&&aw>0&&<rect x={ax1} y={y+ROW_H/2-5} width={aw} height={9} rx={2} fill={t.status==="Completed"?T.grn:t.status==="Ongoing"?T.blu:T.amb} fillOpacity={0.8}/>}
+            <text x={8+indent} y={y+ROW_H/2+4} fontSize={t.level===1?11:t.level===2?10:9.5} fontWeight={t.level===1?700:t.level===2?600:400} fill={crit?"#DC2626":T.t1}>{lbl} {t.name.slice(0,t.level===1?16:13)}{t.name.length>(t.level===1?16:13)?"…":""}</text>
+            {/* slack tail (buffer) */}
+            {!crit&&slack>0&&bx2&&<rect x={bx2} y={y+ROW_H/2-1.5} width={Math.max(2,Math.min(slack*pxPerDay,MO_W*5))} height={3} rx={1} fill="#CBD5E1" opacity={0.75}/>}
+            {/* planned bar — red if critical */}
+            {bx1&&bw>0&&<rect x={bx1} y={y+ROW_H/2-3} width={bw} height={5} rx={2} fill={crit?"#DC2626":T.blu} fillOpacity={crit?0.5:0.35}/>}
+            {/* actual progress bar */}
+            {ax1&&aw>0&&<rect x={ax1} y={y+ROW_H/2-5} width={aw} height={9} rx={2} fill={t.status==="Completed"?T.grn:t.status==="Ongoing"?T.blu:T.amb} fillOpacity={0.85}/>}
             {t.dhyanRakhen&&bx1&&<circle cx={bx1-5} cy={y+ROW_H/2} r={3.5} fill="#F59E0B"/>}
           </g>
         );
       })}
+      {/* P5: dependency arrows (predecessor end → successor start) */}
+      {allFlat.map(t=>{
+        const deps=Array.isArray(t.dependencies)?t.dependencies:[];
+        return deps.map(dep=>{
+          const a=pos[Number(dep)], b=pos[t.id];
+          if(!a||!b||a.bx2==null||b.bx1==null) return null;
+          const x1=a.bx2,y1=a.y,x2=b.bx1,y2=b.y;
+          return(<g key={`${t.id}-${dep}`} opacity={0.5}>
+            <path d={`M${x1},${y1} H${x1+6} V${y2} H${x2-4}`} fill="none" stroke="#64748B" strokeWidth={1}/>
+            <path d={`M${x2-4},${y2-3} L${x2},${y2} L${x2-4},${y2+3} Z`} fill="#64748B"/>
+          </g>);
+        });
+      })}
       {todayX&&<g><line x1={todayX} y1={HDR_H} x2={todayX} y2={TOTAL_H} stroke={T.red} strokeWidth={1.5} strokeDasharray="4,3"/><rect x={todayX-13} y={HDR_H-14} width={26} height={13} rx={3} fill={T.red}/><text x={todayX} y={HDR_H-4} textAnchor="middle" fontSize={7.5} fill="white" fontWeight="700">TODAY</text></g>}
     </svg>
+   </div>
   );
 }
 
@@ -8237,10 +10221,16 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
 }
 
 function PTEditTask({task,allTasks,onClose,onSave}){
-  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
+  const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+1:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
   const [showDhyan,setShowDhyan]=useState(!!task.dhyanRakhen);
   const [depSrch,setDepSrch]=useState("");
   const upd=(k)=>(e)=>setForm(p=>({...p,[k]:e.target.type==="range"?Number(e.target.value):e.target.value}));
+  // Duration ↔ dates bidirectional sync (duration = inclusive days)
+  const _addD=(d,n)=>{if(!d)return"";const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().slice(0,10);};
+  const _span=(s,e)=>{if(!s||!e)return 0;return Math.round((new Date(e)-new Date(s))/86400000)+1;};
+  const setStart=(v)=>setForm(p=>(p.duration>0&&v)?{...p,baseStart:v,baseEnd:_addD(v,p.duration-1)}:{...p,baseStart:v,duration:_span(v,p.baseEnd)});
+  const setEnd=(v)=>setForm(p=>({...p,baseEnd:v,duration:_span(p.baseStart,v)}));
+  const setDur=(v)=>{const n=Math.max(0,parseInt(v,10)||0);setForm(p=>({...p,duration:n,baseEnd:(p.baseStart&&n>0)?_addD(p.baseStart,n-1):p.baseEnd}));};
   const toggleDep=(id)=>setForm(p=>({...p,dependencies:p.dependencies.includes(id)?p.dependencies.filter(x=>x!==id):[...p.dependencies,id]}));
   const filteredForDep=allTasks.filter(t=>t.id!==task.id&&(!depSrch||t.name.toLowerCase().includes(depSrch.toLowerCase())||t.no.includes(depSrch)));
   const TEAM_PT=[];
@@ -8281,12 +10271,32 @@ function PTEditTask({task,allTasks,onClose,onSave}){
           </div>
           <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginTop:4}}><div style={{height:"100%",width:`${form.progress}%`,background:Number(form.progress)===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/></div>
         </div>
-        {/* Dates */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:10}}>
-          {[["Baseline Start","baseStart"],["Baseline End","baseEnd"]].map(([l,k])=>(
-            <div key={k}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{l}</label>
-              <input type="date" value={form[k]} onChange={upd(k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+        {/* Dates + Duration (bidirectional) */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.8fr",gap:9,marginBottom:5}}>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline Start</label>
+            <input type="date" value={form.baseStart} onChange={e=>setStart(e.target.value)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline End</label>
+            <input type="date" value={form.baseEnd} onChange={e=>setEnd(e.target.value)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Duration (din)</label>
+            <input type="number" min={0} value={form.duration||""} onChange={e=>setDur(e.target.value)} placeholder="0" style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,fontWeight:700,color:T.blu,background:T.bluL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+        </div>
+        <div style={{fontSize:10,color:T.t4,marginBottom:10}}>💡 Duration daalo → End apne aap; ya Start/End badlo → Duration auto.</div>
+        {/* Actual dates (P3) — auto-captured from progress, editable here */}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:4}}>
+          {[["Actual Start","actualStart"],["Actual End","actualEnd"]].map(([l,k])=>(
+            <div key={k}><label style={{fontSize:9.5,fontWeight:600,color:"#0E7490",textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>{l}</label>
+              <input type="date" value={form[k]} onChange={upd(k)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid #A5F3FC`,fontSize:12.5,color:T.t1,background:"#F0FDFF",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
           ))}
+        </div>
+        <div style={{fontSize:10,color:T.t4,marginBottom:10}}>Actual dates progress update karne pe apne aap bharti hain — yahan correct bhi kar sakte ho.</div>
+        {/* P4: Delay reason + note */}
+        <div style={{marginBottom:10,padding:"9px 11px",background:form.delayReason?"#FFF7ED":T.surfaceB,border:`1px solid ${form.delayReason?"#FED7AA":T.b1}`,borderRadius:7}}>
+          <label style={{fontSize:9.5,fontWeight:600,color:form.delayReason?"#9A3412":T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>Delay ka kaaron (agar late)</label>
+          <select value={form.delayReason} onChange={upd("delayReason")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${form.delayReason?"#FDBA74":T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",marginBottom:form.delayReason?7:0}}>
+            <option value="">— koi nahi —</option>
+            {PT_DELAY_REASONS.map(r=><option key={r.key} value={r.key}>{r.label}</option>)}
+          </select>
+          {form.delayReason&&<input value={form.delayNote} onChange={upd("delayNote")} placeholder="Detail / note (optional) — e.g. cement supply 5 din late" style={{width:"100%",padding:"7px 9px",borderRadius:6,border:"1.5px solid #FDBA74",fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>}
         </div>
         {/* Dependencies with search */}
         <div style={{marginBottom:10}}>
@@ -8347,14 +10357,36 @@ function PTEditTask({task,allTasks,onClose,onSave}){
 
 // ── PT Add Task ───────────────────────────────────────────────────
 function PTAddTask({parent,allTasks,onClose,onSave}){
-  const [form,setForm]=useState({name:"",category:"Civil",tag:"",assignee:"",baseStart:"",baseEnd:"",dependencies:[],dhyanRakhen:""});
+  const [form,setForm]=useState({name:"",category:"Civil",tag:"",assignee:"",baseStart:"",baseEnd:"",duration:0,dependencies:[],dhyanRakhen:""});
   const [showDhyan,setShowDhyan]=useState(false);
   const [depSrch,setDepSrch]=useState("");
   const upd=(k)=>(e)=>setForm(p=>({...p,[k]:e.target.value}));
+  // Duration ↔ dates bidirectional sync (duration = inclusive days)
+  const _addD=(d,n)=>{if(!d)return"";const dt=new Date(d);dt.setDate(dt.getDate()+n);return dt.toISOString().slice(0,10);};
+  const _span=(s,e)=>{if(!s||!e)return 0;return Math.round((new Date(e)-new Date(s))/86400000)+1;};
+  const setStart=(v)=>setForm(p=>(p.duration>0&&v)?{...p,baseStart:v,baseEnd:_addD(v,p.duration-1)}:{...p,baseStart:v,duration:_span(v,p.baseEnd)});
+  const setEnd=(v)=>setForm(p=>({...p,baseEnd:v,duration:_span(p.baseStart,v)}));
+  const setDur=(v)=>{const n=Math.max(0,parseInt(v,10)||0);setForm(p=>({...p,duration:n,baseEnd:(p.baseStart&&n>0)?_addD(p.baseStart,n-1):p.baseEnd}));};
   const toggleDep=(id)=>setForm(p=>({...p,dependencies:p.dependencies.includes(id)?p.dependencies.filter(x=>x!==id):[...p.dependencies,id]}));
   const filteredForDep=allTasks.filter(t=>!depSrch||t.name.toLowerCase().includes(depSrch.toLowerCase())||t.no.includes(depSrch));
   const TEAM_PT=[];
-  const dur=form.baseStart&&form.baseEnd?Math.round((new Date(form.baseEnd)-new Date(form.baseStart))/(1000*86400)):0;
+  const dur=form.duration||0;
+  // P2d: suggested start = max(dependency end dates) + 1 day (Finish-to-Start)
+  const autoStart=(()=>{
+    if(!form.dependencies.length) return null;
+    let mx=null;
+    form.dependencies.forEach(id=>{
+      const d=allTasks.find(t=>t.id===id);
+      const end=d&&(d.baseEnd||d.base_end);
+      if(end&&(!mx||new Date(end)>new Date(mx))) mx=end;
+    });
+    if(!mx) return null;
+    const dt=new Date(mx); dt.setDate(dt.getDate()+1);
+    return dt.toISOString().slice(0,10);
+  })();
+  // Gently auto-fill the start when a dependency is picked and start is still empty.
+  // User can always edit; backend also fills this on save as a safety net.
+  useEffect(()=>{ if(autoStart && !form.baseStart) setForm(p=>({...p,baseStart:autoStart,baseEnd:p.duration>0?_addD(autoStart,p.duration-1):p.baseEnd})); },[autoStart]);
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(480px,95vw)",maxHeight:"90vh",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -8373,10 +10405,18 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
             </div>
           ))}
           <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline Start</label>
-            <input type="date" value={form.baseStart} onChange={upd("baseStart")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+            <input type="date" value={form.baseStart} onChange={e=>setStart(e.target.value)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
           <div><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Baseline End</label>
-            <input type="date" value={form.baseEnd} onChange={upd("baseEnd")} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+            <input type="date" value={form.baseEnd} onChange={e=>setEnd(e.target.value)} style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
+          <div><label style={{fontSize:9.5,fontWeight:600,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4}}>Duration (din)</label>
+            <input type="number" min={0} value={form.duration||""} onChange={e=>setDur(e.target.value)} placeholder="0" style={{width:"100%",padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,fontWeight:700,color:T.blu,background:T.bluL,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/></div>
         </div>
+        {autoStart&&<div style={{fontSize:11,color:"#0E7490",fontWeight:600,marginBottom:10,padding:"4px 10px",background:"#ECFEFF",border:"1px solid #A5F3FC",borderRadius:5,display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+          <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#0E7490" strokeWidth={2}><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Dependency se auto start: <b>{autoStart}</b>
+          {form.baseStart!==autoStart&&<button onClick={()=>setForm(p=>({...p,baseStart:autoStart}))} style={{background:"#0E7490",color:"white",border:"none",borderRadius:4,fontSize:10,fontWeight:700,padding:"2px 7px",cursor:"pointer"}}>Use</button>}
+          <span style={{color:T.t4,fontWeight:400,fontSize:10}}>· edit kar sakte ho</span>
+        </div>}
         {dur>0&&<div style={{fontSize:11,color:T.blu,fontWeight:600,marginBottom:10,padding:"3px 9px",background:T.bluL,borderRadius:5,display:"inline-block"}}>Duration: {dur} days</div>}
         {/* Dependencies with search */}
         <div style={{marginBottom:10}}>
@@ -8413,6 +10453,58 @@ function PTAddTask({parent,allTasks,onClose,onSave}){
         <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
         <button onClick={()=>{if(form.name.trim())onSave({...form,dhyanRakhen:showDhyan?form.dhyanRakhen:null});}} disabled={!form.name.trim()}
           style={{flex:2,padding:"9px",borderRadius:6,background:form.name.trim()?T.blu:T.b1,color:form.name.trim()?"white":T.t4,fontSize:12,fontWeight:700,border:"none",cursor:form.name.trim()?"pointer":"not-allowed"}}>Add Task</button>
+      </div>
+    </div>
+  </>);
+}
+
+// ── Cascade reschedule preview (P2e) ──────────────────────────────
+// Shows which dependent tasks will shift when a task's date changes, and
+// lets the user apply the cascade or keep just the single-task edit.
+function CascadePreviewModal({data,applying,onClose,onApply}){
+  const {changed,affected}=data;
+  const fmtD=(d)=>d?String(d).slice(0,10):"—";
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(540px,95vw)",maxHeight:"85vh",boxShadow:"0 24px 64px rgba(0,0,0,0.3)",zIndex:501,overflow:"hidden",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{background:"#92400E",padding:"13px 18px",flexShrink:0}}>
+        <div style={{fontSize:14,fontWeight:700,color:"white",display:"flex",alignItems:"center",gap:7}}>
+          <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+          Dependent tasks ko bhi shift karein?
+        </div>
+        <div style={{fontSize:11.5,color:"rgba(255,255,255,0.8)",marginTop:3,lineHeight:1.4}}>
+          <b>{changed.task_no} {changed.name}</b> ki date badalne se <b>{affected.length}</b> aage wale task khisak rahe hain (sab apni duration bachakar).
+        </div>
+      </div>
+      <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+        {/* changed task */}
+        <div style={{background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:8,padding:"9px 12px",marginBottom:12}}>
+          <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:4}}>Aapne badla</div>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}><span style={{fontFamily:"monospace",fontSize:10,color:T.t4,marginRight:5}}>{changed.task_no}</span>{changed.name}</div>
+            <div style={{fontSize:11.5,color:T.t2}}>{fmtD(changed.old_start)}–{fmtD(changed.old_end)} <span style={{color:"#92400E",fontWeight:700}}>→ {fmtD(changed.new_start)}–{fmtD(changed.new_end)}</span></div>
+          </div>
+        </div>
+        {/* affected list */}
+        <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Yeh {affected.length} task khisakenge</div>
+        <div style={{border:`1px solid ${T.b1}`,borderRadius:8,overflow:"hidden"}}>
+          {affected.map((a,i)=>(
+            <div key={a.id} style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"9px 12px",background:i%2?T.surfaceB:T.surface,borderTop:i?`1px solid ${T.b1}`:"none"}}>
+              <div style={{fontSize:12.5,color:T.t1,minWidth:0,flex:1}}>
+                <span style={{fontFamily:"monospace",fontSize:10,color:T.t4,marginRight:5}}>{a.task_no}</span>
+                {String(a.name).slice(0,34)}{String(a.name).length>34?"…":""}
+              </div>
+              <div style={{fontSize:11.5,color:T.t2,whiteSpace:"nowrap",marginLeft:8}}>
+                {fmtD(a.old_start)} <span style={{color:T.t4}}>→</span> <b style={{color:"#B45309"}}>{fmtD(a.new_start)}</b>
+                {a.delta_days?<span style={{marginLeft:5,background:"#FEF3C7",color:"#92400E",fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:9}}>+{a.delta_days}d</span>:null}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+      <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:8,flexShrink:0}}>
+        <button onClick={onClose} disabled={applying} style={{flex:1,padding:"10px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:applying?"default":"pointer"}}>Sirf yeh task rakhein</button>
+        <button onClick={onApply} disabled={applying} style={{flex:1.6,padding:"10px",borderRadius:7,background:applying?T.b2:"#B45309",color:"white",fontSize:12,fontWeight:700,border:"none",cursor:applying?"default":"pointer"}}>{applying?"Shift ho raha hai…":`Haan, ${affected.length} tasks shift karein`}</button>
       </div>
     </div>
   </>);
@@ -17386,7 +19478,7 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
     setActing(p => ({ ...p, [key]: null }));
   };
 
-  const MOD_COLORS = { "Material Request": T.amb, "Design Approval": "#7C3AED", "Purchase Order (PO)": T.blu, "RA Bill": "#0891B2", "Subcon WO Amendment": "#EA580C", "Customer Estimate Amendment": "#DB2777", "Payment Request": T.blu, "Material Site Transfer": "#059669", "Material Issue": "#059669" };
+  const MOD_COLORS = { "Material Request": T.amb, "Design Approval": "#7C3AED", "Purchase Order (PO)": T.blu, "RA Bill": "#0891B2", "Subcon WO Amendment": "#EA580C", "Customer Estimate Amendment": "#DB2777", "Customer Invoice Draft": "#6D28D9", "Payment Request": T.blu, "Material Site Transfer": "#059669", "Material Issue": "#059669" };
 
   return (<>
     <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.38)", zIndex: 300, backdropFilter: "blur(2px)" }} />

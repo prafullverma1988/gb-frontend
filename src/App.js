@@ -5,6 +5,7 @@ import UploadToast from "./components/UploadToast";
 import { ToastProvider } from "./components/Toast";
 import { ConfirmProvider } from "./components/ConfirmDialog";
 import NotificationBell from "./components/NotificationBell";
+import AppErrorBoundary from "./components/AppErrorBoundary";
 
 // ── LAZY + PRELOAD: shared promise so prefetch & React.lazy use same cache ──
 // When preload() resolves, React.lazy gets already-resolved promise = NO spinner
@@ -35,27 +36,47 @@ const ProjectsPage       = lazyWithPreload("projects",     () => import("./modul
 const SaaSModule         = lazyWithPreload("saas",         () => import("./modules/SaaSModule"));
 
 // ── PREFETCH: Dashboard load hone ke baad background me sab load karo ──
+// safePreload — wraps preload() so a chunk-load failure on flaky network
+// doesn't (a) leave an unhandled promise rejection (which Sentry would
+// log as an alert) or (b) cache a poisoned rejected promise that makes
+// the real <Suspense> wait forever. On error we log + delete the cache
+// slot so the next real navigation retries cleanly.
+function safePreload(label, comp) {
+  try {
+    const p = comp?.preload?.();
+    if (p && typeof p.catch === "function") {
+      p.catch((err) => {
+        console.warn(`[preload] ${label} failed (will retry on demand):`, err?.message);
+        // Best-effort cache eviction — _cache key === label by convention.
+        try { if (_cache[label]) delete _cache[label]; } catch (_) {}
+      });
+    }
+  } catch (err) {
+    console.warn(`[preload] ${label} threw:`, err?.message);
+  }
+}
+
 function prefetchAllModules(){
   // Wave 1 — heavy/frequent modules (1s after dashboard)
   setTimeout(()=>{
-    ProjectsPage.preload();
-    ProjectDetailPage.preload();
-    FinanceModule.preload();
-    ProcurementModule.preload();
+    safePreload("ProjectsPage",     ProjectsPage);
+    safePreload("ProjectDetailPage",ProjectDetailPage);
+    safePreload("FinanceModule",    FinanceModule);
+    safePreload("ProcurementModule",ProcurementModule);
   }, 800);
   // Wave 2 — remaining modules (2s after dashboard)
   setTimeout(()=>{
-    DesignModule.preload();
-    CRMModule.preload();
-    SettingsModule.preload();
-    PayrollModule.preload();
-    TeamScheduleModule.preload();
-    MOMModule.preload();
-    MasterLibraryModule.preload();
-    WarehouseModule.preload();
-    TownshipCRMModule.preload();
-    ReportsModule.preload();
-    SaaSModule.preload();
+    safePreload("DesignModule",        DesignModule);
+    safePreload("CRMModule",           CRMModule);
+    safePreload("SettingsModule",      SettingsModule);
+    safePreload("PayrollModule",       PayrollModule);
+    safePreload("TeamScheduleModule",  TeamScheduleModule);
+    safePreload("MOMModule",           MOMModule);
+    safePreload("MasterLibraryModule", MasterLibraryModule);
+    safePreload("WarehouseModule",     WarehouseModule);
+    safePreload("TownshipCRMModule",   TownshipCRMModule);
+    safePreload("ReportsModule",       ReportsModule);
+    safePreload("SaaSModule",          SaaSModule);
   }, 2000);
 }
 
@@ -1025,12 +1046,14 @@ function ProjectsWrapper(){
 // ── APP ───────────────────────────────────────────────────────────────
 export default function App(){
   // Public route — 3D client preview (no login needed)
+  // Wrapped in AppErrorBoundary so a failed lazy chunk shows the recover
+  // UI instead of a white screen.
   if(window.location.pathname.startsWith("/3d-preview/")){
-    return <Suspense fallback={<ModuleLoader/>}><ClientPreview3D/></Suspense>;
+    return <AppErrorBoundary><Suspense fallback={<ModuleLoader/>}><ClientPreview3D/></Suspense></AppErrorBoundary>;
   }
   // Public route — drawing share link (no login needed)
   if(window.location.pathname.startsWith("/d/")){
-    return <Suspense fallback={<ModuleLoader/>}><PublicDrawingPage/></Suspense>;
+    return <AppErrorBoundary><Suspense fallback={<ModuleLoader/>}><PublicDrawingPage/></Suspense></AppErrorBoundary>;
   }
 
   const [user,setUser]=useState(()=>getUser());
@@ -1240,9 +1263,16 @@ export default function App(){
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={(mod)=>setNav(mod)}/>}
         <div style={{flex:1,overflowY:"auto"}}>
-          <Suspense fallback={<ModuleLoader/>}>
-            {MODULE_MAP[nav]||<DashboardModule/>}
-          </Suspense>
+          {/* Inner ErrorBoundary: if a single module's chunk fails or
+              the module throws on mount, recover the module area only —
+              the rest of the app shell (sidebar, top bar) stays usable.
+              The outer ErrorBoundary in index.js catches anything that
+              escapes this one. */}
+          <AppErrorBoundary>
+            <Suspense fallback={<ModuleLoader/>}>
+              {MODULE_MAP[nav]||<DashboardModule/>}
+            </Suspense>
+          </AppErrorBoundary>
         </div>
       </div>
       {/* Quick Search Modal */}

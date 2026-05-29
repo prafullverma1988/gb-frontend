@@ -1366,12 +1366,19 @@ function FinanceSettings() {
   const [negEnabled, setNegEnabled] = useState(false);
   const [negSaving, setNegSaving] = useState(false);
   const [negTick, setNegTick] = useState(false);
+  // Customer invoice over-billing policy (PS-17) — sibling of negEnabled.
+  // OFF (default) = qty inputs hard-clamped to remaining qty per milestone.
+  // ON = over-bill allowed; UI shows red warning chip but lets admin proceed.
+  const [overbillEnabled, setOverbillEnabled] = useState(false);
+  const [overbillSaving, setOverbillSaving] = useState(false);
+  const [overbillTick, setOverbillTick] = useState(false);
   useEffect(() => {
     api.get("/settings/company").then(r => {
       if (r?.success && r.data) {
         setDupEnabled(r.data.dup_payment_check_enabled !== 0);
         setDupDays(parseInt(r.data.dup_payment_window_days) || 4);
         setNegEnabled(r.data.allow_negative_balance === 1);
+        setOverbillEnabled(r.data.allow_overbill === 1);
       }
     }).catch(() => {});
   }, []);
@@ -1395,6 +1402,15 @@ function FinanceSettings() {
       setTimeout(() => setNegTick(false), 1800);
     } catch (e) { window.alert(e?.message || "Save failed"); }
     setNegSaving(false);
+  };
+  const saveOverbill = async () => {
+    setOverbillSaving(true);
+    try {
+      await api.put("/settings/company", { allow_overbill: overbillEnabled });
+      setOverbillTick(true);
+      setTimeout(() => setOverbillTick(false), 1800);
+    } catch (e) { window.alert(e?.message || "Save failed"); }
+    setOverbillSaving(false);
   };
 
   return (
@@ -1447,6 +1463,21 @@ function FinanceSettings() {
             ? "Account ka balance negative ja sakta hai. Frontend confirm prompt dikhayega, admin OK karke aage badh sakta hai."
             : "Insufficient balance par payment block ho jayega. Real bank pe paisa nahi hai to entry record nahi hogi."}
           value={negEnabled} onChange={setNegEnabled} />
+      </SectionCard>
+      <SectionCard title="Customer Invoice — Over-billing Policy"
+        desc="Jab admin manual invoice banaye via + Invoice flow, kya wo planned qty se zyada bill kar sakta hai? Default OFF — hard clamp (recommended, RA-bill discipline). ON karne par red warning ke saath allow ho jaata hai for reconciliation / claim cases."
+        action={
+          <button onClick={saveOverbill} disabled={overbillSaving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: overbillTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: overbillSaving ? "wait" : "pointer", opacity: overbillSaving ? 0.7 : 1 }}>
+            {overbillTick ? "✓ Saved" : overbillSaving ? "Saving..." : "Save"}
+          </button>
+        }>
+        <ToggleRow icon={<IcDollar size={17} color={T.blue} />}
+          label={"Allow over-billing on customer invoices" + (overbillEnabled ? " — ON (red flag, allowed)" : " — OFF (hard clamp)")}
+          desc={overbillEnabled
+            ? "Qty input remaining se zyada accept karta hai with a red warning chip. Use case: scope-creep claims, reconciliation entries."
+            : "Qty input remaining qty pe clamp ho jata hai. Over-bill block. Strict RA-bill semantics."}
+          value={overbillEnabled} onChange={setOverbillEnabled} />
       </SectionCard>
       <SectionCard title="Budget & Controls" desc="Financial safeguards">
         <ToggleRow icon={<IcBell size={17} color={T.blue} />} label="Budget Overrun Warning" desc="Alert when spending approaches budget" value={f.budgetWarning} onChange={v => upd("budgetWarning", v)} />

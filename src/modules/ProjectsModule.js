@@ -1436,6 +1436,23 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     setCeAmendLoading(null);
   };
 
+  // ── Auto-bill draft invoice — expand-in-card detail (PS-16) ───
+  // Same UX as RA bill / CE amendment: chevron expand pulls the full
+  // /invoices/:id/preview (invoice + items + trigger task with progress)
+  // so admin can Approve/Reject without leaving the drawer.
+  const [expandedAutoInv,setExpandedAutoInv]=useState(null);
+  const [autoInvCache,setAutoInvCache]=useState({});
+  const [autoInvLoading,setAutoInvLoading]=useState(null);
+  const loadAutoInvDetail=async(invId)=>{
+    if(autoInvCache[invId]) return;
+    setAutoInvLoading(invId);
+    try{
+      const r=await api.get("/customer-estimates/invoices/"+invId+"/preview");
+      if(r.success) setAutoInvCache(p=>({...p,[invId]:r.data}));
+    }catch(_){}
+    setAutoInvLoading(null);
+  };
+
   const load=async()=>{
     // Stale-while-revalidate: if we have a cached snapshot for this
     // mode, paint it INSTANTLY (no spinner), then silently refresh in
@@ -1572,7 +1589,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
 
   // ── Data splits by category ──────────────────────────────────────────
   const designItems   = data.centralized.filter(i=>i._source==="design");
-  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","purchase_order","labour_rate","salary_edit"].includes(i._source));
+  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","purchase_order","labour_rate","salary_edit"].includes(i._source));
   const paymentItems  = [
     ...data.centralized.filter(i=>i._source==="payment_request"),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
@@ -1690,6 +1707,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
           res=await api.patch("/subcon/amendments/"+item._source_id+"/action",{status:isRej?"Rejected":"Approved"});
         } else if(src==="ce_amendment"){
           res=await api.patch("/customer-estimates/amendments/"+item._source_id+"/action",{status:isRej?"Rejected":"Approved"});
+        } else if(src==="auto_invoice"){
+          // Approve → /invoices/:id/confirm flips Draft→Submitted.
+          // Reject → soft-delete (DELETE /invoices/:id). Both feed back into
+          // the central drawer's "remove from list" finishing step.
+          if (isRej) {
+            res = await api.del("/customer-estimates/invoices/"+item._source_id);
+          } else {
+            res = await api.patch("/customer-estimates/invoices/"+item._source_id+"/confirm");
+          }
         } else if(src==="labour_rate"){
           res=await api.patch("/approvals/labour-rate/"+item._source_id+"/action",{action:isRej?"reject":"approve"});
         } else if(src==="salary_edit"){
@@ -1716,6 +1742,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
       setExpandedCeAmend(next);
       if (next && item.estimate_id) loadCeAmendDetail(item.estimate_id, item._source_id);
     };
+    // Auto-bill draft expand state (PS-16)
+    const isAutoInv = src==="auto_invoice";
+    const isAutoInvExpanded = isAutoInv && expandedAutoInv===item._source_id;
+    const autoInvDetail = isAutoInv ? autoInvCache[item._source_id] : null;
+    const toggleAutoInvExpand = ()=>{
+      const next = isAutoInvExpanded ? null : item._source_id;
+      setExpandedAutoInv(next);
+      if (next) loadAutoInvDetail(item._source_id);
+    };
     const togglePoExpand = ()=>{
       const next = isPoExpanded ? null : item._source_id;
       setExpandedPo(next);
@@ -1724,7 +1759,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
     const goToProject = ()=>{
       if (!item.project_id || !onSelectProject) return;
       const tabFor = src==="ra_bill"||src==="wo_amendment" ? "subcon"
-                   : src==="ce_amendment" ? "estimate"
+                   : src==="ce_amendment"||src==="auto_invoice" ? "estimate"
                    : src==="design" ? "design"
                    : src==="material_request"||src==="purchase_order" ? "material"
                    : src==="payment_request" ? "transaction"
@@ -1986,6 +2021,87 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
                     );
                   })}
                 </div>
+              </>);
+            })():null}
+          </div>
+        )}
+        {/* Auto-bill draft — toggle + expand panel (PS-16) */}
+        {isAutoInv&&(
+          <button onClick={toggleAutoInvExpand}
+            style={{marginTop:7,width:"100%",padding:"6px 8px",borderRadius:6,background:isAutoInvExpanded?"#EDE9FE":"transparent",border:`1px solid ${isAutoInvExpanded?"#C4B5FD":T.b1}`,color:isAutoInvExpanded?"#6D28D9":T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+            <span style={{fontSize:8}}>{isAutoInvExpanded?"▲":"▼"}</span>
+            {isAutoInvExpanded?"Hide invoice detail":"View invoice detail"}
+          </button>
+        )}
+        {isAutoInv&&isAutoInvExpanded&&(
+          <div style={{marginTop:8,borderTop:`1px solid ${T.b1}`,paddingTop:10}}>
+            {autoInvLoading===item._source_id&&!autoInvDetail?(
+              <div style={{textAlign:"center",padding:"18px 0",color:T.t4,fontSize:12}}>
+                <div style={{width:18,height:18,border:`2px solid ${T.b1}`,borderTopColor:"#6D28D9",borderRadius:"50%",animation:"spin 0.8s linear infinite",margin:"0 auto 6px"}}/>
+                Loading invoice…
+              </div>
+            ):autoInvDetail?(()=>{
+              const inv = autoInvDetail.invoice || {};
+              const items = autoInvDetail.items || [];
+              const task = autoInvDetail.trigger_task;
+              return (<>
+                {/* Trigger audit panel — small purple callout */}
+                {task && (
+                  <div style={{padding:"7px 10px",background:"#F5F3FF",border:"1px solid #DDD6FE",borderRadius:6,marginBottom:8}}>
+                    <div style={{fontSize:8.5,fontWeight:700,color:"#6D28D9",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>🔗 Triggered by Task</div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:6}}>
+                      <span style={{fontSize:11,fontWeight:700,color:T.t1,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.title || task.name}</span>
+                      <span style={{fontSize:11,fontWeight:800,color:T.grn,fontVariantNumeric:"tabular-nums"}}>{task.progress}%</span>
+                    </div>
+                  </div>
+                )}
+                {/* Invoice meta */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:5,marginBottom:8}}>
+                  <div style={{background:T.surfaceB,borderRadius:5,padding:"4px 7px"}}>
+                    <div style={{fontSize:8,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Customer</div>
+                    <div style={{fontSize:10.5,color:T.t1,marginTop:1,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{inv.customer_name||"—"}</div>
+                  </div>
+                  <div style={{background:T.surfaceB,borderRadius:5,padding:"4px 7px"}}>
+                    <div style={{fontSize:8,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Date</div>
+                    <div style={{fontSize:10.5,color:T.t1,marginTop:1,fontWeight:600}}>{inv.invoice_date}</div>
+                  </div>
+                </div>
+                {/* Items table */}
+                <div style={{border:`1px solid ${T.b1}`,borderRadius:6,overflow:"hidden",fontSize:11,marginBottom:8}}>
+                  <div style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 50px 60px 70px",background:"#1E293B",padding:"5px 8px",gap:4}}>
+                    {["Item","Milestone","Qty","Rate","Amount"].map((h,i)=>(
+                      <div key={h} style={{fontSize:8.5,fontWeight:700,color:"rgba(255,255,255,.55)",textAlign:i>=2?"right":"left",textTransform:"uppercase"}}>{h}</div>
+                    ))}
+                  </div>
+                  {items.map((it,ii)=>(
+                    <div key={ii} style={{display:"grid",gridTemplateColumns:"1.4fr 1fr 50px 60px 70px",padding:"5px 8px",gap:4,borderTop:`1px solid ${T.b1}`,alignItems:"center"}}>
+                      <div style={{color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.clean_description || it.description}</div>
+                      <div style={{color:T.blu,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.milestone_name || "—"}</div>
+                      <div style={{color:T.t1,textAlign:"right",fontWeight:600}}>{parseFloat(it.qty||0)}</div>
+                      <div style={{color:T.blu,textAlign:"right"}}>{"₹"+Number(it.rate||0).toLocaleString("en-IN")}</div>
+                      <div style={{color:T.grn,textAlign:"right",fontWeight:700}}>{"₹"+Number(it.this_invoice_amount||0).toLocaleString("en-IN")}</div>
+                    </div>
+                  ))}
+                </div>
+                {/* Tax breakdown — 4 mini tiles */}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:4}}>
+                  {[
+                    {l:"Gross",v:inv.gross_amount,c:T.t1},
+                    {l:"Ret "+(inv.retention_pct||0)+"%",v:inv.retention_amt,c:T.amb},
+                    {l:"TDS "+(inv.tds_pct||0)+"%",v:inv.tds_amt,c:T.red},
+                    {l:"Net Rec",v:inv.net_receivable,c:T.grn},
+                  ].map(s=>(
+                    <div key={s.l} style={{textAlign:"center",background:T.surfaceB,borderRadius:5,padding:"5px 4px"}}>
+                      <div style={{fontSize:7.5,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".2px"}}>{s.l}</div>
+                      <div style={{fontSize:10.5,fontWeight:700,color:s.c,marginTop:1,fontVariantNumeric:"tabular-nums"}}>{"₹"+Number(s.v||0).toLocaleString("en-IN")}</div>
+                    </div>
+                  ))}
+                </div>
+                {inv.remark && (
+                  <div style={{marginTop:6,padding:"5px 8px",background:T.surfaceB,borderRadius:4,fontSize:9.5,color:T.t3,fontStyle:"italic",lineHeight:1.4}}>
+                    {inv.remark}
+                  </div>
+                )}
               </>);
             })():null}
           </div>

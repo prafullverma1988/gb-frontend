@@ -27,27 +27,88 @@ const clearAuth = () => {
   localStorage.removeItem("gb_company_module");
 };
 
+// ── Hardening (P1) ────────────────────────────────────────────
+// Request timeout: AbortController so flaky cell signals don't leave
+// hung promises forever. 15s is generous for our heaviest endpoints
+// (Finance txn list ~5k rows, GRN list, etc.).
+const DEFAULT_TIMEOUT_MS = 15000;
+
+// 401 reload de-dup: prefetchAllModules() fires ~12 parallel requests on
+// boot — if the token expired, EACH would call window.location.reload()
+// causing a stuck reload loop. Gate behind a one-shot flag.
+let _isReloading = false;
+
 const api = async (endpoint, options={}) => {
   const token = getToken();
+  const timeoutMs = options.timeoutMs || DEFAULT_TIMEOUT_MS;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
   const config = {
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...options.headers,
     },
+    signal: ctrl.signal,
     ...options,
   };
-  const res  = await fetch(`${API_BASE}${endpoint}`, config);
-  const data = await res.json();
-  if (res.status === 401) { clearAuth(); window.location.reload(); return data; }
+  let res;
+  try {
+    res = await fetch(`${API_BASE}${endpoint}`, config);
+  } catch (err) {
+    clearTimeout(timer);
+    const isAbort = err?.name === "AbortError";
+    return {
+      success: false,
+      message: isAbort
+        ? "Request timed out — check your connection."
+        : "Network error — check your connection.",
+      _networkError: true,
+      _aborted: isAbort,
+    };
+  }
+  clearTimeout(timer);
+
+  // 401 → token invalid. Clear and reload once (subsequent calls in the
+  // same wave just return without firing reload again).
+  if (res.status === 401) {
+    if (!_isReloading) {
+      _isReloading = true;
+      clearAuth();
+      // Allow in-flight responses to finish writing before reload.
+      setTimeout(() => window.location.reload(), 50);
+    }
+    return { success: false, message: "Session expired", _unauthorized: true };
+  }
+
+  // Safe JSON parse — backend occasionally returns plain text on edge
+  // cases (502 from Railway, HTML error pages, etc.). Without this guard
+  // a non-JSON body throws and crashes the caller.
+  let data;
+  try {
+    const text = await res.text();
+    data = text ? JSON.parse(text) : {};
+  } catch (parseErr) {
+    return {
+      success: false,
+      message: `Bad server response (${res.status})`,
+      _parseError: true,
+      _status: res.status,
+    };
+  }
+
+  // If server returned a non-2xx but no explicit success flag, normalize.
+  if (!res.ok && data && data.success !== false) {
+    return { ...data, success: false, _status: res.status };
+  }
   return data;
 };
 
-api.get   = (endpoint)        => api(endpoint);
-api.post  = (endpoint, body)  => api(endpoint, { method:"POST",  body:JSON.stringify(body) });
-api.put   = (endpoint, body)  => api(endpoint, { method:"PUT",   body:JSON.stringify(body) });
-api.patch = (endpoint, body)  => api(endpoint, { method:"PATCH", body:JSON.stringify(body) });
-api.del   = (endpoint, body)  => api(endpoint, body !== undefined ? { method:"DELETE", body:JSON.stringify(body) } : { method:"DELETE" });
+api.get   = (endpoint, opts)        => api(endpoint, opts);
+api.post  = (endpoint, body, opts)  => api(endpoint, { method:"POST",  body:JSON.stringify(body), ...(opts||{}) });
+api.put   = (endpoint, body, opts)  => api(endpoint, { method:"PUT",   body:JSON.stringify(body), ...(opts||{}) });
+api.patch = (endpoint, body, opts)  => api(endpoint, { method:"PATCH", body:JSON.stringify(body), ...(opts||{}) });
+api.del   = (endpoint, body, opts)  => api(endpoint, body !== undefined ? { method:"DELETE", body:JSON.stringify(body), ...(opts||{}) } : { method:"DELETE", ...(opts||{}) });
 
 // Legacy email+password login — kept for backwards compatibility
 api.login = async (email, password) => {
