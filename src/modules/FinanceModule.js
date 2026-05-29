@@ -556,10 +556,42 @@ function BillConflictModal({data, onCancel, onViewExisting, onForceNew}){
 }
 
 // ─── CREATE TRANSACTION MODAL ─────────────────────────────────
+// ── P4 #68: Hoisted constants ──────────────────────────────────────
+// Static option lists used by CreateTransactionModal. Moving them out
+// of the component body so they're allocated once at module load
+// instead of recreated on every render (~50 strings × every keystroke
+// in the modal). Identity-stable references also let downstream
+// SearchSelect / autocomplete components rely on `===` checks.
+const MAT_HEADS_CONST   = Object.freeze(["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"]);
+const UNITS_CONST       = Object.freeze(["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"]);
+const INV_UNITS_CONST   = Object.freeze(["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"]);
+const MATERIAL_LIBRARY_CONST = Object.freeze([
+  "TMT Steel Fe500 8mm","TMT Steel Fe500 10mm","TMT Steel Fe500 12mm","TMT Steel Fe500 16mm",
+  "TMT Steel Fe550 12mm","Binding Wire",
+  "OPC 53 Grade Cement","OPC 43 Grade Cement","PPC Cement","White Cement",
+  "River Sand","M-Sand","P-Sand",
+  "20mm Aggregate","10mm Aggregate","Gravel",
+  "Red Clay Brick 9x4x3","Fly Ash Brick","AAC Block 4\"","AAC Block 6\"",
+  "Waterproofing Dr. Fixit","Waterproofing Fosroc","Waterproofing Membrane",
+  "PVC Pipe 1\"","PVC Pipe 2\"","CPVC Pipe","GI Pipe 1\"",
+  "PVC Conduit 25mm","PVC Conduit 32mm","FR Wiring 1.5mm","FR Wiring 2.5mm","FR Wiring 4mm",
+  "MCB 6A","MCB 16A","MCB 32A","DB Box 8 Way","DB Box 16 Way",
+  "Vitrified Tile 600x600","Vitrified Tile 800x800","Wall Tile 300x450","Anti-Skid Tile",
+  "Granite Slab","Marble Slab","Kota Stone",
+  "Asian Paints Apex","Berger WeatherCoat","Asian Paints Tractor","Putty",
+  "Door Frame Teak","Door Frame Steel","Flush Door","PVC Door",
+  "UPVC Window","Aluminium Window","Glass 5mm",
+  "Plywood 18mm","Plywood 12mm","GI Sheet",
+  "Diesel","Petrol","Safety Helmet","Safety Harness","Gloves",
+  "Centering Plate","Prop Stand","Shuttering Oil",
+]);
+
 function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject}){
-  const MAT_HEADS=["Civil","Electrical","Plumbing","Finishing","Structural","Mechanical","Safety","General"];
-  const UNITS=["Bag","MT","CuM","Sqft","Nos","Ltr","Kg","RFt","Set","Box","Day","Lumpsum"];
-  const INV_UNITS=["Sqft","Nos","RFt","CuM","Sqm","Day","Lumpsum","Set"];
+  // Reference the module-scope constants (renamed to keep call sites
+  // unchanged — saves dozens of touch-ups below).
+  const MAT_HEADS = MAT_HEADS_CONST;
+  const UNITS     = UNITS_CONST;
+  const INV_UNITS = INV_UNITS_CONST;
   const ACCOUNTS_LIST=dbAccounts?.length?dbAccounts.map(a=>a.name):[];
   const MOPS_LIST=["Cash","Cheque","Bank Transfer","UPI","NEFT"];
   const WORK_TYPES=["Plastering","Brickwork","Concrete Casting","Tile Laying","Electrical Work","Plumbing","Bar Bending","Painting","Waterproofing","Flooring","Carpentry","False Ceiling","Other"];
@@ -583,27 +615,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const STAFF_MERGED = [...new Set([...STAFF_PARTY_LIST, ...staffList])];
   const ALL_PARTIES=dbParties?.length?dbParties.map(p=>p.name):[...CLIENT_LIST,...SUPPLIER_LIST,...SUBCON_LIST];
 
-  // Pre-defined material library (used in Material Purchase Bill)
-  const MATERIAL_LIBRARY=[
-    "TMT Steel Fe500 8mm","TMT Steel Fe500 10mm","TMT Steel Fe500 12mm","TMT Steel Fe500 16mm",
-    "TMT Steel Fe550 12mm","Binding Wire",
-    "OPC 53 Grade Cement","OPC 43 Grade Cement","PPC Cement","White Cement",
-    "River Sand","M-Sand","P-Sand",
-    "20mm Aggregate","10mm Aggregate","Gravel",
-    "Red Clay Brick 9x4x3","Fly Ash Brick","AAC Block 4\"","AAC Block 6\"",
-    "Waterproofing Dr. Fixit","Waterproofing Fosroc","Waterproofing Membrane",
-    "PVC Pipe 1\"","PVC Pipe 2\"","CPVC Pipe","GI Pipe 1\"",
-    "PVC Conduit 25mm","PVC Conduit 32mm","FR Wiring 1.5mm","FR Wiring 2.5mm","FR Wiring 4mm",
-    "MCB 6A","MCB 16A","MCB 32A","DB Box 8 Way","DB Box 16 Way",
-    "Vitrified Tile 600x600","Vitrified Tile 800x800","Wall Tile 300x450","Anti-Skid Tile",
-    "Granite Slab","Marble Slab","Kota Stone",
-    "Asian Paints Apex","Berger WeatherCoat","Asian Paints Tractor","Putty",
-    "Door Frame Teak","Door Frame Steel","Flush Door","PVC Door",
-    "UPVC Window","Aluminium Window","Glass 5mm",
-    "Plywood 18mm","Plywood 12mm","GI Sheet",
-    "Diesel","Petrol","Safety Helmet","Safety Harness","Gloves",
-    "Centering Plate","Prop Stand","Shuttering Oil",
-  ];
+  // Pre-defined material library — now reference the module-scope copy.
+  const MATERIAL_LIBRARY = MATERIAL_LIBRARY_CONST;
 
   const isBankTransfer=type==="Bank Transfer";
   const isPayment=["Payment Received","Payment Made","Petty Cash Expense","Advance Payment","Journal Entry","Credit Note"].includes(type);
@@ -2288,6 +2301,15 @@ function FinanceModule(){
   const [apiLedger,setApiLedger]=useState({});
   // Transaction tab
   const [txnSearch,setTxnSearch]=useState("");const [fProject,setFProject]=useState("All");const [fType,setFType]=useState("All");const [fAcc,setFAcc]=useState("All");const [fStatus,setFStatus]=useState("All");
+  // ── P4 #67: Debounced search so every keystroke doesn't re-filter
+  // the 5000-row activeTxns chain. 250ms feels instant while batching
+  // a fast typer's keystrokes into a single filter pass.
+  const dbTxnSearch = useDebounce(txnSearch, 250);
+  // ── P4 #67: Paginate Fin Activity table — page size 100 — prevents
+  // 5000-row DOM blowup when user opens the tab. Reset to page 0
+  // whenever a filter / search changes so they always land on row 1.
+  const [txnPage, setTxnPage] = useState(0);
+  const TXN_PAGE_SIZE = 100;
   // Panels
   const [showUB,setShowUB]=useState(false);const [selUBParty,setSelUBParty]=useState(null);
   const [showAccPanel,setShowAccPanel]=useState(false);const [accTab,setAccTab]=useState("accounts");
@@ -2659,10 +2681,16 @@ function FinanceModule(){
 
   // Use API data if available, fallback to hardcoded
   const activeAccounts=apiAccounts||ACCOUNTS.map(mapAccount);
-  // Merge wallet transactions into activeTxns (wallet txns only when no API data)
-  const activeTxns=apiTransactions
-    ? [...apiTransactions,...WALLET_TXNS]
-    : [...TRANSACTIONS_DATA,...WALLET_TXNS];
+  // ── P4 #66: Memoize the data chain ─────────────────────────────
+  // Old: activeTxns was a fresh array on every render. Each keystroke
+  // in the search box created a new identity, blowing through 20+
+  // downstream filter/sort/sum chains. Wrap in useMemo so identity is
+  // stable until apiTransactions actually changes.
+  const activeTxns = useMemo(() => (
+    apiTransactions
+      ? [...apiTransactions, ...WALLET_TXNS]
+      : [...TRANSACTIONS_DATA, ...WALLET_TXNS]
+  ), [apiTransactions]);
 
   // Chip filters applied to data
   // Compute real-time party balances from transactions
@@ -2696,23 +2724,45 @@ function FinanceModule(){
   });
   const filteredParties=partiesWithBalance.filter(p=>chipParty==="All"||p.type===chipParty);
 
-  const projects=["All",...new Set(activeTxns.map(t=>t.project))];
-  const txnFiltered=activeTxns.filter(t=>{
-    if(txnSearch&&!t.party.toLowerCase().includes(txnSearch.toLowerCase())&&!t.sub.toLowerCase().includes(txnSearch.toLowerCase())) return false;
-    if(fProject!=="All"&&t.project!==fProject) return false;
-    if(fType!=="All"&&t.type!==fType) return false;
-    if(fAcc!=="All"&&t.account!==fAcc) return false;
-    if(fStatus!=="All"&&t.status!==fStatus) return false;
-    // chip filter
-    if(chipTxn==="Payment In"&&t.type!=="Payment In") return false;
-    if(chipTxn==="Payment Out"&&t.type!=="Payment Out") return false;
-    if(chipTxn==="Material"&&t.type!=="Material Purchase") return false;
-    if(chipTxn==="Site Expense"&&t.type!=="Site Expense") return false;
-    if(chipTxn==="Sub-Con"&&t.type!=="Sub-Con Expense") return false;
-    if(chipTxn==="Party Payment"&&t.type!=="Party Payment") return false;
-    if(chipTxn==="Unpaid"&&t.status==="paid") return false;
-    return true;
-  });
+  const projects = useMemo(() => ["All", ...new Set(activeTxns.map(t => t.project))], [activeTxns]);
+  // ── P4 #66: Memoize the filter chain ───────────────────────────
+  // Old: filtered + .filter().reduce() chain ran on every render
+  // (including unrelated state changes). Now only re-runs when
+  // activeTxns or any filter input changes. Search box typing is
+  // covered by `dbTxnSearch` upstream (see #67's useDebounce wrap).
+  const txnFiltered = useMemo(() => {
+    const q = (dbTxnSearch || "").toLowerCase();
+    return activeTxns.filter(t => {
+      if (q && !t.party.toLowerCase().includes(q) && !t.sub.toLowerCase().includes(q)) return false;
+      if (fProject !== "All" && t.project !== fProject) return false;
+      if (fType    !== "All" && t.type    !== fType)    return false;
+      if (fAcc     !== "All" && t.account !== fAcc)     return false;
+      if (fStatus  !== "All" && t.status  !== fStatus)  return false;
+      if (chipTxn === "Payment In"    && t.type !== "Payment In") return false;
+      if (chipTxn === "Payment Out"   && t.type !== "Payment Out") return false;
+      if (chipTxn === "Material"      && t.type !== "Material Purchase") return false;
+      if (chipTxn === "Site Expense"  && t.type !== "Site Expense") return false;
+      if (chipTxn === "Sub-Con"       && t.type !== "Sub-Con Expense") return false;
+      if (chipTxn === "Party Payment" && t.type !== "Party Payment") return false;
+      if (chipTxn === "Unpaid"        && t.status === "paid") return false;
+      return true;
+    });
+  }, [activeTxns, dbTxnSearch, fProject, fType, fAcc, fStatus, chipTxn]);
+  // ── P4 #67: Sort once, page slice — render-cheap.
+  // Sorting txnFiltered (descending by `ds` = display sort key) here
+  // means the render no longer rebuilds a 5000-item sorted array on
+  // every keystroke / re-render. Page slice on top is the actual DOM
+  // payload — bounded at TXN_PAGE_SIZE.
+  const txnSorted = useMemo(() => {
+    const arr = txnFiltered.slice();
+    arr.sort((a, b) => (b.ds || 0) - (a.ds || 0));
+    return arr;
+  }, [txnFiltered]);
+  const txnPageRows  = useMemo(() => txnSorted.slice(txnPage * TXN_PAGE_SIZE, (txnPage + 1) * TXN_PAGE_SIZE), [txnSorted, txnPage]);
+  const txnPageCount = Math.max(1, Math.ceil(txnFiltered.length / TXN_PAGE_SIZE));
+  // Auto-reset to page 0 when filters / search shrink the result set
+  // below the current page (otherwise user lands on an empty page).
+  useEffect(() => { if (txnPage >= txnPageCount) setTxnPage(0); }, [txnPageCount, txnPage]);
   const tIn=txnFiltered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
   const tOut=txnFiltered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
   const totalBal=activeAccounts.reduce((s,a)=>s+a.balance,0);
@@ -2850,11 +2900,19 @@ function FinanceModule(){
       if(da!==db) return da-db;
       return (a.id||0)-(b.id||0);
     });
-    let runBal=0;
-    return sorted.reduce((acc,t)=>{
+    // ── P4 #66: Fix O(n²) reduce → O(n) mutable push ───────────
+    // Old: `[...acc, {...t, runBal}]` allocated a new array AND copied
+    // every element on each iteration. At 1000 txns that's ~500K
+    // copies just to compute running balance. New: push into a
+    // pre-allocated array, return at end.
+    let runBal = 0;
+    const out = new Array(sorted.length);
+    for (let i = 0; i < sorted.length; i++) {
+      const t = sorted[i];
       runBal += t.dr ? -t.amount : t.amount;
-      return [...acc,{...t,runBal}];
-    },[]);
+      out[i] = { ...t, runBal };
+    }
+    return out;
   };
   const downloadLedgerCSV=(party)=>{
     const rows=getLedgerRows(party);
@@ -3680,8 +3738,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   "Wallet Top-up": {label:"Wallet Top-up",  color:T.slt,  bg:T.sltL,  dir:"internal"},
                   "Material Return":{label:"Material Return",color:T.grn, bg:T.grnL,  dir:"in"},
                 };
-                const sorted=[...txnFiltered].sort((a,b)=>b.ds-a.ds);
-                return sorted.map((txn,i)=>{
+                // P4 #67: render only the current page (max TXN_PAGE_SIZE rows
+                // instead of 5000). txnPageRows is already sorted descending
+                // by ds in the memo above.
+                return txnPageRows.map((txn,i)=>{
                   const meta=TYPE_META[txn.type]||{label:txn.type||"Transaction",color:T.t3,bg:T.b1,dir:txn.dr?"out":"in"};
                   // Bank Transfer: source account = DR (red), to_account = CR (green)
                   const isBTrow=meta.dir==="transfer";
@@ -3731,6 +3791,23 @@ Status: ${ledgerRow.status||"unpaid"}`;
               })()}
               {txnFiltered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
               </div>
+              {/* Pagination strip — only when there are multiple pages */}
+              {txnPageCount > 1 && (
+                <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,padding:"8px 14px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`,flexShrink:0}}>
+                  <button onClick={()=>setTxnPage(0)} disabled={txnPage===0}
+                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage===0?T.b1:T.surface,color:txnPage===0?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage===0?"not-allowed":"pointer"}}>« First</button>
+                  <button onClick={()=>setTxnPage(p=>Math.max(0,p-1))} disabled={txnPage===0}
+                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage===0?T.b1:T.surface,color:txnPage===0?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage===0?"not-allowed":"pointer"}}>‹ Prev</button>
+                  <span style={{fontSize:11.5,color:T.t3,padding:"0 8px",fontVariantNumeric:"tabular-nums"}}>
+                    Page <b style={{color:T.t1}}>{txnPage+1}</b> of <b style={{color:T.t1}}>{txnPageCount}</b>
+                    <span style={{marginLeft:8,color:T.t4}}>· {txnFiltered.length} total</span>
+                  </span>
+                  <button onClick={()=>setTxnPage(p=>Math.min(txnPageCount-1,p+1))} disabled={txnPage>=txnPageCount-1}
+                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage>=txnPageCount-1?T.b1:T.surface,color:txnPage>=txnPageCount-1?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage>=txnPageCount-1?"not-allowed":"pointer"}}>Next ›</button>
+                  <button onClick={()=>setTxnPage(txnPageCount-1)} disabled={txnPage>=txnPageCount-1}
+                    style={{padding:"4px 10px",borderRadius:5,border:`1px solid ${T.b1}`,background:txnPage>=txnPageCount-1?T.b1:T.surface,color:txnPage>=txnPageCount-1?T.t4:T.t2,fontSize:11,fontWeight:600,cursor:txnPage>=txnPageCount-1?"not-allowed":"pointer"}}>Last »</button>
+                </div>
+              )}
               {/* Footer totals — In / Out for the filtered set */}
               <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
                 <span style={{gridColumn:"1/6",fontSize:12,fontWeight:700,color:T.t1}}>TOTAL — {txnFiltered.length} entries</span>

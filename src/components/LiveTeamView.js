@@ -108,12 +108,30 @@ export default function LiveTeamView() {
     } catch (e) { /* ignore */ }
   }, [members]);
 
-  // Initial + poll
+  // ── P4 #69: Visibility-aware polling ──────────────────────────
+  // 15s poll for live team locations — pause when the tab is hidden so
+  // we don't drain GPS-heavy queries every 15s for nobody watching.
+  // Initial geofence load runs once regardless of visibility (cheap).
   useEffect(() => {
     loadLive();
     loadGeofences();
-    pollTimer.current = setInterval(loadLive, POLL_MS);
-    return () => clearInterval(pollTimer.current);
+    const start = () => {
+      if (pollTimer.current) return;
+      loadLive();
+      pollTimer.current = setInterval(loadLive, POLL_MS);
+    };
+    const stop = () => {
+      if (!pollTimer.current) return;
+      clearInterval(pollTimer.current);
+      pollTimer.current = null;
+    };
+    const onVis = () => (document.hidden ? stop() : start());
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, [loadLive, loadGeofences]);
 
   // Reload trail when selection changes

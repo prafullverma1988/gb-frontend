@@ -36,11 +36,31 @@ export default function NotificationBell({ onNavigate }) {
     .then(r => { if (r && r.success) setItems(r.data || []); })
     .catch(() => {});
 
-  // 30s poll for the badge count (server-load floor — do not poll faster).
+  // ── P4 #69: Visibility-aware polling ──────────────────────────
+  // 30s poll for the badge count, BUT only while the tab is visible.
+  // A hidden tab polling every 30s = 120 useless API calls/hour/user.
+  // Without this gate, dashboards left open overnight burn server quota
+  // for nothing. Pattern: do an initial fetch when visible, set the
+  // interval, and stop both on hidden/unmount.
   useEffect(() => {
-    fetchCount();
-    const poll = setInterval(fetchCount, 30000);
-    return () => clearInterval(poll);
+    let poll = null;
+    const start = () => {
+      if (poll) return;
+      fetchCount();
+      poll = setInterval(fetchCount, 30000);
+    };
+    const stop = () => {
+      if (!poll) return;
+      clearInterval(poll);
+      poll = null;
+    };
+    const onVis = () => (document.hidden ? stop() : start());
+    if (!document.hidden) start();
+    document.addEventListener("visibilitychange", onVis);
+    return () => {
+      stop();
+      document.removeEventListener("visibilitychange", onVis);
+    };
   }, []);
   // Load the full list only while the dropdown is open.
   useEffect(() => { if (open) fetchList(); }, [open]);
