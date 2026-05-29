@@ -15839,14 +15839,19 @@ function NewRaBillModal({ woId, wo, milestones, fmtC, inpStyle, lblStyle, billFo
       secs.forEach(s=>(s.items||[]).forEach(it=>allItems.push(it)));
       unsec.forEach(it=>allItems.push(it));
 
-      // Fetch prev cumulative per item from last bill
+      // P3 #65: Single bulk fetch instead of N parallel HTTP calls.
+      // Old: 200-item WO = 200 simultaneous /prev-cumulative calls.
+      // New: one /prev-cumulative-bulk returns the whole map.
       const prevMap = {};
-      await Promise.all(allItems.map(async it=>{
-        try{
-          const pr = await api.get("/subcon/prev-cumulative?wo_item_id="+it.id+"&wo_id="+woId);
-          prevMap[it.id] = parseFloat(pr.data?.prev_cum||0);
-        } catch(e){ prevMap[it.id]=0; }
-      }));
+      try {
+        const pr = await api.get("/subcon/prev-cumulative-bulk?wo_id="+woId);
+        const serverMap = pr?.data?.prev_cum || {};
+        for (const it of allItems) {
+          prevMap[it.id] = parseFloat(serverMap[it.id] || 0) || 0;
+        }
+      } catch(e) {
+        for (const it of allItems) prevMap[it.id] = 0;
+      }
 
       // Build sections with prev_cum
       const builtSecs = secs.map(s=>({
