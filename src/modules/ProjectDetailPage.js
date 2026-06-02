@@ -2032,7 +2032,16 @@ function TabEstimate({ project }) {
       const secTotal = items.reduce((s,i)=> s + (parseFloat(i.amount)||0), 0);
       grand += secTotal;
       const secCollapsed = collapsedSecs.has(sec.id);
-      body += `<tr class="sec"><td colspan="5">${secCollapsed ? "▸ " : "▾ "}${esc(sec.title||"")}</td><td class="r">${inr(secTotal)}</td></tr>`;
+      // Section rollup qty + rate — mirrors the live render. Uniform-area
+      // sections show the area + Σ per-sqft rate; per-item sections show
+      // Σ qty and blank rate (per-sqft is meaningless there).
+      const secPerItem = !!Number(sec.per_item_qty);
+      const secRateSum = items.reduce((s,i)=> s + (parseFloat(i.rate)||0), 0);
+      const secQtySum  = items.reduce((s,i)=> s + (parseFloat(i.qty)||0), 0);
+      const secArea    = parseFloat(items[0]?.qty) || 0;
+      const secQtyDisp = secPerItem ? secQtySum : secArea;
+      const secRateDisp = secPerItem ? "" : inr(secRateSum) + "/sqft";
+      body += `<tr class="sec"><td colspan="2">${secCollapsed ? "▸ " : "▾ "}${esc(sec.title||"")}${secPerItem ? ' <span class="tag">PER-ITEM QTY</span>' : ""}</td><td class="r">${Math.round(secQtyDisp).toLocaleString("en-IN")}</td><td class="r">${secRateDisp}</td><td></td><td class="r">${inr(secTotal)}</td></tr>`;
       if (secCollapsed) continue;
       // Group items by category
       const groups = {}; const catOrder = [];
@@ -2048,7 +2057,12 @@ function TabEstimate({ project }) {
         const catTotal = gi.reduce((s,i)=> s + (parseFloat(i.amount)||0), 0);
         const catKey = `${sec.id}::${cat}`;
         const catCollapsed = !!cat && collapsedCats.has(catKey);
-        if (cat) body += `<tr class="cat"><td colspan="5">${catCollapsed ? "▸ " : "▾ "}${esc(cat)}</td><td class="r">${inr(catTotal)}</td></tr>`;
+        const catRateSum = gi.reduce((s,i)=> s + (parseFloat(i.rate)||0), 0);
+        const catQtySum  = gi.reduce((s,i)=> s + (parseFloat(i.qty)||0), 0);
+        const catArea    = parseFloat(gi[0]?.qty) || 0;
+        const catQtyDisp = secPerItem ? catQtySum : catArea;
+        const catRateDisp = secPerItem ? "" : inr(catRateSum) + "/sqft";
+        if (cat) body += `<tr class="cat"><td colspan="2">${catCollapsed ? "▸ " : "▾ "}${esc(cat)} <span class="cnt">· ${gi.length} item${gi.length===1?"":"s"}</span></td><td class="r">${Math.round(catQtyDisp).toLocaleString("en-IN")}</td><td class="r">${catRateDisp}</td><td></td><td class="r">${inr(catTotal)}</td></tr>`;
         if (catCollapsed) continue;
         for (const it of gi) {
           body += `<tr><td class="it">${esc(it._clean)}</td><td>${esc(it.unit||"")}</td><td class="r">${(parseFloat(it.qty)||0).toLocaleString("en-IN")}</td><td class="r">${inr(it.rate)}</td><td class="r">${inr(it.amount)}</td><td></td></tr>`;
@@ -2095,6 +2109,8 @@ function TabEstimate({ project }) {
         tr.sec td{background:#EFF6FF;color:#1D4ED8;font-weight:800;border-top:1px solid #BFDBFE}
         tr.cat td{background:#F1F5F9;color:#111827;font-weight:700;padding-left:16px}
         td.it{padding-left:24px}
+        .tag{font-size:8px;font-weight:700;background:#FEF3C7;color:#92400E;padding:1px 5px;border-radius:3px;letter-spacing:.3px}
+        .cnt{font-size:9.5px;color:#9CA3AF;font-weight:500}
         .totals{margin-top:16px;width:300px;margin-left:auto;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden}
         .totals .row{display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #F3F4F6;font-size:12px}
         .totals .row.ret{color:#D97706}.totals .row.tds{color:#DC2626}
