@@ -1100,16 +1100,22 @@ function PartyMasterSection() {
         ) : null}
       </span>
     )},
-    { key: "type", label: "Roles", minW: 160, render: r => {
-      // Multi-role: render one badge per role. Falls back to legacy type.
+    { key: "type", label: "Roles", minW: 180, render: r => {
+      // Multi-role: render one colored badge per role, separated by a " / "
+      // divider so multiple roles read as "Material Vendor / Transporter".
       const keys = parsePartyRoles(r);
       const keyToLabel = { material_vendor:"Material Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
       return (
-        <span style={{ display:"inline-flex", flexWrap:"wrap", gap:4 }}>
-          {keys.map(k => {
+        <span style={{ display:"inline-flex", flexWrap:"wrap", alignItems:"center", gap:4 }}>
+          {keys.map((k, i) => {
             const label = keyToLabel[k] || k;
             const tc = typeColors[label] || { c: T.textMid, bg: T.borderLight };
-            return <Badge key={k} text={label} color={tc.c} bg={tc.bg} />;
+            return (
+              <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
+                {i > 0 && <span style={{ color: T.textLight, fontWeight:700, fontSize:12 }}>/</span>}
+                <Badge text={label} color={tc.c} bg={tc.bg} />
+              </span>
+            );
           })}
         </span>
       );
