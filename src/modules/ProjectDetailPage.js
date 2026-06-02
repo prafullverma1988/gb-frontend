@@ -1550,6 +1550,13 @@ function TabEstimate({ project }) {
   const [subTab, setSubTab] = useState("boq");
   const [loading, setLoading] = useState(true);
   const [showNewEst, setShowNewEst] = useState(false);
+  // ── BOQ fold/expand state ──────────────────────────────────────
+  // Sets hold the COLLAPSED keys (empty = everything expanded).
+  // Section key = sec.id ; category key = `${sec.id}::${catName}`.
+  const [collapsedSecs, setCollapsedSecs] = useState(() => new Set());
+  const [collapsedCats, setCollapsedCats] = useState(() => new Set());
+  const toggleSec = (id) => setCollapsedSecs(prev => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const toggleCat = (key) => setCollapsedCats(prev => { const n = new Set(prev); n.has(key) ? n.delete(key) : n.add(key); return n; });
 
   // ── M5: Estimate Builder integration ──────────────────────────
   // Three new paths next to "Quick Manual": Take from CRM Final Quote,
@@ -1967,6 +1974,100 @@ function TabEstimate({ project }) {
   const fmtC = (v) => "₹"+(parseFloat(v)||0).toLocaleString("en-IN",{maximumFractionDigits:0});
   const inpS = {padding:"7px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12,outline:"none",fontFamily:"inherit",width:"100%",boxSizing:"border-box"};
   const lblS = {fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:3};
+
+  // ── BOQ flatten + fold + export helpers ────────────────────────
+  const flattenBoqRows = () => {
+    const rows = [];
+    for (const sec of (estDetail?.sections || [])) {
+      for (const it of (sec.items || [])) {
+        const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
+        rows.push({
+          section: sec.title || "", category: m ? m[1] : "", item: m ? m[2] : (it.description || ""),
+          unit: it.unit || "", qty: parseFloat(it.qty) || 0, rate: parseFloat(it.rate) || 0, amount: parseFloat(it.amount) || 0,
+        });
+      }
+    }
+    return rows;
+  };
+  const collapseAllBoq = () => {
+    const secIds = new Set(); const catKeys = new Set();
+    for (const sec of (estDetail?.sections || [])) {
+      secIds.add(sec.id);
+      for (const it of (sec.items || [])) {
+        const m = /^\[([^\]]+)\]\s*/.exec(it.description || "");
+        if (m) catKeys.add(`${sec.id}::${m[1]}`);
+      }
+    }
+    setCollapsedSecs(secIds); setCollapsedCats(catKeys);
+  };
+  const expandAllBoq = () => { setCollapsedSecs(new Set()); setCollapsedCats(new Set()); };
+
+  const exportBoqExcel = () => {
+    const rows = flattenBoqRows();
+    const esc = (s) => `"${String(s ?? "").replace(/"/g, '""')}"`;
+    const lines = [["Section","Category","Item","Unit","Qty","Rate","Amount"].map(esc).join(",")];
+    for (const r of rows) lines.push([r.section, r.category, r.item, r.unit, r.qty, r.rate, r.amount].map(esc).join(","));
+    const grand = rows.reduce((s, r) => s + r.amount, 0);
+    lines.push(["", "", "", "", "", "GRAND TOTAL", grand].map(esc).join(","));
+    const blob = new Blob(["﻿" + lines.join("\n")], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `BOQ_${(selEst?.estimate_no || "estimate")}.csv`;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
+  const exportBoqPdf = () => {
+    const esc = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    const rows = flattenBoqRows();
+    const grand = rows.reduce((s, r) => s + r.amount, 0);
+    const bySec = {};
+    for (const r of rows) { (bySec[r.section] ||= []).push(r); }
+    let body = "";
+    for (const [secName, items] of Object.entries(bySec)) {
+      const secTotal = items.reduce((s, r) => s + r.amount, 0);
+      body += `<tr class="sec"><td colspan="5">${esc(secName)}</td><td class="r">₹${secTotal.toLocaleString("en-IN")}</td></tr>`;
+      let lastCat = null;
+      for (const r of items) {
+        if (r.category && r.category !== lastCat) {
+          lastCat = r.category;
+          const catTotal = items.filter(x => x.category === r.category).reduce((s, x) => s + x.amount, 0);
+          body += `<tr class="cat"><td colspan="5">${esc(r.category)}</td><td class="r">₹${catTotal.toLocaleString("en-IN")}</td></tr>`;
+        }
+        body += `<tr><td class="it">${esc(r.item)}</td><td>${esc(r.unit)}</td><td class="r">${r.qty.toLocaleString("en-IN")}</td><td class="r">₹${r.rate.toLocaleString("en-IN")}</td><td class="r">₹${r.amount.toLocaleString("en-IN")}</td><td></td></tr>`;
+      }
+    }
+    const w = window.open("", "_blank");
+    if (!w) { window.alert("Pop-up blocked — allow pop-ups to export PDF."); return; }
+    const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"/>
+      <title>BOQ — ${esc(selEst?.estimate_no || "")}</title>
+      <style>
+        body{font-family:'Segoe UI',system-ui,sans-serif;color:#111827;margin:22px;font-size:12px}
+        h1{font-size:18px;margin:0 0 2px}.sub{font-size:11px;color:#6B7280;margin-bottom:14px}
+        table{width:100%;border-collapse:collapse}
+        th{background:#EFF6FF;color:#1D4ED8;text-align:left;padding:7px 9px;font-size:10px;text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid #BFDBFE}
+        td{padding:6px 9px;border-bottom:1px solid #F3F4F6}
+        td.r{text-align:right;font-variant-numeric:tabular-nums}
+        tr.sec td{background:#EFF6FF;color:#1D4ED8;font-weight:800;border-top:1px solid #BFDBFE}
+        tr.cat td{background:#F1F5F9;color:#111827;font-weight:700;padding-left:16px}
+        td.it{padding-left:24px}
+        tr.grand td{background:#ECFDF5;color:#059669;font-weight:800;font-size:13px;border-top:2px solid #A7F3D0}
+        .footer{margin-top:18px;font-size:10px;color:#9CA3AF;text-align:center}
+        @media print{body{margin:12mm}}
+      </style></head><body>
+        <h1>Bill of Quantities</h1>
+        <div class="sub">${esc(selEst?.estimate_no || "")} · ${esc(selEst?.customer_name || "")} · ${esc(projectName || "")} · Generated ${today}</div>
+        <table>
+          <tr><th>Description</th><th>Unit</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th><th style="text-align:right">Subtotal</th></tr>
+          ${body}
+          <tr class="grand"><td colspan="5">GRAND TOTAL</td><td class="r">₹${grand.toLocaleString("en-IN")}</td></tr>
+        </table>
+        <div class="footer">Generated by GB Buildcon</div>
+      </body></html>`);
+    w.document.close();
+    setTimeout(() => w.print(), 400);
+  };
 
   // Library data — loaded once for the Library Picker. Cities + packages +
   // construction types feed the city/construction badge next to each rate.
@@ -2815,17 +2916,29 @@ function TabEstimate({ project }) {
             ))}
             <div style={{flex:1}}/>
             <div style={{display:"flex",alignItems:"center",gap:6,paddingRight:12}}>
-              {subTab==="boq" && (
-                <button onClick={openEditBoq}
-                  title={pendingAmendCount > 0 ? "A pending amendment already exists — review it in the Amendments tab first" : "Propose changes to this estimate's BOQ (requires admin approval)"}
-                  disabled={pendingAmendCount > 0}
-                  style={{background: pendingAmendCount > 0 ? "#E5E7EB" : "#FEF3C7",
-                          color: pendingAmendCount > 0 ? "#9CA3AF" : "#92400E",
-                          border:"1px solid "+ (pendingAmendCount > 0 ? "#E5E7EB" : "#FCD34D"),
-                          borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,
-                          cursor: pendingAmendCount > 0 ? "not-allowed" : "pointer"}}>
-                  ✎ Edit BOQ
-                </button>
+              {subTab==="boq" && estDetail && (
+                <>
+                  {/* Fold / expand all */}
+                  <button onClick={expandAllBoq} title="Expand all sections"
+                    style={{background:T.surface,border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"5px 9px",fontSize:11,fontWeight:600,cursor:"pointer"}}>⊞ Expand all</button>
+                  <button onClick={collapseAllBoq} title="Collapse all sections"
+                    style={{background:T.surface,border:"1px solid "+T.b1,color:T.t2,borderRadius:5,padding:"5px 9px",fontSize:11,fontWeight:600,cursor:"pointer"}}>⊟ Collapse all</button>
+                  {/* Exports */}
+                  <button onClick={exportBoqExcel} title="Download BOQ as Excel (CSV)"
+                    style={{background:T.grnL,border:"1px solid "+T.grnM,color:T.grn,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>⬇ Excel</button>
+                  <button onClick={exportBoqPdf} title="Download / print BOQ as PDF"
+                    style={{background:T.redL,border:"1px solid "+T.redM,color:T.red,borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,cursor:"pointer"}}>⬇ PDF</button>
+                  <button onClick={openEditBoq}
+                    title={pendingAmendCount > 0 ? "A pending amendment already exists — review it in the Amendments tab first" : "Propose changes to this estimate's BOQ (requires admin approval)"}
+                    disabled={pendingAmendCount > 0}
+                    style={{background: pendingAmendCount > 0 ? "#E5E7EB" : "#FEF3C7",
+                            color: pendingAmendCount > 0 ? "#9CA3AF" : "#92400E",
+                            border:"1px solid "+ (pendingAmendCount > 0 ? "#E5E7EB" : "#FCD34D"),
+                            borderRadius:5,padding:"5px 10px",fontSize:11,fontWeight:700,
+                            cursor: pendingAmendCount > 0 ? "not-allowed" : "pointer"}}>
+                    ✎ Edit BOQ
+                  </button>
+                </>
               )}
               {subTab==="milestone" && (
                 <>
@@ -3023,21 +3136,17 @@ function TabEstimate({ project }) {
                       if (!groups[catName]) { groups[catName] = []; catOrder.push(catName); }
                       groups[catName].push({ ...it, _cleanDesc: cleanDesc });
                     }
+                    const secCollapsed = collapsedSecs.has(sec.id);
                     return (
                       <div key={sec.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
-                        {/* Section bar — flex layout, totals cluster on the far right
-                            (slightly outside the item column positions so they stand
-                            out as a summary, not an item row). */}
-                        {/* Section bar — uses SAME grid as item rows so Qty
-                            and Rate sit exactly under their column headers.
-                            Container paddingRight is reduced to 0 (vs items'
-                            14) so the AMOUNT total sits ~14-18px to the right
-                            of where item amounts end — a deliberate offset
-                            that signals "rollup total", not item row. */}
-                        <div style={{display:"grid",gridTemplateColumns:GRID,padding:"9px 0 9px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM,borderLeft:"3px solid "+T.blu,alignItems:"center"}}>
-                          <span style={{fontSize:12.5,fontWeight:700,color:T.blu}}>
+                        {/* Section bar — click to fold/expand. Chevron + same
+                            grid as item rows so Qty/Rate sit under headers. */}
+                        <div onClick={()=>toggleSec(sec.id)}
+                          style={{display:"grid",gridTemplateColumns:GRID,padding:"9px 0 9px 14px",background:T.bluL,borderBottom:"1px solid "+T.bluM,borderLeft:"3px solid "+T.blu,alignItems:"center",cursor:"pointer"}}>
+                          <span style={{fontSize:12.5,fontWeight:700,color:T.blu,display:"flex",alignItems:"center",gap:7}}>
+                            <span style={{display:"inline-block",transition:"transform .15s",transform:secCollapsed?"rotate(-90deg)":"rotate(0deg)",fontSize:11,color:T.blu}}>▼</span>
                             {sec.title}
-                            {secPerItem && <span style={{marginLeft:8,padding:"1px 6px",fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3,letterSpacing:".3px"}}>PER-ITEM QTY</span>}
+                            {secPerItem && <span style={{marginLeft:4,padding:"1px 6px",fontSize:9.5,fontWeight:700,background:"#FEF3C7",color:"#92400E",borderRadius:3,letterSpacing:".3px"}}>PER-ITEM QTY</span>}
                           </span>
                           <span/>{/* Unit column — empty on bar */}
                           <span style={{fontSize:11.5,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:8}}>
@@ -3050,12 +3159,14 @@ function TabEstimate({ project }) {
                             {fmtC(secTotal)}
                           </span>
                         </div>
+                        {!secCollapsed && (
                         <div style={{display:"grid",gridTemplateColumns:GRID,padding:"6px 14px",background:T.surfaceB,borderBottom:"1px solid "+T.b1}}>
                           {["Description","Unit","Qty","Rate","Amount"].map((h,i) => (
                             <span key={h} style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",textAlign:i>=2?"right":"left",paddingRight:(i===2||i===3)?8:0}}>{h}</span>
                           ))}
                         </div>
-                        {catOrder.map(catName => {
+                        )}
+                        {!secCollapsed && catOrder.map(catName => {
                           const items = groups[catName] || [];
                           const catTotal   = items.reduce((s,i) => s + parseFloat(i.amount||0), 0);
                           const catRateSum = items.reduce((s,i) => s + parseFloat(i.rate||0),   0);
@@ -3065,14 +3176,18 @@ function TabEstimate({ project }) {
                           // sub-groups within a section).
                           const catArea       = parseFloat(items[0]?.qty) || 0;
                           const catQtyDisplay = secPerItem ? catQtySum : catArea;
+                          const catKey = `${sec.id}::${catName}`;
+                          const catCollapsed = !!catName && collapsedCats.has(catKey);
                           return (
                             <React.Fragment key={catName || "__none__"}>
                               {catName && (
-                                <div style={{display:"grid",gridTemplateColumns:GRID,padding:"6px 0 6px 18px",background:"#F1F5F9",
-                                             borderBottom:"1px solid "+T.b1,borderLeft:"3px solid "+T.bluM,alignItems:"center"}}>
-                                  <span style={{fontSize:11.5,fontWeight:700,color:T.t1,letterSpacing:".2px"}}>
+                                <div onClick={()=>toggleCat(catKey)}
+                                  style={{display:"grid",gridTemplateColumns:GRID,padding:"6px 0 6px 18px",background:"#F1F5F9",
+                                             borderBottom:"1px solid "+T.b1,borderLeft:"3px solid "+T.bluM,alignItems:"center",cursor:"pointer"}}>
+                                  <span style={{fontSize:11.5,fontWeight:700,color:T.t1,letterSpacing:".2px",display:"flex",alignItems:"center",gap:6}}>
+                                    <span style={{display:"inline-block",transition:"transform .15s",transform:catCollapsed?"rotate(-90deg)":"rotate(0deg)",fontSize:9,color:T.t3}}>▼</span>
                                     {catName}
-                                    <span style={{fontSize:10,color:T.t4,fontWeight:500,marginLeft:6}}>
+                                    <span style={{fontSize:10,color:T.t4,fontWeight:500}}>
                                       · {items.length} item{items.length === 1 ? "" : "s"}
                                     </span>
                                   </span>
@@ -3088,7 +3203,7 @@ function TabEstimate({ project }) {
                                   </span>
                                 </div>
                               )}
-                              {items.map(it => (
+                              {!catCollapsed && items.map(it => (
                                 <div key={it.id} style={{display:"grid",gridTemplateColumns:GRID,padding:"8px 14px",borderBottom:"1px solid "+T.b1,alignItems:"center", paddingLeft: catName ? 28 : 14}}>
                                   <span style={{fontSize:12.5,color:T.t1}}>{it._cleanDesc}</span>
                                   <span style={{fontSize:11.5,color:T.t3}}>{it.unit}</span>
@@ -7346,6 +7461,7 @@ function TabTasks({ projectId, isAdmin }) {
       {startModal && <StartDateModal
         mode={startModal.mode} projectId={projectId}
         currentStart={proj?.start_date}
+        phaseList={tasks.map(t=>({id:t.id, name:t.name, baseStart:t.baseStart}))}
         onClose={()=>setStartModal(null)}
         onDone={async()=>{ setStartModal(null); await loadProj(); await refetchTasks(); }}
       />}
@@ -8084,7 +8200,7 @@ function ScheduleLifecycleStrip({ proj, isAdmin, onSetStart, onLockPlan, onUnloc
 }
 
 // ── Start-date modal: recalc (estimate) or lock (green flag) ──
-function StartDateModal({ mode, projectId, currentStart, onClose, onDone }){
+function StartDateModal({ mode, projectId, currentStart, phaseList, onClose, onDone }){
   const isLock = mode==="lock";
   const [date,setDate] = useState(currentStart?String(currentStart).slice(0,10):"");
   const [preview,setPreview] = useState(null);
@@ -8112,18 +8228,59 @@ function StartDateModal({ mode, projectId, currentStart, onClose, onDone }){
           <label style={{fontSize:11,fontWeight:700,color:"#374151",textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>{isLock?"Real start date":"Start date"}</label>
           <input type="date" value={date} onChange={e=>{setDate(e.target.value);setPreview(null);}} style={{width:"100%",padding:"9px 12px",border:"1.5px solid #D1D5DB",borderRadius:7,fontSize:13,fontFamily:"inherit",outline:"none",boxSizing:"border-box",marginBottom:12}}/>
           {!preview && <button onClick={doPreview} disabled={loading||!date} style={{width:"100%",padding:"10px",borderRadius:7,background:date?"#0F172A":"#CBD5E1",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:loading||!date?"default":"pointer"}}>{loading?"…":"Preview changes"}</button>}
-          {preview && <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"10px 12px",marginBottom:4}}>
-            <div style={{fontSize:12,fontWeight:700,color:"#1E293B",marginBottom:6}}>{preview.changed_count} tasks ki date badlegi</div>
-            <div style={{maxHeight:180,overflowY:"auto"}}>
-              {(preview.changes||[]).slice(0,8).map(c=>(
-                <div key={c.id} style={{display:"flex",justifyContent:"space-between",gap:8,fontSize:11,padding:"3px 0",borderBottom:"1px solid #F1F5F9"}}>
-                  <span style={{color:"#475569",minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><b style={{fontFamily:"monospace",fontSize:9.5,color:"#94A3B8"}}>{c.task_no}</b> {String(c.name).slice(0,22)}</span>
-                  <span style={{color:"#0F172A",whiteSpace:"nowrap"}}>{c.old_start||"—"} → <b>{c.new_start}</b></span>
+          {preview && (()=>{
+            const allChanges  = preview.changes||[];
+            const totalChanged = preview.changed_count || allChanges.length;
+            // Build a lookup: String(id) → change object from API
+            const changeMap = {};
+            allChanges.forEach(c=>{ changeMap[String(c.id)] = c; });
+            const fmtD = d => d ? new Date(d+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
+            // Use phaseList (from parent tasks tree) — guaranteed ALL phases, correct order
+            const list = phaseList||[];
+            const subCount = totalChanged - list.filter(p=>changeMap[String(p.id)]).length;
+            return(
+              <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"10px 12px",marginBottom:4}}>
+                <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  Phase-wise schedule — {totalChanged} tasks badlenge
                 </div>
-              ))}
-              {preview.changes?.length>8 && <div style={{fontSize:10.5,color:"#94A3B8",paddingTop:4}}>+ {preview.changes.length-8} aur…</div>}
-            </div>
-          </div>}
+                {list.length===0
+                  ? <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"10px 0"}}>Apply karne pe sab dates update hongi</div>
+                  : list.map((ph,i)=>{
+                      const c = changeMap[String(ph.id)];
+                      const newStart = c?.new_start;
+                      const oldStart = c?.old_start || ph.baseStart;
+                      const changed  = newStart && oldStart && oldStart!==newStart;
+                      return(
+                        <div key={ph.id||i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
+                          padding:"7px 9px",borderRadius:6,marginBottom:3,
+                          background:changed?"white":"#F8FAFC",
+                          border:`1px solid ${changed?"#BFDBFE":"#E2E8F0"}`}}>
+                          <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0,flex:1}}>
+                            <div style={{width:8,height:8,borderRadius:2,background:changed?"#2563EB":"#CBD5E1",flexShrink:0}}/>
+                            <span style={{fontSize:12,fontWeight:600,color:changed?"#1E293B":"#94A3B8",
+                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                              {ph.name}
+                            </span>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0,marginLeft:8,whiteSpace:"nowrap"}}>
+                            {changed
+                              ? <><span style={{fontSize:10.5,color:"#94A3B8",textDecoration:"line-through"}}>{fmtD(oldStart)}</span>
+                                  <span style={{color:"#CBD5E1",fontSize:10,margin:"0 2px"}}>→</span>
+                                  <span style={{fontSize:11.5,fontWeight:700,color:"#1D4ED8"}}>{fmtD(newStart)}</span></>
+                              : <span style={{fontSize:10.5,color:"#CBD5E1"}}>unchanged</span>
+                            }
+                          </div>
+                        </div>
+                      );
+                    })
+                }
+                {subCount>0&&<div style={{fontSize:10,color:"#94A3B8",marginTop:7,textAlign:"center",borderTop:"1px solid #F1F5F9",paddingTop:6}}>
+                  + {subCount} sub-tasks ki dates bhi apply hone pe update hongi
+                </div>}
+              </div>
+            );
+          })()}
         </div>
         <div style={{padding:"0 22px 18px",display:"flex",gap:8}}>
           <button onClick={onClose} disabled={loading} style={{flex:1,padding:"10px",borderRadius:7,background:"#F1F5F9",color:"#475569",fontSize:12.5,fontWeight:700,border:"1px solid #E2E8F0",cursor:"pointer"}}>Cancel</button>
@@ -8600,7 +8757,7 @@ function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleColl
   const cellX=[];  // {start,x} for each cell start
   let cx=0; CELLS.forEach(c=>{ cellX.push({t:c.start.getTime(),x:cx}); cx+=c.widthPx; });
   const chartWidth = cx;
-  const ROW_H=30, LBL_W=230, HDR_H=28, HDR2_H=18;
+  const ROW_H=30, LBL_W=270, HDR_H=28, HDR2_H=18;
   const toX=(ds)=>{if(!ds)return null;const ms=new Date(ds).getTime()-pStart.getTime();if(isNaN(ms))return null;return LBL_W+ms*pxPerMs;};
   const todayX=toX(todayStr);
   const TOTAL_HEADER=HDR_H+HDR2_H;
@@ -8651,6 +8808,12 @@ function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleColl
     </div>
 
     <svg width={TOTAL_W} height={TOTAL_H} style={{display:"block",fontFamily:"'Segoe UI',sans-serif",minWidth:TOTAL_W}}>
+      <defs>
+        {/* Clip task names to label column — no overflow into bar area */}
+        <clipPath id="gantt-lbl-clip">
+          <rect x={0} y={0} width={LBL_W-6} height={TOTAL_H}/>
+        </clipPath>
+      </defs>
       {/* ── MONTH HEADER ── */}
       <rect x={0} y={0} width={TOTAL_W} height={TOTAL_HEADER} fill="#0D1B2A"/>
       <rect x={0} y={0} width={LBL_W} height={TOTAL_HEADER} fill="#0D1B2A"/>
@@ -8673,6 +8836,12 @@ function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleColl
       })()}
       <line x1={LBL_W} y1={0} x2={LBL_W} y2={TOTAL_H} stroke="rgba(255,255,255,0.12)" strokeWidth={1}/>
 
+      {/* ── CHART AREA CLICK-TO-DISMISS — clicking bars/chart closes panel ── */}
+      <rect x={LBL_W} y={TOTAL_HEADER} width={chartWidth} height={Math.max(0,TOTAL_H-TOTAL_HEADER)}
+        fill="transparent"
+        onClick={()=>{setPinnedId(null);setHoveredId(null);}}
+        onMouseEnter={handleRowLeave}/>
+
       {/* ── TASK ROWS ── */}
       {allFlat.map((t,i)=>{
         const y=TOTAL_HEADER+i*ROW_H;
@@ -8694,8 +8863,6 @@ function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleColl
         const textFill=isPhase?"rgba(255,255,255,0.9)":crit?"#DC2626":"#1E293B";
         const barColor=isPhase?"#60A5FA":crit?"#DC2626":T.blu;
         const name=t.name||"";
-        const maxChars=isPhase?22:isPkg?20:18;
-        const nameTrunc=name.length>maxChars?name.slice(0,maxChars)+"…":name;
         const codeLbl=pcd.code||t.no||"";
 
         return(<g key={t.id}>
@@ -8706,11 +8873,8 @@ function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleColl
             const isAct  = activeId===t.id;
             const isPinned = pinnedId===t.id;
             const hlBg = isPinned?"#DBEAFE":isPred?"#EFF6FF":isSucc?"#FFF7ED":isAct?"#F0F9FF":rowBg;
-            return (<rect x={0} y={y} width={TOTAL_W} height={ROW_H} fill={hlBg}
-              onMouseEnter={e=>handleRowEnter(t.id, e.clientY)}
-              onMouseLeave={handleRowLeave}
-              onClick={()=>handleRowClick(t.id)}
-              style={{cursor:"pointer"}}/> );
+            // Full-width background only — no pointer events (trigger rect rendered LAST so it's on top)
+            return <rect x={0} y={y} width={TOTAL_W} height={ROW_H} fill={hlBg} style={{pointerEvents:"none"}}/>;
           })()}
           {/* dep highlight left rail */}
           {hovPreds.includes(t.id)&&<rect x={0} y={y} width={4} height={ROW_H} fill="#3B82F6"/>}
@@ -8740,8 +8904,8 @@ function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleColl
             <text x={indent+22+codeLbl.length*3.25+4} y={y+ROW_H/2+4} textAnchor="middle" fontSize={isPhase?9.5:8.5} fontWeight="700" fill="white">{codeLbl}</text>
           </g>}
 
-          {/* Task name */}
-          <text x={indent+22+codeLbl.length*6.5+14} y={y+ROW_H/2+4} fontSize={isPhase?11:isPkg?10.5:10} fontWeight={isPhase?700:isPkg?600:400} fill={textFill}>{nameTrunc}</text>
+          {/* Task name — full text, clipped to label column */}
+          <text x={indent+22+codeLbl.length*6.5+14} y={y+ROW_H/2+4} fontSize={isPhase?11:isPkg?10.5:10} fontWeight={isPhase?700:isPkg?600:400} fill={textFill} clipPath="url(#gantt-lbl-clip)"><title>{name}</title>{name}</text>
 
           {/* BARS */}
           {/* slack tail */}
@@ -8754,6 +8918,12 @@ function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleColl
           {ax1!=null&&aw>0&&t.actualStart&&<rect x={ax1} y={y+ROW_H/2+2} width={aw} height={4} rx={2} fill={t.status==="Completed"?T.grn:T.blu} fillOpacity={0.85}/>}
           {/* dhyan dot */}
           {t.dhyanRakhen&&bx1!=null&&<circle cx={bx1-6} cy={y+ROW_H/2} r={3.5} fill="#F59E0B" opacity={0.9}/>}
+          {/* ── HOVER TRIGGER — rendered LAST so it sits on top of all text/pills ── */}
+          <rect x={0} y={y} width={LBL_W} height={ROW_H} fill="transparent"
+            onMouseEnter={e=>handleRowEnter(t.id, e.clientY)}
+            onMouseLeave={handleRowLeave}
+            onClick={()=>handleRowClick(t.id)}
+            style={{cursor:"pointer"}}/>
         </g>);
       })}
 
