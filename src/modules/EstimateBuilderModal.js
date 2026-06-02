@@ -19,6 +19,7 @@
 // ───────────────────────────────────────────────────────────────────
 import { useState, useEffect, useMemo } from "react";
 import api from "../config/api";
+import SearchSelect from "../components/SearchSelect";
 
 const inrIN = (n) => Math.round(Number(n) || 0).toLocaleString("en-IN");
 const isSet = (v) => v !== null && v !== undefined && v !== "";
@@ -1006,20 +1007,21 @@ export default function EstimateBuilderModal({
                   <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:9 }}>
                     <div>
                       <label style={lblC}>Customer <span style={{color:"#DC2626"}}>*</span></label>
-                      <input
-                        list="ebm-customers"
-                        value={customerName}
-                        onChange={e => {
-                          const v = e.target.value;
-                          setCustomerName(v);
-                          const match = customers.find(c => c.name === v);
+                      {/* Proper searchable dropdown — sourced ONLY from the
+                          party library (client-type, junk names excluded
+                          server-side). value = customerId; we mirror the
+                          chosen name into customerName for the save payload. */}
+                      <SearchSelect
+                        value={customerId}
+                        options={customers.map(c => ({ id: c.id, name: c.name }))}
+                        onChange={(id) => {
+                          const match = customers.find(c => String(c.id) === String(id));
                           setCustomerId(match?.id || null);
+                          setCustomerName(match?.name || "");
                         }}
-                        placeholder="Type or pick a customer"
-                        style={{ ...inpC, borderColor: custInvalid ? "#FCA5A5" : "#D1D5DB", background: custInvalid ? "#FEF2F2" : "white" }}/>
-                      <datalist id="ebm-customers">
-                        {customers.map(c => <option key={c.id} value={c.name}/>)}
-                      </datalist>
+                        placeholder="Search or pick a customer"
+                        accent={custInvalid ? "#DC2626" : "#2563EB"}
+                      />
                     </div>
                     <div>
                       <label style={lblC}>Description / Note</label>

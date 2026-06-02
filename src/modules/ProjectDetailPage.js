@@ -2801,7 +2801,8 @@ function TabEstimate({ project }) {
               {id:"boq",label:"BOQ / Items"},
               {id:"milestone",label:"Payment Schedule"},
               {id:"invoice",label:"Invoices ("+invoices.length+")"},
-              {id:"payment",label:"Payments ("+payments.length+")"},
+              // Payments tab removed — customer receipts are managed at the
+              // Party Ledger level (Party tab → Receipt), not per-estimate.
               {id:"amend",label:"Amendments ("+amendments.length+")", dot: pendingAmendCount > 0},
             ].map(t => (
               <button key={t.id} onClick={()=>setSubTab(t.id)}
@@ -3411,7 +3412,7 @@ function TabEstimate({ project }) {
                         ))}
                       </div>
                       <div style={{marginTop:8,fontSize:10.5,color:T.t4,textAlign:"center",fontStyle:"italic"}}>
-                        Click anywhere to view full detail · record payment · delete
+                        Click anywhere to view full detail · delete
                       </div>
                     </div>
                   );
@@ -3807,16 +3808,17 @@ function TabEstimate({ project }) {
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
               <div>
                 <label style={lblS}>Customer</label>
-                <input type="text" list="ce-customers" value={estForm.customer_name}
-                  onChange={e => {
-                    const v = e.target.value;
-                    const match = customers.find(c => c.name === v);
-                    setEstForm(p => ({...p, customer_name: v, customer_id: match?.id || ""}));
+                {/* Searchable picker — client parties only (junk names
+                    filtered server-side). value = customer_id. */}
+                <SearchSelect
+                  value={estForm.customer_id}
+                  options={customers.map(c => ({ id: c.id, name: c.name }))}
+                  onChange={(id) => {
+                    const match = customers.find(c => String(c.id) === String(id));
+                    setEstForm(p => ({...p, customer_id: match?.id || "", customer_name: match?.name || ""}));
                   }}
-                  placeholder="Type or pick a customer" style={inpS}/>
-                <datalist id="ce-customers">
-                  {customers.map(c => <option key={c.id} value={c.name}/>)}
-                </datalist>
+                  placeholder="Search or pick a customer"
+                />
               </div>
               <div>
                 <label style={lblS}>Description</label>
@@ -4925,12 +4927,9 @@ function TabEstimate({ project }) {
                     style={{background:"white",border:"1px solid "+T.b1,color:T.t2,borderRadius:6,padding:"7px 12px",fontSize:12,fontWeight:600,cursor:"pointer"}}>
                     Close
                   </button>
-                  {inv.status !== "Paid" && inv.status !== "Draft" && due > 0 && (
-                    <button onClick={()=>{ closeInvoiceDetail(); setPayForm(p=>({...p,amount_received:String(due)})); setShowPay(inv.id); }}
-                      style={{background:T.grn,color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
-                      ₹ Record Payment
-                    </button>
-                  )}
+                  {/* Record Payment removed — customer receipts are recorded
+                      in the Party Ledger (Party tab → Receipt), keeping all
+                      money-in for this client in one place. */}
                   {inv.status === "Draft" && (
                     <button onClick={()=>{ closeInvoiceDetail(); openInvoicePreview(inv.id); }}
                       style={{background:"#7C3AED",color:"white",border:"none",borderRadius:6,padding:"7px 16px",fontSize:12,fontWeight:700,cursor:"pointer"}}>
@@ -6841,16 +6840,21 @@ function TabTasks({ projectId, isAdmin }) {
   const [fTag,setFTag]       = useState("All");
   const [fAssignee,setFAssignee] = useState("All");
   const [fDelayed,setFDelayed]   = useState(false);
-  const [fAsSchedule,setFAsSchedule] = useState("");
+  const [fAsSchedule,setFAsSchedule] = useState(false);   // flat chronological sort view
+  const [fToday,setFToday]           = useState(false);    // show only today's tasks
+  const [fDateFrom,setFDateFrom]     = useState("");       // unified date range — from
+  const [fDateTo,setFDateTo]         = useState("");       // unified date range — to
   const [showFilters,setShowFilters] = useState(false);
   const [savedFilters,setSavedFilters] = useState([
-    {name:"Civil Ongoing",  f:{fCat:"Civil",fStatus:"Ongoing",fAssignee:"All",fDelayed:false,fAsSchedule:""}},
-    {name:"My Delayed",     f:{fCat:"All",fStatus:"All",fAssignee:"",fDelayed:true,fAsSchedule:""}},
-    {name:"Today Schedule", f:{fCat:"All",fStatus:"All",fAssignee:"All",fDelayed:false,fAsSchedule:new Date().toISOString().split("T")[0]}},
+    {name:"Civil Ongoing",  f:{fCat:"Civil",fStatus:"Ongoing",fAssignee:"All",fDelayed:false,fAsSchedule:false,fToday:false,fDateFrom:"",fDateTo:""}},
+    {name:"My Delayed",     f:{fCat:"All",fStatus:"All",fAssignee:"All",fDelayed:true, fAsSchedule:false,fToday:false,fDateFrom:"",fDateTo:""}},
+    {name:"Today Schedule", f:{fCat:"All",fStatus:"All",fAssignee:"All",fDelayed:false,fAsSchedule:true, fToday:true, fDateFrom:"",fDateTo:""}},
   ]);
   const [filterSaveName,setFilterSaveName] = useState("");
   const [lastUsedFilter,setLastUsedFilter] = useState(null);
-  const [levelFilter,setLevelFilter] = useState("All"); // All | 1 | 2 | 3 | 4 | 5 | 6 | 7
+  const [levelFilter,setLevelFilter] = useState("All");
+  const [ganttScale,setGanttScale]   = useState("month");
+  const [ganttRange,setGanttRange]   = useState({from:"",to:""});
   const [infoTask,setInfoTask]       = useState(null);
   const [contextMenu,setContextMenu] = useState(null); // {x,y,task}
   const [dhyanTask,setDhyanTask]     = useState(null);
@@ -6863,6 +6867,34 @@ function TabTasks({ projectId, isAdmin }) {
   const [cascadePreview,setCascadePreview]   = useState(null); // P2e: {taskId,base_start,base_end,changed,affected}
   const [cascadeApplying,setCascadeApplying] = useState(false);
   const [reasonMenu,setReasonMenu] = useState(null); // P4: {x,y,task}
+  // ── Gantt: quick dep remove + cascade fix callbacks ────────────
+  const ganttRemoveDep = async (taskId, depId) => {
+    const t = allFlat.find(x=>x.id===Number(taskId));
+    if(!t) return;
+    let deps = Array.isArray(t.dependencies) ? t.dependencies.map(Number) : [];
+    deps = deps.filter(d=>d!==Number(depId));
+    try { await api.put("/tasks/"+taskId, {dependencies: deps}); } catch(_){}
+    setTasks(updateInTree(tasks, Number(taskId), {dependencies: deps}));
+  };
+  const ganttAddDep = async (taskId, depId) => {
+    const t = allFlat.find(x=>x.id===Number(taskId));
+    if(!t) return;
+    let deps = Array.isArray(t.dependencies) ? t.dependencies.map(Number) : [];
+    if(deps.includes(Number(depId))) return;
+    deps = [...deps, Number(depId)];
+    try { await api.put("/tasks/"+taskId, {dependencies: deps}); } catch(_){}
+    setTasks(updateInTree(tasks, Number(taskId), {dependencies: deps}));
+  };
+  const ganttCascadeFix = async (taskId, newStart) => {
+    if(!newStart) return;
+    setCascadeApplying(true);
+    try {
+      const r = await api.post("/tasks/"+taskId+"/reschedule", {base_start:newStart, base_end:null, mode:"apply"});
+      if(r.success) await refetchTasks();
+    } catch(_){}
+    setCascadeApplying(false);
+  };
+
   const setDelayReason = async (task, key) => {
     setReasonMenu(null);
     try { await api.put("/tasks/"+task.id, { delay_reason: key || "" }); } catch(_){}
@@ -6875,6 +6907,31 @@ function TabTasks({ projectId, isAdmin }) {
   const allFlat = ptFlatten(tasks);
   const TEAM_PT = [...new Set(allFlat.map(t=>t.assignee).filter(Boolean))];
   const phaseCodeMap = ptPhaseCodes(tasks); // id -> {code, phaseColor, phaseName, isPhase}
+
+  // ── Level filter metadata ─────────────────────────────────────
+  // Count tasks at each depth by walking the tree recursively (ptFlatten
+  // does NOT set .level, so we compute depth here directly from the tree).
+  // Choosing "L N" shows all tasks from root down to depth N (cumulative).
+  const levelMeta = (()=>{
+    const depthCounts = {};  // depth (0-indexed) → count at that depth
+    function walkDepth(list, depth){
+      list.forEach(t=>{
+        depthCounts[depth] = (depthCounts[depth]||0)+1;
+        if(t.children?.length) walkDepth(t.children, depth+1);
+      });
+    }
+    walkDepth(tasks, 0);
+    const maxD = Math.min(6, Math.max(0, ...Object.keys(depthCounts).map(Number)));
+    const DEPTH_LABELS = ["Phase","Package","Activity","Sub-Activity","Step","Detail","Micro"];
+    // cumulative count: tasks visible when user selects "up to level d+1"
+    let cum = 0;
+    const levels = [];
+    for (let d = 0; d <= maxD; d++) {
+      cum += (depthCounts[d]||0);
+      levels.push({ depth:d, label: DEPTH_LABELS[d]||`L${d+1}`, count: depthCounts[d]||0, cumCount: cum });
+    }
+    return { levels, maxD };
+  })();
 
   // P5: fetch CPM (critical path + slack) when Gantt is shown / structure changes
   useEffect(()=>{
@@ -6913,12 +6970,13 @@ function TabTasks({ projectId, isAdmin }) {
   const applyFilter=(f)=>{
     setFCat(f.fCat||"All");setFStatus(f.fStatus||"All");
     setFTag(f.fTag||"All");setFAssignee(f.fAssignee||"All");
-    setFDelayed(f.fDelayed||false);setFAsSchedule(f.fAsSchedule||"");
+    setFDelayed(f.fDelayed||false);setFAsSchedule(f.fAsSchedule||false);
+    setFToday(f.fToday||false);setFDateFrom(f.fDateFrom||"");setFDateTo(f.fDateTo||"");
     setLastUsedFilter(f);
   };
   const saveCurrentFilter=()=>{
     if(!filterSaveName.trim()) return;
-    const f={fCat,fStatus,fTag,fAssignee,fDelayed,fAsSchedule};
+    const f={fCat,fStatus,fTag,fAssignee,fDelayed,fAsSchedule,fToday,fDateFrom,fDateTo};
     setSavedFilters(p=>[{name:filterSaveName,f},...p.filter(x=>x.name!==filterSaveName)]);
     setLastUsedFilter(f);
     setFilterSaveName("");
@@ -6945,20 +7003,32 @@ function TabTasks({ projectId, isAdmin }) {
       const mTag=fTag==="All"||t.tag===fTag;
       const mAs=fAssignee==="All"||t.assignee===fAssignee;
       const mDel=!fDelayed||ptDelayDays(t)>0;
-      let mSched=true;
-      if(fAsSchedule){
-        const sd=getSchedStart(t);
-        mSched=sd?Math.abs((new Date(sd)-new Date(fAsSchedule))/(1000*86400))<=3:false;
+      // Today filter: task's planned range covers today
+      let mToday=true;
+      if(fToday){
+        const tod=new Date().toISOString().split("T")[0];
+        const bs=t.baseStart, be=t.baseEnd;
+        mToday=bs&&be?(bs<=tod&&tod<=be):(bs?bs===tod:false);
       }
-      const self=mCat&&mSt&&mTag&&mAs&&mDel&&mSched;
+      // Date range filter: task overlaps with selected range
+      let mDate=true;
+      if(fDateFrom||fDateTo){
+        const bs=t.baseStart, be=t.baseEnd||t.baseStart;
+        mDate=bs?((!fDateFrom||be>=fDateFrom)&&(!fDateTo||bs<=fDateTo)):false;
+      }
+      const self=mCat&&mSt&&mTag&&mAs&&mDel&&mToday&&mDate;
       if(self||ch.length>0) return{...t,children:ch};
       return null;
     }).filter(Boolean);
   }
   const filtered=applyFilters(tasks);
   const flatFiltered=ptFlatten(filtered);
+  // Schedule view: all matched tasks flattened + sorted by baseStart
+  const scheduleFlat = fAsSchedule
+    ? [...flatFiltered].filter(t=>t.baseStart).sort((a,b)=>a.baseStart.localeCompare(b.baseStart))
+    : null;
   const allTags=[...new Set(allFlat.map(t=>t.tag).filter(Boolean))];
-  const activeF=[fCat!=="All",fStatus!=="All",fTag!=="All",fAssignee!=="All",fDelayed,!!fAsSchedule].filter(Boolean).length;
+  const activeF=[fCat!=="All",fStatus!=="All",fTag!=="All",fAssignee!=="All",fDelayed,fToday,!!(fDateFrom||fDateTo),fAsSchedule].filter(Boolean).length;
 
   const ongoing=allFlat.filter(t=>t.status==="Ongoing").length;
   const completed=allFlat.filter(t=>t.status==="Completed").length;
@@ -7026,7 +7096,8 @@ function TabTasks({ projectId, isAdmin }) {
 
   function renderRow(t, depth=0, sno=[], maxDepth=undefined){
     const hasKids=t.children?.length>0;
-    const isOpen=!collapsed[t.id];
+    // when level filter is active, force-expand all nodes so all levels are visible
+    const isOpen = maxDepth!==undefined ? true : !collapsed[t.id];
     const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
     const delay=ptDelayDays(t);
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
@@ -7381,44 +7452,55 @@ function TabTasks({ projectId, isAdmin }) {
           Filters {activeF>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"0 5px",borderRadius:10}}>{activeF}</span>}
         </button>
 
-        {/* ── AS SCHEDULE — always visible date pill ── */}
-        <div style={{display:"flex",alignItems:"center",gap:0,background:fAsSchedule?T.grnL:T.surfaceB,border:`1.5px solid ${fAsSchedule?T.grnM:T.b1}`,borderRadius:7,overflow:"hidden",height:30}}>
-          {/* Calendar icon + label */}
-          <div style={{display:"flex",alignItems:"center",gap:5,padding:"0 9px",borderRight:`1px solid ${fAsSchedule?T.grnM:T.b1}`,height:"100%",cursor:"default"}}>
-            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={fAsSchedule?T.grn:T.slt} strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-            <span style={{fontSize:11,fontWeight:600,color:fAsSchedule?T.grn:T.t3,whiteSpace:"nowrap"}}>As Schedule</span>
-            {fAsSchedule&&<span style={{background:T.grn,color:"white",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:3}}>ON</span>}
-          </div>
-          {/* Date input */}
-          <input type="date" value={fAsSchedule} onChange={e=>setFAsSchedule(e.target.value)}
-            style={{height:"100%",padding:"0 8px",border:"none",background:"transparent",fontSize:11.5,color:fAsSchedule?T.grn:T.t2,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer",width:fAsSchedule?130:120}}/>
-          {/* Today shortcut */}
-          <button onClick={()=>setFAsSchedule(new Date().toISOString().split("T")[0])}
-            style={{padding:"0 7px",height:"100%",border:"none",borderLeft:`1px solid ${fAsSchedule?T.grnM:T.b1}`,background:fAsSchedule?"transparent":T.surface,color:fAsSchedule?T.grn:T.t4,fontSize:10,fontWeight:700,cursor:"pointer",whiteSpace:"nowrap"}}>
-            Today
-          </button>
-          {/* Clear X */}
-          {fAsSchedule&&<button onClick={()=>setFAsSchedule("")}
-            style={{padding:"0 7px",height:"100%",border:"none",borderLeft:`1px solid ${T.grnM}`,background:"transparent",color:T.grn,fontSize:10,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center"}}>
+        {/* ── TODAY TOGGLE pill ── */}
+        <button onClick={()=>setFToday(s=>!s)}
+          style={{height:30,padding:"0 12px",borderRadius:6,display:"flex",alignItems:"center",gap:5,
+            border:`1.5px solid ${fToday?T.blu:T.b1}`,background:fToday?T.blu:"transparent",
+            color:fToday?"white":T.t3,fontSize:11.5,fontWeight:fToday?700:400,cursor:"pointer",
+            whiteSpace:"nowrap",transition:"all .15s"}}>
+          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2}><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+          Today{fToday&&<svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>}
+        </button>
+        {/* ── UNIFIED DATE RANGE (list filter + gantt viewport) ── */}
+        <div style={{display:"flex",alignItems:"center",gap:4,height:30,padding:"0 8px",borderRadius:7,
+          border:`1.5px solid ${(fDateFrom||fDateTo)?T.bluM:T.b1}`,
+          background:(fDateFrom||fDateTo)?T.bluL:T.surface}}>
+          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={(fDateFrom||fDateTo)?T.blu:T.t4} strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <input type="date" value={fDateFrom} onChange={e=>{setFDateFrom(e.target.value);if(view==="gantt")setGanttRange(p=>({...p,from:e.target.value}));}} placeholder="From"
+            style={{border:"none",background:"transparent",fontSize:11,color:fDateFrom?T.blu:T.t3,outline:"none",width:102,fontFamily:"inherit"}}/>
+          <span style={{color:T.t4,fontSize:10}}>–</span>
+          <input type="date" value={fDateTo} onChange={e=>{setFDateTo(e.target.value);if(view==="gantt")setGanttRange(p=>({...p,to:e.target.value}));}} placeholder="To"
+            style={{border:"none",background:"transparent",fontSize:11,color:fDateTo?T.blu:T.t3,outline:"none",width:102,fontFamily:"inherit"}}/>
+          {(fDateFrom||fDateTo)&&<button onClick={()=>{setFDateFrom("");setFDateTo("");setGanttRange({from:"",to:""}); }}
+            style={{background:"none",border:"none",cursor:"pointer",color:T.blu,padding:0,display:"flex"}}>
             <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M18 6L6 18M6 6l12 12"/></svg>
           </button>}
         </div>
-        {/* As Schedule active info */}
-        {fAsSchedule&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"3px 9px",background:T.grnL,border:`1px solid ${T.grnM}`,borderRadius:6}}>
-          <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.grn} strokeWidth={2}><path d="M20 6L9 17l-5-5"/></svg>
-          <span style={{fontSize:10.5,color:T.grn,fontWeight:600}}>{flatFiltered.length} tasks · {flatFiltered.filter(t=>t.status==="Not Started").length} not started</span>
-        </div>}
 
         <div style={{flex:1}}/>
         {dhyanCount>0&&<div style={{display:"flex",alignItems:"center",gap:5,padding:"4px 9px",background:T.redL,borderRadius:6,border:`1px solid ${T.redM}`}}>
           <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
           <span style={{fontSize:10.5,fontWeight:700,color:T.red}}>{dhyanCount} DHYAN alerts</span>
         </div>}
-        {/* Level filter */}
+        {/* Gantt scale switcher — only when gantt is active */}
+        {view==="gantt" && <div style={{display:"flex",alignItems:"center",gap:3,background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3}}>
+          {[["week","Week"],["month","Month"],["quarter","Qtr"],["year","Year"]].map(([sc,lb])=>(
+            <button key={sc} onClick={()=>setGanttScale(sc)}
+              style={{padding:"4px 9px",borderRadius:5,border:"none",background:ganttScale===sc?T.blu:"none",color:ganttScale===sc?"white":T.t3,fontSize:11,fontWeight:ganttScale===sc?700:400,cursor:"pointer",whiteSpace:"nowrap"}}>
+              {lb}
+            </button>
+          ))}
+        </div>}
+        {/* Gantt range synced from unified date range above */}
+        {/* Level dropdown — All + L1(n) L2(n) ... */}
         <select value={levelFilter} onChange={e=>setLevelFilter(e.target.value)}
-          style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t2,background:T.surface,fontFamily:"inherit",cursor:"pointer"}}>
-          <option value="All">All Levels</option>
-          {[1,2,3,4,5,6,7].map(l=><option key={l} value={l}>Level {l}</option>)}
+          style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${levelFilter!=="All"?T.blu:T.b1}`,background:levelFilter!=="All"?T.bluL:T.surface,color:levelFilter!=="All"?T.blu:T.t2,fontSize:11.5,fontWeight:levelFilter!=="All"?700:400,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
+          <option value="All">All Levels ({allFlat.length})</option>
+          {levelMeta.levels.map(lv=>(
+            <option key={lv.depth} value={String(lv.depth+1)}>
+              L{lv.depth+1} — {lv.label}{lv.depth>0?" (upto)":""} ({lv.cumCount})
+            </option>
+          ))}
         </select>
         {/* CSV Export */}
         <button onClick={()=>{
@@ -7502,13 +7584,32 @@ function TabTasks({ projectId, isAdmin }) {
               </div>
             ))}
             <div>
-              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>Delayed</div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4,display:"flex",alignItems:"center",gap:5}}>
+                Delayed
+                {delayed>0&&<span style={{background:T.red,color:"white",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:10,lineHeight:1.4}}>{delayed}</span>}
+              </div>
               <button onClick={()=>setFDelayed(s=>!s)}
-                style={{height:30,padding:"0 11px",borderRadius:6,border:`1.5px solid ${fDelayed?T.red:T.b1}`,background:fDelayed?T.redL:T.surface,color:fDelayed?T.red:T.t3,fontSize:12,fontWeight:fDelayed?700:400,cursor:"pointer"}}>
-                {fDelayed?"Delayed Only":"All Tasks"}
+                style={{height:30,minWidth:110,padding:"0 11px",borderRadius:6,display:"flex",alignItems:"center",gap:5,
+                  border:`1.5px solid ${fDelayed?T.red:T.b1}`,background:fDelayed?T.redL:T.surface,
+                  color:fDelayed?T.red:T.t3,fontSize:12,fontWeight:fDelayed?700:400,cursor:"pointer",
+                  transition:"background .2s, border-color .2s, color .2s",whiteSpace:"nowrap"}}>
+                {fDelayed
+                  ? <><svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>Delayed Only</>
+                  : <>All Tasks</>}
               </button>
             </div>
-            {activeF>0&&<button onClick={()=>{setFCat("All");setFStatus("All");setFTag("All");setFAssignee("All");setFDelayed(false);setFAsSchedule("");}}
+            {/* As Schedule toggle — flat chronological sort */}
+            <div>
+              <div style={{fontSize:9.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px",marginBottom:4}}>View Mode</div>
+              <button onClick={()=>setFAsSchedule(s=>!s)}
+                style={{height:30,padding:"0 11px",borderRadius:6,display:"flex",alignItems:"center",gap:5,
+                  border:`1.5px solid ${fAsSchedule?T.grn:T.b1}`,background:fAsSchedule?T.grnL:T.surface,
+                  color:fAsSchedule?T.grn:T.t3,fontSize:12,fontWeight:fAsSchedule?700:400,cursor:"pointer"}}>
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>
+                {fAsSchedule?"Schedule View ON":"As Schedule"}
+              </button>
+            </div>
+            {activeF>0&&<button onClick={()=>{setFCat("All");setFStatus("All");setFTag("All");setFAssignee("All");setFDelayed(false);setFAsSchedule(false);setFToday(false);setFDateFrom("");setFDateTo("");setGanttRange({from:"",to:""}); }}
               style={{height:30,padding:"0 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,color:T.t3,fontSize:11.5,fontWeight:600,cursor:"pointer",alignSelf:"flex-end"}}>
               Clear All
             </button>}
@@ -7583,18 +7684,89 @@ function TabTasks({ projectId, isAdmin }) {
             ))}
           </div>
           <div style={{maxHeight:480,overflowY:"auto"}}>
-            {levelFilter==="All"
-              ? filtered.map(t=>renderRow(t,0))
-              : filtered.map(t=>renderRow(t,0,undefined,parseInt(levelFilter)-1))
+            {fAsSchedule&&scheduleFlat
+              /* ── SCHEDULE VIEW: flat, date-sorted ── */
+              ? scheduleFlat.length===0
+                ? <div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:13}}>Koi task nahi mila selected filters ke saath</div>
+                : scheduleFlat.map((t,i)=>{
+                    const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
+                    const delay=ptDelayDays(t);
+                    const pcd=phaseCodeMap[t.id]||{};
+                    const codeLbl=pcd.code||t.no||"";
+                    const prevDate=i>0?scheduleFlat[i-1].baseStart:null;
+                    const showDateHdr=t.baseStart&&t.baseStart!==prevDate;
+                    const fmtD=d=>d?new Date(d+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}):"";
+                    return(
+                      <div key={t.id}>
+                        {showDateHdr&&(
+                          <div style={{padding:"5px 14px 3px",background:"#F0F9FF",borderBottom:`1px solid ${T.bluL}`,
+                            fontSize:10,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".5px",
+                            display:"flex",alignItems:"center",gap:7,borderTop:`1px solid ${T.b1}`}}>
+                            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                            {fmtD(t.baseStart)}
+                            {t.baseEnd&&t.baseEnd!==t.baseStart&&<span style={{color:T.t4,fontWeight:400,fontSize:9}}> → {fmtD(t.baseEnd)}</span>}
+                          </div>
+                        )}
+                        <div style={{display:"grid",gridTemplateColumns:GRID_TEMPLATE,alignItems:"center",height:32,
+                          borderBottom:`1px solid #F1F5F9`,background:"white",cursor:"pointer"}}
+                          onClick={()=>{if(t.dhyanRakhen){setDhyanTask(t);setPendingTask(t);}else setOpenTask(t);}}
+                          onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF"}
+                          onMouseLeave={e=>e.currentTarget.style.background="white"}>
+                          <div style={{padding:"0 8px",display:"flex",alignItems:"center",gap:5,overflow:"hidden"}}>
+                            {codeLbl&&<span style={{fontSize:9,fontWeight:700,color:"white",background:pcd.phaseColor||T.blu,
+                              padding:"1px 5px",borderRadius:3,flexShrink:0,fontFamily:"monospace"}}>{codeLbl}</span>}
+                            <span style={{fontSize:12,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+                            {delay>0&&<span style={{fontSize:10,color:T.red,fontWeight:700,flexShrink:0,marginLeft:3}}>⚠{delay}d</span>}
+                          </div>
+                          {/* Status — colored dot only, no text (progress bar shows state) */}
+                          <div style={{padding:"0 8px",display:"flex",alignItems:"center",gap:5}}>
+                            <div style={{width:8,height:8,borderRadius:"50%",background:ss.c,flexShrink:0,boxShadow:`0 0 0 2px ${ss.bg}`}}/>
+                            <span style={{fontSize:10,color:ss.c,fontWeight:600}}>{t.status==="Not Started"?"—":t.status}</span>
+                          </div>
+                          {/* Progress bar */}
+                          <div style={{padding:"0 5px",display:"flex",alignItems:"center",gap:4}}>
+                            <div style={{flex:1,height:6,borderRadius:3,background:T.b1,overflow:"hidden",minWidth:40}}>
+                              <div style={{height:"100%",borderRadius:3,
+                                background:t.status==="Completed"?T.grn:t.status==="Ongoing"?T.blu:T.b2,
+                                width:`${t.progress||0}%`,transition:"width .3s"}}/>
+                            </div>
+                            <span style={{fontSize:10,color:T.t4,flexShrink:0,minWidth:24,textAlign:"right"}}>{t.progress||0}%</span>
+                          </div>
+                          <div style={{padding:"0 5px",fontSize:11,color:T.t2}}>{fmtD(t.baseStart)}</div>
+                          <div style={{padding:"0 5px",fontSize:11,color:T.t2}}>{fmtD(t.baseEnd)}</div>
+                          <div style={{padding:"0 5px",fontSize:11,color:T.t3}}>
+                            {t.baseStart&&t.baseEnd?Math.round((new Date(t.baseEnd)-new Date(t.baseStart))/86400000)+1+"d":"—"}
+                          </div>
+                          <div style={{padding:"0 5px",fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.assignee||"—"}</div>
+                        </div>
+                      </div>
+                    );
+                  })
+              /* ── NORMAL HIERARCHY VIEW ── */
+              : levelFilter==="All"
+                ? filtered.map(t=>renderRow(t,0))
+                : filtered.map(t=>renderRow(t,0,undefined,parseInt(levelFilter)-1))
             }
           </div>
         </div>
       )}
 
-      {/* GANTT VIEW — simple inline */}
+      {/* GANTT VIEW */}
       {view==="gantt"&&(
         <div style={{overflowX:"auto",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-          <PTGantt tasks={filtered} cpm={cpmData} phaseCodeMap={phaseCodeMap}/>
+          <PTGantt
+            tasks={filtered}
+            cpm={cpmData}
+            phaseCodeMap={phaseCodeMap}
+            levelFilter={levelFilter}
+            collapsed={collapsed}
+            onToggleCollapse={toggleCollapse}
+            ganttScale={ganttScale}
+            ganttRange={ganttRange}
+            onRemoveDep={ganttRemoveDep}
+            onAddDep={ganttAddDep}
+            onCascadeFix={ganttCascadeFix}
+          />
         </div>
       )}
 
@@ -8326,84 +8498,397 @@ function BaselineHistoryModal({ projectId, canBaseline, onClose, onDeleted }) {
 }
 
 // ── Inline Gantt for project detail ──────────────────────────────
-function PTGantt({tasks, cpm, phaseCodeMap}){
+function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleCollapse, ganttScale, ganttRange, onRemoveDep, onAddDep, onCascadeFix}){
+  // HTML-overlay dep panel: hover shows preview, click PINS it so you can interact
+  const [hoveredId, setHoveredId]   = React.useState(null);
+  const [pinnedId,  setPinnedId]    = React.useState(null);
+  const [panelPos,  setPanelPos]    = React.useState({x:0,y:0}); // locked when row entered
+  const [addSearchQ, setAddSearchQ] = React.useState("");
+  const mousePosRef = React.useRef({x:0,y:0}); // live ref, no re-render
+  const leaveTimer  = React.useRef(null);
+  const wrapRef     = React.useRef(null);
+
+  const handleRowEnter = (id, clientY) => {
+    clearTimeout(leaveTimer.current);
+    setHoveredId(id);
+    const rect = wrapRef.current?.getBoundingClientRect();
+    const vw = typeof window!=="undefined"?window.innerWidth:1200;
+    const vh = typeof window!=="undefined"?window.innerHeight:800;
+    const idealX = rect ? rect.left + 245 : 245;
+    setPanelPos({
+      x: Math.min(idealX, vw - 270),
+      y: Math.min((clientY||0) + 10, vh - 240),
+    });
+  };
+  const handleRowLeave = () => {
+    leaveTimer.current = setTimeout(()=>setHoveredId(null), 350);
+  };
+  const handlePanelEnter = () => clearTimeout(leaveTimer.current);
+  const handlePanelLeave = () => { leaveTimer.current = setTimeout(()=>setHoveredId(null), 350); };
+  const handleRowClick  = (id) => { setPinnedId(p=>p===id?null:id); setAddSearchQ(""); };
+
+  const activeId = pinnedId ?? hoveredId; // pinned wins
   const cmap=(cpm&&cpm.map)||{};
   const pcm=phaseCodeMap||{};
   const hasCpm=cpm&&Object.keys(cmap).length>0;
-  const allFlat=(function flatD(list,depth=0,out=[]){list.forEach(t=>{out.push({...t,level:depth+1});if(t.children?.length)flatD(t.children,depth+1,out);});return out;})(tasks);
-  const MONTHS=[];
-  let d=new Date("2025-01-01");
-  while(d<=new Date("2026-10-01")){MONTHS.push({y:d.getFullYear(),m:d.getMonth(),lbl:`${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][d.getMonth()]}${d.getFullYear()===2026?"'26":""}`});d=new Date(d.getFullYear(),d.getMonth()+1,1);}
-  const ROW_H=26,LBL_W=180,MO_W=36,HDR_H=28,TOTAL_W=LBL_W+MONTHS.length*MO_W,TOTAL_H=HDR_H+allFlat.length*ROW_H;
-  const pStart=new Date("2025-01-01");
-  const totDays=(new Date("2026-10-01")-pStart)/(1000*86400);
-  const pxPerDay=(MONTHS.length*MO_W)/totDays;
-  const toX=(ds)=>{if(!ds)return null;const dd=(new Date(ds)-pStart)/(1000*86400);return LBL_W+dd/totDays*(MONTHS.length*MO_W);};
-  const todayX=toX(new Date().toISOString().split("T")[0]);
-  // bar positions (for dependency arrows)
+  const scale = ganttScale || "month";
+  const maxDepth = levelFilter==="All" ? 999 : parseInt(levelFilter)-1;
+
+  // Flatten respecting levelFilter + collapsed state
+  const allFlat=(function flatD(list,depth=0,out=[]){
+    list.forEach(t=>{
+      out.push({...t,level:depth+1,_depth:depth});
+      const isOpen = !(collapsed&&collapsed[t.id]);
+      if(t.children?.length && isOpen && depth<maxDepth) flatD(t.children,depth+1,out);
+    });
+    return out;
+  })(tasks);
+
+  // ── Date range computation ────────────────────────────────────
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0,10);
+  const MN=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+  const allDates = allFlat.flatMap(t=>[t.baseStart,t.baseEnd,t.actualStart].filter(Boolean)).map(d=>new Date(d).getTime()).filter(n=>!isNaN(n));
+  allDates.push(today.getTime());
+  const rawMin = allDates.length ? Math.min(...allDates) : today.getTime();
+  const rawMax = allDates.length ? Math.max(...allDates) : today.getTime();
+
+  // User date range override
+  const rangeFrom = ganttRange?.from ? new Date(ganttRange.from).getTime() : null;
+  const rangeTo   = ganttRange?.to   ? new Date(ganttRange.to).getTime()   : null;
+
+  // pxPerDay by scale
+  const PX_PER_DAY = {week:18, month:1.5, quarter:0.55, year:0.22}[scale] || 1.5;
+  const pxPerMs = PX_PER_DAY / 86400000;
+
+  // pStart / pEnd: user range > auto from data
+  let pStart, pEnd;
+  if(rangeFrom&&rangeTo){ pStart=new Date(rangeFrom); pEnd=new Date(rangeTo); }
+  else {
+    pStart=new Date(rawMin); pEnd=new Date(rawMax);
+    if(scale==="week"){ pStart.setDate(pStart.getDate()-7);   pEnd.setDate(pEnd.getDate()+14); }
+    else if(scale==="month"){ pStart.setDate(1); pStart.setMonth(pStart.getMonth()-1); pEnd.setDate(1); pEnd.setMonth(pEnd.getMonth()+2); }
+    else if(scale==="quarter"){ pStart.setMonth(Math.floor(pStart.getMonth()/3)*3,1); pEnd.setMonth(Math.floor(pEnd.getMonth()/3)*3+6,1); }
+    else { pStart.setMonth(0,1); pEnd.setMonth(12,1); }
+  }
+
+  // ── Build header CELLS based on scale ────────────────────────
+  // Each cell = {key, label, start(Date), widthPx}
+  const CELLS=[];
+  if(scale==="week"){
+    let d=new Date(pStart); d.setDate(d.getDate()-d.getDay()); // snap to Sunday
+    while(d<=pEnd){
+      const wNo = Math.ceil((d-new Date(d.getFullYear(),0,1))/604800000);
+      const lbl=`W${wNo}`;
+      CELLS.push({key:d.toISOString(),label:lbl,sublabel:`${MN[d.getMonth()]}`,start:new Date(d),widthPx:PX_PER_DAY*7,yr:d.getFullYear(),mo:d.getMonth()});
+      d.setDate(d.getDate()+7);
+    }
+  } else if(scale==="month"){
+    let d=new Date(pStart.getFullYear(),pStart.getMonth(),1);
+    while(d<=pEnd){ const yr=d.getFullYear(),mo=d.getMonth(); CELLS.push({key:`${yr}-${mo}`,label:MN[mo],sublabel:String(yr),start:new Date(d),widthPx:PX_PER_DAY*new Date(yr,mo+1,0).getDate(),yr,mo}); d=new Date(yr,mo+1,1); }
+  } else if(scale==="quarter"){
+    let d=new Date(pStart.getFullYear(),Math.floor(pStart.getMonth()/3)*3,1);
+    while(d<=pEnd){ const yr=d.getFullYear(),q=Math.floor(d.getMonth()/3); const qDays=[92,91,92,92][q]; CELLS.push({key:`${yr}-Q${q}`,label:`Q${q+1}`,sublabel:String(yr),start:new Date(d),widthPx:PX_PER_DAY*qDays,yr,mo:d.getMonth()}); d=new Date(yr,q*3+3,1); }
+  } else { // year
+    let d=new Date(pStart.getFullYear(),0,1);
+    while(d<=pEnd){ const yr=d.getFullYear(); const leap=yr%4===0&&(yr%100!==0||yr%400===0); CELLS.push({key:`${yr}`,label:String(yr),sublabel:"",start:new Date(d),widthPx:PX_PER_DAY*(leap?366:365),yr,mo:0}); d=new Date(yr+1,0,1); }
+  }
+  if(!CELLS.length) CELLS.push({key:"empty",label:"",sublabel:"",start:new Date(pStart),widthPx:100,yr:today.getFullYear(),mo:today.getMonth()});
+
+  // Build X-axis from cells
+  const cellX=[];  // {start,x} for each cell start
+  let cx=0; CELLS.forEach(c=>{ cellX.push({t:c.start.getTime(),x:cx}); cx+=c.widthPx; });
+  const chartWidth = cx;
+  const ROW_H=30, LBL_W=230, HDR_H=28, HDR2_H=18;
+  const toX=(ds)=>{if(!ds)return null;const ms=new Date(ds).getTime()-pStart.getTime();if(isNaN(ms))return null;return LBL_W+ms*pxPerMs;};
+  const todayX=toX(todayStr);
+  const TOTAL_HEADER=HDR_H+HDR2_H;
+  const TOTAL_W=LBL_W+chartWidth;
+  const TOTAL_H=TOTAL_HEADER+allFlat.length*ROW_H;
+  const pxPerDay=PX_PER_DAY;
+
+  // ── Dependency maps (for hover highlight) ────────────────────
+  // predsMap[id] = [dep ids this task depends on]
+  // succMap[id]  = [ids that depend on this task]
+  const predsMap={}, succMap={};
+  allFlat.forEach(t=>{
+    const deps=Array.isArray(t.dependencies)?t.dependencies.map(Number):[];
+    predsMap[t.id]=deps;
+    deps.forEach(d=>{ succMap[d]=succMap[d]||[]; succMap[d].push(t.id); });
+  });
+  // ── Broken dep detection — pred.end > succ.start = violation ──
+  const brokenSet = new Set(); // "predId-succId" keys
+  allFlat.forEach(t=>{
+    (predsMap[t.id]||[]).forEach(depId=>{
+      const pred = allFlat.find(x=>x.id===depId);
+      if(pred && pred.baseEnd && t.baseStart && new Date(pred.baseEnd)>new Date(t.baseStart))
+        brokenSet.add(`${depId}-${t.id}`);
+    });
+  });
+
+  const hovPreds = activeId ? (predsMap[activeId]||[]) : [];
+  const hovSuccs = activeId ? (succMap[activeId]||[])  : [];
+
+  // bar positions for arrows
   const pos={};
-  allFlat.forEach((t,i)=>{ pos[t.id]={y:HDR_H+i*ROW_H+ROW_H/2, bx1:toX(t.baseStart), bx2:toX(t.baseEnd)}; });
-  const LG={display:"flex",alignItems:"center",gap:5};
+  allFlat.forEach((t,i)=>{ pos[t.id]={y:TOTAL_HEADER+i*ROW_H+ROW_H/2, bx1:toX(t.baseStart), bx2:toX(t.baseEnd)}; });
+
+  const phaseColors=["#1E3A5F","#1A4731","#4A1942","#3D2900","#1A2E4A","#2D1B4E","#1F3A2F"];
+
+  const LG={display:"flex",alignItems:"center",gap:5,fontSize:11};
   return(
-   <div>
-    {/* P5 legend */}
-    <div style={{display:"flex",alignItems:"center",gap:16,padding:"7px 12px",fontSize:10.5,color:T.t3,borderBottom:`1px solid ${T.b1}`,flexWrap:"wrap",background:T.surfaceB}}>
-      <span style={LG}><span style={{width:18,height:5,borderRadius:2,background:T.blu,opacity:0.4}}/>Planned</span>
-      <span style={LG}><span style={{width:18,height:8,borderRadius:2,background:T.grn,opacity:0.85}}/>Actual</span>
-      <span style={LG}><span style={{width:18,height:5,borderRadius:2,background:"#DC2626"}}/><b style={{color:"#DC2626"}}>Critical path</b></span>
-      <span style={LG}><span style={{width:18,height:3,background:"#CBD5E1"}}/>Slack (buffer)</span>
-      <span style={LG}><svg width={22} height={9}><path d="M0,4.5 H15" stroke="#64748B" strokeWidth={1}/><path d="M15,1.5 L20,4.5 L15,7.5 Z" fill="#64748B"/></svg>Dependency</span>
-      {!hasCpm&&<span style={{color:T.t4,fontStyle:"italic"}}>critical path load ho raha…</span>}
+   <div ref={wrapRef}>
+    {/* Legend */}
+    <div style={{display:"flex",alignItems:"center",gap:14,padding:"8px 14px",fontSize:10.5,color:T.t3,borderBottom:`1px solid ${T.b1}`,flexWrap:"wrap",background:"#F8FAFC"}}>
+      <span style={LG}><span style={{width:20,height:6,borderRadius:3,background:"#3B82F6",opacity:0.45,display:"inline-block"}}/>Planned</span>
+      <span style={LG}><span style={{width:20,height:9,borderRadius:3,background:T.grn,opacity:0.9,display:"inline-block"}}/>Actual</span>
+      <span style={LG}><span style={{width:20,height:6,borderRadius:3,background:"#DC2626",display:"inline-block"}}/><b style={{color:"#DC2626"}}>Critical</b></span>
+      <span style={LG}><span style={{width:20,height:3,background:"#CBD5E1",display:"inline-block"}}/>Slack</span>
+      <span style={LG}><svg width={22} height={10}><path d="M0,5 H14" stroke="#94A3B8" strokeWidth={1.5}/><path d="M14,2 L20,5 L14,8Z" fill="#94A3B8"/></svg>Dependency</span>
+      {!hasCpm&&<span style={{color:"#F59E0B",fontSize:10,fontStyle:"italic"}}>⟳ critical path load ho raha…</span>}
+      {allFlat.length===0&&<span style={{color:T.t4,fontSize:10,fontStyle:"italic"}}>Koi task nahi — dates set karo</span>}
     </div>
+
     <svg width={TOTAL_W} height={TOTAL_H} style={{display:"block",fontFamily:"'Segoe UI',sans-serif",minWidth:TOTAL_W}}>
-      <rect x={0} y={0} width={TOTAL_W} height={HDR_H} fill="#0D1B2A"/>
-      <text x={10} y={HDR_H/2+4} fontSize={9.5} fill="rgba(255,255,255,0.55)" fontWeight="600">Task</text>
-      {MONTHS.map((mo,i)=>(
-        <g key={i}><rect x={LBL_W+i*MO_W} y={0} width={MO_W} height={HDR_H} fill={i%2===0?"#0D1B2A":"#162032"}/>
-        <text x={LBL_W+i*MO_W+MO_W/2} y={HDR_H/2+4} textAnchor="middle" fontSize={8} fill="rgba(255,255,255,0.5)">{mo.lbl}</text></g>
-      ))}
+      {/* ── MONTH HEADER ── */}
+      <rect x={0} y={0} width={TOTAL_W} height={TOTAL_HEADER} fill="#0D1B2A"/>
+      <rect x={0} y={0} width={LBL_W} height={TOTAL_HEADER} fill="#0D1B2A"/>
+      <text x={12} y={HDR_H/2+5} fontSize={10} fill="rgba(255,255,255,0.5)" fontWeight="600">PHASE / CODE</text>
+      <text x={12} y={HDR_H+HDR2_H/2+4} fontSize={9} fill="rgba(255,255,255,0.35)">Task Name</text>
+      {/* Dynamic scale cells */}
+      {(()=>{
+        let cx=LBL_W;
+        return CELLS.map((cell,i)=>{
+          const x=cx; cx+=cell.widthPx;
+          const isCurrentPeriod=cell.yr===today.getFullYear()&&(scale!=="week"?cell.mo===today.getMonth():Math.abs(cell.start-today)<7*86400000);
+          return(<g key={cell.key}>
+            <rect x={x} y={0} width={cell.widthPx} height={HDR_H} fill={i%2===0?"#0D1B2A":"#13223A"}/>
+            <rect x={x} y={HDR_H} width={cell.widthPx} height={HDR2_H} fill={i%2===0?"#162032":"#111827"}/>
+            {cell.widthPx>16&&<text x={x+cell.widthPx/2} y={HDR_H/2+5} textAnchor="middle" fontSize={Math.min(9,cell.widthPx/3.5)} fontWeight="700" fill={isCurrentPeriod?"#FCD34D":"rgba(255,255,255,0.7)"}>{cell.label}</text>}
+            {cell.widthPx>20&&cell.sublabel&&<text x={x+cell.widthPx/2} y={HDR_H+HDR2_H/2+4} textAnchor="middle" fontSize={7.5} fill="rgba(255,255,255,0.4)">{cell.sublabel}</text>}
+            <line x1={x} y1={0} x2={x} y2={TOTAL_HEADER} stroke="rgba(255,255,255,0.06)" strokeWidth={1}/>
+          </g>);
+        });
+      })()}
+      <line x1={LBL_W} y1={0} x2={LBL_W} y2={TOTAL_H} stroke="rgba(255,255,255,0.12)" strokeWidth={1}/>
+
+      {/* ── TASK ROWS ── */}
       {allFlat.map((t,i)=>{
-        const y=HDR_H+i*ROW_H;
-        const bx1=toX(t.baseStart),bx2=toX(t.baseEnd);
-        const ax1=toX(t.actualStart),ax2=t.actualEnd?toX(t.actualEnd):todayX;
-        const bw=bx1&&bx2?Math.max(2,bx2-bx1):0;
-        const aw=ax1?Math.max(2,(ax2-ax1)*t.progress/100):0;
-        const indent=t.level*10;
+        const y=TOTAL_HEADER+i*ROW_H;
+        const isPhase=t._depth===0;
+        const isPkg=t._depth===1;
+        const hasKids=t.children?.length>0;
+        const isOpen=!(collapsed&&collapsed[t.id]);
+        const bx1=toX(t.baseStart), bx2=toX(t.baseEnd);
+        const ax1=toX(t.actualStart), ax2=t.actualEnd?toX(t.actualEnd):todayX;
+        // min 4px so 1-day tasks always visible
+        const bw=bx1!=null&&bx2!=null?Math.max(4,bx2-bx1):0;
+        const prog=Number(t.progress)||0;
+        const aw=ax1!=null&&ax2!=null?Math.max(4,(ax2-ax1)*prog/100):0;
+        const indent=t._depth*14;
         const crit=cmap[t.id]?.is_critical;
         const slack=cmap[t.id]?.slack;
-        const lbl=pcm[t.id]?.code||t.no;
-        return(
-          <g key={t.id}>
-            <rect x={0} y={y} width={TOTAL_W} height={ROW_H} fill={i%2===0?T.surface:T.surfaceB}/>
-            {crit&&<rect x={0} y={y} width={3} height={ROW_H} fill="#DC2626"/>}
-            <line x1={0} y1={y+ROW_H} x2={TOTAL_W} y2={y+ROW_H} stroke={T.b1} strokeWidth={0.5}/>
-            {MONTHS.map((_,mi)=><line key={mi} x1={LBL_W+mi*MO_W} y1={y} x2={LBL_W+mi*MO_W} y2={y+ROW_H} stroke={T.b1} strokeWidth={0.5}/>)}
-            <text x={8+indent} y={y+ROW_H/2+4} fontSize={t.level===1?11:t.level===2?10:9.5} fontWeight={t.level===1?700:t.level===2?600:400} fill={crit?"#DC2626":T.t1}>{lbl} {t.name.slice(0,t.level===1?16:13)}{t.name.length>(t.level===1?16:13)?"…":""}</text>
-            {/* slack tail (buffer) */}
-            {!crit&&slack>0&&bx2&&<rect x={bx2} y={y+ROW_H/2-1.5} width={Math.max(2,Math.min(slack*pxPerDay,MO_W*5))} height={3} rx={1} fill="#CBD5E1" opacity={0.75}/>}
-            {/* planned bar — red if critical */}
-            {bx1&&bw>0&&<rect x={bx1} y={y+ROW_H/2-3} width={bw} height={5} rx={2} fill={crit?"#DC2626":T.blu} fillOpacity={crit?0.5:0.35}/>}
-            {/* actual progress bar */}
-            {ax1&&aw>0&&<rect x={ax1} y={y+ROW_H/2-5} width={aw} height={9} rx={2} fill={t.status==="Completed"?T.grn:t.status==="Ongoing"?T.blu:T.amb} fillOpacity={0.85}/>}
-            {t.dhyanRakhen&&bx1&&<circle cx={bx1-5} cy={y+ROW_H/2} r={3.5} fill="#F59E0B"/>}
-          </g>
-        );
+        const pcd=pcm[t.id]||{};
+        const rowBg=isPhase?(phaseColors[allFlat.filter((x,j)=>j<i&&x._depth===0).length%phaseColors.length]||"#1E3A5F"):i%2===0?"#FAFBFC":"white";
+        const textFill=isPhase?"rgba(255,255,255,0.9)":crit?"#DC2626":"#1E293B";
+        const barColor=isPhase?"#60A5FA":crit?"#DC2626":T.blu;
+        const name=t.name||"";
+        const maxChars=isPhase?22:isPkg?20:18;
+        const nameTrunc=name.length>maxChars?name.slice(0,maxChars)+"…":name;
+        const codeLbl=pcd.code||t.no||"";
+
+        return(<g key={t.id}>
+          {/* row background — hover/click handlers; leave handled at wrapper level */}
+          {(()=>{
+            const isPred = hovPreds.includes(t.id);
+            const isSucc = hovSuccs.includes(t.id);
+            const isAct  = activeId===t.id;
+            const isPinned = pinnedId===t.id;
+            const hlBg = isPinned?"#DBEAFE":isPred?"#EFF6FF":isSucc?"#FFF7ED":isAct?"#F0F9FF":rowBg;
+            return (<rect x={0} y={y} width={TOTAL_W} height={ROW_H} fill={hlBg}
+              onMouseEnter={e=>handleRowEnter(t.id, e.clientY)}
+              onMouseLeave={handleRowLeave}
+              onClick={()=>handleRowClick(t.id)}
+              style={{cursor:"pointer"}}/> );
+          })()}
+          {/* dep highlight left rail */}
+          {hovPreds.includes(t.id)&&<rect x={0} y={y} width={4} height={ROW_H} fill="#3B82F6"/>}
+          {hovSuccs.includes(t.id)&&<rect x={0} y={y} width={4} height={ROW_H} fill="#F59E0B"/>}
+          {/* phase left accent */}
+          {isPhase&&<rect x={0} y={y} width={4} height={ROW_H} fill={pcd.phaseColor||"#3B82F6"}/>}
+          {!isPhase&&crit&&!hovPreds.includes(t.id)&&!hovSuccs.includes(t.id)&&<rect x={0} y={y} width={3} height={ROW_H} fill="#DC2626"/>}
+          {/* pin indicator */}
+          {pinnedId===t.id&&<rect x={0} y={y} width={TOTAL_W} height={ROW_H} fill="none" stroke="#2563EB" strokeWidth={1.5} opacity={0.7}/>}
+          {/* row bottom border */}
+          <line x1={0} y1={y+ROW_H} x2={TOTAL_W} y2={y+ROW_H} stroke={isPhase?"rgba(255,255,255,0.08)":"#F1F5F9"} strokeWidth={isPhase?1:0.5}/>
+          {/* month grid lines */}
+          {(()=>{let cx2=0;return CELLS.map((c,mi)=>{const lx=LBL_W+cx2;cx2+=c.widthPx;return <line key={mi} x1={lx} y1={y} x2={lx} y2={y+ROW_H} stroke={isPhase?"rgba(255,255,255,0.04)":"#F1F5F9"} strokeWidth={0.5}/>;});})()}
+
+          {/* collapse/expand triangle (phase + package) */}
+          {hasKids&&onToggleCollapse&&(
+            <g onClick={()=>onToggleCollapse(t.id)} style={{cursor:"pointer"}}>
+              <rect x={indent+4} y={y+ROW_H/2-7} width={14} height={14} rx={3} fill={isPhase?"rgba(255,255,255,0.12)":"rgba(0,0,0,0.06)"}/>
+              <path d={isOpen?`M${indent+7},${y+ROW_H/2-2} L${indent+11},${y+ROW_H/2+3} L${indent+15},${y+ROW_H/2-2}`:`M${indent+8},${y+ROW_H/2-3} L${indent+14},${y+ROW_H/2+1} L${indent+8},${y+ROW_H/2+5}`} fill={isPhase?"white":T.t3} strokeWidth={0}/>
+            </g>
+          )}
+          {!hasKids&&<circle cx={indent+11} cy={y+ROW_H/2} r={3} fill={pcd.phaseColor||"#94A3B8"} opacity={0.6}/>}
+
+          {/* Phase code pill */}
+          {codeLbl&&<g>
+            <rect x={indent+22} y={y+ROW_H/2-8} width={codeLbl.length*6.5+8} height={16} rx={4} fill={isPhase?(pcd.phaseColor||"#3B82F6"):(pcd.phaseColor||"#E2E8F0")} opacity={isPhase?0.9:0.7}/>
+            <text x={indent+22+codeLbl.length*3.25+4} y={y+ROW_H/2+4} textAnchor="middle" fontSize={isPhase?9.5:8.5} fontWeight="700" fill="white">{codeLbl}</text>
+          </g>}
+
+          {/* Task name */}
+          <text x={indent+22+codeLbl.length*6.5+14} y={y+ROW_H/2+4} fontSize={isPhase?11:isPkg?10.5:10} fontWeight={isPhase?700:isPkg?600:400} fill={textFill}>{nameTrunc}</text>
+
+          {/* BARS */}
+          {/* slack tail */}
+          {!crit&&slack>0&&bx2!=null&&pxPerDay>0&&<rect x={bx2} y={y+ROW_H/2-1.5} width={Math.max(3,Math.min(slack*pxPerDay,pxPerDay*240))} height={3} rx={1.5} fill="#CBD5E1" opacity={0.8}/>}
+          {/* planned bar */}
+          {bx1!=null&&bw>0&&<rect x={bx1} y={y+ROW_H/2-(isPhase?4:3)} width={bw} height={isPhase?8:6} rx={isPhase?3:2} fill={barColor} fillOpacity={crit?0.55:isPhase?0.5:0.38}/>}
+          {/* actual/progress fill on planned bar */}
+          {bx1!=null&&bw>0&&prog>0&&<rect x={bx1} y={y+ROW_H/2-(isPhase?4:3)} width={Math.max(3,bw*prog/100)} height={isPhase?8:6} rx={isPhase?3:2} fill={t.status==="Completed"?T.grn:barColor} fillOpacity={0.9}/>}
+          {/* actual bar (separate, when actual dates differ) */}
+          {ax1!=null&&aw>0&&t.actualStart&&<rect x={ax1} y={y+ROW_H/2+2} width={aw} height={4} rx={2} fill={t.status==="Completed"?T.grn:T.blu} fillOpacity={0.85}/>}
+          {/* dhyan dot */}
+          {t.dhyanRakhen&&bx1!=null&&<circle cx={bx1-6} cy={y+ROW_H/2} r={3.5} fill="#F59E0B" opacity={0.9}/>}
+        </g>);
       })}
-      {/* P5: dependency arrows (predecessor end → successor start) */}
+
+      {/* ── DEPENDENCY ARROWS — highlighted when hovered ── */}
       {allFlat.map(t=>{
         const deps=Array.isArray(t.dependencies)?t.dependencies:[];
         return deps.map(dep=>{
           const a=pos[Number(dep)], b=pos[t.id];
           if(!a||!b||a.bx2==null||b.bx1==null) return null;
-          const x1=a.bx2,y1=a.y,x2=b.bx1,y2=b.y;
-          return(<g key={`${t.id}-${dep}`} opacity={0.5}>
-            <path d={`M${x1},${y1} H${x1+6} V${y2} H${x2-4}`} fill="none" stroke="#64748B" strokeWidth={1}/>
-            <path d={`M${x2-4},${y2-3} L${x2},${y2} L${x2-4},${y2+3} Z`} fill="#64748B"/>
+          const x1=a.bx2, y1=a.y, x2=b.bx1, y2=b.y;
+          const mx=x1+Math.max(10,(x2-x1)*0.4);
+          // highlight if either endpoint is hovered
+          const isBroken = brokenSet.has(`${dep}-${t.id}`);
+          const isHl = hoveredId===t.id || hoveredId===Number(dep);
+          const clr = isBroken?"#EF4444":hoveredId===Number(dep)?"#F59E0B":hoveredId===t.id?"#3B82F6":"#64748B";
+          return(<g key={`${t.id}-${dep}`} opacity={isHl||isBroken?1:0.38}>
+            <path d={`M${x1},${y1} H${mx} V${y2} H${x2-4}`} fill="none" stroke={clr} strokeWidth={isHl||isBroken?2:1.2} strokeDasharray={isBroken?"4,2":undefined}/>
+            <path d={`M${x2-5},${y2-3} L${x2},${y2} L${x2-5},${y2+3}Z`} fill={clr}/>
+            {isBroken&&<text x={(x1+x2)/2} y={Math.min(y1,y2)-3} textAnchor="middle" fontSize={8} fill="#EF4444" fontWeight="700">⚠</text>}
           </g>);
         });
       })}
-      {todayX&&<g><line x1={todayX} y1={HDR_H} x2={todayX} y2={TOTAL_H} stroke={T.red} strokeWidth={1.5} strokeDasharray="4,3"/><rect x={todayX-13} y={HDR_H-14} width={26} height={13} rx={3} fill={T.red}/><text x={todayX} y={HDR_H-4} textAnchor="middle" fontSize={7.5} fill="white" fontWeight="700">TODAY</text></g>}
+      {/* ── TODAY LINE ── */}
+      {todayX!=null&&<g>
+        <line x1={todayX} y1={TOTAL_HEADER} x2={todayX} y2={TOTAL_H} stroke="#EF4444" strokeWidth={1.5} strokeDasharray="5,3" opacity={0.8}/>
+        <rect x={todayX-16} y={TOTAL_HEADER-14} width={32} height={13} rx={4} fill="#EF4444"/>
+        <text x={todayX} y={TOTAL_HEADER-4} textAnchor="middle" fontSize={7.5} fill="white" fontWeight="800">TODAY</text>
+      </g>}
     </svg>
+
+    {/* ── HTML DEP PANEL — floats near cursor, stays alive on mouse-enter ── */}
+    {(()=>{
+      const tid = pinnedId ?? hoveredId;
+      if(!tid) return null;
+      const task = allFlat.find(t=>t.id===tid);
+      if(!task) return null;
+      const preds = (predsMap[tid]||[]).map(id=>allFlat.find(t=>t.id===id)).filter(Boolean);
+      const succs = (succMap[tid]||[]).map(id=>allFlat.find(t=>t.id===id)).filter(Boolean);
+      if(preds.length===0 && succs.length===0 && !pinnedId) return null;
+      const isPinned = pinnedId===tid;
+      const px = Math.min(panelPos.x+16, (typeof window!=="undefined"?window.innerWidth:1200)-290);
+      const py = Math.min(panelPos.y+10,  (typeof window!=="undefined"?window.innerHeight:800)-220);
+      const rmBtn = (onClick)=>(
+        <button onClick={onClick} title="Hatao"
+          style={{background:"rgba(239,68,68,0.15)",border:"1px solid rgba(239,68,68,0.35)",cursor:"pointer",color:"#F87171",padding:"1px 6px",borderRadius:4,fontSize:12,fontWeight:700,lineHeight:1,flexShrink:0}}>×</button>
+      );
+      return(
+        <div onMouseEnter={handlePanelEnter} onMouseLeave={handlePanelLeave}
+          style={{position:"fixed",left:px,top:py,zIndex:9999,background:"#1E293B",borderRadius:10,padding:"12px 14px",minWidth:248,maxWidth:300,
+            boxShadow:"0 12px 36px rgba(0,0,0,0.5)",fontSize:12,color:"white",fontFamily:"'Segoe UI',sans-serif",pointerEvents:"all",
+            border:isPinned?"1px solid rgba(59,130,246,0.5)":"1px solid rgba(255,255,255,0.08)"}}>
+          {/* Header */}
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
+            <div style={{fontWeight:700,fontSize:12,color:"white",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,marginRight:6}}>
+              <span style={{opacity:.5,fontSize:10,fontFamily:"monospace",marginRight:4}}>{task.no||""}</span>{task.name}
+            </div>
+            {isPinned&&<button onClick={()=>setPinnedId(null)}
+              style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.4)",display:"flex",padding:0,flexShrink:0}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>}
+            {!isPinned&&<span style={{fontSize:9,color:"rgba(255,255,255,0.3)",flexShrink:0}}>click = pin</span>}
+          </div>
+
+          {/* Depends on */}
+          <div style={{marginBottom:8}}>
+            <div style={{fontSize:9.5,fontWeight:700,color:"#60A5FA",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>
+              Depends on ({preds.length})
+            </div>
+            {preds.length===0
+              ?<div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontStyle:"italic"}}>koi nahi</div>
+              :preds.map(p=>(
+                <div key={p.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                  <span style={{opacity:.45,fontSize:9,fontFamily:"monospace",flexShrink:0}}>{p.no||""}</span>
+                  <span style={{flex:1,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{p.name}</span>
+                  {rmBtn(()=>onRemoveDep&&onRemoveDep(tid,p.id))}
+                </div>
+              ))
+            }
+          </div>
+
+          {/* Required by */}
+          <div style={{marginBottom:isPinned?10:0}}>
+            <div style={{fontSize:9.5,fontWeight:700,color:"#FB923C",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>
+              Required by ({succs.length})
+            </div>
+            {succs.length===0
+              ?<div style={{fontSize:11,color:"rgba(255,255,255,0.3)",fontStyle:"italic"}}>koi nahi</div>
+              :succs.map(s=>(
+                <div key={s.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 0",borderBottom:"1px solid rgba(255,255,255,0.05)"}}>
+                  <span style={{opacity:.45,fontSize:9,fontFamily:"monospace",flexShrink:0}}>{s.no||""}</span>
+                  <span style={{flex:1,fontSize:11,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                  {rmBtn(()=>onRemoveDep&&onRemoveDep(s.id,tid))}
+                </div>
+              ))
+            }
+          </div>
+
+          {/* Quick-add dep — only when pinned */}
+          {isPinned&&(
+            <div style={{borderTop:"1px solid rgba(255,255,255,0.1)",paddingTop:9}}>
+              <div style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".6px",marginBottom:5}}>
+                + Dependency add karo
+              </div>
+              <input value={addSearchQ} onChange={e=>setAddSearchQ(e.target.value)}
+                placeholder="Task code ya naam type karo..."
+                style={{width:"100%",padding:"6px 8px",borderRadius:6,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.07)",
+                  color:"white",fontSize:11,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              {addSearchQ&&(
+                <div style={{marginTop:4,maxHeight:130,overflowY:"auto"}}>
+                  {allFlat
+                    .filter(t=>t.id!==tid&&!(predsMap[tid]||[]).includes(t.id)
+                      &&(t.name.toLowerCase().includes(addSearchQ.toLowerCase())||(t.no||"").toLowerCase().includes(addSearchQ.toLowerCase())))
+                    .slice(0,8)
+                    .map(t=>(
+                      <div key={t.id} onClick={()=>{onAddDep&&onAddDep(tid,t.id);setAddSearchQ("");}}
+                        style={{padding:"4px 7px",borderRadius:5,cursor:"pointer",fontSize:11,color:"rgba(255,255,255,0.85)",
+                          display:"flex",alignItems:"center",gap:5}}
+                        onMouseEnter={e=>e.currentTarget.style.background="rgba(59,130,246,0.25)"}
+                        onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <span style={{opacity:.45,fontSize:9,fontFamily:"monospace",flexShrink:0}}>{t.no||""}</span>
+                        <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.name}</span>
+                      </div>
+                    ))
+                  }
+                  {allFlat.filter(t=>t.id!==tid&&!(predsMap[tid]||[]).includes(t.id)
+                    &&(t.name.toLowerCase().includes(addSearchQ.toLowerCase())||(t.no||"").toLowerCase().includes(addSearchQ.toLowerCase()))).length===0
+                    &&<div style={{fontSize:11,color:"rgba(255,255,255,0.35)",padding:"6px 4px"}}>Koi task nahi mila</div>
+                  }
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      );
+    })()}
    </div>
   );
 }
