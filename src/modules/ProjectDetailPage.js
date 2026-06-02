@@ -2019,24 +2019,64 @@ function TabEstimate({ project }) {
 
   const exportBoqPdf = () => {
     const esc = (s) => String(s ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-    const rows = flattenBoqRows();
-    const grand = rows.reduce((s, r) => s + r.amount, 0);
-    const bySec = {};
-    for (const r of rows) { (bySec[r.section] ||= []).push(r); }
+    const inr = (n) => "₹" + (Number(n)||0).toLocaleString("en-IN");
+
+    // ── Build body from estDetail.sections so we can honour the EXACT
+    // on-screen fold state: a collapsed section prints only its header
+    // row; a collapsed category prints only its sub-header. Mirrors the
+    // [Category] prefix parsing the live render uses.
     let body = "";
-    for (const [secName, items] of Object.entries(bySec)) {
-      const secTotal = items.reduce((s, r) => s + r.amount, 0);
-      body += `<tr class="sec"><td colspan="5">${esc(secName)}</td><td class="r">₹${secTotal.toLocaleString("en-IN")}</td></tr>`;
-      let lastCat = null;
-      for (const r of items) {
-        if (r.category && r.category !== lastCat) {
-          lastCat = r.category;
-          const catTotal = items.filter(x => x.category === r.category).reduce((s, x) => s + x.amount, 0);
-          body += `<tr class="cat"><td colspan="5">${esc(r.category)}</td><td class="r">₹${catTotal.toLocaleString("en-IN")}</td></tr>`;
+    let grand = 0;
+    for (const sec of (estDetail?.sections || [])) {
+      const items = sec.items || [];
+      const secTotal = items.reduce((s,i)=> s + (parseFloat(i.amount)||0), 0);
+      grand += secTotal;
+      const secCollapsed = collapsedSecs.has(sec.id);
+      body += `<tr class="sec"><td colspan="5">${secCollapsed ? "▸ " : "▾ "}${esc(sec.title||"")}</td><td class="r">${inr(secTotal)}</td></tr>`;
+      if (secCollapsed) continue;
+      // Group items by category
+      const groups = {}; const catOrder = [];
+      for (const it of items) {
+        const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
+        const cat = m ? m[1] : "";
+        const clean = m ? m[2] : (it.description || "");
+        (groups[cat] ||= []); if (!catOrder.includes(cat)) catOrder.push(cat);
+        groups[cat].push({ ...it, _clean: clean });
+      }
+      for (const cat of catOrder) {
+        const gi = groups[cat];
+        const catTotal = gi.reduce((s,i)=> s + (parseFloat(i.amount)||0), 0);
+        const catKey = `${sec.id}::${cat}`;
+        const catCollapsed = !!cat && collapsedCats.has(catKey);
+        if (cat) body += `<tr class="cat"><td colspan="5">${catCollapsed ? "▸ " : "▾ "}${esc(cat)}</td><td class="r">${inr(catTotal)}</td></tr>`;
+        if (catCollapsed) continue;
+        for (const it of gi) {
+          body += `<tr><td class="it">${esc(it._clean)}</td><td>${esc(it.unit||"")}</td><td class="r">${(parseFloat(it.qty)||0).toLocaleString("en-IN")}</td><td class="r">${inr(it.rate)}</td><td class="r">${inr(it.amount)}</td><td></td></tr>`;
         }
-        body += `<tr><td class="it">${esc(r.item)}</td><td>${esc(r.unit)}</td><td class="r">${r.qty.toLocaleString("en-IN")}</td><td class="r">₹${r.rate.toLocaleString("en-IN")}</td><td class="r">₹${r.amount.toLocaleString("en-IN")}</td><td></td></tr>`;
       }
     }
+
+    // ── Tax / charge summary (uses estimate header %s) ──
+    const retPct = parseFloat(selEst?.retention_pct)||0;
+    const tdsPct = parseFloat(selEst?.tds_pct)||0;
+    const taxPct = parseFloat(selEst?.tax_pct)||0;
+    const retAmt = Math.round(grand * retPct/100);
+    const tdsAmt = Math.round(grand * tdsPct/100);
+    const taxAmt = Math.round(grand * taxPct/100);
+    const net    = grand - retAmt - tdsAmt + taxAmt;
+    let summary = `<div class="row"><span>Gross Amount</span><span>${inr(grand)}</span></div>`;
+    if (retPct) summary += `<div class="row ret"><span>Retention (${retPct}%)</span><span>− ${inr(retAmt)}</span></div>`;
+    if (tdsPct) summary += `<div class="row tds"><span>TDS (${tdsPct}%)</span><span>− ${inr(tdsAmt)}</span></div>`;
+    if (taxPct) summary += `<div class="row"><span>Tax (${taxPct}%)</span><span>+ ${inr(taxAmt)}</span></div>`;
+    summary += `<div class="row net"><span>NET PAYABLE</span><span>${inr(net)}</span></div>`;
+
+    // ── Notes / Terms & Conditions ──
+    const notes = (selEst?.description || "").trim();
+    const terms = (selEst?.remark || "").trim();
+    let termsBlock = "";
+    if (notes) termsBlock += `<div class="tc"><div class="tch">Notes</div><div class="tcb">${esc(notes)}</div></div>`;
+    if (terms) termsBlock += `<div class="tc"><div class="tch">Terms &amp; Conditions</div><div class="tcb">${esc(terms)}</div></div>`;
+
     const w = window.open("", "_blank");
     if (!w) { window.alert("Pop-up blocked — allow pop-ups to export PDF."); return; }
     const today = new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
@@ -2045,6 +2085,9 @@ function TabEstimate({ project }) {
       <style>
         body{font-family:'Segoe UI',system-ui,sans-serif;color:#111827;margin:22px;font-size:12px}
         h1{font-size:18px;margin:0 0 2px}.sub{font-size:11px;color:#6B7280;margin-bottom:14px}
+        .meta{display:flex;flex-wrap:wrap;gap:18px;margin:10px 0 16px;padding:10px 14px;background:#F8F9FB;border:1px solid #E5E7EB;border-radius:8px}
+        .meta div{font-size:11px}.meta .l{color:#6B7280;text-transform:uppercase;letter-spacing:.3px;font-size:9.5px}
+        .meta .v{font-weight:700;color:#111827;font-size:12.5px}
         table{width:100%;border-collapse:collapse}
         th{background:#EFF6FF;color:#1D4ED8;text-align:left;padding:7px 9px;font-size:10px;text-transform:uppercase;letter-spacing:.3px;border-bottom:2px solid #BFDBFE}
         td{padding:6px 9px;border-bottom:1px solid #F3F4F6}
@@ -2052,18 +2095,30 @@ function TabEstimate({ project }) {
         tr.sec td{background:#EFF6FF;color:#1D4ED8;font-weight:800;border-top:1px solid #BFDBFE}
         tr.cat td{background:#F1F5F9;color:#111827;font-weight:700;padding-left:16px}
         td.it{padding-left:24px}
-        tr.grand td{background:#ECFDF5;color:#059669;font-weight:800;font-size:13px;border-top:2px solid #A7F3D0}
-        .footer{margin-top:18px;font-size:10px;color:#9CA3AF;text-align:center}
+        .totals{margin-top:16px;width:300px;margin-left:auto;border:1px solid #E5E7EB;border-radius:8px;overflow:hidden}
+        .totals .row{display:flex;justify-content:space-between;padding:7px 14px;border-bottom:1px solid #F3F4F6;font-size:12px}
+        .totals .row.ret{color:#D97706}.totals .row.tds{color:#DC2626}
+        .totals .row.net{background:#ECFDF5;color:#059669;font-weight:800;font-size:13px;border-bottom:none}
+        .tc{margin-top:16px}.tch{font-size:10.5px;font-weight:800;color:#374151;text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
+        .tcb{font-size:11.5px;color:#4B5563;white-space:pre-wrap;line-height:1.5}
+        .footer{margin-top:22px;font-size:10px;color:#9CA3AF;text-align:center}
         @media print{body{margin:12mm}}
       </style></head><body>
         <h1>Bill of Quantities</h1>
-        <div class="sub">${esc(selEst?.estimate_no || "")} · ${esc(selEst?.customer_name || "")} · ${esc(project?.name || "")} · Generated ${today}</div>
+        <div class="sub">Generated ${today}</div>
+        <div class="meta">
+          <div><div class="l">Estimate</div><div class="v">${esc(selEst?.estimate_no || "—")}</div></div>
+          <div><div class="l">Customer</div><div class="v">${esc(selEst?.customer_name || "—")}</div></div>
+          <div><div class="l">Project</div><div class="v">${esc(project?.name || "—")}</div></div>
+          <div><div class="l">Billing</div><div class="v">${esc(selEst?.billing_method || "—")}</div></div>
+        </div>
         <table>
           <tr><th>Description</th><th>Unit</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th><th style="text-align:right">Subtotal</th></tr>
           ${body}
-          <tr class="grand"><td colspan="5">GRAND TOTAL</td><td class="r">₹${grand.toLocaleString("en-IN")}</td></tr>
         </table>
-        <div class="footer">Generated by GB Buildcon</div>
+        <div class="totals">${summary}</div>
+        ${termsBlock}
+        <div class="footer">Generated by GB Buildcon · ${esc(selEst?.estimate_no || "")}</div>
       </body></html>`);
     w.document.close();
     setTimeout(() => w.print(), 400);
@@ -8235,22 +8290,30 @@ function StartDateModal({ mode, projectId, currentStart, phaseList, onClose, onD
             const changeMap = {};
             allChanges.forEach(c=>{ changeMap[String(c.id)] = c; });
             const fmtD = d => d ? new Date(d+"T00:00:00").toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"2-digit"}) : "—";
-            // Use phaseList (from parent tasks tree) — guaranteed ALL phases, correct order
             const list = phaseList||[];
-            const subCount = totalChanged - list.filter(p=>changeMap[String(p.id)]).length;
+            // Compute shift from first changed task — backend omits cascaded tasks from preview
+            const firstC = allChanges.find(c=>c.old_start&&c.new_start&&c.old_start!==c.new_start);
+            const shiftDays = firstC ? Math.round((new Date(firstC.new_start)-new Date(firstC.old_start))/86400000) : 0;
+            const addDays = (ds,n)=>{ if(!ds)return null; const d=new Date(ds+"T00:00:00"); d.setDate(d.getDate()+n); return d.toISOString().slice(0,10); };
+            const subCount = Math.max(0, totalChanged - list.length);
             return(
               <div style={{background:"#F8FAFC",border:"1px solid #E2E8F0",borderRadius:8,padding:"10px 12px",marginBottom:4}}>
                 <div style={{fontSize:11,fontWeight:700,color:"#374151",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
-                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#2563EB" strokeWidth={2}><path d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2z"/></svg>
                   Phase-wise schedule — {totalChanged} tasks badlenge
+                  {shiftDays!==0&&<span style={{fontSize:10,fontWeight:600,color:shiftDays<0?"#16A34A":"#DC2626",
+                    background:shiftDays<0?"#DCFCE7":"#FEE2E2",padding:"1px 7px",borderRadius:10}}>
+                    {shiftDays>0?"+":""}{shiftDays} din
+                  </span>}
                 </div>
                 {list.length===0
                   ? <div style={{fontSize:11,color:"#94A3B8",textAlign:"center",padding:"10px 0"}}>Apply karne pe sab dates update hongi</div>
                   : list.map((ph,i)=>{
-                      const c = changeMap[String(ph.id)];
-                      const newStart = c?.new_start;
+                      const c        = changeMap[String(ph.id)];
                       const oldStart = c?.old_start || ph.baseStart;
+                      const newStart = c?.new_start || (shiftDays!==0&&ph.baseStart ? addDays(ph.baseStart,shiftDays) : null);
                       const changed  = newStart && oldStart && oldStart!==newStart;
+                      const isEst    = !c && changed;
                       return(
                         <div key={ph.id||i} style={{display:"flex",alignItems:"center",justifyContent:"space-between",
                           padding:"7px 9px",borderRadius:6,marginBottom:3,
@@ -8259,17 +8322,15 @@ function StartDateModal({ mode, projectId, currentStart, phaseList, onClose, onD
                           <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0,flex:1}}>
                             <div style={{width:8,height:8,borderRadius:2,background:changed?"#2563EB":"#CBD5E1",flexShrink:0}}/>
                             <span style={{fontSize:12,fontWeight:600,color:changed?"#1E293B":"#94A3B8",
-                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
-                              {ph.name}
-                            </span>
+                              overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ph.name}</span>
+                            {isEst&&<span style={{fontSize:9,color:"#94A3B8",flexShrink:0,fontStyle:"italic"}}>~</span>}
                           </div>
                           <div style={{display:"flex",alignItems:"center",gap:5,flexShrink:0,marginLeft:8,whiteSpace:"nowrap"}}>
                             {changed
                               ? <><span style={{fontSize:10.5,color:"#94A3B8",textDecoration:"line-through"}}>{fmtD(oldStart)}</span>
                                   <span style={{color:"#CBD5E1",fontSize:10,margin:"0 2px"}}>→</span>
                                   <span style={{fontSize:11.5,fontWeight:700,color:"#1D4ED8"}}>{fmtD(newStart)}</span></>
-                              : <span style={{fontSize:10.5,color:"#CBD5E1"}}>unchanged</span>
-                            }
+                              : <span style={{fontSize:10.5,color:"#CBD5E1"}}>—</span>}
                           </div>
                         </div>
                       );
