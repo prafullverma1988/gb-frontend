@@ -2057,7 +2057,7 @@ function TabEstimate({ project }) {
         @media print{body{margin:12mm}}
       </style></head><body>
         <h1>Bill of Quantities</h1>
-        <div class="sub">${esc(selEst?.estimate_no || "")} · ${esc(selEst?.customer_name || "")} · ${esc(projectName || "")} · Generated ${today}</div>
+        <div class="sub">${esc(selEst?.estimate_no || "")} · ${esc(selEst?.customer_name || "")} · ${esc(project?.name || "")} · Generated ${today}</div>
         <table>
           <tr><th>Description</th><th>Unit</th><th style="text-align:right">Qty</th><th style="text-align:right">Rate</th><th style="text-align:right">Amount</th><th style="text-align:right">Subtotal</th></tr>
           ${body}
