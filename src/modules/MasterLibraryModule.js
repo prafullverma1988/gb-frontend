@@ -913,10 +913,55 @@ function PartyMasterSection() {
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
   const [saving, setSaving] = useState(false);
-  const emptyForm = { name: "", type: "Material Vendor", gstin: "", pan: "", phone: "", email: "", address: "", city: "Raipur", opening_balance: 0, staff_subtype: "", designation: "", wallet_limit: "", negative_limit: "" };
+  const emptyForm = { name: "", type: "Material Vendor", roles: ["material_vendor"], gstin: "", pan: "", phone: "", email: "", address: "", city: "Raipur", opening_balance: 0, staff_subtype: "", designation: "", wallet_limit: "", negative_limit: "" };
   const [form, setForm] = useState(emptyForm);
   const [saveErr, setSaveErr] = useState("");
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  // ── Multi-role support ──────────────────────────────────────────
+  // A party can hold several roles (Material Vendor + Subcon + Transporter).
+  // Staff is EXCLUSIVE — selecting it clears the others and vice-versa.
+  const ROLE_OPTIONS = [
+    { key: "material_vendor", label: "Material Vendor" },
+    { key: "client",          label: "Client" },
+    { key: "subcontractor",   label: "Subcontractor" },
+    { key: "labour_vendor",   label: "Labour Vendor" },
+    { key: "transporter",     label: "Transporter" },
+    { key: "consultant",      label: "Consultant" },
+    { key: "staff",           label: "Staff" },
+  ];
+  const ROLE_ALIAS = {
+    "material vendor":"material_vendor","material supplier":"material_vendor","supplier":"material_vendor","vendor":"material_vendor","other vendor":"material_vendor",
+    "client":"client","subcontractor":"subcontractor","sub-contractor":"subcontractor","subcon":"subcontractor",
+    "labour vendor":"labour_vendor","labor vendor":"labour_vendor","transporter":"transporter","consultant":"consultant","staff":"staff",
+  };
+  const toRoleKey = (v) => {
+    if (!v) return null;
+    const k = String(v).toLowerCase().trim();
+    return ROLE_ALIAS[k] || (ROLE_OPTIONS.some(o => o.key === k) ? k : null);
+  };
+  // Parse a party's stored roles (comma-string) + legacy type → key array.
+  const parsePartyRoles = (p) => {
+    const set = [];
+    if (p?.roles) String(p.roles).split(",").forEach(r => { const c = toRoleKey(r); if (c && !set.includes(c)) set.push(c); });
+    if (set.length === 0) { const c = p?.is_staff ? "staff" : toRoleKey(p?.type); if (c) set.push(c); }
+    return set.length ? set : ["material_vendor"];
+  };
+  // Toggle a role in the form; enforce staff-exclusivity.
+  const toggleRole = (key) => setForm(p => {
+    const cur = Array.isArray(p.roles) ? p.roles : [];
+    let next;
+    if (key === "staff") {
+      next = cur.includes("staff") ? [] : ["staff"];            // staff stands alone
+    } else {
+      const without = cur.filter(r => r !== "staff");           // picking any non-staff drops staff
+      next = without.includes(key) ? without.filter(r => r !== key) : [...without, key];
+    }
+    if (next.length === 0) next = ["material_vendor"];          // never empty
+    // primary = first role → drives the `type`/staff logic
+    const primary = next[0];
+    return { ...p, roles: next, type: primary === "staff" ? "Staff" : (ROLE_OPTIONS.find(o => o.key === primary)?.label || p.type) };
+  });
 
   // "Material Vendor" is the canonical UI label. We still recognise legacy
   // values ("Supplier" / "Material Supplier") so existing parties show up
@@ -924,17 +969,17 @@ function PartyMasterSection() {
   // app users get a staff-party automatically; this is for off-app casual staff.
   const types = ["All", "Material Vendor", "Client", "Subcontractor", "Labour Vendor", "Transporter", "Consultant", "Staff"];
   const typeColors = { "Material Vendor": { c: T.blue, bg: T.blueSoft }, Supplier: { c: T.blue, bg: T.blueSoft }, "Material Supplier": { c: T.blue, bg: T.blueSoft }, Client: { c: T.green, bg: T.greenSoft }, Subcontractor: { c: T.purple, bg: T.purpleSoft }, "Labour Vendor": { c: T.amber, bg: T.amberSoft }, Transporter: { c: T.amber, bg: T.amberSoft }, Consultant: { c: T.teal, bg: T.tealSoft }, Staff: { c: T.teal, bg: T.tealSoft }, staff: { c: T.teal, bg: T.tealSoft } };
-  const isStaffForm = form.type === "Staff";
-  // Map any legacy supplier-like value to the new canonical chip
-  const SUPPLIER_LIKE = new Set(["supplier", "material supplier", "material vendor", "vendor", "other vendor"]);
+  const isStaffForm = Array.isArray(form.roles) ? form.roles.includes("staff") : form.type === "Staff";
 
   const filtered = parties.filter(p => {
-    const ptype = (p.type || "").toLowerCase();
-    if (filterType === "Material Vendor") {
-      if (!SUPPLIER_LIKE.has(ptype)) return false;
-    } else if (filterType === "Staff") {
+    // Role-aware filter: a multi-role party shows under EACH of its roles.
+    if (filterType === "Staff") {
       if (!p.is_staff) return false;
-    } else if (filterType !== "All" && ptype !== filterType.toLowerCase()) return false;
+    } else if (filterType !== "All") {
+      const wantKey = toRoleKey(filterType);
+      const partyKeys = parsePartyRoles(p);
+      if (wantKey && !partyKeys.includes(wantKey)) return false;
+    }
     const s = search.toLowerCase();
     if (s && !p.name?.toLowerCase().includes(s) && !(p.phone||"").includes(s) && !(p.city||"").toLowerCase().includes(s)) return false;
     return true;
@@ -945,6 +990,7 @@ function PartyMasterSection() {
     setEditing(p); setSaveErr("");
     setForm({
       name: p.name||"", type: p.is_staff ? "Staff" : (p.type||"Material Vendor"),
+      roles: parsePartyRoles(p),
       gstin: p.gstin||"", pan: p.pan||"", phone: p.phone||"", email: p.email||"",
       address: p.address||"", city: p.city||"", opening_balance: p.opening_balance||0,
       staff_subtype: p.staff_subtype||"", designation: p.designation||"",
@@ -977,6 +1023,9 @@ function PartyMasterSection() {
         payload = { ...form };
         delete payload.staff_subtype; delete payload.designation;
         delete payload.wallet_limit; delete payload.negative_limit;
+        // Send the multi-role array; backend stores comma-joined roles +
+        // sets type=primary. `type` still included for older-backend safety.
+        payload.roles = Array.isArray(form.roles) && form.roles.length ? form.roles : [toRoleKey(form.type) || "material_vendor"];
       }
       if (editing) {
         const res = await api.put("/finance/parties/" + editing.id, payload);
@@ -1051,10 +1100,19 @@ function PartyMasterSection() {
         ) : null}
       </span>
     )},
-    { key: "type", label: "Type", minW: 100, render: r => {
-      const label = r.is_staff ? "Staff" : (r.type || "—");
-      const tc = typeColors[label] || typeColors[r.type] || { c: T.textMid, bg: T.borderLight };
-      return <Badge text={label} color={tc.c} bg={tc.bg} />;
+    { key: "type", label: "Roles", minW: 160, render: r => {
+      // Multi-role: render one badge per role. Falls back to legacy type.
+      const keys = parsePartyRoles(r);
+      const keyToLabel = { material_vendor:"Material Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
+      return (
+        <span style={{ display:"inline-flex", flexWrap:"wrap", gap:4 }}>
+          {keys.map(k => {
+            const label = keyToLabel[k] || k;
+            const tc = typeColors[label] || { c: T.textMid, bg: T.borderLight };
+            return <Badge key={k} text={label} color={tc.c} bg={tc.bg} />;
+          })}
+        </span>
+      );
     }},
     { key: "phone", label: "Phone", minW: 130, style: { fontFamily: "monospace", fontSize: 12 } },
     { key: "city", label: "City", minW: 80 },
@@ -1081,9 +1139,45 @@ function PartyMasterSection() {
         {saveErr ? (
           <div style={{ background: T.redSoft, border: `1px solid ${T.red}55`, color: T.red, fontSize: 12.5, padding: "8px 12px", borderRadius: 8, marginBottom: 12 }}>{saveErr}</div>
         ) : null}
-        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
-          <FormField label="Party Name" value={form.name} onChange={v => upd("name", v)} placeholder="Full legal name" half required disabled={editingLinkedStaff} />
-          <FormSelect label="Type" value={form.type} onChange={v => upd("type", v)} options={types.filter(t => t !== "All")} half required disabled={!!editing} />
+        <div style={{ marginBottom: 14 }}>
+          <FormField label="Party Name" value={form.name} onChange={v => upd("name", v)} placeholder="Full legal name" required disabled={editingLinkedStaff} />
+        </div>
+        {/* ── Multi-role selector ── ek party kai roles me ho sakti hai ── */}
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: T.text, marginBottom: 6 }}>
+            Roles <span style={{ color: T.red }}>*</span>
+            <span style={{ fontWeight: 400, color: T.textMid, fontSize: 11, marginLeft: 6 }}>
+              (ek se zyada select kar sakte ho — e.g. Material Vendor + Subcontractor)
+            </span>
+          </div>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {ROLE_OPTIONS.map(opt => {
+              const active = Array.isArray(form.roles) && form.roles.includes(opt.key);
+              const col = typeColors[opt.label] || { c: T.blue, bg: T.blueSoft };
+              const staffLocked = !!editing && (opt.key === "staff" ? !form.roles?.includes("staff") : form.roles?.includes("staff"));
+              return (
+                <button key={opt.key} type="button"
+                  onClick={() => !staffLocked && toggleRole(opt.key)}
+                  disabled={staffLocked}
+                  style={{
+                    padding: "6px 13px", borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: staffLocked ? "not-allowed" : "pointer",
+                    border: `1.5px solid ${active ? col.c : T.border}`,
+                    background: active ? col.bg : "white",
+                    color: active ? col.c : T.textMid,
+                    opacity: staffLocked ? 0.4 : 1,
+                    display: "flex", alignItems: "center", gap: 5, transition: "all .12s",
+                  }}>
+                  {active && <span style={{ fontSize: 11 }}>✓</span>}
+                  {opt.label}
+                </button>
+              );
+            })}
+          </div>
+          {isStaffForm && (
+            <div style={{ fontSize: 10.5, color: T.textMid, marginTop: 6, fontStyle: "italic" }}>
+              Staff alag category hai (wallet + app-user) — ye dusre roles ke saath combine nahi hoti.
+            </div>
+          )}
         </div>
         {editingLinkedStaff ? (
           <div style={{ fontSize: 11, color: T.textMid, marginTop: -8, marginBottom: 12 }}>

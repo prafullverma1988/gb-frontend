@@ -1562,11 +1562,16 @@ function ProcurementModule(){
     api.get("/finance/parties").then(res=>{
       if(res.success&&res.data){
         const isVendorType = (p) => {
+          // Multi-role aware: check the roles field (comma-separated
+          // canonical keys) first, then fall back to legacy `type`.
+          // A party that is ALSO a material vendor shows here even if its
+          // primary type is something else.
+          const roleStr = String(p?.roles || "").toLowerCase();
+          if (roleStr) {
+            if (/(^|,)\s*(material_vendor|transporter)\s*(,|$)/.test(roleStr)) return true;
+          }
           const t = String(p?.type || "").toLowerCase().trim();
           if (!t) return false;
-          // Anything containing "vendor" or "supplier" — covers
-          // "Supplier", "Material Supplier", "Other Vendor", "Labour
-          // Vendor", "EqVendor", etc. Excludes clients, sub-con, staff.
           if (t === "client" || t === "staff" || t.includes("sub-con") || t.includes("subcon")) return false;
           return t.includes("vendor") || t.includes("supplier");
         };

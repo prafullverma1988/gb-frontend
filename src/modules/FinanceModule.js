@@ -598,9 +598,27 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const PROJECTS_LIST=dbProjects?.length?dbProjects:[];
   // Case-insensitive type matching — DB has mixed casing ("client", "Supplier", "subcontractor", "Labour Vendor")
   const _ptype = (p) => String(p?.type||"").toLowerCase().trim();
-  const CLIENT_LIST=dbParties?.length?dbParties.filter(p=>_ptype(p)==="client").map(p=>p.name):[];
-  const SUPPLIER_LIST=dbParties?.length?dbParties.filter(p=>{const t=_ptype(p);return t==="supplier"||t==="material supplier"||t==="material_supplier";}).map(p=>p.name):[];
-  const SUBCON_LIST=dbParties?.length?dbParties.filter(p=>{const t=_ptype(p);return t==="sub-con"||t==="subcon"||t==="contractor"||t==="subcontractor";}).map(p=>p.name):[];
+  // ── Multi-role aware membership ──────────────────────────────────
+  // A party can hold several roles (parties.roles = comma-separated
+  // canonical keys). A material vendor that's ALSO a subcontractor must
+  // appear in BOTH the material-bill AND the sub-con picker. Check the
+  // roles field first, fall back to legacy `type` for un-migrated rows.
+  const _ROLE_ALIAS = {
+    "material vendor":"material_vendor","material supplier":"material_vendor","material_supplier":"material_vendor","supplier":"material_vendor","vendor":"material_vendor","other vendor":"material_vendor",
+    "client":"client","subcontractor":"subcontractor","sub-contractor":"subcontractor","sub-con":"subcontractor","subcon":"subcontractor","contractor":"subcontractor",
+    "labour vendor":"labour_vendor","labor vendor":"labour_vendor","transporter":"transporter","consultant":"consultant","staff":"staff",
+  };
+  const _canon = (v) => { const k=String(v||"").toLowerCase().trim(); return _ROLE_ALIAS[k]||k; };
+  const _phasRole = (p, roleKey) => {
+    const want = _canon(roleKey);
+    if (p?.roles) {
+      for (const r of String(p.roles).split(",")) if (_canon(r) === want) return true;
+    }
+    return _canon(p?.type) === want;
+  };
+  const CLIENT_LIST=dbParties?.length?dbParties.filter(p=>_phasRole(p,"client")).map(p=>p.name):[];
+  const SUPPLIER_LIST=dbParties?.length?dbParties.filter(p=>_phasRole(p,"material_vendor")).map(p=>p.name):[];
+  const SUBCON_LIST=dbParties?.length?dbParties.filter(p=>_phasRole(p,"subcontractor")).map(p=>p.name):[];
   // Staff parties — internal users with a wallet row (parties.is_staff=1).
   // Treated as party-equivalent for both inflow (Payment Received = admin
   // receives from a staff wallet, e.g. reimbursement / wallet drain) and
