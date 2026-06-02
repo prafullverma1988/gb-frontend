@@ -150,10 +150,24 @@ function Toolbar({ search, setSearch, count, label, onAdd, addLabel, filterEl, o
 }
 
 // Data table
-// onRowClick (optional)  → makes each row clickable (e.g. open detail drawer)
-// hideActions (optional)  → hides the trailing Actions column (edit/delete
-//                           move into the detail drawer instead)
-function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, emptyMsg = "No items found" }) {
+// Optional props:
+//   onRowClick  → caller-driven row click (used by the custom Party drawer)
+//   hideActions → suppress the trailing Actions column
+//   noDetail    → opt OUT of the auto detail-drawer for an edit/delete table
+//
+// AUTO DETAIL DRAWER:
+//   When a table has BOTH onEdit + onDelete and does NOT set hideActions /
+//   onRowClick / noDetail, every row becomes clickable and opens a generic
+//   right side-slide drawer that lists all columns (label → value) with
+//   Edit + Delete buttons in the footer. This gives the whole Library a
+//   consistent "click row → detail + actions in drawer" UX with zero
+//   per-section wiring.
+function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, noDetail, emptyMsg = "No items found" }) {
+  const [detailRow, setDetailRow] = useState(null);
+  const detailMode = !noDetail && !onRowClick && !hideActions && !!onEdit && !!onDelete;
+  const rowClick = onRowClick || (detailMode ? setDetailRow : null);
+  const showActions = !hideActions && !detailMode;
+
   if (data.length === 0) {
     return (
       <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, padding: "50px 20px", textAlign: "center" }}>
@@ -163,6 +177,10 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, e
       </div>
     );
   }
+
+  // Best-guess display title for the drawer header.
+  const drawerTitle = (row) => row?.name || row?.title || row?.work_item || row?.material_name || row?.code || (columns[0]?.render ? null : row?.[columns[0]?.key]) || "Detail";
+
   return (
     <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, overflow: "hidden" }}>
       <div style={{ overflowX: "auto" }}>
@@ -172,7 +190,7 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, e
               {columns.map(c => (
                 <th key={c.key} style={{ textAlign: c.align || "left", padding: "12px 14px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap", minWidth: c.minW || "auto" }}>{c.label}</th>
               ))}
-              {!hideActions && (
+              {showActions && (
                 <th style={{ width: 80, borderBottom: `2px solid ${T.border}`, padding: "12px 14px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase" }}>Actions</th>
               )}
             </tr>
@@ -180,8 +198,8 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, e
           <tbody>
             {data.map((row, ri) => (
               <tr key={row.id || ri}
-                onClick={onRowClick ? () => onRowClick(row) : undefined}
-                style={{ borderBottom: `1px solid ${T.borderLight}`, cursor: onRowClick ? "pointer" : "default" }}
+                onClick={rowClick ? () => rowClick(row) : undefined}
+                style={{ borderBottom: `1px solid ${T.borderLight}`, cursor: rowClick ? "pointer" : "default" }}
                 onMouseEnter={e => e.currentTarget.style.background = T.borderLight + "88"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 {columns.map(c => (
@@ -189,7 +207,7 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, e
                     {c.render ? c.render(row) : row[c.key]}
                   </td>
                 ))}
-                {!hideActions && (
+                {showActions && (
                   <td style={{ padding: "10px 14px" }} onClick={e => e.stopPropagation()}>
                     <div style={{ display: "flex", gap: 4 }}>
                       <button onClick={() => onEdit(row)} style={{ background: T.blueSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
@@ -206,6 +224,40 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, e
           </tbody>
         </table>
       </div>
+
+      {/* ── Generic detail drawer ── */}
+      {detailMode && detailRow && (
+        <>
+          <div onClick={() => setDetailRow(null)}
+            style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 340, backdropFilter: "blur(2px)" }}/>
+          <div style={{ position: "fixed", top: 0, right: 0, height: "100vh", width: 420, maxWidth: "94vw", background: T.card, zIndex: 341, boxShadow: "-8px 0 28px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column" }}>
+            <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: T.text, lineHeight: 1.25 }}>{drawerTitle(detailRow)}</div>
+              <button onClick={() => setDetailRow(null)} style={{ background: "none", border: "none", fontSize: 22, lineHeight: 1, color: T.textLight, cursor: "pointer", padding: 2 }}>×</button>
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "8px 20px" }}>
+              {columns.map(c => (
+                <div key={c.key} style={{ display: "flex", padding: "10px 0", borderBottom: `1px solid ${T.borderLight}` }}>
+                  <span style={{ width: 130, flexShrink: 0, fontSize: 11, color: T.textLight, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".3px", paddingTop: 1 }}>{c.label}</span>
+                  <span style={{ flex: 1, fontSize: 13, color: T.text, wordBreak: "break-word" }}>
+                    {c.render ? c.render(detailRow) : (detailRow[c.key] ?? <span style={{ color: T.textLight }}>—</span>)}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <div style={{ padding: "12px 20px", borderTop: `1px solid ${T.border}`, display: "flex", gap: 10 }}>
+              <button onClick={() => { const tgt = detailRow; setDetailRow(null); onEdit(tgt); }}
+                style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.blue, color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                <IcEdit size={15} color="white" /> Edit
+              </button>
+              <button onClick={async () => { if (window.confirm(`Delete "${drawerTitle(detailRow)}"?`)) { await onDelete(detailRow.id); setDetailRow(null); } }}
+                style={{ padding: "9px 16px", borderRadius: 8, background: T.redSoft, color: T.red, border: `1px solid ${T.red}44`, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
+                <IcTrash size={15} color={T.red} /> Delete
+              </button>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }
