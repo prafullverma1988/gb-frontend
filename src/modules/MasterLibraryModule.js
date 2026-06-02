@@ -150,7 +150,10 @@ function Toolbar({ search, setSearch, count, label, onAdd, addLabel, filterEl, o
 }
 
 // Data table
-function DataTable({ columns, data, onEdit, onDelete, emptyMsg = "No items found" }) {
+// onRowClick (optional)  → makes each row clickable (e.g. open detail drawer)
+// hideActions (optional)  → hides the trailing Actions column (edit/delete
+//                           move into the detail drawer instead)
+function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, emptyMsg = "No items found" }) {
   if (data.length === 0) {
     return (
       <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, padding: "50px 20px", textAlign: "center" }}>
@@ -169,12 +172,16 @@ function DataTable({ columns, data, onEdit, onDelete, emptyMsg = "No items found
               {columns.map(c => (
                 <th key={c.key} style={{ textAlign: c.align || "left", padding: "12px 14px", fontSize: 11, fontWeight: 700, color: T.textLight, borderBottom: `2px solid ${T.border}`, textTransform: "uppercase", letterSpacing: "0.5px", whiteSpace: "nowrap", minWidth: c.minW || "auto" }}>{c.label}</th>
               ))}
-              <th style={{ width: 80, borderBottom: `2px solid ${T.border}`, padding: "12px 14px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase" }}>Actions</th>
+              {!hideActions && (
+                <th style={{ width: 80, borderBottom: `2px solid ${T.border}`, padding: "12px 14px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase" }}>Actions</th>
+              )}
             </tr>
           </thead>
           <tbody>
             {data.map((row, ri) => (
-              <tr key={row.id || ri} style={{ borderBottom: `1px solid ${T.borderLight}` }}
+              <tr key={row.id || ri}
+                onClick={onRowClick ? () => onRowClick(row) : undefined}
+                style={{ borderBottom: `1px solid ${T.borderLight}`, cursor: onRowClick ? "pointer" : "default" }}
                 onMouseEnter={e => e.currentTarget.style.background = T.borderLight + "88"}
                 onMouseLeave={e => e.currentTarget.style.background = "transparent"}>
                 {columns.map(c => (
@@ -182,16 +189,18 @@ function DataTable({ columns, data, onEdit, onDelete, emptyMsg = "No items found
                     {c.render ? c.render(row) : row[c.key]}
                   </td>
                 ))}
-                <td style={{ padding: "10px 14px" }}>
-                  <div style={{ display: "flex", gap: 4 }}>
-                    <button onClick={() => onEdit(row)} style={{ background: T.blueSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
-                      <IcEdit size={14} color={T.blue} />
-                    </button>
-                    <button onClick={() => onDelete(row.id)} style={{ background: T.redSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
-                      <IcTrash size={14} color={T.red} />
-                    </button>
-                  </div>
-                </td>
+                {!hideActions && (
+                  <td style={{ padding: "10px 14px" }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button onClick={() => onEdit(row)} style={{ background: T.blueSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
+                        <IcEdit size={14} color={T.blue} />
+                      </button>
+                      <button onClick={() => onDelete(row.id)} style={{ background: T.redSoft, border: "none", cursor: "pointer", padding: 6, borderRadius: 6, display: "flex" }}>
+                        <IcTrash size={14} color={T.red} />
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>
@@ -917,6 +926,8 @@ function PartyMasterSection() {
   const [form, setForm] = useState(emptyForm);
   const [saveErr, setSaveErr] = useState("");
   const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  // Side-slide detail drawer — clicking a party row opens it.
+  const [detailParty, setDetailParty] = useState(null);
 
   // ── Multi-role support ──────────────────────────────────────────
   // A party can hold several roles (Material Vendor + Subcon + Transporter).
@@ -1122,7 +1133,6 @@ function PartyMasterSection() {
     }},
     { key: "phone", label: "Phone", minW: 130, style: { fontFamily: "monospace", fontSize: 12 } },
     { key: "city", label: "City", minW: 80 },
-    { key: "gstin", label: "GSTIN", minW: 140, render: r => r.gstin ? <span style={{ fontFamily: "monospace", fontSize: 11.5 }}>{r.gstin}</span> : <span style={{ color: T.textLight }}>—</span> },
     { key: "opening_balance", label: "Balance", minW: 100, align: "right", render: r => {
       const bal = Number(r.opening_balance) || 0;
       return <span style={{ fontWeight: 700, color: bal > 0 ? T.green : bal < 0 ? T.red : T.textMid }}>
@@ -1140,7 +1150,102 @@ function PartyMasterSection() {
         templateConfig={partyTemplateConfig} currentData={parties} onImportData={handlePartyImport}
         filterEl={<div style={{minWidth:180}}><SearchSelect value={filterType} options={types} onChange={setFilterType} placeholder="Filter type..."/></div>}
       />
-      <DataTable columns={columns} data={filtered} onEdit={openEdit} onDelete={del} />
+      {/* Row click opens the detail drawer; Actions column hidden
+          (edit/delete now live inside the drawer). */}
+      <DataTable columns={columns} data={filtered} onRowClick={setDetailParty} hideActions />
+
+      {/* ── Party Detail side-drawer ───────────────────────────── */}
+      {detailParty && (() => {
+        const p = detailParty;
+        const roleKeys = parsePartyRoles(p);
+        const keyToLabel = { material_vendor:"Material Vendor", client:"Client", subcontractor:"Subcontractor", labour_vendor:"Labour Vendor", transporter:"Transporter", consultant:"Consultant", staff:"Staff" };
+        const Row = ({ label, value, mono }) => (
+          <div style={{ display:"flex", padding:"9px 0", borderBottom:`1px solid ${T.borderLight}` }}>
+            <span style={{ width:130, flexShrink:0, fontSize:11.5, color:T.textLight, fontWeight:600, textTransform:"uppercase", letterSpacing:".3px" }}>{label}</span>
+            <span style={{ flex:1, fontSize:13, color:value?T.text:T.textLight, fontFamily: mono?"monospace":"inherit", wordBreak:"break-word" }}>{value || "—"}</span>
+          </div>
+        );
+        const bal = Number(p.opening_balance) || 0;
+        return (
+          <>
+            <div onClick={() => setDetailParty(null)}
+              style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:340, backdropFilter:"blur(2px)" }}/>
+            <div style={{ position:"fixed", top:0, right:0, height:"100vh", width:440, maxWidth:"94vw", background:T.card, zIndex:341, boxShadow:"-8px 0 28px rgba(0,0,0,0.18)", display:"flex", flexDirection:"column" }}>
+              {/* Header */}
+              <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.border}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:17, fontWeight:700, color:T.text, lineHeight:1.25 }}>{p.name}</div>
+                  <div style={{ display:"inline-flex", flexWrap:"wrap", alignItems:"center", gap:4, marginTop:7 }}>
+                    {roleKeys.map((k,i) => {
+                      const label = keyToLabel[k] || k;
+                      const tc = typeColors[label] || { c:T.textMid, bg:T.borderLight };
+                      return (
+                        <span key={k} style={{ display:"inline-flex", alignItems:"center", gap:4 }}>
+                          {i>0 && <span style={{ color:T.textLight, fontWeight:700 }}>/</span>}
+                          <Badge text={label} color={tc.c} bg={tc.bg} />
+                        </span>
+                      );
+                    })}
+                  </div>
+                </div>
+                <button onClick={() => setDetailParty(null)}
+                  style={{ background:"none", border:"none", fontSize:22, lineHeight:1, color:T.textLight, cursor:"pointer", padding:2 }}>×</button>
+              </div>
+              {/* Body */}
+              <div style={{ flex:1, overflowY:"auto", padding:"8px 20px" }}>
+                {/* Balance highlight */}
+                {bal !== 0 && (
+                  <div style={{ margin:"10px 0", padding:"10px 14px", borderRadius:8, background: bal>0?T.greenSoft:T.redSoft, border:`1px solid ${(bal>0?T.green:T.red)}33` }}>
+                    <div style={{ fontSize:10.5, fontWeight:700, color:T.textLight, textTransform:"uppercase" }}>Opening Balance</div>
+                    <div style={{ fontSize:18, fontWeight:800, color: bal>0?T.green:T.red, marginTop:2 }}>
+                      {bal>0?"+":"−"} Rs.{Math.abs(bal).toLocaleString("en-IN")}
+                    </div>
+                  </div>
+                )}
+                <div style={{ marginTop:6 }}>
+                  <Row label="Contact Person" value={p.contact_person} />
+                  <Row label="Phone" value={p.phone} mono />
+                  <Row label="Email" value={p.email} />
+                  <Row label="GSTIN" value={p.gstin} mono />
+                  <Row label="PAN" value={p.pan} mono />
+                  <Row label="Address" value={p.address} />
+                  <Row label="City" value={p.city} />
+                  <Row label="Credit Days" value={p.credit_days != null ? `${p.credit_days} days` : ""} />
+                </div>
+                {/* Bank details */}
+                {(p.bank_name || p.bank_account || p.ifsc) && (
+                  <div style={{ marginTop:14 }}>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:T.text, marginBottom:4, textTransform:"uppercase", letterSpacing:".3px" }}>Bank Details</div>
+                    <Row label="Bank Name" value={p.bank_name} />
+                    <Row label="Account No" value={p.bank_account} mono />
+                    <Row label="IFSC" value={p.ifsc} mono />
+                  </div>
+                )}
+                {p.is_staff ? (
+                  <div style={{ marginTop:14 }}>
+                    <div style={{ fontSize:11.5, fontWeight:700, color:T.text, marginBottom:4, textTransform:"uppercase", letterSpacing:".3px" }}>Staff Info</div>
+                    <Row label="Subtype" value={p.staff_subtype} />
+                    <Row label="Designation" value={p.designation} />
+                    <Row label="Wallet Limit" value={p.wallet_limit != null ? `Rs.${Number(p.wallet_limit).toLocaleString("en-IN")}` : ""} />
+                  </div>
+                ) : null}
+              </div>
+              {/* Footer — Edit + Delete */}
+              <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.border}`, display:"flex", gap:10 }}>
+                <button onClick={() => { const tgt = p; setDetailParty(null); openEdit(tgt); }}
+                  style={{ flex:1, padding:"9px", borderRadius:8, background:T.blue, color:"white", border:"none", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
+                  <IcEdit size={15} color="white" /> Edit
+                </button>
+                <button onClick={async () => { if (window.confirm(`Delete "${p.name}"?`)) { await del(p.id); setDetailParty(null); } }}
+                  style={{ padding:"9px 16px", borderRadius:8, background:T.redSoft, color:T.red, border:`1px solid ${T.red}44`, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
+                  <IcTrash size={15} color={T.red} /> Delete
+                </button>
+              </div>
+            </div>
+          </>
+        );
+      })()}
+
       <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Party" : "Add Party"} desc="Party / supplier / client / staff details" width={660}>
         {saveErr ? (
           <div style={{ background: T.redSoft, border: `1px solid ${T.red}55`, color: T.red, fontSize: 12.5, padding: "8px 12px", borderRadius: 8, marginBottom: 12 }}>{saveErr}</div>
