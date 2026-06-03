@@ -1641,8 +1641,26 @@ function SubconRateCardSection() {
   const [sectionEdits,    setSectionEdits]    = useState({});
   const [itemEdits,       setItemEdits]       = useState({});
   const [editingSections, setEditingSections] = useState({});
+  const [pendingNewItems, setPendingNewItems] = useState({});  // {sid:[{_isNew,item_id,category_id,base_rate,...}]}
   const [pendingDelItems, setPendingDelItems] = useState({});
   const [saving,          setSaving]          = useState(false);
+
+  // Add Category drawer state (same as ClientBOQSection)
+  const [addCatDrawer,  setAddCatDrawer]  = useState(null); // {structure_id, section_name}
+  const [addCatPicks,   setAddCatPicks]   = useState([]);   // ordered [workCatId,...]
+  const [addCatNewForm, setAddCatNewForm] = useState(null); // {name,code,desc} | null
+  const [addCatSaving,  setAddCatSaving]  = useState(false);
+
+  // Add Item drawer state
+  const [addItemDrawer,  setAddItemDrawer]  = useState(null); // {structure_id,section_name,category_id,category_name}
+  const [addItemPicks,   setAddItemPicks]   = useState([]);   // ordered [boqItemId,...]
+  const [addItemSearch,  setAddItemSearch]  = useState("");
+  const [addItemNewForm, setAddItemNewForm] = useState(null); // {name,unit,base_rate,description} | null
+  const [addItemSaving,  setAddItemSaving]  = useState(false);
+
+  // BOQ items master list (same as Client BOQ — subcon packages share boq_items)
+  const [boqItems, setBoqItems] = useState([]);
+  const { items: workCats, reload: reloadWorkCats } = useSection("work-categories");
 
   // Package CRUD modals
   const [addPkgModal, setAddPkgModal] = useState(false);
@@ -1666,6 +1684,7 @@ function SubconRateCardSection() {
   useEffect(() => {
     api.get("/library/construction-types").then(r => r.success && setConTypes(r.data||[]));
     api.get("/library/cities").then(r => r.success && setCities(r.data||[]));
+    api.get("/library/boq-items").then(r => r.success && setBoqItems(r.data||[]));
   }, []);
 
   // ── Load packages when type + trade changes ────────────────────────────
@@ -1764,6 +1783,7 @@ function SubconRateCardSection() {
       const dirtySids = new Set([
         ...Object.keys(itemEdits),
         ...Object.keys(pendingDelItems),
+        ...Object.keys(pendingNewItems),
       ].map(Number));
       Object.keys(sectionEdits).forEach(sid => {
         if (sectionEdits[sid]?.default_qty !== undefined && (sectionItems[Number(sid)]||[]).length)
@@ -1773,14 +1793,25 @@ function SubconRateCardSection() {
         const allRows = sectionItems[sid] || [];
         const edits   = itemEdits[sid] || {};
         const delSet  = pendingDelItems[sid] || {};
+        // Existing rows (with edits applied)
         const rows = allRows.filter(r => !delSet[r.item_id]).map(r => ({
           item_id:     r.item_id,
+          category_id: r.category_id || null,
           base_rate:   edits[r.item_id]?.base_rate   !== undefined ? Number(edits[r.item_id].base_rate)||0   : Number(r.base_rate != null ? r.base_rate : (Number(r.rate||0) - Number(r.add_on_rate||0)))||0,
           add_on_rate: edits[r.item_id]?.add_on_rate !== undefined ? Number(edits[r.item_id].add_on_rate)||0 : Number(r.add_on_rate)||0,
           description: edits[r.item_id]?.description !== undefined ? edits[r.item_id].description : (r.description||""),
         }));
+        // Pending new items (added via + Add Item drawer)
+        const newRows = (pendingNewItems[sid]||[]).map(r => ({
+          item_id:     r.item_id,
+          category_id: r.category_id || null,
+          base_rate:   Number(r.base_rate)||0,
+          add_on_rate: Number(r.add_on_rate)||0,
+          description: r.description||"",
+        }));
         await api.put(`/library/rate-matrix`, {
-          package_id: selPkg.id, city_id: selCity.id, structure_id: sid, items: rows,
+          package_id: selPkg.id, city_id: selCity.id, structure_id: sid,
+          items: [...rows, ...newRows],
         }).catch(() => {});
       }
       // Reload tree
@@ -1790,7 +1821,7 @@ function SubconRateCardSection() {
       ));
       const map = {}; for (const [sid, rows] of results) map[sid] = rows;
       setSectionItems(map);
-      setSectionEdits({}); setItemEdits({}); setPendingDelItems({}); setEditingSections({});
+      setSectionEdits({}); setItemEdits({}); setPendingNewItems({}); setPendingDelItems({}); setEditingSections({});
     } finally { setSaving(false); }
   };
 
@@ -1848,9 +1879,119 @@ function SubconRateCardSection() {
     else alert(r.message||"Delete failed");
   };
 
+  // ── Category drawer handlers (same logic as ClientBOQSection) ──────────
+  const openAddCatDrawer = (sec) => {
+    setAddCatPicks([]); setAddCatNewForm(null);
+    setAddCatDrawer({ structure_id: sec.id, section_name: getSecName(sec) });
+  };
+  const closeAddCatDrawer = () => { if (!addCatSaving) setAddCatDrawer(null); };
+  const toggleCatPick = (id) => setAddCatPicks(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
+
+  const confirmAddCats = async () => {
+    if (!addCatDrawer) return;
+    setAddCatSaving(true);
+    const existingMaxSort = pkgCategories
+      .filter(c => c.structure_id === addCatDrawer.structure_id)
+      .reduce((mx,c) => Math.max(mx, Number(c.sort_order)||0), 0);
+    for (let i=0; i<addCatPicks.length; i++) {
+      const id = addCatPicks[i];
+      const nm = workCats.find(c => c.id===id)?.name;
+      if (!nm) continue;
+      await api.post("/library/packages/" + selPkg.id + "/categories", {
+        structure_id:  addCatDrawer.structure_id,
+        category_name: nm,
+        sort_order:    existingMaxSort + 1 + i,
+      });
+    }
+    setAddCatSaving(false);
+    // Reload categories
+    const r = await api.get(`/library/packages/${selPkg.id}/categories`).catch(()=>({success:false}));
+    if (r.success) setPkgCategories(r.data||[]);
+    closeAddCatDrawer();
+  };
+  const createAndAddCat = async () => {
+    if (!addCatNewForm?.name?.trim() || !addCatDrawer) return;
+    setAddCatSaving(true);
+    const cr = await api.post("/library/work-categories", {
+      name: addCatNewForm.name.trim(), code: (addCatNewForm.code||"").trim(),
+      description: (addCatNewForm.desc||"").trim(),
+    });
+    if (cr?.success) {
+      await api.post("/library/packages/" + selPkg.id + "/categories", {
+        structure_id: addCatDrawer.structure_id,
+        category_name: addCatNewForm.name.trim(),
+      });
+      await reloadWorkCats();
+      const r = await api.get(`/library/packages/${selPkg.id}/categories`).catch(()=>({success:false}));
+      if (r.success) setPkgCategories(r.data||[]);
+      setAddCatNewForm(null);
+    } else alert(cr?.message||"Failed to create category");
+    setAddCatSaving(false);
+  };
+
+  // ── Item drawer handlers ────────────────────────────────────────────────
+  const openAddItemDrawer = (sec, cat) => {
+    setAddItemPicks([]); setAddItemSearch(""); setAddItemNewForm(null);
+    setAddItemDrawer({
+      structure_id:  sec.id,   section_name:  getSecName(sec),
+      category_id:   cat.id,   category_name: cat.category_name,
+    });
+  };
+  const closeAddItemDrawer = () => { if (!addItemSaving) setAddItemDrawer(null); };
+  const toggleItemPick = (id) => setAddItemPicks(p => p.includes(id) ? p.filter(x=>x!==id) : [...p,id]);
+
+  const confirmAddItems = () => {
+    if (!addItemDrawer) return;
+    const sid   = addItemDrawer.structure_id;
+    const catId = addItemDrawer.category_id;
+    const existing = new Set([
+      ...(sectionItems[sid]||[]).map(r => r.item_id),
+      ...(pendingNewItems[sid]||[]).map(r => r.item_id),
+    ]);
+    const fresh = addItemPicks.filter(id => !existing.has(id)).map(id => {
+      const master = boqItems.find(i => i.id===id);
+      return { _isNew:true, item_id:id, category_id:catId, base_rate:Number(master?.base_rate)||0, add_on_rate:0, description:"" };
+    });
+    if (fresh.length) setPendingNewItems(p => ({...p, [sid]:[...(p[sid]||[]),...fresh]}));
+    // Un-mark any pending deletes for re-added items
+    setPendingDelItems(p => {
+      const sec = {...(p[sid]||{})};
+      for (const id of addItemPicks) delete sec[id];
+      return {...p, [sid]:sec};
+    });
+    closeAddItemDrawer();
+  };
+  const createAndAddItem = async () => {
+    if (!addItemNewForm?.name?.trim() || !addItemDrawer) return;
+    setAddItemSaving(true);
+    const r = await api.post("/library/boq-items", {
+      name:        addItemNewForm.name.trim(),
+      category:    addItemNewForm.category || addItemDrawer.category_name,
+      unit:        addItemNewForm.unit || "Sqft",
+      base_rate:   Number(addItemNewForm.base_rate)||0,
+      description: addItemNewForm.description||"",
+    });
+    setAddItemSaving(false);
+    if (r?.success && r.data) {
+      setBoqItems(p => [r.data, ...p]);
+      const sid = addItemDrawer.structure_id;
+      setPendingNewItems(p => ({
+        ...p,
+        [sid]: [...(p[sid]||[]), {
+          _isNew:true, item_id:r.data.id,
+          category_id: addItemDrawer.category_id,
+          base_rate: Number(r.data.base_rate)||0, add_on_rate:0, description:"",
+        }]
+      }));
+      setAddItemNewForm(null);
+    } else alert(r?.message||"Save failed");
+  };
+
   // ── Computed ───────────────────────────────────────────────────────────
   const tradeGroupsWithItems = TRADE_CATS.filter(t => workItems.some(i => i.trade_category === t));
-  const hasPendingEdits = Object.keys(sectionEdits).length>0 || Object.keys(itemEdits).length>0 || Object.keys(pendingDelItems).length>0;
+  const hasPendingEdits = Object.keys(sectionEdits).length>0 || Object.keys(itemEdits).length>0
+    || Object.values(pendingNewItems).some(a=>a.length>0)
+    || Object.values(pendingDelItems).some(o=>Object.keys(o).length>0);
 
   const chipBtn = (label, active, onClick, color) => (
     <button key={label} onClick={onClick} style={{
@@ -2049,13 +2190,23 @@ function SubconRateCardSection() {
                 {/* Section body */}
                 {!isCollapsed && (
                   <div style={{padding:"12px 16px"}}>
-                    {secCats.length===0 && (
+                    {secCats.length===0 && !editable && (
                       <div style={{textAlign:"center",padding:"20px",color:T.textLight,fontSize:12}}>
-                        No items — add sections and categories from Client BOQ Rate page, then rates appear here
+                        No categories yet — click ✏ Edit then + Add Category to start
                       </div>
                     )}
+
                     {secCats.map(cat => {
-                      const catRows  = rows.filter(r=>r.category_name===cat.category_name && !delSet[r.item_id]);
+                      // Include pending new items for this category
+                      const pendNew = (pendingNewItems[sec.id]||[]).filter(r=>r.category_id===cat.id);
+                      const catRows = [
+                        ...rows.filter(r=>r.category_name===cat.category_name && !delSet[r.item_id]),
+                        ...pendNew.map(r=>({
+                          ...r, item_name: boqItems.find(i=>i.id===r.item_id)?.name||"",
+                          unit: boqItems.find(i=>i.id===r.item_id)?.unit||"Sqft",
+                          _pending: true,
+                        }))
+                      ];
                       const catKey   = `${sec.id}:${cat.id||cat.category_name}`;
                       const isCatCol = !!collapsedCats[catKey];
                       const catBase  = catRows.reduce((s,r)=>s+getRowBase(sec.id,r),0);
@@ -2073,6 +2224,13 @@ function SubconRateCardSection() {
                             <span style={{fontSize:10.5,color:T.textLight}}>· {catRows.length} items</span>
                             <span style={{fontSize:11,fontWeight:700,color:T.blue}}>Base ₹{catBase.toLocaleString()}</span>
                             {catAddOn>0 && <span style={{fontSize:11,fontWeight:600,color:T.amber,marginLeft:6}}>+Add-on ₹{catAddOn.toLocaleString()}</span>}
+                            {/* + Add Item button — visible when section is in edit mode */}
+                            {editable && (
+                              <button onClick={e=>{e.stopPropagation();openAddItemDrawer(sec,cat);}}
+                                style={{marginLeft:8,padding:"2px 10px",borderRadius:5,background:T.blueSoft,border:`1px solid ${T.blue}44`,color:T.blue,fontSize:10.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                                + Add Item
+                              </button>
+                            )}
                           </div>
 
                           {!isCatCol && catRows.length>0 && (
@@ -2086,8 +2244,12 @@ function SubconRateCardSection() {
                               </thead>
                               <tbody>
                                 {catRows.map(it => (
-                                  <tr key={it.item_id} style={{borderBottom:`1px solid ${T.borderLight}`}}>
-                                    <td style={{padding:"7px 10px",fontWeight:600,color:T.text}}>{it.item_name||it.name}</td>
+                                  <tr key={it._pending?`new-${it.item_id}`:it.item_id}
+                                    style={{borderBottom:`1px solid ${T.borderLight}`,background:it._pending?"#EFF6FF":"transparent"}}>
+                                    <td style={{padding:"7px 10px",fontWeight:600,color:T.text}}>
+                                      {it.item_name||it.name}
+                                      {it._pending && <span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:3,background:T.blue,color:"white",marginLeft:6}}>NEW</span>}
+                                    </td>
                                     <td style={{padding:"7px 10px",color:T.textLight}}>{it.unit}</td>
                                     <td style={{padding:"7px 10px"}}>
                                       {editable
@@ -2104,7 +2266,10 @@ function SubconRateCardSection() {
                                     <td style={{padding:"7px 10px",color:T.textLight,fontSize:11.5}}>{it.description||"—"}</td>
                                     {editable && (
                                       <td style={{padding:"7px 10px"}}>
-                                        <button onClick={()=>setPendingDelItems(p=>({...p,[sec.id]:{...(p[sec.id]||{}),[it.item_id]:true}}))}
+                                        <button onClick={()=>{
+                                          if(it._pending) setPendingNewItems(p=>({...p,[sec.id]:(p[sec.id]||[]).filter(r=>r.item_id!==it.item_id)}));
+                                          else setPendingDelItems(p=>({...p,[sec.id]:{...(p[sec.id]||{}),[it.item_id]:true}}));
+                                        }}
                                           style={{background:"none",border:"none",cursor:"pointer",padding:2,display:"flex"}}>
                                           <IcTrash size={13} color={T.red}/>
                                         </button>
@@ -2115,9 +2280,22 @@ function SubconRateCardSection() {
                               </tbody>
                             </table>
                           )}
+                          {!isCatCol && catRows.length===0 && editable && (
+                            <div style={{textAlign:"center",padding:"10px",color:T.textLight,fontSize:11.5,background:"#F8FAFC",borderRadius:6,border:`1px dashed ${T.border}`}}>
+                              No items — click + Add Item above
+                            </div>
+                          )}
                         </div>
                       );
                     })}
+
+                    {/* + Add Category button — visible when section in edit mode */}
+                    {editable && (
+                      <button onClick={()=>openAddCatDrawer(sec)}
+                        style={{marginTop:8,width:"100%",padding:"8px",borderRadius:7,background:"white",border:`1.5px dashed ${T.blue}`,color:T.blue,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                        <IcPlus size={13} color={T.blue}/> Add Category to {getSecName(sec)}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -2220,6 +2398,179 @@ function SubconRateCardSection() {
         <ModalFooter onClose={()=>setShowItemModal(false)} onSave={saveItem}
           saveLabel={itemSaving?"Saving…":editingItem?"Update Item":"Add Item"}/>
       </Modal>
+
+      {/* ── Add Category Drawer ─────────────────────────────────────────── */}
+      {addCatDrawer && (() => {
+        const sid = addCatDrawer.structure_id;
+        const alreadyAdded = new Set(pkgCategories.filter(c=>c.structure_id===sid).map(c=>c.category_name));
+        const available = workCats.filter(c => !alreadyAdded.has(c.name));
+        return (<>
+          <div onClick={closeAddCatDrawer} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9000,backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",right:0,top:0,height:"100vh",width:480,maxWidth:"95vw",background:T.card,zIndex:9001,boxShadow:"-8px 0 40px rgba(0,0,0,0.25)",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#0F172A"}}>
+              <div>
+                <div style={{fontSize:14,fontWeight:700,color:"white"}}>Add Category</div>
+                <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>Section: {addCatDrawer.section_name}</div>
+              </div>
+              <button onClick={closeAddCatDrawer} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"16px 20px"}}>
+              {/* Pick from existing Work Categories */}
+              <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>
+                Pick from Work Categories
+              </div>
+              {available.length===0 && (
+                <div style={{padding:"12px",color:T.textLight,fontSize:12,background:T.bg,borderRadius:7,marginBottom:14}}>
+                  All work categories already added to this section
+                </div>
+              )}
+              <div style={{display:"flex",flexDirection:"column",gap:4,marginBottom:16}}>
+                {available.map((cat,i) => {
+                  const picked = addCatPicks.includes(cat.id);
+                  return (
+                    <div key={cat.id} onClick={()=>toggleCatPick(cat.id)}
+                      style={{display:"flex",alignItems:"center",gap:10,padding:"9px 12px",borderRadius:7,cursor:"pointer",border:`1.5px solid ${picked?T.blue:T.border}`,background:picked?T.blueSoft:"white"}}>
+                      <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${picked?T.blue:T.border}`,background:picked?T.blue:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        {picked && <span style={{color:"white",fontSize:10,lineHeight:1,fontWeight:700}}>✓</span>}
+                      </div>
+                      {picked && <span style={{fontSize:10,fontWeight:700,padding:"1px 6px",borderRadius:10,background:T.blue,color:"white",minWidth:18,textAlign:"center"}}>{addCatPicks.indexOf(cat.id)+1}</span>}
+                      <span style={{fontSize:13,fontWeight:picked?700:400,color:picked?T.blue:T.text,flex:1}}>{cat.name}</span>
+                      {cat.description && <span style={{fontSize:11,color:T.textLight}}>{cat.description}</span>}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Create new category */}
+              <div style={{borderTop:`1px solid ${T.border}`,paddingTop:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>
+                  Or Create New Category
+                </div>
+                {addCatNewForm===null ? (
+                  <button onClick={()=>setAddCatNewForm({name:"",code:"",desc:""})}
+                    style={{padding:"8px 16px",borderRadius:7,border:`1.5px dashed ${T.border}`,background:"white",color:T.textMid,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                    <IcPlus size={13} color={T.textMid}/> New Category
+                  </button>
+                ) : (
+                  <div style={{background:T.bg,borderRadius:8,padding:12,border:`1px solid ${T.border}`}}>
+                    <FormField label="Category Name *" value={addCatNewForm.name} onChange={v=>setAddCatNewForm(p=>({...p,name:v}))} placeholder="e.g. Civil Structure" required/>
+                    <div style={{display:"flex",gap:10,marginTop:10}}>
+                      <FormField label="Code" value={addCatNewForm.code} onChange={v=>setAddCatNewForm(p=>({...p,code:v}))} placeholder="e.g. CIV" half/>
+                      <FormField label="Description" value={addCatNewForm.desc} onChange={v=>setAddCatNewForm(p=>({...p,desc:v}))} half placeholder="Optional"/>
+                    </div>
+                    <div style={{display:"flex",gap:8,marginTop:12}}>
+                      <button onClick={()=>setAddCatNewForm(null)} style={{flex:1,padding:"8px",borderRadius:6,border:`1px solid ${T.border}`,background:"white",fontSize:12,cursor:"pointer"}}>Cancel</button>
+                      <button onClick={createAndAddCat} disabled={addCatSaving||!addCatNewForm.name.trim()}
+                        style={{flex:2,padding:"8px",borderRadius:6,background:T.blue,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        {addCatSaving?"Creating…":"Create & Add"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,background:T.bg}}>
+              <button onClick={closeAddCatDrawer} style={{flex:1,padding:"10px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,cursor:"pointer"}}>Cancel</button>
+              <button onClick={confirmAddCats} disabled={addCatSaving||addCatPicks.length===0}
+                style={{flex:2,padding:"10px",borderRadius:8,background:addCatPicks.length>0?T.blue:T.borderLight,color:addCatPicks.length>0?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:addCatPicks.length>0?"pointer":"not-allowed"}}>
+                {addCatSaving?"Adding…":`Add ${addCatPicks.length} Categor${addCatPicks.length===1?"y":"ies"}`}
+              </button>
+            </div>
+          </div>
+        </>);
+      })()}
+
+      {/* ── Add Item Drawer ─────────────────────────────────────────────── */}
+      {addItemDrawer && (() => {
+        const sid = addItemDrawer.structure_id;
+        const existingIds = new Set([
+          ...(sectionItems[sid]||[]).map(r=>r.item_id),
+          ...(pendingNewItems[sid]||[]).map(r=>r.item_id),
+        ]);
+        const filtered = boqItems.filter(i =>
+          !existingIds.has(i.id) &&
+          (!addItemSearch || i.name.toLowerCase().includes(addItemSearch.toLowerCase()) || (i.category||"").toLowerCase().includes(addItemSearch.toLowerCase()))
+        );
+        return (<>
+          <div onClick={closeAddItemDrawer} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9000,backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",right:0,top:0,height:"100vh",width:520,maxWidth:"95vw",background:T.card,zIndex:9001,boxShadow:"-8px 0 40px rgba(0,0,0,0.25)",display:"flex",flexDirection:"column"}}>
+            <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,background:"#0F172A"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                <div>
+                  <div style={{fontSize:14,fontWeight:700,color:"white"}}>Add Item</div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,0.5)",marginTop:2}}>{addItemDrawer.section_name} › {addItemDrawer.category_name}</div>
+                </div>
+                <button onClick={closeAddItemDrawer} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer"}}>×</button>
+              </div>
+              <input value={addItemSearch} onChange={e=>setAddItemSearch(e.target.value)} autoFocus
+                placeholder="Search BOQ items…"
+                style={{width:"100%",padding:"8px 12px",borderRadius:7,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+            </div>
+            <div style={{flex:1,overflowY:"auto",padding:"10px 16px"}}>
+              {addItemPicks.length>0 && (
+                <div style={{marginBottom:10,padding:"6px 10px",background:T.blueSoft,borderRadius:6,fontSize:11.5,color:T.blue,fontWeight:600}}>
+                  {addItemPicks.length} item{addItemPicks.length>1?"s":""} selected — click Save to add
+                </div>
+              )}
+              {filtered.map(item => {
+                const picked = addItemPicks.includes(item.id);
+                return (
+                  <div key={item.id} onClick={()=>toggleItemPick(item.id)}
+                    style={{display:"flex",alignItems:"center",gap:10,padding:"9px 10px",borderRadius:7,cursor:"pointer",marginBottom:4,border:`1.5px solid ${picked?T.blue:T.borderLight}`,background:picked?T.blueSoft:"white"}}>
+                    <div style={{width:16,height:16,borderRadius:4,border:`2px solid ${picked?T.blue:T.border}`,background:picked?T.blue:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {picked && <span style={{color:"white",fontSize:10,lineHeight:1,fontWeight:700}}>✓</span>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12.5,fontWeight:picked?700:500,color:picked?T.blue:T.text}}>{item.name}</div>
+                      <div style={{fontSize:10.5,color:T.textLight,marginTop:1}}>{item.category} · {item.unit}</div>
+                    </div>
+                    {item.base_rate>0 && <span style={{fontSize:11.5,fontWeight:700,color:T.blue,flexShrink:0}}>₹{Number(item.base_rate).toLocaleString()}</span>}
+                  </div>
+                );
+              })}
+              {filtered.length===0 && (
+                <div style={{textAlign:"center",padding:"20px",color:T.textLight,fontSize:12}}>
+                  {addItemSearch ? `No items matching "${addItemSearch}"` : "All items already added"}
+                </div>
+              )}
+
+              {/* Create new BOQ item */}
+              <div style={{borderTop:`1px solid ${T.border}`,paddingTop:14,marginTop:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>Create New Item</div>
+                {addItemNewForm===null ? (
+                  <button onClick={()=>setAddItemNewForm({name:"",unit:"Sqft",base_rate:"",category:addItemDrawer.category_name,description:""})}
+                    style={{padding:"7px 14px",borderRadius:6,border:`1.5px dashed ${T.border}`,background:"white",color:T.textMid,fontSize:12,fontWeight:600,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                    <IcPlus size={13} color={T.textMid}/> New Item
+                  </button>
+                ) : (
+                  <div style={{background:T.bg,borderRadius:8,padding:12,border:`1px solid ${T.border}`}}>
+                    <FormField label="Item Name *" value={addItemNewForm.name} onChange={v=>setAddItemNewForm(p=>({...p,name:v}))} placeholder="e.g. RCC M20 Grade Slab" required/>
+                    <div style={{display:"flex",gap:10,margin:"10px 0"}}>
+                      <FormField label="Unit" value={addItemNewForm.unit} onChange={v=>setAddItemNewForm(p=>({...p,unit:v}))} half placeholder="Sqft"/>
+                      <FormField label="Base Rate (₹)" value={addItemNewForm.base_rate} onChange={v=>setAddItemNewForm(p=>({...p,base_rate:v}))} type="number" half placeholder="0"/>
+                    </div>
+                    <FormField label="Description" value={addItemNewForm.description} onChange={v=>setAddItemNewForm(p=>({...p,description:v}))} placeholder="Optional scope notes"/>
+                    <div style={{display:"flex",gap:8,marginTop:12}}>
+                      <button onClick={()=>setAddItemNewForm(null)} style={{flex:1,padding:"8px",borderRadius:6,border:`1px solid ${T.border}`,background:"white",fontSize:12,cursor:"pointer"}}>Cancel</button>
+                      <button onClick={createAndAddItem} disabled={addItemSaving||!addItemNewForm.name.trim()}
+                        style={{flex:2,padding:"8px",borderRadius:6,background:T.blue,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer"}}>
+                        {addItemSaving?"Creating…":"Create & Add"}
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+            <div style={{padding:"14px 20px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,background:T.bg}}>
+              <button onClick={closeAddItemDrawer} style={{flex:1,padding:"10px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,cursor:"pointer"}}>Cancel</button>
+              <button onClick={confirmAddItems} disabled={addItemPicks.length===0}
+                style={{flex:2,padding:"10px",borderRadius:8,background:addItemPicks.length>0?T.blue:T.borderLight,color:addItemPicks.length>0?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:addItemPicks.length>0?"pointer":"not-allowed"}}>
+                Add {addItemPicks.length>0?`${addItemPicks.length} Item${addItemPicks.length>1?"s":""}`:""} — then Save Rates
+              </button>
+            </div>
+          </div>
+        </>);
+      })()}
     </div>
   );
 }
