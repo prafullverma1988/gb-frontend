@@ -1609,116 +1609,616 @@ function SubcontractorSection() {
 // ═══════════════════════════════════════════════════════════════════════
 // SUBCON RATE CARD SECTION
 // ═══════════════════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════════════════════════════
+// SUBCON RATE CARD — Dual mode: Floor Package + Work Items
+// Floor Package: Construction Type → City → Trade Category → Rate Card
+//                → Sections → Categories → Items  (mirrors Client BOQ)
+// Work Items:    Construction Type → City → flat items with unit rates
+// ═══════════════════════════════════════════════════════════════════════
 function SubconRateCardSection() {
-  const { items: subcons } = useSection("subcontractors");
-  const { items: uomList } = useSection("uom");
-  const { items: workCats } = useSection("work-categories");
-  const [selectedSubcon, setSelectedSubcon] = useState("");
-  const [rateItems, setRateItems] = useState([]);
-  const [loadingItems, setLoadingItems] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [saving, setSaving] = useState(false);
-  const emptyForm = { work_item: "", unit: "", rate: 0, remark: "" };
-  const [form, setForm] = useState(emptyForm);
-  const upd = (k, v) => setForm(p => ({ ...p, [k]: v }));
+  const TRADE_CATS = ["Civil","Electrical","Plumbing","Finishing","Tile","MEP","Waterproofing","Painting","Other"];
 
-  const uomOptions = uomList.length > 0 ? uomList.map(u => u.name) : ["Sq.Ft","CFT","Running Ft","Kg","MT","Point","Unit","Lump Sum","Piece","Day"];
-  const workItems = workCats.map(c => c.name);
+  // ── Mode ──────────────────────────────────────────────────────────────
+  const [mode, setMode] = useState("package"); // "package" | "item_wise"
+
+  // ── Shared: Construction Type + City ──────────────────────────────────
+  const [conTypes, setConTypes] = useState([]);
+  const [cities,   setCities]   = useState([]);
+  const [selType,  setSelType]  = useState(null);
+  const [selCity,  setSelCity]  = useState(null);
+
+  // ── Package mode ───────────────────────────────────────────────────────
+  const [selTrade,      setSelTrade]      = useState(null);
+  const [packages,      setPackages]      = useState([]);
+  const [selPkg,        setSelPkg]        = useState(null);
+  const [pkgStructures, setPkgStructures] = useState([]);
+  const [pkgCategories, setPkgCategories] = useState([]);
+  const [sectionItems,  setSectionItems]  = useState({}); // {sid:[rows]}
+  const [collapsedSecs, setCollapsedSecs] = useState({});
+  const [collapsedCats, setCollapsedCats] = useState({});
+
+  // Pending edits (same pattern as ClientBOQSection)
+  const [sectionEdits,    setSectionEdits]    = useState({});
+  const [itemEdits,       setItemEdits]       = useState({});
+  const [editingSections, setEditingSections] = useState({});
+  const [pendingDelItems, setPendingDelItems] = useState({});
+  const [saving,          setSaving]          = useState(false);
+
+  // Package CRUD modals
+  const [addPkgModal, setAddPkgModal] = useState(false);
+  const [editingPkg,  setEditingPkg]  = useState(null);
+  const [pkgForm,     setPkgForm]     = useState({ name:"", sqft_rate:"", description:"" });
+  const [pkgSaving,   setPkgSaving]   = useState(false);
+
+  // ── Item-wise mode ─────────────────────────────────────────────────────
+  const [workItems,     setWorkItems]     = useState([]);
+  const [itemsLoading,  setItemsLoading]  = useState(false);
+  const [tradeFilter,   setTradeFilter]   = useState("All");
+  const [showItemModal, setShowItemModal] = useState(false);
+  const [editingItem,   setEditingItem]   = useState(null);
+  const [itemForm,      setItemForm]      = useState({ name:"", unit:"Sqft", trade_category:"Civil", description:"", rate:"" });
+  const [itemSaving,    setItemSaving]    = useState(false);
+
+  const { items: uomList } = useSection("uom");
+  const uomOpts = uomList.length ? uomList.map(u => u.name) : ["Sqft","Cft","Running Ft","Kg","Point","Unit","Lump Sum","Piece","Nos"];
+
+  // ── Initial load ───────────────────────────────────────────────────────
+  useEffect(() => {
+    api.get("/library/construction-types").then(r => r.success && setConTypes(r.data||[]));
+    api.get("/library/cities").then(r => r.success && setCities(r.data||[]));
+  }, []);
+
+  // ── Load packages when type + trade changes ────────────────────────────
+  useEffect(() => {
+    if (!selType || !selTrade) { setPackages([]); setSelPkg(null); return; }
+    api.get(`/library/rate-packages?for=subcon&trade_category=${encodeURIComponent(selTrade)}&type_id=${selType.id}`)
+      .then(r => { if (r.success) setPackages(r.data||[]); })
+      .catch(() => {});
+    setSelPkg(null);
+    setSectionEdits({}); setItemEdits({}); setPendingDelItems({}); setEditingSections({});
+    // eslint-disable-next-line
+  }, [selType?.id, selTrade]);
+
+  // ── Load package tree ──────────────────────────────────────────────────
+  useEffect(() => {
+    if (!selPkg) { setPkgStructures([]); setPkgCategories([]); setSectionItems({}); return; }
+    Promise.all([
+      api.get(`/library/packages/${selPkg.id}/structures`),
+      api.get(`/library/packages/${selPkg.id}/categories`),
+    ]).then(([sr, cr]) => {
+      const structs = sr.success ? sr.data||[] : [];
+      setPkgStructures(structs);
+      if (cr.success) setPkgCategories(cr.data||[]);
+    });
+    setSectionEdits({}); setItemEdits({}); setPendingDelItems({}); setEditingSections({});
+    // eslint-disable-next-line
+  }, [selPkg?.id]);
+
+  // Re-fan items when city or structures change
+  useEffect(() => {
+    if (!selPkg || !selCity || !pkgStructures.length) { setSectionItems({}); return; }
+    Promise.all(pkgStructures.map(s =>
+      api.get(`/library/rate-matrix?package_id=${selPkg.id}&city_id=${selCity.id}&structure_id=${s.id}`)
+        .then(r => [s.id, r.success ? r.data||[] : []])
+        .catch(() => [s.id, []])
+    )).then(results => {
+      const map = {};
+      for (const [sid, rows] of results) map[sid] = rows;
+      setSectionItems(map);
+    });
+    // eslint-disable-next-line
+  }, [selPkg?.id, selCity?.id, pkgStructures]);
+
+  // ── Load work items ────────────────────────────────────────────────────
+  const loadWorkItems = useCallback(() => {
+    if (!selCity || !selType) { setWorkItems([]); return; }
+    setItemsLoading(true);
+    api.get(`/library/subcon-work-items?city_id=${selCity.id}&type_id=${selType.id}`)
+      .then(r => { if (r.success) setWorkItems(r.data||[]); })
+      .catch(() => {})
+      .finally(() => setItemsLoading(false));
+  }, [selCity?.id, selType?.id]);
 
   useEffect(() => {
-    if (!selectedSubcon) return;
-    setLoadingItems(true);
-    api.get("/library/subcon-rates?subcon_id=" + selectedSubcon)
-      .then(res => { if (res.success) setRateItems(res.data || []); })
-      .catch(() => {})
-      .finally(() => setLoadingItems(false));
-  }, [selectedSubcon]);
+    if (mode === "item_wise") loadWorkItems();
+  }, [mode, loadWorkItems]);
 
-  const openCreate = () => {
-    setEditing(null);
-    setForm({ ...emptyForm, unit: uomOptions[0] || "Sq.Ft", work_item: workItems[0] || "" });
-    setShowModal(true);
+  // ── Effective value helpers ────────────────────────────────────────────
+  const getSecArea = (sec) => {
+    const ed = sectionEdits[sec.id];
+    return ed?.default_qty !== undefined ? Number(ed.default_qty)||0 : Number(sec.default_qty)||0;
   };
-  const openEdit = (r) => { setEditing(r); setForm({ work_item: r.work_item, unit: r.unit, rate: r.rate, remark: r.remark || "" }); setShowModal(true); };
-  const save = async () => {
-    if (!form.work_item.trim()) return alert("Work item required");
-    if (!selectedSubcon) return alert("Select a subcontractor first");
+  const getSecName = (sec) => {
+    const ed = sectionEdits[sec.id];
+    return ed?.name !== undefined ? ed.name : sec.name;
+  };
+  const getRowBase = (sid, row) => {
+    const ed = itemEdits[sid]?.[row.item_id];
+    if (ed?.base_rate !== undefined) return Number(ed.base_rate)||0;
+    return row.base_rate != null ? Number(row.base_rate) : (Number(row.rate)||0) - (Number(row.add_on_rate)||0);
+  };
+  const getRowAddOn = (sid, row) => {
+    const ed = itemEdits[sid]?.[row.item_id];
+    return ed?.add_on_rate !== undefined ? Number(ed.add_on_rate)||0 : Number(row.add_on_rate)||0;
+  };
+  const patchSection = (sid, patch) => setSectionEdits(p => ({ ...p, [sid]: { ...(p[sid]||{}), ...patch } }));
+  const patchRow = (sid, itemId, patch) => setItemEdits(p => ({
+    ...p, [sid]: { ...(p[sid]||{}), [itemId]: { ...(p[sid]?.[itemId]||{}), ...patch } }
+  }));
+
+  // ── Save Rates ─────────────────────────────────────────────────────────
+  const saveRates = async () => {
+    if (!selPkg || !selCity) return;
     setSaving(true);
-    const payload = { ...form, subcon_id: selectedSubcon };
-    let res;
-    if (editing) res = await api.put("/library/subcon-rates/" + editing.id, payload);
-    else res = await api.post("/library/subcon-rates", payload);
-    setSaving(false);
-    if (res.success) {
-      if (editing) setRateItems(p => p.map(x => x.id === editing.id ? res.data : x));
-      else setRateItems(p => [...p, res.data]);
-      setShowModal(false);
-    } else alert(res.message || "Save failed");
-  };
-  const del = async (id) => {
-    const res = await api.del("/library/subcon-rates/" + id);
-    if (res.success) setRateItems(p => p.filter(x => x.id !== id));
+    try {
+      // 1. Section name/area updates
+      for (const [sidStr, ed] of Object.entries(sectionEdits)) {
+        const body = {};
+        if (ed.name !== undefined) body.name = ed.name.trim();
+        if (ed.default_qty !== undefined) body.default_qty = Number(ed.default_qty)||0;
+        if (Object.keys(body).length) {
+          await api.put(`/library/packages/${selPkg.id}/structures/${sidStr}`, body).catch(() => {});
+        }
+      }
+      // 2. Item rate matrix updates per section
+      const dirtySids = new Set([
+        ...Object.keys(itemEdits),
+        ...Object.keys(pendingDelItems),
+      ].map(Number));
+      Object.keys(sectionEdits).forEach(sid => {
+        if (sectionEdits[sid]?.default_qty !== undefined && (sectionItems[Number(sid)]||[]).length)
+          dirtySids.add(Number(sid));
+      });
+      for (const sid of dirtySids) {
+        const allRows = sectionItems[sid] || [];
+        const edits   = itemEdits[sid] || {};
+        const delSet  = pendingDelItems[sid] || {};
+        const rows = allRows.filter(r => !delSet[r.item_id]).map(r => ({
+          item_id:     r.item_id,
+          base_rate:   edits[r.item_id]?.base_rate   !== undefined ? Number(edits[r.item_id].base_rate)||0   : Number(r.base_rate != null ? r.base_rate : (Number(r.rate||0) - Number(r.add_on_rate||0)))||0,
+          add_on_rate: edits[r.item_id]?.add_on_rate !== undefined ? Number(edits[r.item_id].add_on_rate)||0 : Number(r.add_on_rate)||0,
+          description: edits[r.item_id]?.description !== undefined ? edits[r.item_id].description : (r.description||""),
+        }));
+        await api.put(`/library/rate-matrix`, {
+          package_id: selPkg.id, city_id: selCity.id, structure_id: sid, items: rows,
+        }).catch(() => {});
+      }
+      // Reload tree
+      const results = await Promise.all(pkgStructures.map(s =>
+        api.get(`/library/rate-matrix?package_id=${selPkg.id}&city_id=${selCity.id}&structure_id=${s.id}`)
+          .then(r => [s.id, r.success ? r.data||[] : []]).catch(() => [s.id, []])
+      ));
+      const map = {}; for (const [sid, rows] of results) map[sid] = rows;
+      setSectionItems(map);
+      setSectionEdits({}); setItemEdits({}); setPendingDelItems({}); setEditingSections({});
+    } finally { setSaving(false); }
   };
 
-  const selectedSubconName = subcons.find(s => String(s.id) === String(selectedSubcon))?.name || "";
+  // ── Package CRUD ───────────────────────────────────────────────────────
+  const savePkg = async () => {
+    if (!pkgForm.name.trim()) return alert("Package name required");
+    if (!selTrade || !selType) return alert("Select trade category and construction type first");
+    setPkgSaving(true);
+    const payload = {
+      name: pkgForm.name.trim(), sqft_rate: parseFloat(pkgForm.sqft_rate)||0,
+      description: pkgForm.description, construction_type_id: selType.id,
+      package_for: "subcon", trade_category: selTrade,
+    };
+    const r = editingPkg
+      ? await api.put(`/library/rate-packages/${editingPkg.id}`, payload).catch(() => ({success:false}))
+      : await api.post("/library/rate-packages", payload).catch(() => ({success:false}));
+    setPkgSaving(false);
+    if (!r.success) { alert(r.message||"Save failed"); return; }
+    setAddPkgModal(false); setEditingPkg(null); setPkgForm({name:"",sqft_rate:"",description:""});
+    api.get(`/library/rate-packages?for=subcon&trade_category=${encodeURIComponent(selTrade)}&type_id=${selType.id}`)
+      .then(res => { if (res.success) { setPackages(res.data||[]); if (editingPkg) setSelPkg(p => res.data.find(x => x.id===editingPkg.id)||p); } });
+  };
+
+  // ── Work item CRUD ─────────────────────────────────────────────────────
+  const openAddItem = () => {
+    setEditingItem(null);
+    setItemForm({ name:"", unit:"Sqft", trade_category:tradeFilter!=="All"?tradeFilter:"Civil", description:"", rate:"" });
+    setShowItemModal(true);
+  };
+  const openEditItem = (item) => {
+    setEditingItem(item);
+    setItemForm({ name:item.name, unit:item.unit||"Sqft", trade_category:item.trade_category||"Civil", description:item.description||"", rate:String(item.rate||"") });
+    setShowItemModal(true);
+  };
+  const saveItem = async () => {
+    if (!itemForm.name.trim()) return alert("Item name required");
+    if (!selCity || !selType) return alert("Select city and construction type first");
+    setItemSaving(true);
+    const payload = {
+      name:itemForm.name.trim(), unit:itemForm.unit, trade_category:itemForm.trade_category,
+      description:itemForm.description, city_id:selCity.id, construction_type_id:selType.id,
+      rate:parseFloat(itemForm.rate)||0,
+    };
+    const r = editingItem
+      ? await api.put(`/library/subcon-work-items/${editingItem.id}`, payload).catch(() => ({success:false}))
+      : await api.post("/library/subcon-work-items", payload).catch(() => ({success:false}));
+    setItemSaving(false);
+    if (!r.success) { alert(r.message||"Save failed"); return; }
+    setShowItemModal(false); loadWorkItems();
+  };
+  const deleteItem = async (id) => {
+    if (!window.confirm("Delete this work item?")) return;
+    const r = await api.del(`/library/subcon-work-items/${id}`).catch(() => ({success:false}));
+    if (r.success) setWorkItems(p => p.filter(x => x.id !== id));
+    else alert(r.message||"Delete failed");
+  };
+
+  // ── Computed ───────────────────────────────────────────────────────────
+  const tradeGroupsWithItems = TRADE_CATS.filter(t => workItems.some(i => i.trade_category === t));
+  const hasPendingEdits = Object.keys(sectionEdits).length>0 || Object.keys(itemEdits).length>0 || Object.keys(pendingDelItems).length>0;
+
+  const chipBtn = (label, active, onClick, color) => (
+    <button key={label} onClick={onClick} style={{
+      padding:"7px 16px", borderRadius:20, border:`1.5px solid ${active?(color||T.blue):T.border}`,
+      background:active?(color||T.blue):"white", color:active?"white":T.textMid,
+      fontSize:13, fontWeight:600, cursor:"pointer", transition:"all .15s",
+    }}>{label}</button>
+  );
 
   return (
     <div>
-      {/* Subcon selector */}
-      <div style={{ background: "white", borderRadius: 10, border: "1px solid #E5E7EB", padding: "14px 18px", marginBottom: 16, display: "flex", alignItems: "center", gap: 16 }}>
-        <label style={{ fontSize: 12, fontWeight: 700, color: "#6B7280", whiteSpace: "nowrap" }}>SELECT SUBCONTRACTOR</label>
-        <div style={{flex:1}}>
-          <SearchSelect value={selectedSubcon}
-            options={subcons.map(s => ({ value: s.id, label: `${s.name}${s.trade?` (${s.trade})`:""}` }))}
-            onChange={setSelectedSubcon}
-            placeholder="Select subcontractor..."/>
-        </div>
-        {selectedSubcon && (
-          <button onClick={openCreate}
-            style={{ padding: "9px 18px", background: "#2563EB", color: "white", border: "none", borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
-            + Add Item
+      {/* ── Mode Toggle ─────────────────────────────────────────────────── */}
+      <div style={{display:"flex",gap:8,marginBottom:18,alignItems:"center"}}>
+        {[
+          {id:"package",   icon:"📐", label:"Floor Package Rates",  desc:"Sqft-based package — for full-floor work orders"},
+          {id:"item_wise", icon:"🔧", label:"Work Item Rates",       desc:"Unit-based items — for specialist work orders"},
+        ].map(m => (
+          <button key={m.id} onClick={()=>setMode(m.id)} style={{
+            display:"flex", alignItems:"center", gap:8,
+            padding:"10px 20px", borderRadius:9,
+            border:`2px solid ${mode===m.id?T.blue:T.border}`,
+            background:mode===m.id?T.blue:"white",
+            color:mode===m.id?"white":T.textMid,
+            fontSize:13, fontWeight:700, cursor:"pointer", transition:"all .15s",
+          }}>
+            <span>{m.icon}</span> {m.label}
           </button>
-        )}
+        ))}
+        <span style={{marginLeft:8,fontSize:11.5,color:T.textLight,alignSelf:"center"}}>
+          {mode==="package"
+            ? "Entire floor given to one subcon — area × rate/sqft"
+            : "Specific items given to subcon — item × unit qty × rate"}
+        </span>
       </div>
 
-      {!selectedSubcon ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "#9CA3AF", fontSize: 14 }}>
-          Select a subcontractor to view or add rate items
+      {/* ── Step 1: Construction Type ──────────────────────────────────── */}
+      <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:12}}>
+        <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:10}}>
+          1 — CONSTRUCTION TYPE
         </div>
-      ) : loadingItems ? (
-        <div style={{ textAlign: "center", padding: "60px 0", color: "#9CA3AF" }}>Loading...</div>
-      ) : (
-        <>
-          <div style={{ marginBottom: 12, fontSize: 13, fontWeight: 700, color: "#374151" }}>
-            Rate Card — {selectedSubconName}
-            <span style={{ marginLeft: 10, fontSize: 12, fontWeight: 500, color: "#6B7280" }}>{rateItems.length} items</span>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+          {conTypes.map(ct => chipBtn(ct.name, selType?.id===ct.id, ()=>{setSelType(ct);setSelPkg(null);setSelTrade(null);}, T.blue))}
+          {!conTypes.length && <span style={{color:T.textLight,fontSize:12}}>No types yet — add from Client BOQ Rate → Construction Type</span>}
+        </div>
+      </div>
+
+      {selType && (
+        <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:12}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:10}}>
+            2 — CITY
           </div>
-          <DataTable
-            columns={[
-              { key: "work_item", label: "Work Item", minW: 200, render: r => <span style={{ fontWeight: 600 }}>{r.work_item}</span> },
-              { key: "unit", label: "Unit", minW: 80 },
-              { key: "rate", label: "Rate (Rs.)", minW: 100, align: "right", render: r => <span style={{ fontWeight: 700, color: "#2563EB" }}>Rs.{(r.rate||0).toLocaleString()}/{r.unit}</span> },
-              { key: "remark", label: "Remark", minW: 160, render: r => <span style={{ fontSize: 12, color: "#6B7280" }}>{r.remark || "—"}</span> },
-            ]}
-            data={rateItems}
-            onEdit={openEdit}
-            onDelete={del}
-            emptyMsg="No rate items added yet — click Add Item to start"
-          />
-        </>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {cities.map(c => chipBtn(c.name, selCity?.id===c.id, ()=>setSelCity(c), T.teal))}
+          </div>
+        </div>
       )}
 
-      <Modal open={showModal} onClose={() => setShowModal(false)} title={editing ? "Edit Rate Item" : "Add Rate Item"} desc={"Rate for: " + selectedSubconName} width={500}>
-        <div style={{ marginBottom: 14 }}>
-          <FormSelect label="Work Item" value={form.work_item} onChange={v => upd("work_item", v)} options={workItems} required />
+      {/* ════════════ FLOOR PACKAGE MODE ════════════ */}
+      {mode==="package" && selType && selCity && (<>
+
+        {/* Step 3: Trade Category */}
+        <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:12}}>
+          <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:10}}>
+            3 — TRADE CATEGORY
+          </div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+            {TRADE_CATS.map(t => chipBtn(t, selTrade===t, ()=>setSelTrade(t), T.purple))}
+          </div>
         </div>
-        <div style={{ display: "flex", gap: 16, marginBottom: 14 }}>
-          <FormSelect label="Unit" value={form.unit} onChange={v => upd("unit", v)} options={uomOptions} half />
-          <FormField label="Rate (Rs.)" value={form.rate || ""} onChange={v => upd("rate", parseFloat(v) || 0)} type="number" half required />
+
+        {/* Step 4: Rate Card */}
+        {selTrade && (
+          <div style={{background:"white",borderRadius:10,border:`1px solid ${T.border}`,padding:"14px 18px",marginBottom:16}}>
+            <div style={{fontSize:10,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"1px",marginBottom:12}}>
+              4 — RATE CARD
+            </div>
+            <div style={{display:"flex",gap:10,flexWrap:"wrap",alignItems:"stretch"}}>
+              {packages.map(p => (
+                <div key={p.id} onClick={()=>setSelPkg(p)} style={{
+                  padding:"12px 16px", borderRadius:10, cursor:"pointer", minWidth:150, position:"relative",
+                  border:`2px solid ${selPkg?.id===p.id?T.blue:T.border}`,
+                  background:selPkg?.id===p.id?T.blueSoft:"white",
+                  boxShadow:selPkg?.id===p.id?`0 0 0 2px ${T.blue}33`:"none",
+                }}>
+                  <div style={{fontSize:13,fontWeight:700,color:selPkg?.id===p.id?T.blue:T.text,paddingRight:20}}>{p.name}</div>
+                  {p.sqft_rate>0 && <div style={{fontSize:11,color:T.textLight,marginTop:3}}>₹{Number(p.sqft_rate).toLocaleString()}/sqft</div>}
+                  {p.description && <div style={{fontSize:10.5,color:T.textLight,marginTop:2}}>{p.description}</div>}
+                  <button onClick={e=>{e.stopPropagation();setEditingPkg(p);setPkgForm({name:p.name,sqft_rate:String(p.sqft_rate||""),description:p.description||""});setAddPkgModal(true);}}
+                    style={{position:"absolute",top:7,right:7,background:"none",border:"none",cursor:"pointer",padding:3,borderRadius:5,opacity:0.5,display:"flex"}}>
+                    <IcEdit size={12} color={T.textMid}/>
+                  </button>
+                </div>
+              ))}
+              <div onClick={()=>{setEditingPkg(null);setPkgForm({name:"",sqft_rate:"",description:""});setAddPkgModal(true);}}
+                style={{padding:"12px 16px",borderRadius:10,border:`2px dashed ${T.border}`,background:T.bg,cursor:"pointer",minWidth:130,display:"flex",alignItems:"center",justifyContent:"center",gap:6,color:T.textLight,fontSize:13,fontWeight:600}}>
+                <IcPlus size={14} color={T.textLight}/> New Rate Card
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Package tree */}
+        {selPkg && (<>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div>
+              <span style={{fontSize:13,fontWeight:700,color:T.text}}>
+                {selType.name} — {selCity.name} — <span style={{color:T.purple}}>{selTrade}</span> — <span style={{color:T.blue}}>{selPkg.name}</span>
+              </span>
+              <div style={{fontSize:11,color:T.textLight,marginTop:2}}>
+                Click ✏ Edit on a section to modify rates · Save Rates to commit all changes
+              </div>
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              {hasPendingEdits && (
+                <button onClick={()=>{setSectionEdits({});setItemEdits({});setPendingDelItems({});setEditingSections({});}}
+                  style={{padding:"7px 14px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:12,fontWeight:600,color:T.textMid,cursor:"pointer"}}>
+                  ✕ Discard
+                </button>
+              )}
+              <button onClick={saveRates} disabled={!hasPendingEdits||saving}
+                style={{padding:"8px 18px",borderRadius:8,background:hasPendingEdits&&!saving?T.blue:T.borderLight,color:hasPendingEdits&&!saving?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:hasPendingEdits&&!saving?"pointer":"not-allowed"}}>
+                {saving?"Saving…":"💾 Save Rates"}
+              </button>
+              <button onClick={async()=>{
+                  const name=window.prompt("Section name?");
+                  if(!name?.trim()) return;
+                  const r=await api.post(`/library/packages/${selPkg.id}/structures`,{name:name.trim(),default_qty:0,unit:"sqft",rate:0,per_item_qty:0,sort_order:pkgStructures.length}).catch(()=>({success:false}));
+                  if(r.success){setPkgStructures(p=>[...p,r.data]);setEditingSections(p=>({...p,[r.data.id]:true}));}
+                  else alert(r.message||"Failed");
+                }}
+                style={{padding:"8px 16px",borderRadius:8,background:"white",border:`1.5px solid ${T.blue}`,color:T.blue,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+                <IcPlus size={14} color={T.blue}/> Add Section
+              </button>
+            </div>
+          </div>
+
+          {pkgStructures.length===0 && (
+            <div style={{textAlign:"center",padding:"48px 20px",background:"white",borderRadius:12,border:`1.5px dashed ${T.border}`,color:T.textLight,fontSize:14}}>
+              No sections yet — click + Add Section to build this rate card
+            </div>
+          )}
+
+          {pkgStructures.map(sec => {
+            const secCats  = pkgCategories.filter(c => c.structure_id===sec.id);
+            const rows     = sectionItems[sec.id]||[];
+            const delSet   = pendingDelItems[sec.id]||{};
+            const editable = !!editingSections[sec.id];
+            const isCollapsed = !!collapsedSecs[sec.id];
+            const area     = getSecArea(sec);
+            const baseSum  = rows.filter(r=>!delSet[r.item_id]).reduce((s,r)=>s+getRowBase(sec.id,r),0);
+            const addOnSum = rows.filter(r=>!delSet[r.item_id]).reduce((s,r)=>s+getRowAddOn(sec.id,r),0);
+
+            return (
+              <div key={sec.id} style={{background:"white",borderRadius:12,marginBottom:14,overflow:"hidden",
+                border:`1.5px solid ${editable?"#93C5FD":T.border}`,
+                boxShadow:editable?`0 0 0 3px #BFDBFE`:T.shadow}}>
+
+                {/* Section header */}
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"12px 16px",background:"#0F172A",cursor:"pointer"}}
+                  onClick={()=>setCollapsedSecs(p=>({...p,[sec.id]:!p[sec.id]}))}>
+                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2.5}
+                    style={{transform:isCollapsed?"rotate(0deg)":"rotate(90deg)",transition:"transform .18s",flexShrink:0}}>
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
+
+                  {editable ? (
+                    <input value={getSecName(sec)} onClick={e=>e.stopPropagation()}
+                      onChange={e=>patchSection(sec.id,{name:e.target.value})}
+                      style={{flex:1,padding:"4px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:13.5,fontWeight:700,outline:"none",fontFamily:"inherit"}}/>
+                  ) : (
+                    <span style={{flex:1,fontSize:14,fontWeight:700,color:"white"}}>{sec.name}</span>
+                  )}
+
+                  <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>
+                    {secCats.length} cat · {rows.filter(r=>!delSet[r.item_id]).length} items
+                  </span>
+
+                  {editable && (
+                    <div style={{display:"flex",alignItems:"center",gap:5}} onClick={e=>e.stopPropagation()}>
+                      <span style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>AREA</span>
+                      <input type="number" value={area||""} onChange={e=>patchSection(sec.id,{default_qty:e.target.value})}
+                        placeholder="0" onClick={e=>e.stopPropagation()}
+                        style={{width:68,padding:"3px 7px",borderRadius:5,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                      <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>sqft</span>
+                    </div>
+                  )}
+                  {!editable && area>0 && <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{area.toLocaleString()} sqft</span>}
+                  {(baseSum+addOnSum)>0 && <span style={{fontSize:12,fontWeight:700,color:"#4ADE80"}}>₹{(baseSum+addOnSum).toLocaleString()}/sqft</span>}
+
+                  <button onClick={e=>{e.stopPropagation();setEditingSections(p=>({...p,[sec.id]:!editable}));}}
+                    style={{padding:"4px 12px",borderRadius:6,background:editable?"#1E40AF":"rgba(255,255,255,0.12)",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                    {editable?"✓ Done":"✏ Edit"}
+                  </button>
+                </div>
+
+                {/* Section body */}
+                {!isCollapsed && (
+                  <div style={{padding:"12px 16px"}}>
+                    {secCats.length===0 && (
+                      <div style={{textAlign:"center",padding:"20px",color:T.textLight,fontSize:12}}>
+                        No items — add sections and categories from Client BOQ Rate page, then rates appear here
+                      </div>
+                    )}
+                    {secCats.map(cat => {
+                      const catRows  = rows.filter(r=>r.category_name===cat.category_name && !delSet[r.item_id]);
+                      const catKey   = `${sec.id}:${cat.id||cat.category_name}`;
+                      const isCatCol = !!collapsedCats[catKey];
+                      const catBase  = catRows.reduce((s,r)=>s+getRowBase(sec.id,r),0);
+                      const catAddOn = catRows.reduce((s,r)=>s+getRowAddOn(sec.id,r),0);
+                      if(!catRows.length && !editable) return null;
+                      return (
+                        <div key={catKey} style={{marginBottom:8}}>
+                          <div onClick={()=>setCollapsedCats(p=>({...p,[catKey]:!p[catKey]}))}
+                            style={{display:"flex",alignItems:"center",gap:8,padding:"7px 12px",background:"#F8FAFC",borderRadius:7,cursor:"pointer",border:`1px solid ${T.borderLight}`,marginBottom:isCatCol?0:6}}>
+                            <svg width={9} height={9} viewBox="0 0 24 24" fill="none" stroke={T.textLight} strokeWidth={2.5}
+                              style={{transform:isCatCol?"rotate(0deg)":"rotate(90deg)",transition:"transform .15s",flexShrink:0}}>
+                              <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                            <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{cat.category_name}</span>
+                            <span style={{fontSize:10.5,color:T.textLight}}>· {catRows.length} items</span>
+                            <span style={{fontSize:11,fontWeight:700,color:T.blue}}>Base ₹{catBase.toLocaleString()}</span>
+                            {catAddOn>0 && <span style={{fontSize:11,fontWeight:600,color:T.amber,marginLeft:6}}>+Add-on ₹{catAddOn.toLocaleString()}</span>}
+                          </div>
+
+                          {!isCatCol && catRows.length>0 && (
+                            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,marginBottom:4}}>
+                              <thead>
+                                <tr>
+                                  {["ITEM","UNIT","BASE RATE","ADD-ON","DESCRIPTION",...(editable?[""]:[])].map(h=>(
+                                    <th key={h} style={{padding:"5px 10px",textAlign:"left",fontSize:9.5,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"0.4px",background:"#F1F5F9",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+                                  ))}
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {catRows.map(it => (
+                                  <tr key={it.item_id} style={{borderBottom:`1px solid ${T.borderLight}`}}>
+                                    <td style={{padding:"7px 10px",fontWeight:600,color:T.text}}>{it.item_name||it.name}</td>
+                                    <td style={{padding:"7px 10px",color:T.textLight}}>{it.unit}</td>
+                                    <td style={{padding:"7px 10px"}}>
+                                      {editable
+                                        ? <input type="number" value={getRowBase(sec.id,it)} onChange={e=>patchRow(sec.id,it.item_id,{base_rate:e.target.value})}
+                                            style={{width:82,padding:"3px 7px",borderRadius:5,border:`1px solid ${T.border}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                                        : <span style={{fontWeight:700,color:T.blue}}>₹{Number(getRowBase(sec.id,it)).toLocaleString()}</span>}
+                                    </td>
+                                    <td style={{padding:"7px 10px"}}>
+                                      {editable
+                                        ? <input type="number" value={getRowAddOn(sec.id,it)} onChange={e=>patchRow(sec.id,it.item_id,{add_on_rate:e.target.value})}
+                                            style={{width:82,padding:"3px 7px",borderRadius:5,border:`1px solid ${T.border}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                                        : <span style={{color:T.amber,fontWeight:600}}>{Number(getRowAddOn(sec.id,it))>0?`₹${Number(getRowAddOn(sec.id,it)).toLocaleString()}`:"—"}</span>}
+                                    </td>
+                                    <td style={{padding:"7px 10px",color:T.textLight,fontSize:11.5}}>{it.description||"—"}</td>
+                                    {editable && (
+                                      <td style={{padding:"7px 10px"}}>
+                                        <button onClick={()=>setPendingDelItems(p=>({...p,[sec.id]:{...(p[sec.id]||{}),[it.item_id]:true}}))}
+                                          style={{background:"none",border:"none",cursor:"pointer",padding:2,display:"flex"}}>
+                                          <IcTrash size={13} color={T.red}/>
+                                        </button>
+                                      </td>
+                                    )}
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </>)}
+      </>)}
+
+      {/* ════════════ WORK ITEM MODE ════════════ */}
+      {mode==="item_wise" && selType && selCity && (
+        <div>
+          <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap",alignItems:"center"}}>
+            <span style={{fontSize:11,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:".5px",alignSelf:"center"}}>Category:</span>
+            {["All",...TRADE_CATS].map(t=>(
+              <button key={t} onClick={()=>setTradeFilter(t)}
+                style={{padding:"5px 14px",borderRadius:20,border:`1.5px solid ${tradeFilter===t?T.blue:T.border}`,background:tradeFilter===t?T.blue:"white",color:tradeFilter===t?"white":T.textMid,fontSize:12,fontWeight:600,cursor:"pointer"}}>
+                {t}
+              </button>
+            ))}
+            <button onClick={openAddItem}
+              style={{marginLeft:"auto",padding:"8px 18px",borderRadius:8,background:`linear-gradient(135deg,${T.blue},${T.blueMid})`,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6,boxShadow:`0 3px 10px ${T.blue}33`}}>
+              <IcPlus size={14} color="white"/> Add Work Item
+            </button>
+          </div>
+
+          {itemsLoading && <div style={{textAlign:"center",padding:"40px",color:T.textLight}}>Loading…</div>}
+
+          {!itemsLoading && workItems.length===0 && (
+            <div style={{textAlign:"center",padding:"48px 20px",background:"white",borderRadius:12,border:`1.5px dashed ${T.border}`,color:T.textLight}}>
+              <div style={{fontSize:14,fontWeight:600,marginBottom:6}}>No items yet for {selType.name} × {selCity.name}</div>
+              <div style={{fontSize:12}}>Click + Add Work Item to build the rate library for this city/type combo</div>
+            </div>
+          )}
+
+          {!itemsLoading && (tradeFilter==="All" ? tradeGroupsWithItems : [tradeFilter]).map(trade => {
+            const items = workItems.filter(i=>i.trade_category===trade);
+            if(!items.length) return null;
+            return (
+              <div key={trade} style={{background:"white",borderRadius:12,border:`1px solid ${T.border}`,marginBottom:14,overflow:"hidden",boxShadow:T.shadow}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"10px 16px",background:"#F8FAFC",borderBottom:`1px solid ${T.border}`}}>
+                  <span style={{fontSize:13,fontWeight:700,color:T.text}}>{trade}</span>
+                  <span style={{fontSize:11,color:T.textLight,background:T.borderLight,padding:"2px 10px",borderRadius:20,fontWeight:600}}>{items.length} items</span>
+                </div>
+                <DataTable
+                  columns={[
+                    {key:"name",    label:"Work Item",                  minW:200, render:r=><span style={{fontWeight:600}}>{r.name}</span>},
+                    {key:"unit",    label:"Unit",                       minW:80},
+                    {key:"rate",    label:`Rate — ${selCity.name}`,     minW:140, align:"right",
+                     render:r=><span style={{fontWeight:700,color:T.blue}}>₹{Number(r.rate||0).toLocaleString("en-IN")}/{r.unit}</span>},
+                    {key:"description", label:"Description / Scope",   minW:200,
+                     render:r=><span style={{fontSize:12,color:T.textLight}}>{r.description||"—"}</span>},
+                  ]}
+                  data={items}
+                  onEdit={openEditItem}
+                  onDelete={item=>deleteItem(item.id)}
+                  emptyMsg=""
+                />
+              </div>
+            );
+          })}
         </div>
-        <FormField label="Remark / Scope" value={form.remark} onChange={v => upd("remark", v)} placeholder="e.g. Including material, labour only, etc." />
-        <ModalFooter onClose={() => setShowModal(false)} onSave={save} saveLabel={saving ? "Saving..." : editing ? "Update" : "Add Item"} />
+      )}
+
+      {/* Prompt to select type/city */}
+      {(!selType || !selCity) && (
+        <div style={{textAlign:"center",padding:"40px 20px",background:"white",borderRadius:12,border:`1.5px dashed ${T.border}`,marginTop:8,color:T.textLight}}>
+          {!selType ? "Select a Construction Type to start" : "Select a City to view rates"}
+        </div>
+      )}
+
+      {/* ── Add/Edit Rate Card (Package) Modal ────────────────────────── */}
+      <Modal open={addPkgModal} onClose={()=>{setAddPkgModal(false);setEditingPkg(null);}}
+        title={editingPkg?"Edit Rate Card":"New Rate Card"}
+        desc={`${selTrade||""}${selType?" — "+selType.name:""}`} width={480}>
+        <FormField label="Rate Card Name *" value={pkgForm.name} onChange={v=>setPkgForm(p=>({...p,name:v}))}
+          placeholder="e.g. Civil Full, Civil Basic, Electrical Standard" required/>
+        <div style={{display:"flex",gap:14,margin:"14px 0"}}>
+          <FormField label="Indicative Rate (₹/sqft)" value={pkgForm.sqft_rate} onChange={v=>setPkgForm(p=>({...p,sqft_rate:v}))} type="number" half placeholder="e.g. 800"/>
+          <FormField label="Description" value={pkgForm.description} onChange={v=>setPkgForm(p=>({...p,description:v}))} half placeholder="Optional"/>
+        </div>
+        <ModalFooter onClose={()=>{setAddPkgModal(false);setEditingPkg(null);}} onSave={savePkg}
+          saveLabel={pkgSaving?"Saving…":editingPkg?"Update Rate Card":"Create Rate Card"}/>
+      </Modal>
+
+      {/* ── Add/Edit Work Item Modal ────────────────────────────────────── */}
+      <Modal open={showItemModal} onClose={()=>setShowItemModal(false)}
+        title={editingItem?"Edit Work Item":"Add Work Item"}
+        desc={`${selType?.name||""}${selCity?" × "+selCity.name:""}`} width={500}>
+        <FormField label="Item Name *" value={itemForm.name} onChange={v=>setItemForm(p=>({...p,name:v}))}
+          placeholder="e.g. Brick Masonry, RCC Slab, Plastering" required/>
+        <div style={{display:"flex",gap:14,margin:"14px 0"}}>
+          <FormSelect label="Trade Category" value={itemForm.trade_category} onChange={v=>setItemForm(p=>({...p,trade_category:v}))} options={TRADE_CATS} half/>
+          <FormSelect label="Unit" value={itemForm.unit} onChange={v=>setItemForm(p=>({...p,unit:v}))} options={uomOpts} half/>
+        </div>
+        <div style={{display:"flex",gap:14,marginBottom:14}}>
+          <FormField label={`Rate in ${selCity?.name||"City"} (₹/${itemForm.unit||"unit"}) *`}
+            value={itemForm.rate} onChange={v=>setItemForm(p=>({...p,rate:v}))} type="number" half placeholder="e.g. 45" required/>
+          <FormField label="Description / Scope" value={itemForm.description} onChange={v=>setItemForm(p=>({...p,description:v}))} half placeholder="Optional notes"/>
+        </div>
+        <ModalFooter onClose={()=>setShowItemModal(false)} onSave={saveItem}
+          saveLabel={itemSaving?"Saving…":editingItem?"Update Item":"Add Item"}/>
       </Modal>
     </div>
   );

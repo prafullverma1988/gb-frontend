@@ -6894,6 +6894,8 @@ const PT_REASON_MAP=Object.fromEntries(PT_DELAY_REASONS.map(r=>[r.key,r]));
 function TabTasks({ projectId, isAdmin }) {
   const [tasks,setTasks]     = useState([]);
   const [loading, setLoading] = useState(true);
+  const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
+  useEffect(()=>{const fn=()=>setIsMobile(window.innerWidth<768);window.addEventListener("resize",fn);return()=>window.removeEventListener("resize",fn);},[]);
 
   // ── BASELINE STATE ─────────────────────────────────────────────
   const [baselineStatus, setBaselineStatus] = useState(null); // {is_set, current, task_total, ...}
@@ -6993,8 +6995,8 @@ function TabTasks({ projectId, isAdmin }) {
         const map = {};
         flat.forEach((t, idx) => {
           t.children = [];
-          t.no = t.task_no;
-          t.tsk_no = "TSK" + String(t.id).padStart(6, "0");
+          t.id = Number(t.id);
+          t.no = t.task_no || String(t.id); // fallback: DB id if task_no missing
           t.baseStart = t.base_start;
           t.baseEnd = t.base_end;
           t.actualStart = t.actual_start;
@@ -7028,6 +7030,7 @@ function TabTasks({ projectId, isAdmin }) {
   const [fDelayed,setFDelayed]   = useState(false);
   const [fAsSchedule,setFAsSchedule] = useState(false);   // flat chronological sort view
   const [fToday,setFToday]           = useState(false);    // show only today's tasks
+  const [fPhase,setFPhase]           = useState("All");    // root-task (phase) filter — mobile filter sheet
   const [fDateFrom,setFDateFrom]     = useState("");       // unified date range — from
   const [fDateTo,setFDateTo]         = useState("");       // unified date range — to
   const [showFilters,setShowFilters] = useState(false);
@@ -7138,7 +7141,7 @@ function TabTasks({ projectId, isAdmin }) {
     const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
     const map = {};
     flat.forEach((t, idx) => {
-      t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
+      t.children=[]; t.id=Number(t.id); t.no=t.task_no||String(t.id);
       t.baseStart=t.base_start; t.baseEnd=t.base_end;
       t.originalStart=t.original_start; t.originalEnd=t.original_end;
       t.currentBaselineStart=t.current_baseline_start; t.currentBaselineEnd=t.current_baseline_end;
@@ -7181,9 +7184,11 @@ function TabTasks({ projectId, isAdmin }) {
     return latest||t.baseStart;
   }
 
-  function applyFilters(list){
+  function applyFilters(list,rootPhase){
     return list.map(t=>{
-      const ch=t.children?applyFilters(t.children):[];
+      const thisPhase=rootPhase!==undefined?rootPhase:t.name;
+      const ch=t.children?applyFilters(t.children,thisPhase):[];
+      const mPhase=fPhase==="All"||thisPhase===fPhase;
       const mCat=fCat==="All"||t.category===fCat;
       const mSt=fStatus==="All"||t.status===fStatus;
       const mTag=fTag==="All"||t.tag===fTag;
@@ -7202,19 +7207,19 @@ function TabTasks({ projectId, isAdmin }) {
         const bs=t.baseStart, be=t.baseEnd||t.baseStart;
         mDate=bs?((!fDateFrom||be>=fDateFrom)&&(!fDateTo||bs<=fDateTo)):false;
       }
-      const self=mCat&&mSt&&mTag&&mAs&&mDel&&mToday&&mDate;
+      const self=mPhase&&mCat&&mSt&&mTag&&mAs&&mDel&&mToday&&mDate;
       if(self||ch.length>0) return{...t,children:ch};
       return null;
     }).filter(Boolean);
   }
-  const filtered=applyFilters(tasks);
+  const filtered=applyFilters(tasks,undefined);
   const flatFiltered=ptFlatten(filtered);
   // Schedule view: all matched tasks flattened + sorted by baseStart
   const scheduleFlat = fAsSchedule
     ? [...flatFiltered].filter(t=>t.baseStart).sort((a,b)=>a.baseStart.localeCompare(b.baseStart))
     : null;
   const allTags=[...new Set(allFlat.map(t=>t.tag).filter(Boolean))];
-  const activeF=[fCat!=="All",fStatus!=="All",fTag!=="All",fAssignee!=="All",fDelayed,fToday,!!(fDateFrom||fDateTo),fAsSchedule].filter(Boolean).length;
+  const activeF=[fCat!=="All",fPhase!=="All",fStatus!=="All",fTag!=="All",fAssignee!=="All",fDelayed,fToday,!!(fDateFrom||fDateTo),fAsSchedule].filter(Boolean).length;
 
   const ongoing=allFlat.filter(t=>t.status==="Ongoing").length;
   const completed=allFlat.filter(t=>t.status==="Completed").length;
@@ -7258,7 +7263,7 @@ function TabTasks({ projectId, isAdmin }) {
     const r = await api.get("/tasks?project_id=" + projectId);
     if (r.success) {
       const fl = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-")); const map = {};
-      fl.forEach((t,i) => { t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0"); t.baseStart=t.base_start; t.baseEnd=t.base_end; t.actualStart=t.actual_start; t.actualEnd=t.actual_end; t.dhyanRakhen=t.dhyan_rakhen; t.lastUpdate=t.last_update; t.assignee=t.assignee_name||t.assigned_to||""; t.serial=i+1; map[t.id]=t; });
+      fl.forEach((t,i) => { t.children=[]; t.id=Number(t.id); t.no=t.task_no||String(t.id); t.baseStart=t.base_start; t.baseEnd=t.base_end; t.actualStart=t.actual_start; t.actualEnd=t.actual_end; t.dhyanRakhen=t.dhyan_rakhen; t.lastUpdate=t.last_update; t.assignee=t.assignee_name||t.assigned_to||""; t.serial=i+1; map[t.id]=t; });
       const roots=[]; fl.forEach(t => { if(t.parent_id&&map[t.parent_id]) map[t.parent_id].children.push(t); else roots.push(t); });
       setTasks(roots);
     }
@@ -7752,8 +7757,8 @@ function TabTasks({ projectId, isAdmin }) {
         </button>}
       </div>
 
-      {/* Filter panel — 2 rows */}
-      {showFilters&&(
+      {/* Filter panel — desktop inline */}
+      {!isMobile&&showFilters&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:10}}>
           {/* Row 1 */}
           <div style={{display:"flex",gap:8,alignItems:"flex-end",flexWrap:"wrap",marginBottom:10}}>
@@ -7840,6 +7845,81 @@ function TabTasks({ projectId, isAdmin }) {
           </div>
         </div>
       )}
+
+      {/* Mobile filter bottom sheet — constrained to mobile viewport width, NOT full desktop screen */}
+      {isMobile&&showFilters&&(<>
+        <div onClick={()=>setShowFilters(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300}}/>
+        <div style={{position:"fixed",bottom:0,left:0,right:0,maxHeight:"82vh",overflowY:"auto",background:"white",borderRadius:"16px 16px 0 0",zIndex:301,paddingBottom:"env(safe-area-inset-bottom,0px)",animation:"slideUp .2s ease"}}>
+          {/* Header */}
+          <div style={{padding:"12px 16px 10px",borderBottom:"1px solid #F1F5F9",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0,background:"white",zIndex:1}}>
+            <div style={{display:"flex",gap:0,background:"#F1F5F9",borderRadius:8,padding:3}}>
+              {["Filter","Sort"].map((t,i)=>(
+                <button key={t} style={{padding:"6px 20px",borderRadius:6,border:"none",background:i===0?"white":"transparent",fontSize:13,fontWeight:i===0?700:500,cursor:"pointer",color:"#1E293B",fontFamily:"inherit"}}>{t}</button>
+              ))}
+            </div>
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <button onClick={()=>{setFStatus("All");setFPhase("All");setFDelayed(false);setFToday(false);}} style={{padding:"6px 12px",borderRadius:6,background:"#FEE2E2",color:"#DC2626",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>Clear All</button>
+              <button onClick={()=>setShowFilters(false)} style={{width:30,height:30,borderRadius:8,border:"none",background:"#F1F5F9",cursor:"pointer",fontSize:18,display:"flex",alignItems:"center",justifyContent:"center",color:"#64748B",fontFamily:"inherit"}}>×</button>
+            </div>
+          </div>
+          {/* Body */}
+          <div style={{padding:"14px 16px"}}>
+            {/* STATUS */}
+            <div style={{marginBottom:18}}>
+              <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>STATUS</div>
+              <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                {["All","Not Started","Ongoing","Completed","Hold"].map(s=>(
+                  <button key={s} onClick={()=>setFStatus(s)}
+                    style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${fStatus===s?"#2563EB":"#E2E8F0"}`,background:fStatus===s?"#2563EB":"white",color:fStatus===s?"white":"#374151",fontSize:12.5,fontWeight:fStatus===s?700:400,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>
+                    {s==="All"?"All":s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* PHASE */}
+            {tasks.length>0&&(
+              <div style={{marginBottom:18}}>
+                <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>PHASE</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap"}}>
+                  {["All",...tasks.map(t=>t.name)].map(ph=>(
+                    <button key={ph} onClick={()=>setFPhase(ph)}
+                      style={{padding:"7px 14px",borderRadius:20,border:`1.5px solid ${fPhase===ph?"#2563EB":"#E2E8F0"}`,background:fPhase===ph?"#2563EB":"white",color:fPhase===ph?"white":"#374151",fontSize:12,fontWeight:fPhase===ph?700:400,cursor:"pointer",fontFamily:"inherit",maxWidth:130,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",transition:"all .15s"}}>
+                      {ph==="All"?"All Phases":ph}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {/* SHOW ONLY */}
+            <div>
+              <div style={{fontSize:10,fontWeight:700,color:"#94A3B8",textTransform:"uppercase",letterSpacing:".6px",marginBottom:4}}>SHOW ONLY</div>
+              {[
+                {label:"Today's tasks",sub:"Base start → end ke beech aaj ka din ho",v:fToday,fn:setFToday,ic:"⏰"},
+                {label:"Delayed tasks (late)",sub:"End date nikal gayi, abhi bhi incomplete",v:fDelayed,fn:setFDelayed,ic:"⚠️"},
+              ].map(({label,sub,v,fn,ic})=>(
+                <div key={label} onClick={()=>fn(s=>!s)} style={{display:"flex",alignItems:"center",gap:10,padding:"13px 0",borderBottom:"1px solid #F8FAFC",cursor:"pointer"}}>
+                  <span style={{fontSize:18,flexShrink:0}}>{ic}</span>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,fontWeight:500,color:"#1E293B"}}>{label}</div>
+                    <div style={{fontSize:11,color:"#94A3B8",marginTop:2}}>{sub}</div>
+                  </div>
+                  <div style={{width:44,height:24,borderRadius:12,background:v?"#2563EB":"#E2E8F0",position:"relative",transition:"background .2s",flexShrink:0}}>
+                    <div style={{position:"absolute",top:2,left:v?20:2,width:20,height:20,borderRadius:"50%",background:"white",transition:"left .2s",boxShadow:"0 1px 3px rgba(0,0,0,.2)"}}/>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Apply button */}
+          <div style={{padding:"12px 16px 16px"}}>
+            <button onClick={()=>setShowFilters(false)}
+              style={{width:"100%",padding:"14px",borderRadius:10,background:"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:"pointer",fontFamily:"inherit"}}>
+              Apply{activeF>0?` (${activeF} active)`:""}
+            </button>
+          </div>
+        </div>
+        <style>{`@keyframes slideUp{from{transform:translateY(30px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
+      </>)}
 
       {/* LIST VIEW */}
       {view==="list"&&!loading&&(
@@ -8013,7 +8093,7 @@ function TabTasks({ projectId, isAdmin }) {
             {/* Task info header */}
             <div style={{padding:"8px 14px 6px",borderBottom:"1px solid #F3F4F6",marginBottom:4}}>
               <div style={{fontSize:11,fontWeight:700,color:"#111827",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{contextMenu.task.name}</div>
-              <div style={{fontSize:9.5,color:"#9CA3AF",fontFamily:"monospace"}}>{contextMenu.task.tsk_no} · {contextMenu.task.no}</div>
+              <div style={{fontSize:9.5,color:"#9CA3AF",fontFamily:"monospace"}}>{contextMenu.task.no}</div>
             </div>
             {[
               {icon:"M5 15l7-7 7 7",label:"Move Up",action:()=>{moveTask(contextMenu.task.id,"up");setContextMenu(null);}},
@@ -8040,7 +8120,7 @@ function TabTasks({ projectId, isAdmin }) {
       </>}
 
       {/* Task Detail drawer */}
-      {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}}/>}
+      {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}} isMobile={isMobile}/>}
       {showTaskIssues&&<TaskIssueDrawer issues={taskIssues} loading={taskIssuesLoading} filter={taskIssueFilter} setFilter={setTaskIssueFilter} onClose={()=>setShowTaskIssues(false)} onStatusChange={(id,s)=>setTaskIssues(p=>p.map(x=>x.id===id?{...x,status:s}:x))}/>}
 
       {/* Edit Task drawer */}
@@ -8143,7 +8223,7 @@ function TabTasks({ projectId, isAdmin }) {
               const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
               const map = {};
               flat.forEach((t, idx) => {
-                t.children = []; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
+                t.children = []; t.id=Number(t.id); t.no=t.task_no||String(t.id);
                 t.baseStart=t.base_start; t.baseEnd=t.base_end;
                 t.originalStart=t.original_start; t.originalEnd=t.original_end;
                 t.currentBaselineStart=t.current_baseline_start; t.currentBaselineEnd=t.current_baseline_end;
@@ -8173,7 +8253,7 @@ function TabTasks({ projectId, isAdmin }) {
               const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
               const map = {};
               flat.forEach((t, idx) => {
-                t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
+                t.children=[]; t.id=Number(t.id); t.no=t.task_no||String(t.id);
                 t.baseStart=t.base_start; t.baseEnd=t.base_end;
                 t.originalStart=t.original_start; t.originalEnd=t.original_end;
                 t.currentBaselineStart=t.current_baseline_start; t.currentBaselineEnd=t.current_baseline_end;
@@ -8205,7 +8285,7 @@ function TabTasks({ projectId, isAdmin }) {
               const flat = (r.data || []).filter(t => !String(t.task_no || "").startsWith("TODO-"));
               const map = {};
               flat.forEach((t, idx) => {
-                t.children=[]; t.no=t.task_no; t.tsk_no="TSK"+String(t.id).padStart(6,"0");
+                t.children=[]; t.id=Number(t.id); t.no=t.task_no||String(t.id);
                 t.baseStart=t.base_start; t.baseEnd=t.base_end;
                 t.originalStart=t.original_start; t.originalEnd=t.original_end;
                 t.currentBaselineStart=t.current_baseline_start; t.currentBaselineEnd=t.current_baseline_end;
@@ -9175,7 +9255,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
       <div style={{background:"#1E3A5F",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontSize:14,fontWeight:700,color:"white"}}>New Material Request</div>
-          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Task: {task.name} · {task.tsk_no||task.no}</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Task: {task.name} · {task.no}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",display:"flex"}}>
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -9263,7 +9343,7 @@ function TaskMRModal({task, prefill, projectId, onClose, onSaved}){
               unit: form.unit,
               required_date: form.required_date||null,
               approx_amount: form.approx_amount||null,
-              notes: form.notes ? form.notes+" [Task: "+task.name+"]" : "Task: "+task.name+" ("+task.tsk_no+")",
+              notes: form.notes ? form.notes+" [Task: "+task.name+"]" : "Task: "+task.name+" ("+task.no+")",
               task_id: task.id,
               task_name: task.name,
             });
@@ -9378,7 +9458,7 @@ function TaskGRNModal({task, prefill, projectId, onClose, onSaved}){
       <div style={{background:"#0F172A",padding:"13px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
         <div>
           <div style={{fontSize:14,fontWeight:700,color:"white"}}>Record GRN — Material Received</div>
-          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:2}}>Task: {task.name} · {task.tsk_no||task.no}</div>
+          <div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:2}}>Task: {task.name} · {task.no}</div>
         </div>
         <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",display:"flex"}}>
           <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -9730,7 +9810,7 @@ function TaskIssueChat({issueId}){
   );
 }
 
-function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
+function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   // ── Scrollspy: active nav section ───────────────────────────────────
   const [activeSection,setActiveSection]=useState("progress");
   const scrollRef=useRef(null);
@@ -9896,8 +9976,8 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
   };
 
   return(<>
-    {/* Backdrop */}
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+    {/* Backdrop — desktop only; on mobile the full-screen page has no click-outside-to-close */}
+    {!isMobile&&<div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)"}}/>}
 
     {/* Full photo viewer */}
     {fullPhoto&&(
@@ -9916,31 +9996,54 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
     {/* ── DRAWER ── */}
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(600px,100vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-8px 0 40px rgba(0,0,0,0.2)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
 
-      {/* ── HEADER (fixed) ── */}
-      <div style={{background:"#0F172A",padding:"12px 16px",flexShrink:0}}>
-        <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
-          <div style={{flex:1,minWidth:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
-              <span style={{fontSize:9.5,color:"rgba(255,255,255,0.35)",fontFamily:"monospace"}}>{task.tsk_no||task.no}</span>
-              <span style={{background:sm.bg,color:sm.c,fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{autoStatus(prog)}</span>
-              {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>⚠ DHYAN</span>}
-              {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{delay}d delayed</span>}
-            </div>
-            <div style={{fontSize:15,fontWeight:700,color:"white",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.name}</div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:3}}>{task.category}{task.assignee?" · "+task.assignee:""}</div>
-          </div>
-          <button onClick={onClose} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.8)",padding:8,display:"flex",borderRadius:8,flexShrink:0}}>
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+      {/* ── HEADER ── */}
+      {isMobile?(
+        <div style={{background:"#1E293B",padding:"10px 16px 12px",flexShrink:0}}>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",padding:"0 0 8px 0",display:"flex",alignItems:"center",gap:5}}>
+            <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+            <span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>Back</span>
           </button>
-        </div>
-        {/* Progress bar */}
-        <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10}}>
-          <div style={{flex:1,height:5,background:"rgba(255,255,255,0.15)",borderRadius:3,overflow:"hidden"}}>
-            <div style={{height:"100%",width:prog+"%",background:prog===100?"#10B981":"#3B82F6",borderRadius:3,transition:"width .3s"}}/>
+          <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:15.5,fontWeight:700,color:"white",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.name}</div>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginTop:5,flexWrap:"wrap"}}>
+                <span style={{background:sm.bg,color:sm.c,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20}}>{autoStatus(prog)}</span>
+                {task.category&&<span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{task.category}</span>}
+                {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>⚠ DHYAN</span>}
+                {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:4}}>{delay}d delay</span>}
+              </div>
+            </div>
+            <span style={{fontSize:26,fontWeight:800,color:prog===100?"#10B981":prog>0?"#60A5FA":"#94A3B8",flexShrink:0,lineHeight:1,marginTop:2}}>{prog}%</span>
           </div>
-          <span style={{fontSize:12,fontWeight:700,color:prog===100?"#10B981":"white",minWidth:34}}>{prog}%</span>
+          <div style={{marginTop:10,height:4,background:"rgba(255,255,255,0.15)",borderRadius:2,overflow:"hidden"}}>
+            <div style={{height:"100%",width:prog+"%",background:prog===100?"#10B981":"#3B82F6",borderRadius:2,transition:"width .3s"}}/>
+          </div>
         </div>
-      </div>
+      ):(
+        <div style={{background:"#0F172A",padding:"12px 16px",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4,flexWrap:"wrap"}}>
+                <span style={{fontSize:9.5,color:"rgba(255,255,255,0.35)",fontFamily:"monospace"}}>{task.no}</span>
+                <span style={{background:sm.bg,color:sm.c,fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{autoStatus(prog)}</span>
+                {task.dhyanRakhen&&<span style={{background:"#FEF3C7",color:"#92400E",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>⚠ DHYAN</span>}
+                {delay>0&&<span style={{background:"#FEE2E2",color:"#DC2626",fontSize:9,fontWeight:700,padding:"2px 8px",borderRadius:4}}>{delay}d delayed</span>}
+              </div>
+              <div style={{fontSize:15,fontWeight:700,color:"white",lineHeight:1.3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{task.name}</div>
+              <div style={{fontSize:10,color:"rgba(255,255,255,0.4)",marginTop:3}}>{task.category}{task.assignee?" · "+task.assignee:""}</div>
+            </div>
+            <button onClick={onClose} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.8)",padding:8,display:"flex",borderRadius:8,flexShrink:0}}>
+              <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+          <div style={{marginTop:10,display:"flex",alignItems:"center",gap:10}}>
+            <div style={{flex:1,height:5,background:"rgba(255,255,255,0.15)",borderRadius:3,overflow:"hidden"}}>
+              <div style={{height:"100%",width:prog+"%",background:prog===100?"#10B981":"#3B82F6",borderRadius:3,transition:"width .3s"}}/>
+            </div>
+            <span style={{fontSize:12,fontWeight:700,color:prog===100?"#10B981":"white",minWidth:34}}>{prog}%</span>
+          </div>
+        </div>
+      )}
 
       {/* DHYAN banner */}
       {task.dhyanRakhen&&<div style={{padding:"8px 14px",background:"#FEF3C7",borderBottom:"1px solid #FDE68A",flexShrink:0,display:"flex",gap:7}}>
@@ -10022,7 +10125,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
               <div style={{fontSize:11,color:"#64748B"}}>{prog===0?"Not started yet":prog===100?"Task complete!":"In progress"}</div>
             </div>
           </div>
-          {/* Quick % buttons — bigger for mobile touch */}
+          {/* Quick % buttons */}
           <div style={{display:"flex",gap:8,marginBottom:14}}>
             {[0,25,50,75,100].map(p=>(
               <button key={p} onClick={()=>setProg(p)}
@@ -10192,7 +10295,31 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           )}
           {/* Material activity list */}
           {matLoading&&<div style={{textAlign:"center",padding:"24px 0",color:"#94A3B8",fontSize:13}}>Loading materials...</div>}
-          {!matLoading&&materials.length>0&&(
+          {!matLoading&&materials.length>0&&(isMobile?(
+            /* ── Mobile: compact TABLE view ── */
+            <div style={{background:"white",borderRadius:10,border:"1px solid #E2E8F0",overflow:"hidden",marginBottom:8}}>
+              {/* Table header */}
+              <div style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",background:"#F8FAFC",borderBottom:"1px solid #E2E8F0",padding:"8px 12px"}}>
+                {["ITEM","ALLOTTED","USED","LEFT"].map(h=>(
+                  <span key={h} style={{fontSize:9.5,fontWeight:700,color:"#94A3B8",letterSpacing:".4px",textTransform:"uppercase"}}>{h}</span>
+                ))}
+              </div>
+              {/* Table rows */}
+              {materials.map((m,i)=>{
+                const left=Number(m.required_qty||0)-Number(m.used_qty||0);
+                const isOdd=i%2===1;
+                return(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:"2fr 1fr 1fr 1fr",padding:"10px 12px",background:isOdd?"#FAFAFA":"white",borderBottom:i<materials.length-1?"1px solid #F1F5F9":"none",alignItems:"center"}}>
+                    <div style={{fontSize:12.5,fontWeight:600,color:"#1E293B",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.material_name}</div>
+                    <div style={{fontSize:12,color:"#475569"}}>{m.required_qty||0} <span style={{fontSize:9,color:"#94A3B8"}}>{m.unit}</span></div>
+                    <div style={{fontSize:12,fontWeight:600,color:Number(m.used_qty)>0?"#D97706":"#94A3B8"}}>{m.used_qty||0} <span style={{fontSize:9,color:"#94A3B8"}}>{m.unit}</span></div>
+                    <div style={{fontSize:12,fontWeight:600,color:left>0?"#059669":left<0?"#DC2626":"#94A3B8"}}>{left} <span style={{fontSize:9,color:"#94A3B8"}}>{m.unit}</span></div>
+                  </div>
+                );
+              })}
+            </div>
+          ):(
+            /* ── Desktop: card view ── */
             <div>
               <div style={{fontSize:10,fontWeight:600,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Material Activity ({materials.length})</div>
               {materials.map((m,i)=>{
@@ -10213,7 +10340,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
                 );
               })}
             </div>
-          )}
+          ))}
           {!matLoading&&materials.length===0&&usedLog.length===0&&(
             <div style={{textAlign:"center",padding:"32px 0",color:"#94A3B8"}}>
               <svg width={36} height={36} viewBox="0 0 24 24" fill="none" stroke="#CBD5E1" strokeWidth={1.5} style={{margin:"0 auto 8px",display:"block"}}><path d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
@@ -10914,9 +11041,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId}){
           })}
         </div>
 
+
       </div>{/* end scrollable body */}
 
-      {/* ── COMMENTS — Fixed at bottom ── */}
+      {/* ── COMMENTS — Fixed at bottom (mobile + desktop) ── */}
       <div style={{borderTop:"1px solid #E2E8F0",background:"white",flexShrink:0}}>
         {comments.length>0&&(
           <div style={{maxHeight:110,overflowY:"auto",padding:"8px 14px 4px"}}>
@@ -14829,7 +14957,7 @@ function TabMaterial({ project }) {
 }
 
 
-function TabSubcon({ projectId }) {
+function TabSubcon({ projectId, project }) {
   const [wos, setWos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selWo, setSelWo] = useState(null);
@@ -15455,7 +15583,7 @@ function TabSubcon({ projectId }) {
       {/* NEW WO MODAL */}
       {showNewWO&&(
         <NewWOModal
-          subcons={subcons} setSubcons={setSubcons} projectId={projectId} fmtC={fmtC}
+          subcons={subcons} setSubcons={setSubcons} projectId={projectId} project={project} fmtC={fmtC}
           inpStyle={inpStyle} lblStyle={lblStyle} saving={saving} setSaving={setSaving}
           onClose={()=>setShowNewWO(false)}
           onSaved={()=>{ setShowNewWO(false); loadWOs(); }}
@@ -15600,9 +15728,143 @@ function TabSubcon({ projectId }) {
   );
 }
 
-function NewWOModal({ subcons, setSubcons, projectId, fmtC, inpStyle, lblStyle, saving, setSaving, onClose, onSaved }) {
-  const CATS = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
+function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, lblStyle, saving, setSaving, onClose, onSaved }) {
+  const CATS       = ["Civil","Electrical","Plumbing","Finishing","Structural","MEP","Waterproofing","Painting","Tiling","Other"];
+  const TRADE_CATS = ["Civil","Electrical","Plumbing","Finishing","Tile","MEP","Waterproofing","Painting","Other"];
   const blankSection = () => ({ title:"", items:[{ description:"", unit:"", qty:"", rate:"", isLibrary:false }] });
+
+  // ── WO Type ────────────────────────────────────────────────────────────
+  // "manual"    → existing manual entry (sections + items typed by hand)
+  // "package"   → pick subcon rate card package → sections+items auto-load
+  // "item_wise" → browse work items from library → tick + qty
+  const [woType, setWoType] = useState("manual");
+
+  // ── Package mode state ─────────────────────────────────────────────────
+  // Reads project.city_id + project.construction_type_id for auto-detect
+  const [pkgConTypes,  setPkgConTypes]  = useState([]);
+  const [pkgCities,    setPkgCities]    = useState([]);
+  const [pkgSelType,   setPkgSelType]   = useState(null);
+  const [pkgSelCity,   setPkgSelCity]   = useState(null);
+  const [pkgTrade,     setPkgTrade]     = useState(null);
+  const [pkgList,      setPkgList]      = useState([]);
+  const [pkgSelPkg,    setPkgSelPkg]    = useState(null);
+  const [pkgStructures,setPkgStructures]= useState([]);
+  const [pkgCategories,setPkgCategories]= useState([]);
+  const [pkgSecItems,  setPkgSecItems]  = useState({}); // {sid:[rows]}
+  const [pkgAreas,     setPkgAreas]     = useState({}); // {sid: area override}
+  const [pkgCollapsed, setPkgCollapsed] = useState({});
+
+  // ── Item-wise mode state ───────────────────────────────────────────────
+  const [iwItems,      setIwItems]      = useState([]); // all work items for city+type
+  const [iwLoading,    setIwLoading]    = useState(false);
+  const [iwTradeFilter,setIwTradeFilter]= useState("All");
+  const [iwPicked,     setIwPicked]     = useState({}); // {id: qty}
+
+  // Load base data for package/item-wise mode when modal opens
+  useEffect(() => {
+    if (woType === "manual") return;
+    api.get("/library/construction-types").then(r => {
+      if (!r.success) return;
+      setPkgConTypes(r.data||[]);
+      // Auto-select from project
+      if (project?.construction_type_id) {
+        const match = (r.data||[]).find(t => Number(t.id)===Number(project.construction_type_id));
+        if (match) setPkgSelType(match);
+      }
+    });
+    api.get("/library/cities").then(r => {
+      if (!r.success) return;
+      setPkgCities(r.data||[]);
+      if (project?.city_id) {
+        const match = (r.data||[]).find(c => Number(c.id)===Number(project.city_id));
+        if (match) setPkgSelCity(match);
+      }
+    });
+    // eslint-disable-next-line
+  }, [woType]);
+
+  // Load packages when type + trade selected
+  useEffect(() => {
+    if (!pkgSelType || !pkgTrade) { setPkgList([]); setPkgSelPkg(null); return; }
+    api.get(`/library/rate-packages?for=subcon&trade_category=${encodeURIComponent(pkgTrade)}&type_id=${pkgSelType.id}`)
+      .then(r => { if (r.success) setPkgList(r.data||[]); });
+    setPkgSelPkg(null);
+    // eslint-disable-next-line
+  }, [pkgSelType?.id, pkgTrade]);
+
+  // Load package tree when pkg + city selected
+  useEffect(() => {
+    if (!pkgSelPkg || !pkgSelCity) { setPkgStructures([]); setPkgCategories([]); setPkgSecItems({}); return; }
+    Promise.all([
+      api.get(`/library/packages/${pkgSelPkg.id}/structures`),
+      api.get(`/library/packages/${pkgSelPkg.id}/categories`),
+    ]).then(([sr, cr]) => {
+      const structs = sr.success ? sr.data||[] : [];
+      setPkgStructures(structs);
+      if (cr.success) setPkgCategories(cr.data||[]);
+      if (structs.length) {
+        Promise.all(structs.map(s =>
+          api.get(`/library/rate-matrix?package_id=${pkgSelPkg.id}&city_id=${pkgSelCity.id}&structure_id=${s.id}`)
+            .then(r => [s.id, r.success ? r.data||[] : []])
+            .catch(() => [s.id, []])
+        )).then(results => {
+          const map = {}; const aMap = {};
+          for (const [sid, rows] of results) {
+            map[sid] = rows;
+            // Pre-fill area from section default_qty
+            const sec = structs.find(x => x.id === sid);
+            if (sec?.default_qty) aMap[sid] = String(sec.default_qty);
+          }
+          setPkgSecItems(map);
+          setPkgAreas(aMap);
+        });
+      }
+    });
+    // eslint-disable-next-line
+  }, [pkgSelPkg?.id, pkgSelCity?.id]);
+
+  // Load work items for item-wise mode
+  useEffect(() => {
+    if (woType !== "item_wise" || !pkgSelCity || !pkgSelType) { setIwItems([]); return; }
+    setIwLoading(true);
+    api.get(`/library/subcon-work-items?city_id=${pkgSelCity.id}&type_id=${pkgSelType.id}`)
+      .then(r => { if (r.success) setIwItems(r.data||[]); })
+      .catch(() => {})
+      .finally(() => setIwLoading(false));
+    // eslint-disable-next-line
+  }, [woType, pkgSelCity?.id, pkgSelType?.id]);
+
+  // Build sections from package mode for submit
+  const buildPackageSections = () => {
+    return pkgStructures.map(sec => {
+      const rows  = pkgSecItems[sec.id] || [];
+      const area  = parseFloat(pkgAreas[sec.id] || sec.default_qty || 0);
+      const items = rows.filter(r => (parseFloat(r.base_rate||0)+parseFloat(r.add_on_rate||0)) > 0).map(r => ({
+        description: r.item_name || r.name,
+        unit:        r.unit || "Sqft",
+        qty:         area,
+        rate:        parseFloat(r.base_rate||0) + parseFloat(r.add_on_rate||0),
+        library_item_id: r.item_id || null,
+      }));
+      return { title: sec.name, items };
+    }).filter(s => s.items.length > 0);
+  };
+
+  // Build sections from item-wise picks for submit
+  const buildItemSections = () => {
+    const picked = Object.entries(iwPicked).filter(([,qty]) => parseFloat(qty||0) > 0);
+    if (!picked.length) return [];
+    // Group by trade_category
+    const groups = {};
+    for (const [id, qty] of picked) {
+      const item = iwItems.find(i => String(i.id)===String(id));
+      if (!item) continue;
+      const cat = item.trade_category || "Work Items";
+      if (!groups[cat]) groups[cat] = [];
+      groups[cat].push({ description:item.name, unit:item.unit||"Sqft", qty:parseFloat(qty), rate:parseFloat(item.rate||0) });
+    }
+    return Object.entries(groups).map(([title, items]) => ({ title, items }));
+  };
 
   const [form, setForm] = useState({
     subcon_name:"", subcon_category:"Civil",
@@ -15679,11 +15941,25 @@ function NewWOModal({ subcons, setSubcons, projectId, fmtC, inpStyle, lblStyle, 
 
   const submit = async () => {
     if(!form.subcon_name) return alert("Subcontractor required");
-    const validSecs = form.sections.filter(s=>s.title.trim() && s.items.some(i=>i.description&&i.qty&&i.rate));
-    if(validSecs.length===0) return alert("At least 1 section with items required");
+
+    // Build sections based on wo_type
+    let finalSections = [];
+    if (woType === "package") {
+      finalSections = buildPackageSections();
+      if (!finalSections.length) return alert("Package has no items with rates — set rates in Library → Subcon Rate Card first");
+    } else if (woType === "item_wise") {
+      finalSections = buildItemSections();
+      if (!finalSections.length) return alert("Select at least one item with qty > 0");
+    } else {
+      // manual
+      finalSections = form.sections.filter(s=>s.title.trim() && s.items.some(i=>i.description&&i.qty&&i.rate));
+      if (!finalSections.length) return alert("At least 1 section with items required");
+    }
+
     setSaving(true);
     const res = await api.post("/subcon/work-orders",{
       project_id: projectId,
+      wo_type: woType,
       subcon_name: form.subcon_name,
       subcon_category: form.subcon_category,
       description: form.description,
@@ -15691,7 +15967,9 @@ function NewWOModal({ subcons, setSubcons, projectId, fmtC, inpStyle, lblStyle, 
       tds_pct: parseFloat(form.tds_pct||2),
       start_date: form.start_date||null,
       end_date: form.end_date||null,
-      sections: validSecs.map(s=>({
+      // Package metadata (for reference)
+      ...(woType==="package" && pkgSelPkg ? { source_package_id: pkgSelPkg.id, source_package_name: pkgSelPkg.name } : {}),
+      sections: finalSections.map(s=>({
         title: s.title,
         items: s.items.filter(i=>i.description&&i.qty&&i.rate).map(i=>({
           description:i.description, unit:i.unit||"", qty:parseFloat(i.qty), rate:parseFloat(i.rate),
@@ -15711,12 +15989,234 @@ function NewWOModal({ subcons, setSubcons, projectId, fmtC, inpStyle, lblStyle, 
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div style={{background:T.surface,borderRadius:12,width:"min(760px,96vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
         {/* Header */}
-        <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
-          <div style={{fontSize:14,fontWeight:700,color:"white"}}>New Work Order</div>
-          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",lineHeight:1}}>×</button>
+        <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:"white",marginBottom:8}}>New Work Order</div>
+            {/* WO Type toggle */}
+            <div style={{display:"flex",gap:6}}>
+              {[
+                {id:"manual",    icon:"✏️", label:"Manual"},
+                {id:"package",   icon:"📐", label:"Package"},
+                {id:"item_wise", icon:"🔧", label:"Item-wise"},
+              ].map(m=>(
+                <button key={m.id} onClick={()=>setWoType(m.id)} style={{
+                  padding:"5px 12px", borderRadius:6, fontSize:11, fontWeight:700, cursor:"pointer",
+                  border:`1.5px solid ${woType===m.id?"rgba(255,255,255,0.6)":"rgba(255,255,255,0.2)"}`,
+                  background:woType===m.id?"rgba(255,255,255,0.2)":"transparent",
+                  color:woType===m.id?"white":"rgba(255,255,255,0.5)",
+                  display:"flex", alignItems:"center", gap:5,
+                }}>
+                  {m.icon} {m.label}
+                </button>
+              ))}
+              <span style={{fontSize:10,color:"rgba(255,255,255,0.35)",alignSelf:"center",marginLeft:4}}>
+                {woType==="manual" ? "Type items manually" : woType==="package" ? "Load from Subcon Rate Card" : "Pick individual items from library"}
+              </span>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",lineHeight:1,marginTop:2}}>×</button>
         </div>
 
         <div style={{flex:1,overflowY:"auto",padding:16}}>
+          {/* ── Package Mode UI ──────────────────────────────────────── */}
+          {woType!=="manual" && (
+            <div style={{marginBottom:14,padding:"12px 14px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>
+                {woType==="package" ? "Select Rate Card Package" : "Select Items from Library"}
+                {pkgSelCity && pkgSelType && <span style={{fontWeight:400,textTransform:"none",marginLeft:6,color:T.t4}}>— {pkgSelType.name} × {pkgSelCity.name}{project?.city_name&&!pkgSelCity?" (auto from project)":""}</span>}
+              </div>
+
+              {/* Type + City row */}
+              <div style={{display:"flex",gap:16,marginBottom:12,flexWrap:"wrap"}}>
+                <div style={{flex:1,minWidth:180}}>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>Construction Type</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {pkgConTypes.map(ct=>(
+                      <button key={ct.id} onClick={()=>setPkgSelType(ct)} style={{
+                        padding:"5px 12px",borderRadius:16,fontSize:12,fontWeight:600,cursor:"pointer",
+                        border:`1.5px solid ${pkgSelType?.id===ct.id?T.blu:T.b1}`,
+                        background:pkgSelType?.id===ct.id?T.blu:T.surface,
+                        color:pkgSelType?.id===ct.id?"white":T.t2,
+                      }}>{ct.name}</button>
+                    ))}
+                  </div>
+                </div>
+                <div style={{flex:1,minWidth:180}}>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>City</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {pkgCities.map(c=>(
+                      <button key={c.id} onClick={()=>setPkgSelCity(c)} style={{
+                        padding:"5px 12px",borderRadius:16,fontSize:12,fontWeight:600,cursor:"pointer",
+                        border:`1.5px solid ${pkgSelCity?.id===c.id?"#0D9488":T.b1}`,
+                        background:pkgSelCity?.id===c.id?"#0D9488":T.surface,
+                        color:pkgSelCity?.id===c.id?"white":T.t2,
+                      }}>{c.name}</button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Package mode: Trade + Package picker ── */}
+              {woType==="package" && pkgSelType && pkgSelCity && (<>
+                <div style={{marginBottom:10}}>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>Trade Category</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {TRADE_CATS.map(t=>(
+                      <button key={t} onClick={()=>setPkgTrade(t)} style={{
+                        padding:"4px 11px",borderRadius:16,fontSize:11.5,fontWeight:600,cursor:"pointer",
+                        border:`1.5px solid ${pkgTrade===t?"#7C3AED":T.b1}`,
+                        background:pkgTrade===t?"#7C3AED":T.surface,
+                        color:pkgTrade===t?"white":T.t3,
+                      }}>{t}</button>
+                    ))}
+                  </div>
+                </div>
+                {pkgTrade && (
+                  <div style={{marginBottom:pkgSelPkg?10:0}}>
+                    <div style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:5}}>Rate Card</div>
+                    <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                      {pkgList.map(p=>(
+                        <button key={p.id} onClick={()=>setPkgSelPkg(p)} style={{
+                          padding:"7px 14px",borderRadius:8,fontSize:12,fontWeight:700,cursor:"pointer",
+                          border:`2px solid ${pkgSelPkg?.id===p.id?T.blu:T.b1}`,
+                          background:pkgSelPkg?.id===p.id?T.bluL:T.surface,
+                          color:pkgSelPkg?.id===p.id?T.blu:T.t1,
+                        }}>
+                          {p.name}{p.sqft_rate>0?<span style={{fontSize:10,fontWeight:500,marginLeft:5,opacity:.7}}>₹{Number(p.sqft_rate).toLocaleString()}/sqft</span>:null}
+                        </button>
+                      ))}
+                      {pkgList.length===0 && <span style={{fontSize:11,color:T.t4}}>No packages for {pkgTrade} — add in Library → Subcon Rate Card</span>}
+                    </div>
+                  </div>
+                )}
+
+                {/* Package section tree with area inputs */}
+                {pkgSelPkg && pkgStructures.length>0 && (
+                  <div style={{marginTop:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:8}}>
+                      Sections — {pkgSelPkg.name} · Set area per section
+                    </div>
+                    {pkgStructures.map(sec=>{
+                      const rows  = pkgSecItems[sec.id]||[];
+                      const area  = parseFloat(pkgAreas[sec.id]||sec.default_qty||0);
+                      const total = rows.reduce((s,r)=>s+(parseFloat(r.base_rate||0)+parseFloat(r.add_on_rate||0))*area,0);
+                      const isCol = !!pkgCollapsed[sec.id];
+                      return (
+                        <div key={sec.id} style={{background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:6,overflow:"hidden"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1E293B",cursor:"pointer"}}
+                            onClick={()=>setPkgCollapsed(p=>({...p,[sec.id]:!p[sec.id]}))}>
+                            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2.5}
+                              style={{transform:isCol?"rotate(0deg)":"rotate(90deg)",transition:"transform .15s",flexShrink:0}}>
+                              <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                            <span style={{flex:1,fontSize:12,fontWeight:700,color:"white"}}>{sec.name}</span>
+                            <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{rows.length} items</span>
+                            {total>0 && <span style={{fontSize:11,fontWeight:700,color:"#4ADE80"}}>{fmtC(total)}</span>}
+                            {/* Area input */}
+                            <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:5}}>
+                              <span style={{fontSize:9.5,color:"rgba(255,255,255,0.4)"}}>AREA</span>
+                              <input type="number" value={pkgAreas[sec.id]||""} onChange={e=>setPkgAreas(p=>({...p,[sec.id]:e.target.value}))}
+                                placeholder="sqft" onClick={e=>e.stopPropagation()}
+                                style={{width:70,padding:"3px 7px",borderRadius:5,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                              <span style={{fontSize:9.5,color:"rgba(255,255,255,0.4)"}}>sqft</span>
+                            </div>
+                          </div>
+                          {!isCol && rows.length>0 && (
+                            <div style={{padding:"8px 12px"}}>
+                              {rows.map(it=>{
+                                const rate=parseFloat(it.base_rate||0)+parseFloat(it.add_on_rate||0);
+                                const amt=rate*area;
+                                return (
+                                  <div key={it.item_id} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 80px",gap:6,padding:"4px 0",borderBottom:`1px solid ${T.b1}`,fontSize:11.5,alignItems:"center"}}>
+                                    <span style={{color:T.t1,fontWeight:500}}>{it.item_name||it.name}</span>
+                                    <span style={{color:T.t3}}>{it.unit}</span>
+                                    <span style={{color:T.blu,fontWeight:600,textAlign:"right"}}>₹{rate.toLocaleString()}/sqft</span>
+                                    <span style={{color:T.grn,fontWeight:700,textAlign:"right"}}>{amt>0?fmtC(amt):""}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                    <div style={{textAlign:"right",fontSize:13,fontWeight:800,color:T.grn,padding:"6px 0"}}>
+                      Est. Total: {fmtC(pkgStructures.reduce((st,sec)=>{
+                        const rows=pkgSecItems[sec.id]||[];
+                        const area=parseFloat(pkgAreas[sec.id]||sec.default_qty||0);
+                        return st+rows.reduce((s,r)=>s+(parseFloat(r.base_rate||0)+parseFloat(r.add_on_rate||0))*area,0);
+                      },0))}
+                    </div>
+                  </div>
+                )}
+              </>)}
+
+              {/* ── Item-wise mode: item browser ── */}
+              {woType==="item_wise" && pkgSelType && pkgSelCity && (
+                <div>
+                  <div style={{display:"flex",gap:6,marginBottom:10,flexWrap:"wrap"}}>
+                    {["All",...TRADE_CATS].map(t=>(
+                      <button key={t} onClick={()=>setIwTradeFilter(t)} style={{
+                        padding:"4px 10px",borderRadius:16,fontSize:11,fontWeight:600,cursor:"pointer",
+                        border:`1.5px solid ${iwTradeFilter===t?T.blu:T.b1}`,
+                        background:iwTradeFilter===t?T.blu:T.surface,
+                        color:iwTradeFilter===t?"white":T.t3,
+                      }}>{t}</button>
+                    ))}
+                  </div>
+                  {iwLoading && <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>Loading items…</div>}
+                  {!iwLoading && iwItems.length===0 && (
+                    <div style={{textAlign:"center",padding:"20px",color:T.t4,fontSize:12}}>
+                      No items for {pkgSelType.name} × {pkgSelCity.name} — add in Library → Subcon Rate Card → Work Item Rates
+                    </div>
+                  )}
+                  {!iwLoading && (
+                    <div style={{maxHeight:220,overflowY:"auto",border:`1px solid ${T.b1}`,borderRadius:7,background:T.surface}}>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px",gap:6,padding:"6px 10px",background:"#1E293B",position:"sticky",top:0}}>
+                        {["ITEM","UNIT","RATE","QTY"].map(h=><span key={h} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase"}}>{h}</span>)}
+                      </div>
+                      {(iwTradeFilter==="All"?iwItems:iwItems.filter(i=>i.trade_category===iwTradeFilter)).map(item=>{
+                        const picked = iwPicked[item.id] !== undefined;
+                        return (
+                          <div key={item.id}
+                            style={{display:"grid",gridTemplateColumns:"1fr 70px 80px 100px",gap:6,padding:"6px 10px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:picked?T.bluL:"transparent",cursor:"pointer"}}
+                            onClick={()=>{
+                              if(picked) setIwPicked(p=>{const n={...p};delete n[item.id];return n;});
+                              else setIwPicked(p=>({...p,[item.id]:""}));
+                            }}>
+                            <div style={{display:"flex",alignItems:"center",gap:7}}>
+                              <div style={{width:14,height:14,borderRadius:3,border:`2px solid ${picked?T.blu:T.b2}`,background:picked?T.blu:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                                {picked&&<span style={{color:"white",fontSize:9,lineHeight:1}}>✓</span>}
+                              </div>
+                              <span style={{fontSize:12,color:T.t1,fontWeight:picked?600:400}}>{item.name}</span>
+                            </div>
+                            <span style={{fontSize:11,color:T.t3}}>{item.unit}</span>
+                            <span style={{fontSize:11,color:T.blu,fontWeight:600}}>₹{Number(item.rate||0).toLocaleString()}</span>
+                            {picked && (
+                              <input type="number" value={iwPicked[item.id]||""}
+                                onChange={e=>{e.stopPropagation();setIwPicked(p=>({...p,[item.id]:e.target.value}));}}
+                                onClick={e=>e.stopPropagation()}
+                                placeholder="Qty"
+                                style={{...inpStyle,padding:"3px 7px",fontSize:11}}/>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  {Object.keys(iwPicked).length>0 && (
+                    <div style={{textAlign:"right",fontSize:12,fontWeight:700,color:T.grn,padding:"6px 0"}}>
+                      Est: {fmtC(Object.entries(iwPicked).reduce((s,[id,qty])=>{
+                        const item=iwItems.find(i=>String(i.id)===String(id));
+                        return s+(parseFloat(item?.rate||0)*parseFloat(qty||0));
+                      },0))} · {Object.values(iwPicked).filter(q=>parseFloat(q||0)>0).length} items
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Basic Info */}
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:14}}>
             <div style={{gridColumn:"1/3"}}>
@@ -19851,7 +20351,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
     attendance:  <TabAttendance project={project}/>,
     material:    <TabMaterial project={project}/>,
-    subcon:      <TabSubcon projectId={project.id}/>,
+    subcon:      <TabSubcon projectId={project.id} project={project}/>,
     equipment:   <TabEquipment projectId={project.id}/>,
     files:       <TabFiles projectId={project.id}/>,
     site:        <TabSite/>,
