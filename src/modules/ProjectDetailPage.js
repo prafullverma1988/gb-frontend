@@ -16042,7 +16042,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
     const perItem = !!Number(sec.per_item_qty);
     const cats = pkgCategories.filter(c=>c.structure_id===sec.id);
     return gt + cats.reduce((st,cat)=>{
-      const rows = (pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name);
+      const rows = (pkgSecItems[sec.id]||[]).filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name));
       return st + rows.reduce((ct,r)=>{
         const base=getPkgItemBase(sec.id,cat.id,r.item_id,r);
         const addOn=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
@@ -16216,12 +16216,12 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   const perItem=!!Number(sec.per_item_qty);
                   const sCol=!!pkgCollapsed[sec.id];
                   const cats=pkgCategories.filter(c=>c.structure_id===sec.id);
-                  const secBase=cats.reduce((sb,cat)=>sb+(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name).reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0),0);
-                  const secAddOn=cats.reduce((sa,cat)=>sa+(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name).reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0),0);
+                  const secBase=cats.reduce((sb,cat)=>sb+(pkgSecItems[sec.id]||[]).filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name)).reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0),0);
+                  const secAddOn=cats.reduce((sa,cat)=>sa+(pkgSecItems[sec.id]||[]).filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name)).reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0),0);
                   const secTotal=cats.reduce((st,cat)=>{
                     const ck=`${sec.id}:${cat.id}`;
                     const ca=pkgCatAreas[ck]!=null?parseFloat(pkgCatAreas[ck]):secArea;
-                    return st+(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name).reduce((ct,r)=>{
+                    return st+(pkgSecItems[sec.id]||[]).filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name)).reduce((ct,r)=>{
                       const b=getPkgItemBase(sec.id,cat.id,r.item_id,r);
                       const a=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
                       const q=perItem?getPkgItemQty(sec.id,cat.id,r.item_id,r,secArea,true):ca;
@@ -16264,7 +16264,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                             const catCol=!!pkgCatCollapsed[ck];
                             const catAOv=pkgCatAreas[ck];
                             const catArea=catAOv!=null?parseFloat(catAOv):secArea;
-                            const catRows=(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name);
+                            const catRows=(pkgSecItems[sec.id]||[]).filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name));
                             const catBase=catRows.reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0);
                             const catAddOn=catRows.reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0);
                             const catTotal=catRows.reduce((ct,r)=>{
@@ -16476,16 +16476,16 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                     const cats      = pkgCategories.filter(c=>c.structure_id===sec.id);
                     // Section totals
                     const secBase = cats.reduce((sb,cat)=>sb+(pkgSecItems[sec.id]||[])
-                      .filter(r=>r.category_name===cat.category_name)
+                      .filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name))
                       .reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0),0);
                     const secAddOn= cats.reduce((sa,cat)=>sa+(pkgSecItems[sec.id]||[])
-                      .filter(r=>r.category_name===cat.category_name)
+                      .filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name))
                       .reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0),0);
                     const secTotal= cats.reduce((st,cat)=>{
                       const catAreaKey=`${sec.id}:${cat.id}`;
                       const catArea=pkgCatAreas[catAreaKey]!=null?parseFloat(pkgCatAreas[catAreaKey]):secArea;
                       return st+(pkgSecItems[sec.id]||[])
-                        .filter(r=>r.category_name===cat.category_name)
+                        .filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name))
                         .reduce((ct,r)=>{
                           const base=getPkgItemBase(sec.id,cat.id,r.item_id,r);
                           const addOn=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
@@ -16537,7 +16537,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                               const catCollapsed=!!pkgCatCollapsed[catKey];
                               const catAreaOverride=pkgCatAreas[catKey];
                               const catArea=catAreaOverride!=null?parseFloat(catAreaOverride):secArea;
-                              const catRows=(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name);
+                              const catRows=(pkgSecItems[sec.id]||[]).filter(r=>(Number(r.category_id)===Number(cat.id)||r.category_name===cat.category_name));
                               const catBase=catRows.reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0);
                               const catAddOn=catRows.reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0);
                               const catTotal=catRows.reduce((ct,r)=>{
@@ -16731,8 +16731,8 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             </div>
           )}
 
-          {/* Basic Info — hidden in pkgBuilderMode (info panel in full-screen body covers it) */}
-          {!pkgBuilderMode && <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:14}}>
+          {/* Basic Info — only for manual / item-wise modes (package mode has its own info panel) */}
+          {woType!=="package" && <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:14}}>
             <div style={{gridColumn:"1/3"}}>
               <label style={lblStyle}>Subcontractor *</label>
               <div style={{display:"flex",gap:6,alignItems:"stretch"}}>
@@ -16796,11 +16796,11 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
               <label style={lblStyle}>Start Date</label>
               <input type="date" value={form.start_date} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
             </div>
-          </div>}
+          </div>
+          }
 
-          {/* Sections — manual mode only */}
-          {!pkgBuilderMode && <></>}
-          {/* Sections */}
+          {/* Sections & Grand Total — manual / item-wise mode only */}
+          {woType!=="package" && (<>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".4px"}}>Sections & BOQ Items</div>
             <button onClick={addSection}
@@ -16871,6 +16871,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
           <div style={{textAlign:"right",fontSize:14,fontWeight:800,color:T.grn,padding:"6px 0"}}>
             Grand Total: {fmtC(grandTotal)}
           </div>
+          </>)}
         </div>
 
         {/* Footer */}
@@ -19036,178 +19037,83 @@ function TabSite() {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 14 — MOM  (wired to /api/mom?project_id=...)
 // ═══════════════════════════════════════════════════════════════════
-const MOM_TYPES_TAB = ["Site Review","Client Meeting","Internal Team","Progress Review","Design Review","Safety Audit","Financial Review","Other"];
+// ═══════════════════════════════════════════════════════════════════
+// TAB 14 — MOM
+// ═══════════════════════════════════════════════════════════════════
+function TabMOM() {
+  const [sel, setSel] = useState(D.moms[0] || null);
+  const momS = {"Closed":{c:T.grn,bg:T.grnL},"Planned":{c:T.amb,bg:T.ambL},"Draft":{c:T.slt,bg:T.sltL}};
 
-function TabMOM({ projectId }) {
-  const [moms,setMoms]           = useState([]);
-  const [sel,setSel]             = useState(null);
-  const [loading,setLoading]     = useState(true);
-  const [showCreate,setShowCreate] = useState(false);
-  const [saving,setSaving]       = useState(false);
-  const [saveErr,setSaveErr]     = useState("");
-  const [form,setForm] = useState({title:"",type:"Site Review",date:"",time:"",venue:"",conductedBy:"",notes:""});
-
-  const TODAY = localYMD();
-  const fmtD  = d => d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—";
-  const momS  = {"Finalized":{c:T.grn,bg:T.grnL},"Draft":{c:T.slt,bg:T.sltL},"Cancelled":{c:T.red,bg:T.redL}};
-  const inp   = {width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
-  const lbl   = {fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4};
-
-  useEffect(()=>{
-    if(!projectId) return;
-    setLoading(true);
-    api.get(`/mom?project_id=${projectId}`).then(r=>{
-      if(r.success&&Array.isArray(r.data)){setMoms(r.data);setSel(r.data[0]||null);}
-    }).catch(()=>{}).finally(()=>setLoading(false));
-  },[projectId]);
-
-  const saveMOM = async()=>{
-    if(!form.title.trim()||saving) return;
-    setSaving(true);setSaveErr("");
-    const r=await api.post("/mom",{...form,project_id:projectId,attendees:[],discussion:[],actionItems:[],status:"Finalized"}).catch(()=>null);
-    setSaving(false);
-    if(r?.success){setMoms(p=>[r.data,...p]);setSel(r.data);setShowCreate(false);setForm({title:"",type:"Site Review",date:"",time:"",venue:"",conductedBy:"",notes:""});}
-    else setSaveErr(r?.message||"Save failed — retry.");
-  };
-
-  const patchAction=(momId,actionId,status)=>{
-    const mom=moms.find(m=>m.id===momId);if(!mom)return;
-    api.patch(`/mom/${mom._id}/actions/${actionId}`,{status}).catch(()=>{});
-    const upd=ms=>ms.map(m=>m.id!==momId?m:{...m,actionItems:m.actionItems.map(a=>a.id===actionId?{...a,status}:a)});
-    setMoms(upd);
-    if(sel?.id===momId) setSel(p=>({...p,actionItems:p.actionItems.map(a=>a.id===actionId?{...a,status}:a)}));
-  };
-
-  return(
-    <div style={{padding:"16px 18px",display:"flex",gap:14,height:"100%"}}>
-      <div style={{width:270,flexShrink:0,display:"flex",flexDirection:"column",gap:8}}>
-        <AddBtn label="New MOM" onClick={()=>setShowCreate(true)}/>
+  return (
+    <div style={{padding:"16px 18px", display:"flex", gap:14, height:"100%"}}>
+      <div style={{width:270, flexShrink:0, display:"flex", flexDirection:"column", gap:8}}>
+        <AddBtn label="New MOM"/>
         <div style={{marginTop:4}}/>
-        {loading&&<div style={{color:T.t4,fontSize:12,textAlign:"center",padding:20}}>Loading…</div>}
-        {!loading&&moms.length===0&&<div style={{color:T.t4,fontSize:12,textAlign:"center",padding:20,fontStyle:"italic"}}>No meetings yet<br/><span style={{fontSize:11}}>Click + New MOM to start</span></div>}
-        {moms.map(m=>{
-          const ms=momS[m.status]||{c:T.slt,bg:T.sltL};const isS=sel?.id===m.id;
-          const pnd=(m.actionItems||[]).filter(a=>a.status!=="Done").length;
-          return(
-            <div key={m.id} onClick={()=>setSel(m)} style={{background:T.surface,borderRadius:7,padding:"10px 13px",border:`1.5px solid ${isS?T.blu:T.b1}`,cursor:"pointer",borderLeft:`4px solid ${isS?T.blu:T.b1}`,transition:"all .14s"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
-                <span style={{fontSize:11,fontFamily:"monospace",color:isS?T.blu:T.t4}}>{m.id}</span>
+        {D.moms.map(m=>{
+          const ms = momS[m.status]||{c:T.slt,bg:T.sltL};
+          const isS = sel?.id===m.id;
+          return (
+            <div key={m.id} onClick={()=>setSel(m)} style={{background:T.surface, borderRadius:7, padding:"10px 13px", border:`1.5px solid ${isS?T.blu:T.b1}`, cursor:"pointer", borderLeft:`4px solid ${isS?T.blu:T.b1}`, transition:"all .14s"}}>
+              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5}}>
+                <span style={{fontSize:12.5, fontWeight:700, color:isS?T.blu:T.t1}}>{m.no}</span>
                 <Pill label={m.status} c={ms.c} bg={ms.bg}/>
               </div>
-              <div style={{fontSize:12.5,fontWeight:700,color:isS?T.blu:T.t1,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</div>
-              <div style={{fontSize:11.5,color:T.t3,marginBottom:3}}>{m.type} · {fmtD(m.date)}</div>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                <span style={{fontSize:11,color:T.t4}}>{m.attendees?.length>0?m.attendees.slice(0,2).join(", ")+(m.attendees.length>2?` +${m.attendees.length-2}`:""):"No attendees"}</span>
-                {pnd>0&&<span style={{fontSize:10,fontWeight:700,background:T.ambL,color:T.amb,padding:"1px 6px",borderRadius:8}}>{pnd} pending</span>}
-              </div>
+              <div style={{fontSize:11.5, color:T.t2, marginBottom:3}}>{m.type}</div>
+              <div style={{fontSize:11.5, color:T.t3, marginBottom:4}}>{m.date}</div>
+              <div style={{fontSize:11, color:T.t4}}>{m.attendees.length>0?m.attendees.slice(0,2).join(", ")+(m.attendees.length>2?` +${m.attendees.length-2}`:""):"No attendees yet"}</div>
             </div>
           );
         })}
       </div>
 
       {sel&&(
-        <Panel style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
-          <PHead title={`${sel.id} — ${sel.title}`} action={
-            <div style={{display:"flex",gap:8,alignItems:"center"}}>
-              <span style={{fontSize:11.5,color:T.t3}}>{fmtD(sel.date)}{sel.time?" · "+sel.time:""}{sel.venue?" · "+sel.venue:""}</span>
-              {sel.nextMeeting?.date&&<span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>Next: {fmtD(sel.nextMeeting.date)}</span>}
+        <Panel style={{flex:1, overflow:"hidden", display:"flex", flexDirection:"column"}}>
+          <PHead title={`${sel.no} — ${sel.type}`} action={
+            <div style={{display:"flex", gap:8, alignItems:"center"}}>
+              <span style={{fontSize:11.5, color:T.t3}}>{sel.date} · {sel.venue}</span>
+              {sel.next&&<span style={{fontSize:11.5, color:T.blu, fontWeight:600}}>Next: {sel.next}</span>}
+              <SecBtn label="Export PDF"/>
             </div>
           }/>
-          <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Attendees</div>
-              {sel.attendees?.length>0
-                ?<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{sel.attendees.map((a,i)=><span key={i} style={{background:T.surfaceB,color:T.t1,fontSize:12.5,fontWeight:500,padding:"4px 12px",borderRadius:20,border:`1px solid ${T.b1}`}}>{a}</span>)}</div>
-                :<span style={{fontSize:12.5,color:T.t4,fontStyle:"italic"}}>No attendees recorded</span>}
+          <div style={{flex:1, overflowY:"auto", padding:"16px 18px"}}>
+            <div style={{marginBottom:16}}>
+              <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Attendees</div>
+              {sel.attendees.length>0?(
+                <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
+                  {sel.attendees.map((a,i)=>(
+                    <span key={i} style={{background:T.surfaceB, color:T.t1, fontSize:12.5, fontWeight:500, padding:"4px 12px", borderRadius:20, border:`1px solid ${T.b1}`}}>{a}</span>
+                  ))}
+                </div>
+              ):<span style={{fontSize:12.5, color:T.t4, fontStyle:"italic"}}>No attendees recorded</span>}
             </div>
-            {(sel.agenda||(sel.discussion?.length>0))&&(
-              <div style={{marginBottom:14}}>
-                <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Agenda &amp; Discussion</div>
-                {sel.agenda&&<div style={{padding:"8px 11px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12.5,color:T.t1,marginBottom:6,lineHeight:1.5}}>{sel.agenda}</div>}
-                {sel.discussion?.map((d,i)=>(
-                  <div key={i} style={{display:"flex",gap:8,marginBottom:6,padding:"8px 11px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,alignItems:"flex-start"}}>
-                    <span style={{width:18,height:18,borderRadius:4,background:T.bluL,color:T.blu,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</span>
-                    <span style={{fontSize:12.5,color:T.t1,lineHeight:1.4}}>{d.point}</span>
+            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:16}}>
+              <div>
+                <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Agenda</div>
+                {sel.agenda.map((a,i)=>(
+                  <div key={i} style={{display:"flex", gap:8, marginBottom:8, padding:"8px 11px", background:T.surfaceB, borderRadius:6, border:`1px solid ${T.b1}`, alignItems:"flex-start"}}>
+                    <span style={{width:18, height:18, borderRadius:4, background:T.bluL, color:T.blu, fontSize:10, fontWeight:700, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>{i+1}</span>
+                    <span style={{fontSize:12.5, color:T.t1, lineHeight:1.4}}>{a}</span>
                   </div>
                 ))}
               </div>
-            )}
-            <div style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Action Items</div>
-              {(sel.actionItems||[]).length===0
-                ?<div style={{padding:"12px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,color:T.t4,fontSize:12.5,fontStyle:"italic"}}>No action items</div>
-                :(sel.actionItems||[]).map(a=>{
-                  const isOver=a.dueDate&&a.dueDate<TODAY;
-                  const SC={Done:{c:T.grn,bg:T.grnL},"In Progress":{c:T.blu,bg:T.bluL},Pending:{c:T.amb,bg:T.ambL}};
-                  const sc=SC[a.status]||SC.Pending;
-                  return(
-                    <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,padding:"8px 11px",background:T.surfaceB,borderRadius:6,border:`1px solid ${isOver?T.ambM:T.b1}`,borderLeft:`3px solid ${sc.c}`}}>
-                      <div style={{flex:1,minWidth:0}}>
-                        <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{a.task}</div>
-                        <div style={{fontSize:11,color:T.t4,marginTop:2,display:"flex",gap:10}}>
-                          {a.assignee&&<span>👤 {a.assignee}</span>}
-                          {a.dueDate&&<span style={{color:isOver?T.red:T.t4,fontWeight:isOver?700:400}}>{isOver?"⚠ ":""}{fmtD(a.dueDate)}</span>}
-                          <span style={{color:{High:T.red,Medium:T.amb,Low:T.slt}[a.priority]||T.t4,fontWeight:600}}>{a.priority}</span>
-                        </div>
-                      </div>
-                      <select value={a.status} onChange={e=>patchAction(sel.id,a.id,e.target.value)}
-                        style={{fontSize:10.5,fontWeight:700,padding:"3px 7px",borderRadius:7,border:`1px solid ${sc.c}44`,background:sc.bg,color:sc.c,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
-                        <option>Pending</option><option>In Progress</option><option>Done</option>
-                      </select>
-                    </div>
-                  );
-                })
-              }
-            </div>
-            {sel.notes&&(
               <div>
-                <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Notes</div>
-                <div style={{padding:"8px 11px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12.5,color:T.t2,lineHeight:1.5}}>{sel.notes}</div>
+                <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Decisions / Action Items</div>
+                {sel.decisions.length>0?sel.decisions.map((d,i)=>(
+                  <div key={i} style={{display:"flex", gap:8, marginBottom:8, padding:"8px 11px", background:T.grnL, borderRadius:6, border:`1px solid ${T.grnM}`, alignItems:"flex-start", borderLeft:`3px solid ${T.grn}`}}>
+                    <div style={{width:16,height:16,borderRadius:4,background:T.grn,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      <svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>
+                    </div>
+                    <span style={{fontSize:12.5, color:T.t1, lineHeight:1.4}}>{d}</span>
+                  </div>
+                )):<div style={{padding:"14px", background:T.surfaceB, borderRadius:6, border:`1px solid ${T.b1}`, color:T.t4, fontSize:12.5, fontStyle:"italic"}}>No decisions — meeting is {sel.status.toLowerCase()}</div>}
               </div>
-            )}
+            </div>
           </div>
         </Panel>
       )}
-
-      {showCreate&&<>
-        <div onClick={()=>!saving&&setShowCreate(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:400,backdropFilter:"blur(1px)"}}/>
-        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(500px,95vw)",zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,.2)",overflow:"hidden"}}>
-          <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-            <span style={{fontSize:14,fontWeight:700,color:"white"}}>New MOM</span>
-            <button onClick={()=>setShowCreate(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,.5)",fontSize:20,lineHeight:1,padding:0}}>×</button>
-          </div>
-          <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:10}}>
-            {[{k:"title",l:"Title *",ph:"e.g. Site Review — 3rd Floor Slab"},{k:"venue",l:"Venue",ph:"Site office…"},{k:"conductedBy",l:"Conducted By",ph:"Name"}].map(f=>(
-              <div key={f.k}><label style={lbl}>{f.l}</label><input value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} style={inp}/></div>
-            ))}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-              <div><label style={lbl}>Type</label>
-                <select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))} style={{...inp,padding:"7px 8px"}}>
-                  {MOM_TYPES_TAB.map(t=><option key={t}>{t}</option>)}
-                </select>
-              </div>
-              <div><label style={lbl}>Date</label><input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={inp}/></div>
-              <div><label style={lbl}>Time</label><input value={form.time} onChange={e=>setForm(p=>({...p,time:e.target.value}))} placeholder="10:00 AM" style={inp}/></div>
-            </div>
-            <div><label style={lbl}>Notes / Agenda</label>
-              <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Key discussion points…" style={{...inp,resize:"vertical"}}/>
-            </div>
-            {saveErr&&<div style={{padding:"6px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11,color:T.red}}>{saveErr}</div>}
-          </div>
-          <div style={{padding:"10px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8}}>
-            <button onClick={()=>setShowCreate(false)} style={{padding:"8px 16px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,color:T.t3,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
-            <button onClick={saveMOM} disabled={saving||!form.title.trim()}
-              style={{padding:"8px 18px",borderRadius:7,background:saving||!form.title.trim()?T.blu+"80":T.blu,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:saving||!form.title.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
-              {saving?"Saving…":"Save MOM"}
-            </button>
-          </div>
-        </div>
-      </>}
     </div>
   );
 }
-
-// ═══════════════════════════════════════════════════════════════════
 // ─── SKELETON LOADER ─────────────────────────────────────────────
 function Sk({ w="100%", h=14, r=6, mb=0 }) {
   return <div style={{width:w,height:h,borderRadius:r,marginBottom:mb,background:"linear-gradient(90deg,#E5E7EB 25%,#F3F4F6 50%,#E5E7EB 75%)",backgroundSize:"200% 100%",animation:"skShimmer 1.4s infinite"}}/>;
@@ -20984,7 +20890,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     equipment:   <TabEquipment projectId={project.id}/>,
     files:       <TabFiles projectId={project.id}/>,
     site:        <TabSite/>,
-    mom:         <TabMOM projectId={project.id}/>,
+    mom:         <TabMOM/>,
     // ── Solar EPC tabs ──
     solar_stages:  <TabSuryaGhar  projectId={project.id}/>,
     solar_boq:     <TabSolarBOQ   projectId={project.id}/>,
