@@ -15760,6 +15760,37 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
   const [iwTradeFilter,setIwTradeFilter]= useState("All");
   const [iwPicked,     setIwPicked]     = useState({}); // {id: qty}
 
+  // ── Package builder extras (estimate-like UX) ──────────────────────────
+  const [pkgShowInfo,     setPkgShowInfo]     = useState(true);
+  const [pkgEditMode,     setPkgEditMode]     = useState(false);
+  const [pkgCatCollapsed, setPkgCatCollapsed] = useState({});   // {`${sid}:${catId}`:true}
+  const [pkgCatAreas,     setPkgCatAreas]     = useState({});   // {`${sid}:${catId}`:override}
+  const [pkgItemEdits,    setPkgItemEdits]    = useState({});   // {`${sid}:${catId}:${iid}`:{base,addOn,qty}}
+  // Cloudinary attachment (same pattern as EstimateBuilderModal)
+  const CLOUD_NAME    = "dd632nqfm";
+  const UPLOAD_PRESET = "gb_buildcon_drawings";
+  const [woAttachUrl,  setWoAttachUrl]  = useState("");
+  const [woAttachName, setWoAttachName] = useState("");
+  const [woAttachSize, setWoAttachSize] = useState("");
+  const [woAttaching,  setWoAttaching]  = useState(false);
+  const uploadWoAttachment = async (file) => {
+    setWoAttaching(true);
+    try {
+      const fd = new FormData();
+      fd.append("file", file);
+      fd.append("upload_preset", UPLOAD_PRESET);
+      fd.append("folder", "gb_buildcon/subcon_wo");
+      const isPDF = file.type === "application/pdf" || /\.(pdf|dwg|dxf|doc|docx|xls|xlsx)$/i.test(file.name);
+      const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${isPDF?"raw":"image"}/upload`, { method:"POST", body:fd });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error?.message || "Upload failed");
+      setWoAttachUrl(data.secure_url);
+      setWoAttachName(file.name);
+      setWoAttachSize(Math.round(file.size / 1024) + " KB");
+    } catch(e) { alert(e.message || "Upload failed"); }
+    finally { setWoAttaching(false); }
+  };
+
   // Load base data for package/item-wise mode when modal opens
   useEffect(() => {
     if (woType === "manual") return;
@@ -15836,14 +15867,18 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
 
   // Build sections from package mode for submit
   const buildPackageSections = () => {
+    const effRate = (r) => r.base_rate != null
+      ? parseFloat(r.base_rate||0) + parseFloat(r.add_on_rate||0)
+      : parseFloat(r.rate||0);
     return pkgStructures.map(sec => {
-      const rows  = pkgSecItems[sec.id] || [];
-      const area  = parseFloat(pkgAreas[sec.id] || sec.default_qty || 0);
-      const items = rows.filter(r => (parseFloat(r.base_rate||0)+parseFloat(r.add_on_rate||0)) > 0).map(r => ({
-        description: r.item_name || r.name,
-        unit:        r.unit || "Sqft",
-        qty:         area,
-        rate:        parseFloat(r.base_rate||0) + parseFloat(r.add_on_rate||0),
+      const rows    = pkgSecItems[sec.id] || [];
+      const area    = parseFloat(pkgAreas[sec.id] || sec.default_qty || 0);
+      const perItem = !!Number(sec.per_item_qty);
+      const items = rows.filter(r => effRate(r) > 0).map(r => ({
+        description:     r.item_name || r.name,
+        unit:            r.unit || "Sqft",
+        qty:             perItem ? parseFloat(r.qty||0) : area,
+        rate:            effRate(r),
         library_item_id: r.item_id || null,
       }));
       return { title: sec.name, items };
@@ -15967,7 +16002,9 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
       tds_pct: parseFloat(form.tds_pct||2),
       start_date: form.start_date||null,
       end_date: form.end_date||null,
-      // Package metadata (for reference)
+      attachment_url:  woAttachUrl  || null,
+      attachment_name: woAttachName || null,
+      attachment_size: woAttachSize || null,
       ...(woType==="package" && pkgSelPkg ? { source_package_id: pkgSelPkg.id, source_package_name: pkgSelPkg.name } : {}),
       sections: finalSections.map(s=>({
         title: s.title,
@@ -15985,11 +16022,47 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
     !libSearch || i.name.toLowerCase().includes(libSearch.toLowerCase())
   );
 
+  // True when package is selected and we show full-screen builder
+  const pkgBuilderMode = woType === "package" && pkgSelPkg !== null;
+  // Helper: effective rate for a rate-matrix row
+  const effR = (r) => r.base_rate != null
+    ? parseFloat(r.base_rate||0) + parseFloat(r.add_on_rate||0)
+    : parseFloat(r.rate||0);
+  // Package builder math helpers
+  const getPkgItemBase  = (sid,catId,iid,row) => pkgItemEdits[`${sid}:${catId}:${iid}`]?.base   ?? (row.base_rate != null ? parseFloat(row.base_rate||0) : parseFloat(row.rate||0) - parseFloat(row.add_on_rate||0));
+  const getPkgItemAddOn = (sid,catId,iid,row) => pkgItemEdits[`${sid}:${catId}:${iid}`]?.addOn  ?? parseFloat(row.add_on_rate||0);
+  const getPkgItemQty   = (sid,catId,iid,row,secArea,perItem) => perItem
+    ? (pkgItemEdits[`${sid}:${catId}:${iid}`]?.qty ?? parseFloat(row.qty||0))
+    : secArea;
+  const patchPkgItem = (sid,catId,iid,patch) =>
+    setPkgItemEdits(p=>({...p,[`${sid}:${catId}:${iid}`]:{...(p[`${sid}:${catId}:${iid}`]||{}),...patch}}));
+  // Compute package grand total for footer
+  const pkgGrandTotal = pkgStructures.reduce((gt,sec)=>{
+    const area = parseFloat(pkgAreas[sec.id]||sec.default_qty||0);
+    const perItem = !!Number(sec.per_item_qty);
+    const cats = pkgCategories.filter(c=>c.structure_id===sec.id);
+    return gt + cats.reduce((st,cat)=>{
+      const rows = (pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name);
+      return st + rows.reduce((ct,r)=>{
+        const base=getPkgItemBase(sec.id,cat.id,r.item_id,r);
+        const addOn=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
+        const qty=getPkgItemQty(sec.id,cat.id,r.item_id,r,area,perItem);
+        const catAreaKey=`${sec.id}:${cat.id}`;
+        const catArea=pkgCatAreas[catAreaKey]!=null?parseFloat(pkgCatAreas[catAreaKey]):area;
+        return ct+(base+addOn)*(perItem?qty:catArea);
+      },0);
+    },0);
+  },0);
+
   return(
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center"}}>
-      <div style={{background:T.surface,borderRadius:12,width:"min(760px,96vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
+      <div style={{background:T.surface,borderRadius:pkgBuilderMode?0:12,
+        width:pkgBuilderMode?"100vw":"min(780px,96vw)",
+        height:pkgBuilderMode?"100vh":"auto",
+        maxHeight:pkgBuilderMode?"100vh":"90vh",
+        display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
         {/* Header */}
-        <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
+        <div style={{background:"#0F172A",padding:"13px 18px",borderRadius:pkgBuilderMode?"0":"12px 12px 0 0",display:"flex",justifyContent:"space-between",alignItems:"flex-start",flexShrink:0}}>
           <div>
             <div style={{fontSize:14,fontWeight:700,color:"white",marginBottom:8}}>New Work Order</div>
             {/* WO Type toggle */}
@@ -16017,13 +16090,294 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
           <button onClick={onClose} style={{background:"none",border:"none",color:"rgba(255,255,255,0.5)",fontSize:20,cursor:"pointer",lineHeight:1,marginTop:2}}>×</button>
         </div>
 
-        <div style={{flex:1,overflowY:"auto",padding:16}}>
-          {/* ── Package Mode UI ──────────────────────────────────────── */}
-          {woType!=="manual" && (
+        <div style={{flex:1,overflowY:"auto",padding:pkgBuilderMode?"0":"16px"}}>
+          {/* ── PACKAGE BUILDER: estimate-style full-screen body ─── */}
+          {pkgBuilderMode && (
+            <div style={{maxWidth:1200,margin:"0 auto",padding:"16px 20px 24px"}}>
+              {/* Info Panel */}
+              <div style={{background:"white",borderRadius:10,border:"1px solid #E5E7EB",marginBottom:14}}>
+                <div onClick={()=>setPkgShowInfo(s=>!s)}
+                  style={{padding:"10px 14px",cursor:"pointer",display:"flex",alignItems:"center",gap:10,
+                    borderBottom:pkgShowInfo?"1px solid #E5E7EB":"none"}}>
+                  <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth={2.5}
+                    style={{transition:"transform .15s",transform:pkgShowInfo?"rotate(90deg)":"rotate(0deg)"}}>
+                    <polyline points="9 18 15 12 9 6"/>
+                  </svg>
+                  <span style={{fontSize:12,fontWeight:700,color:"#0F172A",textTransform:"uppercase",letterSpacing:".4px"}}>WO Settings</span>
+                  <span style={{fontSize:11,color:"#64748B",marginLeft:"auto"}}>
+                    Retention {form.retention_pct}% · TDS {form.tds_pct}%{woAttachUrl?" · 📎 Attached":""}
+                  </span>
+                </div>
+                {pkgShowInfo && (() => {
+                  const inpC={width:"100%",padding:"5px 8px",borderRadius:5,border:"1.5px solid #D1D5DB",fontSize:12,outline:"none",fontFamily:"inherit",boxSizing:"border-box"};
+                  const lblC={fontSize:9.5,fontWeight:700,color:"#6B7280",display:"block",marginBottom:3,textTransform:"uppercase",letterSpacing:".4px"};
+                  return (
+                    <div style={{padding:"12px 14px"}}>
+                      {/* Row 1: Subcon + Description */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:9}}>
+                        <div>
+                          <label style={lblC}>Subcontractor <span style={{color:"#DC2626"}}>*</span></label>
+                          <div style={{display:"flex",gap:6}}>
+                            <input list="sc-list-wo-pkg" value={form.subcon_name}
+                              onChange={e=>setForm(p=>({...p,subcon_name:e.target.value}))}
+                              placeholder="Select from library or type..."
+                              style={{...inpC,flex:1,border:`1.5px solid ${!form.subcon_name?"#FCA5A5":"#D1D5DB"}`}}/>
+                            <datalist id="sc-list-wo-pkg">
+                              {subcons.map(s=><option key={s.id} value={s.name}/>)}
+                            </datalist>
+                          </div>
+                        </div>
+                        <div>
+                          <label style={lblC}>Description / Note</label>
+                          <input value={form.description||""} onChange={e=>setForm(p=>({...p,description:e.target.value}))}
+                            placeholder="Optional scope summary" style={inpC}/>
+                        </div>
+                      </div>
+                      {/* Row 2: Retention / TDS / Start / End */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1.3fr 1.3fr",gap:10,marginBottom:9}}>
+                        <div><label style={lblC}>Retention %</label>
+                          <input type="number" value={form.retention_pct} onChange={e=>setForm(p=>({...p,retention_pct:e.target.value}))} style={{...inpC,textAlign:"right"}}/></div>
+                        <div><label style={lblC}>TDS %</label>
+                          <input type="number" value={form.tds_pct} onChange={e=>setForm(p=>({...p,tds_pct:e.target.value}))} style={{...inpC,textAlign:"right"}}/></div>
+                        <div><label style={lblC}>Start Date</label>
+                          <input type="date" value={form.start_date||""} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpC}/></div>
+                        <div><label style={lblC}>End Date</label>
+                          <input type="date" value={form.end_date||""} onChange={e=>setForm(p=>({...p,end_date:e.target.value}))} style={inpC}/></div>
+                      </div>
+                      {/* Row 3: Attachment + Category */}
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                        <div>
+                          <label style={lblC}>Attachment</label>
+                          {!woAttachUrl ? (
+                            <label style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:5,
+                              border:"1.5px dashed #94A3B8",background:"white",cursor:woAttaching?"not-allowed":"pointer",fontSize:11.5,color:"#475569",fontWeight:600}}>
+                              <span style={{fontSize:13}}>📎</span>
+                              {woAttaching?"Uploading…":"Attach PDF / image / DWG"}
+                              <input type="file" accept=".pdf,.dwg,.dxf,.doc,.docx,.xls,.xlsx,image/*"
+                                onChange={e=>{const f=e.target.files?.[0];if(f)uploadWoAttachment(f);e.target.value="";}}
+                                disabled={woAttaching} style={{display:"none"}}/>
+                            </label>
+                          ) : (
+                            <div style={{display:"flex",alignItems:"center",gap:6,padding:"5px 10px",borderRadius:5,border:"1.5px solid #93C5FD",background:"#EFF6FF",fontSize:11.5,color:"#1D4ED8"}}>
+                              <a href={woAttachUrl} target="_blank" rel="noreferrer"
+                                style={{flex:1,color:"#1D4ED8",textDecoration:"none",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                                📎 {woAttachName} <span style={{color:"#64748B"}}>· {woAttachSize}</span>
+                              </a>
+                              <button onClick={()=>{setWoAttachUrl("");setWoAttachName("");setWoAttachSize("");}}
+                                style={{background:"none",border:"none",color:"#DC2626",cursor:"pointer",fontSize:14,lineHeight:1,padding:0}}>×</button>
+                            </div>
+                          )}
+                        </div>
+                        <div>
+                          <label style={lblC}>Trade Category</label>
+                          <div style={{fontSize:12,color:T.t3,fontWeight:600,padding:"5px 0"}}>{pkgTrade} — {pkgSelPkg?.name}</div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Package picker compact row */}
+              <div style={{background:"white",borderRadius:8,border:"1px solid #E5E7EB",padding:"10px 14px",marginBottom:12,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontSize:11,fontWeight:700,color:"#64748B",textTransform:"uppercase",letterSpacing:".4px"}}>{pkgSelType?.name} · {pkgSelCity?.name}</span>
+                <span style={{color:"#CBD5E1"}}>›</span>
+                {pkgList.map(p=>(
+                  <button key={p.id} onClick={()=>setPkgSelPkg(p)} style={{
+                    padding:"4px 12px",borderRadius:6,fontSize:12,fontWeight:700,cursor:"pointer",
+                    border:`2px solid ${pkgSelPkg?.id===p.id?"#2563EB":"#E5E7EB"}`,
+                    background:pkgSelPkg?.id===p.id?"#EFF6FF":"white",
+                    color:pkgSelPkg?.id===p.id?"#2563EB":"#374151"}}>
+                    {p.name}{p.sqft_rate>0&&<span style={{fontSize:10,fontWeight:500,marginLeft:4,opacity:.7}}>Rs.{Number(p.sqft_rate).toLocaleString()}/sqft</span>}
+                  </button>
+                ))}
+              </div>
+
+              {/* ── Section / Category / Item tree — estimate-style ── */}
+              {pkgSelPkg && (<>
+                {pkgStructures.length>0 && pkgStructures.every(sec=>(pkgSecItems[sec.id]||[]).every(r=>effR(r)===0)) && (
+                  <div style={{background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:8,padding:"9px 13px",marginBottom:10,fontSize:12,color:"#92400E",display:"flex",alignItems:"center",gap:8}}>
+                    ⚠ Rates not set — go to <b>Library → Subcon Rate Card</b>, select this package, set rates and Save Rates first.
+                  </div>
+                )}
+                {pkgStructures.length>0 && (
+                  <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:8}}>
+                    <button onClick={()=>setPkgEditMode(m=>!m)}
+                      style={{padding:"5px 13px",borderRadius:6,fontSize:11.5,fontWeight:700,cursor:"pointer",
+                        background:pkgEditMode?"#10B981":"white",border:"1.5px solid "+(pkgEditMode?"#10B981":"#94A3B8"),
+                        color:pkgEditMode?"white":"#334155",display:"flex",alignItems:"center",gap:5}}>
+                      {pkgEditMode?"✓ Done Editing":"✎ Edit Package"}
+                    </button>
+                    <span style={{fontSize:10.5,color:"#64748B"}}>{pkgEditMode?"Override rates/qty per item":"Click to override rates or qty for this WO"}</span>
+                  </div>
+                )}
+                {pkgStructures.map(sec=>{
+                  const secArea=parseFloat(pkgAreas[sec.id]||sec.default_qty||0);
+                  const perItem=!!Number(sec.per_item_qty);
+                  const sCol=!!pkgCollapsed[sec.id];
+                  const cats=pkgCategories.filter(c=>c.structure_id===sec.id);
+                  const secBase=cats.reduce((sb,cat)=>sb+(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name).reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0),0);
+                  const secAddOn=cats.reduce((sa,cat)=>sa+(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name).reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0),0);
+                  const secTotal=cats.reduce((st,cat)=>{
+                    const ck=`${sec.id}:${cat.id}`;
+                    const ca=pkgCatAreas[ck]!=null?parseFloat(pkgCatAreas[ck]):secArea;
+                    return st+(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name).reduce((ct,r)=>{
+                      const b=getPkgItemBase(sec.id,cat.id,r.item_id,r);
+                      const a=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
+                      const q=perItem?getPkgItemQty(sec.id,cat.id,r.item_id,r,secArea,true):ca;
+                      return ct+(b+a)*q;
+                    },0);
+                  },0);
+                  return(
+                    <div key={sec.id} style={{background:"white",borderRadius:10,border:"1px solid #E5E7EB",marginBottom:12,overflow:"hidden"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",background:"#0F172A",color:"white"}}>
+                        <span onClick={()=>setPkgCollapsed(p=>({...p,[sec.id]:!p[sec.id]}))} style={{cursor:"pointer",display:"flex"}}>
+                          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth={2.5}
+                            style={{transition:"transform .15s",transform:sCol?"rotate(0deg)":"rotate(90deg)"}}>
+                            <polyline points="9 18 15 12 9 6"/>
+                          </svg>
+                        </span>
+                        <span style={{fontWeight:700,fontSize:14,flex:1}}>{sec.name}</span>
+                        <span style={{fontSize:11,color:"rgba(255,255,255,0.45)"}}>· {cats.length} {cats.length===1?"category":"categories"}</span>
+                        {perItem&&<span style={{fontSize:9,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>Per-item Qty</span>}
+                        <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11.5,fontWeight:600}}>
+                          {!perItem&&<>
+                            <span style={{color:"rgba(255,255,255,0.6)"}}>Base <strong style={{color:"white"}}>Rs.{Math.round(secBase).toLocaleString("en-IN")}</strong></span>
+                            <span style={{color:"rgba(255,255,255,0.6)"}}>Add-on <strong style={{color:"#F59E0B"}}>Rs.{Math.round(secAddOn).toLocaleString("en-IN")}</strong></span>
+                            <span style={{padding:"3px 9px",background:"#CCFBF1",color:"#0D9488",borderRadius:4,fontWeight:700}}>Rs.{Math.round(secBase+secAddOn).toLocaleString("en-IN")}/sqft</span>
+                            <span style={{display:"flex",alignItems:"center",gap:4}}>
+                              <span style={{color:"rgba(255,255,255,0.55)",fontSize:11}}>Area</span>
+                              <input type="number" value={pkgAreas[sec.id]||""} onChange={e=>setPkgAreas(p=>({...p,[sec.id]:e.target.value}))}
+                                onClick={e=>e.stopPropagation()} placeholder="0"
+                                style={{width:80,padding:"5px 8px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12,fontWeight:700,
+                                  border:"1.5px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",color:"white",outline:"none"}}/>
+                            </span>
+                          </>}
+                          <span style={{color:"rgba(255,255,255,0.6)"}}>Total <strong style={{color:"#CCFBF1",fontSize:13}}>Rs.{Math.round(secTotal).toLocaleString("en-IN")}</strong></span>
+                        </div>
+                      </div>
+                      {!sCol&&(
+                        <div style={{padding:10}}>
+                          {cats.length===0&&<div style={{padding:"14px",textAlign:"center",color:"#9CA3AF",fontSize:12.5}}>No categories — add via Library → Subcon Rate Card</div>}
+                          {cats.map(cat=>{
+                            const ck=`${sec.id}:${cat.id}`;
+                            const catCol=!!pkgCatCollapsed[ck];
+                            const catAOv=pkgCatAreas[ck];
+                            const catArea=catAOv!=null?parseFloat(catAOv):secArea;
+                            const catRows=(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name);
+                            const catBase=catRows.reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0);
+                            const catAddOn=catRows.reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0);
+                            const catTotal=catRows.reduce((ct,r)=>{
+                              const b=getPkgItemBase(sec.id,cat.id,r.item_id,r);
+                              const a=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
+                              const q=perItem?getPkgItemQty(sec.id,cat.id,r.item_id,r,secArea,true):catArea;
+                              return ct+(b+a)*q;
+                            },0);
+                            return(
+                              <div key={ck} style={{marginBottom:10,border:"1px solid #E5E7EB",borderRadius:8,overflow:"hidden"}}>
+                                <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#F1F5F9",borderBottom:catCol?"none":"1px solid #E5E7EB"}}>
+                                  <span onClick={()=>setPkgCatCollapsed(p=>({...p,[ck]:!p[ck]}))} style={{cursor:"pointer",display:"flex"}}>
+                                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth={2.5}
+                                      style={{transition:"transform .15s",transform:catCol?"rotate(0deg)":"rotate(90deg)"}}>
+                                      <polyline points="9 18 15 12 9 6"/>
+                                    </svg>
+                                  </span>
+                                  <span style={{fontWeight:700,fontSize:12.5,color:"#0F172A",flex:1}}>{cat.category_name}</span>
+                                  <span style={{fontSize:10.5,color:"#94A3B8"}}>· {catRows.length} item{catRows.length===1?"":"s"}</span>
+                                  <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11,fontWeight:600}}>
+                                    {!perItem&&<>
+                                      <span style={{color:"#64748B"}}>Base <strong style={{color:"#0F172A"}}>Rs.{Math.round(catBase).toLocaleString("en-IN")}</strong></span>
+                                      <span style={{color:"#64748B"}}>Add-on <strong style={{color:"#F59E0B"}}>Rs.{Math.round(catAddOn).toLocaleString("en-IN")}</strong></span>
+                                      <span style={{display:"flex",alignItems:"center",gap:4}}>
+                                        <span style={{color:"#64748B",fontSize:10.5}}>Area</span>
+                                        <input type="number" value={catAOv!=null?catAOv:""} onChange={e=>setPkgCatAreas(p=>({...p,[ck]:e.target.value===""?null:e.target.value}))}
+                                          placeholder={String(secArea)}
+                                          style={{width:70,padding:"4px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:11.5,fontWeight:700,
+                                            border:"1.5px solid "+(catAOv?"#F59E0B":"#CBD5E1"),background:catAOv?"#FFFBEB":"white",
+                                            color:catAOv?"#92400E":"#0F172A",outline:"none"}}/>
+                                      </span>
+                                    </>}
+                                    <span style={{color:"#64748B"}}>Total <strong style={{color:"#059669"}}>Rs.{Math.round(catTotal).toLocaleString("en-IN")}</strong></span>
+                                  </div>
+                                </div>
+                                {!catCol&&(
+                                  <table style={{width:"100%",borderCollapse:"collapse"}}>
+                                    <thead>
+                                      <tr style={{background:"#FAFAFA"}}>
+                                        <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>Item</th>
+                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase",width:100}}>Base</th>
+                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#F59E0B",textTransform:"uppercase",width:100}}>Add-on</th>
+                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#0D9488",textTransform:"uppercase",width:80}}>{perItem?"Qty":"Area"}</th>
+                                        <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#059669",textTransform:"uppercase",width:110}}>Total</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {catRows.length===0&&<tr><td colSpan={5} style={{padding:"12px",textAlign:"center",color:"#9CA3AF",fontSize:12}}>No items</td></tr>}
+                                      {catRows.map((r,idx)=>{
+                                        const base=getPkgItemBase(sec.id,cat.id,r.item_id,r);
+                                        const addOn=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
+                                        const qty=perItem?getPkgItemQty(sec.id,cat.id,r.item_id,r,secArea,true):catArea;
+                                        const tot=(base+addOn)*qty;
+                                        return(
+                                          <tr key={r.item_id} style={{background:idx%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F3F4F6"}}>
+                                            <td style={{padding:"8px 12px",fontWeight:600,fontSize:12.5,color:"#0F172A"}}>
+                                              {r.item_name||r.name}
+                                              <div style={{fontSize:10,color:"#94A3B8",marginTop:1}}>{r.unit||"—"}</div>
+                                            </td>
+                                            <td style={{padding:"8px 12px",textAlign:"right"}}>
+                                              {pkgEditMode?<input type="number" value={pkgItemEdits[`${sec.id}:${cat.id}:${r.item_id}`]?.base??""}
+                                                  placeholder={String(Math.round(r.base_rate!=null?parseFloat(r.base_rate||0):parseFloat(r.rate||0)-parseFloat(r.add_on_rate||0)))}
+                                                  onChange={e=>patchPkgItem(sec.id,cat.id,r.item_id,{base:e.target.value===""?undefined:parseFloat(e.target.value)||0})}
+                                                  style={{width:90,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,border:"1.5px solid #E5E7EB",background:"white",outline:"none"}}/>
+                                                :<span style={{fontSize:12.5,fontWeight:600}}>Rs.{Math.round(base).toLocaleString("en-IN")}</span>}
+                                            </td>
+                                            <td style={{padding:"8px 12px",textAlign:"right"}}>
+                                              {pkgEditMode?<input type="number" value={pkgItemEdits[`${sec.id}:${cat.id}:${r.item_id}`]?.addOn??""}
+                                                  placeholder={String(Math.round(parseFloat(r.add_on_rate||0)))}
+                                                  onChange={e=>patchPkgItem(sec.id,cat.id,r.item_id,{addOn:e.target.value===""?undefined:parseFloat(e.target.value)||0})}
+                                                  style={{width:90,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,border:"1.5px solid #E5E7EB",background:"white",outline:"none",color:"#F59E0B",fontWeight:600}}/>
+                                                :<span style={{fontSize:12.5,fontWeight:600,color:"#F59E0B"}}>{addOn>0?`Rs.${Math.round(addOn).toLocaleString("en-IN")}`:"—"}</span>}
+                                            </td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:12,color:"#0D9488",fontWeight:600}}>
+                                              {perItem&&pkgEditMode?<input type="number" value={pkgItemEdits[`${sec.id}:${cat.id}:${r.item_id}`]?.qty??""}
+                                                  placeholder={String(parseFloat(r.qty||0))}
+                                                  onChange={e=>patchPkgItem(sec.id,cat.id,r.item_id,{qty:e.target.value===""?undefined:parseFloat(e.target.value)||0})}
+                                                  style={{width:70,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,border:"1.5px solid #E5E7EB",background:"white",outline:"none",color:"#0D9488",fontWeight:700}}/>
+                                                :Math.round(qty).toLocaleString("en-IN")}
+                                            </td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>
+                                              Rs.{Math.round(tot).toLocaleString("en-IN")}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {pkgGrandTotal>0&&(
+                  <div style={{marginTop:10,padding:"14px 20px",background:"#0F172A",color:"white",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <span style={{fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",color:"rgba(255,255,255,0.7)"}}>Grand Total</span>
+                    <span style={{fontSize:20,fontWeight:700,color:"#CCFBF1"}}>Rs.{Math.round(pkgGrandTotal).toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+              </>)}
+            </div>
+          )}
+
+          {/* ── Package / Item-wise picker (compact, shown when NOT in full builder) ── */}
+          {woType!=="manual" && !pkgBuilderMode && (
             <div style={{marginBottom:14,padding:"12px 14px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`}}>
               <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:10}}>
                 {woType==="package" ? "Select Rate Card Package" : "Select Items from Library"}
-                {pkgSelCity && pkgSelType && <span style={{fontWeight:400,textTransform:"none",marginLeft:6,color:T.t4}}>— {pkgSelType.name} × {pkgSelCity.name}{project?.city_name&&!pkgSelCity?" (auto from project)":""}</span>}
+                {pkgSelCity && pkgSelType && <span style={{fontWeight:400,textTransform:"none",marginLeft:6,color:T.t4}}>— {pkgSelType.name} × {pkgSelCity.name}</span>}
               </div>
 
               {/* Type + City row */}
@@ -16090,65 +16444,225 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                   </div>
                 )}
 
-                {/* Package section tree with area inputs */}
-                {pkgSelPkg && pkgStructures.length>0 && (
-                  <div style={{marginTop:12}}>
-                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:8}}>
-                      Sections — {pkgSelPkg.name} · Set area per section
+                {/* Section tree moved to pkgBuilderMode body above */}
+                {false && pkgSelPkg && (<>
+                  {/* 0-rate warning */}
+                  {pkgStructures.length>0 && pkgStructures.every(sec=>(pkgSecItems[sec.id]||[]).every(r=>effR(r)===0)) && (
+                    <div style={{background:"#FFFBEB",border:"1px solid #FCD34D",borderRadius:8,padding:"9px 13px",marginTop:10,fontSize:12,color:"#92400E",display:"flex",alignItems:"center",gap:8}}>
+                      ⚠ Rates not set — go to <b>Library → Subcon Rate Card</b>, select this package, set rates and Save Rates first.
                     </div>
-                    {pkgStructures.map(sec=>{
-                      const rows  = pkgSecItems[sec.id]||[];
-                      const area  = parseFloat(pkgAreas[sec.id]||sec.default_qty||0);
-                      const total = rows.reduce((s,r)=>s+(parseFloat(r.base_rate||0)+parseFloat(r.add_on_rate||0))*area,0);
-                      const isCol = !!pkgCollapsed[sec.id];
-                      return (
-                        <div key={sec.id} style={{background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:6,overflow:"hidden"}}>
-                          <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#1E293B",cursor:"pointer"}}
-                            onClick={()=>setPkgCollapsed(p=>({...p,[sec.id]:!p[sec.id]}))}>
-                            <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.5)" strokeWidth={2.5}
-                              style={{transform:isCol?"rotate(0deg)":"rotate(90deg)",transition:"transform .15s",flexShrink:0}}>
+                  )}
+
+                  {/* Edit Package toggle */}
+                  {pkgStructures.length>0 && (
+                    <div style={{display:"flex",gap:8,alignItems:"center",marginTop:10,marginBottom:8}}>
+                      <button onClick={()=>setPkgEditMode(m=>!m)}
+                        style={{padding:"5px 13px",borderRadius:6,fontSize:11.5,fontWeight:700,cursor:"pointer",
+                          background:pkgEditMode?"#10B981":"white",border:"1.5px solid "+(pkgEditMode?"#10B981":"#94A3B8"),
+                          color:pkgEditMode?"white":"#334155",display:"flex",alignItems:"center",gap:5}}>
+                        {pkgEditMode?"✓ Done Editing":"✎ Edit Package"}
+                      </button>
+                      <span style={{fontSize:10.5,color:T.t4}}>
+                        {pkgEditMode?"Override rates / qty per item for this WO":"Click to override rates or qty"}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Section tree */}
+                  {pkgStructures.map(sec=>{
+                    const secArea   = parseFloat(pkgAreas[sec.id]||sec.default_qty||0);
+                    const perItem   = !!Number(sec.per_item_qty);
+                    const sCollapsed= !!pkgCollapsed[sec.id];
+                    const cats      = pkgCategories.filter(c=>c.structure_id===sec.id);
+                    // Section totals
+                    const secBase = cats.reduce((sb,cat)=>sb+(pkgSecItems[sec.id]||[])
+                      .filter(r=>r.category_name===cat.category_name)
+                      .reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0),0);
+                    const secAddOn= cats.reduce((sa,cat)=>sa+(pkgSecItems[sec.id]||[])
+                      .filter(r=>r.category_name===cat.category_name)
+                      .reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0),0);
+                    const secTotal= cats.reduce((st,cat)=>{
+                      const catAreaKey=`${sec.id}:${cat.id}`;
+                      const catArea=pkgCatAreas[catAreaKey]!=null?parseFloat(pkgCatAreas[catAreaKey]):secArea;
+                      return st+(pkgSecItems[sec.id]||[])
+                        .filter(r=>r.category_name===cat.category_name)
+                        .reduce((ct,r)=>{
+                          const base=getPkgItemBase(sec.id,cat.id,r.item_id,r);
+                          const addOn=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
+                          const qty=perItem?getPkgItemQty(sec.id,cat.id,r.item_id,r,secArea,true):catArea;
+                          return ct+(base+addOn)*qty;
+                        },0);
+                    },0);
+                    const itemCount=(pkgSecItems[sec.id]||[]).length;
+
+                    return (
+                      <div key={sec.id} style={{background:"white",borderRadius:10,border:"1px solid #E5E7EB",marginBottom:12,overflow:"hidden",marginTop:8}}>
+                        {/* Section header — dark */}
+                        <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",background:"#0F172A",color:"white"}}>
+                          <span onClick={()=>setPkgCollapsed(p=>({...p,[sec.id]:!p[sec.id]}))} style={{cursor:"pointer",display:"flex"}}>
+                            <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.65)" strokeWidth={2.5}
+                              style={{transition:"transform .15s",transform:sCollapsed?"rotate(0deg)":"rotate(90deg)"}}>
                               <polyline points="9 18 15 12 9 6"/>
                             </svg>
-                            <span style={{flex:1,fontSize:12,fontWeight:700,color:"white"}}>{sec.name}</span>
-                            <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>{rows.length} items</span>
-                            {total>0 && <span style={{fontSize:11,fontWeight:700,color:"#4ADE80"}}>{fmtC(total)}</span>}
-                            {/* Area input */}
-                            <div onClick={e=>e.stopPropagation()} style={{display:"flex",alignItems:"center",gap:5}}>
-                              <span style={{fontSize:9.5,color:"rgba(255,255,255,0.4)"}}>AREA</span>
-                              <input type="number" value={pkgAreas[sec.id]||""} onChange={e=>setPkgAreas(p=>({...p,[sec.id]:e.target.value}))}
-                                placeholder="sqft" onClick={e=>e.stopPropagation()}
-                                style={{width:70,padding:"3px 7px",borderRadius:5,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",color:"white",fontSize:12,outline:"none",fontFamily:"inherit"}}/>
-                              <span style={{fontSize:9.5,color:"rgba(255,255,255,0.4)"}}>sqft</span>
-                            </div>
+                          </span>
+                          <span style={{fontWeight:700,fontSize:14,flex:1}}>{sec.name}</span>
+                          <span style={{fontSize:11,color:"rgba(255,255,255,0.45)"}}>· {cats.length} {cats.length===1?"category":"categories"}</span>
+                          {perItem && <span style={{fontSize:9,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>Per-item Qty</span>}
+                          {/* Right: Base | AddOn | /sqft | Area | Total */}
+                          <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11.5,fontWeight:600}}>
+                            {!perItem&&<>
+                              <span style={{color:"rgba(255,255,255,0.6)"}}>Base <strong style={{color:"white"}}>Rs.{Math.round(secBase).toLocaleString("en-IN")}</strong></span>
+                              <span style={{color:"rgba(255,255,255,0.6)"}}>Add-on <strong style={{color:"#F59E0B"}}>Rs.{Math.round(secAddOn).toLocaleString("en-IN")}</strong></span>
+                              <span style={{padding:"3px 9px",background:"#CCFBF1",color:"#0D9488",borderRadius:4,fontWeight:700}}>
+                                Rs.{Math.round(secBase+secAddOn).toLocaleString("en-IN")}/sqft
+                              </span>
+                              <span style={{display:"flex",alignItems:"center",gap:4}}>
+                                <span style={{color:"rgba(255,255,255,0.55)",fontSize:11}}>Area</span>
+                                <input type="number" value={pkgAreas[sec.id]||""} onChange={e=>setPkgAreas(p=>({...p,[sec.id]:e.target.value}))}
+                                  onClick={e=>e.stopPropagation()} placeholder="0"
+                                  style={{width:80,padding:"5px 8px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12,fontWeight:700,
+                                    border:"1.5px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.08)",color:"white",outline:"none"}}/>
+                              </span>
+                            </>}
+                            <span style={{color:"rgba(255,255,255,0.6)"}}>Total <strong style={{color:"#CCFBF1",fontSize:13}}>Rs.{Math.round(secTotal).toLocaleString("en-IN")}</strong></span>
                           </div>
-                          {!isCol && rows.length>0 && (
-                            <div style={{padding:"8px 12px"}}>
-                              {rows.map(it=>{
-                                const rate=parseFloat(it.base_rate||0)+parseFloat(it.add_on_rate||0);
-                                const amt=rate*area;
-                                return (
-                                  <div key={it.item_id} style={{display:"grid",gridTemplateColumns:"1fr 60px 70px 80px",gap:6,padding:"4px 0",borderBottom:`1px solid ${T.b1}`,fontSize:11.5,alignItems:"center"}}>
-                                    <span style={{color:T.t1,fontWeight:500}}>{it.item_name||it.name}</span>
-                                    <span style={{color:T.t3}}>{it.unit}</span>
-                                    <span style={{color:T.blu,fontWeight:600,textAlign:"right"}}>₹{rate.toLocaleString()}/sqft</span>
-                                    <span style={{color:T.grn,fontWeight:700,textAlign:"right"}}>{amt>0?fmtC(amt):""}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          )}
                         </div>
-                      );
-                    })}
-                    <div style={{textAlign:"right",fontSize:13,fontWeight:800,color:T.grn,padding:"6px 0"}}>
-                      Est. Total: {fmtC(pkgStructures.reduce((st,sec)=>{
-                        const rows=pkgSecItems[sec.id]||[];
-                        const area=parseFloat(pkgAreas[sec.id]||sec.default_qty||0);
-                        return st+rows.reduce((s,r)=>s+(parseFloat(r.base_rate||0)+parseFloat(r.add_on_rate||0))*area,0);
-                      },0))}
+
+                        {/* Categories */}
+                        {!sCollapsed && (
+                          <div style={{padding:10}}>
+                            {cats.length===0 && <div style={{padding:"14px 12px",textAlign:"center",color:"#9CA3AF",fontSize:12.5}}>No categories — add via Library → Subcon Rate Card</div>}
+                            {cats.map(cat=>{
+                              const catKey=`${sec.id}:${cat.id}`;
+                              const catCollapsed=!!pkgCatCollapsed[catKey];
+                              const catAreaOverride=pkgCatAreas[catKey];
+                              const catArea=catAreaOverride!=null?parseFloat(catAreaOverride):secArea;
+                              const catRows=(pkgSecItems[sec.id]||[]).filter(r=>r.category_name===cat.category_name);
+                              const catBase=catRows.reduce((b,r)=>b+getPkgItemBase(sec.id,cat.id,r.item_id,r),0);
+                              const catAddOn=catRows.reduce((a,r)=>a+getPkgItemAddOn(sec.id,cat.id,r.item_id,r),0);
+                              const catTotal=catRows.reduce((ct,r)=>{
+                                const base=getPkgItemBase(sec.id,cat.id,r.item_id,r);
+                                const addOn=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
+                                const qty=perItem?getPkgItemQty(sec.id,cat.id,r.item_id,r,secArea,true):catArea;
+                                return ct+(base+addOn)*qty;
+                              },0);
+                              return (
+                                <div key={catKey} style={{marginBottom:10,border:"1px solid #E5E7EB",borderRadius:8,overflow:"hidden"}}>
+                                  {/* Category header */}
+                                  <div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",background:"#F1F5F9",borderBottom:catCollapsed?"none":"1px solid #E5E7EB"}}>
+                                    <span onClick={()=>setPkgCatCollapsed(p=>({...p,[catKey]:!p[catKey]}))} style={{cursor:"pointer",display:"flex"}}>
+                                      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="#64748B" strokeWidth={2.5}
+                                        style={{transition:"transform .15s",transform:catCollapsed?"rotate(0deg)":"rotate(90deg)"}}>
+                                        <polyline points="9 18 15 12 9 6"/>
+                                      </svg>
+                                    </span>
+                                    <span style={{fontWeight:700,fontSize:12.5,color:"#0F172A",flex:1}}>{cat.category_name}</span>
+                                    <span style={{fontSize:10.5,color:"#94A3B8"}}>· {catRows.length} item{catRows.length===1?"":"s"}</span>
+                                    <div style={{display:"flex",gap:10,alignItems:"center",fontSize:11,fontWeight:600}}>
+                                      {!perItem&&<>
+                                        <span style={{color:"#64748B"}}>Base <strong style={{color:"#0F172A"}}>Rs.{Math.round(catBase).toLocaleString("en-IN")}</strong></span>
+                                        <span style={{color:"#64748B"}}>Add-on <strong style={{color:"#F59E0B"}}>Rs.{Math.round(catAddOn).toLocaleString("en-IN")}</strong></span>
+                                        <span style={{display:"flex",alignItems:"center",gap:4}}>
+                                          <span style={{color:"#64748B",fontSize:10.5}}>Area</span>
+                                          <input type="number"
+                                            value={catAreaOverride!=null?catAreaOverride:""}
+                                            onChange={e=>setPkgCatAreas(p=>({...p,[catKey]:e.target.value===""?null:e.target.value}))}
+                                            placeholder={String(secArea)}
+                                            title={catAreaOverride?`Override active — clear to inherit ${secArea} from section`:`Inherits ${secArea} from section`}
+                                            style={{width:70,padding:"4px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:11.5,fontWeight:700,
+                                              border:"1.5px solid "+(catAreaOverride?"#F59E0B":"#CBD5E1"),
+                                              background:catAreaOverride?"#FFFBEB":"white",
+                                              color:catAreaOverride?"#92400E":"#0F172A",outline:"none"}}/>
+                                        </span>
+                                      </>}
+                                      <span style={{color:"#64748B"}}>Total <strong style={{color:"#059669"}}>Rs.{Math.round(catTotal).toLocaleString("en-IN")}</strong></span>
+                                    </div>
+                                  </div>
+
+                                  {/* Item table */}
+                                  {!catCollapsed && (
+                                    <table style={{width:"100%",borderCollapse:"collapse"}}>
+                                      <thead>
+                                        <tr style={{background:"#FAFAFA"}}>
+                                          <th style={{padding:"7px 12px",textAlign:"left",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>Item</th>
+                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase",width:100}}>Base</th>
+                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#F59E0B",textTransform:"uppercase",width:100}}>Add-on</th>
+                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#0D9488",textTransform:"uppercase",width:80}}>{perItem?"Qty":"Area"}</th>
+                                          <th style={{padding:"7px 12px",textAlign:"right",fontSize:10,fontWeight:700,color:"#059669",textTransform:"uppercase",width:110}}>Total</th>
+                                        </tr>
+                                      </thead>
+                                      <tbody>
+                                        {catRows.length===0 && <tr><td colSpan={5} style={{padding:"12px",textAlign:"center",color:"#9CA3AF",fontSize:12}}>No items</td></tr>}
+                                        {catRows.map((r,idx)=>{
+                                          const base   = getPkgItemBase(sec.id,cat.id,r.item_id,r);
+                                          const addOn  = getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
+                                          const qty    = perItem?getPkgItemQty(sec.id,cat.id,r.item_id,r,secArea,true):catArea;
+                                          const total  = (base+addOn)*qty;
+                                          return (
+                                            <tr key={r.item_id} style={{background:idx%2===0?"white":"#FAFAFA",borderBottom:"1px solid #F3F4F6"}}>
+                                              <td style={{padding:"8px 12px",fontWeight:600,fontSize:12.5,color:"#0F172A"}}>
+                                                {r.item_name||r.name}
+                                                <div style={{fontSize:10,color:"#94A3B8",marginTop:1}}>{r.unit||"—"}</div>
+                                              </td>
+                                              <td style={{padding:"8px 12px",textAlign:"right"}}>
+                                                {pkgEditMode
+                                                  ? <input type="number"
+                                                      value={pkgItemEdits[`${sec.id}:${cat.id}:${r.item_id}`]?.base ?? ""}
+                                                      placeholder={String(Math.round(r.base_rate!=null?parseFloat(r.base_rate||0):parseFloat(r.rate||0)-parseFloat(r.add_on_rate||0)))}
+                                                      onChange={e=>patchPkgItem(sec.id,cat.id,r.item_id,{base:e.target.value===""?undefined:parseFloat(e.target.value)||0})}
+                                                      style={{width:90,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,
+                                                        border:"1.5px solid #E5E7EB",background:"white",outline:"none"}}/>
+                                                  : <span style={{fontSize:12.5,fontWeight:600}}>Rs.{Math.round(base).toLocaleString("en-IN")}</span>
+                                                }
+                                              </td>
+                                              <td style={{padding:"8px 12px",textAlign:"right"}}>
+                                                {pkgEditMode
+                                                  ? <input type="number"
+                                                      value={pkgItemEdits[`${sec.id}:${cat.id}:${r.item_id}`]?.addOn ?? ""}
+                                                      placeholder={String(Math.round(parseFloat(r.add_on_rate||0)))}
+                                                      onChange={e=>patchPkgItem(sec.id,cat.id,r.item_id,{addOn:e.target.value===""?undefined:parseFloat(e.target.value)||0})}
+                                                      style={{width:90,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,
+                                                        border:"1.5px solid #E5E7EB",background:"white",outline:"none",color:"#F59E0B",fontWeight:600}}/>
+                                                  : <span style={{fontSize:12.5,fontWeight:600,color:"#F59E0B"}}>{addOn>0?`Rs.${Math.round(addOn).toLocaleString("en-IN")}`:"—"}</span>
+                                                }
+                                              </td>
+                                              <td style={{padding:"8px 12px",textAlign:"right",fontSize:12,color:"#0D9488",fontWeight:600}}>
+                                                {perItem && pkgEditMode
+                                                  ? <input type="number"
+                                                      value={pkgItemEdits[`${sec.id}:${cat.id}:${r.item_id}`]?.qty ?? ""}
+                                                      placeholder={String(parseFloat(r.qty||0))}
+                                                      onChange={e=>patchPkgItem(sec.id,cat.id,r.item_id,{qty:e.target.value===""?undefined:parseFloat(e.target.value)||0})}
+                                                      style={{width:70,padding:"5px 7px",borderRadius:5,textAlign:"right",fontFamily:"inherit",fontSize:12.5,
+                                                        border:"1.5px solid #E5E7EB",background:"white",outline:"none",color:"#0D9488",fontWeight:700}}/>
+                                                  : Math.round(qty).toLocaleString("en-IN")
+                                                }
+                                              </td>
+                                              <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>
+                                                Rs.{Math.round(total).toLocaleString("en-IN")}
+                                              </td>
+                                            </tr>
+                                          );
+                                        })}
+                                      </tbody>
+                                    </table>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+
+                  {/* Grand Total bar */}
+                  {pkgGrandTotal>0 && (
+                    <div style={{marginTop:10,padding:"14px 20px",background:"#0F172A",color:"white",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                      <span style={{fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",color:"rgba(255,255,255,0.7)"}}>Grand Total</span>
+                      <span style={{fontSize:20,fontWeight:700,color:"#CCFBF1"}}>Rs.{Math.round(pkgGrandTotal).toLocaleString("en-IN")}</span>
                     </div>
-                  </div>
-                )}
+                  )}
+                </>)}
               </>)}
 
               {/* ── Item-wise mode: item browser ── */}
@@ -16217,8 +16731,8 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             </div>
           )}
 
-          {/* Basic Info */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:14}}>
+          {/* Basic Info — hidden in pkgBuilderMode (info panel in full-screen body covers it) */}
+          {!pkgBuilderMode && <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:9,marginBottom:14}}>
             <div style={{gridColumn:"1/3"}}>
               <label style={lblStyle}>Subcontractor *</label>
               <div style={{display:"flex",gap:6,alignItems:"stretch"}}>
@@ -16282,8 +16796,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
               <label style={lblStyle}>Start Date</label>
               <input type="date" value={form.start_date} onChange={e=>setForm(p=>({...p,start_date:e.target.value}))} style={inpStyle}/>
             </div>
-          </div>
+          </div>}
 
+          {/* Sections — manual mode only */}
+          {!pkgBuilderMode && <></>}
           {/* Sections */}
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
             <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".4px"}}>Sections & BOQ Items</div>
@@ -16358,12 +16874,27 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
         </div>
 
         {/* Footer */}
-        <div style={{padding:"12px 16px",borderTop:"1px solid "+T.b1,display:"flex",gap:8,flexShrink:0}}>
-          <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:7,border:"1px solid "+T.b1,background:T.surface,fontSize:12,cursor:"pointer"}}>Cancel</button>
-          <button onClick={submit} disabled={saving}
-            style={{flex:2,padding:"9px",borderRadius:7,background:saving?T.t4:T.blu,color:"white",border:"none",fontSize:13,fontWeight:700,cursor:"pointer"}}>
-            {saving?"Creating...":"Create Work Order"}
-          </button>
+        <div style={{padding:"12px 20px",borderTop:"1px solid #E5E7EB",display:"flex",gap:8,flexShrink:0,alignItems:"center",background:"white"}}>
+          {/* PDF download — only in package builder mode */}
+          {pkgBuilderMode && (
+            <button onClick={()=>window.print()} title="Download PDF of current view"
+              style={{padding:"8px 14px",borderRadius:7,border:"1.5px solid #94A3B8",background:"white",fontSize:12,fontWeight:600,color:"#334155",cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+              📥 PDF
+            </button>
+          )}
+          {/* Subtotal display */}
+          {pkgBuilderMode && pkgGrandTotal>0 && (
+            <span style={{fontSize:12,color:"#64748B",fontWeight:500}}>
+              Subtotal: <strong style={{color:"#0F172A"}}>Rs.{Math.round(pkgGrandTotal).toLocaleString("en-IN")}</strong>
+            </span>
+          )}
+          <div style={{marginLeft:"auto",display:"flex",gap:8}}>
+            <button onClick={onClose} style={{padding:"9px 18px",borderRadius:7,border:"1px solid #D1D5DB",background:"#F8FAFC",fontSize:12.5,fontWeight:600,color:"#374151",cursor:"pointer"}}>Cancel</button>
+            <button onClick={submit} disabled={saving}
+              style={{padding:"9px 22px",borderRadius:7,background:saving?"#9CA3AF":"#2563EB",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:saving?"not-allowed":"pointer"}}>
+              {saving?"Creating…":"Create Work Order"}
+            </button>
+          </div>
         </div>
       </div>
 
@@ -18503,77 +19034,175 @@ function TabSite() {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 14 — MOM
 // ═══════════════════════════════════════════════════════════════════
-function TabMOM() {
-  const [sel, setSel] = useState(D.moms[0] || null);
-  const momS = {"Closed":{c:T.grn,bg:T.grnL},"Planned":{c:T.amb,bg:T.ambL},"Draft":{c:T.slt,bg:T.sltL}};
+// TAB 14 — MOM  (wired to /api/mom?project_id=...)
+// ═══════════════════════════════════════════════════════════════════
+const MOM_TYPES_TAB = ["Site Review","Client Meeting","Internal Team","Progress Review","Design Review","Safety Audit","Financial Review","Other"];
 
-  return (
-    <div style={{padding:"16px 18px", display:"flex", gap:14, height:"100%"}}>
-      <div style={{width:270, flexShrink:0, display:"flex", flexDirection:"column", gap:8}}>
-        <AddBtn label="New MOM"/>
+function TabMOM({ projectId }) {
+  const [moms,setMoms]           = useState([]);
+  const [sel,setSel]             = useState(null);
+  const [loading,setLoading]     = useState(true);
+  const [showCreate,setShowCreate] = useState(false);
+  const [saving,setSaving]       = useState(false);
+  const [saveErr,setSaveErr]     = useState("");
+  const [form,setForm] = useState({title:"",type:"Site Review",date:"",time:"",venue:"",conductedBy:"",notes:""});
+
+  const TODAY = localYMD();
+  const fmtD  = d => d?new Date(d).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"—";
+  const momS  = {"Finalized":{c:T.grn,bg:T.grnL},"Draft":{c:T.slt,bg:T.sltL},"Cancelled":{c:T.red,bg:T.redL}};
+  const inp   = {width:"100%",padding:"7px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const lbl   = {fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4};
+
+  useEffect(()=>{
+    if(!projectId) return;
+    setLoading(true);
+    api.get(`/mom?project_id=${projectId}`).then(r=>{
+      if(r.success&&Array.isArray(r.data)){setMoms(r.data);setSel(r.data[0]||null);}
+    }).catch(()=>{}).finally(()=>setLoading(false));
+  },[projectId]);
+
+  const saveMOM = async()=>{
+    if(!form.title.trim()||saving) return;
+    setSaving(true);setSaveErr("");
+    const r=await api.post("/mom",{...form,project_id:projectId,attendees:[],discussion:[],actionItems:[],status:"Finalized"}).catch(()=>null);
+    setSaving(false);
+    if(r?.success){setMoms(p=>[r.data,...p]);setSel(r.data);setShowCreate(false);setForm({title:"",type:"Site Review",date:"",time:"",venue:"",conductedBy:"",notes:""});}
+    else setSaveErr(r?.message||"Save failed — retry.");
+  };
+
+  const patchAction=(momId,actionId,status)=>{
+    const mom=moms.find(m=>m.id===momId);if(!mom)return;
+    api.patch(`/mom/${mom._id}/actions/${actionId}`,{status}).catch(()=>{});
+    const upd=ms=>ms.map(m=>m.id!==momId?m:{...m,actionItems:m.actionItems.map(a=>a.id===actionId?{...a,status}:a)});
+    setMoms(upd);
+    if(sel?.id===momId) setSel(p=>({...p,actionItems:p.actionItems.map(a=>a.id===actionId?{...a,status}:a)}));
+  };
+
+  return(
+    <div style={{padding:"16px 18px",display:"flex",gap:14,height:"100%"}}>
+      <div style={{width:270,flexShrink:0,display:"flex",flexDirection:"column",gap:8}}>
+        <AddBtn label="New MOM" onClick={()=>setShowCreate(true)}/>
         <div style={{marginTop:4}}/>
-        {D.moms.map(m=>{
-          const ms = momS[m.status]||{c:T.slt,bg:T.sltL};
-          const isS = sel?.id===m.id;
-          return (
-            <div key={m.id} onClick={()=>setSel(m)} style={{background:T.surface, borderRadius:7, padding:"10px 13px", border:`1.5px solid ${isS?T.blu:T.b1}`, cursor:"pointer", borderLeft:`4px solid ${isS?T.blu:T.b1}`, transition:"all .14s"}}>
-              <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5}}>
-                <span style={{fontSize:12.5, fontWeight:700, color:isS?T.blu:T.t1}}>{m.no}</span>
+        {loading&&<div style={{color:T.t4,fontSize:12,textAlign:"center",padding:20}}>Loading…</div>}
+        {!loading&&moms.length===0&&<div style={{color:T.t4,fontSize:12,textAlign:"center",padding:20,fontStyle:"italic"}}>No meetings yet<br/><span style={{fontSize:11}}>Click + New MOM to start</span></div>}
+        {moms.map(m=>{
+          const ms=momS[m.status]||{c:T.slt,bg:T.sltL};const isS=sel?.id===m.id;
+          const pnd=(m.actionItems||[]).filter(a=>a.status!=="Done").length;
+          return(
+            <div key={m.id} onClick={()=>setSel(m)} style={{background:T.surface,borderRadius:7,padding:"10px 13px",border:`1.5px solid ${isS?T.blu:T.b1}`,cursor:"pointer",borderLeft:`4px solid ${isS?T.blu:T.b1}`,transition:"all .14s"}}>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+                <span style={{fontSize:11,fontFamily:"monospace",color:isS?T.blu:T.t4}}>{m.id}</span>
                 <Pill label={m.status} c={ms.c} bg={ms.bg}/>
               </div>
-              <div style={{fontSize:11.5, color:T.t2, marginBottom:3}}>{m.type}</div>
-              <div style={{fontSize:11.5, color:T.t3, marginBottom:4}}>{m.date}</div>
-              <div style={{fontSize:11, color:T.t4}}>{m.attendees.length>0?m.attendees.slice(0,2).join(", ")+(m.attendees.length>2?` +${m.attendees.length-2}`:""): "No attendees yet"}</div>
+              <div style={{fontSize:12.5,fontWeight:700,color:isS?T.blu:T.t1,marginBottom:3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.title}</div>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:3}}>{m.type} · {fmtD(m.date)}</div>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <span style={{fontSize:11,color:T.t4}}>{m.attendees?.length>0?m.attendees.slice(0,2).join(", ")+(m.attendees.length>2?` +${m.attendees.length-2}`:""):"No attendees"}</span>
+                {pnd>0&&<span style={{fontSize:10,fontWeight:700,background:T.ambL,color:T.amb,padding:"1px 6px",borderRadius:8}}>{pnd} pending</span>}
+              </div>
             </div>
           );
         })}
       </div>
 
       {sel&&(
-        <Panel style={{flex:1, overflow:"hidden", display:"flex", flexDirection:"column"}}>
-          <PHead title={`${sel.no} — ${sel.type}`} action={
-            <div style={{display:"flex", gap:8, alignItems:"center"}}>
-              <span style={{fontSize:11.5, color:T.t3}}>{sel.date} · {sel.venue}</span>
-              {sel.next&&<span style={{fontSize:11.5, color:T.blu, fontWeight:600}}>Next: {sel.next}</span>}
-              <SecBtn label="Export PDF"/>
+        <Panel style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column"}}>
+          <PHead title={`${sel.id} — ${sel.title}`} action={
+            <div style={{display:"flex",gap:8,alignItems:"center"}}>
+              <span style={{fontSize:11.5,color:T.t3}}>{fmtD(sel.date)}{sel.time?" · "+sel.time:""}{sel.venue?" · "+sel.venue:""}</span>
+              {sel.nextMeeting?.date&&<span style={{fontSize:11.5,color:T.blu,fontWeight:600}}>Next: {fmtD(sel.nextMeeting.date)}</span>}
             </div>
           }/>
-          <div style={{flex:1, overflowY:"auto", padding:"16px 18px"}}>
-            <div style={{marginBottom:16}}>
-              <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Attendees</div>
-              {sel.attendees.length>0?(
-                <div style={{display:"flex", gap:6, flexWrap:"wrap"}}>
-                  {sel.attendees.map((a,i)=>(
-                    <span key={i} style={{background:T.surfaceB, color:T.t1, fontSize:12.5, fontWeight:500, padding:"4px 12px", borderRadius:20, border:`1px solid ${T.b1}`}}>{a}</span>
-                  ))}
-                </div>
-              ):<span style={{fontSize:12.5, color:T.t4, fontStyle:"italic"}}>No attendees recorded</span>}
+          <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Attendees</div>
+              {sel.attendees?.length>0
+                ?<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>{sel.attendees.map((a,i)=><span key={i} style={{background:T.surfaceB,color:T.t1,fontSize:12.5,fontWeight:500,padding:"4px 12px",borderRadius:20,border:`1px solid ${T.b1}`}}>{a}</span>)}</div>
+                :<span style={{fontSize:12.5,color:T.t4,fontStyle:"italic"}}>No attendees recorded</span>}
             </div>
-            <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:16}}>
-              <div>
-                <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Agenda</div>
-                {sel.agenda.map((a,i)=>(
-                  <div key={i} style={{display:"flex", gap:8, marginBottom:8, padding:"8px 11px", background:T.surfaceB, borderRadius:6, border:`1px solid ${T.b1}`, alignItems:"flex-start"}}>
-                    <span style={{width:18, height:18, borderRadius:4, background:T.bluL, color:T.blu, fontSize:10, fontWeight:700, display:"inline-flex", alignItems:"center", justifyContent:"center", flexShrink:0}}>{i+1}</span>
-                    <span style={{fontSize:12.5, color:T.t1, lineHeight:1.4}}>{a}</span>
+            {(sel.agenda||(sel.discussion?.length>0))&&(
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Agenda &amp; Discussion</div>
+                {sel.agenda&&<div style={{padding:"8px 11px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12.5,color:T.t1,marginBottom:6,lineHeight:1.5}}>{sel.agenda}</div>}
+                {sel.discussion?.map((d,i)=>(
+                  <div key={i} style={{display:"flex",gap:8,marginBottom:6,padding:"8px 11px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,alignItems:"flex-start"}}>
+                    <span style={{width:18,height:18,borderRadius:4,background:T.bluL,color:T.blu,fontSize:10,fontWeight:700,display:"inline-flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</span>
+                    <span style={{fontSize:12.5,color:T.t1,lineHeight:1.4}}>{d.point}</span>
                   </div>
                 ))}
               </div>
-              <div>
-                <div style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px", marginBottom:8}}>Decisions / Action Items</div>
-                {sel.decisions.length>0?sel.decisions.map((d,i)=>(
-                  <div key={i} style={{display:"flex", gap:8, marginBottom:8, padding:"8px 11px", background:T.grnL, borderRadius:6, border:`1px solid ${T.grnM}`, alignItems:"flex-start", borderLeft:`3px solid ${T.grn}`}}>
-                    <div style={{width:16,height:16,borderRadius:4,background:T.grn,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                      <svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>
+            )}
+            <div style={{marginBottom:14}}>
+              <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Action Items</div>
+              {(sel.actionItems||[]).length===0
+                ?<div style={{padding:"12px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,color:T.t4,fontSize:12.5,fontStyle:"italic"}}>No action items</div>
+                :(sel.actionItems||[]).map(a=>{
+                  const isOver=a.dueDate&&a.dueDate<TODAY;
+                  const SC={Done:{c:T.grn,bg:T.grnL},"In Progress":{c:T.blu,bg:T.bluL},Pending:{c:T.amb,bg:T.ambL}};
+                  const sc=SC[a.status]||SC.Pending;
+                  return(
+                    <div key={a.id} style={{display:"flex",alignItems:"center",gap:10,marginBottom:6,padding:"8px 11px",background:T.surfaceB,borderRadius:6,border:`1px solid ${isOver?T.ambM:T.b1}`,borderLeft:`3px solid ${sc.c}`}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{a.task}</div>
+                        <div style={{fontSize:11,color:T.t4,marginTop:2,display:"flex",gap:10}}>
+                          {a.assignee&&<span>👤 {a.assignee}</span>}
+                          {a.dueDate&&<span style={{color:isOver?T.red:T.t4,fontWeight:isOver?700:400}}>{isOver?"⚠ ":""}{fmtD(a.dueDate)}</span>}
+                          <span style={{color:{High:T.red,Medium:T.amb,Low:T.slt}[a.priority]||T.t4,fontWeight:600}}>{a.priority}</span>
+                        </div>
+                      </div>
+                      <select value={a.status} onChange={e=>patchAction(sel.id,a.id,e.target.value)}
+                        style={{fontSize:10.5,fontWeight:700,padding:"3px 7px",borderRadius:7,border:`1px solid ${sc.c}44`,background:sc.bg,color:sc.c,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+                        <option>Pending</option><option>In Progress</option><option>Done</option>
+                      </select>
                     </div>
-                    <span style={{fontSize:12.5, color:T.t1, lineHeight:1.4}}>{d}</span>
-                  </div>
-                )):<div style={{padding:"14px", background:T.surfaceB, borderRadius:6, border:`1px solid ${T.b1}`, color:T.t4, fontSize:12.5, fontStyle:"italic"}}>No decisions — meeting is {sel.status.toLowerCase()}</div>}
-              </div>
+                  );
+                })
+              }
             </div>
+            {sel.notes&&(
+              <div>
+                <div style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",marginBottom:8}}>Notes</div>
+                <div style={{padding:"8px 11px",background:T.surfaceB,borderRadius:6,border:`1px solid ${T.b1}`,fontSize:12.5,color:T.t2,lineHeight:1.5}}>{sel.notes}</div>
+              </div>
+            )}
           </div>
         </Panel>
       )}
+
+      {showCreate&&<>
+        <div onClick={()=>!saving&&setShowCreate(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.4)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(500px,95vw)",zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,.2)",overflow:"hidden"}}>
+          <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+            <span style={{fontSize:14,fontWeight:700,color:"white"}}>New MOM</span>
+            <button onClick={()=>setShowCreate(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,.5)",fontSize:20,lineHeight:1,padding:0}}>×</button>
+          </div>
+          <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:10}}>
+            {[{k:"title",l:"Title *",ph:"e.g. Site Review — 3rd Floor Slab"},{k:"venue",l:"Venue",ph:"Site office…"},{k:"conductedBy",l:"Conducted By",ph:"Name"}].map(f=>(
+              <div key={f.k}><label style={lbl}>{f.l}</label><input value={form[f.k]} onChange={e=>setForm(p=>({...p,[f.k]:e.target.value}))} placeholder={f.ph} style={inp}/></div>
+            ))}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
+              <div><label style={lbl}>Type</label>
+                <select value={form.type} onChange={e=>setForm(p=>({...p,type:e.target.value}))} style={{...inp,padding:"7px 8px"}}>
+                  {MOM_TYPES_TAB.map(t=><option key={t}>{t}</option>)}
+                </select>
+              </div>
+              <div><label style={lbl}>Date</label><input type="date" value={form.date} onChange={e=>setForm(p=>({...p,date:e.target.value}))} style={inp}/></div>
+              <div><label style={lbl}>Time</label><input value={form.time} onChange={e=>setForm(p=>({...p,time:e.target.value}))} placeholder="10:00 AM" style={inp}/></div>
+            </div>
+            <div><label style={lbl}>Notes / Agenda</label>
+              <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Key discussion points…" style={{...inp,resize:"vertical"}}/>
+            </div>
+            {saveErr&&<div style={{padding:"6px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11,color:T.red}}>{saveErr}</div>}
+          </div>
+          <div style={{padding:"10px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+            <button onClick={()=>setShowCreate(false)} style={{padding:"8px 16px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12.5,color:T.t3,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+            <button onClick={saveMOM} disabled={saving||!form.title.trim()}
+              style={{padding:"8px 18px",borderRadius:7,background:saving||!form.title.trim()?T.blu+"80":T.blu,color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:saving||!form.title.trim()?"not-allowed":"pointer",fontFamily:"inherit"}}>
+              {saving?"Saving…":"Save MOM"}
+            </button>
+          </div>
+        </div>
+      </>}
     </div>
   );
 }
@@ -20355,7 +20984,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     equipment:   <TabEquipment projectId={project.id}/>,
     files:       <TabFiles projectId={project.id}/>,
     site:        <TabSite/>,
-    mom:         <TabMOM/>,
+    mom:         <TabMOM projectId={project.id}/>,
     // ── Solar EPC tabs ──
     solar_stages:  <TabSuryaGhar  projectId={project.id}/>,
     solar_boq:     <TabSolarBOQ   projectId={project.id}/>,

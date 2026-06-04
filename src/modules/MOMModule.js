@@ -166,6 +166,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
   const [actions,setActions]=useState(mom.actionItems);
 
   const updateActionStatus=(id,status)=>{
+    api.patch(`/mom/${mom._id}/actions/${id}`,{status}).catch(()=>{});
     const updated=actions.map(a=>a.id===id?{...a,status}:a);
     setActions(updated);
     onUpdate(mom.id,{actionItems:updated});
@@ -408,6 +409,8 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
 // ── CREATE MOM MODAL ───────────────────────────────────────────
 function CreateMOMModal({onClose,onSave}){
   const [step,setStep]=useState(1); // 1=details, 2=discussion, 3=actions
+  const [saving,setSaving]=useState(false);
+  const [saveErr,setSaveErr]=useState("");
   const [sites, setSites] = useState([]);   // loaded from /projects
   const [team, setTeam]   = useState([]);   // loaded from /users
   useEffect(()=>{
@@ -467,16 +470,20 @@ function CreateMOMModal({onClose,onSave}){
     }
   };
 
-  const save=()=>{
-    const mom={
-      id:`MOM-${String(Date.now()).slice(-3)}`,
+  const save=async()=>{
+    if(saving) return;
+    setSaving(true); setSaveErr("");
+    const payload={
       ...form,
       discussion:discussion.filter(d=>d.point.trim()),
       actionItems:actions.filter(a=>a.task.trim()).map((a,i)=>({...a,id:`A${i+1}`})),
       nextMeeting:form.nextMeetingDate?{date:form.nextMeetingDate,time:form.nextMeetingTime,agenda:form.nextMeetingAgenda}:null,
-      createdAt:TODAY,sharedWith:[],status:"Finalized",
+      status:"Finalized",
     };
-    onSave(mom);onClose();
+    const r=await api.post("/mom",payload).catch(()=>null);
+    setSaving(false);
+    if(r?.success){onSave(r.data);onClose();}
+    else setSaveErr(r?.message||"Save failed — check connection and retry.");
   };
 
   const inputStyle={width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
@@ -654,10 +661,14 @@ function CreateMOMModal({onClose,onSave}){
           style={{flex:2,padding:"10px",borderRadius:7,background:step===1&&!form.title.trim()?T.b1:T.blu,color:step===1&&!form.title.trim()?T.t4:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:step===1&&!form.title.trim()?"not-allowed":"pointer"}}>
           Next →
         </button>}
-        {step===3&&<button onClick={save}
-          style={{flex:2,padding:"10px",borderRadius:7,background:T.grn,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
-          <IcChk size={14} color="white"/> Save MOM
-        </button>}
+        {step===3&&<>
+          {saveErr&&<div style={{flex:"1 1 100%",order:-1,padding:"6px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11,color:T.red,marginBottom:4}}>{saveErr}</div>}
+          <button onClick={save} disabled={saving}
+            style={{flex:2,padding:"10px",borderRadius:7,background:saving?T.grn+"99":T.grn,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:saving?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            {saving?<span style={{width:14,height:14,border:"2px solid rgba(255,255,255,0.4)",borderTopColor:"white",borderRadius:"50%",display:"inline-block",animation:"spin .7s linear infinite"}}/>:<IcChk size={14} color="white"/>}
+            {saving?"Saving…":"Save MOM"}
+          </button>
+        </>}
       </div>
     </div>
   </>);
@@ -672,6 +683,14 @@ function MOMModule(){
   const [fSite,setFSite]=useState("All");
   const [fType,setFType]=useState("All");
   const [view,setView]=useState("cards"); // cards | actions
+
+  useEffect(()=>{
+    api.get("/mom").then(r=>{
+      if(r.success && Array.isArray(r.data)) setMoms(r.data);
+    }).catch(()=>{});
+  },[]);
+
+  const sites=useMemo(()=>[...new Set(moms.map(m=>m.site).filter(Boolean))],[moms]);
 
   const filtered=useMemo(()=>moms.filter(m=>{
     if(fSite!=="All"&&m.site!==fSite) return false;
@@ -740,7 +759,7 @@ function MOMModule(){
           <select value={fSite} onChange={e=>setFSite(e.target.value)}
             style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${fSite!=="All"?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.18)"}`,background:fSite!=="All"?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.07)",color:fSite!=="All"?"#FDE68A":"rgba(255,255,255,0.7)",fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
             <option value="All">All Sites</option>
-            {SITES.map(s=><option key={s} style={{color:T.t1,background:T.surface}}>{s}</option>)}
+            {sites.map(s=><option key={s} style={{color:T.t1,background:T.surface}}>{s}</option>)}
           </select>
           <select value={fType} onChange={e=>setFType(e.target.value)}
             style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${fType!=="All"?"rgba(251,191,36,0.5)":"rgba(255,255,255,0.18)"}`,background:fType!=="All"?"rgba(251,191,36,0.15)":"rgba(255,255,255,0.07)",color:fType!=="All"?"#FDE68A":"rgba(255,255,255,0.7)",fontSize:11.5,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
@@ -843,6 +862,7 @@ function MOMModule(){
         ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#CBD5E0;border-radius:10px}
         select,input,textarea{font-family:'Segoe UI',system-ui,sans-serif}
         @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+        @keyframes spin{to{transform:rotate(360deg)}}
       `}</style>
     </div>
   );

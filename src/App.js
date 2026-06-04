@@ -173,6 +173,14 @@ const NAV_GROUPS=[
 // Modules that are always ON — cannot be toggled off
 const ALWAYS_ON = ["dashboard","projects","finance","procurement","reports","library","settings"];
 
+// Primary tabs pinned to the mobile bottom bar
+const BOTTOM_TABS = [
+  {id:"dashboard",   label:"Home",     Icon:IcHome},
+  {id:"projects",    label:"Projects", Icon:IcProj},
+  {id:"finance",     label:"Finance",  Icon:IcFin },
+  {id:"procurement", label:"Purchase", Icon:IcProc},
+];
+
 
 // ── DASHBOARD DATA (loaded from API, empty defaults) ──────────────────
 const PROJECTS_DATA=[];
@@ -808,29 +816,79 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
 
 
 // ── TOPBAR ────────────────────────────────────────────────────────────
-function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSearch,onCheatsheet,onNotificationNav}){
+function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSearch,onCheatsheet,onNotificationNav,isMobile}){
   return(
-    <div style={{height:60,background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",padding:"0 20px",gap:14,flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
-      <button onClick={()=>setCollapsed(!collapsed)} style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}><IcMenu size={19}/></button>
-      <div style={{flex:1}}><div style={{fontSize:15,fontWeight:700,color:T.t1}}>{title}</div>{sub&&<div style={{fontSize:11,color:T.t3}}>{sub}</div>}</div>
-      {/* Ctrl+K Search button */}
-      <button onClick={onSearch} title="Quick Search (Ctrl+K)"
-        style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,transition:"all 0.15s"}}
-        onMouseEnter={e=>{e.currentTarget.style.background=T.sltL;e.currentTarget.style.borderColor=T.b2;}}
-        onMouseLeave={e=>{e.currentTarget.style.background=T.bg;e.currentTarget.style.borderColor=T.b1;}}>
-        <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round"><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
-        <span style={{fontSize:12,color:T.t4,whiteSpace:"nowrap"}}>Search...</span>
-        <span style={{fontSize:9.5,background:T.b1,borderRadius:4,padding:"1px 6px",color:T.t4,fontWeight:600,letterSpacing:"0.3px"}}>Ctrl+K</span>
-      </button>
-      {/* ? Cheatsheet button */}
-      <button onClick={onCheatsheet} title="Keyboard Shortcuts (?)"
+    <div style={{height:60,background:T.surface,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",padding:isMobile?"0 14px":"0 20px",gap:isMobile?10:14,flexShrink:0,boxShadow:"0 1px 4px rgba(0,0,0,0.06)"}}>
+      {!isMobile&&<button onClick={()=>setCollapsed(!collapsed)} style={{background:"none",border:"none",cursor:"pointer",color:T.t3,padding:7,borderRadius:7,display:"flex"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background="none"}><IcMenu size={19}/></button>}
+      <div style={{flex:1}}><div style={{fontSize:isMobile?13.5:15,fontWeight:700,color:T.t1}}>{title}</div>{!isMobile&&sub&&<div style={{fontSize:11,color:T.t3}}>{sub}</div>}</div>
+      {isMobile?(
+        <button onClick={onSearch} title="Search" style={{width:34,height:34,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center"}} onMouseEnter={e=>e.currentTarget.style.background=T.sltL} onMouseLeave={e=>e.currentTarget.style.background=T.bg}><IcSearch size={17}/></button>
+      ):(
+        <button onClick={onSearch} title="Quick Search (Ctrl+K)"
+          style={{display:"flex",alignItems:"center",gap:8,padding:"6px 12px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,transition:"all 0.15s"}}
+          onMouseEnter={e=>{e.currentTarget.style.background=T.sltL;e.currentTarget.style.borderColor=T.b2;}}
+          onMouseLeave={e=>{e.currentTarget.style.background=T.bg;e.currentTarget.style.borderColor=T.b1;}}>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} strokeLinecap="round"><path d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z"/></svg>
+          <span style={{fontSize:12,color:T.t4,whiteSpace:"nowrap"}}>Search...</span>
+          <span style={{fontSize:9.5,background:T.b1,borderRadius:4,padding:"1px 6px",color:T.t4,fontWeight:600,letterSpacing:"0.3px"}}>Ctrl+K</span>
+        </button>
+      )}
+      {!isMobile&&<button onClick={onCheatsheet} title="Keyboard Shortcuts (?)"
         style={{width:32,height:32,borderRadius:8,border:`1px solid ${T.b1}`,background:T.bg,cursor:"pointer",color:T.t3,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,transition:"all 0.15s"}}
         onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
-        onMouseLeave={e=>e.currentTarget.style.background=T.bg}>?</button>
+        onMouseLeave={e=>e.currentTarget.style.background=T.bg}>?</button>}
       <NotificationBell onNavigate={onNotificationNav}/>
       <div style={{width:34,height:34,borderRadius:"50%",background:`linear-gradient(135deg,${C.a},#FF8F00)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,color:"white",cursor:"pointer"}}>{(user?.name||"U")[0].toUpperCase()}</div>
     </div>
   );
+}
+
+// ── MOBILE BOTTOM NAV ────────────────────────────────────────────────
+function MobileBottomNav({active,setActive,enabledModules,user}){
+  const [showMore,setShowMore]=useState(false);
+  const isVisible=(id)=>{
+    if(id==="saas") return user?.role==="super_admin";
+    if(ALWAYS_ON.includes(id)) return true;
+    if(!enabledModules) return true;
+    return enabledModules[id]!==false;
+  };
+  const moreItems=NAV_GROUPS.flatMap(g=>g.items).filter(item=>!BOTTOM_TABS.find(t=>t.id===item.id)&&isVisible(item.id));
+  const isMoreActive=!BOTTOM_TABS.find(t=>t.id===active);
+  const handleNav=(id)=>{setActive(id);setShowMore(false);};
+  return(<>
+    {showMore&&(<>
+      <div onClick={()=>setShowMore(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:290}}/>
+      <div style={{position:"fixed",bottom:"calc(60px + env(safe-area-inset-bottom,0px))",left:0,right:0,background:"#1E293B",borderRadius:"16px 16px 0 0",boxShadow:"0 -8px 32px rgba(0,0,0,0.4)",zIndex:291,animation:"slideUp .2s ease"}}>
+        <div style={{padding:"12px 16px 8px",borderBottom:"1px solid rgba(255,255,255,0.08)",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontSize:11,fontWeight:700,color:"rgba(255,255,255,0.4)",letterSpacing:"1px",textTransform:"uppercase"}}>More Modules</span>
+          <button onClick={()=>setShowMore(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.4)",display:"flex",padding:4}}><svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg></button>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",padding:"8px 0 12px"}}>
+          {moreItems.map(item=>{
+            const isA=active===item.id;
+            return(<button key={item.id} onClick={()=>handleNav(item.id)} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:5,padding:"14px 8px",background:isA?"rgba(59,130,246,0.15)":"none",border:"none",cursor:"pointer",color:isA?"#60A5FA":"rgba(255,255,255,0.6)",fontFamily:"inherit",transition:"color .12s"}}>
+              <item.Icon size={22} color="currentColor"/>
+              <span style={{fontSize:10,fontWeight:isA?700:500}}>{item.label}</span>
+            </button>);
+          })}
+        </div>
+      </div>
+    </>)}
+    <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,background:"#1E293B",borderTop:"1px solid rgba(255,255,255,0.1)",boxShadow:"0 -4px 20px rgba(0,0,0,0.3)",paddingBottom:"env(safe-area-inset-bottom,0px)",display:"flex"}}>
+      {BOTTOM_TABS.map(tab=>{
+        const isA=active===tab.id;
+        return(<button key={tab.id} onClick={()=>handleNav(tab.id)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"8px 0 10px",border:"none",cursor:"pointer",background:"none",color:isA?"#60A5FA":"rgba(255,255,255,0.45)",fontFamily:"inherit",borderTop:`2px solid ${isA?"#3B82F6":"transparent"}`,transition:"color .15s"}}>
+          <tab.Icon size={21} color="currentColor"/>
+          <span style={{fontSize:9.5,fontWeight:isA?700:500,letterSpacing:".2px"}}>{tab.label}</span>
+        </button>);
+      })}
+      <button onClick={()=>setShowMore(s=>!s)} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"8px 0 10px",border:"none",cursor:"pointer",background:"none",color:(isMoreActive||showMore)?"#60A5FA":"rgba(255,255,255,0.45)",fontFamily:"inherit",borderTop:`2px solid ${(isMoreActive||showMore)?"#3B82F6":"transparent"}`,transition:"color .15s"}}>
+        <IcMenu size={21} color="currentColor"/>
+        <span style={{fontSize:9.5,fontWeight:(isMoreActive||showMore)?700:500,letterSpacing:".2px"}}>More</span>
+      </button>
+    </div>
+    <style>{`@keyframes slideUp{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}`}</style>
+  </>);
 }
 
 // ── MODULE DISABLED SCREEN ────────────────────────────────────────────
@@ -1259,10 +1317,10 @@ export default function App(){
         <div style={{width:32,height:32,border:"3px solid rgba(255,255,255,0.15)",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
         <div style={{color:"white",fontSize:14,fontWeight:600}}>Switching company...</div>
       </div>}
-      {!hideAppShell && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany}/>}
+      {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={(mod)=>setNav(mod)}/>}
-        <div style={{flex:1,overflowY:"auto"}}>
+        {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={(mod)=>setNav(mod)} isMobile={isMobile}/>}
+        <div style={{flex:1,overflowY:"auto",paddingBottom:isMobile&&!hideAppShell?68:0}}>
           {/* Inner ErrorBoundary: if a single module's chunk fails or
               the module throws on mount, recover the module area only —
               the rest of the app shell (sidebar, top bar) stays usable.
@@ -1279,6 +1337,8 @@ export default function App(){
       {showSearch&&<QuickSearch onNavigate={(id)=>{setNav(id);setShowSearch(false);}} onClose={()=>setShowSearch(false)}/>}
       {/* Shortcut Cheatsheet Modal */}
       {showCheatsheet&&<ShortcutCheatsheet onClose={()=>setShowCheatsheet(false)}/>}
+      {/* Mobile bottom navigation bar */}
+      {isMobile&&!hideAppShell&&<MobileBottomNav active={nav} setActive={setNav} enabledModules={enabledModules} user={user}/>}
       {/* Background Upload Toast — always visible */}
       <UploadToast/>
     </div>

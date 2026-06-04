@@ -1645,6 +1645,12 @@ function SubconRateCardSection() {
   const [pendingDelItems, setPendingDelItems] = useState({});
   const [saving,          setSaving]          = useState(false);
 
+  // Add Section modal
+  const [addSecModal,  setAddSecModal]  = useState(false);
+  const [addSecForm,   setAddSecForm]   = useState({ name: "", default_qty: 0, unit: "sqft", per_item_qty: false });
+  const [addSecSaving, setAddSecSaving] = useState(false);
+  const [saveError,    setSaveError]    = useState("");
+
   // Add Category drawer state (same as ClientBOQSection)
   const [addCatDrawer,  setAddCatDrawer]  = useState(null); // {structure_id, section_name}
   const [addCatPicks,   setAddCatPicks]   = useState([]);   // ordered [workCatId,...]
@@ -1765,62 +1771,170 @@ function SubconRateCardSection() {
     ...p, [sid]: { ...(p[sid]||{}), [itemId]: { ...(p[sid]?.[itemId]||{}), ...patch } }
   }));
 
+  // ── per_item_qty + calculation helpers (same as ClientBOQSection) ──────
+  const getSecPerItem = (sec) => {
+    const ed = sectionEdits[sec.id];
+    if (ed?.per_item_qty !== undefined) return !!ed.per_item_qty;
+    return !!Number(sec.per_item_qty);
+  };
+  const getRowQty = (sid, row) => {
+    const ed = itemEdits[sid]?.[row.item_id];
+    if (ed?.qty !== undefined) return ed.qty;
+    return (row.qty === null || row.qty === undefined) ? 0 : Number(row.qty);
+  };
+  // Build rows for a category (saved + pendingNew − pendingDel)
+  // Matches by category_id OR category_name (backend may return either)
+  const subconCatRows = (sid, cat) => {
+    const delSet = pendingDelItems[sid] || {};
+    const saved  = (sectionItems[sid] || []).filter(r =>
+      (Number(r.category_id) === Number(cat.id) || r.category_name === cat.category_name)
+      && !delSet[r.item_id]
+    );
+    const news   = (pendingNewItems[sid] || []).filter(r => Number(r.category_id) === Number(cat.id)).map(r => ({
+      ...r,
+      item_name: boqItems.find(i => i.id === r.item_id)?.name || "",
+      unit:      boqItems.find(i => i.id === r.item_id)?.unit || "Sqft",
+      _pending:  true,
+    }));
+    return [...saved, ...news];
+  };
+  const calcRow = (sid, row, area, perItem) => {
+    const base  = Number(getRowBase(sid, row)) || 0;
+    const addOn = Number(getRowAddOn(sid, row)) || 0;
+    const qty   = perItem ? (Number(getRowQty(sid, row)) || 0) : area;
+    return { base, addOn, qty, perSqft: base + addOn, total: (base + addOn) * qty };
+  };
+  const calcCategory = (sid, cat, area, perItem) => {
+    let base = 0, addOn = 0, itemTotalSum = 0;
+    for (const r of subconCatRows(sid, cat)) {
+      const rc = calcRow(sid, r, area, perItem);
+      base += rc.base; addOn += rc.addOn; itemTotalSum += rc.total;
+    }
+    const perSqft = base + addOn;
+    const total = perItem ? itemTotalSum : (perSqft * area);
+    return { base, addOn, perSqft, total };
+  };
+  const calcSection = (sec) => {
+    const area    = getSecArea(sec);
+    const perItem = getSecPerItem(sec);
+    const cats    = pkgCategories.filter(c => c.structure_id === sec.id);
+    let base = 0, addOn = 0, total = 0;
+    for (const cat of cats) {
+      const c = calcCategory(sec.id, cat, area, perItem);
+      base += c.base; addOn += c.addOn; total += c.total;
+    }
+    const perSqft = base + addOn;
+    const sectionTotal = perItem ? total : (perSqft * area);
+    return { area, perItem, base, addOn, perSqft, total: sectionTotal };
+  };
+  const calcGrand = () => {
+    let base = 0, addOn = 0, total = 0;
+    for (const sec of pkgStructures) {
+      const s = calcSection(sec);
+      base += s.base; addOn += s.addOn; total += s.total;
+    }
+    return { base, addOn, total };
+  };
+
   // ── Save Rates ─────────────────────────────────────────────────────────
   const saveRates = async () => {
     if (!selPkg || !selCity) return;
     setSaving(true);
     try {
-      // 1. Section name/area updates
+      // 1. Section name/area/per_item_qty updates
       for (const [sidStr, ed] of Object.entries(sectionEdits)) {
         const body = {};
-        if (ed.name !== undefined) body.name = ed.name.trim();
-        if (ed.default_qty !== undefined) body.default_qty = Number(ed.default_qty)||0;
+        if (ed.name         !== undefined) body.name         = ed.name.trim();
+        if (ed.default_qty  !== undefined) body.default_qty  = Number(ed.default_qty) || 0;
+        if (ed.per_item_qty !== undefined) body.per_item_qty = !!ed.per_item_qty;
         if (Object.keys(body).length) {
-          await api.put(`/library/packages/${selPkg.id}/structures/${sidStr}`, body).catch(() => {});
+          await api.put(`/library/structures/${sidStr}`, body).catch(() => {});
         }
       }
-      // 2. Item rate matrix updates per section
+
+      // 2. Build committed sectionItems optimistically — don't rely on GET reload.
+      //    This prevents flicker/blank when the reload GET is slow or 404s.
+      const committed = { ...sectionItems };
+
       const dirtySids = new Set([
         ...Object.keys(itemEdits),
         ...Object.keys(pendingDelItems),
         ...Object.keys(pendingNewItems),
       ].map(Number));
       Object.keys(sectionEdits).forEach(sid => {
-        if (sectionEdits[sid]?.default_qty !== undefined && (sectionItems[Number(sid)]||[]).length)
+        const ed = sectionEdits[sid];
+        if ((ed?.default_qty !== undefined || ed?.per_item_qty !== undefined) && (sectionItems[Number(sid)]||[]).length)
           dirtySids.add(Number(sid));
       });
+
       for (const sid of dirtySids) {
+        const sec     = pkgStructures.find(s => s.id === sid);
+        const area    = sec ? getSecArea(sec) : 0;
+        const perItem = sec ? getSecPerItem(sec) : false;
         const allRows = sectionItems[sid] || [];
         const edits   = itemEdits[sid] || {};
         const delSet  = pendingDelItems[sid] || {};
-        // Existing rows (with edits applied)
+
+        // Existing rows with edits applied
         const rows = allRows.filter(r => !delSet[r.item_id]).map(r => ({
-          item_id:     r.item_id,
-          category_id: r.category_id || null,
+          ...r,
           base_rate:   edits[r.item_id]?.base_rate   !== undefined ? Number(edits[r.item_id].base_rate)||0   : Number(r.base_rate != null ? r.base_rate : (Number(r.rate||0) - Number(r.add_on_rate||0)))||0,
           add_on_rate: edits[r.item_id]?.add_on_rate !== undefined ? Number(edits[r.item_id].add_on_rate)||0 : Number(r.add_on_rate)||0,
           description: edits[r.item_id]?.description !== undefined ? edits[r.item_id].description : (r.description||""),
+          qty:         perItem ? (edits[r.item_id]?.qty !== undefined ? Number(edits[r.item_id].qty)||0 : Number(r.qty)||0) : area,
         }));
-        // Pending new items (added via + Add Item drawer)
-        const newRows = (pendingNewItems[sid]||[]).map(r => ({
+
+        // Pending new items — hydrate with name/category_name/unit for display
+        const newRowsFull = (pendingNewItems[sid]||[]).map(r => {
+          const master = boqItems.find(i => i.id === r.item_id);
+          const cat    = pkgCategories.find(c => c.id === r.category_id);
+          return {
+            ...r,
+            item_name:     master?.name || "",
+            category_name: cat?.category_name || r.category_name || "",
+            unit:          master?.unit || r.unit || "Sqft",
+            base_rate:     Number(r.base_rate)||0,
+            add_on_rate:   Number(r.add_on_rate)||0,
+            description:   r.description||"",
+            qty:           perItem ? (Number(getRowQty(sid, r))||0) : area,
+            _pending:      false, // mark as committed after save
+          };
+        });
+
+        // Optimistically update UI immediately
+        committed[sid] = [...rows, ...newRowsFull];
+
+        // POST to backend — await so errors surface
+        const apiRows = [...rows, ...newRowsFull].map(r => ({
           item_id:     r.item_id,
           category_id: r.category_id || null,
           base_rate:   Number(r.base_rate)||0,
           add_on_rate: Number(r.add_on_rate)||0,
           description: r.description||"",
+          qty:         Number(r.qty)||0,
         }));
-        await api.put(`/library/rate-matrix`, {
+        const saveRes = await api.post(`/library/rate-matrix/bulk`, {
           package_id: selPkg.id, city_id: selCity.id, structure_id: sid,
-          items: [...rows, ...newRows],
-        }).catch(() => {});
+          items: apiRows,
+        }).catch(e => ({ success: false, message: e?.message || "Network error" }));
+
+        if (saveRes?.success) {
+          // Sync from server to get proper server-side IDs
+          const fresh = await api.get(
+            `/library/rate-matrix?package_id=${selPkg.id}&city_id=${selCity.id}&structure_id=${sid}`
+          ).catch(() => ({ success: false }));
+          if (fresh?.success && fresh.data?.length) {
+            committed[sid] = fresh.data;
+          }
+        } else {
+          console.error("[SubconRateCard] bulk save failed sid", sid, saveRes?.message);
+          // Warn user — data is shown but may not persist after refresh
+          setSaveError(`Save failed for section ${sid}: ${saveRes?.message || "Unknown error"}. Data shown but may not persist.`);
+        }
       }
-      // Reload tree
-      const results = await Promise.all(pkgStructures.map(s =>
-        api.get(`/library/rate-matrix?package_id=${selPkg.id}&city_id=${selCity.id}&structure_id=${s.id}`)
-          .then(r => [s.id, r.success ? r.data||[] : []]).catch(() => [s.id, []])
-      ));
-      const map = {}; for (const [sid, rows] of results) map[sid] = rows;
-      setSectionItems(map);
+
+      // Update UI with committed state (from optimistic or server refresh)
+      setSectionItems(committed);
       setSectionEdits({}); setItemEdits({}); setPendingNewItems({}); setPendingDelItems({}); setEditingSections({});
     } finally { setSaving(false); }
   };
@@ -2115,18 +2229,19 @@ function SubconRateCardSection() {
                 style={{padding:"8px 18px",borderRadius:8,background:hasPendingEdits&&!saving?T.blue:T.borderLight,color:hasPendingEdits&&!saving?"white":T.textLight,border:"none",fontSize:13,fontWeight:700,cursor:hasPendingEdits&&!saving?"pointer":"not-allowed"}}>
                 {saving?"Saving…":"💾 Save Rates"}
               </button>
-              <button onClick={async()=>{
-                  const name=window.prompt("Section name?");
-                  if(!name?.trim()) return;
-                  const r=await api.post(`/library/packages/${selPkg.id}/structures`,{name:name.trim(),default_qty:0,unit:"sqft",rate:0,per_item_qty:0,sort_order:pkgStructures.length}).catch(()=>({success:false}));
-                  if(r.success){setPkgStructures(p=>[...p,r.data]);setEditingSections(p=>({...p,[r.data.id]:true}));}
-                  else alert(r.message||"Failed");
-                }}
+              <button onClick={()=>{setAddSecForm({name:"",default_qty:0,unit:"sqft",per_item_qty:false});setAddSecModal(true);}}
                 style={{padding:"8px 16px",borderRadius:8,background:"white",border:`1.5px solid ${T.blue}`,color:T.blue,fontSize:13,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
                 <IcPlus size={14} color={T.blue}/> Add Section
               </button>
             </div>
           </div>
+
+          {saveError && (
+            <div style={{background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:8,padding:"10px 14px",marginBottom:12,display:"flex",alignItems:"center",gap:10,fontSize:12.5,color:"#DC2626"}}>
+              <span style={{fontWeight:700}}>⚠ Save Error:</span> {saveError}
+              <button onClick={()=>setSaveError("")} style={{marginLeft:"auto",background:"none",border:"none",cursor:"pointer",color:"#DC2626",fontSize:16,lineHeight:1}}>×</button>
+            </div>
+          )}
 
           {pkgStructures.length===0 && (
             <div style={{textAlign:"center",padding:"48px 20px",background:"white",borderRadius:12,border:`1.5px dashed ${T.border}`,color:T.textLight,fontSize:14}}>
@@ -2135,14 +2250,13 @@ function SubconRateCardSection() {
           )}
 
           {pkgStructures.map(sec => {
-            const secCats  = pkgCategories.filter(c => c.structure_id===sec.id);
-            const rows     = sectionItems[sec.id]||[];
-            const delSet   = pendingDelItems[sec.id]||{};
-            const editable = !!editingSections[sec.id];
-            const isCollapsed = !!collapsedSecs[sec.id];
-            const area     = getSecArea(sec);
-            const baseSum  = rows.filter(r=>!delSet[r.item_id]).reduce((s,r)=>s+getRowBase(sec.id,r),0);
-            const addOnSum = rows.filter(r=>!delSet[r.item_id]).reduce((s,r)=>s+getRowAddOn(sec.id,r),0);
+            const secCats    = pkgCategories.filter(c => c.structure_id === sec.id);
+            const editable   = !!editingSections[sec.id];
+            const isCollapsed= !!collapsedSecs[sec.id];
+            const sCalc      = calcSection(sec);
+            const area       = sCalc.area;
+            const perItem    = sCalc.perItem;
+            const noAreaHint = !perItem && area === 0;
 
             return (
               <div key={sec.id} style={{background:"white",borderRadius:12,marginBottom:14,overflow:"hidden",
@@ -2166,20 +2280,50 @@ function SubconRateCardSection() {
                   )}
 
                   <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>
-                    {secCats.length} cat · {rows.filter(r=>!delSet[r.item_id]).length} items
+                    {secCats.length} cat
                   </span>
 
-                  {editable && (
+                  {/* Uniform Area / Per-item Qty toggle */}
+                  {!perItem && (
                     <div style={{display:"flex",alignItems:"center",gap:5}} onClick={e=>e.stopPropagation()}>
-                      <span style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>AREA</span>
-                      <input type="number" value={area||""} onChange={e=>patchSection(sec.id,{default_qty:e.target.value})}
-                        placeholder="0" onClick={e=>e.stopPropagation()}
-                        style={{width:68,padding:"3px 7px",borderRadius:5,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:12,outline:"none",fontFamily:"inherit"}}/>
-                      <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>sqft</span>
+                      {noAreaHint && !editable && (
+                        <span style={{fontSize:10,color:"rgba(245,158,11,0.85)",background:"rgba(245,158,11,0.15)",padding:"2px 7px",borderRadius:4,fontWeight:600}}>
+                          set area to see totals
+                        </span>
+                      )}
+                      {editable && (<>
+                        <span style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>AREA</span>
+                        <input type="number" value={area||""} onChange={e=>patchSection(sec.id,{default_qty:e.target.value})}
+                          placeholder="0" onClick={e=>e.stopPropagation()}
+                          style={{width:68,padding:"3px 7px",borderRadius:5,border:"1px solid rgba(255,255,255,0.25)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:12,outline:"none",fontFamily:"inherit"}}/>
+                        <span style={{fontSize:10,color:"rgba(255,255,255,0.4)"}}>sqft</span>
+                      </>)}
+                      {!editable && area>0 && <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{area.toLocaleString()} sqft</span>}
                     </div>
                   )}
-                  {!editable && area>0 && <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{area.toLocaleString()} sqft</span>}
-                  {(baseSum+addOnSum)>0 && <span style={{fontSize:12,fontWeight:700,color:"#4ADE80"}}>₹{(baseSum+addOnSum).toLocaleString()}/sqft</span>}
+
+                  {/* Mode toggle button */}
+                  {editable && (
+                    <button onClick={e=>{e.stopPropagation();patchSection(sec.id,{per_item_qty:!perItem});}}
+                      title={perItem?"Switch to Uniform Area mode":"Switch to Per-item Qty mode"}
+                      style={{background:perItem?"rgba(245,158,11,0.22)":"rgba(255,255,255,0.10)",
+                               border:"1px solid "+(perItem?"#F59E0B":"rgba(255,255,255,0.2)"),
+                               color:perItem?"#FCD34D":"rgba(255,255,255,0.85)",
+                               borderRadius:6,padding:"3px 10px",fontSize:10.5,fontWeight:700,cursor:"pointer",flexShrink:0,whiteSpace:"nowrap"}}>
+                      {perItem?"Per-item Qty":"Uniform Area"}
+                    </button>
+                  )}
+                  {!editable && perItem && (
+                    <span style={{fontSize:10,color:"#FCD34D",background:"rgba(245,158,11,0.2)",padding:"2px 7px",borderRadius:4,fontWeight:700}}>Per-item Qty</span>
+                  )}
+
+                  {/* Section total */}
+                  {sCalc.total > 0 && (
+                    <span style={{fontSize:12,fontWeight:700,color:"#4ADE80"}}>Total ₹{Math.round(sCalc.total).toLocaleString("en-IN")}</span>
+                  )}
+                  {sCalc.perSqft > 0 && !perItem && (
+                    <span style={{fontSize:10.5,color:"rgba(255,255,255,0.45)"}}>₹{Math.round(sCalc.perSqft).toLocaleString()}/sqft</span>
+                  )}
 
                   <button onClick={e=>{e.stopPropagation();setEditingSections(p=>({...p,[sec.id]:!editable}));}}
                     style={{padding:"4px 12px",borderRadius:6,background:editable?"#1E40AF":"rgba(255,255,255,0.12)",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer",flexShrink:0}}>
@@ -2197,21 +2341,11 @@ function SubconRateCardSection() {
                     )}
 
                     {secCats.map(cat => {
-                      // Include pending new items for this category
-                      const pendNew = (pendingNewItems[sec.id]||[]).filter(r=>r.category_id===cat.id);
-                      const catRows = [
-                        ...rows.filter(r=>r.category_name===cat.category_name && !delSet[r.item_id]),
-                        ...pendNew.map(r=>({
-                          ...r, item_name: boqItems.find(i=>i.id===r.item_id)?.name||"",
-                          unit: boqItems.find(i=>i.id===r.item_id)?.unit||"Sqft",
-                          _pending: true,
-                        }))
-                      ];
+                      const catRows  = subconCatRows(sec.id, cat);
                       const catKey   = `${sec.id}:${cat.id||cat.category_name}`;
                       const isCatCol = !!collapsedCats[catKey];
-                      const catBase  = catRows.reduce((s,r)=>s+getRowBase(sec.id,r),0);
-                      const catAddOn = catRows.reduce((s,r)=>s+getRowAddOn(sec.id,r),0);
-                      if(!catRows.length && !editable) return null;
+                      const cCalc    = calcCategory(sec.id, cat, area, perItem);
+                      if (!catRows.length && !editable) return null;
                       return (
                         <div key={catKey} style={{marginBottom:8}}>
                           <div onClick={()=>setCollapsedCats(p=>({...p,[catKey]:!p[catKey]}))}
@@ -2222,9 +2356,9 @@ function SubconRateCardSection() {
                             </svg>
                             <span style={{fontSize:12,fontWeight:700,color:T.text,flex:1}}>{cat.category_name}</span>
                             <span style={{fontSize:10.5,color:T.textLight}}>· {catRows.length} items</span>
-                            <span style={{fontSize:11,fontWeight:700,color:T.blue}}>Base ₹{catBase.toLocaleString()}</span>
-                            {catAddOn>0 && <span style={{fontSize:11,fontWeight:600,color:T.amber,marginLeft:6}}>+Add-on ₹{catAddOn.toLocaleString()}</span>}
-                            {/* + Add Item button — visible when section is in edit mode */}
+                            <span style={{fontSize:11,fontWeight:700,color:T.teal}}>Base ₹{Math.round(cCalc.base).toLocaleString("en-IN")}</span>
+                            {cCalc.addOn>0 && <span style={{fontSize:11,fontWeight:600,color:T.amber,marginLeft:4}}>+₹{Math.round(cCalc.addOn).toLocaleString("en-IN")}</span>}
+                            {cCalc.total>0 && <span style={{fontSize:11,fontWeight:700,color:T.green,marginLeft:4}}>= ₹{Math.round(cCalc.total).toLocaleString("en-IN")}</span>}
                             {editable && (
                               <button onClick={e=>{e.stopPropagation();openAddItemDrawer(sec,cat);}}
                                 style={{marginLeft:8,padding:"2px 10px",borderRadius:5,background:T.blueSoft,border:`1px solid ${T.blue}44`,color:T.blue,fontSize:10.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
@@ -2237,13 +2371,15 @@ function SubconRateCardSection() {
                             <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,marginBottom:4}}>
                               <thead>
                                 <tr>
-                                  {["ITEM","UNIT","BASE RATE","ADD-ON","DESCRIPTION",...(editable?[""]:[])].map(h=>(
-                                    <th key={h} style={{padding:"5px 10px",textAlign:"left",fontSize:9.5,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"0.4px",background:"#F1F5F9",borderBottom:`1px solid ${T.border}`}}>{h}</th>
+                                  {["ITEM","UNIT","BASE RATE","ADD-ON",perItem?"QTY":"AREA","TOTAL",...(editable?[""]:[])].map(h=>(
+                                    <th key={h} style={{padding:"5px 10px",textAlign:["QTY","AREA","TOTAL"].includes(h)?"right":"left",fontSize:9.5,fontWeight:700,color:T.textLight,textTransform:"uppercase",letterSpacing:"0.4px",background:"#F1F5F9",borderBottom:`1px solid ${T.border}`}}>{h}</th>
                                   ))}
                                 </tr>
                               </thead>
                               <tbody>
-                                {catRows.map(it => (
+                                {catRows.map(it => {
+                                  const rCalc = calcRow(sec.id, it, area, perItem);
+                                  return (
                                   <tr key={it._pending?`new-${it.item_id}`:it.item_id}
                                     style={{borderBottom:`1px solid ${T.borderLight}`,background:it._pending?"#EFF6FF":"transparent"}}>
                                     <td style={{padding:"7px 10px",fontWeight:600,color:T.text}}>
@@ -2255,7 +2391,7 @@ function SubconRateCardSection() {
                                       {editable
                                         ? <input type="number" value={getRowBase(sec.id,it)} onChange={e=>patchRow(sec.id,it.item_id,{base_rate:e.target.value})}
                                             style={{width:82,padding:"3px 7px",borderRadius:5,border:`1px solid ${T.border}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
-                                        : <span style={{fontWeight:700,color:T.blue}}>₹{Number(getRowBase(sec.id,it)).toLocaleString()}</span>}
+                                        : <span style={{fontWeight:700,color:T.teal}}>₹{Number(getRowBase(sec.id,it)).toLocaleString()}</span>}
                                     </td>
                                     <td style={{padding:"7px 10px"}}>
                                       {editable
@@ -2263,7 +2399,20 @@ function SubconRateCardSection() {
                                             style={{width:82,padding:"3px 7px",borderRadius:5,border:`1px solid ${T.border}`,fontSize:12,outline:"none",fontFamily:"inherit"}}/>
                                         : <span style={{color:T.amber,fontWeight:600}}>{Number(getRowAddOn(sec.id,it))>0?`₹${Number(getRowAddOn(sec.id,it)).toLocaleString()}`:"—"}</span>}
                                     </td>
-                                    <td style={{padding:"7px 10px",color:T.textLight,fontSize:11.5}}>{it.description||"—"}</td>
+                                    {/* QTY / AREA column */}
+                                    <td style={{padding:"7px 10px",textAlign:"right"}}>
+                                      {perItem && editable
+                                        ? <input type="number" value={getRowQty(sec.id,it)} onChange={e=>patchRow(sec.id,it.item_id,{qty:e.target.value})}
+                                            style={{width:68,padding:"3px 7px",borderRadius:5,border:`1px solid ${T.border}`,fontSize:12,outline:"none",fontFamily:"inherit",textAlign:"right"}}/>
+                                        : <span style={{color:T.textMid,fontWeight:500}}>{perItem?Number(getRowQty(sec.id,it)).toLocaleString():area.toLocaleString()}</span>
+                                      }
+                                    </td>
+                                    {/* TOTAL column */}
+                                    <td style={{padding:"7px 10px",textAlign:"right"}}>
+                                      <span style={{fontWeight:700,color:rCalc.total>0?T.green:T.textLight}}>
+                                        {rCalc.total>0?`₹${Math.round(rCalc.total).toLocaleString("en-IN")}`:"—"}
+                                      </span>
+                                    </td>
                                     {editable && (
                                       <td style={{padding:"7px 10px"}}>
                                         <button onClick={()=>{
@@ -2276,7 +2425,8 @@ function SubconRateCardSection() {
                                       </td>
                                     )}
                                   </tr>
-                                ))}
+                                  );
+                                })}
                               </tbody>
                             </table>
                           )}
@@ -2301,8 +2451,95 @@ function SubconRateCardSection() {
               </div>
             );
           })}
+        {/* Grand Total bar */}
+        {pkgStructures.length > 0 && (() => {
+          const grand = calcGrand();
+          return grand.total > 0 ? (
+            <div style={{background:"linear-gradient(135deg,#0F172A,#1E293B)",borderRadius:10,padding:"14px 20px",display:"flex",alignItems:"center",gap:20,marginTop:4}}>
+              <span style={{fontSize:12,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.8px"}}>Grand Total</span>
+              <span style={{flex:1}}/>
+              <span style={{fontSize:11,color:"rgba(255,255,255,0.4)"}}>Base ₹{Math.round(grand.base).toLocaleString("en-IN")}</span>
+              {grand.addOn>0 && <span style={{fontSize:11,color:"rgba(245,158,11,0.8)"}}>+Add-on ₹{Math.round(grand.addOn).toLocaleString("en-IN")}</span>}
+              <span style={{fontSize:18,fontWeight:800,color:"#4ADE80"}}>₹{Math.round(grand.total).toLocaleString("en-IN")}</span>
+            </div>
+          ) : null;
+        })()}
         </>)}
       </>)}
+
+      {/* ── Add Section Modal ──────────────────────────────────────────────── */}
+      {addSecModal && (
+        <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>{if(!addSecSaving)setAddSecModal(false);}}>
+          <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.45)",backdropFilter:"blur(4px)"}}/>
+          <div style={{position:"relative",width:440,maxWidth:"94vw",background:"white",borderRadius:14,boxShadow:T.shadowLg,overflow:"hidden",fontFamily:T.font}} onClick={e=>e.stopPropagation()}>
+            <div style={{padding:"18px 22px",borderBottom:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+              <div style={{fontSize:15,fontWeight:700,color:T.text}}>Add Section</div>
+              <button onClick={()=>setAddSecModal(false)} style={{background:"none",border:"none",cursor:"pointer",padding:4,display:"flex"}}><IcX size={18} color={T.textMid}/></button>
+            </div>
+            <div style={{padding:"20px 22px",display:"flex",flexDirection:"column",gap:14}}>
+              <div>
+                <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Section Name <span style={{color:T.red}}>*</span></label>
+                <input value={addSecForm.name} onChange={e=>setAddSecForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Ground Floor, First Floor…"
+                  style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,outline:"none",boxSizing:"border-box",fontFamily:T.font}}
+                  onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border} autoFocus/>
+              </div>
+              <div style={{display:"flex",gap:12}}>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Default Area / Qty</label>
+                  <input type="number" value={addSecForm.default_qty||""} onChange={e=>setAddSecForm(p=>({...p,default_qty:e.target.value}))} placeholder="0"
+                    style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,outline:"none",boxSizing:"border-box",fontFamily:T.font}}
+                    onFocus={e=>e.target.style.borderColor=T.blue} onBlur={e=>e.target.style.borderColor=T.border}/>
+                </div>
+                <div style={{flex:1}}>
+                  <label style={{fontSize:12,fontWeight:600,color:T.textMid,display:"block",marginBottom:6}}>Unit</label>
+                  <select value={addSecForm.unit} onChange={e=>setAddSecForm(p=>({...p,unit:e.target.value}))}
+                    style={{width:"100%",padding:"10px 13px",borderRadius:8,border:`1.5px solid ${T.border}`,fontSize:13.5,color:T.text,outline:"none",background:"white",fontFamily:T.font}}>
+                    {(uomOpts.length?uomOpts:["Sqft","Cft","Running Ft","Kg","Point","Unit","Lump Sum"]).map(u=><option key={u}>{u}</option>)}
+                  </select>
+                </div>
+              </div>
+              {/* Per-item qty toggle */}
+              <div style={{padding:"10px 12px",background:addSecForm.per_item_qty?"#FFFBEB":"#F9FAFB",border:`1.5px solid ${addSecForm.per_item_qty?"#FCD34D":"#E5E7EB"}`,borderRadius:8,cursor:"pointer",transition:"all .15s"}}
+                onClick={()=>setAddSecForm(p=>({...p,per_item_qty:!p.per_item_qty}))}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <input type="checkbox" checked={!!addSecForm.per_item_qty} onChange={()=>{}} style={{width:16,height:16,cursor:"pointer",accentColor:T.amber}}/>
+                  <div>
+                    <div style={{fontSize:13,fontWeight:700,color:T.text}}>
+                      Per-item quantity {addSecForm.per_item_qty?"(enabled)":"(disabled — uniform area)"}
+                    </div>
+                    <div style={{fontSize:11.5,color:T.textMid,marginTop:2}}>
+                      {addSecForm.per_item_qty
+                        ? "Each item will have its own quantity field (e.g. RCC: 100 cft, Plaster: 200 sqft)"
+                        : "All items share the section's area value (e.g. GF = 1200 sqft)"}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div style={{padding:"14px 22px",borderTop:`1px solid ${T.border}`,display:"flex",gap:10,justifyContent:"flex-end"}}>
+              <button onClick={()=>setAddSecModal(false)} style={{padding:"9px 18px",borderRadius:8,border:`1px solid ${T.border}`,background:"white",fontSize:13,fontWeight:600,color:T.textMid,cursor:"pointer"}}>Cancel</button>
+              <button disabled={!addSecForm.name?.trim()||addSecSaving} onClick={async()=>{
+                if(!addSecForm.name?.trim()||!selPkg) return;
+                setAddSecSaving(true);
+                const r=await api.post(`/library/packages/${selPkg.id}/structures`,{
+                  name:addSecForm.name.trim(),default_qty:Number(addSecForm.default_qty)||0,
+                  unit:addSecForm.unit||"sqft",rate:0,per_item_qty:!!addSecForm.per_item_qty,
+                  sort_order:pkgStructures.length,
+                }).catch(()=>({success:false}));
+                setAddSecSaving(false);
+                if(r?.success){
+                  setPkgStructures(p=>[...p,r.data]);
+                  setEditingSections(p=>({...p,[r.data.id]:true}));
+                  setAddSecModal(false);
+                } else alert(r?.message||"Failed to add section");
+              }}
+                style={{padding:"9px 22px",borderRadius:8,background:!addSecForm.name?.trim()||addSecSaving?T.borderLight:`linear-gradient(135deg,${T.blue},${T.blueMid})`,color:!addSecForm.name?.trim()||addSecSaving?T.textLight:"white",border:"none",fontSize:13,fontWeight:700,cursor:!addSecForm.name?.trim()||addSecSaving?"not-allowed":"pointer"}}>
+                {addSecSaving?"Adding…":"Add Section"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ════════════ WORK ITEM MODE ════════════ */}
       {mode==="item_wise" && selType && selCity && (
