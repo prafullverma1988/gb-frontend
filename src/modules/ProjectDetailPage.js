@@ -15866,21 +15866,32 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
   }, [woType, pkgSelCity?.id, pkgSelType?.id]);
 
   // Build sections from package mode for submit
+  // Uses the same helper fns as the display so edits/overrides are reflected
   const buildPackageSections = () => {
-    const effRate = (r) => r.base_rate != null
-      ? parseFloat(r.base_rate||0) + parseFloat(r.add_on_rate||0)
-      : parseFloat(r.rate||0);
     return pkgStructures.map(sec => {
-      const rows    = pkgSecItems[sec.id] || [];
       const area    = parseFloat(pkgAreas[sec.id] || sec.default_qty || 0);
       const perItem = !!Number(sec.per_item_qty);
-      const items = rows.filter(r => effRate(r) > 0).map(r => ({
-        description:     r.item_name || r.name,
-        unit:            r.unit || "Sqft",
-        qty:             perItem ? parseFloat(r.qty||0) : area,
-        rate:            effRate(r),
-        library_item_id: r.item_id || null,
-      }));
+      const cats    = pkgCategories.filter(c => c.structure_id === sec.id);
+      const items   = cats.flatMap(cat => {
+        const catAreaKey = `${sec.id}:${cat.id}`;
+        const catArea    = pkgCatAreas[catAreaKey] != null ? parseFloat(pkgCatAreas[catAreaKey]) : area;
+        const catRows    = (pkgSecItems[sec.id]||[]).filter(r =>
+          Number(r.category_id)===Number(cat.id) || r.category_name===cat.category_name
+        );
+        return catRows.map(r => {
+          const base  = getPkgItemBase(sec.id, cat.id, r.item_id, r);
+          const addOn = getPkgItemAddOn(sec.id, cat.id, r.item_id, r);
+          const qty   = perItem
+            ? getPkgItemQty(sec.id, cat.id, r.item_id, r, area, true)
+            : catArea;
+          return {
+            description: r.item_name || r.name,
+            unit:        r.unit || "Sqft",
+            qty,
+            rate:        base + addOn,
+          };
+        }).filter(i => i.description && i.rate > 0);
+      });
       return { title: sec.name, items };
     }).filter(s => s.items.length > 0);
   };
@@ -15992,30 +16003,37 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
     }
 
     setSaving(true);
-    const res = await api.post("/subcon/work-orders",{
-      project_id: projectId,
-      wo_type: woType,
-      subcon_name: form.subcon_name,
+    const payload = {
+      project_id:      projectId,
+      wo_type:         woType,
+      subcon_name:     form.subcon_name,
       subcon_category: form.subcon_category,
-      description: form.description,
-      retention_pct: parseFloat(form.retention_pct||5),
-      tds_pct: parseFloat(form.tds_pct||2),
-      start_date: form.start_date||null,
-      end_date: form.end_date||null,
-      attachment_url:  woAttachUrl  || null,
-      attachment_name: woAttachName || null,
-      attachment_size: woAttachSize || null,
-      ...(woType==="package" && pkgSelPkg ? { source_package_id: pkgSelPkg.id, source_package_name: pkgSelPkg.name } : {}),
+      description:     form.description,
+      retention_pct:   parseFloat(form.retention_pct||5),
+      tds_pct:         parseFloat(form.tds_pct||2),
+      start_date:      form.start_date||null,
+      end_date:        form.end_date||null,
       sections: finalSections.map(s=>({
         title: s.title,
-        items: s.items.filter(i=>i.description&&i.qty&&i.rate).map(i=>({
-          description:i.description, unit:i.unit||"", qty:parseFloat(i.qty), rate:parseFloat(i.rate),
-        })),
-      })),
-    }).catch(()=>({success:false,message:"Network error"}));
+        items: s.items
+          .filter(i => i.description && parseFloat(i.rate||0) > 0)
+          .map(i=>({
+            description: i.description,
+            unit:        i.unit||"Sqft",
+            qty:         parseFloat(i.qty||0),
+            rate:        parseFloat(i.rate),
+          })),
+      })).filter(s=>s.items.length>0),
+    };
+    const res = await api.post("/subcon/work-orders", payload)
+      .catch(e=>({success:false,message:e?.message||"Network error"}));
     setSaving(false);
-    if(res.success) onSaved();
-    else alert(res.message||"Failed");
+    if(res.success) {
+      onSaved();
+    } else {
+      const errMsg = res.message || res.error || `Server error (${res._status||500})`;
+      alert("Create Work Order failed:\n" + errMsg);
+    }
   };
 
   const filteredLib = libItems.filter(i=>
