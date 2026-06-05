@@ -15761,11 +15761,17 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
   const [iwPicked,     setIwPicked]     = useState({}); // {id: qty}
 
   // ── Package builder extras (estimate-like UX) ──────────────────────────
-  const [pkgShowInfo,     setPkgShowInfo]     = useState(true);
-  const [pkgEditMode,     setPkgEditMode]     = useState(false);
-  const [pkgCatCollapsed, setPkgCatCollapsed] = useState({});   // {`${sid}:${catId}`:true}
-  const [pkgCatAreas,     setPkgCatAreas]     = useState({});   // {`${sid}:${catId}`:override}
-  const [pkgItemEdits,    setPkgItemEdits]    = useState({});   // {`${sid}:${catId}:${iid}`:{base,addOn,qty}}
+  const [pkgShowInfo,        setPkgShowInfo]        = useState(true);
+  const [pkgEditMode,        setPkgEditMode]        = useState(false);
+  const [pkgCatCollapsed,    setPkgCatCollapsed]    = useState({});   // {`${sid}:${catId}`:true}
+  const [pkgCatAreas,        setPkgCatAreas]        = useState({});   // {`${sid}:${catId}`:area_override}
+  const [pkgItemEdits,       setPkgItemEdits]       = useState({});   // {`${sid}:${catId}:${iid}`:{base,addOn,qty}}
+  const [pkgExcludedItems,   setPkgExcludedItems]   = useState({});   // {`${sid}:${catId}:${iid}`:true}
+  const [pkgAddedItems,      setPkgAddedItems]      = useState({});   // {`${sid}:${catId}`:[{name,unit,qty,rate}]}
+  const [pkgAddItemForm,     setPkgAddItemForm]     = useState(null); // {sid,catId,catName,form:{}} | null
+  const [pkgAddedSections,   setPkgAddedSections]   = useState([]);   // [{title,items:[{name,unit,qty,rate}]}]
+  const [pkgAddSecOpen,      setPkgAddSecOpen]      = useState(false);
+  const [pkgAddSecForm,      setPkgAddSecForm]      = useState({title:"",items:[{name:"",unit:"Sqft",qty:"",rate:""}]});
   // Cloudinary attachment (same pattern as EstimateBuilderModal)
   const CLOUD_NAME    = "dd632nqfm";
   const UPLOAD_PRESET = "gb_buildcon_drawings";
@@ -15866,40 +15872,46 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
   }, [woType, pkgSelCity?.id, pkgSelType?.id]);
 
   // Build sections from package mode for submit.
-  // Maps 3-level (library section → category → item) to 2-level WO
-  // by creating one WO section per library CATEGORY.
-  // Title format: "Section Name — Category Name" (or just category if unique).
+  // Maps 3-level (library section → category → item) to 2-level WO.
+  // Each category becomes a WO section: "Section — Category" title.
+  // Respects pkgExcludedItems (deleted) and pkgAddedItems (added in builder).
   const buildPackageSections = () => {
-    return pkgStructures.flatMap(sec => {
+    const libSections = pkgStructures.flatMap(sec => {
       const area    = parseFloat(pkgAreas[sec.id] || sec.default_qty || 0);
       const perItem = !!Number(sec.per_item_qty);
       const cats    = pkgCategories.filter(c => c.structure_id === sec.id);
       return cats.map(cat => {
-        const catAreaKey = `${sec.id}:${cat.id}`;
-        const catArea    = pkgCatAreas[catAreaKey] != null ? parseFloat(pkgCatAreas[catAreaKey]) : area;
+        const catKey     = `${sec.id}:${cat.id}`;
+        const catArea    = pkgCatAreas[catKey] != null ? parseFloat(pkgCatAreas[catKey]) : area;
         const catRows    = (pkgSecItems[sec.id]||[]).filter(r =>
           Number(r.category_id)===Number(cat.id) || r.category_name===cat.category_name
         );
-        const items = catRows.map(r => {
-          const base  = getPkgItemBase(sec.id, cat.id, r.item_id, r);
-          const addOn = getPkgItemAddOn(sec.id, cat.id, r.item_id, r);
-          const qty   = perItem
-            ? getPkgItemQty(sec.id, cat.id, r.item_id, r, area, true)
-            : catArea;
-          return {
-            description: r.item_name || r.name,
-            unit:        r.unit || "Sqft",
-            qty,
-            rate:        base + addOn,
-          };
-        }).filter(i => i.description && i.rate > 0);
-        // Title: "Section — Category" so both levels are visible in WO view
-        const title = cat.category_name === sec.name
-          ? cat.category_name
-          : `${sec.name} — ${cat.category_name}`;
+        // Library items (minus excluded)
+        const libItems = catRows
+          .filter(r => !pkgExcludedItems[`${sec.id}:${cat.id}:${r.item_id}`])
+          .map(r => {
+            const base  = getPkgItemBase(sec.id, cat.id, r.item_id, r);
+            const addOn = getPkgItemAddOn(sec.id, cat.id, r.item_id, r);
+            const qty   = perItem ? getPkgItemQty(sec.id, cat.id, r.item_id, r, area, true) : catArea;
+            return { description: r.item_name || r.name, unit: r.unit || "Sqft", qty, rate: base + addOn };
+          }).filter(i => i.description && i.rate > 0);
+        // WO-added items for this category
+        const addedItems = (pkgAddedItems[catKey]||[]).map(i => ({
+          description: i.name, unit: i.unit||"Sqft", qty: parseFloat(i.qty)||0, rate: parseFloat(i.rate)||0,
+        })).filter(i => i.description && i.rate > 0);
+        const items = [...libItems, ...addedItems];
+        const title = cat.category_name === sec.name ? cat.category_name : `${sec.name} — ${cat.category_name}`;
         return { title, items };
       }).filter(s => s.items.length > 0);
     });
+    // Extra manual sections added in WO builder
+    const extraSections = pkgAddedSections.map(sec => ({
+      title: sec.title,
+      items: sec.items.filter(i => i.name && parseFloat(i.rate||0)>0).map(i => ({
+        description: i.name, unit: i.unit||"Sqft", qty: parseFloat(i.qty||0), rate: parseFloat(i.rate||0),
+      })),
+    })).filter(s => s.items.length > 0);
+    return [...libSections, ...extraSections];
   };
 
   // Build sections from item-wise picks for submit
@@ -16336,8 +16348,10 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                       </tr>
                                     </thead>
                                     <tbody>
-                                      {catRows.length===0&&<tr><td colSpan={5} style={{padding:"12px",textAlign:"center",color:"#9CA3AF",fontSize:12}}>No items</td></tr>}
+                                      {catRows.length===0&&!(pkgAddedItems[ck]||[]).length&&<tr><td colSpan={pkgEditMode?6:5} style={{padding:"12px",textAlign:"center",color:"#9CA3AF",fontSize:12}}>No items — click + Add Item to add</td></tr>}
                                       {catRows.map((r,idx)=>{
+                                        const excKey=`${sec.id}:${cat.id}:${r.item_id}`;
+                                        if(pkgExcludedItems[excKey]) return null;
                                         const base=getPkgItemBase(sec.id,cat.id,r.item_id,r);
                                         const addOn=getPkgItemAddOn(sec.id,cat.id,r.item_id,r);
                                         const qty=perItem?getPkgItemQty(sec.id,cat.id,r.item_id,r,secArea,true):catArea;
@@ -16372,11 +16386,47 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                                             <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>
                                               Rs.{Math.round(tot).toLocaleString("en-IN")}
                                             </td>
+                                            {/* × Delete column — only in edit mode */}
+                                            {pkgEditMode&&<td style={{padding:"6px 10px",textAlign:"center"}}>
+                                              <button onClick={()=>setPkgExcludedItems(p=>({...p,[excKey]:true}))}
+                                                title="Remove from this WO"
+                                                style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:15,lineHeight:1,padding:2}}>×</button>
+                                            </td>}
+                                          </tr>
+                                        );
+                                      })}
+                                      {/* WO-added items for this category */}
+                                      {(pkgAddedItems[ck]||[]).map((ai,aidx)=>{
+                                        const aiRate=parseFloat(ai.rate||0);
+                                        const aiQty=parseFloat(ai.qty||0);
+                                        return(
+                                          <tr key={`added-${aidx}`} style={{background:"#EFF6FF",borderBottom:"1px solid #BFDBFE"}}>
+                                            <td style={{padding:"8px 12px",fontWeight:600,fontSize:12.5,color:"#1D4ED8"}}>
+                                              {ai.name} <span style={{fontSize:9,background:"#2563EB",color:"white",borderRadius:3,padding:"1px 5px",marginLeft:4}}>NEW</span>
+                                              <div style={{fontSize:10,color:"#93C5FD",marginTop:1}}>{ai.unit}</div>
+                                            </td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:12.5,fontWeight:600,color:"#1D4ED8"}}>Rs.{Math.round(aiRate).toLocaleString("en-IN")}</td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",color:"#9CA3AF"}}>—</td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:12,color:"#0D9488",fontWeight:600}}>{aiQty.toLocaleString()}</td>
+                                            <td style={{padding:"8px 12px",textAlign:"right",fontSize:13,fontWeight:700,color:"#059669"}}>Rs.{Math.round(aiRate*aiQty).toLocaleString("en-IN")}</td>
+                                            {pkgEditMode&&<td style={{padding:"6px 10px",textAlign:"center"}}>
+                                              <button onClick={()=>setPkgAddedItems(p=>({...p,[ck]:(p[ck]||[]).filter((_,i)=>i!==aidx)}))}
+                                                style={{background:"none",border:"none",cursor:"pointer",color:"#EF4444",fontSize:15,lineHeight:1,padding:2}}>×</button>
+                                            </td>}
                                           </tr>
                                         );
                                       })}
                                     </tbody>
                                   </table>
+                                )}
+                                {/* + Add Item button — only in edit mode */}
+                                {pkgEditMode&&!catCol&&(
+                                  <button onClick={()=>setPkgAddItemForm({sid:sec.id,catId:cat.id,catName:cat.category_name,secName:sec.name,perItem,
+                                      form:{name:"",unit:perItem?"No":"Sqft",qty:perItem?"1":"",rate:""}})}
+                                    style={{width:"100%",padding:"7px",fontSize:11.5,fontWeight:700,color:"#2563EB",background:"#EFF6FF",
+                                      border:"1.5px dashed #93C5FD",borderTop:"none",cursor:"pointer",borderRadius:"0 0 6px 6px",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                                    + Add Item to {cat.category_name}
+                                  </button>
                                 )}
                               </div>
                             );
@@ -16386,10 +16436,110 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
                     </div>
                   );
                 })}
+
+                {/* + Add Section (manual) — only in edit mode */}
+                {pkgEditMode&&(
+                  <button onClick={()=>{setPkgAddedSections(p=>[...p,{title:"",items:[{name:"",unit:"Sqft",qty:"",rate:""}]}]);}}
+                    style={{width:"100%",padding:"10px",marginTop:4,fontSize:12,fontWeight:700,color:"#2563EB",background:"white",
+                      border:"1.5px dashed #93C5FD",borderRadius:8,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+                    + Add New Section
+                  </button>
+                )}
+
+                {/* Extra manual sections added in builder */}
+                {pkgAddedSections.map((ms,msi)=>(
+                  <div key={`ms-${msi}`} style={{background:"white",borderRadius:10,border:"1.5px solid #93C5FD",marginBottom:12,marginTop:8,overflow:"hidden"}}>
+                    <div style={{padding:"10px 14px",background:"#1E3A5F",display:"flex",alignItems:"center",gap:10}}>
+                      <input value={ms.title} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,title:e.target.value}:s))}
+                        placeholder="Section name (e.g. Extra Civil Work)"
+                        style={{flex:1,padding:"5px 9px",borderRadius:5,border:"1px solid rgba(255,255,255,0.2)",background:"rgba(255,255,255,0.1)",color:"white",fontSize:13,fontWeight:700,outline:"none",fontFamily:"inherit"}}/>
+                      <button onClick={()=>setPkgAddedSections(p=>p.filter((_,i)=>i!==msi))}
+                        style={{background:"rgba(239,68,68,0.2)",border:"1px solid #EF4444",color:"#FCA5A5",borderRadius:5,padding:"4px 10px",cursor:"pointer",fontSize:11,fontWeight:700}}>
+                        × Remove Section
+                      </button>
+                    </div>
+                    <div style={{padding:10}}>
+                      <table style={{width:"100%",borderCollapse:"collapse",marginBottom:8}}>
+                        <thead>
+                          <tr style={{background:"#F8FAFC"}}>
+                            {["Item Description","Unit","Qty","Rate","Total",""].map(h=>(
+                              <th key={h} style={{padding:"6px 10px",textAlign:h==="Total"||h==="Qty"||h==="Rate"?"right":"left",fontSize:10,fontWeight:700,color:"#64748B",textTransform:"uppercase"}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {ms.items.map((it,iti)=>(
+                            <tr key={iti} style={{borderBottom:"1px solid #F3F4F6"}}>
+                              <td style={{padding:"6px 8px"}}><input value={it.name} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,name:e.target.value}:x)}:s))} placeholder="Item description" style={{width:"100%",padding:"5px 8px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,outline:"none",fontFamily:"inherit"}}/></td>
+                              <td style={{padding:"6px 8px"}}><select value={it.unit} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,unit:e.target.value}:x)}:s))} style={{padding:"5px 8px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12,background:"white",outline:"none"}}>
+                                {["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"].map(u=><option key={u}>{u}</option>)}</select></td>
+                              <td style={{padding:"6px 8px"}}><input type="number" value={it.qty} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,qty:e.target.value}:x)}:s))} placeholder="0" style={{width:70,padding:"5px 7px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,textAlign:"right",outline:"none",fontFamily:"inherit"}}/></td>
+                              <td style={{padding:"6px 8px"}}><input type="number" value={it.rate} onChange={e=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.map((x,j)=>j===iti?{...x,rate:e.target.value}:x)}:s))} placeholder="0" style={{width:80,padding:"5px 7px",borderRadius:4,border:"1.5px solid #E5E7EB",fontSize:12.5,textAlign:"right",outline:"none",fontFamily:"inherit"}}/></td>
+                              <td style={{padding:"6px 8px",textAlign:"right",fontWeight:700,color:"#059669",fontSize:12.5}}>Rs.{Math.round((parseFloat(it.qty)||0)*(parseFloat(it.rate)||0)).toLocaleString("en-IN")}</td>
+                              <td style={{padding:"6px 8px",textAlign:"center"}}><button onClick={()=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:s.items.filter((_,j)=>j!==iti)}:s))} style={{background:"none",border:"none",color:"#EF4444",cursor:"pointer",fontSize:14,lineHeight:1}}>×</button></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <button onClick={()=>setPkgAddedSections(p=>p.map((s,i)=>i===msi?{...s,items:[...s.items,{name:"",unit:"Sqft",qty:"",rate:""}]}:s))}
+                        style={{padding:"6px 14px",fontSize:11.5,fontWeight:700,color:"#2563EB",background:"#EFF6FF",border:"1.5px dashed #93C5FD",borderRadius:5,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                        + Add Item
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
                 {pkgGrandTotal>0&&(
                   <div style={{marginTop:10,padding:"14px 20px",background:"#0F172A",color:"white",borderRadius:10,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
                     <span style={{fontSize:13,fontWeight:700,textTransform:"uppercase",letterSpacing:".4px",color:"rgba(255,255,255,0.7)"}}>Grand Total</span>
                     <span style={{fontSize:20,fontWeight:700,color:"#CCFBF1"}}>Rs.{Math.round(pkgGrandTotal).toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+
+                {/* Add Item modal */}
+                {pkgAddItemForm&&(
+                  <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center"}} onClick={()=>setPkgAddItemForm(null)}>
+                    <div style={{position:"absolute",inset:0,background:"rgba(0,0,0,0.4)",backdropFilter:"blur(4px)"}}/>
+                    <div style={{position:"relative",width:400,maxWidth:"94vw",background:"white",borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",overflow:"hidden",fontFamily:"inherit"}} onClick={e=>e.stopPropagation()}>
+                      <div style={{padding:"14px 18px",background:"#0F172A",color:"white",fontSize:13,fontWeight:700}}>
+                        + Add Item — {pkgAddItemForm.catName}
+                        <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",marginTop:2,fontWeight:400}}>{pkgAddItemForm.secName}</div>
+                      </div>
+                      <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:10}}>
+                        {[
+                          {label:"Item Name *",key:"name",type:"text",ph:"e.g. Extra RCC Work"},
+                          {label:"Unit",key:"unit",type:"select",opts:["Sqft","Cft","No","Running Ft","Unit","Kg","Lump Sum"]},
+                          {label:pkgAddItemForm.perItem?"Quantity":"Qty (Area)",key:"qty",type:"number",ph:"0"},
+                          {label:"Rate (₹)",key:"rate",type:"number",ph:"0"},
+                        ].map(f=>(
+                          <div key={f.key}>
+                            <label style={{fontSize:11,fontWeight:700,color:"#64748B",display:"block",marginBottom:4,textTransform:"uppercase"}}>{f.label}</label>
+                            {f.type==="select"
+                              ?<select value={pkgAddItemForm.form[f.key]} onChange={e=>setPkgAddItemForm(p=>({...p,form:{...p.form,[f.key]:e.target.value}}))}
+                                  style={{width:"100%",padding:"9px 12px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:13,outline:"none",background:"white",fontFamily:"inherit"}}>
+                                  {f.opts.map(o=><option key={o}>{o}</option>)}
+                                </select>
+                              :<input type={f.type} value={pkgAddItemForm.form[f.key]} onChange={e=>setPkgAddItemForm(p=>({...p,form:{...p.form,[f.key]:e.target.value}}))}
+                                  placeholder={f.ph} autoFocus={f.key==="name"}
+                                  style={{width:"100%",padding:"9px 12px",borderRadius:7,border:"1.5px solid #E5E7EB",fontSize:13,outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                            }
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{padding:"12px 18px",borderTop:"1px solid #E5E7EB",display:"flex",gap:8,justifyContent:"flex-end"}}>
+                        <button onClick={()=>setPkgAddItemForm(null)} style={{padding:"8px 16px",borderRadius:7,border:"1px solid #E5E7EB",background:"#F8FAFC",fontSize:12.5,cursor:"pointer",fontFamily:"inherit"}}>Cancel</button>
+                        <button disabled={!pkgAddItemForm.form.name?.trim()||!pkgAddItemForm.form.rate}
+                          onClick={()=>{
+                            const catKey=`${pkgAddItemForm.sid}:${pkgAddItemForm.catId}`;
+                            setPkgAddedItems(p=>({...p,[catKey]:[...(p[catKey]||[]),{...pkgAddItemForm.form}]}));
+                            setPkgAddItemForm(null);
+                          }}
+                          style={{padding:"8px 20px",borderRadius:7,background:!pkgAddItemForm.form.name?.trim()||!pkgAddItemForm.form.rate?"#D1D5DB":"#2563EB",
+                            color:!pkgAddItemForm.form.name?.trim()||!pkgAddItemForm.form.rate?"#9CA3AF":"white",border:"none",fontSize:12.5,fontWeight:700,cursor:!pkgAddItemForm.form.name?.trim()||!pkgAddItemForm.form.rate?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                          Add Item
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 )}
               </>)}
