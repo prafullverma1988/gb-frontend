@@ -15865,20 +15865,22 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
     // eslint-disable-next-line
   }, [woType, pkgSelCity?.id, pkgSelType?.id]);
 
-  // Build sections from package mode for submit
-  // Uses the same helper fns as the display so edits/overrides are reflected
+  // Build sections from package mode for submit.
+  // Maps 3-level (library section → category → item) to 2-level WO
+  // by creating one WO section per library CATEGORY.
+  // Title format: "Section Name — Category Name" (or just category if unique).
   const buildPackageSections = () => {
-    return pkgStructures.map(sec => {
+    return pkgStructures.flatMap(sec => {
       const area    = parseFloat(pkgAreas[sec.id] || sec.default_qty || 0);
       const perItem = !!Number(sec.per_item_qty);
       const cats    = pkgCategories.filter(c => c.structure_id === sec.id);
-      const items   = cats.flatMap(cat => {
+      return cats.map(cat => {
         const catAreaKey = `${sec.id}:${cat.id}`;
         const catArea    = pkgCatAreas[catAreaKey] != null ? parseFloat(pkgCatAreas[catAreaKey]) : area;
         const catRows    = (pkgSecItems[sec.id]||[]).filter(r =>
           Number(r.category_id)===Number(cat.id) || r.category_name===cat.category_name
         );
-        return catRows.map(r => {
+        const items = catRows.map(r => {
           const base  = getPkgItemBase(sec.id, cat.id, r.item_id, r);
           const addOn = getPkgItemAddOn(sec.id, cat.id, r.item_id, r);
           const qty   = perItem
@@ -15891,9 +15893,13 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
             rate:        base + addOn,
           };
         }).filter(i => i.description && i.rate > 0);
-      });
-      return { title: sec.name, items };
-    }).filter(s => s.items.length > 0);
+        // Title: "Section — Category" so both levels are visible in WO view
+        const title = cat.category_name === sec.name
+          ? cat.category_name
+          : `${sec.name} — ${cat.category_name}`;
+        return { title, items };
+      }).filter(s => s.items.length > 0);
+    });
   };
 
   // Build sections from item-wise picks for submit
