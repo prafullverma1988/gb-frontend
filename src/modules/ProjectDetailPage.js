@@ -12,140 +12,10 @@ import MaterialLedgerDrawer from "../components/MaterialLedgerDrawer";
 import uploadManager from "../utils/uploadManager";
 import EstimateBuilderModal from "./EstimateBuilderModal";
 import MOMModule from "./MOMModule";
-
-// ── TZ-safe local date helper ────────────────────────────────────────
-// `new Date().toISOString().split("T")[0]` shifts by 1 day in early IST hours
-// (UTC midnight crosses local date boundary). Use local components instead.
-const localYMD = (d=new Date()) => {
-  const yyyy = d.getFullYear();
-  const mm = String(d.getMonth()+1).padStart(2,"0");
-  const dd = String(d.getDate()).padStart(2,"0");
-  return `${yyyy}-${mm}-${dd}`;
-};
-
-// ── DESIGN TOKENS — Balanced palette ─────────────────────────────────
-const T = {
-  // Surfaces
-  bg:       "#F4F6F9",
-  surface:  "#FFFFFF",
-  surfaceB: "#F8F9FB",
-  // Text
-  t1:  "#111827",
-  t2:  "#374151",
-  t3:  "#6B7280",
-  t4:  "#9CA3AF",
-  // Borders
-  b1:  "#E5E7EB",
-  b2:  "#D1D5DB",
-  // Primary blue
-  blu:  "#2563EB",
-  bluL: "#EFF6FF",
-  bluM: "#BFDBFE",
-  // Green
-  grn:  "#059669",
-  grnL: "#ECFDF5",
-  grnM: "#A7F3D0",
-  // Amber
-  amb:  "#D97706",
-  ambL: "#FFFBEB",
-  ambM: "#FDE68A",
-  // Red
-  red:  "#DC2626",
-  redL: "#FEF2F2",
-  redM: "#FECACA",
-  // Slate (neutral)
-  slt:  "#64748B",
-  sltL: "#F1F5F9",
-  // Purple
-  pur:  "#7C3AED",
-  purL: "#F5F3FF",
-};
-
-const fmt  = (n) => n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:`${(n/1000).toFixed(0)}K`;
-const fmtN = (n) => Math.abs(n).toLocaleString("en-IN");
-
-// ── MINI COMPONENTS ───────────────────────────────────────────────────
-
-// Pill badge — slightly rounded, colored border
-const Pill = ({label, c, bg, border}) => (
-  <span style={{display:"inline-block", background:bg, color:c, fontSize:11, fontWeight:600, padding:"2px 9px", borderRadius:20, border:`1px solid ${border||c+"44"}`, whiteSpace:"nowrap"}}>{label}</span>
-);
-
-// Progress bar
-const PBar = ({pct, color, h=4}) => (
-  <div style={{height:h, background:T.b1, borderRadius:h, overflow:"hidden"}}>
-    <div style={{height:"100%", width:`${Math.min(pct,100)}%`, background:color||T.blu, borderRadius:h, transition:"width .5s"}}/>
-  </div>
-);
-
-// Stat card — white card with top color accent
-const Stat = ({label, value, note, color}) => (
-  <div style={{padding:"13px 15px", background:T.surface, border:`1px solid ${T.b1}`, borderRadius:8, borderTop:`3px solid ${color||T.blu}`}}>
-    <div style={{fontSize:10, color:T.t3, fontWeight:600, letterSpacing:".5px", textTransform:"uppercase", marginBottom:5}}>{label}</div>
-    <div style={{fontSize:21, fontWeight:700, color:T.t1, letterSpacing:"-.5px", lineHeight:1}}>{value}</div>
-    {note&&<div style={{fontSize:11, color:T.t4, marginTop:4}}>{note}</div>}
-  </div>
-);
-
-// Panel card
-const Panel = ({children, style}) => (
-  <div style={{background:T.surface, border:`1px solid ${T.b1}`, borderRadius:8, overflow:"hidden", ...style}}>{children}</div>
-);
-
-// Panel header
-const PHead = ({title, action}) => (
-  <div style={{padding:"10px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surfaceB}}>
-    <span style={{fontSize:12.5, fontWeight:700, color:T.t1, letterSpacing:"-.1px"}}>{title}</span>
-    {action}
-  </div>
-);
-
-// Table header row
-const THead = ({cols, headers}) => (
-  <div style={{display:"grid", gridTemplateColumns:cols, padding:"7px 15px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`}}>
-    {headers.map((h,i)=>(
-      <span key={i} style={{fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".6px"}}>{h}</span>
-    ))}
-  </div>
-);
-
-// Add button
-const AddBtn = ({label, onClick}) => (
-  <button onClick={onClick} style={{display:"inline-flex", alignItems:"center", gap:5, padding:"5px 12px", border:`1px solid ${T.blu}`, borderRadius:6, background:T.bluL, color:T.blu, fontSize:11.5, fontWeight:600, cursor:"pointer", transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background=T.blu;e.currentTarget.style.color="#fff";}} onMouseLeave={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.color=T.blu;}}>
-    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-    {label}
-  </button>
-);
-
-// Secondary button
-const SecBtn = ({label, onClick}) => (
-  <button onClick={onClick} style={{display:"inline-flex", alignItems:"center", gap:4, padding:"5px 11px", border:`1px solid ${T.b2}`, borderRadius:6, background:T.surface, color:T.t2, fontSize:11.5, fontWeight:500, cursor:"pointer"}}>{label}</button>
-);
-
-// Filter tabs
-const FilterTabs = ({options, active, onChange}) => (
-  <div style={{display:"flex", gap:2, background:T.bg, borderRadius:7, padding:3, border:`1px solid ${T.b1}`}}>
-    {options.map(o=>{
-      const isA = active===o.id;
-      return <button key={o.id} onClick={()=>onChange(o.id)} style={{padding:"4px 11px", borderRadius:5, border:"none", background:isA?T.surface:"none", color:isA?T.blu:T.t3, fontSize:11.5, fontWeight:isA?700:400, cursor:"pointer", boxShadow:isA?"0 1px 3px rgba(0,0,0,.08)":"none", transition:"all .15s", whiteSpace:"nowrap"}}>{o.label}{o.count!=null&&<span style={{marginLeft:4, background:isA?T.blu:T.b2, color:isA?"#fff":T.t3, fontSize:9, fontWeight:700, padding:"0 5px", borderRadius:10}}>{o.count}</span>}</button>;
-    })}
-  </div>
-);
+import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
+import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
 
 // ── DATA ──────────────────────────────────────────────────────────────
-const PROJ = {
-  id:0, name:"", client:"",
-  city:"", type:"", progress:0, status:"",
-  boq:0, expense:0, pm:"", sup:"",
-  start:"", end:"", address:"",
-  area:"", floors:"",
-};
-const STATUS_S = {
-  "Ongoing":     {c:T.grn, bg:T.grnL},
-  "Completed":   {c:T.blu, bg:T.bluL},
-  "Hold":        {c:T.amb, bg:T.ambL},
-  "Not Started": {c:T.slt, bg:T.sltL},
-};
 const D = {
   milestones:[],
   expBreakdown:[],
@@ -169,9 +39,6 @@ const D = {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 1 — OVERVIEW
 // ═══════════════════════════════════════════════════════════════════
-const STAGES = ["Requested","Approved","Ordered","Received","Used"];
-const STAGE_S = {"Requested":{c:T.slt,bg:T.sltL},"Approved":{c:T.pur,bg:T.purL},"Ordered":{c:T.amb,bg:T.ambL},"Received":{c:T.blu,bg:T.bluL},"Used":{c:T.grn,bg:T.grnL}};
-
 function TabOverview({proj, onRequestPayment}) {
   const margin = proj.boq - proj.expense;
   const expTotal = D.expBreakdown.reduce((s,e)=>s+e.amt,0);
@@ -21002,10 +20869,6 @@ function TaskSkeleton({gridTemplate}={}){
 // PROJECT DETAIL PAGE — SHELL
 // ═══════════════════════════════════════════════════════════════════
 
-// ── Tab icons (inline SVG, single path each) ──
-const TabIc = ({d, size=16, color="currentColor"}) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d={d}/></svg>
-);
 const IcOverview  = (p) => <TabIc {...p} d="M3 12l2-2 4 4 6-6 6 6M3 21h18"/>;
 const IcDesign    = (p) => <TabIc {...p} d="M12 19l7-7 3 3-7 7-3-3zM18 13l-1.5-7.5L2 2l3.5 14.5L13 18z"/>;
 const IcEstimate  = (p) => <TabIc {...p} d="M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2zM16 8H8m0 4h8m-8 4h5"/>;

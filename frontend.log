@@ -238,3 +238,360 @@ webpack compiled [1m[32msuccessfully[39m[22m
 Compiling...
 Compiled successfully!
 webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\modules\ProjectDetailPage.js
+Syntax error: Identifier 'localYMD' has already been declared. (21:6) (21:6)
+[1m[31mERROR[39m[22m in [1m./src/modules/ProjectDetailPage.js[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\prafu\gb-frontend\src\modules\ProjectDetailPage.js: Identifier 'localYMD' has already been declared. (21:6)
+
+[0m [90m 19 |[39m [90m// `new Date().toISOString().split("T")[0]` shifts by 1 day in early IST hours[39m
+ [90m 20 |[39m [90m// (UTC midnight crosses local date boundary). Use local components instead.[39m
+[31m[1m>[22m[39m[90m 21 |[39m [36mconst[39m localYMD [33m=[39m (d[33m=[39m[36mnew[39m [33mDate[39m()) [33m=>[39m {
+ [90m    |[39m       [31m[1m^[22m[39m
+ [90m 22 |[39m   [36mconst[39m yyyy [33m=[39m d[33m.[39mgetFullYear()[33m;[39m
+ [90m 23 |[39m   [36mconst[39m mm [33m=[39m [33mString[39m(d[33m.[39mgetMonth()[33m+[39m[35m1[39m)[33m.[39mpadStart([35m2[39m[33m,[39m[32m"0"[39m)[33m;[39m
+ [90m 24 |[39m   [36mconst[39m dd [33m=[39m [33mString[39m(d[33m.[39mgetDate())[33m.[39mpadStart([35m2[39m[33m,[39m[32m"0"[39m)[33m;[39m[0m
+    at constructor (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowScopeHandler.checkRedeclarationInScope (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1619:19)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1585:12)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1686:11)
+    at FlowParserMixin.declareNameFromIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7567:16)
+    at FlowParserMixin.checkIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7563:12)
+    at FlowParserMixin.checkLVal (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7500:12)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13412:10)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3474:11)
+    at FlowParserMixin.parseVar (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13383:12)
+    at FlowParserMixin.parseVarStatement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+    at FlowParserMixin.parseStatementContent (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:2918:24)
+    at FlowParserMixin.parseModuleItem (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+    at FlowParserMixin.parseBlockOrModuleBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+    at FlowParserMixin.parseBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+    at FlowParserMixin.parseProgram (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12622:10)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12612:25)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3685:28)
+    at FlowParserMixin.parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14488:25)
+    at parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14522:38)
+    at parser (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\parser\index.js:41:34)
+    at parser.next (<anonymous>)
+    at normalizeFile (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+    at normalizeFile.next (<anonymous>)
+    at run (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\index.js:22:50)
+    at run.next (<anonymous>)
+    at transform (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transform.js:22:33)
+    at transform.next (<anonymous>)
+    at step (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:261:32)
+    at C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:273:13
+    at async.call.result.err.err (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:223:11)
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\modules\ProjectDetailPage.js
+  Line 21:6:  Parsing [1m[31merror[39m[22m[1m: Identifier 'localYMD' has already been declared. (21:6)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\modules\ProjectDetailPage.js
+Syntax error: Identifier 'T' has already been declared. (19:6) (19:6)
+[1m[31mERROR[39m[22m in [1m./src/modules/ProjectDetailPage.js[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\prafu\gb-frontend\src\modules\ProjectDetailPage.js: Identifier 'T' has already been declared. (19:6)
+
+[0m [90m 17 |[39m
+ [90m 18 |[39m [90m// ── DESIGN TOKENS — Balanced palette ─────────────────────────────────[39m
+[31m[1m>[22m[39m[90m 19 |[39m [36mconst[39m [33mT[39m [33m=[39m {
+ [90m    |[39m       [31m[1m^[22m[39m
+ [90m 20 |[39m   [90m// Surfaces[39m
+ [90m 21 |[39m   bg[33m:[39m       [32m"#F4F6F9"[39m[33m,[39m
+ [90m 22 |[39m   surface[33m:[39m  [32m"#FFFFFF"[39m[33m,[39m[0m
+    at constructor (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowScopeHandler.checkRedeclarationInScope (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1619:19)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1585:12)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1686:11)
+    at FlowParserMixin.declareNameFromIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7567:16)
+    at FlowParserMixin.checkIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7563:12)
+    at FlowParserMixin.checkLVal (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7500:12)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13412:10)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3474:11)
+    at FlowParserMixin.parseVar (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13383:12)
+    at FlowParserMixin.parseVarStatement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+    at FlowParserMixin.parseStatementContent (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:2918:24)
+    at FlowParserMixin.parseModuleItem (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+    at FlowParserMixin.parseBlockOrModuleBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+    at FlowParserMixin.parseBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+    at FlowParserMixin.parseProgram (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12622:10)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12612:25)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3685:28)
+    at FlowParserMixin.parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14488:25)
+    at parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14522:38)
+    at parser (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\parser\index.js:41:34)
+    at parser.next (<anonymous>)
+    at normalizeFile (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+    at normalizeFile.next (<anonymous>)
+    at run (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\index.js:22:50)
+    at run.next (<anonymous>)
+    at transform (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transform.js:22:33)
+    at transform.next (<anonymous>)
+    at step (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:261:32)
+    at C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:273:13
+    at async.call.result.err.err (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:223:11)
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\modules\ProjectDetailPage.js
+  Line 19:6:  Parsing [1m[31merror[39m[22m[1m: Identifier 'T' has already been declared. (19:6)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\modules\ProjectDetailPage.js
+Syntax error: Identifier 'Pill' has already been declared. (21:6) (21:6)
+[1m[31mERROR[39m[22m in [1m./src/modules/ProjectDetailPage.js[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\prafu\gb-frontend\src\modules\ProjectDetailPage.js: Identifier 'Pill' has already been declared. (21:6)
+
+[0m [90m 19 |[39m
+ [90m 20 |[39m [90m// Pill badge — slightly rounded, colored border[39m
+[31m[1m>[22m[39m[90m 21 |[39m [36mconst[39m [33mPill[39m [33m=[39m ({label[33m,[39m c[33m,[39m bg[33m,[39m border}) [33m=>[39m (
+ [90m    |[39m       [31m[1m^[22m[39m
+ [90m 22 |[39m   [33m<[39m[33mspan[39m style[33m=[39m{{display[33m:[39m[32m"inline-block"[39m[33m,[39m background[33m:[39mbg[33m,[39m color[33m:[39mc[33m,[39m fontSize[33m:[39m[35m11[39m[33m,[39m fontWeight[33m:[39m[35m600[39m[33m,[39m padding[33m:[39m[32m"2px 9px"[39m[33m,[39m borderRadius[33m:[39m[35m20[39m[33m,[39m border[33m:[39m[32m`1px solid ${border||c+"44"}`[39m[33m,[39m whiteSpace[33m:[39m[32m"nowrap"[39m}}[33m>[39m{label}[33m<[39m[33m/[39m[33mspan[39m[33m>[39m
+ [90m 23 |[39m )[33m;[39m
+ [90m 24 |[39m[0m
+    at constructor (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowScopeHandler.checkRedeclarationInScope (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1619:19)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1585:12)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1686:11)
+    at FlowParserMixin.declareNameFromIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7567:16)
+    at FlowParserMixin.checkIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7563:12)
+    at FlowParserMixin.checkLVal (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7500:12)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13412:10)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3474:11)
+    at FlowParserMixin.parseVar (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13383:12)
+    at FlowParserMixin.parseVarStatement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+    at FlowParserMixin.parseStatementContent (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:2918:24)
+    at FlowParserMixin.parseModuleItem (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+    at FlowParserMixin.parseBlockOrModuleBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+    at FlowParserMixin.parseBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+    at FlowParserMixin.parseProgram (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12622:10)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12612:25)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3685:28)
+    at FlowParserMixin.parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14488:25)
+    at parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14522:38)
+    at parser (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\parser\index.js:41:34)
+    at parser.next (<anonymous>)
+    at normalizeFile (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+    at normalizeFile.next (<anonymous>)
+    at run (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\index.js:22:50)
+    at run.next (<anonymous>)
+    at transform (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transform.js:22:33)
+    at transform.next (<anonymous>)
+    at step (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:261:32)
+    at C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:273:13
+    at async.call.result.err.err (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:223:11)
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\modules\ProjectDetailPage.js
+  Line 21:6:  Parsing [1m[31merror[39m[22m[1m: Identifier 'Pill' has already been declared. (21:6)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\modules\ProjectDetailPage.js
+Syntax error: Identifier 'PROJ' has already been declared. (19:6) (19:6)
+[1m[31mERROR[39m[22m in [1m./src/modules/ProjectDetailPage.js[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\prafu\gb-frontend\src\modules\ProjectDetailPage.js: Identifier 'PROJ' has already been declared. (19:6)
+
+[0m [90m 17 |[39m
+ [90m 18 |[39m [90m// ── DATA ──────────────────────────────────────────────────────────────[39m
+[31m[1m>[22m[39m[90m 19 |[39m [36mconst[39m [33mPROJ[39m [33m=[39m {
+ [90m    |[39m       [31m[1m^[22m[39m
+ [90m 20 |[39m   id[33m:[39m[35m0[39m[33m,[39m name[33m:[39m[32m""[39m[33m,[39m client[33m:[39m[32m""[39m[33m,[39m
+ [90m 21 |[39m   city[33m:[39m[32m""[39m[33m,[39m type[33m:[39m[32m""[39m[33m,[39m progress[33m:[39m[35m0[39m[33m,[39m status[33m:[39m[32m""[39m[33m,[39m
+ [90m 22 |[39m   boq[33m:[39m[35m0[39m[33m,[39m expense[33m:[39m[35m0[39m[33m,[39m pm[33m:[39m[32m""[39m[33m,[39m sup[33m:[39m[32m""[39m[33m,[39m[0m
+    at constructor (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowScopeHandler.checkRedeclarationInScope (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1619:19)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1585:12)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1686:11)
+    at FlowParserMixin.declareNameFromIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7567:16)
+    at FlowParserMixin.checkIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7563:12)
+    at FlowParserMixin.checkLVal (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7500:12)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13412:10)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3474:11)
+    at FlowParserMixin.parseVar (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13383:12)
+    at FlowParserMixin.parseVarStatement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+    at FlowParserMixin.parseStatementContent (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:2918:24)
+    at FlowParserMixin.parseModuleItem (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+    at FlowParserMixin.parseBlockOrModuleBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+    at FlowParserMixin.parseBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+    at FlowParserMixin.parseProgram (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12622:10)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12612:25)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3685:28)
+    at FlowParserMixin.parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14488:25)
+    at parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14522:38)
+    at parser (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\parser\index.js:41:34)
+    at parser.next (<anonymous>)
+    at normalizeFile (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+    at normalizeFile.next (<anonymous>)
+    at run (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\index.js:22:50)
+    at run.next (<anonymous>)
+    at transform (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transform.js:22:33)
+    at transform.next (<anonymous>)
+    at step (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:261:32)
+    at C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:273:13
+    at async.call.result.err.err (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:223:11)
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\modules\ProjectDetailPage.js
+  Line 19:6:  Parsing [1m[31merror[39m[22m[1m: Identifier 'PROJ' has already been declared. (19:6)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\modules\ProjectDetailPage.js
+Syntax error: Identifier 'STAGES' has already been declared. (42:6) (42:6)
+[1m[31mERROR[39m[22m in [1m./src/modules/ProjectDetailPage.js[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\prafu\gb-frontend\src\modules\ProjectDetailPage.js: Identifier 'STAGES' has already been declared. (42:6)
+
+[0m [90m 40 |[39m [90m// TAB 1 — OVERVIEW[39m
+ [90m 41 |[39m [90m// ═══════════════════════════════════════════════════════════════════[39m
+[31m[1m>[22m[39m[90m 42 |[39m [36mconst[39m [33mSTAGES[39m [33m=[39m [[32m"Requested"[39m[33m,[39m[32m"Approved"[39m[33m,[39m[32m"Ordered"[39m[33m,[39m[32m"Received"[39m[33m,[39m[32m"Used"[39m][33m;[39m
+ [90m    |[39m       [31m[1m^[22m[39m
+ [90m 43 |[39m [36mconst[39m [33mSTAGE_S[39m [33m=[39m {[32m"Requested"[39m[33m:[39m{c[33m:[39m[33mT[39m[33m.[39mslt[33m,[39mbg[33m:[39m[33mT[39m[33m.[39msltL}[33m,[39m[32m"Approved"[39m[33m:[39m{c[33m:[39m[33mT[39m[33m.[39mpur[33m,[39mbg[33m:[39m[33mT[39m[33m.[39mpurL}[33m,[39m[32m"Ordered"[39m[33m:[39m{c[33m:[39m[33mT[39m[33m.[39mamb[33m,[39mbg[33m:[39m[33mT[39m[33m.[39mambL}[33m,[39m[32m"Received"[39m[33m:[39m{c[33m:[39m[33mT[39m[33m.[39mblu[33m,[39mbg[33m:[39m[33mT[39m[33m.[39mbluL}[33m,[39m[32m"Used"[39m[33m:[39m{c[33m:[39m[33mT[39m[33m.[39mgrn[33m,[39mbg[33m:[39m[33mT[39m[33m.[39mgrnL}}[33m;[39m
+ [90m 44 |[39m
+ [90m 45 |[39m [36mfunction[39m [33mTabOverview[39m({proj[33m,[39m onRequestPayment}) {[0m
+    at constructor (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowScopeHandler.checkRedeclarationInScope (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1619:19)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1585:12)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1686:11)
+    at FlowParserMixin.declareNameFromIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7567:16)
+    at FlowParserMixin.checkIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7563:12)
+    at FlowParserMixin.checkLVal (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7500:12)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13412:10)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3474:11)
+    at FlowParserMixin.parseVar (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13383:12)
+    at FlowParserMixin.parseVarStatement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+    at FlowParserMixin.parseStatementContent (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:2918:24)
+    at FlowParserMixin.parseModuleItem (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+    at FlowParserMixin.parseBlockOrModuleBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+    at FlowParserMixin.parseBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+    at FlowParserMixin.parseProgram (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12622:10)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12612:25)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3685:28)
+    at FlowParserMixin.parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14488:25)
+    at parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14522:38)
+    at parser (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\parser\index.js:41:34)
+    at parser.next (<anonymous>)
+    at normalizeFile (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+    at normalizeFile.next (<anonymous>)
+    at run (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\index.js:22:50)
+    at run.next (<anonymous>)
+    at transform (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transform.js:22:33)
+    at transform.next (<anonymous>)
+    at step (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:261:32)
+    at C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:273:13
+    at async.call.result.err.err (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:223:11)
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\modules\ProjectDetailPage.js
+  Line 42:6:  Parsing [1m[31merror[39m[22m[1m: Identifier 'STAGES' has already been declared. (42:6)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\modules\ProjectDetailPage.js
+Syntax error: Identifier 'TabIc' has already been declared. (20873:6) (20873:6)
+[1m[31mERROR[39m[22m in [1m./src/modules/ProjectDetailPage.js[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\prafu\gb-frontend\src\modules\ProjectDetailPage.js: Identifier 'TabIc' has already been declared. (20873:6)
+
+[0m [90m 20871 |[39m
+ [90m 20872 |[39m [90m// ── Tab icons (inline SVG, single path each) ──[39m
+[31m[1m>[22m[39m[90m 20873 |[39m [36mconst[39m [33mTabIc[39m [33m=[39m ({d[33m,[39m size[33m=[39m[35m16[39m[33m,[39m color[33m=[39m[32m"currentColor"[39m}) [33m=>[39m (
+ [90m       |[39m       [31m[1m^[22m[39m
+ [90m 20874 |[39m   [33m<[39m[33msvg[39m width[33m=[39m{size} height[33m=[39m{size} viewBox[33m=[39m[32m"0 0 24 24"[39m fill[33m=[39m[32m"none"[39m stroke[33m=[39m{color} strokeWidth[33m=[39m{[35m1.8[39m} strokeLinecap[33m=[39m[32m"round"[39m strokeLinejoin[33m=[39m[32m"round"[39m[33m>[39m[33m<[39m[33mpath[39m d[33m=[39m{d}[33m/[39m[33m>[39m[33m<[39m[33m/[39m[33msvg[39m[33m>[39m
+ [90m 20875 |[39m )[33m;[39m
+ [90m 20876 |[39m [36mconst[39m [33mIcOverview[39m  [33m=[39m (p) [33m=>[39m [33m<[39m[33mTabIc[39m {[33m...[39mp} d[33m=[39m[32m"M3 12l2-2 4 4 6-6 6 6M3 21h18"[39m[33m/[39m[33m>[39m[33m;[39m[0m
+    at constructor (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowScopeHandler.checkRedeclarationInScope (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1619:19)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1585:12)
+    at FlowScopeHandler.declareName (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:1686:11)
+    at FlowParserMixin.declareNameFromIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7567:16)
+    at FlowParserMixin.checkIdentifier (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7563:12)
+    at FlowParserMixin.checkLVal (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:7500:12)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13412:10)
+    at FlowParserMixin.parseVarId (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3474:11)
+    at FlowParserMixin.parseVar (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13383:12)
+    at FlowParserMixin.parseVarStatement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13230:10)
+    at FlowParserMixin.parseStatementContent (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12851:23)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12767:17)
+    at FlowParserMixin.parseStatementLike (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:2918:24)
+    at FlowParserMixin.parseModuleItem (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12744:17)
+    at FlowParserMixin.parseBlockOrModuleBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13316:36)
+    at FlowParserMixin.parseBlockBody (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:13309:10)
+    at FlowParserMixin.parseProgram (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12622:10)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12612:25)
+    at FlowParserMixin.parseTopLevel (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3685:28)
+    at FlowParserMixin.parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14488:25)
+    at parse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:14522:38)
+    at parser (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\parser\index.js:41:34)
+    at parser.next (<anonymous>)
+    at normalizeFile (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\normalize-file.js:64:37)
+    at normalizeFile.next (<anonymous>)
+    at run (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transformation\index.js:22:50)
+    at run.next (<anonymous>)
+    at transform (C:\Users\prafu\gb-frontend\node_modules\@babel\core\lib\transform.js:22:33)
+    at transform.next (<anonymous>)
+    at step (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:261:32)
+    at C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:273:13
+    at async.call.result.err.err (C:\Users\prafu\gb-frontend\node_modules\gensync\index.js:223:11)
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\modules\ProjectDetailPage.js
+  Line 20873:6:  Parsing [1m[31merror[39m[22m[1m: Identifier 'TabIc' has already been declared. (20873:6)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
