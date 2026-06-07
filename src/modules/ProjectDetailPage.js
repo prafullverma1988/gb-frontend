@@ -11,6 +11,7 @@ import MaterialTransferTab from "../components/MaterialTransferTab";
 import MaterialLedgerDrawer from "../components/MaterialLedgerDrawer";
 import uploadManager from "../utils/uploadManager";
 import EstimateBuilderModal from "./EstimateBuilderModal";
+import MOMModule from "./MOMModule";
 
 // ── TZ-safe local date helper ────────────────────────────────────────
 // `new Date().toISOString().split("T")[0]` shifts by 1 day in early IST hours
@@ -6248,7 +6249,7 @@ function TabParty({ projectId, projectName }) {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 5 — TRANSACTION
 // ═══════════════════════════════════════════════════════════════════
-function TabTransaction() {
+function TabTransaction({projectId, projectName}) {
   const [fType,  setFType]  = useState("All");
   const [fParty, setFParty] = useState("All");
   const [fAcct,  setFAcct]  = useState("All");
@@ -6260,6 +6261,32 @@ function TabTransaction() {
   const [showFilters,setShowFilters]=useState(false);
   const [search, setSearch] = useState("");
   const [selParty,setSelParty]=useState("All"); // dropdown search
+
+  // Create Transaction dropdown + modal state
+  const [showCreateTxn, setShowCreateTxn] = useState(false);
+  const [projTxnType,   setProjTxnType]   = useState(null);
+  const [txnParties,    setTxnParties]    = useState([]);
+  const [txnAccounts,   setTxnAccounts]   = useState([]);
+  const [txnProjects,   setTxnProjects]   = useState([]);
+
+  useEffect(()=>{
+    if(!projectId) return;
+    Promise.all([
+      api.get("/finance/parties"),
+      api.get("/finance/accounts"),
+      api.get("/projects"),
+      api.get("/finance/transactions?project_id=" + projectId + "&limit=2000"),
+    ]).then(([pRes,aRes,prRes,tRes])=>{
+      const allP = (pRes?.success&&Array.isArray(pRes.data)) ? pRes.data : [];
+      const projTxns = (tRes?.success&&Array.isArray(tRes.data)) ? tRes.data : [];
+      // Only parties that have at least 1 transaction on this project
+      // (same logic as TabParty). Fallback to all parties if project has no txns yet.
+      const projPartyIds = new Set(projTxns.map(t=>Number(t.party_id)).filter(Boolean));
+      setTxnParties(projPartyIds.size > 0 ? allP.filter(p=>projPartyIds.has(Number(p.id))) : allP);
+      if(aRes?.success&&Array.isArray(aRes.data))   setTxnAccounts(aRes.data);
+      if(prRes?.success&&Array.isArray(prRes.data)) setTxnProjects(prRes.data.map(p=>p.name));
+    }).catch(()=>{});
+  },[projectId]);
 
   const TYPES   = ["All","Payment In","Payment Out","Material Purchase","Site Expense","Sub-Con","Sales Invoice","Advance"];
   const PARTIES = ["All",...[...new Set(D.transactions.map(t=>t.party))]];
@@ -6355,7 +6382,53 @@ function TabTransaction() {
             <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M22 3H2l8 9.46V19l4 2v-8.54L22 3"/></svg>
             More{activeFilters>0&&<span style={{background:T.blu,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{activeFilters}</span>}
           </button>
-          <AddBtn label="Add Transaction"/>
+          {/* Add Transaction dropdown */}
+          <div style={{position:"relative"}}>
+            <AddBtn label="Add Transaction" onClick={()=>setShowCreateTxn(v=>!v)}/>
+            {showCreateTxn&&(<>
+              <div onClick={()=>setShowCreateTxn(false)} style={{position:"fixed",inset:0,zIndex:140}}/>
+              <div style={{position:"absolute",right:0,top:"calc(100% + 6px)",background:T.surface,borderRadius:10,boxShadow:"0 8px 28px rgba(0,0,0,0.18)",border:`1px solid ${T.b1}`,zIndex:150,width:265,overflow:"hidden"}}>
+                {[
+                  {section:"Cash & Bank",items:[
+                    {l:"Payment Received",    sub:"Client payment in",      c:T.grn, bg:T.grnL},
+                    {l:"Payment Made",        sub:"Pay vendor / labour",    c:T.red, bg:T.redL},
+                    {l:"Petty Cash Expense",  sub:"Site / misc expense",    c:T.amb, bg:T.ambL},
+                  ]},
+                  {section:"Billing & Purchases",items:[
+                    {l:"Material Purchase Bill", sub:"Record supplier bill", c:T.blu, bg:T.bluL},
+                    {l:"Sales Invoice",           sub:"Raise client invoice", c:T.grn, bg:T.grnL},
+                    {l:"Sub-Con Bill",            sub:"Labour / subcon work", c:T.slt, bg:T.sltL},
+                    {l:"Advance Payment",         sub:"Advance to party",     c:T.pur, bg:T.purL},
+                  ]},
+                  {section:"Adjustments",items:[
+                    {l:"Journal Entry", sub:"Manual debit / credit", c:T.slt, bg:T.sltL},
+                    {l:"Credit Note",   sub:"Party balance adjust",  c:T.pur, bg:T.purL},
+                  ]},
+                ].map((grp,gi)=>(
+                  <div key={gi}>
+                    <div style={{padding:"7px 12px 3px",background:T.surfaceB,borderTop:gi>0?`1px solid ${T.b1}`:"none"}}>
+                      <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.7px"}}>{grp.section}</span>
+                    </div>
+                    {grp.items.map((item,ii)=>(
+                      <button key={ii}
+                        onClick={()=>{setShowCreateTxn(false);setProjTxnType(item.l);}}
+                        style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",background:"none",cursor:"pointer",textAlign:"left"}}
+                        onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
+                        onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                        <div style={{width:28,height:28,borderRadius:7,background:item.bg,border:`1px solid ${item.c}22`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                          <div style={{width:8,height:8,borderRadius:"50%",background:item.c}}/>
+                        </div>
+                        <div>
+                          <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{item.l}</div>
+                          <div style={{fontSize:10,color:T.t4}}>{item.sub}</div>
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </>)}
+          </div>
           {activeFilters>0&&<button onClick={clearAll} style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>}
         </div>
 
@@ -6417,6 +6490,21 @@ function TabTransaction() {
           );
         })}
       </Panel>
+
+      {/* Create Transaction Modal — project pre-filled & locked */}
+      {projTxnType&&(
+        <CreateTransactionModal
+          type={projTxnType}
+          projectId={projectId}
+          preProject={projectName}
+          lockProject={true}
+          onClose={()=>setProjTxnType(null)}
+          dbParties={txnParties}
+          dbAccounts={txnAccounts}
+          dbProjects={txnProjects}
+          onSaved={()=>setProjTxnType(null)}
+        />
+      )}
     </div>
   );
 }
@@ -13378,8 +13466,16 @@ function TabMaterial({ project }) {
 
   useEffect(() => {
     if (!showGRN || !projectId) return;
-    api.get("/procurement/mrs?project_id=" + projectId + "&stage=Ordered")
-      .then(res => { if (res.success) setOrderedMRs(res.data||[]); }).catch(()=>{});
+    // Fetch both fully-Ordered AND PartialReceived MRs — both still need more material
+    Promise.all([
+      api.get("/procurement/mrs?project_id=" + projectId + "&stage=Ordered"),
+      api.get("/procurement/mrs?project_id=" + projectId + "&mat_status=PartialReceived"),
+    ]).then(([r1, r2]) => {
+      const m1 = r1?.success  ? (r1.data||[]) : [];
+      const m2 = r2?.success  ? (r2.data||[]) : [];
+      const seen = new Set();
+      setOrderedMRs([...m1, ...m2].filter(m => { if(seen.has(m.id)) return false; seen.add(m.id); return true; }));
+    }).catch(()=>{});
     loadPendingTransfers();
     loadPendingIssues();
     setTrReceiveDone([]);
@@ -13701,72 +13797,85 @@ function TabMaterial({ project }) {
       ══════════════════════════════════════════════════════ */}
       {activeTab==="requests"&&(<>
 
-        {/* NEW REQUEST MODAL */}
+        {/* NEW REQUEST — side-slide drawer */}
         {showModal && (<>
-          <div onClick={()=>setShowModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.32)",zIndex:400,backdropFilter:"blur(2px)"}}/>
-          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:10,boxShadow:"0 20px 60px rgba(0,0,0,0.18)",zIndex:401,width:440,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
-            <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
-              <div style={{minWidth:0}}>
-                <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>New Material Request</div>
-                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{projectName}</div>
-              </div>
-              <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                {/* Repositioned: now a top-right action so user can quickly add
-                    a new library entry without leaving the modal. Purple theme
-                    matches the Create PO modal's "Add new material to Library". */}
-                <button onClick={()=>setShowAddLib(s=>!s)} title="Add new material to Library"
-                  style={{padding:"5px 11px",borderRadius:6,background:"rgba(168,85,247,0.18)",border:`1px solid rgba(168,85,247,0.5)`,color:"#C4B5FD",fontSize:11.5,fontWeight:700,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"background .15s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background="rgba(168,85,247,0.3)"}
-                  onMouseLeave={e=>e.currentTarget.style.background="rgba(168,85,247,0.18)"}>
-                  <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                  {showAddLib?"Cancel":"Add new material to Library"}
-                </button>
-                <button onClick={()=>setShowModal(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
-              </div>
-            </div>
-            <div style={{padding:"16px 18px",display:"flex",flexDirection:"column",gap:12,maxHeight:"calc(100vh - 180px)",overflowY:"auto"}}>
-              <div style={{background:T.ambL,border:"1px solid "+T.ambM,borderRadius:7,padding:"8px 11px",fontSize:11.5,color:T.amb}}>
-                Request Procurement mein jayegi — Admin approve karenge phir order hoga
-              </div>
+          <style>{`@keyframes mrSlideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+          <div onClick={()=>setShowModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.42)",zIndex:400,backdropFilter:"blur(3px)"}}/>
+          <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(560px,96vw)",background:T.bg,zIndex:401,boxShadow:"-8px 0 40px rgba(0,0,0,0.22)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"mrSlideIn .22s ease-out"}}>
 
-              {/* Top-right "+ New Material" inline form (toggled) — purple-themed */}
+            {/* ── Header ─────────────────────────────────────────── */}
+            <div style={{background:"#0D1B2A",padding:"14px 18px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:"white",letterSpacing:"-.2px"}}>📦 New Material Request</div>
+                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.42)",marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{projectName}</div>
+              </div>
+              <button onClick={()=>setShowAddLib(s=>!s)}
+                style={{padding:"5px 11px",borderRadius:6,background:showAddLib?"rgba(168,85,247,0.35)":"rgba(168,85,247,0.15)",border:"1px solid rgba(168,85,247,0.55)",color:"#C4B5FD",fontSize:11,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5,fontFamily:"inherit",transition:"all .15s",flexShrink:0,whiteSpace:"nowrap"}}
+                onMouseEnter={e=>e.currentTarget.style.background="rgba(168,85,247,0.3)"}
+                onMouseLeave={e=>e.currentTarget.style.background=showAddLib?"rgba(168,85,247,0.35)":"rgba(168,85,247,0.15)"}>
+                <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.6} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                {showAddLib ? "Cancel" : "+ Library"}
+              </button>
+              <button onClick={()=>setShowModal(false)}
+                style={{width:28,height:28,borderRadius:6,background:"rgba(255,255,255,0.08)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"background .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.2)"}
+                onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}>
+                ×
+              </button>
+            </div>
+
+            {/* ── Workflow info strip ─────────────────────────────── */}
+            <div style={{padding:"8px 18px",background:"#FFFBEB",borderBottom:"1px solid #FDE68A",display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
+              <span style={{fontSize:13}}>📋</span>
+              <span style={{fontSize:11.5,color:"#92400E",lineHeight:1.4}}>Request → Admin approves → Purchase Order → Received at site</span>
+            </div>
+
+            {/* ── Scrollable body ─────────────────────────────────── */}
+            <div style={{flex:1,overflowY:"auto",padding:"16px 18px",display:"flex",flexDirection:"column",gap:14}}>
+
+              {/* Add-to-library inline form */}
               {showAddLib && (
-                <div style={{padding:"11px 12px",background:T.purL,border:`1.5px solid ${T.purM}`,borderRadius:8}}>
-                  <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,letterSpacing:".3px"}}>🆕 Add new material to Library</div>
-                  <div style={{display:"grid",gridTemplateColumns:"2.5fr 1fr auto",gap:8,alignItems:"center"}}>
+                <div style={{padding:"12px 14px",background:T.purL,border:`1.5px solid ${T.purM}`,borderRadius:9}}>
+                  <div style={{fontSize:11,fontWeight:700,color:T.pur,marginBottom:8,display:"flex",alignItems:"center",gap:5}}>
+                    <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.pur} strokeWidth={2.5} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                    Add new material to Library
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 100px 76px",gap:8,alignItems:"center"}}>
                     <input value={libNewName} onChange={e=>setLibNewName(e.target.value)} placeholder="Material name *" autoFocus
-                      style={{padding:"7px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
+                      style={{padding:"8px 10px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12.5,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box"}}/>
                     <select value={libNewUnit} onChange={e=>setLibNewUnit(e.target.value)}
-                      style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box",cursor:"pointer"}}>
+                      style={{padding:"8px 9px",borderRadius:6,border:`1.5px solid ${T.purM}`,fontSize:12,color:T.t1,background:"white",outline:"none",fontFamily:"inherit",boxSizing:"border-box",cursor:"pointer"}}>
                       <option value="">Unit</option>
                       {UNITS_MR.map(u=><option key={u}>{u}</option>)}
                     </select>
                     <button onClick={saveLibMaterial} disabled={!libNewName.trim()||libSaving}
-                      style={{padding:"7px 14px",borderRadius:6,background:libNewName.trim()?T.pur:T.b1,color:libNewName.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:libNewName.trim()?"pointer":"not-allowed",fontFamily:"inherit",whiteSpace:"nowrap"}}>
-                      {libSaving?"...":"Save"}
+                      style={{padding:"8px 0",borderRadius:6,background:libNewName.trim()?T.pur:T.b1,color:libNewName.trim()?"white":T.t4,border:"none",fontSize:12,fontWeight:700,cursor:libNewName.trim()?"pointer":"not-allowed",fontFamily:"inherit"}}>
+                      {libSaving?"…":"Save"}
                     </button>
                   </div>
-                  <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.75}}>Save par item rows me bhi available hoga.</div>
+                  <div style={{fontSize:10,color:T.pur,marginTop:6,opacity:.72}}>Save hone ke baad item rows mein immediately available hoga.</div>
                 </div>
               )}
 
-              {/* Items — clean PO-modal style: header strip, single-line rows */}
-              <div style={{padding:"11px 13px",background:T.surfaceB,borderRadius:9,border:`1px solid ${T.b1}`}}>
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:9}}>
-                  <div>
-                    <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px"}}>Items</div>
-                    <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>Material library se pick karein · unit auto-locked</div>
+              {/* ── Items table ──────────────────────────────────── */}
+              <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+                {/* Table header bar */}
+                <div style={{background:"#0D1B2A",padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:10}}>
+                    <span style={{fontSize:12,fontWeight:700,color:"white"}}>Items</span>
+                    <span style={{fontSize:10,color:"rgba(255,255,255,0.38)"}}>Library se pick karein · unit auto-locked</span>
                   </div>
+                  <span style={{fontSize:10,color:"rgba(255,255,255,0.3)",fontWeight:600,flexShrink:0}}>
+                    {form.items.filter(it=>it.item_name?.trim()).length}/{form.items.length} filled
+                  </span>
                 </div>
-
-                {/* Column header strip */}
-                <div style={{display:"grid",gridTemplateColumns:"2.2fr 70px 80px 90px 28px",gap:7,padding:"6px 8px",background:"#0D1B2A",borderRadius:6,marginBottom:5}}>
-                  {["Material (Library)","Qty","Unit","Approx ₹",""].map((h,i)=>(
-                    <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.55)",textTransform:"uppercase",letterSpacing:".4px"}}>{h}</span>
+                {/* Column labels */}
+                <div style={{display:"grid",gridTemplateColumns:"2.2fr 72px 88px 88px 30px",gap:6,padding:"7px 14px",background:"#1B2A3A"}}>
+                  {["Material","Qty","Unit","Approx ₹",""].map((h,i)=>(
+                    <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".5px"}}>{h}</span>
                   ))}
                 </div>
-
-                {/* Rows */}
+                {/* Item rows */}
                 {form.items.map((it,idx)=>{
                   const libMatch = matLibReal.find(m => (m.name||"").trim().toLowerCase() === (it.item_name||"").trim().toLowerCase());
                   const isLocked = !!it.item_name;
@@ -13774,108 +13883,107 @@ function TabMaterial({ project }) {
                   const pipe = mrPipelineByIdx[idx];
                   return (
                     <React.Fragment key={idx}>
-                    <div style={{display:"grid",gridTemplateColumns:"2.2fr 70px 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom: !pipe && idx<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
-                      <LibrarySelect type="material" value={it.item_name}
-                        hideAddNew compact
-                        inputRef={el=>{ if(el) itemRowRefs.current[idx] = el; }}
-                        onChange={v=>{
-                          const found = matLibReal.find(m=>m.name===v);
-                          updItem(idx, { item_name:v||"", unit: found?.unit || it.unit });
-                          checkMrPipeline(idx, v||"");
-                        }}
-                        placeholder="Pick material..."/>
-                      <input type="number" inputMode="decimal" min={0} step="any" value={it.quantity}
-                        onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E"||e.key==="+") e.preventDefault();}}
-                        onChange={e=>{
-                          const v=e.target.value;
-                          if(v===""){updItem(idx,{quantity:""});return;}
-                          const n=parseFloat(v);
-                          if(!isNaN(n)&&n>=0) updItem(idx,{quantity:v});
-                        }}
-                        placeholder="Qty"
-                        style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                        onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                      {isLocked ? (
-                        <div title="Unit Material Library se aata hai — change karne ke liye Library me edit karein"
-                          style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:5,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
-                          <span style={{fontSize:9,opacity:.55}}>🔒</span>{displayUnit}
-                        </div>
-                      ) : (
-                        <select value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
-                          style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer"}}>
-                          {UNITS_MR.map(u=><option key={u}>{u}</option>)}
-                        </select>
-                      )}
-                      <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
-                        style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                        onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                      <button onClick={()=>{removeItemRow(idx); setMrPipelineByIdx(p=>{const n={...p};delete n[idx];return n;});}} disabled={form.items.length===1}
-                        title={form.items.length===1?"At least one item required":"Remove row"}
-                        style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
-                        <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
-                      </button>
-                    </div>
-                    {pipe && pipe.in_pipeline && (
-                      <div style={{margin:"4px 8px 8px",padding:"7px 11px",borderRadius:6,background:"#FFFBEB",border:`1.5px solid #FDE68A`,fontSize:11.5,color:"#92400E",lineHeight:1.5,borderBottom: idx<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
-                        <div style={{fontWeight:700,marginBottom:3,display:"flex",alignItems:"center",gap:5}}>
-                          ⚠ Iss project me ye material already pipeline me hai · Total pending: <b>{pipe.total_pending_qty} {pipe.unit||""}</b>
-                        </div>
-                        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:3}}>
-                          {pipe.entries.map((e,k)=>(
-                            <span key={k} style={{background:"white",border:`1px solid #FDE68A`,borderRadius:20,padding:"2px 9px",fontSize:10.5,color:T.t2,fontWeight:600}}>
-                              <span style={{color:T.blu,fontFamily:"monospace"}}>{e.mr_no}</span>
-                              <span style={{color:T.t4,margin:"0 4px"}}>·</span>
-                              <span>{e.status}</span>
-                              <span style={{color:T.t4,margin:"0 4px"}}>·</span>
-                              <b>{e.pending_qty} {e.unit||""}</b>
-                            </span>
-                          ))}
-                        </div>
-                        <div style={{fontSize:10.5,color:T.t3,marginTop:4,fontStyle:"italic"}}>
-                          Aur chahiye? Submit pe confirm dialog aayega. Ya wait karke pehle wala MR receive kar lo.
-                        </div>
+                      <div style={{display:"grid",gridTemplateColumns:"2.2fr 72px 88px 88px 30px",gap:6,padding:"8px 14px",alignItems:"center",borderBottom:`1px solid ${T.b1}`,background:idx%2===0?T.surface:T.surfaceB,transition:"background .1s"}}>
+                        <LibrarySelect type="material" value={it.item_name}
+                          hideAddNew compact
+                          inputRef={el=>{ if(el) itemRowRefs.current[idx] = el; }}
+                          onChange={v=>{
+                            const found = matLibReal.find(m=>m.name===v);
+                            updItem(idx, { item_name:v||"", unit: found?.unit || it.unit });
+                            checkMrPipeline(idx, v||"");
+                          }}
+                          placeholder="Pick material..."/>
+                        <input type="number" inputMode="decimal" min={0} step="any" value={it.quantity}
+                          onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E"||e.key==="+") e.preventDefault();}}
+                          onChange={e=>{
+                            const v=e.target.value;
+                            if(v===""){updItem(idx,{quantity:""});return;}
+                            const n=parseFloat(v);
+                            if(!isNaN(n)&&n>=0) updItem(idx,{quantity:v});
+                          }}
+                          placeholder="0"
+                          style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right",width:"100%"}}
+                          onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                        {isLocked ? (
+                          <div title="Unit Material Library se aata hai"
+                            style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t2,background:"#F5F7FA",fontFamily:"inherit",fontWeight:600,display:"flex",alignItems:"center",gap:4,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
+                            <span style={{fontSize:9,opacity:.5}}>🔒</span>{displayUnit}
+                          </div>
+                        ) : (
+                          <select value={it.unit} onChange={e=>updItem(idx,{unit:e.target.value})}
+                            style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",cursor:"pointer",width:"100%"}}>
+                            {UNITS_MR.map(u=><option key={u}>{u}</option>)}
+                          </select>
+                        )}
+                        <input type="number" value={it.approx_amount} onChange={e=>updItem(idx,{approx_amount:e.target.value})} placeholder="0"
+                          style={{padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",width:"100%"}}
+                          onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                        <button onClick={()=>{removeItemRow(idx); setMrPipelineByIdx(p=>{const n={...p};delete n[idx];return n;});}} disabled={form.items.length===1}
+                          style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.3:1,flexShrink:0}}>
+                          <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2.4} strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                        </button>
                       </div>
-                    )}
+                      {pipe && pipe.in_pipeline && (
+                        <div style={{margin:"2px 14px 8px",padding:"7px 11px",borderRadius:6,background:"#FFFBEB",border:`1.5px solid #FDE68A`,fontSize:11,color:"#92400E",lineHeight:1.5}}>
+                          <div style={{fontWeight:700,marginBottom:3}}>⚠ Already in pipeline · Pending: <b>{pipe.total_pending_qty} {pipe.unit||""}</b></div>
+                          <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                            {pipe.entries.map((e,k)=>(
+                              <span key={k} style={{background:"white",border:`1px solid #FDE68A`,borderRadius:20,padding:"2px 8px",fontSize:10.5,color:T.t2}}>
+                                <span style={{color:T.blu,fontFamily:"monospace"}}>{e.mr_no}</span>
+                                <span style={{color:T.t4,margin:"0 3px"}}>·</span>{e.status}
+                                <span style={{color:T.t4,margin:"0 3px"}}>·</span><b>{e.pending_qty} {e.unit||""}</b>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </React.Fragment>
                   );
                 })}
-
-                {/* Add row — full-width dashed blue, matches PO modal */}
-                <button onClick={addItemRow}
-                  style={{marginTop:9,width:"100%",padding:"9px 12px",borderRadius:7,background:"transparent",border:`1.5px dashed ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .12s"}}
-                  onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderStyle="solid";}}
-                  onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderStyle="dashed";}}>
-                  <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
-                  Add row
-                </button>
-              </div>
-
-              <div style={{display:"grid",gridTemplateColumns:"1fr",gap:10}}>
-                <div>
-                  <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Required By <span style={{color:T.t4,textTransform:"none",fontWeight:500,marginLeft:4}}>(applies to all items)</span></label>
-                  <input type="date" value={form.required_date} onChange={e=>setForm(p=>({...p,required_date:e.target.value}))}
-                    style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                {/* Add row button */}
+                <div style={{padding:"8px 14px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
+                  <button onClick={addItemRow}
+                    style={{width:"100%",padding:"8px 12px",borderRadius:7,background:"transparent",border:`1.5px dashed ${T.blu}44`,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .12s"}}
+                    onMouseEnter={e=>{e.currentTarget.style.background=T.bluL;e.currentTarget.style.borderColor=T.blu;}}
+                    onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.borderColor=`${T.blu}44`;}}>
+                    <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
+                    Add another item
+                  </button>
                 </div>
               </div>
-              <div>
-                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Notes</label>
-                <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={2} placeholder="Special requirements..."
-                  style={{width:"100%",padding:"8px 10px",borderRadius:6,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+
+              {/* Required By + Notes — side by side */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>
+                    Required By <span style={{fontSize:9,fontWeight:500,textTransform:"none",color:T.t4}}>(all items)</span>
+                  </label>
+                  <input type="date" value={form.required_date} onChange={e=>setForm(p=>({...p,required_date:e.target.value}))}
+                    style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                <div>
+                  <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:5}}>Notes</label>
+                  <textarea value={form.notes} onChange={e=>setForm(p=>({...p,notes:e.target.value}))} rows={1} placeholder="Special requirements…"
+                    style={{width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"none",minHeight:38}}/>
+                </div>
               </div>
-              {/* Photos — mobile camera capture supported via accept+capture attrs */}
+
+              {/* Photos */}
               <div>
-                <label style={{fontSize:10.5,fontWeight:600,color:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>Photos (optional)</label>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:6}}>
+                <label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",display:"block",marginBottom:7}}>
+                  Photos <span style={{fontSize:9,fontWeight:500,textTransform:"none"}}>(optional)</span>
+                </label>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap",alignItems:"center"}}>
                   {(form.photos||[]).map((url,idx)=>(
-                    <div key={idx} style={{position:"relative",width:64,height:64,borderRadius:6,overflow:"hidden",border:"1px solid "+T.b1}}>
+                    <div key={idx} style={{position:"relative",width:60,height:60,borderRadius:7,overflow:"hidden",border:`1px solid ${T.b1}`}}>
                       <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       <button onClick={()=>setForm(p=>({...p,photos:(p.photos||[]).filter((_,i)=>i!==idx)}))}
-                        style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,0.6)",color:"white",border:"none",fontSize:10,cursor:"pointer",lineHeight:1,padding:0}}>×</button>
+                        style={{position:"absolute",top:2,right:2,width:16,height:16,borderRadius:"50%",background:"rgba(0,0,0,0.65)",color:"white",border:"none",fontSize:10,cursor:"pointer",padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                     </div>
                   ))}
-                  <label style={{width:64,height:64,borderRadius:6,border:"1.5px dashed "+T.b2,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:11,color:T.t3,fontWeight:600,flexDirection:"column",gap:2}}>
+                  <label style={{width:60,height:60,borderRadius:7,border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexDirection:"column",gap:2,color:T.t3}}>
                     <span style={{fontSize:18}}>📷</span>
-                    <span>Add</span>
+                    <span style={{fontSize:10,fontWeight:600}}>Add</span>
                     <input type="file" accept="image/*" capture="environment" multiple style={{display:"none"}}
                       onChange={e=>{
                         const files = Array.from(e.target.files||[]);
@@ -13889,24 +13997,37 @@ function TabMaterial({ project }) {
                         e.target.value="";
                       }}/>
                   </label>
-                </div>
-                <div style={{fontSize:10,color:T.t4}}>Mobile pe camera bhi khulega · Multi-select ok</div>
-              </div>
-            </div>
-            <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8}}>
-              <button onClick={()=>setShowModal(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-              {(() => {
+                  <span style={{fontSize:10,color:T.t4}}>Camera opens on mobile · multi-select ok</span>
+                </div>{/* end photos flex row */}
+              </div>{/* end photos section */}
+
+            </div>{/* end scrollable body */}
+
+            {/* ── Sticky footer ──────────────────────────────────── */}
+            <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:10,alignItems:"center",flexShrink:0}}>
+              {(()=>{
                 const validCount = (form.items||[]).filter(it => it.item_name?.trim() && Number(it.quantity) > 0).length;
                 const canSubmit = !saving && validCount > 0;
-                return (
-                  <button onClick={handleSubmitMR} disabled={!canSubmit}
-                    style={{flex:2,padding:"8px",borderRadius:7,background:canSubmit?T.blu:T.b1,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:canSubmit?"pointer":"not-allowed"}}>
-                    {saving ? "Saving..." : validCount > 1 ? `Submit ${validCount} Requests` : "Submit Request"}
+                return (<>
+                  <button onClick={()=>setShowModal(false)}
+                    style={{padding:"9px 18px",borderRadius:8,background:"white",border:`1.5px solid ${T.b1}`,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer",flexShrink:0}}>
+                    Cancel
                   </button>
-                );
+                  <div style={{flex:1,minWidth:0}}>
+                    {validCount > 0
+                      ? <div style={{fontSize:10.5,color:T.blu,fontWeight:600}}>{validCount} item{validCount!==1?"s":""} ready · {(form.items||[]).filter(it=>!it.item_name?.trim()).length > 0 && <span style={{color:T.t4,fontWeight:400}}>unfilled rows will be skipped</span>}</div>
+                      : <div style={{fontSize:10.5,color:T.t4}}>Pick at least one item to submit</div>
+                    }
+                  </div>
+                  <button onClick={handleSubmitMR} disabled={!canSubmit}
+                    style={{padding:"9px 22px",borderRadius:8,background:canSubmit?"#0D1B2A":"#CBD5E1",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:canSubmit?"pointer":"not-allowed",transition:"all .15s",flexShrink:0,minWidth:150}}>
+                    {saving ? "Submitting…" : canSubmit ? `Submit${validCount>1?" "+validCount+" Requests":" Request"}` : "Select items first"}
+                  </button>
+                </>);
               })()}
             </div>
-          </div>
+
+          </div>{/* end drawer */}
         </>)}
 
         {/* Stage pipeline */}
@@ -14054,25 +14175,41 @@ function TabMaterial({ project }) {
 
         {/* GRN MODAL */}
         {showGRN&&(<>
-          <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:400,backdropFilter:"blur(2px)"}}/>
-          <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:401,width:580,maxHeight:"85vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
-            <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
-              <div>
-                <div style={{fontSize:14,fontWeight:700,color:"white"}}>Record GRN — Material Received</div>
-                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.45)",marginTop:2}}>{projectName}</div>
+          <style>{`@keyframes grnSlideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
+          <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(3px)"}}/>
+          <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(640px,96vw)",background:T.bg,zIndex:401,boxShadow:"-8px 0 40px rgba(0,0,0,0.22)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"grnSlideIn .22s ease-out"}}>
+
+            {/* Header */}
+            <div style={{background:"#0D1B2A",padding:"14px 18px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,fontWeight:700,color:"white",letterSpacing:"-.2px"}}>📥 Record GRN — Material Received</div>
+                <div style={{fontSize:10.5,color:"rgba(255,255,255,0.42)",marginTop:2}}>{projectName}</div>
               </div>
-              <button onClick={()=>setShowGRN(false)} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",fontSize:20,lineHeight:1}}>×</button>
+              <button onClick={()=>setShowGRN(false)}
+                style={{width:28,height:28,borderRadius:6,background:"rgba(255,255,255,0.08)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",fontSize:16,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,transition:"background .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.background="rgba(255,255,255,0.2)"}
+                onMouseLeave={e=>e.currentTarget.style.background="rgba(255,255,255,0.08)"}>
+                ×
+              </button>
             </div>
-            <div style={{display:"flex",borderBottom:"1px solid "+T.b1,flexShrink:0}}>
-              {[{id:"ordered",label:"Ordered Materials"},{id:"direct",label:"Direct Receive"}].map(t=>(
-                <button key={t.id} onClick={()=>setGrnTab(t.id)}
-                  style={{flex:1,padding:"10px",border:"none",background:grnTab===t.id?T.surface:T.surfaceB,color:grnTab===t.id?T.blu:T.t3,fontSize:12.5,fontWeight:grnTab===t.id?700:400,cursor:"pointer",borderBottom:grnTab===t.id?"2px solid "+T.blu:"2px solid transparent"}}>
-                  {t.label}
-                  {t.id==="ordered"&&(orderedMRs.length+pendingTransfers.length+pendingIssues.length)>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,marginLeft:5}}>{orderedMRs.length+pendingTransfers.length+pendingIssues.length}</span>}
-                </button>
-              ))}
+
+            {/* Tab bar */}
+            <div style={{display:"flex",background:"#111E2C",flexShrink:0}}>
+              {[{id:"ordered",label:"Ordered Materials"},{id:"direct",label:"Direct Receive"}].map(t=>{
+                const isActive=grnTab===t.id;
+                const badge=t.id==="ordered"?(orderedMRs.length+pendingTransfers.length+pendingIssues.length):0;
+                return(
+                  <button key={t.id} onClick={()=>setGrnTab(t.id)}
+                    style={{flex:1,padding:"11px 14px",border:"none",background:isActive?"#1E3048":"none",color:isActive?"white":"rgba(255,255,255,0.45)",fontSize:12.5,fontWeight:isActive?700:400,cursor:"pointer",borderBottom:isActive?"2px solid "+T.blu:"2px solid transparent",display:"flex",alignItems:"center",justifyContent:"center",gap:6,transition:"all .15s"}}>
+                    {t.label}
+                    {badge>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:800,padding:"1px 7px",borderRadius:10,lineHeight:"16px"}}>{badge}</span>}
+                  </button>
+                );
+              })}
             </div>
-            <div style={{flex:1,overflowY:"auto",padding:"14px 16px"}}>
+
+            {/* Scrollable body */}
+            <div style={{flex:1,overflowY:"auto",padding:"16px 18px"}}>
               {grnTab==="ordered"&&(
                 <div>
                   {/* ── PENDING ISSUES from Warehouse ──────────────────── */}
@@ -14263,23 +14400,33 @@ function TabMaterial({ project }) {
                               {/* Per-material rows */}
                               <div style={{padding:"4px 14px 10px"}}>
                                 <div style={{display:"grid",gridTemplateColumns:"100px 1fr 90px 110px 70px",gap:7,padding:"6px 0",fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".3px"}}>
-                                  <span>MR No</span><span>Material</span><span style={{textAlign:"right"}}>Ordered</span><span style={{textAlign:"right"}}>Received Qty</span><span></span>
+                                  <span>MR No</span><span>Material</span><span style={{textAlign:"right"}}>Pending</span><span style={{textAlign:"right"}}>Receive Qty</span><span></span>
                                 </div>
                                 {mrs.map(mr => {
                                   const row = grnRows[mr.id] || {};
+                                  const alreadyReceived = Number(mr.received_qty || 0);
+                                  const orderedQty     = Number(mr.quantity || 0);
+                                  const pendingQty     = Math.max(0, orderedQty - alreadyReceived);
+                                  const isPartial      = mr.mat_status === "PartialReceived";
                                   const recv = Number(row.received_qty||0);
-                                  const over = recv > Number(mr.quantity||0);
+                                  const over = recv > pendingQty;
                                   return (
                                     <div key={mr.id} style={{display:"grid",gridTemplateColumns:"100px 1fr 90px 110px 70px",gap:7,padding:"7px 0",borderTop:"1px dashed "+T.b1,alignItems:"center"}}>
-                                      <span style={{fontSize:11,color:T.amb,fontWeight:700,fontFamily:"monospace"}}>{mr.mr_number||`MR-${mr.id}`}</span>
+                                      <div>
+                                        <span style={{fontSize:11,color:T.amb,fontWeight:700,fontFamily:"monospace"}}>{mr.mr_number||`MR-${mr.id}`}</span>
+                                        {isPartial&&<div style={{fontSize:9,color:T.amb,fontWeight:700,background:T.ambL,border:"1px solid "+T.ambM,borderRadius:4,padding:"1px 5px",marginTop:2,display:"inline-block"}}>Partial</div>}
+                                      </div>
                                       <div style={{minWidth:0}}>
                                         <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{mr.item_name}</div>
-                                        {mr.approx_amount>0&&<div style={{fontSize:10,color:T.t4}}>@ ₹{Math.round(Number(mr.approx_amount)/Number(mr.quantity||1)).toLocaleString("en-IN")}/{mr.unit}</div>}
+                                        {isPartial
+                                          ? <div style={{fontSize:10,color:T.amb}}>Ordered {orderedQty} · Received {alreadyReceived} · <b>Pending {pendingQty}</b></div>
+                                          : mr.approx_amount>0&&<div style={{fontSize:10,color:T.t4}}>@ ₹{Math.round(Number(mr.approx_amount)/Number(mr.quantity||1)).toLocaleString("en-IN")}/{mr.unit}</div>
+                                        }
                                       </div>
-                                      <span style={{fontSize:11.5,color:T.t2,fontWeight:600,textAlign:"right"}}>{mr.quantity} {mr.unit}</span>
+                                      <span style={{fontSize:11.5,color:isPartial?T.amb:T.t2,fontWeight:700,textAlign:"right"}}>{pendingQty} {mr.unit}</span>
                                       <input type="number" value={row.received_qty||""}
                                         onChange={e=>setGrnRows(p=>({...p,[mr.id]:{...p[mr.id],received_qty:e.target.value}}))}
-                                        placeholder="0"
+                                        placeholder={String(pendingQty)}
                                         style={{padding:"6px 8px",borderRadius:5,border:"1.5px solid "+(over?T.red:T.b1),fontSize:11.5,textAlign:"right",fontFamily:"inherit",outline:"none",background:over?T.redL:T.surface,color:over?T.red:T.t1}}/>
                                       <span style={{fontSize:10.5,color:T.t4}}>{mr.unit}</span>
                                     </div>
@@ -14393,28 +14540,31 @@ function TabMaterial({ project }) {
                   </button>
                 </div>
               )}
-            </div>
-            {/* Photos — shared across all GRN tabs (challan / material / quality).
-                When grn_photo_required is ON (company policy), at least one is mandatory. */}
-            <div style={{padding:"10px 16px",borderTop:"1px solid "+T.b1,background:"white",flexShrink:0}}>
-                <div style={{fontSize:10.5,fontWeight:700,color:grnPhotoRequired&&grnPhotos.length===0?T.amb:T.t3,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:6,display:"flex",alignItems:"center",gap:6}}>
+
+              {/* ── Photos section (inside scroll body) ── */}
+              <div style={{marginTop:18,borderTop:"1px solid "+T.b1,paddingTop:14}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:grnPhotoRequired&&grnPhotos.length===0?T.amb:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
                   📷 GRN Photos
                   <span style={{textTransform:"none",fontSize:10,fontWeight:500,color:T.t4}}>(challan / material / quality)</span>
-                  {grnPhotoRequired&&<span style={{textTransform:"none",fontSize:9.5,fontWeight:700,color:grnPhotos.length===0?T.red:T.grn,background:grnPhotos.length===0?T.redL:T.grnL,padding:"1px 7px",borderRadius:10,border:`1px solid ${grnPhotos.length===0?T.redM:T.grnM}`}}>
-                    {grnPhotos.length===0?"⚠ Required":"✓ Attached"}
-                  </span>}
+                  {grnPhotoRequired&&(
+                    <span style={{textTransform:"none",fontSize:9.5,fontWeight:700,color:grnPhotos.length===0?T.red:T.grn,background:grnPhotos.length===0?T.redL:T.grnL,padding:"2px 8px",borderRadius:10,border:`1px solid ${grnPhotos.length===0?T.redM:T.grnM}`}}>
+                      {grnPhotos.length===0?"⚠ Required":"✓ Attached"}
+                    </span>
+                  )}
                 </div>
-                <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
                   {grnPhotos.map((url,idx)=>(
-                    <div key={idx} style={{position:"relative",width:60,height:60,borderRadius:6,overflow:"hidden",border:"1px solid "+T.b1}}>
+                    <div key={idx} style={{position:"relative",width:64,height:64,borderRadius:7,overflow:"hidden",border:"1px solid "+T.b1,boxShadow:"0 1px 4px rgba(0,0,0,0.08)"}}>
                       <img src={url} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
                       <button onClick={()=>setGrnPhotos(p=>p.filter((_,i)=>i!==idx))}
-                        style={{position:"absolute",top:2,right:2,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,0.6)",color:"white",border:"none",fontSize:10,cursor:"pointer",lineHeight:1,padding:0}}>×</button>
+                        style={{position:"absolute",top:3,right:3,width:18,height:18,borderRadius:"50%",background:"rgba(0,0,0,0.65)",color:"white",border:"none",fontSize:10,cursor:"pointer",lineHeight:1,padding:0,display:"flex",alignItems:"center",justifyContent:"center"}}>×</button>
                     </div>
                   ))}
-                  <label style={{width:60,height:60,borderRadius:6,border:"1.5px dashed "+T.b2,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",fontSize:10,color:T.t3,fontWeight:600,flexDirection:"column",gap:1}}>
-                    <span style={{fontSize:16}}>📷</span>
-                    <span>Add</span>
+                  <label style={{width:64,height:64,borderRadius:7,border:"1.5px dashed "+T.b2,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexDirection:"column",gap:2,transition:"border-color .15s"}}
+                    onMouseEnter={e=>e.currentTarget.style.borderColor=T.blu}
+                    onMouseLeave={e=>e.currentTarget.style.borderColor=T.b2}>
+                    <span style={{fontSize:18}}>📷</span>
+                    <span style={{fontSize:10,color:T.t4,fontWeight:600}}>Add</span>
                     <input type="file" accept="image/*" capture="environment" multiple style={{display:"none"}}
                       onChange={e=>{
                         const files=Array.from(e.target.files||[]);
@@ -14429,23 +14579,32 @@ function TabMaterial({ project }) {
                       }}/>
                   </label>
                 </div>
+                <div style={{marginTop:5,fontSize:10,color:T.t4}}>Camera opens on mobile · Multi-select supported</div>
               </div>
-            <div style={{padding:"11px 16px",borderTop:"1px solid "+T.b1,background:T.surfaceB,display:"flex",gap:8,flexShrink:0}}>
-              <button onClick={()=>setShowGRN(false)} style={{flex:1,padding:"8px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Close</button>
+
+            </div>{/* end scroll body */}
+
+            {/* ── Sticky footer ── */}
+            <div style={{padding:"12px 18px",borderTop:"1px solid "+T.b1,background:T.bg,display:"flex",gap:10,flexShrink:0}}>
+              <button onClick={()=>setShowGRN(false)}
+                style={{flex:1,padding:"9px",borderRadius:7,background:T.surface,border:"1px solid "+T.b1,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer",fontFamily:"inherit"}}>
+                Close
+              </button>
               {grnTab==="direct"&&(
                 <button onClick={handleDirectReceive} disabled={grnSaving}
-                  style={{flex:2,padding:"8px",borderRadius:7,background:grnSaving?T.b1:T.grn,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer"}}>
-                  {grnSaving?"Saving...":"Submit GRN"}
+                  style={{flex:2,padding:"9px",borderRadius:7,background:grnSaving?"#ccc":T.grn,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:grnSaving?"not-allowed":"pointer",fontFamily:"inherit",letterSpacing:"-.1px"}}>
+                  {grnSaving?"Saving…":"✅ Submit GRN"}
                 </button>
               )}
               {grnTab==="ordered"&&grnDone.length>0&&(
                 <button onClick={()=>setShowGRN(false)}
-                  style={{flex:2,padding:"8px",borderRadius:7,background:T.grn,border:"none",color:"white",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>
+                  style={{flex:2,padding:"9px",borderRadius:7,background:T.grn,border:"none",color:"white",fontSize:13,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
                   Done ✓ ({grnDone.length} received)
                 </button>
               )}
             </div>
-          </div>
+
+          </div>{/* end drawer */}
         </>)}
 
         {/* Toolbar */}
@@ -20728,7 +20887,18 @@ function TabSite() {
 // ═══════════════════════════════════════════════════════════════════
 // TAB 14 — MOM
 // ═══════════════════════════════════════════════════════════════════
-function TabMOM() {
+function TabMOM({ project }) {
+  // Reuse the company-level MOMModule scoped to this project.
+  // Same stats / cards / Action Tracker / Create flow — just filtered to project_id.
+  return (
+    <div style={{height:"100%", overflow:"auto"}}>
+      <MOMModule projectId={project?.id} projectName={project?.name} embedded/>
+    </div>
+  );
+}
+
+// (legacy demo-data TabMOM removed — see project tab uses MOMModule above)
+function _TabMOM_legacy_unused() {
   const [sel, setSel] = useState(D.moms[0] || null);
   const momS = {"Closed":{c:T.grn,bg:T.grnL},"Planned":{c:T.amb,bg:T.ambL},"Draft":{c:T.slt,bg:T.sltL}};
 
@@ -22569,7 +22739,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     design:      <TabDesign project={project} isAdmin={isAdmin}/>,
     estimate:    <TabEstimate project={project}/>,
     party:       <TabParty projectId={project.id} projectName={project.name}/>,
-    transaction: <TabTransaction/>,
+    transaction: <TabTransaction projectId={project.id} projectName={project.name}/>,
     todo:        <TabTodo projectId={project.id}/>,
     task:        <TabTasks projectId={project.id} isAdmin={isAdmin}/>,
     attendance:  <TabAttendance project={project}/>,
@@ -22578,7 +22748,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     equipment:   <TabEquipment projectId={project.id}/>,
     files:       <TabFiles projectId={project.id}/>,
     site:        <TabSite/>,
-    mom:         <TabMOM/>,
+    mom:         <TabMOM project={project}/>,
     // ── Solar EPC tabs ──
     solar_stages:  <TabSuryaGhar  projectId={project.id}/>,
     solar_boq:     <TabSolarBOQ   projectId={project.id}/>,

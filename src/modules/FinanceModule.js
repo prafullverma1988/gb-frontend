@@ -586,7 +586,7 @@ const MATERIAL_LIBRARY_CONST = Object.freeze([
   "Centering Plate","Prop Stand","Shuttering Oil",
 ]);
 
-function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject}){
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject,projectId}){
   // Reference the module-scope constants (renamed to keep call sites
   // unchanged — saves dozens of touch-ups below).
   const MAT_HEADS = MAT_HEADS_CONST;
@@ -742,8 +742,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [payOutDesc,setPayOutDesc]=useState("");
   const [payOutDate,setPayOutDate]=useState(_today);
 
-  // ── BOQ items (shared between invoice & subcon) ──────────────
-  const BOQ_ITEMS=[
+  // ── BOQ items (invoice) ───────────────────────────────────────
+  // When projectId is provided (project-level Transaction tab), fetch real
+  // estimate items via API. Otherwise fall back to mock data for company-level.
+  const _MOCK_BOQ_ITEMS=[
     {id:1,work:"Foundation Work",desc:"PCC M15 + RCC M25 footings",unit:"Sqft",boqQty:1500,rate:220,billed:0},
     {id:2,work:"Column & Beam",desc:"RCC columns GF to FF, M25 grade",unit:"Nos",boqQty:24,rate:8500,billed:0},
     {id:3,work:"Brickwork GF",desc:"9 inch brick wall ground floor",unit:"Sqft",boqQty:2400,rate:160,billed:0},
@@ -753,6 +755,58 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     {id:7,work:"Flooring GF",desc:"Vitrified tiles 60x60 with bedding",unit:"Sqft",boqQty:1500,rate:85,billed:0},
     {id:8,work:"Electrical Works",desc:"Point wiring, DB, mains",unit:"Point",boqQty:42,rate:2200,billed:0},
   ];
+  // null = still loading, [] = no estimate on project, [...] = real items
+  const [realBoqItems, setRealBoqItems] = useState(null);
+
+  useEffect(()=>{
+    if(!isInvoice || !projectId){ setRealBoqItems(null); return; }
+    setRealBoqItems(null); // loading
+    api.get("/customer-estimates?project_id=" + projectId)
+      .then(async r=>{
+        if(!r?.success || !Array.isArray(r.data) || !r.data.length){
+          setRealBoqItems([]); return;
+        }
+        // Fetch full detail for all estimates on this project, flatten items
+        const details = await Promise.all(
+          r.data.map(est =>
+            api.get("/customer-estimates/" + est.id)
+              .then(d => d?.success ? d.data : null)
+              .catch(()=>null)
+          )
+        );
+        const mapped = [];
+        for(const est of details.filter(Boolean)){
+          const allItems = [...(est.unsectioned||[])];
+          for(const sec of (est.sections||[])) allItems.push(...(sec.items||[]));
+          for(const it of allItems){
+            if(it.is_active === 0 || it.is_active === false) continue;
+            mapped.push({
+              id:      it.id,
+              work:    it.description || "",
+              desc:    "",
+              unit:    it.unit || "",
+              boqQty:  parseFloat(it.qty  || 0),
+              rate:    parseFloat(it.rate || 0),
+              billed:  0,
+            });
+          }
+        }
+        setRealBoqItems(mapped);
+      })
+      .catch(()=>setRealBoqItems([]));
+  },[isInvoice, projectId]); // eslint-disable-line
+
+  // When project has no estimate → force fresh mode
+  useEffect(()=>{
+    if(isInvoice && projectId && Array.isArray(realBoqItems) && realBoqItems.length === 0){
+      setInvMode("fresh");
+    }
+  },[isInvoice, projectId, realBoqItems]); // eslint-disable-line
+
+  // Active BOQ: real items when project is known, mock otherwise
+  const BOQ_ITEMS = (isInvoice && projectId)
+    ? (realBoqItems || [])
+    : _MOCK_BOQ_ITEMS;
   const SUBCON_BOQ=[
     {id:1,work:"Foundation Work",desc:"PCC M15 + RCC M25 footings",unit:"Sqft",boqQty:1500,subRate:150,prevBilled:0},
     {id:2,work:"Column & Beam",desc:"RCC columns GF to FF, M25 grade",unit:"Nos",boqQty:24,subRate:5500,prevBilled:0},
@@ -1742,8 +1796,17 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           ════════════════════════════════════════════════════ */}
           {isInvoice&&(
             <div>
-              <ModeToggle mode={invMode} setMode={setInvMode} c={T.grn}
-                opts={[["boq","Link with BOQ","Pick items from project BOQ"],["fresh","Fresh Invoice","Enter work items manually"]]}/>
+              {/* BOQ tab only shown when: no project context (mock/free), or project has real items.
+                  When projectId given but no estimate found → only "Fresh Invoice" is offered. */}
+              {(()=>{
+                const boqLoading = projectId && realBoqItems === null;
+                const boqHasItems = !projectId || (Array.isArray(realBoqItems) && realBoqItems.length > 0);
+                const modeOpts = [
+                  ...(boqHasItems ? [["boq", boqLoading ? "Loading BOQ…" : "Link with BOQ", boqLoading ? "Fetching estimate items" : "Pick items from project BOQ"]] : []),
+                  ["fresh","Fresh Invoice","Enter work items manually"],
+                ];
+                return <ModeToggle mode={invMode} setMode={setInvMode} c={T.grn} opts={modeOpts}/>;
+              })()}
 
               {invMode==="boq"&&(
                 <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:10}}>
@@ -1752,7 +1815,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
                     ))}
                   </div>
-                  {BOQ_ITEMS.map(b=><BoqRow key={b.id} b={b}/>)}
+                  {realBoqItems === null && projectId
+                    ? <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>Loading BOQ items…</div>
+                    : BOQ_ITEMS.length === 0
+                      ? <div style={{padding:"24px",textAlign:"center",color:T.t4,fontSize:13}}>No BOQ items found for this project.</div>
+                      : BOQ_ITEMS.map(b=><BoqRow key={b.id} b={b}/>)
+                  }
                   <div style={{padding:"9px 12px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`,display:"flex",alignItems:"center",gap:12}}>
                     <span style={{fontSize:11,color:T.t3}}>{Object.values(boqSelected).filter(Boolean).length} item{Object.values(boqSelected).filter(Boolean).length!==1?"s":""} selected</span>
                     <div style={{flex:1}}/>

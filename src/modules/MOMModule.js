@@ -407,7 +407,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
 }
 
 // ── CREATE MOM MODAL ───────────────────────────────────────────
-function CreateMOMModal({onClose,onSave}){
+function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
   const [step,setStep]=useState(1); // 1=details, 2=discussion, 3=actions
   const [saving,setSaving]=useState(false);
   const [saveErr,setSaveErr]=useState("");
@@ -428,7 +428,10 @@ function CreateMOMModal({onClose,onSave}){
     }).catch(()=>{});
   },[]);
   const [form,setForm]=useState({
-    title:"",type:"Site Review",site:"",venue:"",
+    title:"",type:"Site Review",
+    site: projectName || "",
+    project_id: projectId || null,
+    venue:"",
     date:TODAY,time:"10:00 AM",conductedBy:localStorage.getItem("gb_user_name")||"",
     attendees:[],agenda:"",notes:"",
     nextMeetingDate:"",nextMeetingTime:"",nextMeetingAgenda:"",
@@ -525,8 +528,14 @@ function CreateMOMModal({onClose,onSave}){
               <div><label style={labelStyle}>Meeting Type</label>
                 <SearchSelect value={form.type} options={MEETING_TYPES} onChange={v=>setForm(p=>({...p,type:v}))} placeholder="Select meeting type..."/>
               </div>
-              <div><label style={labelStyle}>Site / Project</label>
-                <SearchSelect value={form.site} options={sites} onChange={v=>setForm(p=>({...p,site:v}))} placeholder={sites.length?"Select project...":"Loading projects..."}/>
+              <div><label style={labelStyle}>Site / Project {projectId && <span style={{color:T.t4,fontSize:9,marginLeft:4,textTransform:"none",letterSpacing:0,fontWeight:500}}>(locked)</span>}</label>
+                {projectId ? (
+                  <div style={{...inputStyle, display:"flex", alignItems:"center", justifyContent:"space-between", background:T.surfaceB, color:T.t2, cursor:"not-allowed"}} title="MOM is scoped to this project — switch projects from the side nav to change.">
+                    <span>🔒 {projectName || form.site || "—"}</span>
+                  </div>
+                ) : (
+                  <SearchSelect value={form.site} options={sites} onChange={v=>setForm(p=>({...p,site:v}))} placeholder={sites.length?"Select project...":"Loading projects..."}/>
+                )}
               </div>
               <div><label style={labelStyle}>Date</label>
                 <input type="date" value={form.date} onChange={upd("date")} style={inputStyle}/>
@@ -675,7 +684,7 @@ function CreateMOMModal({onClose,onSave}){
 }
 
 // ── MAIN MOM MODULE ────────────────────────────────────────────
-function MOMModule(){
+function MOMModule({projectId=null,projectName="",embedded=false}={}){
   const [moms,setMoms]=useState(INIT_MOMS);
   const [selMOM,setSelMOM]=useState(null);
   const [showCreate,setShowCreate]=useState(false);
@@ -684,11 +693,15 @@ function MOMModule(){
   const [fType,setFType]=useState("All");
   const [view,setView]=useState("cards"); // cards | actions
 
+  // Project-scoped mode: filter to a single project on the server.
+  // Otherwise companywide list.
+  const projectScoped = !!projectId;
   useEffect(()=>{
-    api.get("/mom").then(r=>{
+    const url = projectScoped ? `/mom?project_id=${projectId}` : "/mom";
+    api.get(url).then(r=>{
       if(r.success && Array.isArray(r.data)) setMoms(r.data);
     }).catch(()=>{});
-  },[]);
+  },[projectId, projectScoped]);
 
   const sites=useMemo(()=>[...new Set(moms.map(m=>m.site).filter(Boolean))],[moms]);
 
@@ -855,7 +868,7 @@ function MOMModule(){
 
       {/* Modals */}
       {selMOM&&<MOMDetailDrawer mom={selMOM} onClose={()=>setSelMOM(null)} onUpdate={updateMOM}/>}
-      {showCreate&&<CreateMOMModal onClose={()=>setShowCreate(false)} onSave={mom=>setMoms(p=>[mom,...p])}/>}
+      {showCreate&&<CreateMOMModal projectId={projectId} projectName={projectName} onClose={()=>setShowCreate(false)} onSave={mom=>setMoms(p=>[mom,...p])}/>}
 
       <style>{`
         *{box-sizing:border-box}
