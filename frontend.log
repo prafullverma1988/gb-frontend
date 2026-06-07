@@ -1,0 +1,240 @@
+
+> gb-dashboard@0.1.0 start
+> react-scripts start
+
+(node:32728) [DEP0176] DeprecationWarning: fs.F_OK is deprecated, use fs.constants.F_OK instead
+(Use `node --trace-deprecation ...` to show where the warning was created)
+(node:32728) [DEP_WEBPACK_DEV_SERVER_ON_AFTER_SETUP_MIDDLEWARE] DeprecationWarning: 'onAfterSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+(node:32728) [DEP_WEBPACK_DEV_SERVER_ON_BEFORE_SETUP_MIDDLEWARE] DeprecationWarning: 'onBeforeSetupMiddleware' option is deprecated. Please use the 'setupMiddlewares' option.
+Starting the development server...
+
+Compiled successfully!
+
+You can now view gb-dashboard in the browser.
+
+  Local:            http://localhost:3000
+  On Your Network:  http://192.168.29.12:3000
+
+Note that the development build is not optimized.
+To create a production build, use npm run build.
+
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\modules\ProjectDetailPage.js
+Syntax error: Expected corresponding JSX closing tag for <>. (13999:12) (13999:12)
+[1m[31mERROR[39m[22m in [1m./src/modules/ProjectDetailPage.js[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\prafu\gb-frontend\src\modules\ProjectDetailPage.js: Expected corresponding JSX closing tag for <>. (13999:12)
+
+[0m [90m 13997 |[39m               [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m 13998 |[39m
+[31m[1m>[22m[39m[90m 13999 |[39m             [33m<[39m[35m/div>{/[39m[33m*[39m end scrollable body [33m*[39m[33m/[39m}
+ [90m       |[39m             [31m[1m^[22m[39m
+ [90m 14000 |[39m
+ [90m 14001 |[39m             {[90m/* ── Sticky footer ──────────────────────────────────── */[39m}
+ [90m 14002 |[39m             [33m<[39m[33mdiv[39m style[33m=[39m{{padding[33m:[39m[32m"12px 18px"[39m[33m,[39mborderTop[33m:[39m[32m`1px solid ${T.b1}`[39m[33m,[39mbackground[33m:[39m[33mT[39m[33m.[39msurface[33m,[39mdisplay[33m:[39m[32m"flex"[39m[33m,[39mgap[33m:[39m[35m10[39m[33m,[39malignItems[33m:[39m[32m"center"[39m[33m,[39mflexShrink[33m:[39m[35m0[39m}}[33m>[39m[0m
+    at constructor (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4720:14)
+    at FlowParserMixin.jsxParseElement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+    at FlowParserMixin.parseExprAtom (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOps (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3498:39
+    at FlowParserMixin.tryParse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6907:20)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3498:18)
+    at C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10800:39
+    at FlowParserMixin.allowInAnd (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+    at FlowParserMixin.parseMaybeAssignAllowIn (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+    at FlowParserMixin.parseMaybeAssignAllowInOrVoidPattern (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11675:28)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3591:18)
+    at FlowParserMixin.parseExprAtom (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11331:23)
+    at FlowParserMixin.parseExprAtom (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOpBaseRightExpr (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10986:34)
+    at FlowParserMixin.parseExprOpRightExpr (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10981:21)
+    at FlowParserMixin.parseExprOp (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10947:27)
+    at FlowParserMixin.parseExprOps (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10908:17)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3549:18)
+    at FlowParserMixin.parseExpressionBase (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10784:23)
+    at C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10780:39
+    at FlowParserMixin.allowInAnd (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+    at FlowParserMixin.parseExpression (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10780:17)
+    at FlowParserMixin.jsxParseExpressionContainer (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4632:31)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4711:36)
+    at FlowParserMixin.jsxParseElement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+    at FlowParserMixin.parseExprAtom (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOps (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3498:39
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\modules\ProjectDetailPage.js
+  Line 13999:12:  Parsing [1m[31merror[39m[22m[1m: Expected corresponding JSX closing tag for <>. (13999:12)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Failed to compile.
+
+[eslint] 
+src\modules\ProjectDetailPage.js
+Syntax error: Expected corresponding JSX closing tag for <>. (14023:10) (14023:10)
+[1m[31mERROR[39m[22m in [1m./src/modules/ProjectDetailPage.js[39m[22m
+Module build failed (from ./node_modules/babel-loader/lib/index.js):
+SyntaxError: C:\Users\prafu\gb-frontend\src\modules\ProjectDetailPage.js: Expected corresponding JSX closing tag for <>. (14023:10)
+
+[0m [90m 14021 |[39m             [33m<[39m[33m/[39m[33mdiv[39m[33m>[39m
+ [90m 14022 |[39m
+[31m[1m>[22m[39m[90m 14023 |[39m           [33m<[39m[35m/div>{/[39m[33m*[39m end drawer [33m*[39m[33m/[39m}
+ [90m       |[39m           [31m[1m^[22m[39m
+ [90m 14024 |[39m         [33m<[39m[33m/[39m[33m>[39m)}
+ [90m 14025 |[39m
+ [90m 14026 |[39m         {[90m/* Stage pipeline */[39m}[0m
+    at constructor (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:365:19)
+    at FlowParserMixin.raise (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6599:19)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4720:14)
+    at FlowParserMixin.jsxParseElement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+    at FlowParserMixin.parseExprAtom (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOps (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3498:39
+    at FlowParserMixin.tryParse (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:6907:20)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3498:18)
+    at C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10800:39
+    at FlowParserMixin.allowInAnd (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+    at FlowParserMixin.parseMaybeAssignAllowIn (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10800:17)
+    at FlowParserMixin.parseMaybeAssignAllowInOrVoidPattern (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12493:17)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11675:28)
+    at FlowParserMixin.parseParenAndDistinguishExpression (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3591:18)
+    at FlowParserMixin.parseExprAtom (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11331:23)
+    at FlowParserMixin.parseExprAtom (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4764:20)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOpBaseRightExpr (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10986:34)
+    at FlowParserMixin.parseExprOpRightExpr (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10981:21)
+    at FlowParserMixin.parseExprOp (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10947:27)
+    at FlowParserMixin.parseExprOps (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10908:17)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3549:18)
+    at FlowParserMixin.parseExpressionBase (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10784:23)
+    at C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10780:39
+    at FlowParserMixin.allowInAnd (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:12426:12)
+    at FlowParserMixin.parseExpression (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10780:17)
+    at FlowParserMixin.jsxParseExpressionContainer (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4632:31)
+    at FlowParserMixin.jsxParseElementAt (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4711:36)
+    at FlowParserMixin.jsxParseElement (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4749:17)
+    at FlowParserMixin.parseExprAtom (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:4759:19)
+    at FlowParserMixin.parseExprSubscripts (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11081:23)
+    at FlowParserMixin.parseUpdate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11066:21)
+    at FlowParserMixin.parseMaybeUnary (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:11046:23)
+    at FlowParserMixin.parseMaybeUnaryOrPrivate (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10899:61)
+    at FlowParserMixin.parseExprOps (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10904:23)
+    at FlowParserMixin.parseMaybeConditional (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10881:23)
+    at FlowParserMixin.parseMaybeAssign (C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:10831:21)
+    at C:\Users\prafu\gb-frontend\node_modules\@babel\parser\lib\index.js:3498:39
+
+[1m[31mERROR[39m[22m in [1m[eslint] 
+src\modules\ProjectDetailPage.js
+  Line 14023:10:  Parsing [1m[31merror[39m[22m[1m: Expected corresponding JSX closing tag for <>. (14023:10)
+
+[39m[22m
+
+webpack compiled with [1m[31m2 errors[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
+Compiling...
+Compiled successfully!
+webpack compiled [1m[32msuccessfully[39m[22m
