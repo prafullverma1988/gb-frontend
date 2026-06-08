@@ -917,8 +917,11 @@ function ApprovalSettings() {
     { id: 0,  module: "Customer Invoice",       cat: "FINANCE",      enabled: true,  levels: [{ role: "Accountant", limit: 500000 }, { role: "Admin", limit: null }] },
     { id: 0,  module: "Retention Release",      cat: "FINANCE",      enabled: true,  levels: [{ role: "Accountant", limit: 100000 }, { role: "Admin", limit: null }] },
     { id: 0,  module: "Detention Charges",      cat: "FINANCE",      enabled: false, levels: [{ role: "Project Manager", limit: null }] },
-    { id: 0,  module: "Payment Entry",          cat: "PAYMENTS",     enabled: true,  levels: [{ role: "Accountant", limit: 100000 }, { role: "Admin", limit: null }] },
-    { id: 0,  module: "Payment Request",        cat: "PAYMENTS",     enabled: true,  levels: [{ role: "Project Manager", limit: 200000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Payment Entry",               cat: "PAYMENTS",  enabled: true,  levels: [{ role: "Accountant", limit: 100000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Payment Request",             cat: "PAYMENTS",  enabled: true,  levels: [{ role: "Project Manager", limit: 200000 }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Customer Estimate Amendment", cat: "FINANCE",   enabled: true,  levels: [{ role: "Project Manager", limit: null }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Labour Rate Change",          cat: "HR",        enabled: true,  levels: [{ role: "Project Manager", limit: null }, { role: "Admin", limit: null }] },
+    { id: 0,  module: "Salary Edit",                 cat: "HR",        enabled: true,  levels: [{ role: "Admin", limit: null }] },
   ];
 
   const [approvals, setApprovals] = useState(DEFAULTS);
@@ -988,8 +991,8 @@ function ApprovalSettings() {
     setTimeout(() => setSaveMsg(""), 3000);
   };
 
-  const categories = ["DESIGN", "PROCUREMENT", "WAREHOUSE", "FINANCE", "PAYMENTS"];
-  const catColors = { DESIGN: T.purple, PROCUREMENT: T.teal, WAREHOUSE: T.blue, FINANCE: T.amber, PAYMENTS: T.green };
+  const categories = ["DESIGN", "PROCUREMENT", "WAREHOUSE", "FINANCE", "PAYMENTS", "HR"];
+  const catColors = { DESIGN: T.purple, PROCUREMENT: T.teal, WAREHOUSE: T.blue, FINANCE: T.amber, PAYMENTS: T.green, HR: T.red };
 
   const openEdit = (a) => {
     setEditItem(a);
