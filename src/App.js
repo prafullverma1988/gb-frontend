@@ -657,11 +657,26 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   };
 
   // Filter nav items — disabled modules hidden from sidebar
+  const MODULE_MAP_NAV={
+    dashboard:"Dashboard",projects:"Projects",design:"Design",
+    finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
+    reports:"Reports",library:"Library",settings:"Settings",
+    crm:"CRM",mom:"MOM",payroll:"Payroll"
+  };
   const isVisible=(id)=>{
     if(id==="saas") return user?.role==="super_admin";
-    if(ALWAYS_ON.includes(id)) return true;
-    if(!enabledModules) return true;
-    return enabledModules[id]!==false;
+    // Admins always see everything
+    if(["admin","super_admin"].includes(user?.role)) return true;
+    // Company-level module toggle
+    if(enabledModules && enabledModules[id]===false) return false;
+    // Role-based permission check from DB (set in Settings → Module Permissions)
+    const perms = user?.module_permissions;
+    if(perms){
+      const modName = MODULE_MAP_NAV[id];
+      if(modName && perms[modName] !== undefined) return !!perms[modName].view;
+    }
+    // Fallback: ALWAYS_ON modules are visible if no explicit DB permission row exists
+    return ALWAYS_ON.includes(id);
   };
   const mobileHidden = isMobile && collapsed;
   const handleNav=(id)=>{setActive(id); if(isMobile) setCollapsed(true);};
@@ -846,11 +861,22 @@ function TopBar({title,sub,collapsed,setCollapsed,alertCount,user,onLogout,onSea
 // ── MOBILE BOTTOM NAV ────────────────────────────────────────────────
 function MobileBottomNav({active,setActive,enabledModules,user}){
   const [showMore,setShowMore]=useState(false);
+  const MODULE_MAP_MOBILE={
+    dashboard:"Dashboard",projects:"Projects",design:"Design",
+    finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
+    reports:"Reports",library:"Library",settings:"Settings",
+    crm:"CRM",mom:"MOM",payroll:"Payroll"
+  };
   const isVisible=(id)=>{
     if(id==="saas") return user?.role==="super_admin";
-    if(ALWAYS_ON.includes(id)) return true;
-    if(!enabledModules) return true;
-    return enabledModules[id]!==false;
+    if(["admin","super_admin"].includes(user?.role)) return true;
+    if(enabledModules && enabledModules[id]===false) return false;
+    const perms = user?.module_permissions;
+    if(perms){
+      const modName = MODULE_MAP_MOBILE[id];
+      if(modName && perms[modName] !== undefined) return !!perms[modName].view;
+    }
+    return ALWAYS_ON.includes(id);
   };
   const moreItems=NAV_GROUPS.flatMap(g=>g.items).filter(item=>!BOTTOM_TABS.find(t=>t.id===item.id)&&isVisible(item.id));
   const isMoreActive=!BOTTOM_TABS.find(t=>t.id===active);
