@@ -4,6 +4,8 @@ import { CreateTransactionModal } from "../FinanceModule";
 import { T, fmtN } from "../shared/tokens";
 import { Pill, Panel, THead, AddBtn } from "../shared/ui";
 
+const D = { invoices:[], transactions:[] };
+
 function TabTransaction({projectId, projectName}) {
   const [fType,  setFType]  = useState("All");
   const [fParty, setFParty] = useState("All");

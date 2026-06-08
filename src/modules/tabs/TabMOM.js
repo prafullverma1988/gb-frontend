@@ -3,6 +3,8 @@ import MOMModule from "../MOMModule";
 import { T } from "../shared/tokens";
 import { Pill, Panel, PHead, AddBtn, SecBtn } from "../shared/ui";
 
+const D = { moms:[] };
+
 function TabMOM({ project }) {
   // Reuse the company-level MOMModule scoped to this project.
   // Same stats / cards / Action Tracker / Create flow — just filtered to project_id.

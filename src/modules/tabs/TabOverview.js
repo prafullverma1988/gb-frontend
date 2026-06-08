@@ -1,6 +1,8 @@
 import React from "react";
-import { T, fmt } from "../shared/tokens";
+import { T, fmt, STAGES } from "../shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead } from "../shared/ui";
+
+const D = { milestones:[], expBreakdown:[], tasks:[], attendance:[], dpr:[] };
 
 function TabOverview({proj, onRequestPayment}) {
   const margin = proj.boq - proj.expense;

@@ -2,6 +2,8 @@ import React, { useState } from "react";
 import { T } from "../shared/tokens";
 import { Pill, AddBtn, SecBtn, FilterTabs } from "../shared/ui";
 
+const D = { dpr:[], tasks:[] };
+
 function TabSite() {
   const [selDPR, setSelDPR] = useState(D.dpr[0] || null);
   const [view, setView]     = useState("overview");
