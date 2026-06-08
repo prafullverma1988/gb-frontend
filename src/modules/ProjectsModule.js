@@ -2469,7 +2469,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
 
 function ProjectsPage({onSelectProject}){
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
-  const isAdmin = ["admin","super_admin","project_manager"].includes(currentUser.role);
+  // admin / super_admin see ALL projects; everyone else sees only their assigned projects
+  const isAdmin = ["admin","super_admin"].includes(currentUser.role);
+  const canCreateProject = ["admin","super_admin","project_manager"].includes(currentUser.role);
+  const allowedProjectIds = isAdmin ? null : (currentUser.projects || []);
 
   // Inject keyframes once
   if(!document.getElementById("gb-spin-css")){const s=document.createElement("style");s.id="gb-spin-css";s.textContent=`
@@ -2655,6 +2658,8 @@ function ProjectsPage({onSelectProject}){
   const progClr=pct=>pct===100?T.grn:pct>60?T.blu:pct>30?T.amb:T.red;
 
   const filtered=allProjects.filter(p=>{
+    // Project access filter — non-admin users only see their assigned projects
+    if(allowedProjectIds && !allowedProjectIds.includes(p.id)) return false;
     if(hideCompleted&&p.status==="Completed") return false;
     if(filterCity!=="All"&&p.city!==filterCity) return false;
     if(filterStatus!=="All"&&p.status!==filterStatus) return false;
@@ -2830,7 +2835,7 @@ function ProjectsPage({onSelectProject}){
         </button>
 
         {/* New Project */}
-        {isAdmin&&<button onClick={()=>setShowNew(true)} style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
+        {canCreateProject&&<button onClick={()=>setShowNew(true)} style={{height:32,padding:"0 14px",borderRadius:6,background:`linear-gradient(135deg,${T.blu},#1D4ED8)`,color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:5,boxShadow:`0 3px 8px ${T.blu}44`,whiteSpace:"nowrap",flexShrink:0}}
           onMouseEnter={e=>e.currentTarget.style.boxShadow=`0 5px 14px ${T.blu}55`}
           onMouseLeave={e=>e.currentTarget.style.boxShadow=`0 3px 8px ${T.blu}44`}>
           <IcAdd size={13} color="white"/> New Project
