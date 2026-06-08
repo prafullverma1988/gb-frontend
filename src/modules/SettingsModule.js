@@ -309,7 +309,7 @@ function RolesAccess() {
 
   // Role form
   const [roleForm, setRoleForm] = useState({ name: "", desc: "", color: T.teal });
-  const roleColors = [T.red, T.blue, T.green, T.amber, T.purple, T.teal, "#E11D48", "#7C3AED", "#0891B2", "#CA8A04"];
+  const roleColors = [T.red, T.blue, T.green, T.amber, T.purple, T.teal, "#E11D48", "#DB2777", "#0891B2", "#CA8A04"];
 
   const openCreateRole = () => { setEditingRole(null); setRoleForm({ name: "", desc: "", color: T.teal }); setShowRoleModal(true); };
   const openEditRole = (r) => { setEditingRole(r); setRoleForm({ name: r.name, desc: r.desc, color: r.color }); setShowRoleModal(true); };
@@ -490,7 +490,7 @@ function RolesAccess() {
           <div style={{ fontSize: 11, color: T.textLight, marginTop: 2 }}>{users.length} users</div>
         </button>
         {roles.map(r => (
-          <button key={r.id} onClick={() => setSelectedRole(r.id)}
+          <div key={r.id} onClick={() => setSelectedRole(r.id)}
             style={{
               flex: "1 1 140px", maxWidth: 200, padding: "12px 14px", borderRadius: T.radius,
               background: selectedRole === r.id ? r.colorBg : T.card,
@@ -503,13 +503,7 @@ function RolesAccess() {
                 <div style={{ fontSize: 13, fontWeight: 700, color: selectedRole === r.id ? r.color : T.text }}>{r.name}</div>
                 <div style={{ fontSize: 11, color: T.textLight, marginTop: 2 }}>{users.filter(u => userInRole(u, r.id)).length} users</div>
               </div>
-              {!r.isSystem && (
-                <button onClick={(e) => { e.stopPropagation(); openEditRole(r); }}
-                  style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
-                  <IcEdit size={13} color={T.textLight} />
-                </button>
-              )}
-              {r.isSystem && selectedRole === r.id && (
+              {(!r.isSystem || selectedRole === r.id) && (
                 <button onClick={(e) => { e.stopPropagation(); openEditRole(r); }}
                   style={{ background: "none", border: "none", cursor: "pointer", padding: 2 }}>
                   <IcEdit size={13} color={T.textLight} />
@@ -517,7 +511,7 @@ function RolesAccess() {
               )}
             </div>
             {!r.isSystem && <div style={{ position: "absolute", top: 6, right: 6, width: 6, height: 6, borderRadius: "50%", background: r.color }} />}
-          </button>
+          </div>
         ))}
         <button onClick={openCreateRole}
           style={{ flex: "0 0 56px", padding: "12px", borderRadius: T.radius, background: T.card, border: `2px dashed ${T.border}`, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", flexDirection: "column", gap: 4 }}>
