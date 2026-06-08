@@ -671,11 +671,12 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     if(enabledModules && enabledModules[id]===false) return false;
     // Role-based permission check from DB (set in Settings → Module Permissions)
     const perms = user?.module_permissions;
-    if(perms){
-      const modName = MODULE_MAP_NAV[id];
-      if(modName && perms[modName] !== undefined) return !!perms[modName].view;
+    const modName = MODULE_MAP_NAV[id];
+    if(perms && modName){
+      // If permissions data loaded: use explicit grant (missing row = no access)
+      return !!(perms[modName]?.view);
     }
-    // Fallback: ALWAYS_ON modules are visible if no explicit DB permission row exists
+    // No permissions data yet — fall back to ALWAYS_ON
     return ALWAYS_ON.includes(id);
   };
   const mobileHidden = isMobile && collapsed;
@@ -872,10 +873,8 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
     if(["admin","super_admin"].includes(user?.role)) return true;
     if(enabledModules && enabledModules[id]===false) return false;
     const perms = user?.module_permissions;
-    if(perms){
-      const modName = MODULE_MAP_MOBILE[id];
-      if(modName && perms[modName] !== undefined) return !!perms[modName].view;
-    }
+    const modName = MODULE_MAP_MOBILE[id];
+    if(perms && modName) return !!(perms[modName]?.view);
     return ALWAYS_ON.includes(id);
   };
   const moreItems=NAV_GROUPS.flatMap(g=>g.items).filter(item=>!BOTTOM_TABS.find(t=>t.id===item.id)&&isVisible(item.id));
@@ -1214,6 +1213,25 @@ export default function App(){
       })
       .catch(()=>setEnabledModules({})); // on error: show all
   },[loggedIn]);
+
+  // Auto-refresh module permissions — no logout needed when admin changes role permissions.
+  // Runs on app load + whenever the tab/window regains focus (covers mobile app-resume too).
+  useEffect(()=>{
+    const refreshPerms=async()=>{
+      if(!loggedIn||["admin","super_admin"].includes(user?.role)) return;
+      try{
+        const res=await api.get("/auth/permissions");
+        if(res.success && res.module_permissions){
+          const updated={...user, module_permissions: res.module_permissions};
+          setUser(updated);
+          try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
+        }
+      }catch(_){}
+    };
+    refreshPerms();
+    window.addEventListener("focus", refreshPerms);
+    return()=>window.removeEventListener("focus", refreshPerms);
+  },[loggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Global keyboard shortcuts ────────────────────────────────────────
   useEffect(()=>{
