@@ -1231,7 +1231,7 @@ export default function App(){
     refreshPerms();
     window.addEventListener("focus", refreshPerms);
     return()=>window.removeEventListener("focus", refreshPerms);
-  },[loggedIn]); // eslint-disable-line react-hooks/exhaustive-deps
+  },[loggedIn]);
 
   // ── Global keyboard shortcuts ────────────────────────────────────────
   useEffect(()=>{
