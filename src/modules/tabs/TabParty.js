@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from "react";
 import api from "../../config/api";
 import { CreateTransactionModal } from "../FinanceModule";
-import { T, fmtN } from "../shared/tokens";
+import { T, fmt, fmtN } from "../shared/tokens";
 import { Pill, Panel, PHead, THead, AddBtn, SecBtn } from "../shared/ui";
 
 function AddPartyModal({ open, onClose, onSaved }) {
