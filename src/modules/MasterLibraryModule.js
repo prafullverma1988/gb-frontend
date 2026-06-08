@@ -6621,18 +6621,23 @@ function WorkersSection() {
 }
 
 const masterSections = [
-  { id: "material_cat",  label: "Material Category",   Icon: IcFolder,    Comp: MaterialCategorySection,  section: "INVENTORY", countKey: "material_categories", color: T.blue },
+  // ── ITEM LIBRARY ──────────────────────────────────────────────────
+  { id: "work_cat",      label: "Work Category",       Icon: IcTool,      Comp: WorkCategorySection,      section: "ITEM LIBRARY", countKey: "work_categories", color: T.purple },
+  { id: "material_cat",  label: "Material Category",   Icon: IcFolder,    Comp: MaterialCategorySection,  section: null, countKey: "material_categories", color: T.blue },
   { id: "materials",     label: "Material Master",     Icon: IcBox,       Comp: MaterialMasterSection,    section: null, countKey: "materials", color: T.teal },
-  { id: "work_cat",      label: "Work Category",       Icon: IcTool,      Comp: WorkCategorySection,      section: null, countKey: "work_categories", color: T.purple },
+  { id: "boq_items",     label: "BOQ Item Library",    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: null, countKey: null, color: T.purple },
+  // ── PEOPLE ────────────────────────────────────────────────────────
   { id: "party",         label: "Party / Supplier",    Icon: IcUsers,     Comp: PartyMasterSection,       section: "PEOPLE", countKey: "parties", color: T.green },
   { id: "subcon",        label: "Subcontractors",      Icon: IcHardHat,   Comp: SubcontractorSection,     section: null, countKey: "subcontractors", color: T.amber },
   { id: "workers",       label: "Workers",             Icon: IcHardHat,   Comp: WorkersSection,           section: null, countKey: "workers", color: T.blue },
-  { id: "subcon_rate",   label: "Subcon Rate Card",    Icon: IcDollar,    Comp: SubconRateCardSection,    section: null, countKey: null, color: T.teal },
+  // ── RATES & BOQ ───────────────────────────────────────────────────
+  { id: "subcon_rate",   label: "Subcon Rate Card",    Icon: IcDollar,    Comp: SubconRateCardSection,    section: "RATES & BOQ", countKey: null, color: T.teal },
   { id: "labour",        label: "Labour Rate Card",    Icon: IcUsers,     Comp: LabourRateSection,        section: null, countKey: "labour_rates", color: T.orange },
-  { id: "boq_items",     label: "BOQ Item Library",    Icon: IcBox,       Comp: BoqItemLibrarySection,    section: "RATES & BOQ", countKey: null, color: T.purple },
   { id: "client_boq",    label: "Client BOQ Rate",     Icon: IcClipboard, Comp: ClientBOQSection,         section: null, countKey: null, color: T.indigo },
+  // ── ASSETS ────────────────────────────────────────────────────────
   { id: "equipment",     label: "Equipment / Machinery", Icon: IcTruck,   Comp: EquipmentSection,         section: "ASSETS", countKey: "equipment", color: T.rose },
-  { id: "design_library", label: "Design Library",     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "DESIGN LIBRARY", countKey: null, color: T.purple },
+  // ── OTHER ─────────────────────────────────────────────────────────
+  { id: "design_library", label: "Design Library",     Icon: IcLayers,    Comp: DesignLibrarySection,     section: "OTHER", countKey: null, color: T.purple },
   { id: "uom",           label: "Units (UOM)",         Icon: IcRuler,     Comp: UOMMasterSection,         section: null, countKey: "uom", color: T.teal },
   { id: "expense_head",  label: "Expense Heads",       Icon: IcDollar,    Comp: ExpenseHeadSection,       section: null, count: "14", color: T.amber },
 ];
