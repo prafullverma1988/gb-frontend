@@ -451,6 +451,62 @@ function RolesAccess() {
     viewer: { Projects: ["view"], Design: ["view"], Finance: ["view"], Procurement: ["view"], Warehouse: ["view"], "Team & HR": [], Reports: ["view"], Settings: [] },
   });
 
+  // ── DB roles (numeric ids needed for PUT /roles/:id/permissions) ──────
+  const [dbRoles, setDbRoles] = useState([]);
+  const [permSaving, setPermSaving] = useState(false);
+
+  useEffect(() => {
+    api.get("/settings/roles").then(res => {
+      if (!res.success || !res.data?.length) return;
+      setDbRoles(res.data);
+      // Pre-populate permMatrix from DB — overrides hardcoded defaults
+      setPermMatrix(prev => {
+        const next = { ...prev };
+        for (const dbRole of res.data) {
+          // Match by slug: "Project Manager" → "project_manager"
+          const key = (dbRole.name || "").toLowerCase().replace(/[\s&]+/g, "_").replace(/_+/g, "_");
+          if (next[key] === undefined) continue;
+          const modMap = {};
+          for (const p of (dbRole.permissions || [])) {
+            const perms = [];
+            if (p.can_view)    perms.push("view");
+            if (p.can_create)  perms.push("create");
+            if (p.can_edit)    perms.push("edit");
+            if (p.can_delete)  perms.push("delete");
+            if (p.can_approve) perms.push("approve");
+            modMap[p.module] = perms;
+          }
+          if (Object.keys(modMap).length) next[key] = modMap;
+        }
+        return next;
+      });
+    }).catch(() => {});
+  }, []);
+
+  const savePermissions = async () => {
+    if (selectedRole === "admin") return;
+    // Find DB role by name-slug match
+    const dbRole = dbRoles.find(r => {
+      const slug = (r.name || "").toLowerCase().replace(/[\s&]+/g, "_").replace(/_+/g, "_");
+      return slug === selectedRole || r.name === activeRole?.name;
+    });
+    if (!dbRole) { alert("Role DB record not found. Check /settings/roles API."); return; }
+    const perms = permMatrix[selectedRole] || {};
+    const permissions = modules.map(m => ({
+      module: m.name,
+      can_view:    (perms[m.name]||[]).includes("view")    ? 1 : 0,
+      can_create:  (perms[m.name]||[]).includes("create")  ? 1 : 0,
+      can_edit:    (perms[m.name]||[]).includes("edit")    ? 1 : 0,
+      can_delete:  (perms[m.name]||[]).includes("delete")  ? 1 : 0,
+      can_approve: (perms[m.name]||[]).includes("approve") ? 1 : 0,
+    }));
+    setPermSaving(true);
+    const res = await api.put(`/settings/roles/${dbRole.id}/permissions`, { permissions });
+    setPermSaving(false);
+    if (res.success) alert("Permissions saved!");
+    else alert(res.message || "Failed to save permissions");
+  };
+
   const togglePerm = (mod, perm) => {
     if (selectedRole === "admin") return;
     setPermMatrix(prev => {
@@ -544,7 +600,7 @@ function RolesAccess() {
       )}
       {tab === "permissions" && !isAllUsers && (
         <SectionCard title={`Module Permissions — ${activeRole?.name || ""}`} desc={activeRole?.desc}
-          action={<SaveBtn label="Update Permissions" />}>
+          action={<SaveBtn label={permSaving ? "Saving..." : "Update Permissions"} onClick={savePermissions} />}>
           {selectedRole === "admin" && (
             <div style={{ background: T.amberSoft, borderRadius: 8, padding: "10px 14px", marginTop: 8, marginBottom: 12, fontSize: 12, color: T.amber, display: "flex", gap: 8, alignItems: "center" }}>
               <IcShield size={15} color={T.amber} /> Admin role has full access. Permissions cannot be modified.
