@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef, lazy, Suspense } from "react";
 import api, { API_BASE } from "../config/api";
 import apiCache from "../utils/apiCache";
 import { Avatar, Credit } from "../components/Credit";
@@ -14,21 +14,27 @@ import EstimateBuilderModal from "./EstimateBuilderModal";
 import MOMModule from "./MOMModule";
 import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
-import TabEstimate from "./tabs/TabEstimate";
-import TabTasks from "./tabs/TabTasks";
-import TabSubcon from "./tabs/TabSubcon";
-import TabMaterial from "./tabs/TabMaterial";
-import TabAttendance from "./tabs/TabAttendance";
-import TabOverview from "./tabs/TabOverview";
-import TabDesign from "./tabs/TabDesign";
-import TabParty from "./tabs/TabParty";
-import TabTransaction from "./tabs/TabTransaction";
-import TabTodo from "./tabs/TabTodo";
-import TabEquipment from "./tabs/TabEquipment";
-import TabFiles from "./tabs/TabFiles";
-import TabSite from "./tabs/TabSite";
-import TabMOM from "./tabs/TabMOM";
-import { TabSuryaGhar, TabSolarBOQ, TabSolarDocs, TabSolarInstall, TabSolarSubsidy } from "./tabs/TabSolar";
+
+// ── TAB CODE-SPLITTING — each tab chunk loads on first open ──────────
+const TabEstimate    = lazy(() => import("./tabs/TabEstimate"));
+const TabTasks       = lazy(() => import("./tabs/TabTasks"));
+const TabSubcon      = lazy(() => import("./tabs/TabSubcon"));
+const TabMaterial    = lazy(() => import("./tabs/TabMaterial"));
+const TabAttendance  = lazy(() => import("./tabs/TabAttendance"));
+const TabOverview    = lazy(() => import("./tabs/TabOverview"));
+const TabDesign      = lazy(() => import("./tabs/TabDesign"));
+const TabParty       = lazy(() => import("./tabs/TabParty"));
+const TabTransaction = lazy(() => import("./tabs/TabTransaction"));
+const TabTodo        = lazy(() => import("./tabs/TabTodo"));
+const TabEquipment   = lazy(() => import("./tabs/TabEquipment"));
+const TabFiles       = lazy(() => import("./tabs/TabFiles"));
+const TabSite        = lazy(() => import("./tabs/TabSite"));
+const TabMOM         = lazy(() => import("./tabs/TabMOM"));
+const TabSuryaGhar   = lazy(() => import("./tabs/TabSolar").then(m => ({ default: m.TabSuryaGhar })));
+const TabSolarBOQ    = lazy(() => import("./tabs/TabSolar").then(m => ({ default: m.TabSolarBOQ })));
+const TabSolarDocs   = lazy(() => import("./tabs/TabSolar").then(m => ({ default: m.TabSolarDocs })));
+const TabSolarInstall= lazy(() => import("./tabs/TabSolar").then(m => ({ default: m.TabSolarInstall })));
+const TabSolarSubsidy= lazy(() => import("./tabs/TabSolar").then(m => ({ default: m.TabSolarSubsidy })));
 
 // ── DATA ──────────────────────────────────────────────────────────────
 const D = {
@@ -430,6 +436,12 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     };
   },[onBack, activeTabs]);
 
+  const TabLoading = () => (
+    <div style={{display:"flex",alignItems:"center",justifyContent:"center",height:"60vh",color:T.t3,fontSize:13}}>
+      Loading…
+    </div>
+  );
+
   const tabContent = {
     // ── Construction tabs (unchanged) ──
     overview:    <TabOverview    proj={project} onRequestPayment={()=>setPaymentReq({})}/>,
@@ -588,7 +600,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
 
         {/* Content */}
         <div style={{flex:1, overflowY:"auto", background:T.bg, marginTop:10}}>
-          {tabContent[tab]}
+          <Suspense fallback={<TabLoading/>}>{tabContent[tab]}</Suspense>
         </div>
       </div>
     </div>
@@ -664,7 +676,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
 
       {/* ── CONTENT ── */}
       <div style={{flex:1, overflowY:"auto", background:T.bg}}>
-        {tabContent[tab]}
+        <Suspense fallback={<TabLoading/>}>{tabContent[tab]}</Suspense>
       </div>
     </div>
   );
