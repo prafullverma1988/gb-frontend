@@ -1525,7 +1525,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     const mrReq=(data.mrs||[]).filter(m=>m.stage==="Requested").length;
     const whP  =(data.whmrs||[]).filter(m=>!m.status||m.status==="Pending").length;
     if(mrReq===0&&whP>0&&activeTab==="mr") setActiveTab("warehouse");
-  },[loading]); // eslint-disable-line react-hooks/exhaustive-deps
+  },[loading]);
 
   // Centralized approve/reject
   const approveItem=async(id)=>{
