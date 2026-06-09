@@ -2530,7 +2530,10 @@ function ProjectsPage({onSelectProject}){
   const [allTodos,setAllTodos]=useState([]);
   const [todosLoading,setTodosLoading]=useState(false);
 
-  // Load real approval counts from centralized engine
+  // Load real approval counts from centralized engine.
+  // MR count: always from procurement+warehouse APIs (same source as Materials
+  // drawer) so tile and drawer can never diverge.
+  // Non-MR modules (Design, Finance, Payment): from approval engine.
   const loadApprovalCounts=async()=>{
     const cached = apiCache.get("approval-counts");
     if(cached){
@@ -2539,29 +2542,36 @@ function ProjectsPage({onSelectProject}){
       setApprovalCount(cached.total);
       return;
     }
-    // Always fetch ALL pending warehouse MRs separately so Material
-    // Requests tile reflects them. Includes:
-    //   • Tab 1 (project_id NULL) — warehouse-internal stock requests
-    //   • Tab 2 (project_id NOT NULL with linked_procurement_mr_id)
-    //     — created when procurement chooses "Issue from Warehouse".
-    // No double-count with procurement: Tab 2 wh_mr is created only
-    // AFTER its parent procurement MR is mr_status=Approved, so
-    // /procurement/mrs?mr_status=Pending never includes that parent.
-    let whMrCount = 0;
-    try {
-      const whRes = await api.get("/warehouse/mr?status=Pending");
-      if (whRes.success) whMrCount = (whRes.data || []).length;
-    } catch (_) {}
+
+    // ── Shared helper: compute mrCount from the same 3 APIs the Materials
+    // drawer uses — this is the single source of truth ────────────────────
+    const computeMrCount=(mrs,pos,whmrs)=>{
+      const req=(mrs||[]).filter(m=>m.stage==="Requested").length;
+      const po =(pos||[]).filter(p=>!p.approval_status||p.approval_status==="Pending").length;
+      const wh =(whmrs||[]).filter(m=>!m.status||m.status==="Pending").length;
+      return req+po+wh;
+    };
 
     try{
-      // Try centralized approval counts first
-      const countRes=await api.get("/approvals/counts");
+      // Fetch approval engine counts (Design/Finance/Payment) AND materials
+      // data (MR/PO/Warehouse) in parallel so all counts load in one round-trip
+      const [countRes,mrRes,poRes,whmrRes]=await Promise.all([
+        api.get("/approvals/counts"),
+        api.get("/procurement/mrs").catch(()=>({success:false})),
+        api.get("/procurement/pos").catch(()=>({success:false})),
+        api.get("/warehouse/mr").catch(()=>({success:false})),
+      ]);
       if(countRes.success&&countRes.data){
         const byMod=countRes.data.byModule||[];
         const mrCountProc=byMod.find(m=>m.module==="Material Request")?.count||0;
         const prCount=byMod.find(m=>m.module==="Payment Request")?.count||0;
-        const mrCount=mrCountProc+whMrCount;
-        // Exclude MRs — they have their own "Material Requests" tile
+        // MR count from procurement/warehouse (same source as drawer)
+        const mrCount=computeMrCount(
+          mrRes.success?mrRes.data:[],
+          poRes.success?poRes.data:[],
+          whmrRes.success?whmrRes.data:[]
+        );
+        // Non-MR approvals total
         const total=(countRes.data.total||0)-mrCountProc;
         apiCache.set("approval-counts",{mrCount,prCount,total},30000);
         setMrPendingCount(mrCount);
@@ -2570,20 +2580,24 @@ function ProjectsPage({onSelectProject}){
         return;
       }
     }catch(e){}
-    // Fallback to direct queries
+
+    // ── Fallback: all direct queries ────────────────────────────────────
     try{
-      const [mrRes,prRes,drRes]=await Promise.all([
-        api.get("/procurement/mrs?mr_status=Pending"),
-        api.get("/finance/payment-requests"),
-        // Fetch all drawings then filter — the ?status=Pending query param
-        // won't catch Revision-state drawings, which also need admin action.
+      const [mrRes,prRes,drRes,poRes,whmrRes]=await Promise.all([
+        api.get("/procurement/mrs").catch(()=>({success:false})),
+        api.get("/finance/payment-requests").catch(()=>({success:false})),
+        // Fetch all drawings — ?status=Pending misses Revision-state drawings
         api.get("/design/drawings").catch(()=>({success:false})),
+        api.get("/procurement/pos").catch(()=>({success:false})),
+        api.get("/warehouse/mr").catch(()=>({success:false})),
       ]);
-      const mrCountProc=(mrRes.success?mrRes.data:[]).filter(m=>m.mr_status==="Pending"||m.stage==="Requested").length;
-      const mrCount=mrCountProc+whMrCount;
+      const mrCount=computeMrCount(
+        mrRes.success?mrRes.data:[],
+        poRes.success?poRes.data:[],
+        whmrRes.success?whmrRes.data:[]
+      );
       const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
       const designCount=(drRes.success?drRes.data:[]).filter(d=>d.status==="Pending"||d.status==="Revision").length;
-      // Exclude MRs from approvalCount — they have their own "Material Requests" tile
       const total=prCount+designCount;
       apiCache.set("approval-counts",{mrCount,prCount,total},30000);
       setMrPendingCount(mrCount);
