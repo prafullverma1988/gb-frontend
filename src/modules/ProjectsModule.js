@@ -1371,7 +1371,7 @@ function TransferCard({tr}){
   );
 }
 
-function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
+function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync}){
   // mode: "approvals" → Design/Finance/Payment tabs
   //       "materials" → MR / PO / Warehouse tabs
   // Read logged-in user to gate Approve/Reject visibility
@@ -1492,6 +1492,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
         setData(next);
         apiCache.set(cacheKey, next, 30000);
         if(venRes.success&&Array.isArray(venRes.data)) setVendorList(venRes.data);
+        // Sync real count back to parent KPI tile — same source as what drawer shows
+        if(onCountSync){
+          const _req=(next.mrs||[]).filter(m=>m.stage==="Requested").length;
+          const _po =(next.pos||[]).filter(p=>!p.approval_status||p.approval_status==="Pending").length;
+          const _wh =(next.whmrs||[]).filter(m=>!m.status||m.status==="Pending").length;
+          onCountSync(_req+_po+_wh);
+        }
       } else {
         const [prRes,apRes]=await Promise.all([
           api.get("/finance/payment-requests"),
@@ -1510,6 +1517,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   };
 
   useEffect(()=>{load();},[]);
+
+  // Smart default tab: if Requests tab would be empty but Warehouse has pending
+  // items, jump straight to Warehouse tab so user isn't confused by 0
+  useEffect(()=>{
+    if(mode!=="materials"||loading)return;
+    const mrReq=(data.mrs||[]).filter(m=>m.stage==="Requested").length;
+    const whP  =(data.whmrs||[]).filter(m=>!m.status||m.status==="Pending").length;
+    if(mrReq===0&&whP>0&&activeTab==="mr") setActiveTab("warehouse");
+  },[loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Centralized approve/reject
   const approveItem=async(id)=>{
@@ -3019,7 +3035,11 @@ function ProjectsPage({onSelectProject}){
         </div>
       )}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
-      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} mode={approvalMode} onSelectProject={onSelectProject}/>}
+      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} mode={approvalMode} onSelectProject={onSelectProject}
+        onCountSync={approvalMode==="materials"
+          ? cnt=>{setMrPendingCount(cnt);apiCache.invalidate("approval-counts");}
+          : undefined}
+      />}
       {showIssuesDrawer&&<IssuesDrawer issues={allIssues} loading={issuesLoading} filter={issueFilter} setFilter={setIssueFilter} onClose={()=>setShowIssuesDrawer(false)} onIssueClose={(id)=>setAllIssues(p=>p.map(x=>x.id===id?{...x,status:"Closed"}:x))}/>}
       {showTodoDrawer&&<TodoDrawer todos={allTodos} loading={todosLoading} onClose={()=>{setShowTodoDrawer(false);api.get("/projects/my-todo-count").then(r=>{if(r.success&&r.data)setTodoCount(r.data.count||0);}).catch(()=>{});}} onSelectProject={onSelectProject}/>}
       {settingsOf&&<ProjectSettingsModal
