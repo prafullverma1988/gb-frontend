@@ -1,5 +1,6 @@
 import { useState, useEffect, Fragment } from "react";
 import api from "../config/api";
+import MapPicker from "../components/MapPicker";
 
 // ─── ICON COMPONENT ──────────────────────────────────────────────────
 const Icon = ({ d, size = 20, color = "currentColor", fill = "none", strokeWidth = 1.8 }) => (
@@ -183,6 +184,126 @@ function Modal({ open, onClose, title, desc, width = 560, children }) {
 // ═══════════════════════════════════════════════════════════════════════
 // COMPANY SETTINGS (unchanged from before)
 // ═══════════════════════════════════════════════════════════════════════
+// ─── OFFICE & WAREHOUSE LOCATIONS (company-level geofences) ──────────
+// Each row is a company geofence (project_id NULL) with kind office/warehouse.
+// Mobile punch-in geofence check honors these alongside project sites.
+function LocationsSettings() {
+  const KINDS = [
+    { v: "office",    label: "🏢 Office",    c: T.blue },
+    { v: "warehouse", label: "📦 Warehouse", c: T.amber },
+  ];
+  const blank = { id: null, kind: "office", label: "", address: "", lat: "", lng: "", radius: 100 };
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [form, setForm] = useState(blank);
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [showMap, setShowMap] = useState(false);
+
+  const load = () => {
+    setLoading(true);
+    api.get("/geofences?include_inactive=1").then(r => {
+      // Company-level locations only (no project) — offices + warehouses
+      const list = (r.success ? r.data : []).filter(g => !g.project_id && (g.kind === "office" || g.kind === "warehouse"));
+      setRows(list);
+    }).catch(()=>{}).finally(()=>setLoading(false));
+  };
+  useEffect(load, []);
+
+  const useCurrentLoc = () => {
+    if (!navigator.geolocation) { setMsg("GPS not available"); return; }
+    setMsg("📍 Getting location…");
+    navigator.geolocation.getCurrentPosition(
+      (p) => { setForm(f => ({ ...f, lat: p.coords.latitude.toFixed(6), lng: p.coords.longitude.toFixed(6) })); setMsg("✓ Location captured"); },
+      () => setMsg("GPS denied — enter manually"),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  };
+
+  const save = async () => {
+    if (!form.label.trim()) { setMsg("Name required"); return; }
+    const lat = parseFloat(form.lat), lng = parseFloat(form.lng);
+    if (isNaN(lat) || isNaN(lng)) { setMsg("Valid lat/lng required (or use current location)"); return; }
+    setBusy(true); setMsg("");
+    try {
+      const body = { project_id: null, kind: form.kind, label: form.label.trim(),
+                     address: form.address || null, center_lat: lat, center_lng: lng, radius_m: Number(form.radius) || 100 };
+      const r = form.id ? await api.put("/geofences/" + form.id, body) : await api.post("/geofences", body);
+      if (r.success) { setMsg("✓ Saved"); setForm(blank); load(); setTimeout(()=>setMsg(""), 2500); }
+      else setMsg(r.message || "Save failed");
+    } catch (e) { setMsg(e.message || "Network error"); }
+    setBusy(false);
+  };
+
+  const edit = (g) => setForm({ id: g.id, kind: g.kind || "office", label: g.label || "", address: g.address || "",
+                                lat: String(g.center_lat), lng: String(g.center_lng), radius: g.radius_m || 100 });
+  const del = async (g) => {
+    if (!window.confirm(`Delete "${g.label}"?`)) return;
+    const r = await api.del("/geofences/" + g.id + "?hard=1").catch(()=>({success:false}));
+    if (r.success) load();
+  };
+
+  const L = { fontSize:10, fontWeight:700, color:T.textLight, textTransform:"uppercase", letterSpacing:".4px", display:"block", marginBottom:4 };
+  const I = { width:"100%", padding:"8px 10px", borderRadius:7, border:`1.5px solid ${T.border}`, fontSize:12.5, color:T.text, background:"white", outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+
+  return (
+    <SectionCard title="Office & Warehouse Locations" desc="Add company offices and warehouses with geo-location. Mobile punch-in is geofenced to these sites (alongside project locations).">
+      {/* Existing list */}
+      {loading ? <div style={{ padding:"14px 0", color:T.textLight, fontSize:12.5 }}>Loading…</div> :
+        rows.length === 0 ? <div style={{ padding:"18px", textAlign:"center", color:T.textLight, fontSize:12.5, background:T.bg, borderRadius:9, marginBottom:16 }}>Koi office/warehouse location nahi — niche se add karo.</div> :
+        <div style={{ marginBottom:18 }}>
+          {rows.map(g => {
+            const k = KINDS.find(x => x.v === g.kind) || KINDS[0];
+            return (
+              <div key={g.id} style={{ display:"flex", alignItems:"center", gap:12, padding:"11px 13px", border:`1px solid ${T.border}`, borderRadius:9, marginBottom:8, background:"white" }}>
+                <span style={{ fontSize:11, fontWeight:700, color:k.c, background:k.c+"15", padding:"3px 9px", borderRadius:12, whiteSpace:"nowrap" }}>{k.label}</span>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{g.label}</div>
+                  <div style={{ fontSize:11, color:T.textMid, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{g.address || "—"}</div>
+                  <div style={{ fontSize:10.5, color:T.textLight, marginTop:1 }}>📍 {Number(g.center_lat).toFixed(5)}, {Number(g.center_lng).toFixed(5)} · {g.radius_m}m</div>
+                </div>
+                <button onClick={()=>edit(g)} style={{ padding:"5px 11px", borderRadius:6, background:T.blueSoft, color:T.blue, border:`1px solid ${T.blue}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>Edit</button>
+                <button onClick={()=>del(g)} style={{ padding:"5px 9px", borderRadius:6, background:T.redSoft, color:T.red, border:`1px solid ${T.red}33`, fontSize:11, fontWeight:700, cursor:"pointer" }}>✕</button>
+              </div>
+            );
+          })}
+        </div>
+      }
+
+      {/* Add / edit form */}
+      <div style={{ background:T.bg, border:`1px solid ${T.border}`, borderRadius:10, padding:"14px 16px" }}>
+        <div style={{ fontSize:12.5, fontWeight:800, color:T.text, marginBottom:12 }}>{form.id ? "✏️ Edit Location" : "➕ Add Office / Warehouse"}</div>
+        <div style={{ display:"flex", gap:8, marginBottom:12 }}>
+          {KINDS.map(k => (
+            <button key={k.v} onClick={()=>setForm(f=>({...f,kind:k.v}))}
+              style={{ flex:1, padding:"9px", borderRadius:8, border:`1.5px solid ${form.kind===k.v?k.c:T.border}`, background:form.kind===k.v?k.c+"12":"white", color:form.kind===k.v?k.c:T.textMid, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
+              {k.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ marginBottom:10 }}><label style={L}>Name *</label><input value={form.label} onChange={e=>setForm(f=>({...f,label:e.target.value}))} placeholder={form.kind==="office"?"e.g. Head Office":"e.g. Main Warehouse"} style={I}/></div>
+        <div style={{ marginBottom:10 }}><label style={L}>Address</label><input value={form.address} onChange={e=>setForm(f=>({...f,address:e.target.value}))} placeholder="Full address" style={I}/></div>
+        <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+          <button onClick={useCurrentLoc} style={{ flex:1, padding:"9px", borderRadius:7, background:"white", border:`1.5px solid ${T.blue}`, color:T.blue, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>📍 Current Location</button>
+          <button onClick={()=>setShowMap(true)} style={{ flex:1, padding:"9px", borderRadius:7, background:"white", border:`1.5px solid ${T.green}`, color:T.green, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>🗺️ Pick from Map</button>
+        </div>
+        {showMap && <MapPicker initial={{lat:form.lat, lng:form.lng}} onClose={()=>setShowMap(false)}
+          onPick={({lat,lng})=>{ setForm(f=>({...f,lat:String(lat),lng:String(lng)})); setMsg("✓ Location captured from map"); }}/>}
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10, marginBottom:12 }}>
+          <div><label style={L}>Latitude</label><input value={form.lat} onChange={e=>setForm(f=>({...f,lat:e.target.value}))} placeholder="21.25" style={I}/></div>
+          <div><label style={L}>Longitude</label><input value={form.lng} onChange={e=>setForm(f=>({...f,lng:e.target.value}))} placeholder="81.63" style={I}/></div>
+          <div><label style={L}>Radius (m)</label><input type="number" value={form.radius} onChange={e=>setForm(f=>({...f,radius:e.target.value}))} placeholder="100" style={I}/></div>
+        </div>
+        {msg && <div style={{ fontSize:12, fontWeight:600, color:msg.startsWith("✓")?T.green:msg.startsWith("📍")?T.blue:T.amber, marginBottom:10 }}>{msg}</div>}
+        <div style={{ display:"flex", gap:8 }}>
+          {form.id && <button onClick={()=>{setForm(blank);setMsg("");}} style={{ flex:1, padding:"10px", borderRadius:8, background:"white", border:`1px solid ${T.border}`, color:T.textMid, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>Cancel</button>}
+          <button onClick={save} disabled={busy} style={{ flex:2, padding:"10px", borderRadius:8, background:busy?T.textLight:T.blue, color:"white", border:"none", fontSize:12.5, fontWeight:700, cursor:busy?"not-allowed":"pointer" }}>{busy?"Saving…":(form.id?"💾 Update Location":"💾 Add Location")}</button>
+        </div>
+      </div>
+    </SectionCard>
+  );
+}
+
 function CompanySettings() {
   const [company, setCompany] = useState({
     name: "", legalName: "", gstin: "", pan: "",
@@ -899,7 +1020,14 @@ function RolesAccess() {
 // MULTI-LEVEL APPROVAL — Expanded with all 12 transaction types + edit/create
 // ═══════════════════════════════════════════════════════════════════════
 function ApprovalSettings() {
-  const allRoles = ["Site Supervisor", "Project Manager", "Accountant", "Admin"];
+  // Role options: value = slug (matches req.user.role), label = display name
+  const ROLE_OPTIONS = [
+    { value: "site_supervisor",  label: "Site Supervisor"  },
+    { value: "project_manager",  label: "Project Manager"  },
+    { value: "accountant",       label: "Accountant"       },
+    { value: "admin",            label: "Admin"            },
+  ];
+  const roleLabel = (v) => ROLE_OPTIONS.find(r => r.value === v)?.label || v;
 
   const DEFAULTS = [
     { id: 0,  module: "Design Approval",       cat: "DESIGN",       enabled: true,  levels: [{ role: "Project Manager", limit: null }] },
@@ -946,7 +1074,15 @@ function ApprovalSettings() {
             enabled: !!wf.enabled,
             escalation_hours: wf.escalation_hours || 24,
             notify_channel: wf.notify_channel || "all",
-            levels: (wf.levels || []).map(lv => ({ role: lv.role, limit: lv.amount_limit ? Number(lv.amount_limit) : null })),
+            levels: (wf.levels || []).map(lv => {
+              // New: allowed_roles JSON array; legacy: single role string
+              let roles = [];
+              if (lv.allowed_roles) {
+                try { roles = typeof lv.allowed_roles === "string" ? JSON.parse(lv.allowed_roles) : lv.allowed_roles; } catch(_){}
+              }
+              if (!roles.length && lv.role) roles = [lv.role];
+              return { roles, limit: lv.amount_limit ? Number(lv.amount_limit) : null };
+            }),
           }));
           // Merge: keep API data, add any DEFAULTS not in API
           const apiModules = new Set(mapped.map(m => m.module));
@@ -980,7 +1116,14 @@ function ApprovalSettings() {
           const mapped = r2.data.map(wf => ({
             id: wf.id, module: wf.module, cat: wf.category, enabled: !!wf.enabled,
             escalation_hours: wf.escalation_hours || 24, notify_channel: wf.notify_channel || "all",
-            levels: (wf.levels || []).map(lv => ({ role: lv.role, limit: lv.amount_limit ? Number(lv.amount_limit) : null })),
+            levels: (wf.levels || []).map(lv => {
+              let roles = [];
+              if (lv.allowed_roles) {
+                try { roles = typeof lv.allowed_roles === "string" ? JSON.parse(lv.allowed_roles) : lv.allowed_roles; } catch(_){}
+              }
+              if (!roles.length && lv.role) roles = [lv.role];
+              return { roles, limit: lv.amount_limit ? Number(lv.amount_limit) : null };
+            }),
           }));
           const apiModules = new Set(mapped.map(m => m.module));
           setApprovals([...mapped, ...DEFAULTS.filter(d => !apiModules.has(d.module))]);
@@ -996,7 +1139,11 @@ function ApprovalSettings() {
 
   const openEdit = (a) => {
     setEditItem(a);
-    setEditLevels(a.levels.map(l => ({ ...l })));
+    // Ensure every level has a `roles` array
+    setEditLevels(a.levels.map(l => ({
+      ...l,
+      roles: Array.isArray(l.roles) && l.roles.length ? l.roles : (l.role ? [l.role] : ["admin"]),
+    })));
     setShowEditModal(true);
   };
 
@@ -1005,9 +1152,16 @@ function ApprovalSettings() {
     setShowEditModal(false);
   };
 
-  const addLevel = () => setEditLevels(p => [...p, { role: "Site Supervisor", limit: null }]);
+  const addLevel = () => setEditLevels(p => [...p, { roles: ["site_supervisor"], limit: null }]);
   const removeLevel = (i) => setEditLevels(p => p.filter((_, idx) => idx !== i));
   const updateLevel = (i, k, v) => setEditLevels(p => p.map((l, idx) => idx === i ? { ...l, [k]: v } : l));
+  // Parallel role helpers — add/remove a role within a single level
+  const addRoleToLevel = (levelIdx, role) => setEditLevels(p =>
+    p.map((l, idx) => idx === levelIdx ? { ...l, roles: [...(l.roles||[]), role] } : l)
+  );
+  const removeRoleFromLevel = (levelIdx, roleIdx) => setEditLevels(p =>
+    p.map((l, idx) => idx === levelIdx ? { ...l, roles: l.roles.filter((_, ri) => ri !== roleIdx) } : l)
+  );
 
   const toggleApproval = (id) => setApprovals(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
 
@@ -1059,7 +1213,10 @@ function ApprovalSettings() {
                         <div style={{ position: "absolute", left: 4, top: 4, width: 14, height: 14, borderRadius: "50%", background: T.card, border: `2.5px solid ${catColors[cat]}`, zIndex: 1 }} />
                         <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 10, padding: "7px 12px", borderRadius: 8, background: T.borderLight }}>
                           <span style={{ fontSize: 12, fontWeight: 600, color: T.textMid }}>L{li + 1}:</span>
-                          <span style={{ fontSize: 12, color: T.text, flex: 1 }}>{l.role}</span>
+                          <span style={{ fontSize: 12, color: T.text, flex: 1 }}>
+                            {(l.roles||[l.role]).filter(Boolean).map(r => roleLabel(r)).join(" / ")}
+                            {(l.roles||[]).length > 1 && <span style={{ fontSize: 10, color: T.amber, marginLeft: 4, fontWeight: 600 }}>(any)</span>}
+                          </span>
                           <Badge text={l.limit ? `Up to Rs.${l.limit >= 100000 ? (l.limit / 100000).toFixed(0) + "L" : (l.limit / 1000).toFixed(0) + "K"}` : "Unlimited"} color={l.limit ? T.amber : T.green} bg={l.limit ? T.amberSoft : T.greenSoft} />
                         </div>
                       </div>
@@ -1088,26 +1245,74 @@ function ApprovalSettings() {
         title={`Edit Approval — ${editItem?.module || ""}`}
         desc="Add, remove, or modify approval levels and their limits" width={560}>
 
-        {editLevels.map((l, i) => (
-          <div key={i} style={{ display: "flex", gap: 12, alignItems: "flex-end", marginBottom: 14, padding: "14px", borderRadius: 10, background: T.borderLight, border: `1px solid ${T.border}` }}>
-            <div style={{ width: 32, textAlign: "center", paddingBottom: 8 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: T.blue }}>L{i + 1}</div>
+        {editLevels.map((l, i) => {
+          const lvRoles = l.roles || [];
+          const isParallel = lvRoles.length > 1;
+          const unusedRoles = ROLE_OPTIONS.filter(o => !lvRoles.includes(o.value));
+          return (
+            <div key={i} style={{ marginBottom: 14, padding: "14px", borderRadius: 10, background: T.borderLight, border: `1.5px solid ${isParallel ? T.amber : T.border}` }}>
+              {/* Level header */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 20 }}>L{i + 1}</span>
+                  {isParallel && (
+                    <span style={{ fontSize: 10.5, fontWeight: 600, color: T.amber, background: "#FFF8E1", padding: "2px 8px", borderRadius: 20, border: "1px solid #FFD54F" }}>
+                      ⚡ Koi bhi approve kar sakta hai
+                    </span>
+                  )}
+                </div>
+                <button onClick={() => removeLevel(i)} disabled={editLevels.length <= 1}
+                  style={{ padding: "4px 8px", borderRadius: 6, border: "none", background: editLevels.length <= 1 ? T.borderLight : T.redSoft, cursor: editLevels.length <= 1 ? "not-allowed" : "pointer", display: "flex", alignItems: "center", gap: 4 }}>
+                  <IcTrash size={13} color={editLevels.length <= 1 ? T.textLight : T.red} />
+                  <span style={{ fontSize: 11, color: editLevels.length <= 1 ? T.textLight : T.red }}>Remove level</span>
+                </button>
+              </div>
+
+              <div style={{ display: "flex", gap: 14, alignItems: "flex-start", flexWrap: "wrap" }}>
+                {/* Role chips + add-role selector */}
+                <div style={{ flex: 2, minWidth: 200 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>
+                    Approver Role(s) {isParallel && <span style={{ color: T.amber, fontWeight: 700 }}>— Parallel (OR)</span>}
+                  </label>
+                  <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                    {lvRoles.map((r, ri) => (
+                      <span key={ri} style={{ display: "inline-flex", alignItems: "center", gap: 4, padding: "4px 10px", borderRadius: 20, background: T.blueSoft, border: "1.5px solid "+(T.blueMid||T.blue), fontSize: 12.5, fontWeight: 600, color: T.blue }}>
+                        {roleLabel(r)}
+                        {lvRoles.length > 1 && (
+                          <button onClick={() => removeRoleFromLevel(i, ri)}
+                            style={{ background: "none", border: "none", cursor: "pointer", color: T.red, fontSize: 14, lineHeight: 1, padding: 0, marginLeft: 2 }}>×</button>
+                        )}
+                      </span>
+                    ))}
+                    {/* Add-role dropdown (shows only roles not already in this level) */}
+                    {unusedRoles.length > 0 && (
+                      <select value="" onChange={e => { if(e.target.value) addRoleToLevel(i, e.target.value); e.target.value=""; }}
+                        style={{ padding: "4px 8px", borderRadius: 20, border: "1.5px dashed "+T.border, fontSize: 12, color: T.textMid, background: "white", cursor: "pointer", fontFamily: "inherit" }}>
+                        <option value="">+ Role add karo</option>
+                        {unusedRoles.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                      </select>
+                    )}
+                  </div>
+                  {isParallel && (
+                    <div style={{ fontSize: 11, color: T.amber, marginTop: 5 }}>
+                      ℹ️ In me se koi bhi ek approve kare to kafi hai
+                    </div>
+                  )}
+                </div>
+
+                {/* Amount limit */}
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>Amount Limit (Rs.)</label>
+                  <input type="number" value={l.limit || ""} onChange={e => updateLevel(i, "limit", e.target.value ? parseInt(e.target.value) : null)} placeholder="No limit"
+                    style={{ width: "100%", padding: "9px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13, color: T.text, background: "white", outline: "none", boxSizing: "border-box", fontFamily: T.font }}
+                    onFocus={e => e.target.style.borderColor = T.blue}
+                    onBlur={e => e.target.style.borderColor = T.border}
+                  />
+                </div>
+              </div>
             </div>
-            <FormSelect label="Approver Role" value={l.role} onChange={v => updateLevel(i, "role", v)} options={allRoles.map(r => ({ value: r, label: r }))} half />
-            <div style={{ flex: 1, minWidth: 140 }}>
-              <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>Amount Limit (Rs.)</label>
-              <input type="number" value={l.limit || ""} onChange={e => updateLevel(i, "limit", e.target.value ? parseInt(e.target.value) : null)} placeholder="No limit"
-                style={{ width: "100%", padding: "10px 14px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13.5, color: T.text, background: "white", outline: "none", boxSizing: "border-box", fontFamily: T.font }}
-                onFocus={e => e.target.style.borderColor = T.blue}
-                onBlur={e => e.target.style.borderColor = T.border}
-              />
-            </div>
-            <button onClick={() => removeLevel(i)} disabled={editLevels.length <= 1}
-              style={{ padding: 8, borderRadius: 6, border: "none", background: editLevels.length <= 1 ? T.borderLight : T.redSoft, cursor: editLevels.length <= 1 ? "not-allowed" : "pointer", display: "flex", marginBottom: 2 }}>
-              <IcTrash size={15} color={editLevels.length <= 1 ? T.textLight : T.red} />
-            </button>
-          </div>
-        ))}
+          );
+        })}
 
         <button onClick={addLevel}
           style={{ width: "100%", padding: "10px", borderRadius: 8, border: `2px dashed ${T.border}`, background: "transparent", fontSize: 13, fontWeight: 600, color: T.textLight, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 8, marginBottom: 20 }}>
@@ -2253,6 +2458,7 @@ const settingsSections = [
   { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,       section: null },
   { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
   { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
+  { id: "locations",     label: "Office & Warehouse",   Icon: IcBuilding,  Comp: LocationsSettings,      section: null },
   { id: "appearance",    label: "Appearance",           Icon: IcLayout,    Comp: UIPreferences,          section: "PERSONALIZATION" },
   { id: "bank",          label: "Bank Details",         Icon: IcBank,      Comp: BankDetails,            section: "FINANCE & MATERIAL" },
   { id: "material",      label: "Material Settings",    Icon: IcBox,       Comp: MaterialSettings,       section: null },
