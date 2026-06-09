@@ -1102,9 +1102,9 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
         {mr.mr_number&&<div style={{fontSize:10,color:T.t4,marginTop:3}}>{mr.mr_number}</div>}
         <PhotoStrip photos={mr.photo_urls} accent={sc.c}/>
       </div>
-      {/* Action row */}
+      {/* Action row — only visible to approver role */}
       <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>
-        {stage==="Requested"&&(<>
+        {stage==="Requested"&&onApprove&&(<>
           {isReject
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
                 <input value={rejectNote} onChange={e=>setRejectNote(e.target.value)} placeholder="Reject reason..."
@@ -1374,6 +1374,9 @@ function TransferCard({tr}){
 function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
   // mode: "approvals" → Design/Finance/Payment tabs
   //       "materials" → MR / PO / Warehouse tabs
+  // Read logged-in user to gate Approve/Reject visibility
+  const _cu=(()=>{try{return JSON.parse(localStorage.getItem("gb_user"))||{};}catch{return{};}})();
+  const canApproveInMaterials=["admin","super_admin"].includes(_cu?.role);
   const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"mr");
   const [mrStage,setMrStage]=useState("Requested");  // MR stage sub-tab
   const [poView,setPoView]=useState("pending");       // PO sub-tab
@@ -2305,7 +2308,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject}){
                   msg={mrStage==="Requested"?"Koi pending request nahi!":"Koi "+mrStage.toLowerCase()+" MR nahi!"}
                   sub={(mrSite!=="All"||mrSearch)?"Filter change karke dekhein":"Is stage mein koi item nahi"}/>
               :mrFiltered(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
-                  onApprove={approveMR} onReject={rejectMR} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
+                  onApprove={canApproveInMaterials?approveMR:null} onReject={canApproveInMaterials?rejectMR:null} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
                   onMarkOrdered={async(id, vendor, expected_delivery)=>{
                     setActing(p=>({...p,[id]:"ordering"}));
