@@ -2542,7 +2542,8 @@ function ProjectsPage({onSelectProject}){
         const mrCountProc=byMod.find(m=>m.module==="Material Request")?.count||0;
         const prCount=byMod.find(m=>m.module==="Payment Request")?.count||0;
         const mrCount=mrCountProc+whMrCount;
-        const total=(countRes.data.total||0)+whMrCount;
+        // Exclude MRs from approvalCount — they have their own "Material Requests" tile
+        const total=Math.max(0,(countRes.data.total||0)-mrCountProc);
         apiCache.set("approval-counts",{mrCount,prCount,total},30000);
         setMrPendingCount(mrCount);
         setPrPendingCount(prCount);
@@ -2563,7 +2564,8 @@ function ProjectsPage({onSelectProject}){
       const mrCount=mrCountProc+whMrCount;
       const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
       const designCount=(drRes.success?drRes.data:[]).filter(d=>d.status==="Pending"||d.status==="Revision").length;
-      const total=mrCount+prCount+designCount;
+      // Exclude MRs from approvalCount — they have their own "Material Requests" tile
+      const total=prCount+designCount;
       apiCache.set("approval-counts",{mrCount,prCount,total},30000);
       setMrPendingCount(mrCount);
       setPrPendingCount(prCount);
