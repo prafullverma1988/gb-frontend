@@ -1713,7 +1713,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
       setSaveErr("");setActing(p=>({...p,[key]:isRej?"rejecting":isRevise?"revising":"approving"}));
       try{
         let res;
-        if(src==="design"){
+        if(item._request_id){
+          // UNIFIED ENGINE: item is enrolled in the central approval workflow —
+          // always act through the engine so multi-level hierarchy is enforced.
+          const centralAction=isRevise?"revise":isRej?"reject":"approve";
+          const centralRemarks=isRevise?revisionNote?.trim():isRej?rejectNote?.trim():undefined;
+          res=await api.patch("/approvals/"+item._request_id+"/action",{action:centralAction,remarks:centralRemarks});
+        } else if(src==="design"){
           const status=isRevise?"Revision":isRej?"Rejected":"Approved";
           const note=status==="Revision"?revisionNote.trim():(status==="Rejected"?rejectNote.trim():undefined);
           res=await api.patch("/design/drawings/"+item._source_id+"/status",{status,note});
