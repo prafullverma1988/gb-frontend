@@ -1611,7 +1611,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // 1. Source-table path: drawings not in approval_requests → addSrc sets _source="design"
   // 2. Centralized path: drawings submitted via POST /approvals/submit → _source undefined but module="Design Approval"
   const designItems   = data.centralized.filter(i=>i._source==="design"||i.module==="Design Approval");
-  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","purchase_order","labour_rate","salary_edit"].includes(i._source));
+  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","purchase_order","labour_rate","salary_edit","attendance_review"].includes(i._source));
   const paymentItems  = [
     ...data.centralized.filter(i=>i._source==="payment_request"),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
@@ -1678,7 +1678,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   };
 
   const CentralCard=({item})=>{
-    const modColors={"Material Request":T.amb,"Design Approval":"#7C3AED","Purchase Order (PO)":T.blu,"RA Bill":"#0891B2","Subcon WO Amendment":"#EA580C","Payment Request":T.blu,"Material Site Transfer":"#059669","Material Issue":"#059669","Salary Edit":"#DB2777"};
+    const modColors={"Material Request":T.amb,"Design Approval":"#7C3AED","Purchase Order (PO)":T.blu,"RA Bill":"#0891B2","Subcon WO Amendment":"#EA580C","Payment Request":T.blu,"Material Site Transfer":"#059669","Material Issue":"#059669","Salary Edit":"#DB2777","Attendance Review":"#0D9488"};
     const mc=modColors[item.module]||T.slt;
     const act=acting["c"+item.id];
     const src=item._source;
@@ -1750,6 +1750,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           res=await api.patch("/approvals/labour-rate/"+item._source_id+"/action",{action:isRej?"reject":"approve"});
         } else if(src==="salary_edit"){
           res=await api.patch("/payroll/salary-edit-requests/"+item._source_id,{status:isRej?"rejected":"approved"});
+        } else if(src==="attendance_review"){
+          // Out-of-fence punch — approve keeps the session/Present; reject undoes it
+          res=await api.patch("/attendance-sessions/sessions/"+item._source_id+"/review",{action:isRej?"reject":"approve"});
         } else {
           // Centralized engine path (approval_requests). For Design revise, send "revise" action.
           const centralAction = isRevise ? "revise" : isRej ? "reject" : "approve";
@@ -1814,7 +1817,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               {src==="design"&&item.category&&<span style={{fontSize:9,color:T.t4}}>{item.category} · {item.drawing_type||"2D"}</span>}
             </div>
             <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{item.title}</div>
-            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name}{!src?" · L"+item.current_level+"/"+item.max_level:""}</div>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{item.project_name||"—"} · by {item.submitted_by_name}{(!src||item._request_id)?" · L"+item.current_level+"/"+item.max_level:""}</div>
             {/* Design — show drawing-status pill, view link, and last revision comment */}
             {src==="design"&&(
               <div style={{display:"flex",flexWrap:"wrap",gap:6,marginTop:6,alignItems:"center"}}>
@@ -1863,10 +1866,22 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               </div>
             )}
             {src==="salary_edit"&&item.notes&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>"{item.notes}"</div>}
+            {src==="attendance_review"&&(
+              <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:"#F0FDFA",borderRadius:6,border:"1px solid #99F6E4",flexWrap:"wrap"}}>
+                <span style={{fontSize:11,color:T.t2}}>🕐 {item.punch_at?new Date(item.punch_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}</span>
+                {item.punch_lat!=null&&(
+                  <a href={`https://www.google.com/maps?q=${item.punch_lat},${item.punch_lng}`} target="_blank" rel="noreferrer"
+                    style={{fontSize:11,color:"#0D9488",fontWeight:700,textDecoration:"none"}}>
+                    📍 {Number(item.punch_lat).toFixed(5)}, {Number(item.punch_lng).toFixed(5)} — map pe dekho ↗
+                  </a>
+                )}
+                <span style={{fontSize:10.5,color:T.amb,fontWeight:600,width:"100%"}}>⚠ Geofence ke bahar punch — approve = Present counts, reject = Absent</span>
+              </div>
+            )}
           </div>
           {item.amount>0&&src!=="labour_rate"&&src!=="salary_edit"&&<span style={{fontSize:13,fontWeight:700,color:mc,flexShrink:0}}>{fmtAmt(item.amount)}</span>}
         </div>
-        {!src&&item.max_level>0&&(
+        {(!src||item._request_id)&&item.max_level>0&&(
           <div style={{display:"flex",gap:4,margin:"6px 0",alignItems:"center"}}>
             {Array.from({length:item.max_level},(_,i)=>{
               const lvl=i+1;const done=lvl<item.current_level;const pending=lvl===item.current_level;
