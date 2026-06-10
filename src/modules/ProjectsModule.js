@@ -1607,7 +1607,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   };
 
   // ── Data splits by category ──────────────────────────────────────────
-  const designItems   = data.centralized.filter(i=>i._source==="design");
+  // Design items can come from two paths:
+  // 1. Source-table path: drawings not in approval_requests → addSrc sets _source="design"
+  // 2. Centralized path: drawings submitted via POST /approvals/submit → _source undefined but module="Design Approval"
+  const designItems   = data.centralized.filter(i=>i._source==="design"||i.module==="Design Approval");
   const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","purchase_order","labour_rate","salary_edit"].includes(i._source));
   const paymentItems  = [
     ...data.centralized.filter(i=>i._source==="payment_request"),
@@ -1685,8 +1688,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
       const isRevise=actionType==="Revision"||actionType==="revise";
       // Revision (and reject) must capture a reason — sender and history both rely on it.
       // Cancel if user clears the prompt.
+      // isDesign: both source AND centralized Design Approval items need the design prompts
+      const isDesign = src==="design" || item.module==="Design Approval";
       let revisionNote=null, rejectNote=null;
-      if((src==="design"||src==="purchase_order")&&isRevise){
+      if((isDesign||src==="purchase_order")&&isRevise){
         const promptMsg=src==="purchase_order"
           ? "Revision note (compulsory) — procurement team ko kya badalna hai?\n\nExample: \"Vendor change karo — better rate available\""
           : "Revision note (compulsory) — designer ko kya badalna hai?\n\nExample: \"Footing depth 1.2m karein, parapet height 4ft tak badhaaye\"";
@@ -1695,7 +1700,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           if(revisionNote!==null) window.alert("Revision note required.");
           return;
         }
-      } else if((src==="design"||src==="purchase_order")&&isRej){
+      } else if((isDesign||src==="purchase_order")&&isRej){
         const promptMsg=src==="purchase_order"
           ? "Rejection reason (compulsory) — PO kyu reject ho rahi hai?"
           : "Rejection reason — drawing kyu reject ho rahi hai?";
@@ -1740,7 +1745,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         } else if(src==="salary_edit"){
           res=await api.patch("/payroll/salary-edit-requests/"+item._source_id,{status:isRej?"rejected":"approved"});
         } else {
-          res=await api.patch("/approvals/"+item.id+"/action",{action:isRej?"reject":"approve"});
+          // Centralized engine path (approval_requests). For Design revise, send "revise" action.
+          const centralAction = isRevise ? "revise" : isRej ? "reject" : "approve";
+          const centralRemarks = isRevise ? revisionNote?.trim() : isRej ? rejectNote?.trim() : undefined;
+          res=await api.patch("/approvals/"+item.id+"/action",{action:centralAction, remarks:centralRemarks});
         }
         if(res&&res.success!==false) setData(p=>({...p,centralized:p.centralized.filter(c=>c.id!==item.id)}));
         else setSaveErr((res&&res.message)||"Action failed");
@@ -1922,7 +1930,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
             {act==="rejecting"?"...":"✕ Reject"}
           </button>
-          {(src==="design"||isPO)&&(
+          {(src==="design"||item.module==="Design Approval"||isPO)&&(
             <button onClick={()=>srcAction("Revision")} disabled={!!act}
               style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
               {act==="revising"?"...":"↻ Revise"}
