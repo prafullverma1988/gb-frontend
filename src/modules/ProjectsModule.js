@@ -1192,7 +1192,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
 }
 
 // ── PO Approval Card ──────────────────────────────────────────────────
-function POApprovalCard({po, approved, acting, onApprove, onCancel}){
+function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true}){
   const act=acting["po"+po.id];
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(2)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${Number(n||0).toLocaleString("en-IN")}`;
   const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});};
@@ -1231,7 +1231,7 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel}){
           {approved&&po.approved_at&&<span style={{fontSize:11,color:T.grn}}>✓ Approved {fmtDate(po.approved_at)}</span>}
         </div>
       </div>
-      {!approved&&(
+      {!approved&&canAct&&(
         <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg,display:"flex",gap:7}}>
           <button onClick={onCancel} disabled={!!act}
             style={{flex:1,padding:"7px",borderRadius:7,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
@@ -1376,7 +1376,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   //       "materials" → MR / PO / Warehouse tabs
   // Read logged-in user to gate Approve/Reject visibility
   const _cu=(()=>{try{return JSON.parse(localStorage.getItem("gb_user"))||{};}catch{return{};}})();
-  const canApproveInMaterials=["admin","super_admin"].includes(_cu?.role);
+  // Legacy fallback gate — used only when the approval engine has no enrolled
+  // items for a module (workflow disabled). Otherwise the engine's
+  // role+level-filtered /approvals/pending list decides who sees buttons.
+  const isAdminUser=["admin","super_admin"].includes(_cu?.role);
   const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"mr");
   const [mrStage,setMrStage]=useState("Requested");  // MR stage sub-tab
   const [poView,setPoView]=useState("pending");       // PO sub-tab
@@ -1473,13 +1476,16 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     }
     try{
       if(mode==="materials"){
-        const [mrRes,poRes,whmrRes,grnRes,trRes,venRes]=await Promise.all([
+        const [mrRes,poRes,whmrRes,grnRes,trRes,venRes,apRes]=await Promise.all([
           api.get("/procurement/mrs"),
           api.get("/procurement/pos"),
           api.get("/warehouse/mr").catch(()=>({success:false})),
           api.get("/warehouse/grn").catch(()=>({success:false})),
           api.get("/warehouse/transfers").catch(()=>({success:false})),
           api.get("/procurement/vendors").catch(()=>({success:false})),
+          // Engine's role+level-filtered pending list — decides which MR/PO
+          // cards show Approve buttons for THIS user (multi-level workflows).
+          api.get("/approvals/pending").catch(()=>({success:false})),
         ]);
         const next = {
           mrs:    mrRes.success  ? mrRes.data   : [],
@@ -1487,7 +1493,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           whmrs:  whmrRes.success? whmrRes.data : [],
           grns:   grnRes.success ? grnRes.data  : [],
           transfers: trRes.success ? trRes.data  : [],
-          finance:[], centralized:[],
+          finance:[], centralized: apRes.success ? (apRes.data||[]) : [],
         };
         setData(next);
         apiCache.set(cacheKey, next, 30000);
@@ -1636,6 +1642,17 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const whApprovedMRs  = data.whmrs.filter(m=>m.status==="Approved"||m.status==="Issued");
   const recentGRNs     = data.grns.slice(0,20);
   const recentTransfers= data.transfers.slice(0,20);
+
+  // ── Engine-driven approvability (materials mode) ──
+  // /approvals/pending is already filtered by role AND current level on the
+  // backend, so "this MR/PO id is in the list" === "this user may act now".
+  // Sequential L1:PM → L2:Admin → PM sees buttons first; after PM approves,
+  // only admin does. Fallback: if the engine has NO enrolled items for the
+  // module (workflow disabled), keep the legacy admin-only gate.
+  const engineMrIds=new Set(data.centralized.filter(i=>i._source==="material_request").map(i=>i._source_id));
+  const enginePoIds=new Set(data.centralized.filter(i=>i._source==="purchase_order").map(i=>i._source_id));
+  const canActOnMr=(id)=>engineMrIds.has(id)||(isAdminUser&&engineMrIds.size===0);
+  const canActOnPo=(id)=>enginePoIds.has(id)||(isAdminUser&&enginePoIds.size===0);
 
   const totalCount = mode==="approvals"
     ? designItems.length+financeItems.length+paymentItems.length
@@ -2353,7 +2370,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
                   msg={mrStage==="Requested"?"Koi pending request nahi!":"Koi "+mrStage.toLowerCase()+" MR nahi!"}
                   sub={(mrSite!=="All"||mrSearch)?"Filter change karke dekhein":"Is stage mein koi item nahi"}/>
               :mrFiltered(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
-                  onApprove={canApproveInMaterials?approveMR:null} onReject={canApproveInMaterials?rejectMR:null} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
+                  onApprove={canActOnMr(mr.id)?approveMR:null} onReject={canActOnMr(mr.id)?rejectMR:null} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
                   onMarkOrdered={async(id, vendor, expected_delivery)=>{
                     setActing(p=>({...p,[id]:"ordering"}));
@@ -2401,6 +2418,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               ?<EmptyState msg={poView==="pending"?"Koi pending PO approval nahi!":"Koi approved PO nahi!"} sub="Sab POs processed hain"/>
               :(poView==="pending"?pendingPOs:approvedPOs).map(po=>(
                 <POApprovalCard key={po.id} po={po} approved={poView==="approved"} acting={acting}
+                  canAct={canActOnPo(po.id)}
                   onApprove={async()=>{
                     setActing(p=>({...p,["po"+po.id]:"approving"}));
                     const res=await api.patch("/procurement/pos/"+po.id+"/approve",{});
