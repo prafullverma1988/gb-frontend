@@ -1476,7 +1476,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     }
     try{
       if(mode==="materials"){
-        const [mrRes,poRes,whmrRes,grnRes,trRes,venRes,apRes]=await Promise.all([
+        const [mrRes,poRes,whmrRes,grnRes,trRes,venRes,apRes,wfRes]=await Promise.all([
           api.get("/procurement/mrs"),
           api.get("/procurement/pos"),
           api.get("/warehouse/mr").catch(()=>({success:false})),
@@ -1486,7 +1486,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           // Engine's role+level-filtered pending list — decides which MR/PO
           // cards show Approve buttons for THIS user (multi-level workflows).
           api.get("/approvals/pending").catch(()=>({success:false})),
+          // Workflow config — tells us which modules have an ENABLED workflow
+          // (so "engine list is empty" can mean "not your turn", never falls
+          // back to the legacy admin gate while a workflow is active).
+          api.get("/approvals/workflows").catch(()=>({success:false})),
         ]);
+        const wfOn={};
+        if(wfRes.success&&Array.isArray(wfRes.data)) wfRes.data.forEach(w=>{wfOn[w.module]=!!w.enabled;});
         const next = {
           mrs:    mrRes.success  ? mrRes.data   : [],
           pos:    poRes.success  ? poRes.data   : [],
@@ -1494,6 +1500,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           grns:   grnRes.success ? grnRes.data  : [],
           transfers: trRes.success ? trRes.data  : [],
           finance:[], centralized: apRes.success ? (apRes.data||[]) : [],
+          wfOn,
         };
         setData(next);
         apiCache.set(cacheKey, next, 30000);
@@ -1647,12 +1654,16 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // /approvals/pending is already filtered by role AND current level on the
   // backend, so "this MR/PO id is in the list" === "this user may act now".
   // Sequential L1:PM → L2:Admin → PM sees buttons first; after PM approves,
-  // only admin does. Fallback: if the engine has NO enrolled items for the
-  // module (workflow disabled), keep the legacy admin-only gate.
+  // only admin does. When a workflow is ENABLED the engine list is the ONLY
+  // authority (an empty list means "not your turn", even for admin). The
+  // legacy admin-only gate applies ONLY when the module has no enabled
+  // workflow at all.
   const engineMrIds=new Set(data.centralized.filter(i=>i._source==="material_request").map(i=>i._source_id));
   const enginePoIds=new Set(data.centralized.filter(i=>i._source==="purchase_order").map(i=>i._source_id));
-  const canActOnMr=(id)=>engineMrIds.has(id)||(isAdminUser&&engineMrIds.size===0);
-  const canActOnPo=(id)=>enginePoIds.has(id)||(isAdminUser&&enginePoIds.size===0);
+  const mrWfOn=!!(data.wfOn&&data.wfOn["Material Request"]);
+  const poWfOn=!!(data.wfOn&&data.wfOn["Purchase Order (PO)"]);
+  const canActOnMr=(id)=>mrWfOn?engineMrIds.has(id):isAdminUser;
+  const canActOnPo=(id)=>poWfOn?enginePoIds.has(id):isAdminUser;
 
   const totalCount = mode==="approvals"
     ? designItems.length+financeItems.length+paymentItems.length
