@@ -12,6 +12,7 @@ import MaterialLedgerDrawer from "../components/MaterialLedgerDrawer";
 import uploadManager from "../utils/uploadManager";
 import EstimateBuilderModal from "./EstimateBuilderModal";
 import MOMModule from "./MOMModule";
+import MapPicker from "../components/MapPicker";
 import { T, fmt, fmtN, localYMD, PROJ, STATUS_S, STAGES, STAGE_S } from "./shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabIc } from "./shared/ui";
 
@@ -342,6 +343,215 @@ function ProjectSwitcher({ current, onSwitch }) {
         </div>
       )}
     </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// PROJECT SETTINGS FORM — all per-project config in one drawer:
+// details (name/status/dates/PM/client/BOQ) + per-project geo-location.
+// ═══════════════════════════════════════════════════════════════════
+function ProjectSettingsForm({ project, isAdmin, onClose }) {
+  const STATUS_OPTS = ["Not Started","Ongoing","Hold","Completed"];
+  const [form, setForm] = useState({
+    name:           project.name || "",
+    status:         project.status || "Not Started",
+    cityId:         project.city_id || "",
+    start_date:     project.start_date ? String(project.start_date).split("T")[0] : "",
+    end_date:       project.end_date ? String(project.end_date).split("T")[0] : "",
+    pm_name:        project.pm_name || "",
+    site_supervisor:project.site_supervisor || "",
+    boq_value:      project.boq_value ?? "",
+    contract_value: project.contract_value ?? "",
+    client_name:    project.client_name || "",
+    client_phone:   project.client_phone || "",
+    client_email:   project.client_email || "",
+    site_address:   project.site_address || "",
+    description:    project.description || "",
+  });
+  const [cities, setCities] = useState([]);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  // Geo-location (per project) — backed by a single admin geofence row.
+  const [geo, setGeo] = useState({ id:null, lat:"", lng:"", radius:80, label:"" });
+  const [geoLoading, setGeoLoading] = useState(true);
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [geoMsg, setGeoMsg] = useState("");
+  const [showMap, setShowMap] = useState(false);
+  const savingRef = useRef(false);
+
+  useEffect(() => {
+    api.get("/library/cities").then(r => { if (r.success) setCities(r.data || []); }).catch(()=>{});
+    // Load existing admin geofence for this project
+    api.get("/geofences?project_id=" + project.id).then(r => {
+      const f = (r.success && Array.isArray(r.data)) ? r.data.find(g => g.source === "admin") || r.data[0] : null;
+      if (f) setGeo({ id:f.id, lat:String(f.center_lat), lng:String(f.center_lng), radius:f.radius_m || 80, label:f.label || "" });
+    }).catch(()=>{}).finally(()=>setGeoLoading(false));
+  }, [project.id]);
+
+  const upd = (k) => (e) => setForm(p => ({ ...p, [k]: e.target.value }));
+
+  // ── Save project details ──
+  const saveDetails = async () => {
+    if (savingRef.current) return;
+    if (!form.name.trim()) { setMsg("Project name required"); return; }
+    savingRef.current = true; setSaving(true); setMsg("");
+    try {
+      const body = {
+        name: form.name.trim(), status: form.status,
+        start_date: form.start_date || null, end_date: form.end_date || null,
+        pm_name: form.pm_name || null, site_supervisor: form.site_supervisor || null,
+        boq_value: form.boq_value === "" ? null : Number(form.boq_value),
+        contract_value: form.contract_value === "" ? null : Number(form.contract_value),
+        client_name: form.client_name || null, client_phone: form.client_phone || null,
+        client_email: form.client_email || null, site_address: form.site_address || null,
+        description: form.description || null,
+      };
+      if (form.cityId) body.cityId = Number(form.cityId);
+      const r = await api.put("/projects/" + project.id, body);
+      if (r.success) { setMsg("✓ Project details saved"); setTimeout(()=>setMsg(""), 3500); }
+      else setMsg(r.message || "Save failed");
+    } catch (e) { setMsg(e.message || "Network error"); }
+    savingRef.current = false; setSaving(false);
+  };
+
+  // ── Capture current GPS into geo lat/lng ──
+  const useCurrentLocation = () => {
+    if (!navigator.geolocation) { setGeoMsg("GPS not available in this browser"); return; }
+    setGeoMsg("📍 Getting location…");
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeo(g => ({ ...g, lat: pos.coords.latitude.toFixed(6), lng: pos.coords.longitude.toFixed(6) }));
+        setGeoMsg("✓ Location captured — Save to apply");
+      },
+      () => setGeoMsg("GPS denied/timeout — enter coordinates manually"),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  };
+
+  // ── Save / update the project geofence ──
+  const saveGeo = async () => {
+    const lat = parseFloat(geo.lat), lng = parseFloat(geo.lng);
+    if (isNaN(lat) || isNaN(lng)) { setGeoMsg("Valid lat/lng required (or use current location)"); return; }
+    setGeoBusy(true); setGeoMsg("");
+    try {
+      const body = {
+        project_id: project.id,
+        label: geo.label || (project.name + " — Site"),
+        center_lat: lat, center_lng: lng, radius_m: Number(geo.radius) || 80,
+      };
+      const r = geo.id
+        ? await api.put("/geofences/" + geo.id, body)
+        : await api.post("/geofences", body);
+      if (r.success) {
+        if (r.data?.id) setGeo(g => ({ ...g, id: r.data.id }));
+        setGeoMsg("✓ Geo-location saved — punch-in is now geofenced to this site");
+        setTimeout(()=>setGeoMsg(""), 4000);
+      } else setGeoMsg(r.message || "Geo save failed");
+    } catch (e) { setGeoMsg(e.message || "Network error"); }
+    setGeoBusy(false);
+  };
+
+  const L = { fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:".4px", display:"block", marginBottom:4 };
+  const I = { width:"100%", padding:"8px 10px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:12.5, color:T.t1, background:T.surface, outline:"none", boxSizing:"border-box", fontFamily:"inherit" };
+  const card = { background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"14px 16px", marginBottom:12 };
+  const sectionTitle = { fontSize:12.5, fontWeight:800, color:T.t1, marginBottom:10, display:"flex", alignItems:"center", gap:6 };
+
+  return (
+    <div style={{ padding:"4px 2px 20px" }}>
+      {/* ── DETAILS ── */}
+      <div style={card}>
+        <div style={sectionTitle}>📋 Project Details</div>
+        <div style={{ marginBottom:10 }}><label style={L}>Project Name *</label><input value={form.name} onChange={upd("name")} style={I}/></div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+          <div><label style={L}>Status</label>
+            <select value={form.status} onChange={upd("status")} style={{ ...I, cursor:"pointer" }}>
+              {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <div><label style={L}>City</label>
+            <select value={form.cityId} onChange={upd("cityId")} style={{ ...I, cursor:"pointer" }}>
+              <option value="">{project.city || "Select city…"}</option>
+              {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          </div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+          <div><label style={L}>Start Date</label><input type="date" value={form.start_date} onChange={upd("start_date")} style={I}/></div>
+          <div><label style={L}>End Date</label><input type="date" value={form.end_date} onChange={upd("end_date")} style={I}/></div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+          <div><label style={L}>Project Manager</label><input value={form.pm_name} onChange={upd("pm_name")} placeholder="PM name" style={I}/></div>
+          <div><label style={L}>Site Supervisor</label><input value={form.site_supervisor} onChange={upd("site_supervisor")} placeholder="Supervisor" style={I}/></div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div><label style={L}>BOQ Value (₹)</label><input type="number" value={form.boq_value} onChange={upd("boq_value")} placeholder="0" style={I}/></div>
+          <div><label style={L}>Contract Value (₹)</label><input type="number" value={form.contract_value} onChange={upd("contract_value")} placeholder="0" style={I}/></div>
+        </div>
+      </div>
+
+      {/* ── CLIENT ── */}
+      <div style={card}>
+        <div style={sectionTitle}>👤 Client</div>
+        <div style={{ marginBottom:10 }}><label style={L}>Client Name</label><input value={form.client_name} onChange={upd("client_name")} style={I}/></div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+          <div><label style={L}>Phone</label><input value={form.client_phone} onChange={upd("client_phone")} style={I}/></div>
+          <div><label style={L}>Email</label><input value={form.client_email} onChange={upd("client_email")} style={I}/></div>
+        </div>
+        <div style={{ marginBottom:10 }}><label style={L}>Site Address</label><input value={form.site_address} onChange={upd("site_address")} placeholder="Full site address" style={I}/></div>
+        <div><label style={L}>Notes / Description</label><textarea value={form.description} onChange={upd("description")} rows={2} style={{ ...I, resize:"vertical" }}/></div>
+      </div>
+
+      {msg && <div style={{ fontSize:12, fontWeight:600, color:msg.startsWith("✓")?T.grn:T.red, marginBottom:8 }}>{msg}</div>}
+      {isAdmin && (
+        <button onClick={saveDetails} disabled={saving}
+          style={{ width:"100%", padding:"11px", borderRadius:8, background:saving?T.b2:T.blu, color:"white", border:"none", fontSize:13, fontWeight:700, cursor:saving?"not-allowed":"pointer", marginBottom:18 }}>
+          {saving ? "Saving…" : "💾 Save Project Details"}
+        </button>
+      )}
+
+      {/* ── GEO-LOCATION ── */}
+      <div style={{ ...card, borderColor:T.bluM, background:T.bluL }}>
+        <div style={sectionTitle}>📍 Site Geo-Location (Geofence)</div>
+        <div style={{ fontSize:11, color:T.t3, marginBottom:12, lineHeight:1.5 }}>
+          Is project ke site ki location set karo. Mobile punch-in is fence ke andar count hoga.
+          Har project ki apni alag location hoti hai.
+        </div>
+        {geoLoading ? (
+          <div style={{ fontSize:12, color:T.t4, padding:"8px 0" }}>Loading…</div>
+        ) : (<>
+          <div style={{ display:"flex", gap:8, marginBottom:10 }}>
+            <button onClick={useCurrentLocation}
+              style={{ flex:1, padding:"9px", borderRadius:7, background:T.surface, border:`1.5px solid ${T.blu}`, color:T.blu, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
+              📍 Current Location
+            </button>
+            <button onClick={()=>setShowMap(true)}
+              style={{ flex:1, padding:"9px", borderRadius:7, background:T.surface, border:`1.5px solid ${T.grn}`, color:T.grn, fontSize:12.5, fontWeight:700, cursor:"pointer" }}>
+              🗺️ Pick from Map
+            </button>
+          </div>
+          {showMap && <MapPicker initial={{lat:geo.lat, lng:geo.lng}} onClose={()=>setShowMap(false)}
+            onPick={({lat,lng})=>{ setGeo(g=>({...g,lat:String(lat),lng:String(lng)})); setGeoMsg("✓ Location captured from map — Save to apply"); }}/>}
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+            <div><label style={L}>Latitude</label><input value={geo.lat} onChange={e=>setGeo(g=>({...g,lat:e.target.value}))} placeholder="e.g. 21.250000" style={I}/></div>
+            <div><label style={L}>Longitude</label><input value={geo.lng} onChange={e=>setGeo(g=>({...g,lng:e.target.value}))} placeholder="e.g. 81.630000" style={I}/></div>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
+            <div><label style={L}>Radius (meters)</label><input type="number" value={geo.radius} onChange={e=>setGeo(g=>({...g,radius:e.target.value}))} placeholder="80" style={I}/></div>
+            <div><label style={L}>Label</label><input value={geo.label} onChange={e=>setGeo(g=>({...g,label:e.target.value}))} placeholder={project.name + " — Site"} style={I}/></div>
+          </div>
+          {geo.id && <div style={{ fontSize:10.5, color:T.grn, marginBottom:8 }}>✓ Existing fence #{geo.id} — editing</div>}
+          {geoMsg && <div style={{ fontSize:11.5, fontWeight:600, color:geoMsg.startsWith("✓")?T.grn:geoMsg.startsWith("📍")?T.blu:T.amb, marginBottom:8 }}>{geoMsg}</div>}
+          {isAdmin && (
+            <button onClick={saveGeo} disabled={geoBusy}
+              style={{ width:"100%", padding:"10px", borderRadius:8, background:geoBusy?T.b2:T.grn, color:"white", border:"none", fontSize:12.5, fontWeight:700, cursor:geoBusy?"not-allowed":"pointer" }}>
+              {geoBusy ? "Saving…" : (geo.id ? "💾 Update Geo-Location" : "💾 Set Geo-Location")}
+            </button>
+          )}
+          {!isAdmin && <div style={{ fontSize:11, color:T.t4, fontStyle:"italic" }}>Admin/PM only — set location.</div>}
+        </>)}
+      </div>
+    </div>
   );
 }
 
@@ -742,11 +952,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
       {/* ── PROJECT SETTINGS DRAWER ── */}
       {showProjectSettings && (
         <SimpleDrawer title="Project Settings" subtitle={`${project.name}`} onClose={()=>setShowProjectSettings(false)}>
-          <PlaceholderEmpty
-            icon={<svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>}
-            title="Project settings"
-            desc="Edit project name, dates, PM, BOQ value, status, and team members. This panel will host all per-project configuration."
-          />
+          <ProjectSettingsForm project={project} isAdmin={isAdmin} onClose={()=>setShowProjectSettings(false)}/>
         </SimpleDrawer>
       )}
       {/* ── PAYMENT REQUEST DRAWER ── */}
