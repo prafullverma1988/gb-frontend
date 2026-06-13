@@ -1658,12 +1658,17 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // authority (an empty list means "not your turn", even for admin). The
   // legacy admin-only gate applies ONLY when the module has no enabled
   // workflow at all.
-  const engineMrIds=new Set(data.centralized.filter(i=>i._source==="material_request").map(i=>i._source_id));
-  const enginePoIds=new Set(data.centralized.filter(i=>i._source==="purchase_order").map(i=>i._source_id));
+  // String()-normalize ids — engine ref_id and source row id can differ in
+  // type (number vs string) across endpoints; loose-key the Set so .has works.
+  const engineMrIds=new Set(data.centralized.filter(i=>i._source==="material_request").map(i=>String(i._source_id)));
+  const enginePoIds=new Set(data.centralized.filter(i=>i._source==="purchase_order").map(i=>String(i._source_id)));
   const mrWfOn=!!(data.wfOn&&data.wfOn["Material Request"]);
   const poWfOn=!!(data.wfOn&&data.wfOn["Purchase Order (PO)"]);
-  const canActOnMr=(id)=>mrWfOn?engineMrIds.has(id):isAdminUser;
-  const canActOnPo=(id)=>poWfOn?enginePoIds.has(id):isAdminUser;
+  // If the engine returned this item for me, I can act — it already filtered
+  // by role+level (covers PM at L1, admin at L2, parallel). The admin-only
+  // fallback applies ONLY when the module has no enabled workflow at all.
+  const canActOnMr=(id)=>engineMrIds.has(String(id))||(!mrWfOn&&isAdminUser);
+  const canActOnPo=(id)=>enginePoIds.has(String(id))||(!poWfOn&&isAdminUser);
 
   const totalCount = mode==="approvals"
     ? designItems.length+financeItems.length+paymentItems.length
