@@ -1055,7 +1055,7 @@ const MR_STAGE_COLORS={
   Received: {c:"#7C3AED",bg:"#F5F3FF",bdr:"#DDD6FE",label:"Delivered"},
   Rejected: {c:T.red,bg:T.redL,bdr:T.redM,label:"Rejected"},
 };
-function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setRejectId, rejectNote, setRejectNote, onMarkOrdered, onMarkReceived, vendorList=[], onVendorAdded}){
+function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setRejectId, rejectNote, setRejectNote, onMarkOrdered, onMarkReceived, vendorList=[], onVendorAdded, waitingOn=null}){
   const [editQty,setEditQty]=useState(String(mr.quantity||""));
   const [showManual,setShowManual]=useState(false);
   const [manualVendor,setManualVendor]=useState("");
@@ -1104,6 +1104,12 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
       </div>
       {/* Action row — only visible to approver role */}
       <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg}}>
+        {stage==="Requested"&&!onApprove&&waitingOn&&(
+          <div style={{padding:"5px 10px",borderRadius:6,background:T.ambL,border:"1px solid "+T.ambM,display:"flex",alignItems:"center",gap:6}}>
+            <span style={{fontSize:11}}>⏳</span>
+            <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingOn}</b></span>
+          </div>
+        )}
         {stage==="Requested"&&onApprove&&(<>
           {isReject
             ?<div style={{display:"flex",flexDirection:"column",gap:5}}>
@@ -1192,7 +1198,7 @@ function MRFlowCard({mr, stage, onApprove, onReject, acting, rejectId, setReject
 }
 
 // ── PO Approval Card ──────────────────────────────────────────────────
-function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true}){
+function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true, waitingOn=null}){
   const act=acting["po"+po.id];
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(2)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${Number(n||0).toLocaleString("en-IN")}`;
   const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});};
@@ -1241,6 +1247,12 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true}
             style={{flex:2,padding:"7px",borderRadius:7,background:act?"#9CA3AF":"#16A34A",border:"none",color:"white",fontSize:12,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
             {act==="approving"?"Approving...":"✓ Approve PO"}
           </button>
+        </div>
+      )}
+      {!approved&&!canAct&&waitingOn&&(
+        <div style={{padding:"8px 13px 11px",borderTop:"1px solid "+T.b1,background:T.bg,display:"flex",alignItems:"center",gap:6}}>
+          <span style={{fontSize:11}}>⏳</span>
+          <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{waitingOn}</b></span>
         </div>
       )}
     </div>
@@ -1380,6 +1392,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // items for a module (workflow disabled). Otherwise the engine's
   // role+level-filtered /approvals/pending list decides who sees buttons.
   const isAdminUser=["admin","super_admin"].includes(_cu?.role);
+  // My Approvals / All toggle — only admin/super_admin/PM get the company-wide
+  // "All" view (matches backend scope gate). Default = "my" (actionable only).
+  const canSeeAll=["admin","super_admin","project_manager"].includes(_cu?.role);
+  const [apprScope,setApprScope]=useState("my"); // "my" | "all"
   const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"mr");
   const [mrStage,setMrStage]=useState("Requested");  // MR stage sub-tab
   const [poView,setPoView]=useState("pending");       // PO sub-tab
@@ -1483,9 +1499,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           api.get("/warehouse/grn").catch(()=>({success:false})),
           api.get("/warehouse/transfers").catch(()=>({success:false})),
           api.get("/procurement/vendors").catch(()=>({success:false})),
-          // Engine's role+level-filtered pending list — decides which MR/PO
-          // cards show Approve buttons for THIS user (multi-level workflows).
-          api.get("/approvals/pending").catch(()=>({success:false})),
+          // Engine's pending list — decides which MR/PO cards show Approve
+          // buttons (multi-level workflows). Fetch full "all" scope when the
+          // user is allowed so the My/All toggle can filter client-side.
+          api.get("/approvals/pending?scope="+(canSeeAll?"all":"my")).catch(()=>({success:false})),
           // Workflow config — tells us which modules have an ENABLED workflow
           // (so "engine list is empty" can mean "not your turn", never falls
           // back to the legacy admin gate while a workflow is active).
@@ -1515,7 +1532,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
       } else {
         const [prRes,apRes]=await Promise.all([
           api.get("/finance/payment-requests"),
-          api.get("/approvals/pending").catch(()=>({success:false})),
+          api.get("/approvals/pending?scope="+(canSeeAll?"all":"my")).catch(()=>({success:false})),
         ]);
         const next = {
           mrs:[], pos:[], whmrs:[], grns:[], transfers:[],
@@ -1619,14 +1636,20 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     setRejectId(null); setRejectNote("");
   };
 
+  // ── My/All scope filter ──────────────────────────────────────────────
+  // "my"  → only items where it's the user's turn (_canActNow). Items without
+  //         the flag (legacy finance PRs) default to actionable.
+  // "all" → everything (read-only cards for items waiting on someone else).
+  const inScope = (i) => apprScope === "all" ? true : (i._canActNow !== false);
+
   // ── Data splits by category ──────────────────────────────────────────
   // Design items can come from two paths:
   // 1. Source-table path: drawings not in approval_requests → addSrc sets _source="design"
   // 2. Centralized path: drawings submitted via POST /approvals/submit → _source undefined but module="Design Approval"
-  const designItems   = data.centralized.filter(i=>i._source==="design"||i.module==="Design Approval");
-  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","purchase_order","labour_rate","salary_edit","attendance_review"].includes(i._source));
+  const designItems   = data.centralized.filter(i=>(i._source==="design"||i.module==="Design Approval")&&inScope(i));
+  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","purchase_order","labour_rate","salary_edit","attendance_review"].includes(i._source)&&inScope(i));
   const paymentItems  = [
-    ...data.centralized.filter(i=>i._source==="payment_request"),
+    ...data.centralized.filter(i=>i._source==="payment_request"&&inScope(i)),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
   ];
 
@@ -1669,6 +1692,22 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // fallback applies ONLY when the module has no enabled workflow at all.
   const canActOnMr=(id)=>engineMrIds.has(String(id))||(!mrWfOn&&isAdminUser);
   const canActOnPo=(id)=>enginePoIds.has(String(id))||(!poWfOn&&isAdminUser);
+  // Waiting-on label (for read-only cards in the All view)
+  const mrWaitMap=new Map(data.centralized.filter(i=>i._source==="material_request").map(i=>[String(i._source_id),i._waitingOn]));
+  const poWaitMap=new Map(data.centralized.filter(i=>i._source==="purchase_order").map(i=>[String(i._source_id),i._waitingOn]));
+  // My/All scope applied only to the pending-approval stage; status tabs
+  // (Approved/Ordered/Delivered, approved POs) always show everything.
+  const mrScoped=(s)=>mrFiltered(s).filter(m=>apprScope==="all"||s!=="Requested"||canActOnMr(m.id));
+  const pendingPOsScoped=apprScope==="all"?pendingPOs:pendingPOs.filter(p=>canActOnPo(p.id));
+
+  // ── My/All toggle badge counts ──
+  const _financePR=data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")).length;
+  const myCount = mode==="approvals"
+    ? data.centralized.filter(i=>i._canActNow!==false).length + _financePR
+    : mrByStage("Requested").filter(m=>canActOnMr(m.id)).length + pendingPOs.filter(p=>canActOnPo(p.id)).length + whPendingMRs.length;
+  const allCount = mode==="approvals"
+    ? data.centralized.length + _financePR
+    : mrByStage("Requested").length + pendingPOs.length + whPendingMRs.length;
 
   const totalCount = mode==="approvals"
     ? designItems.length+financeItems.length+paymentItems.length
@@ -1978,23 +2017,30 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             {isPoExpanded?"Hide detail":"View detail"}
           </button>
         )}
-        {/* Action buttons — Reject / Revision / Approve */}
-        <div style={{display:"flex",gap:6,marginTop:8}} onClick={e=>e.stopPropagation()}>
-          <button onClick={()=>srcAction("reject")} disabled={!!act}
-            style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-            {act==="rejecting"?"...":"✕ Reject"}
-          </button>
-          {(src==="design"||item.module==="Design Approval"||isPO)&&(
-            <button onClick={()=>srcAction("Revision")} disabled={!!act}
-              style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-              {act==="revising"?"...":"↻ Revise"}
+        {/* Action buttons — only when it's the viewer's turn (_canActNow).
+            In the "All" view, items waiting on someone else show a read-only
+            badge instead of buttons. */}
+        {item._canActNow===false
+          ?<div style={{marginTop:8,padding:"7px 10px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:11.5}}>⏳</span>
+              <span style={{fontSize:11,color:T.t3}}>Waiting on <b style={{color:T.amb}}>{item._waitingOn||item.pending_role||"approver"}</b></span>
+            </div>
+          :<div style={{display:"flex",gap:6,marginTop:8}} onClick={e=>e.stopPropagation()}>
+            <button onClick={()=>srcAction("reject")} disabled={!!act}
+              style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+              {act==="rejecting"?"...":"✕ Reject"}
             </button>
-          )}
-          <button onClick={()=>srcAction("approve")} disabled={!!act}
-            style={{flex:isPO?1:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
-            {act==="approving"?"Approving...":"✓ Approve"}
-          </button>
-        </div>
+            {(src==="design"||item.module==="Design Approval"||isPO)&&(
+              <button onClick={()=>srcAction("Revision")} disabled={!!act}
+                style={{flex:1,padding:"6px",borderRadius:6,background:"#DBEAFE",border:"1px solid #93C5FD",color:"#1D4ED8",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+                {act==="revising"?"...":"↻ Revise"}
+              </button>
+            )}
+            <button onClick={()=>srcAction("approve")} disabled={!!act}
+              style={{flex:isPO?1:2,padding:"6px",borderRadius:6,background:act==="approving"?T.b1:T.grn,border:"none",color:"white",fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>
+              {act==="approving"?"Approving...":"✓ Approve"}
+            </button>
+          </div>}
         {isRaBill&&(
           <button onClick={()=>{
               const next=isRaExpanded?null:item._source_id;
@@ -2257,8 +2303,8 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     {id:"payment", label:"Payment", color:T.grn,     count:paymentItems.length},
   ];
   const MATERIAL_TABS=[
-    {id:"mr",        label:"Material Requests", color:T.blu, count:mrByStage("Requested").length},
-    {id:"po",        label:"PO Approval",       color:T.amb, count:pendingPOs.length},
+    {id:"mr",        label:"Material Requests", color:T.blu, count:mrScoped("Requested").length},
+    {id:"po",        label:"PO Approval",       color:T.amb, count:pendingPOsScoped.length},
     {id:"warehouse", label:"Warehouse",         color:T.grn, count:whPendingMRs.length},
   ];
   const tabs=mode==="approvals"?APPROVAL_TABS:MATERIAL_TABS;
@@ -2279,9 +2325,24 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10}}>
-          <span style={{background:headerAccent,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{totalCount} pending</span>
+          <span style={{background:headerAccent,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{apprScope==="my"?myCount:allCount} pending</span>
           <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{mode==="approvals"?"Design · Finance · Payment":"Procurement · MR · Warehouse"}</span>
         </div>
+        {/* My Approvals / All toggle — only admin/super_admin/PM */}
+        {canSeeAll&&(
+          <div style={{display:"flex",background:"rgba(255,255,255,0.08)",borderRadius:20,padding:3,gap:3,marginBottom:10}}>
+            {[{v:"my",label:"My approvals",ic:"👤",n:myCount},{v:"all",label:"All",ic:"☰",n:allCount}].map(o=>(
+              <button key={o.v} onClick={()=>setApprScope(o.v)}
+                style={{flex:1,padding:"6px",border:"none",borderRadius:20,cursor:"pointer",fontSize:11.5,
+                  fontWeight:apprScope===o.v?700:500,transition:"all .15s",
+                  background:apprScope===o.v?headerAccent:"transparent",
+                  color:apprScope===o.v?"white":"rgba(255,255,255,0.55)",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}>
+                {o.label}
+                <span style={{background:apprScope===o.v?"rgba(255,255,255,0.28)":"rgba(255,255,255,0.12)",color:"white",fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10}}>{o.n}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{display:"flex",borderRadius:8,overflow:"hidden",border:"1px solid rgba(255,255,255,0.12)"}}>
           {tabs.map(t=>(
             <button key={t.id} onClick={()=>setActiveTab(t.id)}
@@ -2381,11 +2442,12 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           </div>
           {/* MR cards */}
           <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
-            {mrFiltered(mrStage).length===0
+            {mrScoped(mrStage).length===0
               ?<EmptyState
-                  msg={mrStage==="Requested"?"Koi pending request nahi!":"Koi "+mrStage.toLowerCase()+" MR nahi!"}
-                  sub={(mrSite!=="All"||mrSearch)?"Filter change karke dekhein":"Is stage mein koi item nahi"}/>
-              :mrFiltered(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
+                  msg={mrStage==="Requested"?(apprScope==="my"?"Koi MR aapke approval ke liye nahi!":"Koi pending request nahi!"):"Koi "+mrStage.toLowerCase()+" MR nahi!"}
+                  sub={(mrSite!=="All"||mrSearch)?"Filter change karke dekhein":apprScope==="my"&&mrStage==="Requested"?"\"All\" pe switch karke poori list dekhein":"Is stage mein koi item nahi"}/>
+              :mrScoped(mrStage).map(mr=><MRFlowCard key={mr.id} mr={mr} stage={mrStage}
+                  waitingOn={!canActOnMr(mr.id)?(mrWaitMap.get(String(mr.id))||"approver"):null}
                   onApprove={canActOnMr(mr.id)?approveMR:null} onReject={canActOnMr(mr.id)?rejectMR:null} acting={acting} rejectId={rejectId} setRejectId={setRejectId}
                   rejectNote={rejectNote} setRejectNote={setRejectNote}
                   onMarkOrdered={async(id, vendor, expected_delivery)=>{
@@ -2430,11 +2492,12 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             ))}
           </div>
           <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:10}}>
-            {(poView==="pending"?pendingPOs:approvedPOs).length===0
-              ?<EmptyState msg={poView==="pending"?"Koi pending PO approval nahi!":"Koi approved PO nahi!"} sub="Sab POs processed hain"/>
-              :(poView==="pending"?pendingPOs:approvedPOs).map(po=>(
+            {(poView==="pending"?pendingPOsScoped:approvedPOs).length===0
+              ?<EmptyState msg={poView==="pending"?(apprScope==="my"?"Koi PO aapke approval ke liye nahi!":"Koi pending PO approval nahi!"):"Koi approved PO nahi!"} sub={apprScope==="my"&&poView==="pending"?"\"All\" pe switch karke poori list dekhein":"Sab POs processed hain"}/>
+              :(poView==="pending"?pendingPOsScoped:approvedPOs).map(po=>(
                 <POApprovalCard key={po.id} po={po} approved={poView==="approved"} acting={acting}
                   canAct={canActOnPo(po.id)}
+                  waitingOn={poView==="pending"&&!canActOnPo(po.id)?(poWaitMap.get(String(po.id))||"approver"):null}
                   onApprove={async()=>{
                     setActing(p=>({...p,["po"+po.id]:"approving"}));
                     const res=await api.patch("/procurement/pos/"+po.id+"/approve",{});
