@@ -150,9 +150,15 @@ function GeofenceAdminTab({isAdmin}){
   },[]);
   useEffect(()=>{ reload(); },[reload]);
 
+  // Per-suggestion radius override — admin can correct the auto-learned
+  // radius before confirming (photo spread under/over-estimates real site).
+  const [sugRadius,setSugRadius]=useState({});   // {suggestionId: radius}
   const confirmSuggestion=async(id)=>{
     try{
-      const r=await api.put(`/geofences/${id}/confirm`,{});
+      const body={};
+      const r0=Number(sugRadius[id]);
+      if(r0>0) body.radius_m=r0;
+      const r=await api.put(`/geofences/${id}/confirm`,body);
       if(r.success) await reload();
     }catch(e){ alert(e.message); }
   };
@@ -255,11 +261,19 @@ function GeofenceAdminTab({isAdmin}){
                     </span>
                   </div>
                   <div style={{fontSize:10.5,color:T.t3,marginTop:3,fontFamily:"monospace"}}>
-                    {Number(s.center_lat).toFixed(5)}, {Number(s.center_lng).toFixed(5)} · {s.radius_m}m radius
+                    {Number(s.center_lat).toFixed(5)}, {Number(s.center_lng).toFixed(5)}
                   </div>
                   <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{s.label}</div>
                 </div>
-                <div style={{display:"flex",gap:6}}>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {/* Editable radius — defaults to auto-learned value */}
+                  <div style={{display:"flex",alignItems:"center",gap:3,background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:6,padding:"3px 7px"}} title="Radius (meters) — edit before confirming">
+                    <input type="number" min={20} max={1000}
+                      value={sugRadius[s.id]!==undefined?sugRadius[s.id]:(s.radius_m||80)}
+                      onChange={e=>setSugRadius(p=>({...p,[s.id]:e.target.value}))}
+                      style={{width:52,border:"none",background:"transparent",fontSize:11.5,fontWeight:700,color:T.t1,outline:"none",textAlign:"right",fontFamily:"inherit"}}/>
+                    <span style={{fontSize:10,color:T.t4}}>m</span>
+                  </div>
                   <button onClick={()=>rejectSuggestion(s.id)}
                     style={{padding:"6px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>
                     ✕ Reject
@@ -985,7 +999,58 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
   );
 }
 
-function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[]}){
+// ── PUNCH REVIEW STRIP — out-of-geofence punches awaiting HR review ──
+// Same data as Pending Approvals → Finance → Attendance Review; surfaced
+// here too because HR lives in Payroll. Approve = Present stays, Reject = A.
+function PunchReviewStrip({onActed}){
+  const [rows,setRows]=useState([]);
+  const [acting,setActing]=useState(null);
+  const load=useCallback(()=>{
+    api.get("/attendance-sessions/pending-review").then(r=>{
+      if(r.success) setRows(r.data||[]);
+    }).catch(()=>{});
+  },[]);
+  useEffect(()=>{load();},[load]);
+  const act=async(id,action)=>{
+    setActing(id);
+    try{
+      const r=await api.patch(`/attendance-sessions/sessions/${id}/review`,{action});
+      if(r.success){ setRows(p=>p.filter(x=>x.id!==id)); onActed&&onActed(); }
+      else alert(r.message||"Failed");
+    }catch(e){ alert(e.message); }
+    setActing(null);
+  };
+  if(!rows.length) return null;
+  return(
+    <div style={{background:"#F0FDFA",border:"2px dashed #0D9488",borderRadius:10,padding:"11px 14px",marginBottom:12}}>
+      <div style={{fontSize:12.5,fontWeight:800,color:"#0D9488",marginBottom:8}}>
+        📍 Punch Review — {rows.length} geofence ke bahar
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:7}}>
+        {rows.map(s=>(
+          <div key={s.id} style={{background:T.surface,border:"1px solid #99F6E4",borderRadius:8,padding:"8px 11px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+            <div style={{flex:1,minWidth:180}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{s.user_name||"Staff"} {s.project_name&&<span style={{fontWeight:400,color:T.t3}}>· {s.project_name}</span>}</div>
+              <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>
+                🕐 {s.punch_in_at?new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
+                {s.punch_in_lat!=null&&<>
+                  {" · "}
+                  <a href={`https://www.google.com/maps?q=${s.punch_in_lat},${s.punch_in_lng}`} target="_blank" rel="noreferrer" style={{color:"#0D9488",fontWeight:600,textDecoration:"none"}}>📍 map ↗</a>
+                </>}
+              </div>
+            </div>
+            <button disabled={acting===s.id} onClick={()=>act(s.id,"reject")}
+              style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
+            <button disabled={acting===s.id} onClick={()=>act(s.id,"approve")}
+              style={{padding:"5px 13px",borderRadius:6,background:"#0D9488",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===s.id?"…":"✓ Approve"}</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],punchDays={}}){
   const daysInMonth=new Date(year,month+1,0).getDate();
   const now=new Date();const today=(now.getMonth()===month&&now.getFullYear()===year)?now.getDate():month<now.getMonth()||year<now.getFullYear()?daysInMonth:0;
   const ATT_COLORS={"P":{bg:"#ECFDF5",c:"#059669",label:"P"},"A":{bg:"#FEF2F2",c:"#DC2626",label:"A"},"H":{bg:"#FFFBEB",c:"#D97706",label:"H"},"L":{bg:"#EFF6FF",c:"#2563EB",label:"L"},null:{bg:T.surfaceB,c:T.t4,label:"·"}};
@@ -1065,9 +1130,13 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[]}){
               return(
                 <div key={d}
                   onClick={()=>!isFuture&&!isHolBlock&&toggleAtt(emp.id,d)}
-                  style={{width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:cellBg,borderRadius:4,cursor:isFuture||isHolBlock?"default":"pointer",fontSize:9.5,fontWeight:700,color:cellColor,border:`1px solid ${isHolBlock?"#FCA5A5":isFuture?"transparent":sc.bg}`,transition:"all .1s",margin:"0 1px"}}
-                  title={hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:`${emp.name} - Day ${d}`}>
+                  style={{position:"relative",width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:cellBg,borderRadius:4,cursor:isFuture||isHolBlock?"default":"pointer",fontSize:9.5,fontWeight:700,color:cellColor,border:`1px solid ${isHolBlock?"#FCA5A5":isFuture?"transparent":sc.bg}`,transition:"all .1s",margin:"0 1px"}}
+                  title={hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:punchDays[emp.id]?.[d]?`${emp.name} - Day ${d} · 📍 GPS punch (mobile)`:`${emp.name} - Day ${d}`}>
                   {isHolBlock?"H":isFuture?"":sc.label}
+                  {/* GPS-punch source badge — auto-Present from mobile punch */}
+                  {!isFuture&&!isHolBlock&&punchDays[emp.id]?.[d]&&(
+                    <span style={{position:"absolute",top:-1,right:0,fontSize:7,lineHeight:1}}>📍</span>
+                  )}
                 </div>
               );
             })}
@@ -1765,6 +1834,7 @@ function EditStaffModal({emp,onClose,onSaved}){
     aadhaar:     emp.aadhaar||"",
     role:        emp.role||"",
     dept:        emp.dept||"",
+    salary_enabled: emp.salaryEnabled===false?0:1,
     payment_type:emp.paymentType||"fixed",
     basic_salary:    emp.basicSalary||0,
     hra:             emp.hra||0,
@@ -1873,12 +1943,23 @@ function EditStaffModal({emp,onClose,onSaved}){
             <F label="PAN" full><input style={inp} value={form.pan} onChange={e=>set("pan",e.target.value)}/></F>
           </Sect>
           <Sect title="Payment Mode">
-            <F label="Type" full>
+            <F label="Salary Tracking" full>
+              <div style={{display:"flex",gap:8}}>
+                {[{v:1,l:"✓ Salary ON",sub:"appears in Monthly Salary"},{v:0,l:"Salary OFF",sub:"attendance only (app user)"}].map(o=>(
+                  <button key={o.v} type="button" onClick={()=>set("salary_enabled",o.v)}
+                    style={{flex:1,padding:"9px 11px",borderRadius:8,border:`1.5px solid ${form.salary_enabled===o.v?(o.v?T.grn:T.amb):T.b1}`,background:form.salary_enabled===o.v?(o.v?T.grnL:T.ambL):T.surface,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:form.salary_enabled===o.v?(o.v?T.grn:T.amb):T.t2}}>{o.l}</div>
+                    <div style={{fontSize:10,color:T.t4,marginTop:1}}>{o.sub}</div>
+                  </button>
+                ))}
+              </div>
+            </F>
+            {!!form.salary_enabled && <F label="Type" full>
               <select style={inp} value={form.payment_type} onChange={e=>set("payment_type",e.target.value)}>
                 <option value="fixed">Fixed (full month salary regardless of attendance)</option>
                 <option value="attendance">Attendance-based (pro-rated by P/H days)</option>
               </select>
-            </F>
+            </F>}
           </Sect>
         </div>
         <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
@@ -2230,7 +2311,10 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
     setPaymentTypes(p=>({...p,[empId]:p[empId]==="fixed"?"attendance":"fixed"}));
   };
 
-  const filtered=staff.filter(e=>!search||e.name.toLowerCase().includes(search.toLowerCase())||e.role.toLowerCase().includes(search.toLowerCase()));
+  // Salary list shows only salary-enabled staff. App-users with salary OFF
+  // appear in Attendance but not here (until admin enables salary).
+  const salaryOffCount = staff.filter(e=>e.salaryEnabled===false).length;
+  const filtered=staff.filter(e=>e.salaryEnabled!==false).filter(e=>!search||e.name.toLowerCase().includes(search.toLowerCase())||(e.role||"").toLowerCase().includes(search.toLowerCase()));
 
   const WD=workingDays||26;
   const calcNet=(emp)=>{
@@ -4260,6 +4344,9 @@ function PayrollModule(){
   const [workers,setWorkers]=useState([]);
   const [advances,setAdvances]=useState([]);
   const [monthlyAtt,setMonthlyAtt]=useState({});
+  const [punchDays,setPunchDays]=useState({});   // {staffId:{day:true}} — GPS punch source badge
+  const [attFilter,setAttFilter]=useState("all"); // all | sal (salary staff) | app (app users)
+  const [attSearch,setAttSearch]=useState("");
   const [dailyAtt,setDailyAtt]=useState({});
   const [selSlipEmp,setSelSlipEmp]=useState(null);
   const [selSlipPayType,setSelSlipPayType]=useState("fixed");
@@ -4298,6 +4385,10 @@ function PayrollModule(){
     joinDate:s.join_date?s.join_date.split("T")[0]:"",project:s.project||"",photo:s.photo||"",
     // Phase 5 forward-compat
     shiftTemplateId:s.shift_template_id||null,
+    // User↔Staff integration: login link + salary toggle
+    userId:s.user_id||null,
+    salaryEnabled:s.salary_enabled===undefined?true:!!s.salary_enabled,
+    isAppUser:!!s.user_id,
   });
   const mapWorker=w=>({
     id:w.id,name:w.name,trade:w.trade||"",
@@ -4357,6 +4448,7 @@ function PayrollModule(){
         api.get("/payroll/attendance/daily?month="+month+"&year="+year),
       ]);
       setMonthlyAtt(mRes.data||{});
+      setPunchDays(mRes.punchDays||{});
       setDailyAtt(dRes.data||{});
     }catch(err){console.error("Load attendance:",err);}
   },[month,year]);
@@ -4567,7 +4659,29 @@ function PayrollModule(){
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
         {/* ─── OFFICE STAFF MODE ─── */}
         {mode==="office" && tab==="office-att" && (
-          <MonthlyAttGrid staff={staff} att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays}/>
+          <>
+          <PunchReviewStrip onActed={loadAttendance}/>
+          {/* Filter bar — one attendance place, filterable */}
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
+            {[
+              {v:"all",  l:"All",            n:staff.length},
+              {v:"sal",  l:"💰 Salary staff", n:staff.filter(s=>s.salaryEnabled!==false).length},
+              {v:"app",  l:"📱 App users",    n:staff.filter(s=>s.isAppUser).length},
+            ].map(f=>(
+              <button key={f.v} onClick={()=>setAttFilter(f.v)}
+                style={{padding:"5px 12px",borderRadius:14,border:`1.5px solid ${attFilter===f.v?T.blu:T.b1}`,background:attFilter===f.v?T.bluL:T.surface,color:attFilter===f.v?T.blu:T.t3,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit"}}>
+                {f.l} <span style={{opacity:.6}}>({f.n})</span>
+              </button>
+            ))}
+            <input value={attSearch} onChange={e=>setAttSearch(e.target.value)} placeholder="Search name…"
+              style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:160}}/>
+          </div>
+          <MonthlyAttGrid
+            staff={staff
+              .filter(s=>attFilter==="all"?true:attFilter==="sal"?s.salaryEnabled!==false:s.isAppUser)
+              .filter(s=>!attSearch||s.name.toLowerCase().includes(attSearch.toLowerCase()))}
+            att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays} punchDays={punchDays}/>
+          </>
         )}
         {mode==="office" && tab==="office-leave" && (
           <LeaveTab staff={staff} month={month} year={year} isAdmin={isAdmin} onAttendanceChanged={loadAttendance}/>
