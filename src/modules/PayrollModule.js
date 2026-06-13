@@ -20,6 +20,8 @@ const IcBell =(p)=><Ic {...p} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158
 const IcAdd  =(p)=><Ic {...p} d="M12 5v14M5 12h14"/>;
 const IcX    =(p)=><Ic {...p} d="M18 6L6 18M6 6l12 12"/>;
 const IcChk  =(p)=><Ic {...p} d="M20 6L9 17l-5-5"/>;
+const IcLock =(p)=><Ic {...p} d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"/>;
+const IcChev =(p)=><Ic {...p} d="M9 18l6-6-6-6"/>;
 const IcEdit =(p)=><Ic {...p} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>;
 const IcDown =(p)=><Ic {...p} d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/>;
 const IcPrint=(p)=><Ic {...p} d="M6 9V2h12v7M6 18H4a2 2 0 01-2-2v-5a2 2 0 012-2h16a2 2 0 012 2v5a2 2 0 01-2 2h-2M6 14h12v8H6z"/>;
@@ -4320,6 +4322,569 @@ function DailyWagesSettingsTab(){
   );
 }
 
+// ══════════════════════════════════════════════════════════════════
+// CREATE SALARY — month-end payroll run wizard (admin only)
+// 4 steps: Pre-Run Checks → Attendance Review → Salary Preview → Finalize
+// month prop is 0-indexed (module convention); run APIs use month+1 (1-12).
+// ══════════════════════════════════════════════════════════════════
+const RW_STEPS=["Pre-Run Checks","Attendance Review","Salary Preview","Finalize & Lock"];
+
+function RWStepper({step}){
+  return(
+    <div style={{display:"flex",alignItems:"center",padding:"14px 4px",overflowX:"auto"}}>
+      {RW_STEPS.map((s,i)=>(
+        <div key={s} style={{display:"flex",alignItems:"center",flexShrink:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{width:26,height:26,borderRadius:"50%",display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,
+              background:i<step?T.grn:i===step?T.blu:T.surface,color:i<=step?"#fff":T.t4,border:`1.5px solid ${i<step?T.grn:i===step?T.blu:T.b2}`}}>
+              {i<step?<IcChk size={13} color="#fff"/>:i+1}
+            </div>
+            <span style={{fontSize:12.5,fontWeight:i===step?700:500,color:i===step?T.t1:i<step?T.grn:T.t4,whiteSpace:"nowrap"}}>{s}</span>
+          </div>
+          {i<RW_STEPS.length-1&&<div style={{width:30,height:2,background:i<step?T.grn:T.b1,margin:"0 9px",borderRadius:2}}/>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function RWKpi({label,value,sub,color=T.t1,bg}){
+  return(
+    <div style={{flex:1,minWidth:110,background:bg||T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:"12px 14px"}}>
+      <div style={{fontSize:11,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:.3}}>{label}</div>
+      <div style={{fontSize:20,fontWeight:800,color,marginTop:3}}>{value}</div>
+      {sub&&<div style={{fontSize:10.5,color:T.t4,marginTop:2}}>{sub}</div>}
+    </div>
+  );
+}
+const RWCard=({children,style})=><div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:12,...style}}>{children}</div>;
+
+// Attendance correction modal — day-level edits (P/H/A) + OT hours.
+// Count deltas are mapped to concrete dates so the backend stores day_changes;
+// leave (paid/unpaid) is driven by the Leave module and shown read-only.
+function RunAttEditModal({emp,month,year,holidaySet,workingDays,onClose,onSave}){
+  const [dayMap,setDayMap]=useState(null);     // {day: 'P'|'H'|'A'|'L'} current effective
+  const [target,setTarget]=useState({P:emp.P,H:emp.H,A:emp.A,ot:emp.ot_hours});
+  const [reason,setReason]=useState("");
+  const lastDay=new Date(year,month+1,0).getDate();
+  // working days = not Sunday, not holiday
+  const workDayNums=[];
+  for(let d=1;d<=lastDay;d++){ if(new Date(year,month,d).getDay()===0) continue; if(holidaySet.has(d)) continue; workDayNums.push(d); }
+
+  // load current day-map once (existing endpoint uses 0-indexed month)
+  useEffect(()=>{
+    let alive=true;
+    api.get(`/payroll/attendance/monthly?month=${month}&year=${year}`).then(r=>{
+      if(!alive) return;
+      const raw=(r.data&&r.data[emp.staff_id])||{};
+      const m={}; for(const[d,v]of Object.entries(raw)) m[Number(d)]=v;
+      setDayMap(m);
+    }).catch(()=>{ if(alive) setDayMap({}); });
+    return()=>{ alive=false; };
+  },[emp.staff_id,month,year]);
+
+  const inp={width:"100%",padding:"8px 10px",border:`1px solid ${T.b2}`,borderRadius:8,fontSize:13,fontWeight:700,textAlign:"center",fontFamily:"inherit"};
+  const fields=[["P","Present",T.grn],["H","Half Day",T.amb],["A","Absent",T.red]];
+  const payable=target.P+target.H*0.5+emp.paid_leave;
+  const otAmt=emp.full_gross>0?Math.round((emp.full_gross/(workingDays||26)/8)*target.ot):0;
+  const changedCount=target.P!==emp.P||target.H!==emp.H||target.A!==emp.A;
+  const changedOt=target.ot!==emp.ot_hours;
+  const totalMarked=target.P+target.H+target.A+emp.paid_leave+emp.unpaid_leave;
+  const over=totalMarked>(workingDays||26);
+
+  // map count deltas to concrete day_changes against current day-map
+  const buildDayChanges=()=>{
+    if(!changedCount||!dayMap) return [];
+    const arr=workDayNums.map(d=>{ const v=dayMap[d]; return {day:d,status:(v==="P"||v==="H"||v==="A")?v:(v==="L"?"L":"U")}; });
+    const cnt=s=>arr.filter(x=>x.status===s).length;
+    const need={P:target.P-cnt("P"),H:target.H-cnt("H"),A:target.A-cnt("A")};
+    const out=[];
+    for(const want of ["P","H","A"]){
+      while(need[want]>0){
+        let donor=arr.find(x=>x.status==="U");                       // unmarked first
+        if(!donor) donor=arr.find(x=>need[x.status]<0);              // then a surplus status
+        if(!donor) break;
+        if(donor.status!=="U") need[donor.status]++;
+        donor.status=want; need[want]--;
+        const dd=String(donor.day).padStart(2,"0");
+        out.push({date:`${year}-${String(month+1).padStart(2,"0")}-${dd}`,status:want});
+      }
+    }
+    return out;
+  };
+
+  const submit=()=>{
+    const day_changes=buildDayChanges();
+    const changes=[];
+    if(target.P!==emp.P) changes.push({field:"present",old:emp.P,new:target.P});
+    if(target.H!==emp.H) changes.push({field:"half",old:emp.H,new:target.H});
+    if(target.A!==emp.A) changes.push({field:"absent",old:emp.A,new:target.A});
+    if(changedOt) changes.push({field:"ot_hours",old:emp.ot_hours,new:target.ot});
+    onSave({staff_id:emp.staff_id,name:emp.name,changes,day_changes,reason,target});
+  };
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(13,27,42,0.45)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:90,padding:16}}>
+      <div style={{background:T.surface,borderRadius:14,width:"100%",maxWidth:460,maxHeight:"90vh",overflowY:"auto"}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"15px 18px",borderBottom:`1px solid ${T.b1}`}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <Avatar name={emp.name} size={32}/>
+            <div>
+              <div style={{fontSize:14,fontWeight:800,color:T.t1}}>Edit Attendance — {emp.name}</div>
+              <div style={{fontSize:11,color:T.t4}}>{emp.designation||""} · {MONTHS[month]} {year}</div>
+            </div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><IcX size={17} color={T.t3}/></button>
+        </div>
+        <div style={{padding:"16px 18px"}}>
+          {dayMap===null?<div style={{textAlign:"center",padding:"20px 0",color:T.t4,fontSize:12.5}}>Loading attendance…</div>:<>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:10}}>
+            {fields.map(([k,l,c])=>(
+              <div key={k}>
+                <div style={{fontSize:10.5,fontWeight:700,color:c,marginBottom:4,textTransform:"uppercase",letterSpacing:.3}}>{l}</div>
+                <input type="number" min={0} style={{...inp,color:c,borderColor:target[k]!==emp[k]?c:T.b2,background:target[k]!==emp[k]?c+"0D":T.surface}}
+                  value={target[k]} onChange={e=>setTarget(s=>({...s,[k]:Math.max(0,Number(e.target.value)||0)}))}/>
+              </div>
+            ))}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.blu,marginBottom:4,textTransform:"uppercase",letterSpacing:.3,display:"flex",alignItems:"center",gap:3}}><IcClockIn size={11} color={T.blu}/> OT Hours</div>
+              <input type="number" min={0} style={{...inp,color:T.blu,borderColor:changedOt?T.blu:T.b2,background:changedOt?T.bluL:T.surface}}
+                value={target.ot} onChange={e=>setTarget(s=>({...s,ot:Math.max(0,Number(e.target.value)||0)}))}/>
+            </div>
+            <div>
+              <div style={{fontSize:10.5,fontWeight:700,color:T.pur,marginBottom:4,textTransform:"uppercase",letterSpacing:.3}}>Leave (read-only)</div>
+              <div style={{...inp,color:T.pur,background:T.surfaceB,borderColor:T.b1}}>{emp.paid_leave}P / {emp.unpaid_leave}LOP</div>
+            </div>
+          </div>
+          <div style={{display:"flex",gap:8,marginBottom:12}}>
+            <div style={{flex:1,background:T.bluL,borderRadius:9,padding:"9px 12px",textAlign:"center"}}>
+              <div style={{fontSize:10,color:T.t3,fontWeight:600}}>PAYABLE DAYS</div>
+              <div style={{fontSize:16,fontWeight:800,color:T.blu}}>{payable} / {workingDays||26}</div>
+            </div>
+            <div style={{flex:1,background:T.grnL,borderRadius:9,padding:"9px 12px",textAlign:"center"}}>
+              <div style={{fontSize:10,color:T.t3,fontWeight:600}}>OT AMOUNT</div>
+              <div style={{fontSize:16,fontWeight:800,color:T.grn}}>₹{fmtN(otAmt)}</div>
+            </div>
+          </div>
+          {over&&<div style={{display:"flex",alignItems:"center",gap:7,padding:"8px 12px",background:T.redL,border:`1px solid ${T.red}33`,borderRadius:8,marginBottom:12}}>
+            <IcAlert size={13} color={T.red}/><span style={{fontSize:11.5,color:T.red,fontWeight:600}}>Marked days ({totalMarked}) working days ({workingDays||26}) se zyada</span>
+          </div>}
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:11,fontWeight:700,color:T.t2,marginBottom:5}}>Reason for edit <span style={{color:T.red}}>*</span></div>
+            <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="e.g. 15 Jun GPS punch miss hua, site par tha · 4 hrs OT finishing work"
+              style={{width:"100%",padding:"9px 11px",border:`1px solid ${T.b2}`,borderRadius:8,fontSize:12.5,fontFamily:"inherit",resize:"vertical",boxSizing:"border-box"}}/>
+            <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>Reason audit log me save hoga — payslip dispute me kaam aata hai. Days unmarked se auto-pick honge.</div>
+          </div>
+          <div style={{display:"flex",gap:9}}>
+            <button onClick={onClose} style={{flex:1,padding:"10px",borderRadius:9,border:`1px solid ${T.b2}`,background:T.surface,color:T.t2,fontSize:13,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+            <button disabled={(!changedCount&&!changedOt)||!reason.trim()||over} onClick={submit}
+              style={{flex:2,padding:"10px",borderRadius:9,border:"none",background:((!changedCount&&!changedOt)||!reason.trim()||over)?T.b2:T.blu,color:"#fff",fontSize:13,fontWeight:700,cursor:((!changedCount&&!changedOt)||!reason.trim()||over)?"default":"pointer"}}>
+              Add to Review List
+            </button>
+          </div>
+          </>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Open a printable payslip window from a finalized run item.
+function printRunPayslip(item,run){
+  const b=typeof item.breakdown_json==="string"?JSON.parse(item.breakdown_json||"{}"):(item.breakdown_json||{});
+  const e=b.earnings||{}, d=b.deductions||{};
+  const mName=["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][(run?.month_num||1)-1];
+  const row=(l,v,neg)=>`<tr><td style="padding:4px 0">${l}</td><td style="text-align:right;padding:4px 0;color:${neg?"#DC2626":"#111"}">${neg?"−":""}₹${Number(v||0).toLocaleString("en-IN")}</td></tr>`;
+  const html=`<html><head><title>Payslip — ${item.staff_name}</title></head><body style="font-family:Segoe UI,sans-serif;max-width:540px;margin:24px auto;color:#111">
+    <h2 style="margin:0">GB Buildcon — Payslip</h2>
+    <div style="color:#666;font-size:13px;margin:2px 0 16px">${mName} ${run?.year_num||""} · ${item.staff_name} (${item.designation||""})</div>
+    <div style="display:flex;gap:24px">
+      <div style="flex:1"><b>Earnings</b><table style="width:100%;font-size:13px">
+        ${row("Basic",e.basic)}${row("HRA",e.hra)}${row("Conveyance",e.conveyance)}${row("Medical",e.medical)}${e.phone?row("Phone",e.phone):""}${e.petrol?row("Petrol",e.petrol):""}${e.special?row("Special",e.special):""}
+        ${row("Gross earned ("+item.payable_days+" days)",e.grossEarned)}${item.ot_amount?row("OT ("+item.ot_hours+" hrs)",item.ot_amount):""}
+      </table></div>
+      <div style="flex:1"><b>Deductions</b><table style="width:100%;font-size:13px">
+        ${row("PF",d.pf,1)}${row("ESI",d.esi,1)}${row("TDS",d.tds,1)}${row("Advance",d.advance,1)}
+      </table></div>
+    </div>
+    ${item.adjustment?`<div style="font-size:13px;margin-top:8px">Adjustment: ${item.adjustment>0?"+":""}₹${Number(item.adjustment).toLocaleString("en-IN")} ${item.adjustment_note?"("+item.adjustment_note+")":""}</div>`:""}
+    <div style="margin-top:16px;padding-top:12px;border-top:2px solid #111;font-size:18px;font-weight:800;display:flex;justify-content:space-between"><span>Net Pay</span><span>₹${Number(item.net_amount||0).toLocaleString("en-IN")}</span></div>
+    <div style="color:#999;font-size:11px;margin-top:24px">Computer-generated payslip. Attendance: ${item.days_present}P ${item.days_half}H ${item.days_absent}A · ${item.gps_days} GPS days.</div>
+    <script>window.print()</script></body></html>`;
+  const w=window.open("","_blank","width=620,height=720");
+  if(w){ w.document.write(html); w.document.close(); }
+}
+
+function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
+  const [step,setStep]=useState(0);
+  const [loading,setLoading]=useState(true);
+  const [pre,setPre]=useState(null);            // prechecks payload
+  const [summary,setSummary]=useState([]);      // attendance-summary staff[]
+  const [preview,setPreview]=useState(null);    // salary-preview payload
+  const [pending,setPending]=useState([]);      // local attendance edits awaiting approve
+  const [adjs,setAdjs]=useState({});            // {staff_id: amount}
+  const [editEmp,setEditEmp]=useState(null);
+  const [finalized,setFinalized]=useState(null);// finalized run header
+  const [items,setItems]=useState([]);          // finalized run items
+  const [toast,setToast]=useState(null);
+  const [busy,setBusy]=useState(false);
+  const apiMonth=month+1;
+  const flash=(m)=>{ setToast(m); setTimeout(()=>setToast(null),3000); };
+  const holidaySet=new Set((pre?.holidays||[]).map(h=>h.day));
+
+  // initial load — prechecks; if a finalized run exists, jump to locked view
+  const loadPre=useCallback(async()=>{
+    setLoading(true);
+    try{
+      const r=await api.get(`/payroll/run/prechecks?month=${apiMonth}&year=${year}`);
+      if(r.success){
+        setPre(r.data);
+        if(r.data.locked&&r.data.run){
+          const ri=await api.get(`/payroll/run/${r.data.run.id}/items`);
+          if(ri.success){ setFinalized(ri.data.run); setItems(ri.data.items||[]); setStep(3); }
+        }
+      }
+    }catch(e){ /* */ }
+    setLoading(false);
+  },[apiMonth,year]);
+  // reset + reload whenever month/year changes
+  useEffect(()=>{ setStep(0); setFinalized(null); setItems([]); setPending([]); setAdjs({}); setPreview(null); setSummary([]); loadPre(); },[loadPre]);
+
+  const loadSummary=async()=>{
+    try{ const r=await api.get(`/payroll/run/attendance-summary?month=${apiMonth}&year=${year}`); if(r.success) setSummary(r.data.staff||[]); }catch(e){}
+  };
+  const loadPreview=async()=>{
+    try{ const r=await api.get(`/payroll/run/salary-preview?month=${apiMonth}&year=${year}`); if(r.success){ setPreview(r.data); setAdjs(a=>{const n={...a}; (r.data.items||[]).forEach(it=>{ if(n[it.staff_id]===undefined) n[it.staff_id]=0; }); return n;}); } }catch(e){}
+  };
+
+  const goStep=async(s)=>{
+    if(s===1&&!summary.length) await loadSummary();
+    if(s===2) await loadPreview();
+    setStep(s);
+  };
+
+  // approve attendance edits → POST per staff, then refetch summary
+  const applyEdits=async(edits)=>{
+    setBusy(true);
+    try{
+      for(const ed of edits){
+        await api.post("/payroll/run/attendance-edit",{staff_id:ed.staff_id,month:apiMonth,year,reason:ed.reason,changes:ed.changes,day_changes:ed.day_changes});
+      }
+      setPending(p=>p.filter(x=>!edits.some(e=>e.staff_id===x.staff_id)));
+      await loadSummary();
+      flash(`${edits.length} edit${edits.length>1?"s":""} approved & applied ✓`);
+      if(onChanged) onChanged();
+    }catch(e){ flash(e?.response?.data?.message||"Edit failed"); }
+    setBusy(false);
+  };
+  const onSaveEdit=(edit)=>{ setPending(p=>[...p.filter(x=>x.staff_id!==edit.staff_id),edit]); setEditEmp(null); };
+
+  const doFinalize=async()=>{
+    if(!window.confirm(`${MONTHS[month]} ${year} payroll finalize & lock karein? Attendance lock ho jayegi (revert se hi edit hogi).`)) return;
+    setBusy(true);
+    try{
+      const adjustments=Object.entries(adjs).filter(([,v])=>Number(v)).map(([staff_id,amount])=>({staff_id:Number(staff_id),amount:Number(amount),note:"One-time adjustment"}));
+      const r=await api.post("/payroll/run/finalize",{month:apiMonth,year,adjustments});
+      if(r.success){
+        const ri=await api.get(`/payroll/run/${r.data.run_id}/items`);
+        if(ri.success){ setFinalized(ri.data.run); setItems(ri.data.items||[]); }
+        flash("Payroll finalized & locked 🔒");
+        if(onChanged) onChanged();
+      }else flash(r.message||"Finalize failed");
+    }catch(e){ flash(e?.response?.data?.message||"Finalize failed"); }
+    setBusy(false);
+  };
+  const doRevert=async()=>{
+    const reason=window.prompt("Revert reason? (period unlock ho jayega)");
+    if(reason===null) return;
+    setBusy(true);
+    try{
+      await api.post(`/payroll/run/${finalized.id}/revert`,{reason});
+      flash("Run reverted — period unlocked");
+      setFinalized(null); setItems([]); setStep(0); await loadPre();
+      if(onChanged) onChanged();
+    }catch(e){ flash(e?.response?.data?.message||"Revert failed"); }
+    setBusy(false);
+  };
+  const markPaid=async(it)=>{
+    try{ const r=await api.patch(`/payroll/run-items/${it.id}`,{pay_status:"paid"}); if(r.success) setItems(p=>p.map(x=>x.id===it.id?r.data:x)); }catch(e){ flash("Update failed"); }
+  };
+  const openPayslip=async(it)=>{
+    try{ const r=await api.get(`/payroll/run-items/${it.id}/payslip`); if(r.success) printRunPayslip(r.data.item,r.data.run); }catch(e){ flash("Payslip load failed"); }
+  };
+
+  if(!isAdmin) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Create Salary run is only accessible to admins.</div>;
+  if(loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Loading payroll run…</div>;
+
+  const errs=pre?(pre.pendingLeaves.length>0?1:0)+(pre.pendingAttEdits.length>0?1:0):0;
+  const warns=pre?(pre.unmarkedStaff.length>0?1:0)+(pre.zeroSalaryStaff.length>0?1:0):0;
+
+  return(
+    <div>
+      {/* header strip */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+        <div>
+          <div style={{fontSize:16,fontWeight:800,color:T.t1}}>Create Salary — Payroll Run</div>
+          <div style={{fontSize:12,color:T.t3,marginTop:2}}>Month-end processing · attendance se net payout tak</div>
+        </div>
+        <Pill label={finalized?"Finalized 🔒":"Draft"} c={finalized?T.grn:T.amb} bg={finalized?T.grnL:T.ambL}/>
+      </div>
+      <RWStepper step={step}/>
+
+      {/* STEP 0 — PRE-RUN CHECKS */}
+      {step===0&&pre&&(
+        <div>
+          <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+            <RWKpi label="Blocking Issues" value={errs} color={T.red} bg={T.redL}/>
+            <RWKpi label="Warnings" value={warns} color={T.amb} bg={T.ambL}/>
+            <RWKpi label="GPS Punches" value={pre.punchSessionCount} sub="merged in grid" color={T.grn} bg={T.grnL}/>
+          </div>
+          <RWCard>
+            {[
+              pre.pendingLeaves.length>0&&{type:"error",label:`${pre.pendingLeaves.length} leave application(s) pending approval`,sub:pre.pendingLeaves.slice(0,3).map(l=>`${l.staff_name} (${l.leave_name})`).join(" · "),action:"Review Leaves",go:"office-leave"},
+              pre.pendingAttEdits.length>0&&{type:"error",label:`${pre.pendingAttEdits.length} attendance edit request(s) pending`,sub:"Approve/reject in Attendance tab",action:"Open Attendance",go:"office-att"},
+              pre.unmarkedStaff.length>0&&{type:"warn",label:`${pre.unmarkedStaff.length} staff ke unmarked days hain`,sub:pre.unmarkedStaff.slice(0,3).map(s=>`${s.name} (${s.unmarkedDays}d)`).join(" · ")+" — unmarked = no pay",action:"Open Attendance",go:"office-att"},
+              pre.zeroSalaryStaff.length>0&&{type:"warn",label:`${pre.zeroSalaryStaff.length} staff ki salary structure incomplete`,sub:pre.zeroSalaryStaff.slice(0,3).map(s=>s.name).join(" · ")+" — ₹0 salary banegi",action:"Edit Staff",go:"office-salary"},
+              {type:"ok",label:"GPS punch data synced",sub:`${pre.punchSessionCount} mobile sessions is month — grid me merged`},
+              {type:"ok",label:`${pre.holidays.length} holiday(s) set`,sub:pre.holidays.length?pre.holidays.map(h=>h.name).join(" · "):"Koi holiday nahi — Calendar tab me add karein"},
+            ].filter(Boolean).map((c,i,arr)=>{
+              const col=c.type==="error"?T.red:c.type==="warn"?T.amb:T.grn;
+              const bgL=c.type==="error"?T.redL:c.type==="warn"?T.ambL:T.grnL;
+              return(
+                <div key={i} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"13px 16px",borderBottom:i<arr.length-1?`1px solid ${T.b1}`:"none"}}>
+                  <div style={{width:28,height:28,borderRadius:8,background:bgL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
+                    {c.type==="ok"?<IcChk size={14} color={col}/>:<IcAlert size={14} color={col}/>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:600,color:T.t1}}>{c.label}</div>
+                    <div style={{fontSize:11.5,color:T.t3,marginTop:2}}>{c.sub}</div>
+                  </div>
+                  {c.action&&<button onClick={()=>setTab(c.go)} style={{fontSize:11.5,fontWeight:600,color:T.blu,background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:7,padding:"6px 12px",cursor:"pointer",flexShrink:0}}>{c.action}</button>}
+                </div>
+              );
+            })}
+          </RWCard>
+          {errs>0&&<div style={{display:"flex",alignItems:"center",gap:8,marginTop:12,padding:"10px 14px",background:T.ambL,border:`1px solid ${T.amb}33`,borderRadius:10}}>
+            <IcAlert size={15} color={T.amb}/><span style={{fontSize:12,color:T.t2}}>Red items resolve karna recommended. Aage badhne par pending leaves <b>unpaid</b> aur unmarked days <b>no-pay</b> count honge.</span>
+          </div>}
+        </div>
+      )}
+
+      {/* STEP 1 — ATTENDANCE REVIEW */}
+      {step===1&&(
+        <div>
+          {pending.length>0&&(
+            <RWCard style={{marginBottom:14,border:`1.5px solid ${T.amb}55`,background:T.ambL}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"12px 16px",borderBottom:`1px solid ${T.amb}33`}}>
+                <div style={{display:"flex",alignItems:"center",gap:8}}><IcAlert size={15} color={T.amb}/><span style={{fontSize:13,fontWeight:800,color:T.t1}}>{pending.length} Attendance Edit{pending.length>1?"s":""} — Review & Approve</span></div>
+                <button disabled={busy} onClick={()=>applyEdits(pending)} style={{fontSize:12,fontWeight:700,color:"#fff",background:T.grn,border:"none",borderRadius:8,padding:"8px 16px",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}><IcChk size={13} color="#fff"/> Approve All & Apply</button>
+              </div>
+              {pending.map((ed,i)=>(
+                <div key={ed.staff_id} style={{display:"flex",alignItems:"flex-start",gap:10,padding:"11px 16px",borderBottom:i<pending.length-1?`1px solid ${T.amb}22`:"none"}}>
+                  <Avatar name={ed.name} size={26}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{ed.name}</div>
+                    <div style={{fontSize:11.5,color:T.t2,marginTop:2}}>{ed.changes.map(c=><span key={c.field} style={{display:"inline-block",marginRight:10}}>{c.field}: <b style={{color:T.t3}}>{c.old}</b> → <b style={{color:T.blu}}>{c.new}</b></span>)}{ed.day_changes.length?<span style={{color:T.t4}}>({ed.day_changes.length} din)</span>:null}</div>
+                    <div style={{fontSize:10.5,color:T.t4,marginTop:2,fontStyle:"italic"}}>"{ed.reason}"</div>
+                  </div>
+                  <button disabled={busy} onClick={()=>applyEdits([ed])} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",flexShrink:0}}>Approve</button>
+                  <button onClick={()=>setPending(p=>p.filter(x=>x.staff_id!==ed.staff_id))} style={{fontSize:11,fontWeight:600,color:T.red,background:T.redL,border:`1px solid ${T.red}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",flexShrink:0}}>Reject</button>
+                </div>
+              ))}
+            </RWCard>
+          )}
+          <RWCard style={{overflowX:"auto"}}>
+            <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:820}}>
+              <thead><tr style={{background:T.surfaceB}}>
+                {["Employee","Present","GPS 📍","Half","Paid Lv","LOP","Absent","OT Hrs","Payable","Action"].map(h=>(
+                  <th key={h} style={{textAlign:h==="Employee"?"left":"center",padding:"10px 12px",fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,borderBottom:`1px solid ${T.b1}`}}>{h}</th>
+                ))}
+              </tr></thead>
+              <tbody>
+                {summary.map(e=>{
+                  const hasPending=pending.some(p=>p.staff_id===e.staff_id);
+                  return(
+                    <tr key={e.staff_id} style={{borderBottom:`1px solid ${T.b1}`,background:hasPending?T.ambL:"transparent"}}>
+                      <td style={{padding:"10px 12px"}}><div style={{display:"flex",alignItems:"center",gap:9}}><Avatar name={e.name}/><div><div style={{fontWeight:600,color:T.t1}}>{e.name} {hasPending&&<Pill label="Edit pending" c={T.amb} bg="#fff"/>}</div><div style={{fontSize:10.5,color:T.t4}}>{e.designation||e.payment_type}</div></div></div></td>
+                      <td style={{textAlign:"center",fontWeight:700,color:T.grn}}>{e.P}</td>
+                      <td style={{textAlign:"center",color:T.blu,fontSize:11.5}}>{e.gps_days>0?<span style={{display:"inline-flex",alignItems:"center",gap:3}}><IcGPS size={11} color={T.blu}/>{e.gps_days}</span>:"—"}</td>
+                      <td style={{textAlign:"center",color:T.amb,fontWeight:600}}>{e.H||"—"}</td>
+                      <td style={{textAlign:"center",color:T.pur,fontWeight:600}}>{e.paid_leave||"—"}</td>
+                      <td style={{textAlign:"center",color:T.red,fontWeight:600}}>{e.unpaid_leave||"—"}</td>
+                      <td style={{textAlign:"center",color:T.red,fontWeight:700}}>{e.A||"—"}</td>
+                      <td style={{textAlign:"center",color:T.blu,fontWeight:700}}>{e.ot_hours||"—"}</td>
+                      <td style={{textAlign:"center"}}><Pill label={`${e.payable_days} / ${workingDays||26}`} c={T.blu} bg={T.bluL}/></td>
+                      <td style={{textAlign:"center"}}><button onClick={()=>setEditEmp(e)} style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,color:T.blu,background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer",fontWeight:600}}><IcEdit size={12} color={T.blu}/> Edit</button></td>
+                    </tr>
+                  );
+                })}
+                {!summary.length&&<tr><td colSpan={10} style={{textAlign:"center",padding:"24px",color:T.t4}}>Koi salary-enabled staff nahi mila.</td></tr>}
+              </tbody>
+            </table>
+          </RWCard>
+          <div style={{fontSize:11.5,color:T.t3,marginTop:10}}>Payable = Present + (Half × 0.5) + Paid Leave. OT × per-hour rate (Gross ÷ {workingDays||26} ÷ 8) salary me add. Leave Leave-tab se manage hoti hai.</div>
+        </div>
+      )}
+
+      {/* STEP 2 — SALARY PREVIEW */}
+      {step===2&&preview&&(
+        <RunSalaryPreview preview={preview} adjs={adjs} setAdjs={setAdjs} workingDays={workingDays}/>
+      )}
+
+      {/* STEP 3 — FINALIZE / LOCKED VIEW */}
+      {step===3&&(
+        <RunFinalize preview={preview} adjs={adjs} finalized={finalized} items={items} month={month} year={year}
+          busy={busy} onFinalize={doFinalize} onRevert={doRevert} onMarkPaid={markPaid} onPayslip={openPayslip} isAdmin={isAdmin}/>
+      )}
+
+      {/* NAV */}
+      {!finalized&&(
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:18,gap:10}}>
+          <button disabled={step===0} onClick={()=>goStep(step-1)} style={{padding:"10px 20px",borderRadius:9,border:`1px solid ${T.b2}`,background:T.surface,color:step===0?T.t4:T.t2,fontSize:13,fontWeight:600,cursor:step===0?"default":"pointer"}}>← Back</button>
+          {step===1&&pending.length>0&&<span style={{fontSize:11.5,color:T.amb,fontWeight:600}}>⚠ {pending.length} edit approval pending — continue par skip honge</span>}
+          {step<3&&<button onClick={()=>goStep(step+1)} style={{padding:"10px 24px",borderRadius:9,border:"none",background:T.blu,color:"#fff",fontSize:13,fontWeight:700,cursor:"pointer"}}>Continue →</button>}
+        </div>
+      )}
+
+      {editEmp&&<RunAttEditModal emp={editEmp} month={month} year={year} holidaySet={holidaySet} workingDays={workingDays} onClose={()=>setEditEmp(null)} onSave={onSaveEdit}/>}
+      {toast&&<div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#0D1B2A",color:"#fff",fontSize:12.5,fontWeight:600,padding:"11px 20px",borderRadius:10,boxShadow:"0 6px 24px rgba(0,0,0,0.25)",zIndex:95}}>{toast}</div>}
+    </div>
+  );
+}
+
+// Step 2 body — preview table with expandable breakdown + adjustments
+function RunSalaryPreview({preview,adjs,setAdjs,workingDays}){
+  const [open,setOpen]=useState(null);
+  const items=preview.items||[];
+  const netOf=(it)=>Math.max(0,it.net_amount+(Number(adjs[it.staff_id])||0));
+  const tot=items.reduce((a,it)=>({g:a.g+it.gross_earned,ot:a.ot+it.ot_amount,d:a.d+it.pf+it.esi+it.tds+it.advance_deducted,n:a.n+netOf(it)}),{g:0,ot:0,d:0,n:0});
+  return(
+    <div>
+      <div style={{display:"flex",gap:10,flexWrap:"wrap",marginBottom:14}}>
+        <RWKpi label="Gross Payable" value={`₹${fmtN(tot.g)}`}/>
+        <RWKpi label="OT Payable" value={`₹${fmtN(tot.ot)}`} color={T.blu}/>
+        <RWKpi label="Deductions" value={`₹${fmtN(tot.d)}`} sub="PF+ESI+TDS+Advance" color={T.red}/>
+        <RWKpi label="Net Payout" value={`₹${fmtN(tot.n)}`} color={T.grn} bg={T.grnL}/>
+      </div>
+      <RWCard style={{overflowX:"auto"}}>
+        <table style={{width:"100%",borderCollapse:"collapse",fontSize:12.5,minWidth:820}}>
+          <thead><tr style={{background:T.surfaceB}}>
+            {["Employee","Type","Days","Gross","OT","Deductions","Adjust (±)","Net",""].map(h=>(
+              <th key={h} style={{textAlign:h==="Employee"?"left":"center",padding:"10px 12px",fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,borderBottom:`1px solid ${T.b1}`}}>{h}</th>
+            ))}
+          </tr></thead>
+          <tbody>
+            {items.map(it=>(
+              <RWPreviewRow key={it.staff_id} it={it} open={open===it.staff_id} setOpen={()=>setOpen(open===it.staff_id?null:it.staff_id)} adj={adjs[it.staff_id]||0} setAdj={v=>setAdjs(a=>({...a,[it.staff_id]:v}))} net={netOf(it)}/>
+            ))}
+          </tbody>
+        </table>
+      </RWCard>
+      <div style={{fontSize:11.5,color:T.t3,marginTop:10}}>Adjustment me one-time bonus (+) ya deduction (−) — sirf is month, structure change nahi hota.</div>
+    </div>
+  );
+}
+function RWPreviewRow({it,open,setOpen,adj,setAdj,net}){
+  const b=it.breakdown||{}; const e=b.earnings||{}; const ded=it.pf+it.esi+it.tds+it.advance_deducted;
+  return(
+    <>
+      <tr style={{borderBottom:open?"none":`1px solid ${T.b1}`,background:it.full_gross===0?T.ambL:"transparent"}}>
+        <td style={{padding:"10px 12px"}}><div style={{display:"flex",alignItems:"center",gap:9}}><Avatar name={it.staff_name}/><div><div style={{fontWeight:600,color:T.t1}}>{it.staff_name}</div><div style={{fontSize:10.5,color:T.t4}}>{it.designation}</div></div></div></td>
+        <td style={{textAlign:"center"}}><Pill label={it.payment_type==="fixed"?"Fixed":"Pro-rata"} c={it.payment_type==="fixed"?T.grn:T.pur} bg={it.payment_type==="fixed"?T.grnL:T.purL}/></td>
+        <td style={{textAlign:"center",fontWeight:600,color:T.t2}}>{it.payable_days}</td>
+        <td style={{textAlign:"center",fontWeight:600,color:T.t1}}>₹{fmtN(it.gross_earned)}</td>
+        <td style={{textAlign:"center",fontWeight:600,color:it.ot_amount?T.blu:T.t4}}>{it.ot_amount?`+₹${fmtN(it.ot_amount)}`:"—"}</td>
+        <td style={{textAlign:"center",color:T.red}}>−₹{fmtN(ded)}</td>
+        <td style={{textAlign:"center"}}><input type="number" value={adj} onChange={ev=>setAdj(Number(ev.target.value)||0)} style={{width:74,padding:"5px 7px",border:`1px solid ${T.b2}`,borderRadius:7,fontSize:12,textAlign:"right",color:adj>0?T.grn:adj<0?T.red:T.t2,fontWeight:600,fontFamily:"inherit"}}/></td>
+        <td style={{textAlign:"center",fontWeight:800,color:T.grn,fontSize:13.5}}>₹{fmtN(net)}</td>
+        <td style={{textAlign:"center"}}><button onClick={setOpen} style={{background:"none",border:"none",cursor:"pointer",transform:open?"rotate(90deg)":"none",transition:"transform .15s"}}><IcChev size={15} color={T.t3}/></button></td>
+      </tr>
+      {open&&(
+        <tr style={{borderBottom:`1px solid ${T.b1}`}}>
+          <td colSpan={9} style={{padding:"0 12px 14px"}}>
+            <div style={{display:"flex",gap:12,flexWrap:"wrap",background:T.surfaceB,borderRadius:10,padding:"12px 16px"}}>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Earnings</div>
+                {[["Basic",e.basic],["HRA",e.hra],["Conveyance",e.conveyance],["Medical",e.medical],["Phone",e.phone],["Petrol",e.petrol],["Special",e.special]].filter(([,v])=>v).map(([l,v])=>(
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2.5px 0",color:T.t2}}><span>{l}</span><span>₹{fmtN(v)}</span></div>
+                ))}
+                {it.ot_amount>0&&<div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2.5px 0",color:T.blu,fontWeight:600}}><span>OT ({it.ot_hours} hrs)</span><span>+₹{fmtN(it.ot_amount)}</span></div>}
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",fontWeight:700,color:T.t1,borderTop:`1px solid ${T.b1}`,marginTop:4}}><span>Gross earned ({it.payable_days}d)</span><span>₹{fmtN(it.gross_earned+it.ot_amount)}</span></div>
+              </div>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",marginBottom:6}}>Deductions</div>
+                {[["PF",it.pf],["ESI",it.esi],["TDS",it.tds],["Advance",it.advance_deducted]].map(([l,v])=>(
+                  <div key={l} style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"2.5px 0",color:T.t2}}><span>{l}</span><span style={{color:v?T.red:T.t4}}>{v?`−₹${fmtN(v)}`:"—"}</span></div>
+                ))}
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:12,padding:"4px 0",fontWeight:700,color:T.grn,borderTop:`1px solid ${T.b1}`,marginTop:4}}><span>Net</span><span>₹{fmtN(net)}</span></div>
+              </div>
+            </div>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+// Step 3 / locked body
+function RunFinalize({preview,adjs,finalized,items,month,year,busy,onFinalize,onRevert,onMarkPaid,onPayslip,isAdmin}){
+  // pre-finalize summary uses live preview + local adjustments; locked uses items
+  let totG=0,totOt=0,totD=0,totAdj=0,totN=0,count=0;
+  if(finalized){
+    count=items.length;
+    items.forEach(it=>{ totG+=Number(it.gross_earned); totOt+=Number(it.ot_amount); totD+=Number(it.pf)+Number(it.esi)+Number(it.tds)+Number(it.advance_deducted); totAdj+=Number(it.adjustment); totN+=Number(it.net_amount); });
+  }else if(preview){
+    const list=preview.items||[]; count=list.length;
+    list.forEach(it=>{ const adj=Number(adjs[it.staff_id])||0; totG+=it.gross_earned; totOt+=it.ot_amount; totD+=it.pf+it.esi+it.tds+it.advance_deducted; totAdj+=adj; totN+=Math.max(0,it.net_amount+adj); });
+  }
+  return(
+    <div>
+      <RWCard style={{padding:"20px 22px",marginBottom:14}}>
+        <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:14,display:"flex",alignItems:"center",gap:8}}><IcCal size={16} color={T.blu}/> {MONTHS[month]} {year} — Payroll Run Summary</div>
+        <div style={{display:"flex",gap:10,flexWrap:"wrap"}}>
+          <RWKpi label="Employees" value={count}/>
+          <RWKpi label="Gross + OT" value={`₹${fmtN(totG+totOt)}`}/>
+          <RWKpi label="Deductions" value={`−₹${fmtN(totD)}`} color={T.red}/>
+          <RWKpi label="Adjustments" value={`${totAdj>=0?"+":""}₹${fmtN(totAdj)}`} color={T.amb}/>
+          <RWKpi label="Net Payout" value={`₹${fmtN(totN)}`} color={T.grn} bg={T.grnL}/>
+        </div>
+        {!finalized&&<div style={{marginTop:16,padding:"12px 14px",background:T.sltL||T.surfaceB,borderRadius:10,fontSize:12,color:T.t2,lineHeight:1.65}}>
+          <b>Finalize karne par:</b><br/>① Har employee ka attendance+OT+salary snapshot freeze (payroll_run_items)<br/>② {MONTHS[month]} attendance <b>lock</b> — edit sirf revert se<br/>③ Payslips generate honge<br/>④ Payment status "Pending" — bank transfer ke baad "Mark Paid"</div>}
+      </RWCard>
+      {!finalized?(
+        <button disabled={busy||count===0} onClick={onFinalize} style={{width:"100%",padding:"14px",background:count===0?T.b2:T.grn,color:"#fff",border:"none",borderRadius:11,fontSize:14,fontWeight:800,cursor:count===0?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><IcLock size={16} color="#fff"/> {busy?"Finalizing…":`Finalize & Lock ${MONTHS[month]} ${year} Payroll`}</button>
+      ):(
+        <div>
+          <div style={{padding:"14px",background:T.grnL,border:`1.5px solid ${T.grn}55`,borderRadius:11,display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+            <div style={{width:32,height:32,borderRadius:"50%",background:T.grn,display:"flex",alignItems:"center",justifyContent:"center"}}><IcChk size={16} color="#fff"/></div>
+            <div style={{flex:1}}>
+              <div style={{fontSize:13.5,fontWeight:800,color:T.grn}}>Payroll Finalized — {MONTHS[month]} {year} 🔒</div>
+              <div style={{fontSize:11.5,color:T.t3}}>{count} payslips · Net ₹{fmtN(totN)} · Attendance locked</div>
+            </div>
+            {isAdmin&&<button disabled={busy} onClick={onRevert} style={{fontSize:12,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.red}55`,borderRadius:8,padding:"8px 14px",cursor:"pointer"}}>Revert Run</button>}
+          </div>
+          <RWCard>
+            {items.map((it,i)=>(
+              <div key={it.id} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 16px",borderBottom:i<items.length-1?`1px solid ${T.b1}`:"none"}}>
+                <Avatar name={it.staff_name} size={28}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{it.staff_name}</div>
+                  <div style={{fontSize:10.5,color:T.t4}}>Net ₹{fmtN(it.net_amount)}{it.ot_amount>0?` (incl. OT ₹${fmtN(it.ot_amount)})`:""}</div>
+                </div>
+                <Pill label={it.pay_status==="paid"?"Paid":"Pending"} c={it.pay_status==="paid"?T.grn:T.amb} bg={it.pay_status==="paid"?T.grnL:T.ambL}/>
+                {it.pay_status!=="paid"&&isAdmin&&<button onClick={()=>onMarkPaid(it)} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer"}}>Mark Paid</button>}
+                <button onClick={()=>onPayslip(it)} style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer"}}>Payslip</button>
+              </div>
+            ))}
+          </RWCard>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── MAIN PAYROLL MODULE ───────────────────────────────────────────
 function PayrollModule(){
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
@@ -4537,6 +5102,7 @@ function PayrollModule(){
   const TABS_OFFICE=[
     {id:"office-att",      l:"Attendance",        sub:"From Mobile Punch"},
     {id:"office-salary",   l:"Monthly Salary",    sub:"Auto-calculated"},
+    ...(isAdmin?[{id:"office-run", l:"Create Salary", sub:"Month-end payroll run"}]:[]),
     {id:"office-ledger",   l:"Salary Ledger",     sub:"Payment history"},
     {id:"office-advances", l:"Advances",          sub:"Advance tracking"},
     {id:"office-leave",    l:"Leave",             sub:"Apply & approve"},
@@ -4694,6 +5260,11 @@ function PayrollModule(){
         )}
         {mode==="office" && tab==="office-salary" && (
           <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin} onStaffUpdate={loadAll}/>
+        )}
+        {mode==="office" && tab==="office-run" && (
+          isAdmin
+            ? <PayrollRunWizard month={month} year={year} isAdmin={isAdmin} workingDays={workingDays} setTab={setTab} onChanged={loadAll}/>
+            : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Create Salary run is only accessible to admins.</div>
         )}
         {mode==="office" && tab==="office-ledger" && (
           <SalaryLedgerTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} month={month} year={year}/>
