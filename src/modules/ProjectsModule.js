@@ -2675,7 +2675,11 @@ function ProjectsPage({onSelectProject}){
   // Load real approval counts from centralized engine.
   // MR count: always from procurement+warehouse APIs (same source as Materials
   // drawer) so tile and drawer can never diverge.
-  // Non-MR modules (Design, Finance, Payment): from approval engine.
+  // SINGLE SOURCE OF TRUTH for the KPI tiles: the SAME engine list the drawer's
+  // "My approvals" uses (/approvals/pending?scope=my). Counting that guarantees
+  // the tile == the drawer count — no more drift between two code paths.
+  //   Pending Approvals tile = my non-material items (Design/Finance/Payment)
+  //   Material Requests tile  = my material_request + purchase_order + warehouse pending
   const loadApprovalCounts=async()=>{
     const cached = apiCache.get("approval-counts");
     if(cached){
@@ -2684,66 +2688,17 @@ function ProjectsPage({onSelectProject}){
       setApprovalCount(cached.total);
       return;
     }
-
-    // ── Shared helper: compute mrCount from the same 3 APIs the Materials
-    // drawer uses — this is the single source of truth ────────────────────
-    const computeMrCount=(mrs,pos,whmrs)=>{
-      const req=(mrs||[]).filter(m=>m.stage==="Requested").length;
-      const po =(pos||[]).filter(p=>!p.approval_status||p.approval_status==="Pending").length;
-      const wh =(whmrs||[]).filter(m=>!m.status||m.status==="Pending").length;
-      return req+po+wh;
-    };
-
     try{
-      // Fetch approval engine counts (Design/Finance/Payment) AND materials
-      // data (MR/PO/Warehouse) in parallel so all counts load in one round-trip
-      const [countRes,mrRes,poRes,whmrRes]=await Promise.all([
-        api.get("/approvals/counts"),
-        api.get("/procurement/mrs").catch(()=>({success:false})),
-        api.get("/procurement/pos").catch(()=>({success:false})),
+      const [apRes,whmrRes]=await Promise.all([
+        api.get("/approvals/pending?scope=my").catch(()=>({success:false})),
         api.get("/warehouse/mr").catch(()=>({success:false})),
       ]);
-      if(countRes.success&&countRes.data){
-        const byMod=countRes.data.byModule||[];
-        // /approvals/counts is role+level filtered = "MY" actionable counts.
-        // Tiles must show only what's actionable by THIS user (admin shouldn't
-        // see a pending MR that's still on the PM's desk).
-        const mrMy=byMod.find(m=>m.module==="Material Request")?.count||0;
-        const poMy=byMod.find(m=>m.module==="Purchase Order (PO)")?.count||0;
-        const prCount=byMod.find(m=>m.module==="Payment Request")?.count||0;
-        // Warehouse is a separate (non-engine) flow — count its pending as-is.
-        const whPending=(whmrRes.success?whmrRes.data:[]).filter(m=>!m.status||m.status==="Pending").length;
-        // Material Requests tile = MY actionable MR + PO + warehouse pending
-        const mrCount=mrMy+poMy+whPending;
-        // Pending Approvals tile = everything else (Design/Finance/Payment…),
-        // minus MR & PO which live in the Materials tile.
-        const total=(countRes.data.total||0)-mrMy-poMy;
-        apiCache.set("approval-counts",{mrCount,prCount,total},30000);
-        setMrPendingCount(mrCount);
-        setPrPendingCount(prCount);
-        setApprovalCount(total);
-        return;
-      }
-    }catch(e){}
-
-    // ── Fallback: all direct queries ────────────────────────────────────
-    try{
-      const [mrRes,prRes,drRes,poRes,whmrRes]=await Promise.all([
-        api.get("/procurement/mrs").catch(()=>({success:false})),
-        api.get("/finance/payment-requests").catch(()=>({success:false})),
-        // Fetch all drawings — ?status=Pending misses Revision-state drawings
-        api.get("/design/drawings").catch(()=>({success:false})),
-        api.get("/procurement/pos").catch(()=>({success:false})),
-        api.get("/warehouse/mr").catch(()=>({success:false})),
-      ]);
-      const mrCount=computeMrCount(
-        mrRes.success?mrRes.data:[],
-        poRes.success?poRes.data:[],
-        whmrRes.success?whmrRes.data:[]
-      );
-      const prCount=(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending").length;
-      const designCount=(drRes.success?drRes.data:[]).filter(d=>d.status==="Pending"||d.status==="Revision").length;
-      const total=prCount+designCount;
+      const items=apRes.success?(apRes.data||[]):[];
+      const isMat=i=>i._source==="material_request"||i._source==="purchase_order";
+      const whPending=(whmrRes.success?whmrRes.data:[]).filter(m=>!m.status||m.status==="Pending").length;
+      const mrCount=items.filter(isMat).length+whPending;          // Material tile
+      const prCount=items.filter(i=>i._source==="payment_request").length;
+      const total=items.filter(i=>!isMat(i)).length;               // Pending Approvals tile
       apiCache.set("approval-counts",{mrCount,prCount,total},30000);
       setMrPendingCount(mrCount);
       setPrPendingCount(prCount);
