@@ -1395,6 +1395,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // My Approvals / All toggle — only admin/super_admin/PM get the company-wide
   // "All" view (matches backend scope gate). Default = "my" (actionable only).
   const canSeeAll=["admin","super_admin","project_manager"].includes(_cu?.role);
+  // Wallet approvals (staff cash expenses) are surfaced in the Finance tab too.
+  // Only the roles that can actually approve a wallet txn see them.
+  const isWalletApprover=["admin","super_admin","project_manager"].includes(_cu?.role);
   const [apprScope,setApprScope]=useState("my"); // "my" | "all"
   const [activeTab,setActiveTab]=useState(mode==="approvals"?"design":"mr");
   const [mrStage,setMrStage]=useState("Requested");  // MR stage sub-tab
@@ -1403,7 +1406,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // MR filters
   const [mrSite,setMrSite]=useState("All");           // project filter
   const [mrSearch,setMrSearch]=useState("");          // material name search
-  const [data,setData]=useState({mrs:[],pos:[],whmrs:[],grns:[],transfers:[],finance:[],centralized:[]});
+  const [data,setData]=useState({mrs:[],pos:[],whmrs:[],grns:[],transfers:[],finance:[],centralized:[],wallet:[],walletPhotoPolicy:{}});
   const [vendorList,setVendorList]=useState([]);
   const [loading,setLoading]=useState(true);
   const [acting,setActing]=useState({});
@@ -1531,14 +1534,20 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           onCountSync(_mrMy+_poMy+_wh);
         }
       } else {
-        const [prRes,apRes]=await Promise.all([
+        const [prRes,apRes,walRes,wpRes]=await Promise.all([
           api.get("/finance/payment-requests"),
           api.get("/approvals/pending?scope="+(canSeeAll?"all":"my")).catch(()=>({success:false})),
+          // Wallet pending approvals — shown in the Finance tab (Option A: the
+          // central drawer surfaces them; wallet keeps its own /wallets/* flow).
+          isWalletApprover?api.get("/wallets/pending-approvals").catch(()=>({success:false})):Promise.resolve({success:false}),
+          isWalletApprover?api.get("/wallets/photo-policy").catch(()=>({success:false})):Promise.resolve({success:false}),
         ]);
         const next = {
           mrs:[], pos:[], whmrs:[], grns:[], transfers:[],
           finance:(prRes.success?prRes.data:[]).filter(p=>p.status==="pending"||p.status==="Pending"),
           centralized:apRes.success?apRes.data||[]:[],
+          wallet: walRes.success?(walRes.data||[]):[],
+          walletPhotoPolicy: wpRes.success?(wpRes.data||{}):{},
         };
         setData(next);
         apiCache.set(cacheKey, next, 30000);
@@ -1656,6 +1665,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     ...data.centralized.filter(i=>i._source==="payment_request"&&inScope(i)),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
   ];
+  // Wallet pending approvals — all are actionable by the viewer (an approver),
+  // so they show in both My and All. Only in approvals mode + Finance tab.
+  const walletItems = mode==="approvals" ? (data.wallet||[]) : [];
 
   // ── MR filtered list (site + material search) ──
   const mrSiteList = ["All",...Array.from(new Set(data.mrs.map(m=>m.project_name||"—").filter(Boolean)))];
@@ -1717,14 +1729,14 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const _isMatSrc=(i)=>i._source==="material_request"||i._source==="purchase_order";
   const _financePR=data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")).length;
   const myCount = mode==="approvals"
-    ? data.centralized.filter(i=>!_isMatSrc(i)&&i._canActNow!==false).length + _financePR
+    ? data.centralized.filter(i=>!_isMatSrc(i)&&i._canActNow!==false).length + _financePR + walletItems.length
     : mrByStage("Requested").filter(m=>canActOnMr(m.id)).length + pendingPOs.filter(p=>canActOnPo(p.id)).length + whPendingMRs.length;
   const allCount = mode==="approvals"
-    ? data.centralized.filter(i=>!_isMatSrc(i)).length + _financePR
+    ? data.centralized.filter(i=>!_isMatSrc(i)).length + _financePR + walletItems.length
     : mrByStage("Requested").length + pendingPOs.length + whPendingMRs.length;
 
   const totalCount = mode==="approvals"
-    ? designItems.length+financeItems.length+paymentItems.length
+    ? designItems.length+financeItems.length+paymentItems.length+walletItems.length
     : mrByStage("Requested").length + pendingPOs.length + whPendingMRs.length;
 
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(1)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${n}`;
@@ -2310,6 +2322,64 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     );
   };
 
+  // ── Wallet approval actions (Option A: act via /wallets/* directly) ──
+  const walletPhotoBlocked=(it)=>it.photo_pending && data.walletPhotoPolicy &&
+    data.walletPhotoPolicy[it.is_transfer?"transfer":(it.wallet_category||"generic")]==="required";
+  const removeWallet=(id)=>setData(p=>({...p,wallet:(p.wallet||[]).filter(w=>w.txn_id!==id)}));
+  const walApprove=async(it)=>{
+    if(walletPhotoBlocked(it)){setSaveErr("Is category me photo zaroori — sync hone tak approve disabled.");return;}
+    setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"approving"}));
+    try{const r=await api.post("/wallets/approve/"+it.txn_id,{});if(r&&r.success!==false)removeWallet(it.txn_id);else setSaveErr((r&&r.message)||"Approve failed");}
+    catch(e){setSaveErr(e.message);}
+    setActing(p=>({...p,["w"+it.txn_id]:null}));
+  };
+  const walReject=async(it)=>{
+    const reason=window.prompt("Reject ka reason (optional):","");
+    if(reason===null)return;
+    setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"rejecting"}));
+    try{const r=await api.post("/wallets/reject/"+it.txn_id,{reason:reason.trim()});if(r&&r.success!==false)removeWallet(it.txn_id);else setSaveErr((r&&r.message)||"Reject failed");}
+    catch(e){setSaveErr(e.message);}
+    setActing(p=>({...p,["w"+it.txn_id]:null}));
+  };
+  const walAsk=async(it)=>{
+    const msg=window.prompt("Staff se kya clarification chahiye?","");
+    if(msg===null)return;
+    if(!msg.trim()){setSaveErr("Sawaal likhein.");return;}
+    setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"asking"}));
+    try{const r=await api.post("/wallets/transaction/"+it.txn_id+"/ask-clarification",{message:msg.trim(),photo_url:null});if(r&&r.success!==false)removeWallet(it.txn_id);else setSaveErr((r&&r.message)||"Ask failed");}
+    catch(e){setSaveErr(e.message);}
+    setActing(p=>({...p,["w"+it.txn_id]:null}));
+  };
+  const WCAT_LBL={site_exp:"Site Expense",party_pay:"Party Payment",salary:"Salary",petrol:"Petrol",generic:"Other"};
+  const WalletApprovalCard=({item:it})=>{
+    const act=acting["w"+it.txn_id];
+    const blocked=walletPhotoBlocked(it);
+    return(
+      <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.blu}}>
+        <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
+          <span style={{fontSize:9.5,fontWeight:700,color:T.blu,background:T.bluL,padding:"1px 7px",borderRadius:10,textTransform:"uppercase"}}>Wallet · {WCAT_LBL[it.wallet_category]||"Other"}</span>
+          {it.is_transfer&&<span style={{fontSize:9,fontWeight:700,color:"#7C3AED",background:"#F5F3FF",padding:"1px 7px",borderRadius:10}}>Transfer</span>}
+          {it.limit_exceeded&&<span style={{fontSize:9,fontWeight:700,color:T.red,background:T.redL,padding:"1px 7px",borderRadius:10}}>Limit breach</span>}
+        </div>
+        <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>₹{Number(it.amount||0).toLocaleString("en-IN")}</div>
+        <div style={{fontSize:10.5,color:T.t4,marginTop:2}}><b style={{color:T.t3}}>{it.sender_name}</b> → {it.party_name}{it.project_name?" · "+it.project_name:""}</div>
+        {it.note&&<div style={{fontSize:10.5,color:T.t4,marginTop:2,fontStyle:"italic"}}>"{it.note}"</div>}
+        {(it.photo_url||it.photo_pending)&&(
+          <div style={{display:"flex",gap:8,marginTop:5,alignItems:"center"}}>
+            {it.photo_url&&<a href={it.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10.5,color:T.blu,fontWeight:600}}>Photo dekhein</a>}
+            {it.photo_pending&&<span style={{fontSize:9,fontWeight:700,color:T.amb,background:T.ambL,padding:"1px 7px",borderRadius:10}}>Photo pending</span>}
+          </div>
+        )}
+        {blocked&&<div style={{marginTop:7,fontSize:10,color:T.amb,background:T.ambL,padding:"5px 9px",borderRadius:6}}>Is category me photo zaroori — sync hone tak approve disabled.</div>}
+        <div style={{display:"flex",gap:6,marginTop:8}}>
+          <button onClick={()=>walReject(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="rejecting"?"...":"✕ Reject"}</button>
+          <button onClick={()=>walAsk(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.bluL,border:"1px solid "+T.blu,color:T.blu,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="asking"?"...":"Ask info"}</button>
+          <button onClick={()=>walApprove(it)} disabled={!!act||blocked} style={{flex:1,padding:"6px",borderRadius:6,background:blocked?T.b1:T.grn,border:"none",color:blocked?T.t4:"white",fontSize:11,fontWeight:700,cursor:(act||blocked)?"not-allowed":"pointer"}}>{act==="approving"?"...":"✓ Approve"}</button>
+        </div>
+      </div>
+    );
+  };
+
   const EmptyState=({msg,sub})=>(
     <div style={{textAlign:"center",padding:"60px 20px"}}>
       <div style={{fontSize:36,marginBottom:8}}>✅</div>
@@ -2320,7 +2390,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
 
   const APPROVAL_TABS=[
     {id:"design",  label:"Design",  color:"#7C3AED", count:designItems.length},
-    {id:"finance", label:"Finance", color:T.blu,     count:financeItems.length},
+    {id:"finance", label:"Finance", color:T.blu,     count:financeItems.length+walletItems.length},
     {id:"payment", label:"Payment", color:T.grn,     count:paymentItems.length},
   ];
   const MATERIAL_TABS=[
@@ -2395,12 +2465,22 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               </div></>
         )}
         {!loading&&mode==="approvals"&&activeTab==="finance"&&(
-          financeItems.length===0
-            ?<EmptyState msg="Koi pending Finance approval nahi!" sub="PO, RA Bills, Subcon WO sab clear hain"/>
-            :<><SectionHead label="Finance Approvals" count={financeItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
-              <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
-                {financeItems.map(item=><CentralCard key={item.id} item={item}/>)}
-              </div></>
+          (financeItems.length===0&&walletItems.length===0)
+            ?<EmptyState msg="Koi pending Finance approval nahi!" sub="PO, RA Bills, Subcon WO, Wallet sab clear hain"/>
+            :<>
+              {financeItems.length>0&&<>
+                <SectionHead label="Finance Approvals" count={financeItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
+                <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                  {financeItems.map(item=><CentralCard key={item.id} item={item}/>)}
+                </div>
+              </>}
+              {walletItems.length>0&&<>
+                <SectionHead label="Wallet Approvals" count={walletItems.length} color={T.blu} bg={T.bluL} bdr={T.bluM}/>
+                <div style={{padding:"8px 14px",display:"flex",flexDirection:"column",gap:8}}>
+                  {walletItems.map(item=><WalletApprovalCard key={item.txn_id} item={item}/>)}
+                </div>
+              </>}
+            </>
         )}
         {!loading&&mode==="approvals"&&activeTab==="payment"&&(
           paymentItems.length===0
@@ -2694,16 +2774,21 @@ function ProjectsPage({onSelectProject}){
       return;
     }
     try{
-      const [apRes,whmrRes]=await Promise.all([
+      // Wallet pending approvals now live in the Pending Approvals drawer
+      // (Finance column), so the tile must count them too — keeps tile == drawer.
+      const _isWalletApprover=["admin","super_admin","project_manager"].includes(currentUser?.role);
+      const [apRes,whmrRes,walRes]=await Promise.all([
         api.get("/approvals/pending?scope=my").catch(()=>({success:false})),
         api.get("/warehouse/mr").catch(()=>({success:false})),
+        _isWalletApprover?api.get("/wallets/pending-approvals").catch(()=>({success:false})):Promise.resolve({success:false}),
       ]);
       const items=apRes.success?(apRes.data||[]):[];
       const isMat=i=>i._source==="material_request"||i._source==="purchase_order";
       const whPending=(whmrRes.success?whmrRes.data:[]).filter(m=>!m.status||m.status==="Pending").length;
+      const walletCount=walRes.success?(walRes.data||[]).length:0;
       const mrCount=items.filter(isMat).length+whPending;          // Material tile
       const prCount=items.filter(i=>i._source==="payment_request").length;
-      const total=items.filter(i=>!isMat(i)).length;               // Pending Approvals tile
+      const total=items.filter(i=>!isMat(i)).length+walletCount;   // Pending Approvals tile (incl. wallet)
       apiCache.set("approval-counts",{mrCount,prCount,total},30000);
       setMrPendingCount(mrCount);
       setPrPendingCount(prCount);
