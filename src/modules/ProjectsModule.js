@@ -1683,18 +1683,21 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // workflow at all.
   // String()-normalize ids — engine ref_id and source row id can differ in
   // type (number vs string) across endpoints; loose-key the Set so .has works.
-  // IMPORTANT: gate on _canActNow, not mere presence. In scope=all the engine
-  // returns EVERY pending item (incl. ones waiting on someone else); only those
-  // with _canActNow are actually actionable by this user right now.
-  const engineMrIds=new Set(data.centralized.filter(i=>i._source==="material_request"&&i._canActNow!==false).map(i=>String(i._source_id)));
-  const enginePoIds=new Set(data.centralized.filter(i=>i._source==="purchase_order"&&i._canActNow!==false).map(i=>String(i._source_id)));
+  // Two sets per module:
+  //   *Known  = EVERY pending item the engine returned (actionable or waiting)
+  //   *Act    = only items with _canActNow (truly my turn right now)
+  const mrKnown=new Set(data.centralized.filter(i=>i._source==="material_request").map(i=>String(i._source_id)));
+  const poKnown=new Set(data.centralized.filter(i=>i._source==="purchase_order").map(i=>String(i._source_id)));
+  const mrAct=new Set(data.centralized.filter(i=>i._source==="material_request"&&i._canActNow!==false).map(i=>String(i._source_id)));
+  const poAct=new Set(data.centralized.filter(i=>i._source==="purchase_order"&&i._canActNow!==false).map(i=>String(i._source_id)));
   const mrWfOn=!!(data.wfOn&&data.wfOn["Material Request"]);
   const poWfOn=!!(data.wfOn&&data.wfOn["Purchase Order (PO)"]);
-  // If the engine returned this item for me, I can act — it already filtered
-  // by role+level (covers PM at L1, admin at L2, parallel). The admin-only
-  // fallback applies ONLY when the module has no enabled workflow at all.
-  const canActOnMr=(id)=>engineMrIds.has(String(id))||(!mrWfOn&&isAdminUser);
-  const canActOnPo=(id)=>enginePoIds.has(String(id))||(!poWfOn&&isAdminUser);
+  // If the engine knows this item, trust _canActNow EXCLUSIVELY — never fall
+  // back to the admin gate (that would wrongly grant buttons on a PM-turn item
+  // if the workflow fetch was stale/failed). The admin fallback applies ONLY
+  // to items the engine doesn't track AND when no workflow is enabled.
+  const canActOnMr=(id)=>mrKnown.has(String(id))?mrAct.has(String(id)):(!mrWfOn&&isAdminUser);
+  const canActOnPo=(id)=>poKnown.has(String(id))?poAct.has(String(id)):(!poWfOn&&isAdminUser);
   // Waiting-on label (for read-only cards in the All view)
   const mrWaitMap=new Map(data.centralized.filter(i=>i._source==="material_request").map(i=>[String(i._source_id),i._waitingOn]));
   const poWaitMap=new Map(data.centralized.filter(i=>i._source==="purchase_order").map(i=>[String(i._source_id),i._waitingOn]));
