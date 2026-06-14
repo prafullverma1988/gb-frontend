@@ -2475,7 +2475,108 @@ function WalletSettings() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// MY PROFILE — self-service personal account (name / phone / designation
+// + password). Email & role are read-only (admin-managed identity).
+// ═══════════════════════════════════════════════════════════════════════
+function MyProfile() {
+  const [prof, setProf] = useState(null);
+  const [form, setForm] = useState({ name: "", phone: "", designation: "" });
+  const [msg, setMsg] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [pw, setPw] = useState({ current_password: "", new_password: "", confirm: "" });
+  const [pwMsg, setPwMsg] = useState("");
+  const [pwBusy, setPwBusy] = useState(false);
+
+  useEffect(() => {
+    api.get("/auth/profile").then(r => {
+      if (r.success) {
+        const d = r.data;
+        setProf(d);
+        setForm({ name: d.name || "", phone: d.phone || "", designation: d.designation || "" });
+      }
+    }).catch(() => {});
+  }, []);
+
+  const ROLE_LABEL = { admin: "Admin", super_admin: "Super Admin", project_manager: "Project Manager", supervisor: "Site Supervisor", accountant: "Accountant", viewer: "Viewer" };
+
+  const save = async () => {
+    if (!form.name.trim()) { setMsg("Name required"); return; }
+    setBusy(true); setMsg("");
+    try {
+      const r = await api.put("/auth/profile", { name: form.name.trim(), phone: form.phone || null, designation: form.designation || null });
+      if (r.success) {
+        setMsg("✓ Profile updated");
+        // keep the locally-cached user in sync so the sidebar reflects the new name
+        try {
+          const u = JSON.parse(localStorage.getItem("gb_user") || "{}");
+          localStorage.setItem("gb_user", JSON.stringify({ ...u, name: form.name.trim(), phone: form.phone, designation: form.designation }));
+          if (localStorage.getItem("gb_user_name") !== null) localStorage.setItem("gb_user_name", form.name.trim());
+        } catch (e) { /* */ }
+        setTimeout(() => setMsg(""), 2500);
+      } else setMsg(r.message || "Update failed");
+    } catch (e) { setMsg(e.message || "Network error"); }
+    setBusy(false);
+  };
+
+  const changePw = async () => {
+    if (!pw.current_password || !pw.new_password) { setPwMsg("Both fields required"); return; }
+    if (pw.new_password.length < 6) { setPwMsg("New password min 6 characters"); return; }
+    if (pw.new_password !== pw.confirm) { setPwMsg("New password and confirm don't match"); return; }
+    setPwBusy(true); setPwMsg("");
+    try {
+      const r = await api.put("/auth/change-password", { current_password: pw.current_password, new_password: pw.new_password });
+      if (r.success) { setPwMsg("✓ Password changed"); setPw({ current_password: "", new_password: "", confirm: "" }); setTimeout(() => setPwMsg(""), 2500); }
+      else setPwMsg(r.message || "Change failed");
+    } catch (e) { setPwMsg(e?.response?.data?.message || e.message || "Current password galat hai"); }
+    setPwBusy(false);
+  };
+
+  if (!prof) return <div style={{ padding: "20px", color: T.textLight, fontSize: 13 }}>Loading profile…</div>;
+
+  return (
+    <div>
+      <SectionCard title="My Profile" desc="Apni personal details aur password manage karein" action={<SaveBtn onClick={save} label={busy ? "Saving…" : "Save Changes"} />}>
+        {/* avatar + identity strip */}
+        <div style={{ display: "flex", alignItems: "center", gap: 14, marginBottom: 18 }}>
+          <div style={{ width: 56, height: 56, borderRadius: "50%", background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 22, fontWeight: 800, color: "white", flexShrink: 0 }}>{(prof.name || "U")[0].toUpperCase()}</div>
+          <div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: T.text }}>{prof.name}</div>
+            <div style={{ fontSize: 12.5, color: T.textLight, marginTop: 2 }}>{prof.company_name || ""}</div>
+            <div style={{ marginTop: 5 }}><Badge text={ROLE_LABEL[prof.role] || prof.role} /></div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+          <FormField label="Full Name" value={form.name} onChange={v => setForm(f => ({ ...f, name: v }))} placeholder="Your name" half />
+          <FormField label="Phone" value={form.phone} onChange={v => setForm(f => ({ ...f, phone: v }))} placeholder="Mobile number" half />
+        </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+          <FormField label="Designation" value={form.designation} onChange={v => setForm(f => ({ ...f, designation: v }))} placeholder="e.g. Project Manager" half />
+          <FormField label="Email (login — admin managed)" value={prof.email || ""} onChange={() => {}} disabled half />
+        </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <FormField label="Role (admin managed)" value={ROLE_LABEL[prof.role] || prof.role || ""} onChange={() => {}} disabled half />
+          <FormField label="Company (admin managed)" value={prof.company_name || ""} onChange={() => {}} disabled half />
+        </div>
+        {msg && <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: msg.startsWith("✓") ? T.green : T.red }}>{msg}</div>}
+      </SectionCard>
+
+      <SectionCard title="Change Password" desc="Apna login password update karein" action={<SaveBtn onClick={changePw} label={pwBusy ? "Updating…" : "Update Password"} />}>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginBottom: 14 }}>
+          <FormField label="Current Password" type="password" value={pw.current_password} onChange={v => setPw(p => ({ ...p, current_password: v }))} placeholder="••••••" half />
+        </div>
+        <div style={{ display: "flex", gap: 16, flexWrap: "wrap" }}>
+          <FormField label="New Password" type="password" value={pw.new_password} onChange={v => setPw(p => ({ ...p, new_password: v }))} placeholder="Min 6 characters" half />
+          <FormField label="Confirm New Password" type="password" value={pw.confirm} onChange={v => setPw(p => ({ ...p, confirm: v }))} placeholder="Re-type new password" half />
+        </div>
+        {pwMsg && <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: pwMsg.startsWith("✓") ? T.green : T.red }}>{pwMsg}</div>}
+      </SectionCard>
+    </div>
+  );
+}
+
 const settingsSections = [
+  { id: "profile",       label: "My Profile",           Icon: IcUsers,     Comp: MyProfile,              section: "ACCOUNT" },
   { id: "company",       label: "Company Profile",      Icon: IcBuilding,  Comp: CompanySettings,        section: "GENERAL" },
   { id: "roles",         label: "Roles & Access",       Icon: IcShield,    Comp: RolesAccess,            section: null },
   { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,       section: null },
@@ -2494,11 +2595,12 @@ const settingsSections = [
   { id: "features",      label: "Feature Requests",     Icon: IcEdit,      Comp: FeatureRequests,        section: "FEEDBACK" },
 ];
 
-export default function SettingsModule() {
-  const [activeSection, setActiveSection] = useState("company");
+export default function SettingsModule({ initialSection = "company" } = {}) {
+  const [activeSection, setActiveSection] = useState(initialSection);
   const ActiveComp = settingsSections.find(s => s.id === activeSection)?.Comp || CompanySettings;
   const activeLabel = settingsSections.find(s => s.id === activeSection)?.label || "Settings";
   const descMap = {
+    profile: "Manage your personal account and password",
     company: "Manage your company profile and regional settings", roles: "Configure user roles, permissions and project access",
     approval: "Set up multi-level approval workflows", backdate: "Control back-dated entry permissions",
     attendance: "Configure attendance mode and payment cycle for each labour type",

@@ -807,13 +807,20 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
               <div style={{color:"#fff",fontSize:12,fontWeight:700}}>{user?.name||"User"}</div>
               <div style={{color:"rgba(255,255,255,0.45)",fontSize:10.5,marginTop:1}}>{user?.email||user?.phone||""}</div>
             </div>
-            <button onClick={()=>{setShowProfileMenu(false);handleNav("settings");}}
+            <button onClick={()=>{setShowProfileMenu(false);handleNav("profile");}}
+              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.75)",fontSize:12,fontFamily:"inherit",textAlign:"left",transition:"background .12s"}}
+              onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}
+              onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.75)";}}>
+              <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <span>My Profile</span>
+            </button>
+            {["admin","super_admin"].includes(user?.role)&&<button onClick={()=>{setShowProfileMenu(false);handleNav("settings");}}
               style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.75)",fontSize:12,fontFamily:"inherit",textAlign:"left",transition:"background .12s"}}
               onMouseEnter={e=>{e.currentTarget.style.background="rgba(255,255,255,0.05)";e.currentTarget.style.color="#fff";}}
               onMouseLeave={e=>{e.currentTarget.style.background="none";e.currentTarget.style.color="rgba(255,255,255,0.75)";}}>
               <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83 0 2 2 0 010-2.83l.06-.06a1.65 1.65 0 00.33-1.82 1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 010-2.83 2 2 0 012.83 0l.06.06a1.65 1.65 0 001.82.33H9a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 0 2 2 0 010 2.83l-.06.06a1.65 1.65 0 00-.33 1.82V9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-              <span>Settings</span>
-            </button>
+              <span>Company Settings</span>
+            </button>}
             {onLogout&&<div style={{borderTop:"1px solid rgba(255,255,255,0.06)"}}>
               <button onClick={()=>{setShowProfileMenu(false);onLogout();}}
                 style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"9px 12px",background:"none",border:"none",cursor:"pointer",color:"#F87171",fontSize:12,fontFamily:"inherit",fontWeight:600,textAlign:"left",transition:"background .12s"}}
@@ -1307,6 +1314,7 @@ export default function App(){
     reports:{title:"Reports",sub:"All Reports"},
     library:{title:"Library",sub:"Master Data"},
     settings:{title:"Settings",sub:"Configuration"},
+    profile:{title:"My Profile",sub:"Your Account"},
     saas:{title:"SaaS Admin",sub:"Platform Management"},
   };
 
@@ -1335,6 +1343,7 @@ export default function App(){
     township:  guard("township", "Township CRM",   <TownshipCRMModule/>),
     reports:   guard("reports",  "Reports",        <ReportsModule/>),
     settings:  <SettingsModule/>,
+    profile:   <SettingsModule initialSection="profile"/>,
     saas:     <SaaSModule/>,
   };
 
