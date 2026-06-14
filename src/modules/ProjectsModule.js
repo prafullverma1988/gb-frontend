@@ -1972,6 +1972,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
             <span style={{fontSize:9.5,color:T.t4,marginLeft:4}}>Pending: {item.pending_role||"—"}</span>
           </div>
         )}
+        {/* Escalation note — level had no eligible approver for this project */}
+        {item._escalated&&(
+          <div style={{margin:"4px 0 2px",padding:"5px 9px",borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,fontSize:10.5,color:T.amb,fontWeight:600,display:"flex",alignItems:"center",gap:5}}>
+            <span>⚠</span>
+            <span>Is project pe koi {item._escalatedFrom||"approver"} assigned nahi — Admin ko bheja gaya</span>
+          </div>
+        )}
         {/* Inline PO detail panel — expand on card click */}
         {isPO&&isPoExpanded&&(
           <div style={{marginTop:8,paddingTop:9,borderTop:`1px solid ${T.b1}`}} onClick={e=>e.stopPropagation()}>
