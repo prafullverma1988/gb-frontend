@@ -1648,7 +1648,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // 1. Source-table path: drawings not in approval_requests → addSrc sets _source="design"
   // 2. Centralized path: drawings submitted via POST /approvals/submit → _source undefined but module="Design Approval"
   const designItems   = data.centralized.filter(i=>(i._source==="design"||i.module==="Design Approval")&&inScope(i));
-  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","purchase_order","labour_rate","salary_edit","attendance_review"].includes(i._source)&&inScope(i));
+  // NOTE: purchase_order is NOT here — POs live in the Materials drawer (PO tab),
+  // not the Pending Approvals (Finance) tab. Keeping it out prevents the same
+  // PO being shown/counted in both drawers.
+  const financeItems  = data.centralized.filter(i=>["ra_bill","wo_amendment","ce_amendment","auto_invoice","labour_rate","salary_edit","attendance_review"].includes(i._source)&&inScope(i));
   const paymentItems  = [
     ...data.centralized.filter(i=>i._source==="payment_request"&&inScope(i)),
     ...data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")),
@@ -1708,12 +1711,16 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const pendingPOsScoped=apprScope==="all"?pendingPOs:pendingPOs.filter(p=>canActOnPo(p.id));
 
   // ── My/All toggle badge counts ──
+  // Material sources (MR/PO) belong to the Materials drawer — exclude them from
+  // the Pending Approvals (Design/Finance/Payment) counts so the badge matches
+  // what this drawer actually shows.
+  const _isMatSrc=(i)=>i._source==="material_request"||i._source==="purchase_order";
   const _financePR=data.finance.filter(pf=>!data.centralized.some(c=>c._source_id===pf.id&&c._source==="payment_request")).length;
   const myCount = mode==="approvals"
-    ? data.centralized.filter(i=>i._canActNow!==false).length + _financePR
+    ? data.centralized.filter(i=>!_isMatSrc(i)&&i._canActNow!==false).length + _financePR
     : mrByStage("Requested").filter(m=>canActOnMr(m.id)).length + pendingPOs.filter(p=>canActOnPo(p.id)).length + whPendingMRs.length;
   const allCount = mode==="approvals"
-    ? data.centralized.length + _financePR
+    ? data.centralized.filter(i=>!_isMatSrc(i)).length + _financePR
     : mrByStage("Requested").length + pendingPOs.length + whPendingMRs.length;
 
   const totalCount = mode==="approvals"
