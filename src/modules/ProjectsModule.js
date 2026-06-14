@@ -3149,7 +3149,7 @@ function ProjectsPage({onSelectProject}){
         </div>
       )}
       {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
-      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);loadApprovalCounts();}} mode={approvalMode} onSelectProject={onSelectProject}
+      {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);apiCache.invalidate("approval-counts");loadApprovalCounts();}} mode={approvalMode} onSelectProject={onSelectProject}
         onCountSync={approvalMode==="materials"
           ? cnt=>{setMrPendingCount(cnt);apiCache.invalidate("approval-counts");}
           : undefined}
