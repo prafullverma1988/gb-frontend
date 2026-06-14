@@ -2324,7 +2324,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
       {/* Header */}
       <div style={{background:"#0D1B2A",padding:"14px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
-          <div style={{fontSize:15,fontWeight:700,color:"white"}}>{drawerTitle}</div>
+          <div style={{fontSize:15,fontWeight:700,color:"white"}}>{drawerTitle}
+            <span style={{fontSize:9,fontWeight:700,color:"#0D1B2A",background:"#22C55E",padding:"1px 6px",borderRadius:10,marginLeft:8,verticalAlign:"middle"}}>v3</span>
+          </div>
           <div style={{display:"flex",gap:8,alignItems:"center"}}>
             <button onClick={load} style={{background:"rgba(255,255,255,0.1)",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.7)",fontSize:10.5,padding:"3px 9px",borderRadius:5}}>↻ Refresh</button>
             <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex",padding:4}}><IcX size={15}/></button>
