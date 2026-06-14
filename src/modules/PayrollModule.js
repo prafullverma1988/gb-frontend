@@ -3043,14 +3043,33 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
   const [markPayModal,setMarkPayModal]=useState(null);
   const [payForm,setPayForm]=useState({paidDate:TODAY,paidBy:localStorage.getItem("gb_user_name")||"",txRef:""});
 
-  const records=salaryRecords.filter(r=>{
+  // Run-generated payments (finalized payroll runs) merged in, tagged source:"Run".
+  const [runRecs,setRunRecs]=useState([]);
+  useEffect(()=>{
+    let alive=true;
+    api.get(`/payroll/run-payments?year=${year}`).then(r=>{
+      if(!alive||!r.success) return;
+      setRunRecs((r.data||[]).map(it=>({
+        id:"run-"+it.id, name:it.staff_name, designation:it.designation||"", role:it.designation||"",
+        amount:Number(it.net_amount)||0, status:it.pay_status==="paid"?"Paid":"Pending",
+        salaryDate:it.finalized_at?String(it.finalized_at).split("T")[0]:"", dueDate:null,
+        paidDate:it.paid_at?String(it.paid_at).split("T")[0]:null, txRef:it.tx_ref||"",
+        month:(it.month_num||1)-1, year:it.year_num, source:"Run",
+      })));
+    }).catch(()=>{});
+    return()=>{ alive=false; };
+  },[year]);
+  // Manual records (legacy) tagged source:"Manual"; Run records appended.
+  const combined=[...salaryRecords.map(r=>({...r,source:r.source||"Manual"})),...runRecs];
+
+  const records=combined.filter(r=>{
     if(filterMonth==="current"&&(r.month!==month||r.year!==year)) return false;
     if(filterStatus!=="All"&&r.status!==filterStatus) return false;
     return true;
   });
 
   // Summary
-  const allRecs=filterMonth==="current"?salaryRecords.filter(r=>r.month===month&&r.year===year):salaryRecords;
+  const allRecs=filterMonth==="current"?combined.filter(r=>r.month===month&&r.year===year):combined;
   const totalCreated=allRecs.reduce((s,r)=>s+r.amount,0);
   const totalPaid=allRecs.filter(r=>r.status==="Paid").reduce((s,r)=>s+r.amount,0);
   const totalPending=allRecs.filter(r=>r.status==="Pending").reduce((s,r)=>s+r.amount,0);
@@ -3058,6 +3077,14 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
   const dueSoon=allRecs.filter(r=>r.status==="Pending"&&daysDiff2(r.dueDate)>=0&&daysDiff2(r.dueDate)<=7).length;
 
   const markPaid=async(rec)=>{
+    if(rec.source==="Run"){
+      // Run-generated payment → update payroll_run_items
+      const itemId=String(rec.id).replace("run-","");
+      try{ await api.patch("/payroll/run-items/"+itemId,{pay_status:"paid",payment_method:"manual",tx_ref:payForm.txRef}); }catch(err){console.error("Mark paid (run):",err);}
+      setRunRecs(p=>p.map(r=>r.id===rec.id?{...r,status:"Paid",paidDate:payForm.paidDate,txRef:payForm.txRef}:r));
+      setMarkPayModal(null);
+      return;
+    }
     try{
       await api.patch("/payroll/salary-records/"+rec.id,{status:"Paid",paid_date:payForm.paidDate,paid_by:payForm.paidBy,tx_ref:payForm.txRef});
     }catch(err){console.error("Mark paid:",err);}
@@ -3132,8 +3159,11 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
               onMouseEnter={e=>e.currentTarget.style.background=T.sltL}
               onMouseLeave={e=>e.currentTarget.style.background=i%2===0?"transparent":T.surfaceB}>
               <div>
-                <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{rec.name}</div>
-                <div style={{fontSize:10,color:T.t4}}>{rec.designation} · {rec.category} · {MONTHS[rec.month]} {rec.year}</div>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.t1,display:"flex",alignItems:"center",gap:6}}>
+                  {rec.name}
+                  <span style={{fontSize:8.5,fontWeight:700,padding:"1px 6px",borderRadius:10,textTransform:"uppercase",letterSpacing:.3,color:rec.source==="Run"?T.blu:T.slt,background:rec.source==="Run"?T.bluL:T.sltL,border:`1px solid ${rec.source==="Run"?T.blu:T.slt}33`}}>{rec.source==="Run"?"Run":"Manual"}</span>
+                </div>
+                <div style={{fontSize:10,color:T.t4}}>{rec.designation} · {rec.category||""} · {MONTHS[rec.month]} {rec.year}</div>
               </div>
               <span style={{fontSize:13,fontWeight:700,color:T.t1}}>₹{fmtN(rec.amount)}</span>
               <span style={{fontSize:11.5,color:T.t3}}>{rec.salaryDate}</span>
