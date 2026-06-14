@@ -1683,8 +1683,11 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   // workflow at all.
   // String()-normalize ids — engine ref_id and source row id can differ in
   // type (number vs string) across endpoints; loose-key the Set so .has works.
-  const engineMrIds=new Set(data.centralized.filter(i=>i._source==="material_request").map(i=>String(i._source_id)));
-  const enginePoIds=new Set(data.centralized.filter(i=>i._source==="purchase_order").map(i=>String(i._source_id)));
+  // IMPORTANT: gate on _canActNow, not mere presence. In scope=all the engine
+  // returns EVERY pending item (incl. ones waiting on someone else); only those
+  // with _canActNow are actually actionable by this user right now.
+  const engineMrIds=new Set(data.centralized.filter(i=>i._source==="material_request"&&i._canActNow!==false).map(i=>String(i._source_id)));
+  const enginePoIds=new Set(data.centralized.filter(i=>i._source==="purchase_order"&&i._canActNow!==false).map(i=>String(i._source_id)));
   const mrWfOn=!!(data.wfOn&&data.wfOn["Material Request"]);
   const poWfOn=!!(data.wfOn&&data.wfOn["Purchase Order (PO)"]);
   // If the engine returned this item for me, I can act — it already filtered
