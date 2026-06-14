@@ -1060,11 +1060,16 @@ function ApprovalSettings() {
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
   const [editLevels, setEditLevels] = useState([]);
+  // Company switch: auto-approve the requester's own approval level
+  const [autoApproveSelf, setAutoApproveSelf] = useState(false);
 
   // Load from API on mount
   useEffect(() => {
     (async () => {
       try {
+        api.get("/approvals/settings").then(r => {
+          if (r.success && r.data) setAutoApproveSelf(!!r.data.auto_approve_self);
+        }).catch(() => {});
         const res = await api.get("/approvals/workflows");
         if (res.success && res.data && res.data.length > 0) {
           const mapped = res.data.map(wf => ({
@@ -1165,6 +1170,13 @@ function ApprovalSettings() {
 
   const toggleApproval = (id) => setApprovals(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a));
 
+  // Persist the auto-approve-self switch immediately on toggle
+  const toggleAutoApproveSelf = async (v) => {
+    setAutoApproveSelf(v);
+    try { await api.put("/approvals/settings", { auto_approve_self: v }); }
+    catch (e) { setAutoApproveSelf(!v); }
+  };
+
   if (loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.textLight,fontSize:13}}>Loading approval workflows...</div>;
 
   return (
@@ -1175,6 +1187,17 @@ function ApprovalSettings() {
         <div style={{ fontSize: 13, color: T.blue, lineHeight: 1.6 }}>
           Configure multi-level approval chains for each transaction type. Transactions exceeding the set amount limit will require approval from the next level. Click edit to customize approval levels for any workflow.
         </div>
+      </div>
+
+      {/* Company switch: auto-approve the requester's own level */}
+      <div style={{ background: T.card, borderRadius: T.radius, border: `1px solid ${T.border}`, boxShadow: T.shadow, marginBottom: 20, padding: "4px 22px" }}>
+        <ToggleRow
+          icon={<IcShield size={18} color={T.blue} />}
+          label="Auto-approve requester's own level"
+          desc="Jab approval chain us role tak pahunche jo request banane wale ka hai, wo level apne aap approve ho jata hai (eg: Admin ne banaya, PM check kare, fir Admin ka level auto-approve). OFF = har level pe alag click (double-check)."
+          value={autoApproveSelf}
+          onChange={toggleAutoApproveSelf}
+        />
       </div>
 
       {categories.map(cat => {
