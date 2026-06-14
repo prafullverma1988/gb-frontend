@@ -999,7 +999,13 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
     setErrMsg(""); setActing(p => ({ ...p, [key]: isRej ? "rejecting" : "approving" }));
     try {
       let res;
-      if (src === "design") {
+      const isRevise = actionType === "Revision" || actionType === "revise";
+      if (item._request_id) {
+        // UNIFIED ENGINE: enrolled item — act through the engine so multi-level
+        // hierarchy is enforced (same as the main Pending Approvals drawer).
+        const centralAction = isRevise ? "revise" : isRej ? "reject" : "approve";
+        res = await api.patch("/approvals/" + item._request_id + "/action", { action: centralAction, remarks: isRevise ? "Revision requested" : undefined });
+      } else if (src === "design") {
         const status = actionType === "Revision" ? "Revision" : isRej ? "Rejected" : "Approved";
         res = await api.patch("/design/drawings/" + item._source_id + "/status", { status, note: status === "Revision" ? "Revision requested" : undefined });
       } else if (src === "material_request") {
@@ -1064,12 +1070,12 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
                     {src === "design" && item.category && <span style={{ fontSize: 9, color: T.t4 }}>{item.category} · {item.drawing_type || "2D"}</span>}
                   </div>
                   <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1 }}>{item.title}</div>
-                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{item.project_name || "—"} · by {item.submitted_by_name}{!src ? " · L" + item.current_level + "/" + item.max_level : ""}</div>
+                  <div style={{ fontSize: 10.5, color: T.t4, marginTop: 2 }}>{item.project_name || "—"} · by {item.submitted_by_name}{(!src || item._request_id) ? " · L" + item.current_level + "/" + item.max_level : ""}</div>
                 </div>
                 {item.amount > 0 && <span style={{ fontSize: 13, fontWeight: 700, color: mc, flexShrink: 0 }}>{fmtAmt(item.amount)}</span>}
               </div>
-              {/* Level progress for centralized items */}
-              {!src && item.max_level > 0 && (
+              {/* Level progress for engine-tracked items */}
+              {(!src || item._request_id) && item.max_level > 0 && (
                 <div style={{ display: "flex", gap: 4, margin: "6px 0", alignItems: "center" }}>
                   {Array.from({ length: item.max_level }, (_, i) => {
                     const lvl = i + 1; const done = lvl < item.current_level; const pending = lvl === item.current_level;
