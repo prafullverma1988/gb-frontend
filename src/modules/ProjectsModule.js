@@ -2333,7 +2333,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           </div>
         </div>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10}}>
-          <span style={{background:headerAccent,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{apprScope==="my"?myCount:allCount} pending</span>
+          <span style={{background:headerAccent,color:"white",fontSize:11,fontWeight:700,padding:"2px 10px",borderRadius:20}}>{myCount} pending</span>
           <span style={{fontSize:10.5,color:"rgba(255,255,255,0.4)"}}>{mode==="approvals"?"Design · Finance · Payment":"Procurement · MR · Warehouse"}</span>
         </div>
         {/* My Approvals / All toggle — only admin/super_admin/PM */}
