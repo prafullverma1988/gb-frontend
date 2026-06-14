@@ -1522,12 +1522,13 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         setData(next);
         apiCache.set(cacheKey, next, 30000);
         if(venRes.success&&Array.isArray(venRes.data)) setVendorList(venRes.data);
-        // Sync real count back to parent KPI tile — same source as what drawer shows
+        // Sync MY actionable count back to parent KPI tile (not raw pending) —
+        // so admin's tile is 0 when items are still on the PM's desk.
         if(onCountSync){
-          const _req=(next.mrs||[]).filter(m=>m.stage==="Requested").length;
-          const _po =(next.pos||[]).filter(p=>!p.approval_status||p.approval_status==="Pending").length;
+          const _mrMy=(next.centralized||[]).filter(i=>i._source==="material_request"&&i._canActNow!==false).length;
+          const _poMy=(next.centralized||[]).filter(i=>i._source==="purchase_order"&&i._canActNow!==false).length;
           const _wh =(next.whmrs||[]).filter(m=>!m.status||m.status==="Pending").length;
-          onCountSync(_req+_po+_wh);
+          onCountSync(_mrMy+_poMy+_wh);
         }
       } else {
         const [prRes,apRes]=await Promise.all([
@@ -2697,16 +2698,19 @@ function ProjectsPage({onSelectProject}){
       ]);
       if(countRes.success&&countRes.data){
         const byMod=countRes.data.byModule||[];
-        const mrCountProc=byMod.find(m=>m.module==="Material Request")?.count||0;
+        // /approvals/counts is role+level filtered = "MY" actionable counts.
+        // Tiles must show only what's actionable by THIS user (admin shouldn't
+        // see a pending MR that's still on the PM's desk).
+        const mrMy=byMod.find(m=>m.module==="Material Request")?.count||0;
+        const poMy=byMod.find(m=>m.module==="Purchase Order (PO)")?.count||0;
         const prCount=byMod.find(m=>m.module==="Payment Request")?.count||0;
-        // MR count from procurement/warehouse (same source as drawer)
-        const mrCount=computeMrCount(
-          mrRes.success?mrRes.data:[],
-          poRes.success?poRes.data:[],
-          whmrRes.success?whmrRes.data:[]
-        );
-        // Non-MR approvals total
-        const total=(countRes.data.total||0)-mrCountProc;
+        // Warehouse is a separate (non-engine) flow — count its pending as-is.
+        const whPending=(whmrRes.success?whmrRes.data:[]).filter(m=>!m.status||m.status==="Pending").length;
+        // Material Requests tile = MY actionable MR + PO + warehouse pending
+        const mrCount=mrMy+poMy+whPending;
+        // Pending Approvals tile = everything else (Design/Finance/Payment…),
+        // minus MR & PO which live in the Materials tile.
+        const total=(countRes.data.total||0)-mrMy-poMy;
         apiCache.set("approval-counts",{mrCount,prCount,total},30000);
         setMrPendingCount(mrCount);
         setPrPendingCount(prCount);
