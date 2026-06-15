@@ -2433,11 +2433,38 @@ function WalletSettings() {
   const [saving, setSaving] = useState(false);
   const [savedTick, setSavedTick] = useState(false);
 
+  // ── Per-role × per-category auto-approve limits (mobile wallet) ──
+  const LIMIT_ROLES = [
+    { key: "site_supervisor", label: "Site Supervisor" },
+    { key: "project_manager", label: "Project Manager" },
+    { key: "accountant",      label: "Accountant" },
+  ];
+  const LIMIT_CATS = [
+    { key: "site_exp",  label: "Site Exp" },
+    { key: "party_pay", label: "Party Pay" },
+    { key: "petrol",    label: "Petrol" },
+    { key: "generic",   label: "Other" },
+  ];
+  const [limits, setLimits] = useState(null);
+  const [limSaving, setLimSaving] = useState(false);
+  const [limTick, setLimTick] = useState(false);
+
   useEffect(() => {
-    api.get("/wallets/photo-policy").then(r => {
-      if (r?.success && r.data) setPolicy(p => ({ ...p, ...r.data }));
-    }).catch(() => {}).finally(() => setLoading(false));
+    Promise.all([
+      api.get("/wallets/photo-policy").then(r => { if (r?.success && r.data) setPolicy(p => ({ ...p, ...r.data })); }).catch(() => {}),
+      api.get("/wallets/auto-limits").then(r => { if (r?.success && r.data?.limits) setLimits(r.data.limits); }).catch(() => {}),
+    ]).finally(() => setLoading(false));
   }, []);
+
+  const setLimit = (role, cat, val) => setLimits(p => ({ ...p, [role]: { ...(p?.[role] || {}), [cat]: val } }));
+  const saveLimits = async () => {
+    setLimSaving(true);
+    try {
+      await api.put("/wallets/auto-limits", { limits });
+      setLimTick(true); setTimeout(() => setLimTick(false), 1800);
+    } catch (e) { window.alert(e?.message || "Save failed"); }
+    setLimSaving(false);
+  };
 
   const save = async () => {
     setSaving(true);
@@ -2470,6 +2497,50 @@ function WalletSettings() {
             value={policy[c.key] === "required"}
             onChange={(v) => setPolicy(p => ({ ...p, [c.key]: v ? "required" : "optional" }))} />
         ))}
+      </SectionCard>
+
+      {/* ── Auto-approve limits matrix ── */}
+      <SectionCard title="Wallet auto-approve limits"
+        desc="Har role + category ke liye limit set karein. Is amount tak mobile wallet expense AUTO-approve ho jaata hai; usse zyada par approval queue me jaata hai. Khali chhodo = default."
+        action={
+          <button onClick={saveLimits} disabled={limSaving}
+            style={{ padding: "8px 18px", borderRadius: 8, background: limTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: limSaving ? "wait" : "pointer", opacity: limSaving ? 0.7 : 1 }}>
+            {limTick ? "✓ Saved" : limSaving ? "Saving..." : "Save Limits"}
+          </button>
+        }>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+            <thead>
+              <tr>
+                <th style={{ textAlign: "left", padding: "8px 10px", color: T.textLight, fontWeight: 600, borderBottom: `1px solid ${T.borderLight}` }}>Role</th>
+                {LIMIT_CATS.map(c => (
+                  <th key={c.key} style={{ textAlign: "right", padding: "8px 10px", color: T.textLight, fontWeight: 600, borderBottom: `1px solid ${T.borderLight}` }}>{c.label}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {LIMIT_ROLES.map(r => (
+                <tr key={r.key}>
+                  <td style={{ padding: "8px 10px", fontWeight: 600, color: T.text, borderBottom: `1px solid ${T.borderLight}` }}>{r.label}</td>
+                  {LIMIT_CATS.map(c => (
+                    <td key={c.key} style={{ padding: "6px 10px", textAlign: "right", borderBottom: `1px solid ${T.borderLight}` }}>
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 3 }}>
+                        <span style={{ color: T.textLight, fontSize: 12 }}>₹</span>
+                        <input type="number" min="0" value={(limits?.[r.key]?.[c.key]) ?? ""}
+                          onChange={e => setLimit(r.key, c.key, e.target.value)}
+                          style={{ width: 90, padding: "6px 8px", borderRadius: 6, border: `1px solid ${T.border}`, fontSize: 13, textAlign: "right", fontFamily: "inherit" }} />
+                      </div>
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        <div style={{ marginTop: 12, fontSize: 12, color: T.textLight, display: "flex", alignItems: "center", gap: 6 }}>
+          <IcShield size={14} color={T.green} />
+          Admin / Super Admin hamesha unlimited (sab auto-approve) — inhe set karne ki zaroorat nahi.
+        </div>
       </SectionCard>
     </div>
   );
@@ -2608,7 +2679,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",
     finance: "Tax, invoicing, duplicate-payment guard and financial controls",
     warehouse: "Procurement mode, GRN photo policy and MR fulfillment flow",
-    wallet: "Staff wallet photo policy per category",
+    wallet: "Staff wallet photo policy + auto-approve limits",
     notifications: "Choose which in-app notifications you receive",
     sequences: "Configure auto-numbering for transactions", audit: "Audit trail and data retention settings",
     features: "Request new features and track their status",
