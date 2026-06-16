@@ -3,6 +3,7 @@ import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
 import MRDetailDrawer from "../components/MRDetailDrawer";
+import CompanyTransfersTab from "../components/CompanyTransfersTab";
 
 // ── ICONS ─────────────────────────────────────────────────────────────
 const Ic=({d,size=18,color="currentColor",sw=1.8,fill="none"})=>(
@@ -1859,6 +1860,7 @@ function ProcurementModule(){
     {id:"mr", label:`Material Requests${pendingMRs>0?` (${pendingMRs})`:""}` },
     {id:"po", label:`Purchase Orders${pos.filter(p=>p.approval==="Draft").length>0?` (${pos.filter(p=>p.approval==="Draft").length})`:""}`},
     {id:"rfq",label:`RFQ${rfqs.filter(r=>r.status==="Published").length>0?` (${rfqs.filter(r=>r.status==="Published").length})`:""}`},
+    {id:"transfer",label:"Transfers"},
   ];
 
   return(
@@ -2318,6 +2320,9 @@ function ProcurementModule(){
             })}
           </div>
         )}
+
+        {/* ═══════════ TRANSFERS TAB (same as Warehouse) ═══════════ */}
+        {!loading&&tab==="transfer"&&<CompanyTransfersTab/>}
       </div>
 
       {/* ═══ MODALS ═══ */}

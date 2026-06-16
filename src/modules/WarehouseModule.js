@@ -1559,7 +1559,7 @@ function ReceiveGRNModal({mr,onClose,onSaved}){
 }
 
 // ── NEW TRANSFER MODAL ────────────────────────────────────────────
-function NewTransferModal({stock,projects,onClose,onSaved}){
+export function NewTransferModal({stock,projects,onClose,onSaved}){
   const [f,setF]=useState({date:today(),from_project_id:null,to_project_id:null});
   const [items,setItems]=useState([{material_id:null,name:"",unit:"Nos",qty:"",rate:""}]);
   const [saving,setSaving]=useState(false);
@@ -2828,7 +2828,7 @@ function MaterialOutTab({issues,mrs,projects,onNewIssue,onSelectIssue,onSubMR,on
 }
 
 // ── TRANSFERS TAB ──────────────────────────────────────────────────
-function TransfersTab({transfers,onNew,onSelect}){
+export function TransfersTab({transfers,onNew,onSelect}){
   const [fStatus,setFStatus]=useState("All");
   const STATUS_S={
     "Pending":  {c:T.amb,bg:T.ambL,brd:T.ambM},
@@ -2894,7 +2894,7 @@ function TransfersTab({transfers,onNew,onSelect}){
 }
 
 // ── TRANSFER DETAIL DRAWER ────────────────────────────────────────
-function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDeleted,onReceived}){
+export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDeleted,onReceived}){
   const [detail,setDetail]=useState(transfer);
   const [loading,setLoading]=useState(true);
   const [deleting,setDeleting]=useState(false);
