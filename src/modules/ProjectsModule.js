@@ -2365,15 +2365,15 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     // Clarification thread — admin's "Ask info" question + staff's reply.
     // Re-fetches when walletAsked[txn_id] bumps (after the admin asks).
     const [clar,setClar]=useState([]);
+    const [senderUid,setSenderUid]=useState(null); // submitter's user_id → green; approvers → blue
     const askKey=walletAsked[it.txn_id]||0;
     useEffect(()=>{
       let alive=true;
       api.get("/wallets/transaction/"+it.txn_id+"/thread")
-        .then(r=>{ if(alive&&r&&r.success) setClar((r.data&&r.data.clarifications)||[]); })
+        .then(r=>{ if(alive&&r&&r.success){ setClar((r.data&&r.data.clarifications)||[]); setSenderUid(r.data&&r.data.transaction&&r.data.transaction.sender_user_id); } })
         .catch(()=>{});
       return()=>{alive=false;};
     },[it.txn_id,askKey]);
-    const staffRoles=["staff","site","supervisor","site_supervisor"];
     return(
       <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.blu}}>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
@@ -2395,7 +2395,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           <div style={{marginTop:8,borderTop:"1px solid "+T.b1,paddingTop:7}}>
             <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:.4,marginBottom:5}}>Conversation</div>
             {clar.map(c=>{
-              const isStaff=staffRoles.includes(String(c.from_role||"").toLowerCase());
+              // Submitter (sender) = green; anyone else (approver/admin) = blue.
+              // Fallback to role check if sender_user_id isn't loaded yet.
+              const isStaff = senderUid!=null ? (c.from_user_id===senderUid)
+                : !["admin","super_admin"].includes(String(c.from_role||"").toLowerCase());
               return(
                 <div key={c.id} style={{marginBottom:6,paddingLeft:8,borderLeft:"2px solid "+(isStaff?T.grn:T.blu)}}>
                   <span style={{fontSize:10,fontWeight:700,color:isStaff?T.grn:T.blu}}>{c.from_name||c.from_role}{isStaff?" (staff)":""}</span>
