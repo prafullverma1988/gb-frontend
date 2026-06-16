@@ -1410,6 +1410,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const [vendorList,setVendorList]=useState([]);
   const [loading,setLoading]=useState(true);
   const [acting,setActing]=useState({});
+  const [walletAsked,setWalletAsked]=useState({}); // txn_id → counter; bumps to re-fetch clarification thread after Ask info
   const [rejectId,setRejectId]=useState(null);
   const [rejectNote,setRejectNote]=useState("");
   const [saveErr,setSaveErr]=useState("");
@@ -2346,7 +2347,14 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     if(msg===null)return;
     if(!msg.trim()){setSaveErr("Sawaal likhein.");return;}
     setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"asking"}));
-    try{const r=await api.post("/wallets/transaction/"+it.txn_id+"/ask-clarification",{message:msg.trim(),photo_url:null});if(r&&r.success!==false)removeWallet(it.txn_id);else setSaveErr((r&&r.message)||"Ask failed");}
+    try{
+      const r=await api.post("/wallets/transaction/"+it.txn_id+"/ask-clarification",{message:msg.trim(),photo_url:null});
+      if(r&&r.success!==false){
+        // Keep the item in the list (DON'T remove) so the admin can see the
+        // staff's reply in the conversation thread and then approve/reject.
+        setWalletAsked(p=>({...p,[it.txn_id]:(p[it.txn_id]||0)+1}));
+      } else setSaveErr((r&&r.message)||"Ask failed");
+    }
     catch(e){setSaveErr(e.message);}
     setActing(p=>({...p,["w"+it.txn_id]:null}));
   };
@@ -2354,6 +2362,18 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const WalletApprovalCard=({item:it})=>{
     const act=acting["w"+it.txn_id];
     const blocked=walletPhotoBlocked(it);
+    // Clarification thread — admin's "Ask info" question + staff's reply.
+    // Re-fetches when walletAsked[txn_id] bumps (after the admin asks).
+    const [clar,setClar]=useState([]);
+    const askKey=walletAsked[it.txn_id]||0;
+    useEffect(()=>{
+      let alive=true;
+      api.get("/wallets/transaction/"+it.txn_id+"/thread")
+        .then(r=>{ if(alive&&r&&r.success) setClar((r.data&&r.data.clarifications)||[]); })
+        .catch(()=>{});
+      return()=>{alive=false;};
+    },[it.txn_id,askKey]);
+    const staffRoles=["staff","site","supervisor","site_supervisor"];
     return(
       <div style={{background:T.surface,borderRadius:8,border:"1px solid "+T.b1,padding:"11px 13px",borderLeft:"3px solid "+T.blu}}>
         <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:3,flexWrap:"wrap"}}>
@@ -2371,6 +2391,21 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
           </div>
         )}
         {blocked&&<div style={{marginTop:7,fontSize:10,color:T.amb,background:T.ambL,padding:"5px 9px",borderRadius:6}}>Is category me photo zaroori — sync hone tak approve disabled.</div>}
+        {clar.length>0&&(
+          <div style={{marginTop:8,borderTop:"1px solid "+T.b1,paddingTop:7}}>
+            <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:.4,marginBottom:5}}>Conversation</div>
+            {clar.map(c=>{
+              const isStaff=staffRoles.includes(String(c.from_role||"").toLowerCase());
+              return(
+                <div key={c.id} style={{marginBottom:6,paddingLeft:8,borderLeft:"2px solid "+(isStaff?T.grn:T.blu)}}>
+                  <span style={{fontSize:10,fontWeight:700,color:isStaff?T.grn:T.blu}}>{c.from_name||c.from_role}{isStaff?" (staff)":""}</span>
+                  <div style={{fontSize:11,color:T.t2,marginTop:1}}>{c.message}</div>
+                  {c.photo_url&&<a href={c.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu,fontWeight:600}}>Photo</a>}
+                </div>
+              );
+            })}
+          </div>
+        )}
         <div style={{display:"flex",gap:6,marginTop:8}}>
           <button onClick={()=>walReject(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.redL,border:"1px solid "+T.redM,color:T.red,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="rejecting"?"...":"✕ Reject"}</button>
           <button onClick={()=>walAsk(it)} disabled={!!act} style={{flex:1,padding:"6px",borderRadius:6,background:T.bluL,border:"1px solid "+T.blu,color:T.blu,fontSize:11,fontWeight:700,cursor:act?"not-allowed":"pointer"}}>{act==="asking"?"...":"Ask info"}</button>
