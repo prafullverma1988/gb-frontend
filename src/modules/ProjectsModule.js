@@ -1965,6 +1965,21 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
               </div>
             )}
             {src==="salary_edit"&&item.notes&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>"{item.notes}"</div>}
+            {item.module==="Subcon WO Amendment"&&(item._amend_new!=null||item._amend_reason)&&(<>
+              {item._amend_old!=null&&item._amend_new!=null&&(
+                <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:T.bluL,borderRadius:6,border:"1px solid "+T.bluM,flexWrap:"wrap"}}>
+                  <span style={{fontSize:11,color:T.t3}}>Old WO: <b style={{color:T.t2}}>{fmtAmt(item._amend_old)}</b></span>
+                  <span style={{fontSize:13,color:T.blu,fontWeight:700}}>→</span>
+                  <span style={{fontSize:11,color:T.t3}}>New WO: <b style={{color:T.blu}}>{fmtAmt(item._amend_new)}</b></span>
+                  {item._amend_delta!=null&&item._amend_delta!==0&&(
+                    <span style={{fontSize:10,color:item._amend_delta>0?T.amb:T.grn,fontWeight:700,marginLeft:"auto"}}>
+                      {item._amend_delta>0?"▲ +":"▼ −"}{fmtAmt(Math.abs(item._amend_delta))}
+                    </span>
+                  )}
+                </div>
+              )}
+              {item._amend_reason&&<div style={{fontSize:11,color:T.t3,marginTop:4,fontStyle:"italic"}}>Reason: "{item._amend_reason}"</div>}
+            </>)}
             {src==="attendance_review"&&(
               <div style={{display:"flex",gap:8,alignItems:"center",marginTop:6,padding:"6px 10px",background:"#F0FDFA",borderRadius:6,border:"1px solid #99F6E4",flexWrap:"wrap"}}>
                 <span style={{fontSize:11,color:T.t2}}>🕐 {item.punch_at?new Date(item.punch_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}</span>
