@@ -564,7 +564,30 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
 
   // ── Solar EPC detection — construction tabs untouched ──────────
   const isSolar = project._raw?.project_type === "solar_epc" || project.project_type === "solar_epc";
-  const activeTabs = isSolar ? SOLAR_TABS : TABS;
+  const _allTabs = isSolar ? SOLAR_TABS : TABS;
+
+  // ── Role-based tab gating (Settings → Roles & Access → Project Tabs) ──
+  // Tabs without a permission key (party/todo/task/files/site/solar_*) stay always-on.
+  const TAB_PERM = {
+    overview:"Overview", design:"Design", estimate:"Estimate",
+    transaction:"Transaction", material:"Material", subcon:"Subcon",
+    attendance:"Attendance", equipment:"Equipment", mom:"MOM",
+  };
+  const _perms = currentUser?.module_permissions;
+  const _isAdminRole = ["admin","super_admin"].includes(currentUser?.role);
+  const canSeeTab = (id) => {
+    if(_isAdminRole) return true;          // admins bypass
+    const mod = TAB_PERM[id];
+    if(_perms && mod) return !!(_perms[mod]?.view);  // explicit grant required
+    return true;                            // no perm key, or no perms loaded → show
+  };
+  const activeTabs = _allTabs.filter(t => canSeeTab(t.id));
+  // If current tab got hidden by permissions, fall back to the first visible tab.
+  useEffect(() => {
+    if(activeTabs.length && !activeTabs.some(t => t.id === tab)){
+      setTab(activeTabs[0].id);
+    }
+  }, [activeTabs, tab]);
 
   const sm = STATUS_S[project.status]||{c:T.slt, bg:T.sltL};
   const margin = project.boq - project.expense;
