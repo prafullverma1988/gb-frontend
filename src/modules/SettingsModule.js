@@ -552,11 +552,12 @@ function RolesAccess() {
     setAccessSaving(false);
   };
 
-  // Permission matrix
-  const modules = [
-    { name: "Projects" }, { name: "Design" }, { name: "Finance" }, { name: "Procurement" },
-    { name: "Warehouse" }, { name: "Team & HR" }, { name: "Reports" }, { name: "Settings" },
+  // Permission matrix — grouped: top-level Modules + per-project Tabs.
+  const MODULE_GROUPS = [
+    { title: "Modules", items: ["Projects","Design","Finance","Procurement","Warehouse","Team & HR","CRM","MOM","Reports","Library","Settings"] },
+    { title: "Project Tabs", items: ["Overview","Estimate","Transaction","Material","Subcon","Attendance","Equipment"] },
   ];
+  const modules = MODULE_GROUPS.flatMap(g => g.items.map(name => ({ name })));
   const allPerms = ["view", "create", "edit", "delete", "approve", "export"];
   const permColors = {
     view: { bg: T.blueSoft, text: T.blue }, create: { bg: T.greenSoft, text: T.green },
@@ -565,11 +566,23 @@ function RolesAccess() {
   };
 
   const [permMatrix, setPermMatrix] = useState({
-    admin: { Projects: allPerms, Design: allPerms, Finance: allPerms, Procurement: allPerms, Warehouse: allPerms, "Team & HR": allPerms, Reports: ["view","export"], Settings: ["view","create","edit","delete"] },
-    project_manager: { Projects: ["view","create","edit"], Design: ["view","create","edit"], Finance: ["view","create"], Procurement: ["view","create","edit"], Warehouse: ["view","create","edit"], "Team & HR": ["view"], Reports: ["view","export"], Settings: [] },
-    supervisor: { Projects: ["view"], Design: ["view"], Finance: ["view"], Procurement: ["view","create"], Warehouse: ["view","create","edit"], "Team & HR": ["view"], Reports: ["view"], Settings: [] },
-    accountant: { Projects: ["view"], Design: [], Finance: ["view","create","edit","approve"], Procurement: ["view"], Warehouse: ["view"], "Team & HR": ["view","create","edit"], Reports: ["view","export"], Settings: [] },
-    viewer: { Projects: ["view"], Design: ["view"], Finance: ["view"], Procurement: ["view"], Warehouse: ["view"], "Team & HR": [], Reports: ["view"], Settings: [] },
+    admin: Object.fromEntries(modules.map(m => [m.name, allPerms])),
+    project_manager: {
+      Projects:["view","create","edit"], Design:["view","create","edit"], Finance:["view","create"], Procurement:["view","create","edit"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:["view","create","edit"], MOM:["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
+      Overview:["view"], Estimate:["view","create","edit"], Transaction:["view","create"], Material:["view","create","edit"], Subcon:["view","create","edit"], Attendance:["view","create","edit"], Equipment:["view","create","edit"],
+    },
+    supervisor: {
+      Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view","create"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:[], MOM:["view"], Reports:["view"], Library:["view"], Settings:[],
+      Overview:["view"], Estimate:[], Transaction:[], Material:["view","create"], Subcon:["view"], Attendance:["view","create","edit"], Equipment:["view"],
+    },
+    accountant: {
+      Projects:["view"], Design:[], Finance:["view","create","edit","approve"], Procurement:["view"], Warehouse:["view"], "Team & HR":["view","create","edit"], CRM:["view"], MOM:["view"], Reports:["view"], Library:["view"], Settings:[],
+      Overview:["view"], Estimate:["view"], Transaction:["view","create","edit"], Material:["view"], Subcon:[], Attendance:["view"], Equipment:[],
+    },
+    viewer: {
+      Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view"], Warehouse:["view"], "Team & HR":[], CRM:["view"], MOM:["view"], Reports:["view"], Library:["view"], Settings:[],
+      Overview:["view"], Estimate:["view"], Transaction:["view"], Material:["view"], Subcon:["view"], Attendance:["view"], Equipment:["view"],
+    },
   });
 
   // ── DB roles (numeric ids needed for PUT /roles/:id/permissions) ──────
@@ -738,25 +751,30 @@ function RolesAccess() {
                 </tr>
               </thead>
               <tbody>
-                {modules.map(m => {
-                  const perms = permMatrix[selectedRole]?.[m.name] || [];
-                  return (
-                    <tr key={m.name} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
-                      <td style={{ padding: "12px", fontWeight: 600, color: T.text }}>{m.name}</td>
-                      {allPerms.map(p => {
-                        const has = perms.includes(p);
-                        return (
-                          <td key={p} style={{ textAlign: "center", padding: "8px 6px" }}>
-                            <button onClick={() => togglePerm(m.name, p)}
-                              style={{ width: 28, height: 28, borderRadius: 6, background: has ? permColors[p].bg : T.borderLight, border: `1.5px solid ${has ? permColors[p].text + "44" : "transparent"}`, cursor: selectedRole === "admin" ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
-                              {has && <IcCheck size={14} color={permColors[p].text} strokeWidth={2.5} />}
-                            </button>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
+                {MODULE_GROUPS.flatMap(group => [
+                  <tr key={group.title + "__hdr"}>
+                    <td colSpan={allPerms.length + 1} style={{ padding: "14px 12px 4px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.6px" }}>{group.title}</td>
+                  </tr>,
+                  ...group.items.map(name => {
+                    const perms = permMatrix[selectedRole]?.[name] || [];
+                    return (
+                      <tr key={name} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
+                        <td style={{ padding: "12px", fontWeight: 600, color: T.text }}>{name}</td>
+                        {allPerms.map(p => {
+                          const has = perms.includes(p);
+                          return (
+                            <td key={p} style={{ textAlign: "center", padding: "8px 6px" }}>
+                              <button onClick={() => togglePerm(name, p)}
+                                style={{ width: 28, height: 28, borderRadius: 6, background: has ? permColors[p].bg : T.borderLight, border: `1.5px solid ${has ? permColors[p].text + "44" : "transparent"}`, cursor: selectedRole === "admin" ? "not-allowed" : "pointer", display: "inline-flex", alignItems: "center", justifyContent: "center", transition: "all 0.15s" }}>
+                                {has && <IcCheck size={14} color={permColors[p].text} strokeWidth={2.5} />}
+                              </button>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    );
+                  })
+                ])}
               </tbody>
             </table>
           </div>
