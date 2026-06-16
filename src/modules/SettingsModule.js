@@ -648,7 +648,17 @@ function RolesAccess() {
     setPermMatrix(prev => {
       const cur = prev[selectedRole]?.[mod] || [];
       const has = cur.includes(perm);
-      return { ...prev, [selectedRole]: { ...prev[selectedRole], [mod]: has ? cur.filter(p => p !== perm) : [...cur, perm] } };
+      let next;
+      if (perm === "view") {
+        // No view = no access → turning view OFF clears every permission.
+        next = has ? [] : [...cur, "view"];
+      } else if (has) {
+        next = cur.filter(p => p !== perm);
+      } else {
+        // Any action (create/edit/…) needs view → auto-enable it.
+        next = cur.includes("view") ? [...cur, perm] : [...cur, "view", perm];
+      }
+      return { ...prev, [selectedRole]: { ...prev[selectedRole], [mod]: next } };
     });
   };
 
