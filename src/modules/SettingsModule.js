@@ -554,7 +554,7 @@ function RolesAccess() {
 
   // Permission matrix — grouped: top-level Modules + per-project Tabs.
   const MODULE_GROUPS = [
-    { title: "Modules", items: ["Projects","Design","Finance","Procurement","Warehouse","Team & HR","CRM","MOM","Reports","Library","Settings"] },
+    { title: "Modules", items: ["Projects","Design","Finance","Procurement","Warehouse","Team & HR","CRM","MOM","Township CRM","Reports","Library","Settings"] },
     { title: "Project Tabs", items: ["Overview","Estimate","Transaction","Material","Subcon","Attendance","Equipment"] },
   ];
   const modules = MODULE_GROUPS.flatMap(g => g.items.map(name => ({ name })));
@@ -568,19 +568,19 @@ function RolesAccess() {
   const [permMatrix, setPermMatrix] = useState({
     admin: Object.fromEntries(modules.map(m => [m.name, allPerms])),
     project_manager: {
-      Projects:["view","create","edit"], Design:["view","create","edit"], Finance:["view","create"], Procurement:["view","create","edit"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:["view","create","edit"], MOM:["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
+      Projects:["view","create","edit"], Design:["view","create","edit"], Finance:["view","create"], Procurement:["view","create","edit"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:["view","create","edit"], MOM:["view","create","edit"], "Township CRM":["view","create","edit"], Reports:["view"], Library:["view"], Settings:[],
       Overview:["view"], Estimate:["view","create","edit"], Transaction:["view","create"], Material:["view","create","edit"], Subcon:["view","create","edit"], Attendance:["view","create","edit"], Equipment:["view","create","edit"],
     },
     supervisor: {
-      Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view","create"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:[], MOM:["view"], Reports:["view"], Library:["view"], Settings:[],
+      Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view","create"], Warehouse:["view","create","edit"], "Team & HR":["view"], CRM:[], MOM:["view"], "Township CRM":["view"], Reports:["view"], Library:["view"], Settings:[],
       Overview:["view"], Estimate:[], Transaction:[], Material:["view","create"], Subcon:["view"], Attendance:["view","create","edit"], Equipment:["view"],
     },
     accountant: {
-      Projects:["view"], Design:[], Finance:["view","create","edit","approve"], Procurement:["view"], Warehouse:["view"], "Team & HR":["view","create","edit"], CRM:["view"], MOM:["view"], Reports:["view"], Library:["view"], Settings:[],
+      Projects:["view"], Design:[], Finance:["view","create","edit","approve"], Procurement:["view"], Warehouse:["view"], "Team & HR":["view","create","edit"], CRM:["view"], MOM:["view"], "Township CRM":["view"], Reports:["view"], Library:["view"], Settings:[],
       Overview:["view"], Estimate:["view"], Transaction:["view","create","edit"], Material:["view"], Subcon:[], Attendance:["view"], Equipment:[],
     },
     viewer: {
-      Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view"], Warehouse:["view"], "Team & HR":[], CRM:["view"], MOM:["view"], Reports:["view"], Library:["view"], Settings:[],
+      Projects:["view"], Design:["view"], Finance:["view"], Procurement:["view"], Warehouse:["view"], "Team & HR":[], CRM:["view"], MOM:["view"], "Township CRM":["view"], Reports:["view"], Library:["view"], Settings:[],
       Overview:["view"], Estimate:["view"], Transaction:["view"], Material:["view"], Subcon:["view"], Attendance:["view"], Equipment:["view"],
     },
   });
@@ -588,6 +588,8 @@ function RolesAccess() {
   // ── DB roles (numeric ids needed for PUT /roles/:id/permissions) ──────
   const [dbRoles, setDbRoles] = useState([]);
   const [permSaving, setPermSaving] = useState(false);
+  // Collapsible matrix sections (Modules / Project Tabs) — fold to fit one screen.
+  const [collapsedGroups, setCollapsedGroups] = useState({});
 
   useEffect(() => {
     api.get("/settings/roles").then(res => {
@@ -751,11 +753,16 @@ function RolesAccess() {
                 </tr>
               </thead>
               <tbody>
-                {MODULE_GROUPS.flatMap(group => [
-                  <tr key={group.title + "__hdr"}>
-                    <td colSpan={allPerms.length + 1} style={{ padding: "14px 12px 4px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.6px" }}>{group.title}</td>
+                {MODULE_GROUPS.flatMap(group => {
+                  const collapsed = !!collapsedGroups[group.title];
+                  return [
+                  <tr key={group.title + "__hdr"} onClick={() => setCollapsedGroups(p => ({ ...p, [group.title]: !p[group.title] }))} style={{ cursor: "pointer", userSelect: "none" }}>
+                    <td colSpan={allPerms.length + 1} style={{ padding: "14px 12px 4px", fontSize: 11, fontWeight: 700, color: T.textLight, textTransform: "uppercase", letterSpacing: "0.6px" }}>
+                      <span style={{ display: "inline-block", width: 14, transform: collapsed ? "rotate(-90deg)" : "none", transition: "transform .15s" }}>▼</span>
+                      {group.title} <span style={{ fontWeight: 500, textTransform: "none" }}>({group.items.length})</span>
+                    </td>
                   </tr>,
-                  ...group.items.map(name => {
+                  ...(collapsed ? [] : group.items.map(name => {
                     const perms = permMatrix[selectedRole]?.[name] || [];
                     return (
                       <tr key={name} style={{ borderBottom: `1px solid ${T.borderLight}` }}>
@@ -773,8 +780,9 @@ function RolesAccess() {
                         })}
                       </tr>
                     );
-                  })
-                ])}
+                  }))
+                  ];
+                })}
               </tbody>
             </table>
           </div>

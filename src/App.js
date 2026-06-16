@@ -161,7 +161,7 @@ const NAV_GROUPS=[
     {id:"procurement", label:"Procurement", Icon:IcProc, sc:"P"},
     {id:"warehouse",   label:"Warehouse",   Icon:IcWH,   sc:"W"},
     {id:"township",    label:"Township CRM",Icon:IcTown, sc:"G"},
-    {id:"payroll",     label:"Payroll",     Icon:IcPay,  sc:"Y"},
+    {id:"payroll",     label:"Team & HR",   Icon:IcPay,  sc:"Y"},
   ]},
   {section:"REPORTS",items:[
     {id:"reports",  label:"Reports",    Icon:IcRep, sc:"B"},
@@ -467,7 +467,7 @@ const SEARCH_ITEMS=[
   {id:"procurement",label:"Procurement",  icon:"M6 2L3 6v14a2 2 0 002 2h14a2 2 0 002-2V6l-3-4zM3 6h18",  sc:"Alt+P", section:"Finance & Ops"},
   {id:"warehouse", label:"Warehouse",     icon:"M3 21V8l9-5 9 5v13M9 21v-6h6v6",                          sc:"Alt+W", section:"Finance & Ops"},
   {id:"township",  label:"Township CRM",  icon:"M3 21h18M5 21V7l6-4v18M19 21V11l-6-4",                    sc:"Alt+G", section:"Finance & Ops"},
-  {id:"payroll",   label:"Payroll",       icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
+  {id:"payroll",   label:"Team & HR",     icon:"M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2",    sc:"Alt+Y", section:"Finance & Ops"},
   {id:"crm",       label:"CRM",           icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+C", section:"Navigation"},
   {id:"design",    label:"Design",        icon:"M12 19l7-7 3 3-7 7-3-3z",                                 sc:"Alt+D", section:"Navigation"},
   {id:"team",      label:"My Team", icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2",                sc:"Alt+T", section:"Navigation"},
@@ -662,7 +662,8 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     dashboard:"Dashboard",projects:"Projects",design:"Design",
     finance:"Finance",procurement:"Procurement",warehouse:"Warehouse",
     reports:"Reports",library:"Library",settings:"Settings",
-    crm:"CRM",mom:"MOM",payroll:"Payroll"
+    crm:"CRM",mom:"MOM",payroll:"Team & HR",team:"Team & HR",
+    township:"Township CRM"
   };
   const isVisible=(id)=>{
     if(id==="saas") return user?.role==="super_admin";
@@ -670,14 +671,18 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     if(["admin","super_admin"].includes(user?.role)) return true;
     // Company-level module toggle
     if(enabledModules && enabledModules[id]===false) return false;
-    // Role-based permission check from DB (set in Settings → Module Permissions)
+    // Role-based permission check from DB (Settings → Roles & Access)
     const perms = user?.module_permissions;
     const modName = MODULE_MAP_NAV[id];
     if(perms && modName){
-      // If permissions data loaded: use explicit grant (missing row = no access)
-      return !!(perms[modName]?.view);
+      // Only gate modules actually configured in the matrix. A module with NO
+      // row (not added to Settings yet) stays VISIBLE by default — unconfigured
+      // is NOT blocked. An explicit row with view=0 still hides it.
+      if(perms[modName] !== undefined) return !!(perms[modName].view);
+      return true;
     }
-    // No permissions data yet — fall back to ALWAYS_ON
+    // Unmapped nav item → visible by default. Perms not loaded → ALWAYS_ON.
+    if(!modName) return true;
     return ALWAYS_ON.includes(id);
   };
   const mobileHidden = isMobile && collapsed;
