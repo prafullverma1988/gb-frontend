@@ -1289,7 +1289,7 @@ function NewMRModal({library,onClose,onSaved}){
     const hits=Object.values(pipelineByIdx).filter(p=>p&&p.in_pipeline);
     if(hits.length>0){
       const lines=hits.flatMap(h=>h.entries.map(e=>`  • ${e.mr_no} — ${e.status} — ${e.pending_qty} ${e.unit||""}`));
-      const ok=window.confirm(
+      const ok=await window.confirmAsync(
         `⚠ Ye material(s) already pipeline me hai:\n\n${lines.join("\n")}\n\nFir bhi naya MR raise karna hai? (Continue = force, Cancel = wait)`
       );
       if(!ok) return;
@@ -2324,7 +2324,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
   },[issue?.dbId]);
 
   const handleDelete=async()=>{
-    if(!window.confirm(`${detail?.id} ko delete karein? Source warehouse stock restore hoga${detail?.status==="Received"||detail?.status==="Partial"?" + dest project ka GRN bhi hatega":""}. Yeh undo nahi ho sakta.`)) return;
+    if(!await window.confirmAsync(`${detail?.id} ko delete karein? Source warehouse stock restore hoga${detail?.status==="Received"||detail?.status==="Partial"?" + dest project ka GRN bhi hatega":""}. Yeh undo nahi ho sakta.`)) return;
     setDeleting(true);
     const r=await api.del(`/warehouse/issues/${detail.dbId}`);
     setDeleting(false);
@@ -2916,7 +2916,7 @@ function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDeleted,o
   },[transfer?.dbId]);
 
   const handleDelete=async()=>{
-    if(!window.confirm(`${detail.id} ko delete karein?\n\nSource project ka debit reverse hoga.${detail.status!=="Pending"?" Dest project ka GRN bhi hatega.":""}\nYeh undo nahi ho sakta.`)) return;
+    if(!await window.confirmAsync(`${detail.id} ko delete karein?\n\nSource project ka debit reverse hoga.${detail.status!=="Pending"?" Dest project ka GRN bhi hatega.":""}\nYeh undo nahi ho sakta.`)) return;
     setDeleting(true);
     const r=await api.del(`/warehouse/transfers/${detail.dbId}`);
     setDeleting(false);
@@ -3167,7 +3167,7 @@ function WarehouseModule(){
   };
   const rejectMR = async (mr) => {
     if (!mr?.dbId) return;
-    const reason = window.prompt("Reject reason (optional):", "");
+    const reason = await window.promptAsync("Reject reason (optional):", "");
     if (reason === null) return; // user cancelled
     try {
       const res = await api.patch(`/warehouse/mr/${mr.dbId}`, {
@@ -3220,7 +3220,7 @@ function WarehouseModule(){
   // Reason is mandatory. Linked procurement MR also gets closed by backend.
   const closeMR = async (mr) => {
     if (!mr?.dbId) return;
-    const reason = window.prompt(
+    const reason = await window.promptAsync(
       `${mr.id || `MR-${mr.dbId}`} close karne ka reason (mandatory):\n` +
       "(e.g. site need cancel, design change, project on hold)",
       ""
@@ -3276,13 +3276,13 @@ function WarehouseModule(){
     else alert(res.message||"Approve failed");
   };
   const handleRejectMR=async(dbId)=>{
-    if(!window.confirm("Yeh MR reject kar dein?")) return;
+    if(!await window.confirmAsync("Yeh MR reject kar dein?")) return;
     const res=await api.patch(`/warehouse/mr/${dbId}`,{status:"Rejected"});
     if(res.success) loadAll();
     else alert(res.message||"Reject failed");
   };
   const handleDeleteMaterial=async(m)=>{
-    if(!window.confirm(`"${m.name}" ko delete karein? Movements hue hain to backend block karega.`)) return;
+    if(!await window.confirmAsync(`"${m.name}" ko delete karein? Movements hue hain to backend block karega.`)) return;
     const res=await api.del(`/warehouse/materials/${m.id}`);
     if(res.success){setMatDetail(null);loadAll();}
     else alert(res.message||"Delete failed");
@@ -3368,13 +3368,13 @@ function WarehouseModule(){
             openOrder:(mr)=>setOrderMR(mr),
             openGrn:(mr)=>setGrnMR(mr),
             sendToProcurement:async(mr)=>{
-              if(!window.confirm(`${mr.id} ko procurement team ke paas bhejna hai? Vendor PO place karne ke baad warehouse stock auto-update hoga.`)) return;
+              if(!await window.confirmAsync(`${mr.id} ko procurement team ke paas bhejna hai? Vendor PO place karne ke baad warehouse stock auto-update hoga.`)) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
               if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
               else alert(r.message||"Failed");
             },
             passToProcurement:async(mr)=>{
-              const reason = window.prompt(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              const reason = await window.promptAsync(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
               if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }
@@ -3388,7 +3388,7 @@ function WarehouseModule(){
           onSubMR={{
             openIssue:(mr)=>setIssueFromMR(mr),
             passToProcurement:async(mr)=>{
-              const reason = window.prompt(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              const reason = await window.promptAsync(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
               if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }
@@ -3405,13 +3405,13 @@ function WarehouseModule(){
             openOrder:(mr)=>setOrderMR(mr),
             openGrn:(mr)=>setGrnMR(mr),
             sendToProcurement:async(mr)=>{
-              if(!window.confirm(`${mr.id} ko procurement team ke paas bhejna hai? Vendor PO place karne ke baad warehouse stock auto-update hoga.`)) return;
+              if(!await window.confirmAsync(`${mr.id} ko procurement team ke paas bhejna hai? Vendor PO place karne ke baad warehouse stock auto-update hoga.`)) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/send-to-procurement`);
               if(r.success){ alert(r.message||"Sent to procurement"); loadAll(); }
               else alert(r.message||"Failed");
             },
             passToProcurement:async(mr)=>{
-              const reason = window.prompt(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
+              const reason = await window.promptAsync(`${mr.id}: ye MR procurement ko wapas bhejne ka reason (optional):`, "Stock kam hai / fulfill nahi ho sakta");
               if(reason===null) return;
               const r=await api.post(`/warehouse/mr/${mr.dbId}/pass-to-procurement`, {reason});
               if(r.success){ alert(r.message||"Wapas procurement ke paas bhej diya"); loadAll(); }

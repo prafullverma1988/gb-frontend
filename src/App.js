@@ -4,6 +4,7 @@ import apiCache from "./utils/apiCache";
 import UploadToast from "./components/UploadToast";
 import { ToastProvider } from "./components/Toast";
 import { ConfirmProvider } from "./components/ConfirmDialog";
+import { PromptProvider } from "./components/PromptDialog";
 import NotificationBell from "./components/NotificationBell";
 import AppErrorBoundary from "./components/AppErrorBoundary";
 
@@ -1297,7 +1298,7 @@ export default function App(){
     setSwitching(false);
   };
 
-  if(!loggedIn) return <ToastProvider><ConfirmProvider><LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());}}/></ConfirmProvider></ToastProvider>;
+  if(!loggedIn) return <ToastProvider><ConfirmProvider><PromptProvider><LoginScreen onLogin={(u,cos)=>{setUser(u);setCompanies(cos||getCompanies());}}/></PromptProvider></ConfirmProvider></ToastProvider>;
 
   const PAGES={
     dashboard:{title:"Dashboard",sub:"Company Overview"},
@@ -1352,6 +1353,7 @@ export default function App(){
   return(
     <ToastProvider>
     <ConfirmProvider>
+    <PromptProvider>
     <div style={{display:"flex",height:"100vh",overflow:"hidden",background:T.bg,fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       <style>{`
         *{box-sizing:border-box}
@@ -1395,6 +1397,7 @@ export default function App(){
       {/* Background Upload Toast — always visible */}
       <UploadToast/>
     </div>
+    </PromptProvider>
     </ConfirmProvider>
     </ToastProvider>
   );

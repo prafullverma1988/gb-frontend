@@ -1411,7 +1411,7 @@ function TabAttendance({ project }) {
               Select <b style={{color:T.grn}}>({drawerSelected.size})</b>
             </span>
             <button onClick={()=>{
-                const s = window.prompt("New skill name:");
+                const s = await window.promptAsync("New skill name:");
                 if(s && s.trim()) {
                   setDrawerSelected(p=>new Set([...p, s.trim()]));
                   setDrawerNewSkill(s.trim());

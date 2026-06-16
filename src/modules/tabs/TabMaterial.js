@@ -555,7 +555,7 @@ function TabMaterial({ project }) {
     const pipeHits = Object.values(mrPipelineByIdx).filter(p => p && p.in_pipeline);
     if (pipeHits.length > 0) {
       const lines = pipeHits.flatMap(h => h.entries.map(e => `  • ${e.mr_no} — ${e.status} — ${e.pending_qty} ${e.unit||""}`));
-      const ok = window.confirm(
+      const ok = await window.confirmAsync(
         `⚠ Iss project me ye material(s) already pipeline me hai:\n\n${lines.join("\n")}\n\nFir bhi naya MR raise karna hai? (Continue = force, Cancel = wait)`
       );
       if (!ok) return;
@@ -996,7 +996,7 @@ function TabMaterial({ project }) {
                           {showDel?(
                             <button title="Delete this usage entry"
                               onClick={async()=>{
-                                if(!window.confirm("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
+                                if(!await window.confirmAsync("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
                                 const r=await api.del("/tasks/"+u.task_id+"/used-log/"+u.id);
                                 if(r.success){
                                   setUsedLog(prev=>prev.filter(x=>x.id!==u.id));
@@ -1768,7 +1768,7 @@ function TabMaterial({ project }) {
                                   <button title="Delete this usage entry"
                                     onClick={async(e)=>{
                                       e.stopPropagation();
-                                      if(!window.confirm("Is used entry ko delete kar dein? ("+row.qty+" "+(row.unit||mat.unit||"")+" — "+(row.task_name||"Project level")+")")) return;
+                                      if(!await window.confirmAsync("Is used entry ko delete kar dein? ("+row.qty+" "+(row.unit||mat.unit||"")+" — "+(row.task_name||"Project level")+")")) return;
                                       const r=await api.del("/tasks/"+row.task_id+"/used-log/"+row.used_log_id);
                                       if(r.success){
                                         const rr=await api.get("/tasks/project/"+projectId+"/material-ledger");

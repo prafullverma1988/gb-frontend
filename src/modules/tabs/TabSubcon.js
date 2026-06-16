@@ -108,20 +108,20 @@ function TabSubcon({ projectId, project }) {
   };
 
   const unlinkTaskSub = async (msId) => {
-    if (!window.confirm("Unlink this milestone from its task?")) return;
+    if (!await window.confirmAsync("Unlink this milestone from its task?")) return;
     await api.del("/subcon/wo/"+selWo.id+"/milestones/rate/"+msId+"/link").catch(()=>{});
     await loadLinkedTasksSub(selWo.id);
     await loadBillingLedger(selWo.id);
   };
 
   const deleteRateScheduleSub = async (woItemId, desc) => {
-    if (!window.confirm("Delete all milestones for \"" + desc + "\"?")) return;
+    if (!await window.confirmAsync("Delete all milestones for \"" + desc + "\"?")) return;
     await api.del("/subcon/wo/"+selWo.id+"/milestones/rate/"+woItemId).catch(()=>{});
     await reloadWo();
   };
 
   const deletePercentScheduleSub = async () => {
-    if (!window.confirm("Delete all % milestones?")) return;
+    if (!await window.confirmAsync("Delete all % milestones?")) return;
     await api.del("/subcon/wo/"+selWo.id+"/milestones/percent").catch(()=>{});
     await reloadWo();
   };
@@ -502,7 +502,7 @@ function TabSubcon({ projectId, project }) {
               )}
               <button onClick={async()=>{
                   const next = !selWo.auto_bill_on_complete;
-                  if (next && !window.confirm(
+                  if (next && !await window.confirmAsync(
                     "Turn ON auto-billing?\n\nWhen a task linked to a milestone is marked Complete, the system will auto-create a DRAFT RA bill.\n\nDrafts need your review before paying. You can turn this off anytime."
                   )) return;
                   const r = await api.patch("/subcon/wo/"+selWo.id+"/auto-bill", { enabled: next }).catch(()=>({success:false}));
@@ -547,7 +547,7 @@ function TabSubcon({ projectId, project }) {
                       <div style={{fontSize:12,fontWeight:700,color:T.t1}}>📊 % of WO Value</div>
                       <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>Define milestones as % of total WO value</div>
                     </div>
-                    <div onClick={async()=>{ setMsChooserOpen(false); if(selWo.billing_method==="manual") return; if(!window.confirm("Switch to Manual mode?")) return; await switchBillingMethod("manual"); }}
+                    <div onClick={async()=>{ setMsChooserOpen(false); if(selWo.billing_method==="manual") return; if(!await window.confirmAsync("Switch to Manual mode?")) return; await switchBillingMethod("manual"); }}
                       style={{padding:"10px 12px",cursor:"pointer"}}
                       onMouseEnter={e=>e.currentTarget.style.background="#FAF5FF"} onMouseLeave={e=>e.currentTarget.style.background="white"}>
                       <div style={{fontSize:12,fontWeight:700,color:T.t1}}>✍️ Manual (Cumulative)</div>

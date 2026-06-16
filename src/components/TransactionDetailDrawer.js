@@ -157,7 +157,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
 
   const handleDelete = async () => {
     if (deleting) return;
-    if (!window.confirm(`Delete this ${meta.label} of ₹${fmtN(txn.amount)}? Yeh undo nahi hoga.`)) return;
+    if (!await window.confirmAsync(`Delete this ${meta.label} of ₹${fmtN(txn.amount)}? Yeh undo nahi hoga.`)) return;
     setDeleting(true); setErr("");
     try {
       const res = await api.del("/finance/transactions/" + txn.id);

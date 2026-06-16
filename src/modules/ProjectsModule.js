@@ -1794,7 +1794,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         const promptMsg=src==="purchase_order"
           ? "Revision note (compulsory) — procurement team ko kya badalna hai?\n\nExample: \"Vendor change karo — better rate available\""
           : "Revision note (compulsory) — designer ko kya badalna hai?\n\nExample: \"Footing depth 1.2m karein, parapet height 4ft tak badhaaye\"";
-        revisionNote=window.prompt(promptMsg);
+        revisionNote=await window.promptAsync(promptMsg);
         if(!revisionNote||!revisionNote.trim()){
           if(revisionNote!==null) window.alert("Revision note required.");
           return;
@@ -1803,7 +1803,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         const promptMsg=src==="purchase_order"
           ? "Rejection reason (compulsory) — PO kyu reject ho rahi hai?"
           : "Rejection reason — drawing kyu reject ho rahi hai?";
-        rejectNote=window.prompt(promptMsg);
+        rejectNote=await window.promptAsync(promptMsg);
         if(!rejectNote||!rejectNote.trim()){
           if(rejectNote!==null) window.alert("Rejection reason required.");
           return;
@@ -2335,7 +2335,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     setActing(p=>({...p,["w"+it.txn_id]:null}));
   };
   const walReject=async(it)=>{
-    const reason=window.prompt("Reject ka reason (optional):","");
+    const reason=await window.promptAsync("Reject ka reason (optional):","");
     if(reason===null)return;
     setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"rejecting"}));
     try{const r=await api.post("/wallets/reject/"+it.txn_id,{reason:reason.trim()});if(r&&r.success!==false)removeWallet(it.txn_id);else setSaveErr((r&&r.message)||"Reject failed");}
@@ -2343,7 +2343,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     setActing(p=>({...p,["w"+it.txn_id]:null}));
   };
   const walAsk=async(it)=>{
-    const msg=window.prompt("Staff se kya clarification chahiye?","");
+    const msg=await window.promptAsync("Staff se kya clarification chahiye?","");
     if(msg===null)return;
     if(!msg.trim()){setSaveErr("Sawaal likhein.");return;}
     setSaveErr("");setActing(p=>({...p,["w"+it.txn_id]:"asking"}));

@@ -165,7 +165,7 @@ function GeofenceAdminTab({isAdmin}){
     }catch(e){ alert(e.message); }
   };
   const rejectSuggestion=async(id)=>{
-    if(!window.confirm("Reject this auto-detected location? It will not appear again until 3+ new photo uploads accumulate near these coords.")) return;
+    if(!await window.confirmAsync("Reject this auto-detected location? It will not appear again until 3+ new photo uploads accumulate near these coords.")) return;
     try{
       const r=await api.del(`/geofences/${id}?hard=1`);
       if(r.success) await reload();
@@ -218,7 +218,7 @@ function GeofenceAdminTab({isAdmin}){
     setSaving(false);
   };
   const remove=async(id)=>{
-    if(!window.confirm("Soft-delete this geofence? (Will not affect past punches)")) return;
+    if(!await window.confirmAsync("Soft-delete this geofence? (Will not affect past punches)")) return;
     try{ await api.del(`/geofences/${id}`); await reload(); }
     catch(e){ alert(e.message); }
   };
@@ -537,7 +537,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
     }catch(e){ alert(e.message); }
   };
   const cancel=async(id)=>{
-    if(!window.confirm("Cancel this leave application?")) return;
+    if(!await window.confirmAsync("Cancel this leave application?")) return;
     try{
       const r=await api.patch(`/payroll/leave-applications/${id}/cancel`,{});
       if(r.success) await reload();
@@ -694,7 +694,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
                   {a.reason&&<div style={{fontSize:11,color:T.t3,fontStyle:"italic",marginTop:5}}>"{a.reason}"</div>}
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
-                  <button onClick={()=>review(a.id,"reject",window.prompt("Reject reason (optional):")||null)}
+                  <button onClick={()=>review(a.id,"reject",await window.promptAsync("Reject reason (optional):")||null)}
                     style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
                     ✕ Reject
                   </button>
@@ -715,7 +715,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
           {isAdmin && (
             <div style={{marginBottom:10,display:"flex",gap:8}}>
               <button onClick={async()=>{
-                  if(!window.confirm(`Allocate ${year} balances for all staff × leave types (idempotent)?`)) return;
+                  if(!await window.confirmAsync(`Allocate ${year} balances for all staff × leave types (idempotent)?`)) return;
                   try{
                     const r=await api.post("/payroll/leave-balances/allocate-year",{year});
                     if(r.success){ alert(`${r.added} balance row(s) added`); await reload(); }
@@ -801,12 +801,12 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
     setSaving(false);
   };
   const del=async(id)=>{
-    if(!window.confirm("Delete this holiday?")) return;
+    if(!await window.confirmAsync("Delete this holiday?")) return;
     try{ await api.del(`/payroll/holidays/${id}`); await reload(); }
     catch(e){ alert(e.message); }
   };
   const bulkSeed=async()=>{
-    if(!window.confirm(`Seed CG + National 2026 holidays? Will skip dates already present.`)) return;
+    if(!await window.confirmAsync(`Seed CG + National 2026 holidays? Will skip dates already present.`)) return;
     try{
       const r=await api.post(`/payroll/holidays/bulk-seed?year=${year}`,{});
       if(r.success){ alert(`${r.added} holiday(s) seeded`); await reload(); }
@@ -4612,7 +4612,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
   const onSaveEdit=(edit)=>{ setPending(p=>[...p.filter(x=>x.staff_id!==edit.staff_id),edit]); setEditEmp(null); };
 
   const doFinalize=async()=>{
-    if(!window.confirm(`${MONTHS[month]} ${year} payroll finalize & lock karein? Attendance lock ho jayegi (revert se hi edit hogi).`)) return;
+    if(!await window.confirmAsync(`${MONTHS[month]} ${year} payroll finalize & lock karein? Attendance lock ho jayegi (revert se hi edit hogi).`)) return;
     setBusy(true);
     try{
       const adjustments=Object.entries(adjs).filter(([,v])=>Number(v)).map(([staff_id,amount])=>({staff_id:Number(staff_id),amount:Number(amount),note:"One-time adjustment"}));
@@ -4627,7 +4627,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
     setBusy(false);
   };
   const doRevert=async()=>{
-    const reason=window.prompt("Revert reason? (period unlock ho jayega)");
+    const reason=await window.promptAsync("Revert reason? (period unlock ho jayega)");
     if(reason===null) return;
     setBusy(true);
     try{

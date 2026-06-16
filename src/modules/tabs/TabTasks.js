@@ -137,17 +137,17 @@ function TabTasks({ projectId, isAdmin }) {
   useEffect(()=>{ loadProj(); /* eslint-disable-next-line */ }, [projectId]);
   const canEditSchedule = isAdmin || !proj?.plan_locked;
   const lockPlan = async () => {
-    if(!window.confirm("Plan lock karein? Iske baad sirf admin schedule (dates/duration/dependency) badal sakega.")) return;
+    if(!await window.confirmAsync("Plan lock karein? Iske baad sirf admin schedule (dates/duration/dependency) badal sakega.")) return;
     try { await api.post("/projects/"+projectId+"/lock-plan",{}); } catch(_){}
     loadProj();
   };
   const unlockPlan = async () => {
-    const reason = window.prompt("Plan unlock karne ka reason (min 5 char):"); if(!reason||reason.trim().length<5) return;
+    const reason = await window.promptAsync("Plan unlock karne ka reason (min 5 char):"); if(!reason||reason.trim().length<5) return;
     try { await api.post("/projects/"+projectId+"/unlock-plan",{reason}); } catch(_){}
     loadProj();
   };
   const unlockStart = async () => {
-    const reason = window.prompt("Start date unlock karne ka reason (min 5 char):"); if(!reason||reason.trim().length<5) return;
+    const reason = await window.promptAsync("Start date unlock karne ka reason (min 5 char):"); if(!reason||reason.trim().length<5) return;
     try { await api.post("/projects/"+projectId+"/unlock-start",{reason}); } catch(_){}
     loadProj();
   };
@@ -3483,7 +3483,7 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
                   {showDel?(
                     <button title="Delete this used entry"
                       onClick={async()=>{
-                        if(!window.confirm("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
+                        if(!await window.confirmAsync("Is used entry ko delete kar dein? ("+u.used_qty+" "+(u.unit||"")+")")) return;
                         const r=await api.del("/tasks/"+task.id+"/used-log/"+u.id);
                         if(r.success){
                           setUsedLog(p=>p.filter(x=>x.id!==u.id));

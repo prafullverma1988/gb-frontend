@@ -238,7 +238,7 @@ function LocationsSettings() {
   const edit = (g) => setForm({ id: g.id, kind: g.kind || "office", label: g.label || "", address: g.address || "",
                                 lat: String(g.center_lat), lng: String(g.center_lng), radius: g.radius_m || 100 });
   const del = async (g) => {
-    if (!window.confirm(`Delete "${g.label}"?`)) return;
+    if (!await window.confirmAsync(`Delete "${g.label}"?`)) return;
     const r = await api.del("/geofences/" + g.id + "?hard=1").catch(()=>({success:false}));
     if (r.success) load();
   };
@@ -1512,7 +1512,7 @@ function BankDetails() {
   };
 
   const deleteBank = async (id) => {
-    if (!window.confirm("Remove this account? Transactions already posted to it stay intact.")) return;
+    if (!await window.confirmAsync("Remove this account? Transactions already posted to it stay intact.")) return;
     try {
       const res = await api.del("/finance/accounts/" + id);
       if (res?.success === false) { window.alert(res.message || "Delete failed"); return; }

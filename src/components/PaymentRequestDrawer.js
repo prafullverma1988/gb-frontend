@@ -327,7 +327,7 @@ export default function PaymentRequestDrawer({
                   return String(r.requested_by) === String(me.id);
                 };
                 const onDelete = async (r) => {
-                  if (!window.confirm(`Delete payment request PR-${r.id}?\n\nAmount: ${fmtAmount(r.amount)}\nThis cannot be undone.`)) return;
+                  if (!await window.confirmAsync(`Delete payment request PR-${r.id}?\n\nAmount: ${fmtAmount(r.amount)}\nThis cannot be undone.`)) return;
                   try {
                     const res = await api.del("/finance/payment-requests/" + r.id);
                     if (res?.success === false) {

@@ -117,7 +117,7 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
       await navigator.clipboard.writeText(publicShareUrl);
       window.toast?.success("Link copied to clipboard");
     } catch {
-      window.prompt("Copy this link:", publicShareUrl);
+      await window.promptAsync("Copy this link:", publicShareUrl);
     }
   };
 

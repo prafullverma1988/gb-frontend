@@ -29,7 +29,7 @@ export function initCapacitor() {
     if (canGoBack || window.history.length > 1) {
       window.history.back();
     } else {
-      if (window.confirm("Exit Sanchalan?")) {
+      if (await window.confirmAsync("Exit Sanchalan?")) {
         CapApp.exitApp();
       }
     }

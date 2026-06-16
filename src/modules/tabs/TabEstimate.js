@@ -428,8 +428,8 @@ function TabEstimate({ project }) {
   };
 
   const decideAmendment = async (amendId, status) => {
-    if (status === "Rejected" && !window.confirm("Reject this amendment? The estimate will stay unchanged.")) return;
-    if (status === "Approved" && !window.confirm("Approve this amendment? Sections + items will be replaced and the total recomputed.")) return;
+    if (status === "Rejected" && !await window.confirmAsync("Reject this amendment? The estimate will stay unchanged.")) return;
+    if (status === "Approved" && !await window.confirmAsync("Approve this amendment? Sections + items will be replaced and the total recomputed.")) return;
     const r = await api.patch("/customer-estimates/amendments/" + amendId + "/action", { status })
       .catch(e => ({ success:false, message: e.message }));
     if (!r?.success) { alert(r?.message || "Failed"); return; }
@@ -1049,7 +1049,7 @@ function TabEstimate({ project }) {
     await loadLinkedTasks(selEst.id);
   };
   const unlinkTask = async (milestoneId) => {
-    if (!window.confirm("Unlink this milestone from its task?")) return;
+    if (!await window.confirmAsync("Unlink this milestone from its task?")) return;
     const r = await api.del("/customer-estimates/milestones/rate/"+milestoneId+"/link")
       .catch(e => ({ success:false, message:e.message }));
     if (!r?.success) { alert(r?.message || "Unlink failed"); return; }
@@ -1083,7 +1083,7 @@ function TabEstimate({ project }) {
   };
   const rejectAutoInvoice = async () => {
     if (!previewInv?.invoice?.id) return;
-    if (!window.confirm("Reject and delete this auto-generated draft invoice?\n\nThe milestone will become eligible again on next trigger.")) return;
+    if (!await window.confirmAsync("Reject and delete this auto-generated draft invoice?\n\nThe milestone will become eligible again on next trigger.")) return;
     setPreviewConfirming(true);
     const r = await api.del("/customer-estimates/invoices/"+previewInv.invoice.id)
       .catch(e => ({ success:false, message:e.message }));
@@ -1132,13 +1132,13 @@ function TabEstimate({ project }) {
     setShowSetMs(true);
   };
   const deleteRateSchedule = async (itemId, itemName) => {
-    if (!window.confirm(`Delete payment schedule for "${itemName}"?\n\nAll milestones for this item will be removed. Existing invoices stay intact.`)) return;
+    if (!await window.confirmAsync(`Delete payment schedule for "${itemName}"?\n\nAll milestones for this item will be removed. Existing invoices stay intact.`)) return;
     const r = await api.del("/customer-estimates/"+selEst.id+"/milestones/rate/"+itemId).catch(e => ({success:false, message:e.message}));
     if (!r?.success) { alert(r?.message || "Delete failed"); return; }
     await reloadSel();
   };
   const deletePercentSchedule = async () => {
-    if (!window.confirm("Delete the entire % payment schedule?\n\nAll stages will be removed. Existing invoices stay intact.")) return;
+    if (!await window.confirmAsync("Delete the entire % payment schedule?\n\nAll stages will be removed. Existing invoices stay intact.")) return;
     const r = await api.del("/customer-estimates/"+selEst.id+"/milestones/percent").catch(e => ({success:false, message:e.message}));
     if (!r?.success) { alert(r?.message || "Delete failed"); return; }
     await reloadSel();
@@ -1216,7 +1216,7 @@ function TabEstimate({ project }) {
   };
 
   const deleteInvoice = async (invId, no) => {
-    if (!window.confirm("Delete invoice " + no + "? This cannot be undone.")) return;
+    if (!await window.confirmAsync("Delete invoice " + no + "? This cannot be undone.")) return;
     const r = await api.del("/customer-estimates/invoices/" + invId);
     if (r.success) await reloadSel();
     else alert(r.message || "Delete failed");
@@ -1547,7 +1547,7 @@ function TabEstimate({ project }) {
                       drafts — they wait for admin review regardless. */}
                   <button onClick={async()=>{
                       const next = !selEst.auto_bill_on_complete;
-                      if (next && !window.confirm(
+                      if (next && !await window.confirmAsync(
                         "Turn ON auto-billing?\n\n" +
                         "When a project task linked to a milestone is marked Complete, " +
                         "the system will auto-create a DRAFT invoice.\n\n" +
@@ -1628,7 +1628,7 @@ function TabEstimate({ project }) {
                       <div onClick={async()=>{
                           setMsChooserOpen(false);
                           if (selEst.billing_method === "manual") return;
-                          if (!window.confirm("Switch to Manual mode? You'll bill per-item cumulative qty without preset stages.")) return;
+                          if (!await window.confirmAsync("Switch to Manual mode? You'll bill per-item cumulative qty without preset stages.")) return;
                           const r = await api.put("/customer-estimates/"+selEst.id+"/billing-method",{billing_method:"manual"}).catch(()=>({success:false}));
                           if (r.success) await reloadSel();
                           else alert(r.message||"Switch failed");
@@ -2365,7 +2365,7 @@ function TabEstimate({ project }) {
                       style={{flex:1,padding:"5px 9px",border:"1px solid "+T.bluM,borderRadius:5,fontSize:12.5,fontWeight:700,color:T.blu,background:"white",outline:"none"}}/>
                     <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
                     <button onClick={()=>{
-                      if (!window.confirm("Delete this section + its items from the proposed BOQ?")) return;
+                      if (!await window.confirmAsync("Delete this section + its items from the proposed BOQ?")) return;
                       setAmendForm(p=>({ ...p, sections: p.sections.filter((_,i)=> i !== si) }));
                     }}
                       style={{background:"white",border:"1px solid #FCA5A5",color:"#DC2626",borderRadius:4,padding:"2px 8px",fontSize:11,cursor:"pointer"}}>

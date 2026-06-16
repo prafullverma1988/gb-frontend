@@ -70,17 +70,17 @@ export default function MaterialTransferTab({ projectId, projectName, isAdmin = 
   };
 
   const handleApprove = (tr) => {
-    if (!window.confirm(`Approve ${tr.transfer_no}?\n\n${tr.from_project_name} se stock minus ho jayega.`)) return;
+    if (!await window.confirmAsync(`Approve ${tr.transfer_no}?\n\n${tr.from_project_name} se stock minus ho jayega.`)) return;
     doAction(tr, "approve");
   };
   const handleReject = (tr) => {
-    const reason = window.prompt(`Reject ${tr.transfer_no} — reason batao (compulsory):`);
+    const reason = await window.promptAsync(`Reject ${tr.transfer_no} — reason batao (compulsory):`);
     if (reason == null) return;
     if (!reason.trim()) { setErr("Reject reason compulsory hai"); return; }
     doAction(tr, "reject", { reason: reason.trim() });
   };
   const handleReceive = (tr) => {
-    if (!window.confirm(`Receive ${tr.transfer_no}?\n\nPoora material ${projectName} ke stock me add ho jayega (GRN banega).`)) return;
+    if (!await window.confirmAsync(`Receive ${tr.transfer_no}?\n\nPoora material ${projectName} ke stock me add ho jayega (GRN banega).`)) return;
     doAction(tr, "receive");
   };
 

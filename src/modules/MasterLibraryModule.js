@@ -250,7 +250,7 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, n
                 style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.blue, color: "white", border: "none", fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
                 <IcEdit size={15} color="white" /> Edit
               </button>
-              <button onClick={async () => { if (window.confirm(`Delete "${drawerTitle(detailRow)}"?`)) { await onDelete(detailRow.id); setDetailRow(null); } }}
+              <button onClick={async () => { if (await window.confirmAsync(`Delete "${drawerTitle(detailRow)}"?`)) { await onDelete(detailRow.id); setDetailRow(null); } }}
                 style={{ padding: "9px 16px", borderRadius: 8, background: T.redSoft, color: T.red, border: `1px solid ${T.red}44`, fontSize: 13, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                 <IcTrash size={15} color={T.red} /> Delete
               </button>
@@ -1288,7 +1288,7 @@ function PartyMasterSection() {
                   style={{ flex:1, padding:"9px", borderRadius:8, background:T.blue, color:"white", border:"none", fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center", gap:6 }}>
                   <IcEdit size={15} color="white" /> Edit
                 </button>
-                <button onClick={async () => { if (window.confirm(`Delete "${p.name}"?`)) { await del(p.id); setDetailParty(null); } }}
+                <button onClick={async () => { if (await window.confirmAsync(`Delete "${p.name}"?`)) { await del(p.id); setDetailParty(null); } }}
                   style={{ padding:"9px 16px", borderRadius:8, background:T.redSoft, color:T.red, border:`1px solid ${T.red}44`, fontSize:13, fontWeight:700, cursor:"pointer", display:"flex", alignItems:"center", gap:6 }}>
                   <IcTrash size={15} color={T.red} /> Delete
                 </button>
@@ -1987,7 +1987,7 @@ function SubconRateCardSection() {
     setShowItemModal(false); loadWorkItems();
   };
   const deleteItem = async (id) => {
-    if (!window.confirm("Delete this work item?")) return;
+    if (!await window.confirmAsync("Delete this work item?")) return;
     const r = await api.del(`/library/subcon-work-items/${id}`).catch(() => ({success:false}));
     if (r.success) setWorkItems(p => p.filter(x => x.id !== id));
     else alert(r.message||"Delete failed");
@@ -3152,7 +3152,7 @@ function ClientBOQSection() {
     cancelRenameSection();
   };
   const deleteSection = async (sec) => {
-    if (!window.confirm(`Delete section "${getSecName(sec)}" and all its categories + items?`)) return;
+    if (!await window.confirmAsync(`Delete section "${getSecName(sec)}" and all its categories + items?`)) return;
     const r = await api.del("/library/structures/" + sec.id);
     if (r?.success) {
       await loadStructures(selPkg.id);
@@ -3200,7 +3200,7 @@ function ClientBOQSection() {
     cancelRenameCat();
   };
   const deleteCategory = async (cat) => {
-    if (!window.confirm(`Delete category "${cat.category_name}" and all its items in this section?`)) return;
+    if (!await window.confirmAsync(`Delete category "${cat.category_name}" and all its items in this section?`)) return;
     const r = await api.del("/library/categories/" + cat.id);
     if (r?.success) {
       await loadCategories(selPkg.id);
@@ -5503,7 +5503,7 @@ function BoqItemLibrarySection() {
     else alert(res?.message || "Save failed");
   };
   const del = async (r) => {
-    if (!window.confirm("Delete \"" + r.name + "\" from the BOQ item library?")) return;
+    if (!await window.confirmAsync("Delete \"" + r.name + "\" from the BOQ item library?")) return;
     await apiDel(r.id);
   };
 
@@ -5858,7 +5858,7 @@ function EquipmentSection() {
   };
 
   const del = async (id) => {
-    if (!window.confirm("Delete this equipment?")) return;
+    if (!await window.confirmAsync("Delete this equipment?")) return;
     try {
       const res = await api.del("/equipment/master/" + id);
       if (res.success) setEquipment(p => p.filter(x => x.id !== id));

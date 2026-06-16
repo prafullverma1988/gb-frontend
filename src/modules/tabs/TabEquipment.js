@@ -240,7 +240,7 @@ function TabEquipment({ projectId }) {
     if (!r || r.success === false) { window.alert((r && r.message) || "Update failed"); load(); }
   };
   const removeEq = async (eq) => {
-    if (!window.confirm(`Remove ${eq.name}?`)) return;
+    if (!await window.confirmAsync(`Remove ${eq.name}?`)) return;
     const r = await api.del("/library/project-equipment/" + eq.id);
     if (!r || r.success === false) { window.alert((r && r.message) || "Delete failed"); return; }
     load();

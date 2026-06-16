@@ -155,7 +155,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
   };
 
   const handleResolveIssue = async (issueId) => {
-    const note = window.prompt("Resolution note (kya kiya issue solve karne ke liye):");
+    const note = await window.promptAsync("Resolution note (kya kiya issue solve karne ke liye):");
     if (note == null) return;
     try {
       const res = await api.patch(`/procurement/grns/issues/${issueId}/resolve`, { resolution_note: note });
@@ -166,7 +166,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
 
   const handleGrnDelete = async () => {
     if (grnDeleting) return;
-    const reason = window.prompt(`Delete GRN ${data?.grn?.grn_number}?\n\nYe inventory se bhi qty hata dega. Reason batao (compulsory):`);
+    const reason = await window.promptAsync(`Delete GRN ${data?.grn?.grn_number}?\n\nYe inventory se bhi qty hata dega. Reason batao (compulsory):`);
     if (reason == null) return;
     if (!reason.trim()) { setErr("Delete reason compulsory hai"); return; }
     setGrnDeleting(true); setErr("");

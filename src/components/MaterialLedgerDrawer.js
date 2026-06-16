@@ -138,7 +138,7 @@ export default function MaterialLedgerDrawer({ material, projectId, onClose, onC
   };
 
   const handleDeleteUsed = async (row) => {
-    if (!window.confirm(`Used entry delete karein? (${row.qty} ${row.unit || material.unit || ""})`)) return;
+    if (!await window.confirmAsync(`Used entry delete karein? (${row.qty} ${row.unit || material.unit || ""})`)) return;
     try {
       const r = await api.del(`/tasks/${row.task_id}/used-log/${row.used_log_id}`);
       if (r?.success) { onChanged && onChanged(); onClose && onClose(); }

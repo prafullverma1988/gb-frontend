@@ -394,7 +394,7 @@ export default function EstimateBuilderModal({
     else alert(r?.message || "Rename failed");
   };
   const deleteSection = async (sec) => {
-    if (!window.confirm(`Delete section "${sec.name}"? This will remove it from the library along with all its categories + items.`)) return;
+    if (!await window.confirmAsync(`Delete section "${sec.name}"? This will remove it from the library along with all its categories + items.`)) return;
     if (sec._scratch) {
       setPkgStructures(p => p.filter(s => s.id !== sec.id));
       setMeasurements(m => {
@@ -424,7 +424,7 @@ export default function EstimateBuilderModal({
     else alert(r?.message || "Rename failed");
   };
   const deleteCategory = async (sec, cat) => {
-    if (!window.confirm(`Delete category "${cat.name}"? This removes it from the library + drops its items in this section.`)) return;
+    if (!await window.confirmAsync(`Delete category "${cat.name}"? This removes it from the library + drops its items in this section.`)) return;
     const r = await api.del("/library/categories/" + cat.id);
     if (r?.success) {
       setMeasurements(m => {
