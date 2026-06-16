@@ -1086,7 +1086,9 @@ function ApprovalSettings() {
                 try { roles = typeof lv.allowed_roles === "string" ? JSON.parse(lv.allowed_roles) : lv.allowed_roles; } catch(_){}
               }
               if (!roles.length && lv.role) roles = [lv.role];
-              return { roles, limit: lv.amount_limit ? Number(lv.amount_limit) : null };
+              // Preserve 0 distinctly (mandatory checkpoint) — only null/"" = Unlimited.
+              // `amount_limit ? ... : null` would collapse 0 → null and wipe dual-control on save.
+              return { roles, limit: (lv.amount_limit === null || lv.amount_limit === undefined || lv.amount_limit === "") ? null : Number(lv.amount_limit) };
             }),
           }));
           // Merge: keep API data, add any DEFAULTS not in API
@@ -1127,7 +1129,9 @@ function ApprovalSettings() {
                 try { roles = typeof lv.allowed_roles === "string" ? JSON.parse(lv.allowed_roles) : lv.allowed_roles; } catch(_){}
               }
               if (!roles.length && lv.role) roles = [lv.role];
-              return { roles, limit: lv.amount_limit ? Number(lv.amount_limit) : null };
+              // Preserve 0 distinctly (mandatory checkpoint) — only null/"" = Unlimited.
+              // `amount_limit ? ... : null` would collapse 0 → null and wipe dual-control on save.
+              return { roles, limit: (lv.amount_limit === null || lv.amount_limit === undefined || lv.amount_limit === "") ? null : Number(lv.amount_limit) };
             }),
           }));
           const apiModules = new Set(mapped.map(m => m.module));
@@ -1240,7 +1244,7 @@ function ApprovalSettings() {
                             {(l.roles||[l.role]).filter(Boolean).map(r => roleLabel(r)).join(" / ")}
                             {(l.roles||[]).length > 1 && <span style={{ fontSize: 10, color: T.amber, marginLeft: 4, fontWeight: 600 }}>(any)</span>}
                           </span>
-                          <Badge text={l.limit ? `Up to Rs.${l.limit >= 100000 ? (l.limit / 100000).toFixed(0) + "L" : (l.limit / 1000).toFixed(0) + "K"}` : "Unlimited"} color={l.limit ? T.amber : T.green} bg={l.limit ? T.amberSoft : T.greenSoft} />
+                          <Badge text={l.limit === 0 ? "Always approves" : l.limit ? `Up to Rs.${l.limit >= 100000 ? (l.limit / 100000).toFixed(0) + "L" : (l.limit / 1000).toFixed(0) + "K"}` : "Unlimited"} color={l.limit === 0 ? T.purple : l.limit ? T.amber : T.green} bg={l.limit === 0 ? T.purpleSoft : l.limit ? T.amberSoft : T.greenSoft} />
                         </div>
                       </div>
                     ))}
@@ -1326,11 +1330,14 @@ function ApprovalSettings() {
                 {/* Amount limit */}
                 <div style={{ flex: 1, minWidth: 140 }}>
                   <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>Amount Limit (Rs.)</label>
-                  <input type="number" value={l.limit || ""} onChange={e => updateLevel(i, "limit", e.target.value ? parseInt(e.target.value) : null)} placeholder="No limit"
+                  <input type="number" min="0" value={l.limit ?? ""} onChange={e => updateLevel(i, "limit", e.target.value === "" ? null : parseInt(e.target.value))} placeholder="No limit"
                     style={{ width: "100%", padding: "9px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13, color: T.text, background: "white", outline: "none", boxSizing: "border-box", fontFamily: T.font }}
                     onFocus={e => e.target.style.borderColor = T.blue}
                     onBlur={e => e.target.style.borderColor = T.border}
                   />
+                  <div style={{ fontSize: 10.5, color: T.textLight, marginTop: 4, lineHeight: 1.4 }}>
+                    <b>0</b> = always approves (mandatory — forces dual) · <b>blank</b> = unlimited (top of chain)
+                  </div>
                 </div>
               </div>
             </div>
