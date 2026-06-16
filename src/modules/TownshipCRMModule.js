@@ -100,6 +100,25 @@ const ACTIVITY_TONE = { green:"#27500A", blue:"#0C447C", purple:"#3C3489", amber
 // has_mod is now derived from the live customizations list (Brief 3).
 const FACINGS = ["N", "S", "E", "W", "NE", "NW", "SE", "SW"];
 
+// Batch types — mirrors backend BATCH_TYPES enum (township-crm.js).
+// A batch is either a row-house cluster or a flat tower (both hold units),
+// or a floor group / phase grouping.
+const BATCH_TYPE_OPTIONS = [
+  { value: "row_house_cluster", label: "Row House Cluster" },
+  { value: "tower",            label: "Tower" },
+  { value: "floor_group",      label: "Floor Group" },
+  { value: "phase",            label: "Phase" },
+];
+const BATCH_TYPE_LABEL = Object.fromEntries(BATCH_TYPE_OPTIONS.map(o => [o.value, o.label]));
+
+// Auto-derive a unit prefix from a batch — first letter of the batch name
+// (falls back to batch_no's letters). Editable by the user in the modal.
+function derivePrefix(batch) {
+  const src = (batch?.batch_name || batch?.batch_no || "").trim();
+  const letters = (src.match(/[A-Za-z]+/) || [""])[0];
+  return (letters ? letters[0] : src[0] || "A").toUpperCase();
+}
+
 // Backend stage enum → display label (Kanban grouping keys off the enum).
 const STAGE_DISPLAY = {
   new_inquiry: "New inquiry",
@@ -451,7 +470,7 @@ export default function TownshipCRMModule() {
 
   // ── Seed Demo Data ──────────────────────────────────────────
   const handleSeed = async () => {
-    if (!window.confirm("Existing units + prospects delete ho jayenge. Continue?")) return;
+    if (!await window.confirmAsync("Existing units + prospects delete ho jayenge. Continue?")) return;
     setSeeding(true);
     try {
       const res = await api.post("/township-crm/seed-demo", { wipe_existing: true });
@@ -526,7 +545,7 @@ export default function TownshipCRMModule() {
           activityFeed={activityFeed} constructionSync={constructionSync}
           salesVelocity={salesVelocity} revenueForecast={revenueForecast}/>}
         {activeTab === "Inventory"      && <InventoryTab units={unitsViewModel} summary={UNIT_SUMMARY_LIVE} unitTypes={unitTypes} onUnitClick={openUnitDetail}/>}
-        {activeTab === "Batches"        && <BatchesTab batches={batches}/>}
+        {activeTab === "Batches"        && <BatchesTab batches={batches} projectId={PROJECT_ID} unitTypes={unitTypes} onChanged={loadAll}/>}
         {activeTab === "Prospects"      && <ProspectsTab prospects={prospects} onAdd={() => setShowAddProspect(true)} onProspectClick={setSelectedProspectId}/>}
         {activeTab === "Bookings"       && <BookingsTab bookings={bookings} onRowClick={setSelectedBooking}/>}
         {activeTab === "Customizations" && <CustomizationsTab customizations={customizations}
@@ -534,7 +553,7 @@ export default function TownshipCRMModule() {
         {activeTab === "Construction"   && <ConstructionTab constructionSync={constructionSync} onOpenProject={handleOpenProject}/>}
         {activeTab === "Reports"        && <ReportsTab salesVelocity={salesVelocity} typeDemand={typeDemand}
           revenueForecast={revenueForecast} onStuckUnits={() => setShowStuckUnits(true)}/>}
-        {activeTab === "Settings"       && <SettingsTab project={project} unitTypes={unitTypes} seeding={seeding} onSeed={handleSeed}/>}
+        {activeTab === "Settings"       && <SettingsTab project={project} unitTypes={unitTypes} seeding={seeding} onSeed={handleSeed} projectId={PROJECT_ID} onChanged={loadAll}/>}
       </div>
 
       {/* ── MODALS ─────────────────────────────────────────────── */}
@@ -820,20 +839,36 @@ function InventoryTab({ units, summary, unitTypes, onUnitClick }) {
 // ════════════════════════════════════════════════════════════════
 // TAB 3 — BATCHES (wired to live batches; construction sync = Brief 3)
 // ════════════════════════════════════════════════════════════════
-function BatchesTab({ batches }) {
+function BatchesTab({ batches, projectId, unitTypes, onChanged }) {
+  const [showAdd, setShowAdd]       = useState(false);
+  const [editBatch, setEditBatch]   = useState(null);
+  const [genBatch, setGenBatch]     = useState(null);
+  const [busyId, setBusyId]         = useState(null);
+
+  const handleDelete = async (b) => {
+    if (!await window.confirmAsync(`Delete batch "${b.batch_no}"? Units isme honge to delete nahi hoga.`)) return;
+    setBusyId(b.id);
+    try {
+      const r = await api.del(`/township-crm/batches/${b.id}`);
+      if (r?.success) onChanged?.();
+      else alert("Delete failed: " + (r?.message || "unknown"));
+    } catch (e) { alert("Delete failed: " + (e?.message || e)); }
+    setBusyId(null);
+  };
+
   return (
-    <Frame title={`${batches.length} batches`} sub="Each batch = ek linked project, ek subcon"
-      right={<Btn small label="+ Add batch"/>}>
+    <Frame title={`${batches.length} batches`} sub="Each batch = ek row-house cluster ya tower (units inke andar)"
+      right={<Btn small primary label="+ Add batch" onClick={() => setShowAdd(true)}/>}>
       {batches.length === 0 ? (
         <div style={{ padding:"36px 20px", textAlign:"center", color:T.t2, fontSize:13 }}>
-          Koi batch nahi hai.
+          Koi batch nahi hai. "+ Add batch" se ek cluster ya tower banao.
         </div>
       ) : (
         <div style={{ display:"grid", gap:9 }}>
           {batches.map(b => {
             const prog = Number(b.linked_project_progress || 0);
             const tone = prog >= 80 ? "blue" : prog >= 50 ? "blue" : prog >= 30 ? "amber" : prog > 0 ? "coral" : "gray";
-            const subBits = [b.batch_name, b.subcon_name, b.contract_value ? inr(b.contract_value) : null].filter(Boolean);
+            const subBits = [BATCH_TYPE_LABEL[b.batch_type] || b.batch_name, b.subcon_name, b.contract_value ? inr(b.contract_value) : null].filter(Boolean);
             return (
               <div key={b.id} style={{ background:T.surface, border:`1px solid ${T.b1}`,
                 borderRadius:9, padding:"11px 14px" }}>
@@ -855,15 +890,340 @@ function BatchesTab({ batches }) {
                   </span>
                   <span>Handover target: {fmtDate(b.target_completion_date)}</span>
                 </div>
+                <div style={{ display:"flex", gap:7, marginTop:10, flexWrap:"wrap" }}>
+                  <Btn small primary label="⚙ Generate Units" onClick={() => setGenBatch(b)}/>
+                  <Btn small label="Edit" onClick={() => setEditBatch(b)}/>
+                  <Btn small danger label={busyId === b.id ? "Deleting…" : "Delete"}
+                    disabled={busyId === b.id} onClick={() => handleDelete(b)}/>
+                </div>
               </div>
             );
           })}
         </div>
       )}
       <Note>
-        Har batch ek linked construction project ke through track hota hai. Stage update wahin se aata hai — yahan read-only summary.
+        "Generate Units" se ek batch ke andar units auto-ban jaate hain — prefix + start number do, A-1 se A-30 tak khud generate ho jayenge.
       </Note>
+
+      {showAdd && (
+        <AddBatchModal projectId={projectId}
+          onClose={() => setShowAdd(false)}
+          onSaved={() => { setShowAdd(false); onChanged?.(); }}/>
+      )}
+      {editBatch && (
+        <AddBatchModal projectId={projectId} batch={editBatch}
+          onClose={() => setEditBatch(null)}
+          onSaved={() => { setEditBatch(null); onChanged?.(); }}/>
+      )}
+      {genBatch && (
+        <GenerateUnitsModal batch={genBatch} unitTypes={unitTypes}
+          onClose={() => setGenBatch(null)}
+          onGenerated={() => { setGenBatch(null); onChanged?.(); }}/>
+      )}
     </Frame>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// ADD / EDIT BATCH MODAL — POST /projects/:id/batches | PUT /batches/:id
+// ════════════════════════════════════════════════════════════════
+function AddBatchModal({ projectId, batch, onClose, onSaved }) {
+  const isEdit = !!batch;
+  const [form, setForm] = useState({
+    batch_no:               batch?.batch_no || "",
+    batch_name:             batch?.batch_name || "",
+    batch_type:             batch?.batch_type || "row_house_cluster",
+    unit_range_label:       batch?.unit_range_label || "",
+    subcon_name:            batch?.subcon_name || "",
+    subcon_phone:           batch?.subcon_phone || "",
+    contract_value:         batch?.contract_value ?? "",
+    target_completion_date: batch?.target_completion_date ? String(batch.target_completion_date).slice(0,10) : "",
+    notes:                  batch?.notes || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  const submit = async () => {
+    if (!form.batch_no.trim()) { alert("Batch No is required"); return; }
+    setSaving(true);
+    const body = {
+      batch_no: form.batch_no.trim(),
+      batch_name: form.batch_name.trim() || null,
+      batch_type: form.batch_type,
+      unit_range_label: form.unit_range_label.trim() || null,
+      subcon_name: form.subcon_name.trim() || null,
+      subcon_phone: form.subcon_phone.trim() || null,
+      contract_value: form.contract_value !== "" ? Number(form.contract_value) : null,
+      target_completion_date: form.target_completion_date || null,
+      notes: form.notes.trim() || null,
+    };
+    try {
+      const res = isEdit
+        ? await api.put(`/township-crm/batches/${batch.id}`, body)
+        : await api.post(`/township-crm/projects/${projectId}/batches`, body);
+      if (res?.success) onSaved();
+      else alert((isEdit ? "Update" : "Add") + " batch failed: " + (res?.message || "unknown error"));
+    } catch (e) {
+      alert((isEdit ? "Update" : "Add") + " batch failed: " + (e?.message || e));
+    }
+    setSaving(false);
+  };
+
+  return (
+    <Modal title={isEdit ? `Edit Batch ${batch.batch_no}` : "Add Batch"} onClose={onClose} width={520}>
+      <div style={{ display:"grid", gap:11 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
+          <div>
+            <label style={labelStyle}>Batch No *</label>
+            <input style={inputStyle} value={form.batch_no}
+              onChange={(e) => set("batch_no", e.target.value)} placeholder="e.g. B-1"/>
+          </div>
+          <div>
+            <label style={labelStyle}>Batch Type *</label>
+            <select style={inputStyle} value={form.batch_type}
+              onChange={(e) => set("batch_type", e.target.value)}>
+              {BATCH_TYPE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>Batch Name</label>
+          <input style={inputStyle} value={form.batch_name}
+            onChange={(e) => set("batch_name", e.target.value)} placeholder="e.g. Tower A / Riverside Cluster"/>
+        </div>
+        <div>
+          <label style={labelStyle}>Unit Range Label</label>
+          <input style={inputStyle} value={form.unit_range_label}
+            onChange={(e) => set("unit_range_label", e.target.value)} placeholder="e.g. A-1 to A-30"/>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
+          <div>
+            <label style={labelStyle}>Subcontractor</label>
+            <input style={inputStyle} value={form.subcon_name}
+              onChange={(e) => set("subcon_name", e.target.value)} placeholder="Subcon name"/>
+          </div>
+          <div>
+            <label style={labelStyle}>Subcon Phone</label>
+            <input style={inputStyle} value={form.subcon_phone}
+              onChange={(e) => set("subcon_phone", e.target.value)} placeholder="10-digit mobile"/>
+          </div>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
+          <div>
+            <label style={labelStyle}>Contract Value (₹)</label>
+            <input style={inputStyle} type="number" value={form.contract_value}
+              onChange={(e) => set("contract_value", e.target.value)} placeholder="e.g. 12000000"/>
+          </div>
+          <div>
+            <label style={labelStyle}>Target Completion</label>
+            <input style={inputStyle} type="date" value={form.target_completion_date}
+              onChange={(e) => set("target_completion_date", e.target.value)}/>
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>Notes</label>
+          <textarea style={{ ...inputStyle, minHeight:60, resize:"vertical" }} value={form.notes}
+            onChange={(e) => set("notes", e.target.value)} placeholder="Optional"/>
+        </div>
+      </div>
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
+        <Btn small label="Cancel" onClick={onClose}/>
+        <Btn small primary label={saving ? "Saving…" : (isEdit ? "Save Changes" : "Add Batch")}
+          onClick={submit} disabled={saving}/>
+      </div>
+    </Modal>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// GENERATE UNITS MODAL — POST /batches/:id/generate-units
+// Prefix + start no + count → A-1, A-2, … auto-created in the batch.
+// ════════════════════════════════════════════════════════════════
+function GenerateUnitsModal({ batch, unitTypes, onClose, onGenerated }) {
+  const [form, setForm] = useState({
+    prefix: derivePrefix(batch),
+    start_no: 1,
+    count: 10,
+    unit_type_id: unitTypes[0]?.id || "",
+    facing: "",
+    is_corner_pattern: "none",
+    is_garden_facing_pattern: "none",
+    block_or_tower: batch?.batch_name || "",
+    phase: "",
+    override_base_price: "",
+    plc_corner: "",
+    plc_garden: "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  // Pre-fill corner/garden PLC from the project's saved config (per-sqft rates),
+  // so the user sees real defaults instead of typing them every time.
+  useEffect(() => {
+    const pid = batch?.township_project_id;
+    if (!pid) return;
+    let alive = true;
+    (async () => {
+      try {
+        const r = await api.get(`/township-crm/projects/${pid}/plc-config`);
+        if (!alive || !r?.success) return;
+        const m = Object.fromEntries((r.data || []).map(d => [d.plc_key, d]));
+        setForm(p => ({
+          ...p,
+          plc_corner: m.corner?.charge_unit === "per_sqft" ? String(m.corner.rate) : p.plc_corner,
+          plc_garden: m.garden?.charge_unit === "per_sqft" ? String(m.garden.rate) : p.plc_garden,
+        }));
+      } catch (_) {}
+    })();
+    return () => { alive = false; };
+  }, [batch]);
+
+  const start = Number(form.start_no) || 0;
+  const count = Number(form.count) || 0;
+  const previewValid = form.prefix.trim() && start >= 1 && count >= 1;
+  const preview = previewValid
+    ? (count <= 3
+        ? Array.from({ length: count }, (_, i) => `${form.prefix.trim()}-${start + i}`).join(", ")
+        : `${form.prefix.trim()}-${start}, ${form.prefix.trim()}-${start + 1}, … ${form.prefix.trim()}-${start + count - 1}`)
+    : "—";
+
+  const submit = async () => {
+    if (!form.prefix.trim())   { alert("Prefix is required"); return; }
+    if (start < 1)             { alert("Start number must be >= 1"); return; }
+    if (count < 1)             { alert("Count must be >= 1"); return; }
+    if (count > 200)           { alert("Max 200 units per generation"); return; }
+    if (!form.unit_type_id)    { alert("Unit Type is required"); return; }
+    setSaving(true);
+    try {
+      const res = await api.post(`/township-crm/batches/${batch.id}/generate-units`, {
+        prefix: form.prefix.trim(),
+        start_no: start,
+        count,
+        unit_type_id: Number(form.unit_type_id),
+        facing: form.facing || null,
+        is_corner_pattern: form.is_corner_pattern,
+        is_garden_facing_pattern: form.is_garden_facing_pattern,
+        use_type_base_price: form.override_base_price === "",
+        override_base_price: form.override_base_price !== "" ? Number(form.override_base_price) : null,
+        plc_corner: form.plc_corner !== "" ? Number(form.plc_corner) : 0,
+        plc_garden: form.plc_garden !== "" ? Number(form.plc_garden) : 0,
+        block_or_tower: form.block_or_tower.trim() || null,
+        phase: form.phase.trim() || null,
+      });
+      if (res?.success) {
+        alert(`✓ ${res.data?.generated_count || count} units generated. Batch total: ${res.data?.batch_total ?? "—"}`);
+        onGenerated();
+      } else {
+        alert("Generate failed: " + (res?.message || "unknown error"));
+      }
+    } catch (e) {
+      alert("Generate failed: " + (e?.message || e));
+    }
+    setSaving(false);
+  };
+
+  return (
+    <Modal title={`Generate Units — ${batch.batch_no}`} onClose={onClose} width={540}>
+      <div style={{ display:"grid", gap:11 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:11 }}>
+          <div>
+            <label style={labelStyle}>Prefix *</label>
+            <input style={inputStyle} value={form.prefix}
+              onChange={(e) => set("prefix", e.target.value)} placeholder="A"/>
+          </div>
+          <div>
+            <label style={labelStyle}>Start No *</label>
+            <input style={inputStyle} type="number" min={1} value={form.start_no}
+              onChange={(e) => set("start_no", e.target.value)}/>
+          </div>
+          <div>
+            <label style={labelStyle}>Count *</label>
+            <input style={inputStyle} type="number" min={1} max={200} value={form.count}
+              onChange={(e) => set("count", e.target.value)}/>
+          </div>
+        </div>
+
+        <div style={{ padding:"8px 12px", background:T.priL, borderRadius:6, fontSize:12, color:T.priD }}>
+          Banenge: <strong>{preview}</strong> {previewValid && count > 0 ? `(${count} units)` : ""}
+        </div>
+
+        <div>
+          <label style={labelStyle}>Unit Type *</label>
+          <select style={inputStyle} value={form.unit_type_id}
+            onChange={(e) => set("unit_type_id", e.target.value)}>
+            <option value="">— Select —</option>
+            {unitTypes.map(t => (
+              <option key={t.id} value={t.id}>{t.type_name} ({t.type_code})</option>
+            ))}
+          </select>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
+          <div>
+            <label style={labelStyle}>Facing</label>
+            <select style={inputStyle} value={form.facing}
+              onChange={(e) => set("facing", e.target.value)}>
+              <option value="">— None —</option>
+              {FACINGS.map(f => <option key={f} value={f}>{f}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Block / Tower</label>
+            <input style={inputStyle} value={form.block_or_tower}
+              onChange={(e) => set("block_or_tower", e.target.value)} placeholder="optional"/>
+          </div>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
+          <div>
+            <label style={labelStyle}>Corner pattern</label>
+            <select style={inputStyle} value={form.is_corner_pattern}
+              onChange={(e) => set("is_corner_pattern", e.target.value)}>
+              <option value="none">None</option>
+              <option value="first_last">First & last unit</option>
+              <option value="all">All units</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Garden pattern</label>
+            <select style={inputStyle} value={form.is_garden_facing_pattern}
+              onChange={(e) => set("is_garden_facing_pattern", e.target.value)}>
+              <option value="none">None</option>
+              <option value="first_last">First & last unit</option>
+              <option value="all">All units</option>
+            </select>
+          </div>
+        </div>
+
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:11 }}>
+          <div>
+            <label style={labelStyle}>Base price override (₹)</label>
+            <input style={inputStyle} type="number" value={form.override_base_price}
+              onChange={(e) => set("override_base_price", e.target.value)} placeholder="From type"/>
+          </div>
+          <div>
+            <label style={labelStyle}>PLC corner (₹/sqft)</label>
+            <input style={inputStyle} type="number" value={form.plc_corner}
+              onChange={(e) => set("plc_corner", e.target.value)} placeholder="0"/>
+          </div>
+          <div>
+            <label style={labelStyle}>PLC garden (₹/sqft)</label>
+            <input style={inputStyle} type="number" value={form.plc_garden}
+              onChange={(e) => set("plc_garden", e.target.value)} placeholder="0"/>
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>Phase</label>
+          <input style={inputStyle} value={form.phase}
+            onChange={(e) => set("phase", e.target.value)} placeholder="optional"/>
+        </div>
+      </div>
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
+        <Btn small label="Cancel" onClick={onClose}/>
+        <Btn small primary label={saving ? "Generating…" : `Generate ${count > 0 ? count : ""} Units`}
+          onClick={submit} disabled={saving}/>
+      </div>
+    </Modal>
   );
 }
 
@@ -1189,7 +1549,22 @@ function ReportsTab({ salesVelocity, typeDemand, revenueForecast, onStuckUnits }
 // ════════════════════════════════════════════════════════════════
 // TAB 9 — SETTINGS (live project + unit types + Seed Demo button)
 // ════════════════════════════════════════════════════════════════
-function SettingsTab({ project, unitTypes, seeding, onSeed }) {
+function SettingsTab({ project, unitTypes, seeding, onSeed, projectId, onChanged }) {
+  const [showAddType, setShowAddType] = useState(false);
+  const [editType, setEditType]       = useState(null);
+  const [busyTypeId, setBusyTypeId]   = useState(null);
+
+  const handleDeleteType = async (t) => {
+    if (!await window.confirmAsync(`Delete unit type "${t.type_name}"? Units isme honge to delete nahi hoga.`)) return;
+    setBusyTypeId(t.id);
+    try {
+      const r = await api.del(`/township-crm/unit-types/${t.id}`);
+      if (r?.success) onChanged?.();
+      else alert("Delete failed: " + (r?.message || "unknown"));
+    } catch (e) { alert("Delete failed: " + (e?.message || e)); }
+    setBusyTypeId(null);
+  };
+
   const FormRow = ({ label, value, valueColor }) => (
     <div style={{ display:"flex", justifyContent:"space-between", padding:"9px 0",
       borderBottom:`1px solid ${T.b1}`, fontSize:12 }}>
@@ -1225,12 +1600,15 @@ function SettingsTab({ project, unitTypes, seeding, onSeed }) {
         <FormRow label="RERA number"  value={project?.rera_no || "—"}/>
         <FormRow label="Total units"  value={String(project?.unit_count ?? project?.total_units ?? 0)}/>
 
-        {/* Section 2 — Unit types */}
-        <SectionH>Unit types</SectionH>
+        {/* Section 2 — Unit types (editable) */}
+        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+          <SectionH>Unit types</SectionH>
+          <Btn small primary label="+ Add type" onClick={() => setShowAddType(true)}/>
+        </div>
         <div style={{ overflowX:"auto" }}>
-          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:520 }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:600 }}>
             <thead>
-              <tr>{["Type","Plot","Built-up","Base rate","Price"].map(h => <th key={h} style={th}>{h}</th>)}</tr>
+              <tr>{["Type","Plot","Built-up","Base rate","Price","Units",""].map((h, i) => <th key={i} style={th}>{h}</th>)}</tr>
             </thead>
             <tbody>
               {unitTypes.map(t => (
@@ -1240,23 +1618,276 @@ function SettingsTab({ project, unitTypes, seeding, onSeed }) {
                   <td style={td}>{t.built_up_area_sqft ? `${Number(t.built_up_area_sqft)} sqft` : "—"}</td>
                   <td style={td}>{t.base_rate_per_sqft ? `₹${Number(t.base_rate_per_sqft).toLocaleString("en-IN")}/sqft` : "—"}</td>
                   <td style={{ ...td, fontWeight:600 }}>{inr(t.base_price)}</td>
+                  <td style={td}>{t.unit_count ?? 0}</td>
+                  <td style={{ ...td, whiteSpace:"nowrap" }}>
+                    <span style={{ display:"inline-flex", gap:6 }}>
+                      <Btn small label="Edit" onClick={() => setEditType(t)}/>
+                      <Btn small danger label={busyTypeId === t.id ? "…" : "Delete"}
+                        disabled={busyTypeId === t.id} onClick={() => handleDeleteType(t)}/>
+                    </span>
+                  </td>
                 </tr>
               ))}
               {unitTypes.length === 0 && (
-                <tr><td colSpan={5} style={{ ...td, textAlign:"center", color:T.t3 }}>No unit types.</td></tr>
+                <tr><td colSpan={7} style={{ ...td, textAlign:"center", color:T.t3 }}>No unit types. "+ Add type" se banao.</td></tr>
               )}
             </tbody>
           </table>
         </div>
 
-        {/* Section 3 — PLC charges */}
-        <SectionH>PLC charges (configurable)</SectionH>
-        <FormRow label="Corner unit"       value="+ ₹50/sqft (built-up)"/>
-        <FormRow label="Garden facing"     value="+ ₹100/sqft (built-up)"/>
-        <FormRow label="East facing"       value="+ ₹30/sqft (built-up)"/>
-        <FormRow label="Per-unit override" value="✓ Allowed" valueColor={T.kGrn}/>
+        {/* Section 3 — PLC charges (editable, persisted per project) */}
+        <PlcConfigSection projectId={projectId}/>
       </Frame>
+
+      {showAddType && (
+        <UnitTypeModal projectId={projectId}
+          onClose={() => setShowAddType(false)}
+          onSaved={() => { setShowAddType(false); onChanged?.(); }}/>
+      )}
+      {editType && (
+        <UnitTypeModal projectId={projectId} unitType={editType}
+          onClose={() => setEditType(null)}
+          onSaved={() => { setEditType(null); onChanged?.(); }}/>
+      )}
     </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// ADD / EDIT UNIT TYPE MODAL — POST /projects/:id/unit-types | PUT /unit-types/:id
+// ════════════════════════════════════════════════════════════════
+function UnitTypeModal({ projectId, unitType, onClose, onSaved }) {
+  const isEdit = !!unitType;
+  const [form, setForm] = useState({
+    type_name:          unitType?.type_name || "",
+    type_code:          unitType?.type_code || "",
+    bhk:                unitType?.bhk ?? "",
+    plot_area_sqft:     unitType?.plot_area_sqft ?? "",
+    built_up_area_sqft: unitType?.built_up_area_sqft ?? "",
+    carpet_area_sqft:   unitType?.carpet_area_sqft ?? "",
+    super_built_up_sqft:unitType?.super_built_up_sqft ?? "",
+    base_rate_per_sqft: unitType?.base_rate_per_sqft ?? "",
+    base_price:         unitType?.base_price ?? "",
+    description:        unitType?.description || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k, v) => setForm(p => ({ ...p, [k]: v }));
+
+  // Convenience: base_price = base_rate × built-up, auto-suggested when both set
+  // and price is empty — user can still type an explicit override.
+  const autoPrice = () => {
+    const rate = Number(form.base_rate_per_sqft), area = Number(form.built_up_area_sqft);
+    if (rate > 0 && area > 0) set("base_price", String(Math.round(rate * area)));
+  };
+
+  const numOrNull = (v) => v !== "" ? Number(v) : null;
+
+  const submit = async () => {
+    if (!form.type_name.trim()) { alert("Type Name is required"); return; }
+    if (!form.type_code.trim()) { alert("Type Code is required"); return; }
+    setSaving(true);
+    const body = {
+      type_name: form.type_name.trim(),
+      type_code: form.type_code.trim(),
+      bhk: numOrNull(form.bhk),
+      plot_area_sqft: numOrNull(form.plot_area_sqft),
+      built_up_area_sqft: numOrNull(form.built_up_area_sqft),
+      carpet_area_sqft: numOrNull(form.carpet_area_sqft),
+      super_built_up_sqft: numOrNull(form.super_built_up_sqft),
+      base_rate_per_sqft: numOrNull(form.base_rate_per_sqft),
+      base_price: numOrNull(form.base_price),
+      description: form.description.trim() || null,
+    };
+    try {
+      const res = isEdit
+        ? await api.put(`/township-crm/unit-types/${unitType.id}`, body)
+        : await api.post(`/township-crm/projects/${projectId}/unit-types`, body);
+      if (res?.success) onSaved();
+      else alert((isEdit ? "Update" : "Add") + " type failed: " + (res?.message || "unknown error"));
+    } catch (e) {
+      alert((isEdit ? "Update" : "Add") + " type failed: " + (e?.message || e));
+    }
+    setSaving(false);
+  };
+
+  const numField = (label, key, ph) => (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <input style={inputStyle} type="number" value={form[key]}
+        onChange={(e) => set(key, e.target.value)} placeholder={ph}/>
+    </div>
+  );
+
+  return (
+    <Modal title={isEdit ? `Edit Unit Type ${unitType.type_code}` : "Add Unit Type"} onClose={onClose} width={540}>
+      <div style={{ display:"grid", gap:11 }}>
+        <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:11 }}>
+          <div>
+            <label style={labelStyle}>Type Name *</label>
+            <input style={inputStyle} value={form.type_name}
+              onChange={(e) => set("type_name", e.target.value)} placeholder="e.g. 2BHK Row House"/>
+          </div>
+          <div>
+            <label style={labelStyle}>Type Code *</label>
+            <input style={inputStyle} value={form.type_code}
+              onChange={(e) => set("type_code", e.target.value)} placeholder="e.g. A"/>
+          </div>
+          {numField("BHK", "bhk", "e.g. 2")}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
+          {numField("Plot area (sqft)", "plot_area_sqft", "e.g. 800")}
+          {numField("Built-up (sqft)", "built_up_area_sqft", "e.g. 1200")}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
+          {numField("Carpet area (sqft)", "carpet_area_sqft", "optional")}
+          {numField("Super built-up (sqft)", "super_built_up_sqft", "optional")}
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:11 }}>
+          {numField("Base rate (₹/sqft)", "base_rate_per_sqft", "e.g. 2833")}
+          <div>
+            <label style={labelStyle}>Base price (₹)</label>
+            <input style={inputStyle} type="number" value={form.base_price}
+              onChange={(e) => set("base_price", e.target.value)} onFocus={() => { if (form.base_price === "") autoPrice(); }}
+              placeholder="auto = rate × built-up"/>
+          </div>
+        </div>
+        <div>
+          <label style={labelStyle}>Description</label>
+          <textarea style={{ ...inputStyle, minHeight:54, resize:"vertical" }} value={form.description}
+            onChange={(e) => set("description", e.target.value)} placeholder="Optional"/>
+        </div>
+      </div>
+      <div style={{ display:"flex", justifyContent:"flex-end", gap:8, marginTop:16 }}>
+        <Btn small label="Cancel" onClick={onClose}/>
+        <Btn small primary label={saving ? "Saving…" : (isEdit ? "Save Changes" : "Add Type")}
+          onClick={submit} disabled={saving}/>
+      </div>
+    </Modal>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════
+// PLC CONFIG SECTION — editable per-project PLC rates
+// GET/PUT /projects/:id/plc-config
+// ════════════════════════════════════════════════════════════════
+const PLC_UNIT_OPTIONS  = [{ value:"per_sqft", label:"per sqft" }, { value:"flat", label:"flat" }];
+const PLC_AREA_OPTIONS  = [
+  { value:"built_up", label:"Built-up" },
+  { value:"plot", label:"Plot" },
+  { value:"super_built_up", label:"Super built-up" },
+];
+
+function PlcConfigSection({ projectId }) {
+  const [rows, setRows]   = useState([]);
+  const [loading, setLd]  = useState(true);
+  const [saving, setSv]   = useState(false);
+  const [dirty, setDirty] = useState(false);
+
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      setLd(true);
+      try {
+        const r = await api.get(`/township-crm/projects/${projectId}/plc-config`);
+        if (alive && r?.success) setRows((r.data || []).map(d => ({ ...d, rate: String(d.rate) })));
+      } catch (_) {}
+      if (alive) { setLd(false); setDirty(false); }
+    })();
+    return () => { alive = false; };
+  }, [projectId]);
+
+  const setRow = (i, k, v) => { setRows(p => p.map((r, idx) => idx === i ? { ...r, [k]: v } : r)); setDirty(true); };
+  const addRow = () => { setRows(p => [...p, { plc_key:"", label:"", rate:"0", charge_unit:"per_sqft", applies_to:"built_up" }]); setDirty(true); };
+  const delRow = (i) => { setRows(p => p.filter((_, idx) => idx !== i)); setDirty(true); };
+
+  const save = async () => {
+    for (const r of rows) {
+      if (!String(r.plc_key).trim()) { alert("Har PLC row ka ek key hona chahiye (e.g. corner)"); return; }
+      if (!(Number(r.rate) >= 0))    { alert(`Invalid rate for '${r.plc_key}'`); return; }
+    }
+    setSv(true);
+    try {
+      const items = rows.map((r, i) => ({
+        plc_key: r.plc_key, label: r.label || r.plc_key, rate: Number(r.rate),
+        charge_unit: r.charge_unit, applies_to: r.applies_to, sort_order: i + 1,
+      }));
+      const res = await api.put(`/township-crm/projects/${projectId}/plc-config`, { items });
+      if (res?.success) {
+        setRows((res.data || []).map(d => ({ ...d, rate: String(d.rate) })));
+        setDirty(false);
+      } else {
+        alert("PLC save failed: " + (res?.message || "unknown error"));
+      }
+    } catch (e) { alert("PLC save failed: " + (e?.message || e)); }
+    setSv(false);
+  };
+
+  const th = { padding:"6px 8px", textAlign:"left", fontSize:10, fontWeight:600, color:T.t2,
+    textTransform:"uppercase", letterSpacing:0.3, background:T.gryL, borderBottom:`1px solid ${T.b1}` };
+  const td = { padding:"6px 8px", borderBottom:`1px solid ${T.b1}` };
+  const cell = { ...inputStyle, padding:"5px 7px", fontSize:12 };
+
+  return (
+    <>
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+        <SectionH>PLC charges (editable)</SectionH>
+        <Btn small label="+ Add charge" onClick={addRow}/>
+      </div>
+      {loading ? (
+        <div style={{ padding:"14px 0", fontSize:12, color:T.t3 }}>Loading…</div>
+      ) : (
+        <div style={{ overflowX:"auto" }}>
+          <table style={{ width:"100%", borderCollapse:"collapse", minWidth:560 }}>
+            <thead>
+              <tr>{["Key","Label","Rate (₹)","Unit","Applies to",""].map((h,i) => <th key={i} style={th}>{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i}>
+                  <td style={{ ...td, width:110 }}>
+                    <input style={cell} value={r.plc_key}
+                      onChange={(e) => setRow(i, "plc_key", e.target.value)} placeholder="corner"/>
+                  </td>
+                  <td style={td}>
+                    <input style={cell} value={r.label}
+                      onChange={(e) => setRow(i, "label", e.target.value)} placeholder="Corner unit"/>
+                  </td>
+                  <td style={{ ...td, width:100 }}>
+                    <input style={cell} type="number" value={r.rate}
+                      onChange={(e) => setRow(i, "rate", e.target.value)}/>
+                  </td>
+                  <td style={{ ...td, width:100 }}>
+                    <select style={cell} value={r.charge_unit} onChange={(e) => setRow(i, "charge_unit", e.target.value)}>
+                      {PLC_UNIT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ ...td, width:130 }}>
+                    <select style={cell} value={r.applies_to} onChange={(e) => setRow(i, "applies_to", e.target.value)}>
+                      {PLC_AREA_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ ...td, width:40, textAlign:"center" }}>
+                    <button onClick={() => delRow(i)} title="Remove" style={{ background:"transparent",
+                      border:"none", color:"#B4453A", cursor:"pointer", fontSize:16, lineHeight:1 }}>×</button>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr><td colSpan={6} style={{ ...td, textAlign:"center", color:T.t3, fontSize:12 }}>
+                  No PLC charges. "+ Add charge" se banao.
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginTop:10 }}>
+        <span style={{ fontSize:11, color:T.t3 }}>
+          Per-sqft charges unit type ke area pe lagte hain · "flat" = fixed amount per unit.
+        </span>
+        <Btn small primary label={saving ? "Saving…" : "Save PLC"} onClick={save} disabled={saving || !dirty}/>
+      </div>
+    </>
   );
 }
 
@@ -1303,7 +1934,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
   }, [tab]); // eslint-disable-line
 
   const markSold = async () => {
-    if (!window.confirm("Mark this unit as SOLD (registration done)?")) return;
+    if (!await window.confirmAsync("Mark this unit as SOLD (registration done)?")) return;
     setBusy(true);
     try {
       const r = await api.post(`/township-crm/units/${unitId}/complete-sale`, { note:"Registration done" });
@@ -1313,7 +1944,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
     setBusy(false);
   };
   const cancelBooking = async () => {
-    const reason = window.prompt("Cancel booking — reason:");
+    const reason = await window.promptAsync("Cancel booking — reason:");
     if (reason === null) return;
     setBusy(true);
     try {
@@ -1324,7 +1955,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
     setBusy(false);
   };
   const addNote = async () => {
-    const note = window.prompt("Add a note for this unit:");
+    const note = await window.promptAsync("Add a note for this unit:");
     if (!note) return;
     setBusy(true);
     try {
@@ -1896,7 +2527,7 @@ function ProspectDetailModal({ prospectId, onClose, onChanged }) {
   };
 
   const remove = async () => {
-    if (!window.confirm("Is prospect ko delete karna hai?")) return;
+    if (!await window.confirmAsync("Is prospect ko delete karna hai?")) return;
     setBusy(true);
     try {
       const res = await api.del(`/township-crm/prospects/${prospectId}`);
@@ -2055,7 +2686,7 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
   useEffect(() => { load(); }, [load]);
 
   const markSold = async () => {
-    if (!window.confirm("Mark this unit as SOLD?")) return;
+    if (!await window.confirmAsync("Mark this unit as SOLD?")) return;
     setBusy(true);
     try {
       const r = await api.post(`/township-crm/units/${unitId}/complete-sale`, { note:"Registration done" });
@@ -2065,7 +2696,7 @@ function BookingDetailModal({ booking, onClose, onChanged }) {
     setBusy(false);
   };
   const cancelBooking = async () => {
-    const reason = window.prompt("Cancel booking — reason:");
+    const reason = await window.promptAsync("Cancel booking — reason:");
     if (reason === null) return;
     setBusy(true);
     try {
@@ -2311,7 +2942,7 @@ function CustomizationDetailModal({ customization, onClose, onChanged }) {
     setBusy(false);
   };
   const remove = async () => {
-    if (!window.confirm("Delete this customization?")) return;
+    if (!await window.confirmAsync("Delete this customization?")) return;
     setBusy(true);
     try {
       const r = await api.del(`/township-crm/customizations/${c.id}`);

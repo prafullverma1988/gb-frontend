@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useMemo, useRef, useLayoutEffect } from "react";
 import { createPortal } from "react-dom";
 import TransactionDetailDrawer from "../components/TransactionDetailDrawer";
 import LibrarySelect from "../components/LibrarySelect";
@@ -1080,7 +1080,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       // bypasses the guard.
       if(res&&res.success===false&&res.code==="DUPLICATE_PAYMENT"){
         const prevDate=res.existing_date?String(res.existing_date).slice(0,10):"earlier";
-        const ok=window.confirm(
+        const ok=await window.confirmAsync(
           `⚠ Possible duplicate payment\n\n`+
           `Same vendor ko ₹${Number(res.existing_amount||amt).toLocaleString("en-IN")} ka payment ${prevDate} ko TXN-${res.existing_txn_id} me already entry ho chuka hai.\n`+
           `Window: ±${res.window_days||4} days\n\n`+
@@ -2378,12 +2378,253 @@ function ThreadMsg({admin,name,message,photo,when}){
   );
 }
 
+// ══════════════════════════════════════════════════════════════
+// CASH BOOK + DAY BOOK  (self-contained — Finance module owns its
+// own copy; nothing imported from Reports, per module-independence)
+// Mirrors the Reports cash/day book: date-wise receipts & payments,
+// running ledger balance, plus a per-day "Day Balance" (net in−out).
+// Negative balances render in red WITH a leading minus sign (fmtS).
+// ══════════════════════════════════════════════════════════════
+function CashDayBook({ txns }){
+  const [view,setView]   = useState("cashbook"); // cashbook | daybook
+  const [chip,setChip]   = useState("All");      // All | Receipts | Payments
+  const [fSite,setFSite] = useState("All");
+  const [fHead,setFHead] = useState("All");
+  const [fMOP,setFMOP]   = useState("All");
+  const [fAcc,setFAcc]   = useState("All");
+  const [fParty,setFParty]=useState("All");
+  const [search,setSearch]=useState("");
+  const [fFrom,setFFrom] = useState("");
+  const [fTo,setFTo]     = useState("");
+
+  const uniq=(arr)=>Array.from(new Set(arr.filter(Boolean))).sort();
+  const SITES  = useMemo(()=>uniq(txns.map(t=>t.project)),[txns]);
+  const HEADS  = useMemo(()=>uniq(txns.map(t=>t.type)),[txns]);
+  const MOPS   = useMemo(()=>uniq(txns.map(t=>t.mop)),[txns]);
+  const ACCTS  = useMemo(()=>uniq(txns.map(t=>t.account)),[txns]);
+  const PARTIES= useMemo(()=>uniq(txns.map(t=>t.party)),[txns]);
+
+  // date inputs ("2026-05-22") → numeric YYYYMMDD to compare against txn.ds
+  const toNum=(iso)=>iso?parseInt(iso.replace(/-/g,""),10):null;
+  const fromN=toNum(fFrom), toN=toNum(fTo);
+
+  const filtered=useMemo(()=>txns.filter(t=>{
+    if(fSite!=="All"&&t.project!==fSite) return false;
+    if(fHead!=="All"&&t.type!==fHead)    return false;
+    if(fMOP!=="All"&&t.mop!==fMOP)        return false;
+    if(fAcc!=="All"&&t.account!==fAcc)    return false;
+    if(fParty!=="All"&&t.party!==fParty)  return false;
+    if(chip==="Receipts"&&t.dr) return false;
+    if(chip==="Payments"&&!t.dr) return false;
+    if(fromN&&t.ds<fromN) return false;
+    if(toN&&t.ds>toN)     return false;
+    if(search){const q=search.toLowerCase(); if(!(t.sub||"").toLowerCase().includes(q)&&!(t.party||"").toLowerCase().includes(q)) return false;}
+    return true;
+  }).sort((a,b)=>(a.ds-b.ds)||((a.id||0)-(b.id||0))),
+  [txns,fSite,fHead,fMOP,fAcc,fParty,chip,fromN,toN,search]);
+
+  // Cash Book — running ledger balance row-by-row
+  let rb=0;
+  const withBal=filtered.map(t=>{rb+=t.dr?-t.amount:t.amount;return{...t,runBal:rb};});
+
+  // Day Book — group by day; per-day net + cumulative ledger
+  const daybook=useMemo(()=>{
+    const map={};
+    filtered.forEach(t=>{
+      if(!map[t.ds]) map[t.ds]={ds:t.ds,date:t.date,entries:[],rec:0,pay:0};
+      map[t.ds].entries.push(t);
+      if(t.dr) map[t.ds].pay+=t.amount; else map[t.ds].rec+=t.amount;
+    });
+    let r=0;
+    return Object.values(map).sort((a,b)=>a.ds-b.ds).map(d=>{r+=d.rec-d.pay;return{...d,runBal:r};});
+  },[filtered]);
+
+  const totalRec=filtered.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
+  const totalPay=filtered.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
+  const balance=totalRec-totalPay;
+
+  // ── Exports ──────────────────────────────────────────────────
+  const dlExcel=()=>{
+    if(view==="cashbook"){
+      downloadCSV(`CashBook_${fFrom||"all"}_${fTo||"all"}.csv`,[
+        ["Company — Cash Book"],[`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
+        ["Date","Party","Description","Account","Head","MOP","Receipt","Payment","Balance"],
+        ...withBal.map(e=>[e.date,e.party||"",e.sub,e.account,e.type,e.mop,!e.dr?e.amount:"",e.dr?e.amount:"",e.runBal]),
+        [],["","","","","","","TOTAL",totalRec,totalPay,balance],
+      ]);
+    }else{
+      downloadCSV(`DayBook_${fFrom||"all"}_${fTo||"all"}.csv`,[
+        ["Company — Day Book"],[`Generated: ${new Date().toLocaleDateString("en-IN")}`],[],
+        ["Date","Receipts","Payments","Day Balance","Ledger Balance","Entries"],
+        ...daybook.map(d=>[d.date,d.rec,d.pay,d.rec-d.pay,d.runBal,d.entries.map(e=>e.sub).join(" | ")]),
+        [],["TOTAL",totalRec,totalPay,balance,balance,""],
+      ]);
+    }
+  };
+  const printOut=()=>{
+    if(view==="cashbook"){
+      const rows=withBal.map(e=>`<tr><td>${e.date}</td><td style="font-weight:600">${e.party||"—"}</td><td>${e.sub||""}</td><td>${e.account||""}</td><td>${e.type||""}</td><td>${e.mop||""}</td><td class="r" style="color:#059669">${!e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="color:#DC2626">${e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="font-weight:700;color:${e.runBal>=0?"#2563EB":"#DC2626"}">${fmtS(e.runBal)}</td></tr>`).join("");
+      printHTML("Cash Book — Company",`<h2>Cash Book</h2><table><tr><th>Date</th><th>Party</th><th>Description</th><th>Account</th><th>Head</th><th>MOP</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Balance ₹</th></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="6" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${balance>=0?"#2563EB":"#DC2626"}">${fmtS(balance)}</td></tr></table>`);
+    }else{
+      const rows=daybook.map(d=>`<tr style="background:#F0F4FF;font-weight:700"><td>${d.date}</td><td>${d.entries.length} entr${d.entries.length>1?"ies":"y"}</td><td class="r" style="color:#059669">${d.rec>0?"₹"+fmtN(d.rec):"—"}</td><td class="r" style="color:#DC2626">${d.pay>0?"₹"+fmtN(d.pay):"—"}</td><td class="r" style="color:${(d.rec-d.pay)>=0?"#059669":"#DC2626"}">${fmtS(d.rec-d.pay)}</td><td class="r" style="color:${d.runBal>=0?"#2563EB":"#DC2626"}">${fmtS(d.runBal)}</td></tr>`+d.entries.map(e=>`<tr><td></td><td style="padding-left:20px">${e.sub||""}</td><td class="r" style="color:#059669">${!e.dr?"₹"+fmtN(e.amount):""}</td><td class="r" style="color:#DC2626">${e.dr?"₹"+fmtN(e.amount):""}</td><td></td><td></td></tr>`).join("")).join("");
+      printHTML("Day Book — Company",`<h2>Day Book</h2><table><tr><th>Date</th><th>Summary</th><th class="r">Receipt ₹</th><th class="r">Payment ₹</th><th class="r">Day Bal ₹</th><th class="r">Ledger Bal ₹</th></tr>${rows}<tr style="font-weight:800;background:#F1F5F9"><td colspan="2" style="text-align:right">TOTAL</td><td class="r" style="color:#059669">₹${fmtN(totalRec)}</td><td class="r" style="color:#DC2626">₹${fmtN(totalPay)}</td><td class="r" style="color:${balance>=0?"#059669":"#DC2626"}">${fmtS(balance)}</td><td class="r" style="color:${balance>=0?"#2563EB":"#DC2626"}">${fmtS(balance)}</td></tr></table>`);
+    }
+  };
+
+  const HEAD_BG="#1E293B";
+  const selStyle={height:30,padding:"0 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"};
+  const CB_COLS="70px 120px 1fr 95px 100px 78px 90px 90px 100px";
+  const DB_COLS="85px 110px 1fr 150px 90px 90px 95px 105px";
+  const chips=[["All","All"],["Receipts","Receipts"],["Payments","Payments"]];
+
+  return(
+    <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
+      {/* Toolbar */}
+      <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"9px 11px",marginBottom:8,flexShrink:0}}>
+        {/* Row 1: view toggle + date range + search */}
+        <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
+          <div style={{display:"flex",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3,gap:2}}>
+            {[["cashbook","Cash Book"],["daybook","Day Book"]].map(([id,l])=>(
+              <button key={id} onClick={()=>setView(id)}
+                style={{padding:"5px 13px",borderRadius:5,border:"none",background:view===id?T.blu:"none",color:view===id?"white":T.t3,fontSize:12,fontWeight:view===id?700:500,cursor:"pointer"}}>{l}</button>
+            ))}
+          </div>
+          <input type="date" value={fFrom} onChange={e=>setFFrom(e.target.value)} style={{...selStyle,width:130}}/>
+          <span style={{fontSize:11,color:T.t4}}>to</span>
+          <input type="date" value={fTo} onChange={e=>setFTo(e.target.value)} style={{...selStyle,width:130}}/>
+          <div style={{position:"relative",flex:1,minWidth:150}}>
+            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={12} color={T.t4}/></span>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search description or party..."
+              style={{...selStyle,width:"100%",paddingLeft:25,boxSizing:"border-box"}}/>
+          </div>
+          <div style={{marginLeft:"auto",display:"flex",gap:6}}>
+            <button onClick={dlExcel} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
+            <button onClick={printOut} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF / Print</button>
+          </div>
+        </div>
+        {/* Row 2: in/out chips + dropdown filters */}
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+          {chips.map(([id,l])=>{const on=chip===id;const col=id==="Receipts"?T.grn:id==="Payments"?T.red:T.slt;return(
+            <button key={id} onClick={()=>setChip(id)}
+              style={{padding:"4px 12px",borderRadius:20,border:`1.5px solid ${on?col:T.b1}`,background:on?(id==="Receipts"?T.grnL:id==="Payments"?T.redL:T.sltL):T.surfaceB,color:on?col:T.t3,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer"}}>{l}</button>
+          );})}
+          <div style={{width:1,height:20,background:T.b1,margin:"0 3px"}}/>
+          <select value={fSite}  onChange={e=>setFSite(e.target.value)}  style={{...selStyle,borderColor:fSite!=="All"?T.blu:T.b1,background:fSite!=="All"?T.bluL:T.surface,color:fSite!=="All"?T.blu:T.t2}}><option value="All">All Sites</option>{SITES.map(s=><option key={s}>{s}</option>)}</select>
+          <select value={fHead}  onChange={e=>setFHead(e.target.value)}  style={{...selStyle,borderColor:fHead!=="All"?T.blu:T.b1,background:fHead!=="All"?T.bluL:T.surface,color:fHead!=="All"?T.blu:T.t2}}><option value="All">All Heads</option>{HEADS.map(h=><option key={h}>{h}</option>)}</select>
+          <select value={fMOP}   onChange={e=>setFMOP(e.target.value)}   style={{...selStyle,borderColor:fMOP!=="All"?T.blu:T.b1,background:fMOP!=="All"?T.bluL:T.surface,color:fMOP!=="All"?T.blu:T.t2}}><option value="All">All MOP</option>{MOPS.map(m=><option key={m}>{m}</option>)}</select>
+          <select value={fAcc}   onChange={e=>setFAcc(e.target.value)}   style={{...selStyle,borderColor:fAcc!=="All"?T.blu:T.b1,background:fAcc!=="All"?T.bluL:T.surface,color:fAcc!=="All"?T.blu:T.t2}}><option value="All">All Accounts</option>{ACCTS.map(a=><option key={a}>{a}</option>)}</select>
+          <select value={fParty} onChange={e=>setFParty(e.target.value)} style={{...selStyle,borderColor:fParty!=="All"?T.pur:T.b1,background:fParty!=="All"?T.purL:T.surface,color:fParty!=="All"?T.pur:T.t2}}><option value="All">All Parties</option>{PARTIES.map(p=><option key={p}>{p}</option>)}</select>
+          {(fSite!=="All"||fHead!=="All"||fMOP!=="All"||fAcc!=="All"||fParty!=="All"||chip!=="All"||search||fFrom||fTo)&&(
+            <button onClick={()=>{setFSite("All");setFHead("All");setFMOP("All");setFAcc("All");setFParty("All");setChip("All");setSearch("");setFFrom("");setFTo("");}}
+              style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer"}}>Clear</button>
+          )}
+        </div>
+      </div>
+
+      {/* ── CASH BOOK ── */}
+      {view==="cashbook"&&(
+        <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+          <div style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"8px 14px",background:HEAD_BG,flexShrink:0,gap:6}}>
+            {["Date","Party","Description","Account","Head","MOP","Receipt ₹","Payment ₹","Balance ₹"].map((h,i)=>(
+              <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i>=6?"right":"left"}}>{h}</span>
+            ))}
+          </div>
+          <div style={{flex:1,overflowY:"auto"}}>
+            {withBal.map((e,i)=>(
+              <div key={e.id||i} style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"8px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:T.surfaceB,borderLeft:`3px solid ${!e.dr?T.grn:T.red}55`}}>
+                <span style={{fontSize:11,color:T.t4,fontWeight:500,whiteSpace:"nowrap"}}>{e.date}</span>
+                <span style={{fontSize:11.5,color:T.pur,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.party||"—"}</span>
+                <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.sub||"—"}</span>
+                <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.account||"—"}</span>
+                <span style={{fontSize:10.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.type||"—"}</span>
+                <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.mop||"—"}</span>
+                <span style={{fontSize:12.5,fontWeight:!e.dr?700:400,color:!e.dr?T.grn:T.t4,textAlign:"right"}}>{!e.dr?"₹"+fmtN(e.amount):"—"}</span>
+                <span style={{fontSize:12.5,fontWeight:e.dr?700:400,color:e.dr?T.red:T.t4,textAlign:"right"}}>{e.dr?"₹"+fmtN(e.amount):"—"}</span>
+                <span style={{fontSize:12,fontWeight:700,color:e.runBal>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(e.runBal)}</span>
+              </div>
+            ))}
+            {filtered.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No cash entries for these filters</div>}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:CB_COLS,padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
+            <span style={{gridColumn:"1/6",fontSize:12.5,fontWeight:700,color:T.t1}}>TOTAL ({filtered.length} entries)</span>
+            <span/>
+            <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(totalRec)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(totalPay)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
+          </div>
+        </div>
+      )}
+
+      {/* ── DAY BOOK ── */}
+      {view==="daybook"&&(
+        <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
+          <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"8px 14px",background:HEAD_BG,flexShrink:0,gap:6}}>
+            {["Date","Party","Description","Account · MOP","Receipt ₹","Payment ₹","Day Bal ₹","Ledger Bal ₹"].map((h,i)=>(
+              <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:".3px",textAlign:i>=4?"right":"left"}}>{h}</span>
+            ))}
+          </div>
+          <div style={{flex:1,overflowY:"auto"}}>
+            {daybook.map((day,di)=>(
+              <div key={day.ds}>
+                <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"8px 14px",gap:6,background:di%2===0?"#F0F4FF":"#E8F5E9",borderBottom:`1px solid ${T.b1}`,borderLeft:`4px solid ${T.blu}`}}>
+                  <span style={{fontSize:12,fontWeight:800,color:T.t1}}>{day.date}</span>
+                  <span/>
+                  <span style={{fontSize:11.5,fontWeight:600,color:T.t2}}>{day.entries.length} entr{day.entries.length>1?"ies":"y"}</span>
+                  <span/>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.grn,textAlign:"right"}}>{day.rec>0?"₹"+fmtN(day.rec):"—"}</span>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.red,textAlign:"right"}}>{day.pay>0?"₹"+fmtN(day.pay):"—"}</span>
+                  <span style={{fontSize:12.5,fontWeight:800,color:(day.rec-day.pay)>=0?T.grn:T.red,textAlign:"right"}}>{fmtS(day.rec-day.pay)}</span>
+                  <span style={{fontSize:12.5,fontWeight:800,color:day.runBal>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(day.runBal)}</span>
+                </div>
+                {day.entries.map((e,i)=>(
+                  <div key={e.id||i} style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"6px 14px 6px 28px",gap:6,borderBottom:`1px solid ${T.b1}`,background:i%2===0?T.surface:T.surfaceB,alignItems:"center"}}>
+                    <span style={{fontSize:10,color:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.type}</span>
+                    <span style={{fontSize:11,color:T.pur,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.party||"—"}</span>
+                    <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.sub||"—"}</span>
+                    <span style={{fontSize:10.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.account||"—"} · {e.mop||"—"}</span>
+                    <span style={{fontSize:11.5,color:!e.dr?T.grn:T.t4,textAlign:"right"}}>{!e.dr?"₹"+fmtN(e.amount):"—"}</span>
+                    <span style={{fontSize:11.5,color:e.dr?T.red:T.t4,textAlign:"right"}}>{e.dr?"₹"+fmtN(e.amount):"—"}</span>
+                    <span/>
+                    <span/>
+                  </div>
+                ))}
+              </div>
+            ))}
+            {daybook.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No cash entries for these filters</div>}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:DB_COLS,padding:"9px 14px",gap:6,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0}}>
+            <span style={{fontSize:12,fontWeight:700,color:T.t1}}>TOTAL</span>
+            <span/>
+            <span style={{fontSize:11.5,color:T.t3}}>{daybook.length} days · {filtered.length} entries</span>
+            <span/>
+            <span style={{fontSize:13,fontWeight:800,color:T.grn,textAlign:"right"}}>₹{fmtN(totalRec)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:T.red,textAlign:"right"}}>₹{fmtN(totalPay)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.grn:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red,textAlign:"right"}}>{fmtS(balance)}</span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function FinanceModule(){
   const [tab,setTab]=useState("party");
+  // Animated sliding indicator for the group-toggle (Level-1 nav)
+  const groupBarRef=useRef(null);
+  const [grpInd,setGrpInd]=useState({left:0,width:0});
   // Party tab
   const [masterParties,setMasterParties]=useState(PARTIES);
   const [showAddParty,setShowAddParty]=useState(false);
   const [selParty,setSelParty]=useState(null);const [partySearch,setPartySearch]=useState("");const [selBill,setSelBill]=useState(null);
+  // Party-ledger detail filters (search + date range + project + type)
+  const [ledgerSearch,setLedgerSearch]=useState("");
+  const [ledgerType,setLedgerType]=useState("All");
+  const [ledgerProj,setLedgerProj]=useState("All");
+  const [ledgerFrom,setLedgerFrom]=useState("");
+  const [ledgerTo,setLedgerTo]=useState("");
+  // Reset ledger filters whenever a different party is opened
+  useEffect(()=>{setLedgerSearch("");setLedgerType("All");setLedgerProj("All");setLedgerFrom("");setLedgerTo("");},[selParty?.id]);
   const [apiLedger,setApiLedger]=useState({});
   // Transaction tab
   const [txnSearch,setTxnSearch]=useState("");const [fProject,setFProject]=useState("All");const [fType,setFType]=useState("All");const [fAcc,setFAcc]=useState("All");const [fStatus,setFStatus]=useState("All");
@@ -2512,7 +2753,6 @@ function FinanceModule(){
   // Filter chips (one per tab)
   const [chipParty,setChipParty]=useState("All");
   const [chipTxn,setChipTxn]=useState("All");
-  const [chipCB,setChipCB]=useState("All");
   const [chipPR,setChipPR]=useState("All");
   const [chipPend,setChipPend]=useState("All");
   // Universal search — single box, matches ANY column value (no, type, party, amount, priority, date, status...)
@@ -2884,11 +3124,7 @@ function FinanceModule(){
   const cbTxnsBase=activeTxns.length>0
     ? activeTxns.filter(isCashEvent)
     : TRANSACTIONS_DATA.filter(isCashEvent);
-  const cbTxns=cbTxnsBase.filter(t=>{
-    if(chipCB==="Receipts") return !t.dr;
-    if(chipCB==="Payments") return t.dr;
-    return true;
-  });
+  const cbTxns=cbTxnsBase;
   const cbIn=cbTxns.filter(t=>!t.dr).reduce((s,t)=>s+t.amount,0);
   const cbOut=cbTxns.filter(t=>t.dr).reduce((s,t)=>s+t.amount,0);
 
@@ -3139,7 +3375,7 @@ function FinanceModule(){
   // Share invoice — copies a summary to clipboard, falls back to
   // window.prompt so user can copy manually. WhatsApp link opens a
   // pre-filled chat (uses wa.me URL scheme).
-  const shareInvoice = (ledgerRow, partyName, mode) => {
+  const shareInvoice = async (ledgerRow, partyName, mode) => {
     if (!ledgerRow?.refId) return;
     const amt = (ledgerRow.amount||0).toLocaleString("en-IN");
     const msg = `Invoice ${ledgerRow.invoiceNo||""}
@@ -3156,10 +3392,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
     if (navigator.clipboard?.writeText) {
       navigator.clipboard.writeText(msg).then(
         () => window.alert("Invoice details copied to clipboard"),
-        () => window.prompt("Copy invoice details:", msg)
+        async () => await window.promptAsync("Copy invoice details:", msg)
       );
     } else {
-      window.prompt("Copy invoice details:", msg);
+      await window.promptAsync("Copy invoice details:", msg);
     }
   };
 
@@ -3230,7 +3466,42 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
   // NOTE: "Wallet Approvals" tab moved to the central Pending Approvals drawer
   // (Finance column). Wallet approvals are no longer a Finance sub-tab.
-  const TABS=[{id:"party",l:"Party Ledger"},{id:"transaction",l:"Fin Activity"},{id:"cashbook",l:"Cash Book"},{id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},{id:"pending",l:"Pending Payments"},{id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},{id:"unbilled_grn",l:"Unbilled GRN"},{id:"billed_mat",l:"Billed Material"}];
+  // Tabs grouped into 3 logical sections (+ Equipment as its own group):
+  //  A Ledgers & Cash · B Payments · C Materials · Equipment
+  const TAB_GROUPS=[
+    {key:"ledgers",label:"Ledgers & Cash",tabs:[
+      {id:"party",l:"Party Ledger"},
+      {id:"transaction",l:"Fin Activity"},
+      {id:"cashbook",l:"Cash Book / Day Book"},
+    ]},
+    {key:"payments",label:"Payments",tabs:[
+      {id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},
+      {id:"pending",l:"Pending Payments"},
+    ]},
+    {key:"materials",label:"Materials",tabs:[
+      {id:"unbilled_grn",l:"Unbilled GRN"},
+      {id:"billed_mat",l:"Billed Material"},
+    ]},
+    {key:"equipment",label:"Equipment",tabs:[
+      {id:"equipment_review",l:`Equipment Review${equipReviewCount>0?` (${equipReviewCount})`:""}`},
+    ]},
+  ];
+  const TABS=TAB_GROUPS.flatMap(g=>g.tabs);
+  // Which group is currently open (derived from the active tab)
+  const activeGroup=TAB_GROUPS.find(g=>g.tabs.some(t=>t.id===tab))||TAB_GROUPS[0];
+  // Measure the active group's button and slide the white indicator to it.
+  // useLayoutEffect → positions before paint (no flicker). Re-runs on group
+  // change; a resize listener keeps it aligned when the bar reflows.
+  const measureGrp=()=>{
+    const bar=groupBarRef.current; if(!bar) return;
+    const el=bar.querySelector(`[data-grp="${activeGroup.key}"]`);
+    if(el) setGrpInd({left:el.offsetLeft,width:el.offsetWidth});
+  };
+  useLayoutEffect(measureGrp,[activeGroup.key]);
+  useEffect(()=>{
+    window.addEventListener("resize",measureGrp);
+    return()=>window.removeEventListener("resize",measureGrp);
+  },[activeGroup.key]);
 
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
@@ -3253,16 +3524,22 @@ Status: ${ledgerRow.status||"unpaid"}`;
         </div>
       </div>
 
-      {/* ── Tab bar ── */}
+      {/* ── Tab bar — 2-level: group toggle + sub-tabs ── */}
       <div style={{margin:"8px 18px 0",flexShrink:0}}>
-        <div style={{background:"#F1F5F9",borderRadius:10,padding:"4px",display:"flex",alignItems:"center",gap:4}}>
-          <div style={{display:"flex",flex:1,overflowX:"auto",gap:2}}>
-            {TABS.map(t=>(
-              <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{padding:"8px 14px",border:"none",background:tab===t.id?"#FFFFFF":"none",fontSize:12.5,fontWeight:tab===t.id?600:500,color:tab===t.id?"#0F172A":"#64748B",cursor:"pointer",borderRadius:6,boxShadow:tab===t.id?"0 2px 6px rgba(0,0,0,0.05)":"none",transition:"all 0.15s",whiteSpace:"nowrap"}}>
-                {t.l}
-              </button>
-            ))}
+        {/* Level 1: group toggle (segmented) + right-side actions */}
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div ref={groupBarRef} style={{background:"#F1F5F9",borderRadius:10,padding:"4px",display:"flex",gap:3,flex:1,overflowX:"auto",position:"relative"}}>
+            {/* Sliding white indicator — glides under the active group */}
+            <div style={{position:"absolute",top:4,left:grpInd.left,width:grpInd.width,height:"calc(100% - 8px)",background:"#FFFFFF",borderRadius:7,boxShadow:"0 2px 6px rgba(0,0,0,0.10)",transition:"left .3s cubic-bezier(.4,0,.2,1), width .3s cubic-bezier(.4,0,.2,1)",zIndex:0,pointerEvents:"none",willChange:"left,width"}}/>
+            {TAB_GROUPS.map(g=>{
+              const on=activeGroup.key===g.key;
+              return(
+                <button key={g.key} data-grp={g.key} onClick={()=>setTab(g.tabs[0].id)}
+                  style={{position:"relative",zIndex:1,padding:"8px 18px",border:"none",background:"none",fontSize:12.5,fontWeight:on?700:500,color:on?"#0F172A":"#64748B",cursor:"pointer",borderRadius:7,transition:"color .2s",whiteSpace:"nowrap"}}>
+                  {g.label}
+                </button>
+              );
+            })}
           </div>
           <div style={{display:"flex",gap:6,padding:"2px 0",alignItems:"center",flexShrink:0}}>
             {/* Manual refresh */}
@@ -3380,16 +3657,25 @@ Status: ${ledgerRow.status||"unpaid"}`;
             </div>
           </div>
         </div>
+        {/* Level 2: sub-tabs of the active group — light underline style */}
+        <div key={activeGroup.key} style={{display:"flex",gap:24,marginTop:6,borderBottom:`1px solid ${T.b1}`,animation:"fadeSlideIn .26s ease"}}>
+          {activeGroup.tabs.map(t=>{
+            const on=tab===t.id;
+            return(
+              <button key={t.id} onClick={()=>setTab(t.id)}
+                style={{padding:"0 2px 9px",border:"none",background:"none",borderBottom:`2px solid ${on?T.blu:"transparent"}`,marginBottom:-1,color:on?T.t1:T.t3,fontSize:13,fontWeight:on?700:500,cursor:"pointer",transition:"color .15s",whiteSpace:"nowrap"}}>
+                {t.l}
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* ── Filter Bar ── */}
       {(()=>{
         const FILTER_CONFIGS={
-          party:{
-            chips:["All","Client","Vendor","Labour","Sub-Con","Material Supplier"],
-            active:chipParty, set:setChipParty,
-            colors:{"Client":{c:T.grn,bg:T.grnL},"Vendor":{c:T.amb,bg:T.ambL},"Labour":{c:T.blu,bg:T.bluL},"Sub-Con":{c:T.slt,bg:T.sltL},"Material Supplier":{c:T.pur,bg:T.purL}},
-          },
+          // 'party' removed — its type filter now lives as a compact dropdown
+          // inside the Parties panel header (cleaner, frees a full row).
           transaction:{
             // "Wallet Payment" / "Wallet Top-up" chips removed — the wallets
             // route inserts as type='party_payment' or 'site_expense', so no
@@ -3400,11 +3686,6 @@ Status: ${ledgerRow.status||"unpaid"}`;
             chips:["All","Payment In","Payment Out","Material","Site Expense","Sub-Con","Party Payment","Unpaid"],
             active:chipTxn, set:setChipTxn,
             colors:{"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Sub-Con":{c:T.slt,bg:T.sltL},"Party Payment":{c:T.pur,bg:T.purL},"Unpaid":{c:T.red,bg:T.redL}},
-          },
-          cashbook:{
-            chips:["All","Receipts","Payments"],
-            active:chipCB, set:setChipCB,
-            colors:{"Receipts":{c:T.grn,bg:T.grnL},"Payments":{c:T.red,bg:T.redL}},
           },
           payreq:{
             chips:["All","Pending","Approved","Rejected"],
@@ -3470,21 +3751,30 @@ Status: ${ledgerRow.status||"unpaid"}`;
         {tab==="party"&&(
           <div style={{display:"flex",gap:12,flex:1,overflow:"hidden"}}>
             <div style={{width:selParty?290:420,flexShrink:0,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width 0.2s",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-              <div style={{padding:"9px 12px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,alignItems:"center",flexShrink:0}}>
-                <span style={{fontSize:12,fontWeight:700,color:T.t1,flex:1}}>Parties</span>
-                <div style={{position:"relative",flex:1}}>
-                  <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                  <input value={partySearch} onChange={e=>setPartySearch(e.target.value)} placeholder="Search..."
-                    style={{width:"100%",height:28,padding:"0 8px 0 26px",borderRadius:6,border:`1.5px solid ${partySearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:partySearch?T.bluL:T.surfaceB}}/>
+              <div style={{padding:"10px 12px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,flexShrink:0}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                  <span style={{fontSize:13,fontWeight:700,color:T.t1,flex:1}}>Parties <span style={{fontSize:11,color:T.t4,fontWeight:500}}>· {filteredParties.length}</span></span>
+                  <button onClick={()=>setShowAddParty(true)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
+                    <IcAdd size={12} color="white"/> Party
+                  </button>
                 </div>
-                <button onClick={()=>setShowAddParty(true)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:11,fontWeight:700,display:"flex",alignItems:"center",gap:3,flexShrink:0}}>
-                  <IcAdd size={12} color="white"/> Party
-                </button>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  <div style={{position:"relative",flex:1}}>
+                    <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                    <input value={partySearch} onChange={e=>setPartySearch(e.target.value)} placeholder="Search parties..."
+                      style={{width:"100%",height:30,padding:"0 8px 0 26px",borderRadius:6,border:`1.5px solid ${partySearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:partySearch?T.bluL:T.surface}}/>
+                  </div>
+                  <select value={chipParty} onChange={e=>setChipParty(e.target.value)} title="Filter by type"
+                    style={{height:30,padding:"0 7px",borderRadius:6,border:`1.5px solid ${chipParty!=="All"?T.blu:T.b1}`,fontSize:11.5,color:chipParty!=="All"?T.blu:T.t2,background:chipParty!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",flexShrink:0}}>
+                    {["All","Client","Vendor","Labour","Sub-Con","Material Supplier"].map(o=><option key={o} value={o}>{o==="All"?"All types":o}</option>)}
+                  </select>
+                </div>
               </div>
               <div style={{flex:1,overflowY:"auto"}}>
                 {filteredParties.filter(p=>!partySearch||p.name.toLowerCase().includes(partySearch.toLowerCase())).map(p=>{
                   const isS=selParty?.id===p.id;
                   const tc=p.type==="Client"?T.grn:p.type==="Material Supplier"?T.blu:p.type==="Sub-Con"?T.slt:T.amb;
+                  const initials=(p.name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase()||"?";
                   return(
                     <div key={p.id} onClick={async()=>{
                       setSelParty(p);setSelBill(null);
@@ -3527,13 +3817,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       style={{padding:"10px 13px",cursor:"pointer",borderBottom:`1px solid ${T.b1}`,background:isS?T.bluL:"none",borderLeft:isS?`3px solid ${T.blu}`:"3px solid transparent",transition:"all 0.12s"}}
                       onMouseEnter={e=>{if(!isS)e.currentTarget.style.background=T.surfaceB;}}
                       onMouseLeave={e=>{if(!isS)e.currentTarget.style.background="none";}}>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                        <div style={{fontSize:12.5,fontWeight:600,color:isS?T.blu:T.t1}}>{p.name}</div>
-                        <div style={{fontSize:12.5,fontWeight:700,color:["To Pay","Advance Received"].includes(p.balType)?T.red:T.grn}}>₹{fmt(p.balance)}</div>
-                      </div>
-                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                        <span style={{background:tc+"18",color:tc,fontSize:9.5,fontWeight:600,padding:"1px 7px",borderRadius:20,border:`1px solid ${tc}22`}}>{p.type}</span>
-                        <span style={{fontSize:10,color:T.t4}}>{p.balType}</span>
+                      <div style={{display:"flex",alignItems:"center",gap:10}}>
+                        <div style={{width:34,height:34,borderRadius:"50%",background:tc+"1A",color:tc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{initials}</div>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:12.5,fontWeight:600,color:isS?T.blu:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
+                          <span style={{display:"inline-block",marginTop:3,background:tc+"18",color:tc,fontSize:9.5,fontWeight:600,padding:"1px 7px",borderRadius:20,border:`1px solid ${tc}22`}}>{p.type}</span>
+                        </div>
+                        <div style={{textAlign:"right",flexShrink:0}}>
+                          <div style={{fontSize:12.5,fontWeight:700,color:["To Pay","Advance Received"].includes(p.balType)?T.red:T.grn}}>₹{fmt(p.balance)}</div>
+                          <div style={{fontSize:10,color:T.t4}}>{p.balType}</div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -3542,6 +3835,27 @@ Status: ${ledgerRow.status||"unpaid"}`;
             </div>
             {selParty&&(()=>{
               const ledgerRows=getLedgerRows(selParty);
+              // ── Ledger filters: type / project options + search/date/type/project ──
+              // Each row keeps its TRUE running balance (computed on the full,
+              // chronological ledger) — filtering only hides rows, so the
+              // Balance column and Closing Balance stay accounting-correct.
+              const LEDGER_TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
+              const labelOf=(txn)=>LEDGER_TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
+              const projOf=(txn)=>txn.project||txn.project_name||"";
+              const ledgerTypeOpts=Array.from(new Set(ledgerRows.map(labelOf))).sort();
+              const ledgerProjOpts=Array.from(new Set(ledgerRows.map(projOf).filter(Boolean))).sort();
+              const lq=ledgerSearch.trim().toLowerCase();
+              const fromT=ledgerFrom?new Date(ledgerFrom).getTime():null;
+              const toT=ledgerTo?new Date(ledgerTo+"T23:59:59").getTime():null;
+              const ledgerFiltered=!!(lq||ledgerType!=="All"||ledgerProj!=="All"||ledgerFrom||ledgerTo);
+              const viewRows=ledgerRows.filter(txn=>{
+                if(ledgerType!=="All"&&labelOf(txn)!==ledgerType) return false;
+                if(ledgerProj!=="All"&&projOf(txn)!==ledgerProj) return false;
+                if(fromT||toT){const d=new Date(txn.dateRaw||txn.date).getTime(); if(!isNaN(d)){ if(fromT&&d<fromT) return false; if(toT&&d>toT) return false; }}
+                if(lq){const hay=[txn.date,projOf(txn),txn.note,labelOf(txn),String(txn.amount||""),fmtN(txn.amount||0)].join(" ").toLowerCase(); if(!hay.includes(lq)) return false;}
+                return true;
+              });
+              const clearLedgerFilters=()=>{setLedgerSearch("");setLedgerType("All");setLedgerProj("All");setLedgerFrom("");setLedgerTo("");};
               const totalCR=ledgerRows.reduce((s,r)=>s+(!r.dr?r.amount:0),0);
               const totalDR=ledgerRows.reduce((s,r)=>s+(r.dr?r.amount:0),0);
               // Compute balance from ledger rows (more accurate than opening_balance)
@@ -3557,17 +3871,70 @@ Status: ${ledgerRow.status||"unpaid"}`;
               const chipC=computedBalType==="To Pay"?{bg:T.redL,fg:T.red,br:T.redM}
                          :computedBalType==="To Receive"?{bg:T.ambL,fg:T.amb,br:T.ambM}
                          :{bg:T.grnL,fg:T.grn,br:T.grnM};
+              const dInitials=(selParty.name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase()||"?";
+              const dTc=selParty.type==="Client"?T.grn:selParty.type==="Material Supplier"?T.blu:selParty.type==="Sub-Con"?T.slt:T.amb;
               return(
                 <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
-                  <div style={{padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
-                    <div style={{flex:1}}><div style={{fontSize:13,fontWeight:700,color:T.t1}}>{selParty.name}</div><div style={{fontSize:10.5,color:T.t4}}>{selParty.type}</div></div>
-                    <span style={{background:chipC.bg,color:chipC.fg,fontSize:10,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {computedBalType}</span>
-                    <span style={{background:T.grnL,color:T.grn,fontSize:10,fontWeight:600,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.grnM}`}}>CR ₹{fmtN(totalCR)}</span>
-                    <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:600,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.redM}`}}>DR ₹{fmtN(totalDR)}</span>
-                    <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:27,padding:"0 9px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
-                    <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:27,padding:"0 9px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
-                    <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={15}/></button>
+                  {/* Header: avatar · name/type · export · close */}
+                  <div style={{padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",gap:11,flexShrink:0}}>
+                    <div style={{width:38,height:38,borderRadius:"50%",background:dTc+"1A",color:dTc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{dInitials}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selParty.name}</div>
+                      <div style={{fontSize:11,color:T.t4}}>{selParty.type} · {ledgerRows.length} transactions</div>
+                    </div>
+                    <span style={{background:chipC.bg,color:chipC.fg,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:8,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {computedBalType}</span>
+                    <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
+                    <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
+                    <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={16}/></button>
                   </div>
+                  {/* Summary cards: Credit · Debit · Balance */}
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,padding:"12px 14px",borderBottom:`1px solid ${T.b1}`,flexShrink:0}}>
+                    <div style={{background:T.grnL,borderRadius:8,padding:"9px 12px",border:`1px solid ${T.grnM}`}}>
+                      <div style={{fontSize:10.5,color:T.grn,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Total credit</div>
+                      <div style={{fontSize:17,fontWeight:800,color:T.grn,marginTop:2}}>₹{fmtN(totalCR)}</div>
+                    </div>
+                    <div style={{background:T.redL,borderRadius:8,padding:"9px 12px",border:`1px solid ${T.redM}`}}>
+                      <div style={{fontSize:10.5,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Total debit</div>
+                      <div style={{fontSize:17,fontWeight:800,color:T.red,marginTop:2}}>₹{fmtN(totalDR)}</div>
+                    </div>
+                    <div style={{background:chipC.bg,borderRadius:8,padding:"9px 12px",border:`1px solid ${chipC.br}`}}>
+                      <div style={{fontSize:10.5,color:chipC.fg,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{computedBalType}</div>
+                      <div style={{fontSize:17,fontWeight:800,color:chipC.fg,marginTop:2}}>₹{fmtN(computedBal)}</div>
+                    </div>
+                  </div>
+                  {/* ── Compact filter toolbar: search · date range · project · type ── */}
+                  <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",background:T.surface,borderBottom:`1px solid ${T.b1}`,flexShrink:0,flexWrap:"wrap"}}>
+                    <div style={{position:"relative",flex:1,minWidth:150}}>
+                      <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={12} color={T.t4}/></span>
+                      <input value={ledgerSearch} onChange={e=>setLedgerSearch(e.target.value)} placeholder="Search date, note, type or amount…"
+                        style={{width:"100%",height:28,padding:"0 8px 0 25px",borderRadius:6,border:`1.5px solid ${ledgerSearch?T.blu:T.b1}`,fontSize:11.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:ledgerSearch?T.bluL:T.surface}}/>
+                    </div>
+                    <input type="date" value={ledgerFrom} onChange={e=>setLedgerFrom(e.target.value)} title="From date"
+                      style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerFrom?T.blu:T.b1}`,fontSize:11,color:T.t2,background:ledgerFrom?T.bluL:T.surface,outline:"none",fontFamily:"inherit"}}/>
+                    <span style={{fontSize:10.5,color:T.t4}}>–</span>
+                    <input type="date" value={ledgerTo} onChange={e=>setLedgerTo(e.target.value)} title="To date"
+                      style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerTo?T.blu:T.b1}`,fontSize:11,color:T.t2,background:ledgerTo?T.bluL:T.surface,outline:"none",fontFamily:"inherit"}}/>
+                    <select value={ledgerProj} onChange={e=>setLedgerProj(e.target.value)}
+                      style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerProj!=="All"?T.blu:T.b1}`,fontSize:11,color:ledgerProj!=="All"?T.blu:T.t2,background:ledgerProj!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",maxWidth:120}}>
+                      <option value="All">All Projects</option>{ledgerProjOpts.map(p=><option key={p}>{p}</option>)}
+                    </select>
+                    <select value={ledgerType} onChange={e=>setLedgerType(e.target.value)}
+                      style={{height:28,padding:"0 7px",borderRadius:6,border:`1.5px solid ${ledgerType!=="All"?T.blu:T.b1}`,fontSize:11,color:ledgerType!=="All"?T.blu:T.t2,background:ledgerType!=="All"?T.bluL:T.surface,outline:"none",cursor:"pointer",fontFamily:"inherit",maxWidth:130}}>
+                      <option value="All">All Types</option>{ledgerTypeOpts.map(tp=><option key={tp}>{tp}</option>)}
+                    </select>
+                    {ledgerFiltered&&(
+                      <button onClick={clearLedgerFilters} title="Clear filters"
+                        style={{height:28,padding:"0 8px",borderRadius:6,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:3,fontFamily:"inherit"}}>
+                        <IcX size={10} color="currentColor"/> Clear
+                      </button>
+                    )}
+                  </div>
+                  {/* Result count strip — only while filtering, so nothing looks "missing" */}
+                  {ledgerFiltered&&(
+                    <div style={{padding:"4px 14px",background:T.bluL,borderBottom:`1px solid ${T.b1}`,fontSize:10.5,color:T.blu,fontWeight:600,flexShrink:0}}>
+                      Showing {viewRows.length} of {ledgerRows.length} entries
+                    </div>
+                  )}
                   {/* Clean 7-col ledger: Date | Project | Note | Type | CR | DR | Balance
                       Matches the project-level Party tab for visual consistency. */}
                   <div style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0,gap:4}}>
@@ -3577,8 +3944,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   </div>
                   <div style={{flex:1,overflowY:"auto"}}>
                     {ledgerRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No transactions recorded</div>}
-                    {/* Opening balance row — uses party.opening_balance if set, else 0 */}
-                    {ledgerRows.length>0 && (()=>{
+                    {ledgerRows.length>0&&viewRows.length===0&&<div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>No entries match these filters</div>}
+                    {/* Opening balance row — only on the full, unfiltered ledger */}
+                    {ledgerRows.length>0 && !ledgerFiltered && (()=>{
                       const ob = parseFloat(selParty.opening_balance||0);
                       const obAbs = Math.abs(ob);
                       const obSfx = ob===0 ? "" : (isVendorPty ? (ob>0?"Cr":"Dr") : (ob>0?"Dr":"Cr"));
@@ -3596,7 +3964,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         </div>
                       );
                     })()}
-                    {ledgerRows.map(txn=>(
+                    {viewRows.map(txn=>(
                       <div key={txn.id}>
                         {(()=>{
                           const isBillType=["material_purchase","site_expense","subcon_expense","Material Purchase","Site Expense","Sub-Con Expense"].includes(txn.txnType||txn.type||"");
@@ -3906,6 +4274,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
           </div>
         )}
 
+        {/* CASH BOOK + DAY BOOK TAB */}
+        {tab==="cashbook"&&(
+          <CashDayBook txns={cbTxnsBase}/>
+        )}
+
         {/* PAYMENT REQUESTS TAB */}
         {tab==="payreq"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
@@ -4209,7 +4582,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         const refresh = ()=>{ refreshPayReqs(); refreshPendPmts(); };
                         const onExtend = async ()=>{
                           const cur = pmt.dueDateRaw ? new Date(pmt.dueDateRaw).toISOString().slice(0,10) : new Date().toISOString().slice(0,10);
-                          const newDate = window.prompt(`Extend ${pmt.no} due date — enter new YYYY-MM-DD`, cur);
+                          const newDate = await window.promptAsync(`Extend ${pmt.no} due date — enter new YYYY-MM-DD`, cur);
                           if (!newDate || !/^\d{4}-\d{2}-\d{2}$/.test(newDate)) return;
                           try {
                             const r = await api.post(`/finance/pending-payments/${sourceKind}/${sourceId}/extend`, { new_date:newDate });
@@ -4218,7 +4591,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           } catch(e) { window.alert(e?.message||"Network error"); }
                         };
                         const onClose = async ()=>{
-                          if (!window.confirm(`Close ${pmt.no} without paying?\n\nThis removes it from Pending Payments. The original ${sourceKind==="pr"?"request":"bill"} record stays in history.`)) return;
+                          if (!await window.confirmAsync(`Close ${pmt.no} without paying?\n\nThis removes it from Pending Payments. The original ${sourceKind==="pr"?"request":"bill"} record stays in history.`)) return;
                           try {
                             const r = await api.post(`/finance/pending-payments/${sourceKind}/${sourceId}/close`, {});
                             if (r?.success===false) { window.alert(r.message||"Close failed"); return; }
@@ -4267,14 +4640,37 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
         {/* ══ EQUIPMENT REVIEW TAB ══ */}
         {tab==="equipment_review"&&(
-          <div style={{flex:1,overflowY:"auto",padding:"4px 0"}}>
+          <div style={{flex:1,overflowY:"auto",padding:"2px 2px 8px"}}>
+            {/* Summary bar */}
+            {!equipReviewLoading && equipReview.length > 0 && (()=>{
+              const totVal=equipReview.reduce((s,r)=>s+Number(r.total_amount||0),0);
+              const rateCnt=equipReview.filter(r=>r.approval_status==="pending"&&Number(r.rate_changed)===1).length;
+              const stat=[
+                {l:"Pending Review",v:equipReview.length,c:T.blu,bg:T.bluL,brd:T.bluM},
+                {l:"Total Value",v:`₹${fmtN(totVal)}`,c:T.t1,bg:T.surfaceB,brd:T.b1},
+                {l:"Rate Approvals",v:rateCnt,c:rateCnt>0?T.amb:T.t4,bg:rateCnt>0?T.ambL:T.surfaceB,brd:rateCnt>0?T.ambM:T.b1},
+              ];
+              return(
+                <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,marginBottom:12}}>
+                  {stat.map((s,i)=>(
+                    <div key={i} style={{padding:"11px 16px",background:s.bg,borderRadius:10,border:`1px solid ${s.brd}`}}>
+                      <div style={{fontSize:10,color:T.t4,fontWeight:700,textTransform:"uppercase",letterSpacing:".5px",marginBottom:4}}>{s.l}</div>
+                      <div style={{fontSize:20,fontWeight:800,color:s.c,lineHeight:1}}>{s.v}</div>
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
             {equipReviewLoading && (
               <div style={{textAlign:"center",padding:"40px",color:T.t4,fontSize:13}}>Loading equipment usage...</div>
             )}
             {!equipReviewLoading && equipReview.length === 0 && (
-              <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"50px 20px",textAlign:"center"}}>
-                <div style={{fontSize:14,fontWeight:600,color:T.t2}}>All caught up</div>
-                <div style={{fontSize:12,color:T.t4,marginTop:6}}>No equipment usage entries pending review</div>
+              <div style={{background:T.surface,borderRadius:12,border:`1px solid ${T.b1}`,padding:"56px 20px",textAlign:"center"}}>
+                <div style={{width:52,height:52,borderRadius:"50%",background:T.grnL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px"}}>
+                  <IcChk size={26} color={T.grn}/>
+                </div>
+                <div style={{fontSize:15,fontWeight:700,color:T.t1}}>All caught up</div>
+                <div style={{fontSize:12.5,color:T.t4,marginTop:6}}>No equipment usage entries pending review</div>
               </div>
             )}
             {!equipReviewLoading && equipReview.map(row=>{
@@ -4331,35 +4727,43 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 setEquipRouteEdit(null);
                 loadEquipReview();
               };
+              const accent=isRateBlocking?T.amb:T.blu;
               return (
-                <div key={row.id} style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,padding:"14px 18px",marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"}}>
+                <div key={row.id} style={{background:T.surface,borderRadius:12,border:`1px solid ${T.b1}`,borderLeft:`4px solid ${accent}`,padding:"14px 18px",marginBottom:10,boxShadow:"0 1px 4px rgba(0,0,0,0.05)"}}>
                   <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:14,flexWrap:"wrap"}}>
-                    <div style={{flex:1,minWidth:240}}>
-                      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,flexWrap:"wrap"}}>
-                        <div style={{fontSize:14,fontWeight:700,color:T.t1}}>{row.equipment_name || `Equipment #${row.equipment_id||""}`}</div>
-                        <span style={{fontSize:11,color:T.t3,padding:"2px 9px",background:T.sltL,borderRadius:20,fontWeight:600}}>{dur}</span>
+                    <div style={{flex:1,minWidth:240,display:"flex",gap:12}}>
+                      {/* Icon avatar */}
+                      <div style={{width:40,height:40,borderRadius:10,background:T.sltL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                        <IcProc size={20} color={T.slt}/>
                       </div>
-                      <div style={{fontSize:12,color:T.t3,marginBottom:4}}>
-                        <span style={{fontWeight:600,color:T.t2}}>{row.project_name || "Unknown project"}</span>
-                        {" · "}
-                        {row.created_by_name || "Unknown user"}
-                        {" · "}
-                        {row.usage_date || ""}
-                      </div>
-                      <div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
-                        <span style={{fontSize:11.5,color:T.blu,background:T.bluL,padding:"4px 10px",borderRadius:20,fontWeight:600,border:`1px solid ${T.blu}33`}}>
-                          Suggests: {r.label}{r.party ? ` — ${r.party}` : ""}
-                        </span>
-                      </div>
-                      {isRateBlocking && (
-                        <div style={{marginTop:10,padding:"8px 12px",background:T.ambL,border:`1px solid ${T.amb}55`,borderRadius:6,fontSize:12,color:T.amb,fontWeight:600}}>
-                          Rate ₹{Number(row.rate_used||0).toLocaleString()} (master ₹{Number(row.master_default_rate||0).toLocaleString()}) — needs approval
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5,flexWrap:"wrap"}}>
+                          <div style={{fontSize:14.5,fontWeight:700,color:T.t1}}>{row.equipment_name || `Equipment #${row.equipment_id||""}`}</div>
+                          <span style={{fontSize:11,color:T.t3,padding:"2px 9px",background:T.sltL,borderRadius:20,fontWeight:600}}>{dur}</span>
+                          {isRateBlocking
+                            ? <span style={{fontSize:9.5,fontWeight:800,color:T.amb,background:T.ambL,border:`1px solid ${T.ambM}`,padding:"2px 8px",borderRadius:20,textTransform:"uppercase",letterSpacing:".4px"}}>Rate Approval</span>
+                            : <span style={{fontSize:9.5,fontWeight:800,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,padding:"2px 8px",borderRadius:20,textTransform:"uppercase",letterSpacing:".4px"}}>Pending</span>}
                         </div>
-                      )}
+                        <div style={{fontSize:12,color:T.t3,marginBottom:4,display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                          <span style={{fontWeight:600,color:T.t2}}>{row.project_name || "Unknown project"}</span>
+                          <span style={{color:T.b2}}>·</span>{row.created_by_name || "Unknown user"}
+                          <span style={{color:T.b2}}>·</span>{row.usage_date || ""}
+                        </div>
+                        <div style={{marginTop:8,display:"flex",gap:8,flexWrap:"wrap",alignItems:"center"}}>
+                          <span style={{fontSize:11.5,color:T.blu,background:T.bluL,padding:"4px 10px",borderRadius:20,fontWeight:600,border:`1px solid ${T.bluM}`}}>
+                            Suggests: {r.label}{r.party ? ` — ${r.party}` : ""}
+                          </span>
+                        </div>
+                        {isRateBlocking && (
+                          <div style={{marginTop:10,padding:"8px 12px",background:T.ambL,border:`1px solid ${T.amb}55`,borderRadius:6,fontSize:12,color:T.amb,fontWeight:600}}>
+                            Rate ₹{Number(row.rate_used||0).toLocaleString()} (master ₹{Number(row.master_default_rate||0).toLocaleString()}) — needs approval
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div style={{textAlign:"right",minWidth:140}}>
-                      <div style={{fontSize:18,fontWeight:800,color:T.t1,lineHeight:1}}>₹{Number(row.total_amount||0).toLocaleString()}</div>
-                      <div style={{fontSize:10.5,color:T.t4,marginTop:3,textTransform:"uppercase",letterSpacing:".4px"}}>Total</div>
+                    <div style={{textAlign:"right",minWidth:130,padding:"4px 0"}}>
+                      <div style={{fontSize:20,fontWeight:800,color:T.t1,lineHeight:1,fontVariantNumeric:"tabular-nums"}}>₹{Number(row.total_amount||0).toLocaleString()}</div>
+                      <div style={{fontSize:10,color:T.t4,marginTop:4,textTransform:"uppercase",letterSpacing:".5px"}}>Total Amount</div>
                     </div>
                   </div>
 
@@ -4466,7 +4870,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>
             )}
             <button onClick={async()=>{
-                if(!window.confirm("Re-link existing bills to their source GRNs?\n\nUse this after adding a missing vendor to Party Master so old bills auto-link properly."))return;
+                if(!await window.confirmAsync("Re-link existing bills to their source GRNs?\n\nUse this after adding a missing vendor to Party Master so old bills auto-link properly."))return;
                 try{
                   const r=await api.post("/finance/admin/relink-bills",{});
                   if(r.success){
@@ -4483,7 +4887,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
             {/* Clean duplicate bills — testing tool, hard-deletes duplicate
                 (party_id, challan_no, project_id) buckets keeping the earliest. */}
             <button onClick={async()=>{
-                if(!window.confirm("⚠ HARD-DELETE duplicate bills?\n\nFor every (vendor + challan + project) combo with multiple bills, the earliest will be KEPT and the rest will be PERMANENTLY DELETED.\n\nAccount balances + project expense + party balance will be reversed automatically.\n\nThis cannot be undone. Proceed?"))return;
+                if(!await window.confirmAsync("⚠ HARD-DELETE duplicate bills?\n\nFor every (vendor + challan + project) combo with multiple bills, the earliest will be KEPT and the rest will be PERMANENTLY DELETED.\n\nAccount balances + project expense + party balance will be reversed automatically.\n\nThis cannot be undone. Proceed?"))return;
                 try{
                   const r=await api.post("/finance/admin/clean-duplicate-bills",{});
                   if(r.success){
@@ -4502,7 +4906,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 missed Phase 5 (creates Auto-Bill GRNs for items present in
                 transaction_items but absent from any project grn_items). */}
             <button onClick={async()=>{
-                if(!window.confirm("Sync inventory from past bills?\n\nFor every material_purchase bill, line items NOT yet present in any GRN for the same project will be added via an Auto-Bill GRN. Safe to run multiple times — only missing items get added."))return;
+                if(!await window.confirmAsync("Sync inventory from past bills?\n\nFor every material_purchase bill, line items NOT yet present in any GRN for the same project will be added via an Auto-Bill GRN. Safe to run multiple times — only missing items get added."))return;
                 try{
                   const r=await api.post("/finance/admin/sync-bill-inventory",{});
                   if(r.success){

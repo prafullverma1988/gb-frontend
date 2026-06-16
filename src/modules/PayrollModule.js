@@ -694,7 +694,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
                   {a.reason&&<div style={{fontSize:11,color:T.t3,fontStyle:"italic",marginTop:5}}>"{a.reason}"</div>}
                 </div>
                 <div style={{display:"flex",gap:6,flexShrink:0}}>
-                  <button onClick={()=>review(a.id,"reject",await window.promptAsync("Reject reason (optional):")||null)}
+                  <button onClick={async ()=>review(a.id,"reject",await window.promptAsync("Reject reason (optional):")||null)}
                     style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
                     ✕ Reject
                   </button>

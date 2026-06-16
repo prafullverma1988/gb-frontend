@@ -998,7 +998,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
           // on every status transition. Frontend just calls the endpoint
           // and reacts to the new lead_stage_after returned by the server.
           const transition = async (qid, status, confirmMsg) => {
-            if (confirmMsg && !window.confirm(confirmMsg)) return;
+            if (confirmMsg && !await window.confirmAsync(confirmMsg)) return;
             const r = await api.post("/library/quotations/" + qid + "/status", { status });
             if (!r?.success) return alert(r?.message || "Failed");
             // Mirror server-side lead stage change into local state.
@@ -1008,11 +1008,11 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             reloadBuilderQuotes();
           };
           const sendQuote = async (qid) => {
-            if (!window.confirm("Send this quotation to the client? It will become read-only after sending.")) return;
+            if (!await window.confirmAsync("Send this quotation to the client? It will become read-only after sending.")) return;
             await transition(qid, "Sent");
           };
           const reviseQuote = async (q) => {
-            if (!window.confirm(`Create a revised copy of ${q.quote_no} as a new Draft?`)) return;
+            if (!await window.confirmAsync(`Create a revised copy of ${q.quote_no} as a new Draft?`)) return;
             const r = await api.post("/library/quotations/" + q.id + "/duplicate", {});
             if (!r?.success) return alert(r?.message || "Failed");
             reloadBuilderQuotes();
@@ -1044,7 +1044,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
             window.open("https://wa.me/" + intlPhone + "?text=" + encodeURIComponent(msg), "_blank");
           };
           const delQuote = async (qid) => {
-            if (!window.confirm("Delete this quotation? This soft-deletes the row.")) return;
+            if (!await window.confirmAsync("Delete this quotation? This soft-deletes the row.")) return;
             const r = await api.del("/library/quotations/" + qid);
             if (r?.success) reloadBuilderQuotes();
             else alert(r?.message || "Failed");
@@ -3006,7 +3006,7 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
     name:"", phone:"", email:"",
     city:"", cityId:"",
     projType:"", constructionTypeId:"",
-    budget:"", source:"Direct Call",
+    budget:"", plotArea:"", apxBuildupArea:"", source:"Direct Call",
     assignedTo:ASSIGNED_TO[0]||"", stage:defaultStage||"lead",
     priority:"Medium", contactDate:"", notes:"", tags:""
   });
@@ -3044,6 +3044,8 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
     {l:"Phone *",k:"phone",type:"input",ph:"10-digit mobile",col:1},
     {l:"Email",k:"email",type:"input",ph:"email@gmail.com",col:1},
     {l:"Budget (₹)",k:"budget",type:"number",ph:"e.g. 3500000",col:1},
+    {l:"Plot Area (sq ft)",k:"plotArea",type:"number",ph:"e.g. 1200",col:1},
+    {l:"Apx Buildup Area (sq ft)",k:"apxBuildupArea",type:"number",ph:"e.g. 2400",col:1},
     {l:"Lead Source",k:"source",type:"select",opts:SOURCES,col:1},
     {l:"Assigned To",k:"assignedTo",type:"select",opts:ASSIGNED_TO,col:1},
     {l:"Initial Stage",k:"stage",type:"select",opts:STAGES.map(s=>s.id),col:1},
@@ -4406,6 +4408,7 @@ function CRMModule(){
       const res=await api.post("/crm/leads",{
         name:form.name,phone:form.phone,email:form.email,city:form.city,
         projType:form.projType,budget:Number(form.budget)||0,source:form.source,
+        plotArea:Number(form.plotArea)||0,apxBuildupArea:Number(form.apxBuildupArea)||0,
         assignedTo:teamMembers.find(m=>m.name===form.assignedTo)?.id||null,
         stage:form.stage,priority:form.priority,
         contactDate:form.contactDate||null,notes:form.notes||null,
@@ -4519,7 +4522,7 @@ function CRMModule(){
             rows={[...(canConstruction?leads:[]),...(canSolar?solarLeads:[])]}
             onImport={async(rows)=>{
               if(!rows.length){alert("No rows to import");return;}
-              if(!window.confirm(`Import ${rows.length} lead${rows.length>1?"s":""}?`))return;
+              if(!await window.confirmAsync(`Import ${rows.length} lead${rows.length>1?"s":""}?`))return;
               let ok=0,fail=0;
               for(const r of rows){
                 try{

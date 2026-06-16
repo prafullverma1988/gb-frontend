@@ -105,6 +105,8 @@ const T={
 };
 const fmtN=n=>n==null?"—":Number(n).toLocaleString("en-IN");
 const fmtRs=n=>"₹"+fmtN(Math.abs(n));
+// Signed money — negative balances show a leading "-" (pair with red colour).
+const fmtBal=n=>(n<0?"-₹":"₹")+fmtN(Math.abs(n));
 const fmtDate=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"}):"-";
 const fmtShort=s=>s?new Date(s).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"-";
 const TODAY=new Date().toISOString().split("T")[0];
@@ -336,8 +338,8 @@ function CashBookModule(){
 
   const printDay=()=>{
     const rows=daybook.map(d=>`
-      <tr class="day-header"><td colspan="3"><strong>${fmtDate(d.date)}</strong></td><td class="rec">${fmtRs(d.rec)}</td><td class="pay">${fmtRs(d.pay)}</td><td style="font-weight:700;color:${d.runBal>=0?"#2563EB":"#DC2626"}">${fmtRs(d.runBal)}</td></tr>
-      ${d.entries.map(e=>`<tr><td></td><td>${e.desc}</td><td>${e.account} · ${e.mop}</td><td class="rec" style="font-weight:400">${e.recAmt>0?fmtRs(e.recAmt):""}</td><td class="pay" style="font-weight:400">${e.payAmt>0?fmtRs(e.payAmt):""}</td><td></td></tr>`).join("")}
+      <tr class="day-header"><td colspan="3"><strong>${fmtDate(d.date)}</strong></td><td class="rec">${fmtRs(d.rec)}</td><td class="pay">${fmtRs(d.pay)}</td><td style="font-weight:700;color:${(d.rec-d.pay)>=0?"#059669":"#DC2626"}">${fmtBal(d.rec-d.pay)}</td><td style="font-weight:700;color:${d.runBal>=0?"#2563EB":"#DC2626"}">${fmtBal(d.runBal)}</td></tr>
+      ${d.entries.map(e=>`<tr><td></td><td>${e.desc}</td><td>${e.account} · ${e.mop}</td><td class="rec" style="font-weight:400">${e.recAmt>0?fmtRs(e.recAmt):""}</td><td class="pay" style="font-weight:400">${e.payAmt>0?fmtRs(e.payAmt):""}</td><td></td><td></td></tr>`).join("")}
     `).join("");
     printHTML("Day Book — "+COMPANY_NAME,`
       <div class="header"><div><h1>${COMPANY_NAME} — Day Book</h1><div class="header-sub">Period: ${fFrom} to ${fTo}</div></div></div>
@@ -347,9 +349,9 @@ function CashBookModule(){
         <div class="summary-box" style="border-top-color:#2563EB"><div style="font-size:9px;color:#6B7280;text-transform:uppercase">Working Days</div><div style="font-size:16px;font-weight:800;color:#2563EB">${daybook.length}</div></div>
       </div>
       <table>
-        <tr><th></th><th>Description / Summary</th><th>Account · MOP</th><th>Receipt ₹</th><th>Payment ₹</th><th>Balance ₹</th></tr>
+        <tr><th></th><th>Description / Summary</th><th>Account · MOP</th><th>Receipt ₹</th><th>Payment ₹</th><th>Day Bal ₹</th><th>Ledger Bal ₹</th></tr>
         ${rows}
-        <tr class="total-row"><td colspan="3" style="text-align:right">TOTAL</td><td class="rec">${fmtRs(totalRec)}</td><td class="pay">${fmtRs(totalPay)}</td><td>${fmtRs(balance)}</td></tr>
+        <tr class="total-row"><td colspan="3" style="text-align:right">TOTAL</td><td class="rec">${fmtRs(totalRec)}</td><td class="pay">${fmtRs(totalPay)}</td><td style="color:${balance>=0?"#059669":"#DC2626"};font-weight:800">${fmtBal(balance)}</td><td style="color:${balance>=0?"#2563EB":"#DC2626"};font-weight:800">${fmtBal(balance)}</td></tr>
       </table>`);
   };
 
@@ -452,7 +454,7 @@ function CashBookModule(){
                 <span style={{fontSize:11,color:T.t3}}>{e.mop}</span>
                 <span style={{fontSize:12.5,fontWeight:e.recAmt>0?700:400,color:e.recAmt>0?T.grn:T.t4}}>{e.recAmt>0?fmtRs(e.recAmt):"—"}</span>
                 <span style={{fontSize:12.5,fontWeight:e.payAmt>0?700:400,color:e.payAmt>0?T.red:T.t4}}>{e.payAmt>0?fmtRs(e.payAmt):"—"}</span>
-                <span style={{fontSize:12,fontWeight:700,color:e.runBal>=0?T.blu:T.red}}>{fmtRs(e.runBal)}</span>
+                <span style={{fontSize:12,fontWeight:700,color:e.runBal>=0?T.blu:T.red}}>{fmtBal(e.runBal)}</span>
               </div>
             ))}
           </div>
@@ -462,7 +464,7 @@ function CashBookModule(){
             <span/><span/><span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn}}>{fmtRs(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red}}>{fmtRs(totalPay)}</span>
-            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red}}>{fmtRs(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red}}>{fmtBal(balance)}</span>
           </div>
         </div>
       )}
@@ -470,8 +472,8 @@ function CashBookModule(){
       {/* ── DAY BOOK VIEW ── */}
       {view==="daybook"&&(
         <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"100px 120px 1fr 110px 95px 95px 105px",padding:"7px 14px",background:T.sb}}>
-            {["Date","Party","Description","Account · MOP","Receipt ₹","Payment ₹","Balance ₹"].map((h,i)=>(
+          <div style={{display:"grid",gridTemplateColumns:"95px 110px 1fr 100px 85px 85px 95px 100px",padding:"7px 14px",background:T.sb}}>
+            {["Date","Party","Description","Account · MOP","Receipt ₹","Payment ₹","Day Bal ₹","Ledger Bal ₹"].map((h,i)=>(
               <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
             ))}
           </div>
@@ -479,18 +481,19 @@ function CashBookModule(){
             {daybook.map((day,di)=>(
               <div key={day.date}>
                 {/* Day header */}
-                <div style={{display:"grid",gridTemplateColumns:"100px 120px 1fr 110px 95px 95px 105px",padding:"8px 14px",background:di%2===0?"#F0F4FF":"#E8F5E9",borderBottom:`1px solid ${T.b1}`,borderLeft:`4px solid ${T.blu}`}}>
+                <div style={{display:"grid",gridTemplateColumns:"95px 110px 1fr 100px 85px 85px 95px 100px",padding:"8px 14px",background:di%2===0?"#F0F4FF":"#E8F5E9",borderBottom:`1px solid ${T.b1}`,borderLeft:`4px solid ${T.blu}`}}>
                   <span style={{fontSize:12,fontWeight:800,color:T.t1}}>{fmtShort(day.date)}</span>
                   <span/>
                   <span style={{fontSize:11.5,fontWeight:600,color:T.t2}}>{day.entries.length} entr{day.entries.length>1?"ies":"y"}</span>
                   <span/>
                   <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>{day.rec>0?fmtRs(day.rec):"—"}</span>
                   <span style={{fontSize:12.5,fontWeight:700,color:T.red}}>{day.pay>0?fmtRs(day.pay):"—"}</span>
-                  <span style={{fontSize:12.5,fontWeight:800,color:day.runBal>=0?T.blu:T.red}}>{fmtRs(day.runBal)}</span>
+                  <span style={{fontSize:12.5,fontWeight:800,color:(day.rec-day.pay)>=0?T.grn:T.red}}>{fmtBal(day.rec-day.pay)}</span>
+                  <span style={{fontSize:12.5,fontWeight:800,color:day.runBal>=0?T.blu:T.red}}>{fmtBal(day.runBal)}</span>
                 </div>
                 {/* Day entries indented */}
                 {day.entries.map((e,i)=>(
-                  <div key={e.id} style={{display:"grid",gridTemplateColumns:"100px 120px 1fr 110px 95px 95px 105px",padding:"6px 14px 6px 28px",borderBottom:`1px solid ${T.b1}`,background:i%2===0?T.surface:T.surfaceB,alignItems:"center"}}>
+                  <div key={e.id} style={{display:"grid",gridTemplateColumns:"95px 110px 1fr 100px 85px 85px 95px 100px",padding:"6px 14px 6px 28px",borderBottom:`1px solid ${T.b1}`,background:i%2===0?T.surface:T.surfaceB,alignItems:"center"}}>
                     <span style={{fontSize:10,color:T.t4}}>{e.head}</span>
                     <span style={{fontSize:11,color:T.pur,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.party||"—"}</span>
                     <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{e.desc}</span>
@@ -498,20 +501,22 @@ function CashBookModule(){
                     <span style={{fontSize:11.5,color:e.recAmt>0?T.grn:T.t4}}>{e.recAmt>0?fmtRs(e.recAmt):"—"}</span>
                     <span style={{fontSize:11.5,color:e.payAmt>0?T.red:T.t4}}>{e.payAmt>0?fmtRs(e.payAmt):"—"}</span>
                     <span/>
+                    <span/>
                   </div>
                 ))}
               </div>
             ))}
           </div>
           {/* Totals */}
-          <div style={{display:"grid",gridTemplateColumns:"100px 120px 1fr 110px 95px 95px 105px",padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`}}>
+          <div style={{display:"grid",gridTemplateColumns:"95px 110px 1fr 100px 85px 85px 95px 100px",padding:"9px 14px",background:T.surfaceB,borderTop:`2px solid ${T.b2}`}}>
             <span style={{fontSize:12,fontWeight:700,color:T.t1}}>TOTAL</span>
             <span/>
             <span style={{fontSize:11.5,color:T.t3}}>{daybook.length} days · {filtered.length} entries</span>
             <span/>
             <span style={{fontSize:13,fontWeight:800,color:T.grn}}>{fmtRs(totalRec)}</span>
             <span style={{fontSize:13,fontWeight:800,color:T.red}}>{fmtRs(totalPay)}</span>
-            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red}}>{fmtRs(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.grn:T.red}}>{fmtBal(balance)}</span>
+            <span style={{fontSize:13,fontWeight:800,color:balance>=0?T.blu:T.red}}>{fmtBal(balance)}</span>
           </div>
         </div>
       )}

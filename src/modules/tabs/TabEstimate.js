@@ -2364,7 +2364,7 @@ function TabEstimate({ project }) {
                       placeholder="Section title"
                       style={{flex:1,padding:"5px 9px",border:"1px solid "+T.bluM,borderRadius:5,fontSize:12.5,fontWeight:700,color:T.blu,background:"white",outline:"none"}}/>
                     <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{fmtC(secTotal)}</span>
-                    <button onClick={()=>{
+                    <button onClick={async ()=>{
                       if (!await window.confirmAsync("Delete this section + its items from the proposed BOQ?")) return;
                       setAmendForm(p=>({ ...p, sections: p.sections.filter((_,i)=> i !== si) }));
                     }}

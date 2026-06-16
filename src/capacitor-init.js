@@ -25,7 +25,7 @@ export function initCapacitor() {
   // Android hardware back-button:
   //  - if there's browser history → go back
   //  - if at root → confirm & exit
-  CapApp.addListener("backButton", ({ canGoBack }) => {
+  CapApp.addListener("backButton", async ({ canGoBack }) => {
     if (canGoBack || window.history.length > 1) {
       window.history.back();
     } else {
