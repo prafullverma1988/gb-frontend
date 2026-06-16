@@ -2366,6 +2366,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     // Re-fetches when walletAsked[txn_id] bumps (after the admin asks).
     const [clar,setClar]=useState([]);
     const [senderUid,setSenderUid]=useState(null); // submitter's user_id → green; approvers → blue
+    const [showClar,setShowClar]=useState(false);   // conversation collapsed by default (clean)
     const askKey=walletAsked[it.txn_id]||0;
     useEffect(()=>{
       let alive=true;
@@ -2393,20 +2394,29 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
         {blocked&&<div style={{marginTop:7,fontSize:10,color:T.amb,background:T.ambL,padding:"5px 9px",borderRadius:6}}>Is category me photo zaroori — sync hone tak approve disabled.</div>}
         {clar.length>0&&(
           <div style={{marginTop:8,borderTop:"1px solid "+T.b1,paddingTop:7}}>
-            <div style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:.4,marginBottom:5}}>Conversation</div>
-            {clar.map(c=>{
-              // Submitter (sender) = green; anyone else (approver/admin) = blue.
-              // Fallback to role check if sender_user_id isn't loaded yet.
-              const isStaff = senderUid!=null ? (c.from_user_id===senderUid)
-                : !["admin","super_admin"].includes(String(c.from_role||"").toLowerCase());
-              return(
-                <div key={c.id} style={{marginBottom:6,paddingLeft:8,borderLeft:"2px solid "+(isStaff?T.grn:T.blu)}}>
-                  <span style={{fontSize:10,fontWeight:700,color:isStaff?T.grn:T.blu}}>{c.from_name||c.from_role}{isStaff?" (staff)":""}</span>
-                  <div style={{fontSize:11,color:T.t2,marginTop:1}}>{c.message}</div>
-                  {c.photo_url&&<a href={c.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu,fontWeight:600}}>Photo</a>}
-                </div>
-              );
-            })}
+            {/* Collapsed by default — one compact row; click to expand the thread */}
+            <button onClick={()=>setShowClar(s=>!s)}
+              style={{display:"flex",alignItems:"center",gap:6,width:"100%",background:"none",border:"none",padding:0,cursor:"pointer",fontFamily:"inherit"}}>
+              <span style={{fontSize:9.5,fontWeight:700,color:T.blu}}>💬 Conversation ({clar.length})</span>
+              {!showClar&&<span style={{fontSize:9.5,color:T.t4,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",flex:1,textAlign:"left"}}>— {(clar[clar.length-1]?.message)||""}</span>}
+              <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.blu} strokeWidth={2.4} strokeLinecap="round" style={{marginLeft:"auto",flexShrink:0,transform:showClar?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M6 9l6 6 6-6"/></svg>
+            </button>
+            {showClar&&(
+              <div style={{marginTop:7}}>
+                {clar.map(c=>{
+                  // Submitter (sender) = green; anyone else (approver/admin) = blue.
+                  const isStaff = senderUid!=null ? (c.from_user_id===senderUid)
+                    : !["admin","super_admin"].includes(String(c.from_role||"").toLowerCase());
+                  return(
+                    <div key={c.id} style={{marginBottom:6,paddingLeft:8,borderLeft:"2px solid "+(isStaff?T.grn:T.blu)}}>
+                      <span style={{fontSize:10,fontWeight:700,color:isStaff?T.grn:T.blu}}>{c.from_name||c.from_role}{isStaff?" (staff)":""}</span>
+                      <div style={{fontSize:11,color:T.t2,marginTop:1}}>{c.message}</div>
+                      {c.photo_url&&<a href={c.photo_url} target="_blank" rel="noreferrer" style={{fontSize:10,color:T.blu,fontWeight:600}}>Photo</a>}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
         <div style={{display:"flex",gap:6,marginTop:8}}>
