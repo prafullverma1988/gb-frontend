@@ -48,14 +48,22 @@ function TabAttendance({ project }) {
   const [expandedHistIdx, setExpandedHistIdx] = useState(null);
   // Add/Edit Labour Vendor modal state
   const [showAddVendor, setShowAddVendor] = useState(false);
+  const [addVendorMode, setAddVendorMode] = useState("pick"); // 'pick' (from company) | 'new'
+  const [vendorPickSel, setVendorPickSel] = useState(new Set()); // company vendor ids to add to project
+  const [pickSaving, setPickSaving] = useState(false);
   const [vForm, setVForm] = useState({ name:"", owner:"", phone:"", email:"", city:"", gstin:"", trade:"", notes:"" });
   const [vSkills, setVSkills] = useState([]);  // [{skill, rate, card_rate}]
   const [vSaving, setVSaving] = useState(false);
+  // Add-skill-to-existing-vendor inline form (daily section)
+  const [showAddSkill, setShowAddSkill] = useState(false);
+  const [skillForm, setSkillForm] = useState({ skill:"", rate:"" });
+  const [addSkillSaving, setAddSkillSaving] = useState(false);
 
   // ── Libraries ───────────────────────────────────────────────────
   const [workerLib, setWorkerLib] = useState([]);
   const [subconLib, setSubconLib] = useState([]);
-  const [vendorLib, setVendorLib] = useState([]);
+  const [vendorLib, setVendorLib] = useState([]);          // vendors ON THIS PROJECT (selector + daily)
+  const [companyVendorLib, setCompanyVendorLib] = useState([]); // full company master (the picker)
   const [rateCard,  setRateCard]  = useState([]);
 
   // ── Project workforce ────────────────────────────────────────────
@@ -93,13 +101,26 @@ function TabAttendance({ project }) {
   const TYPE_BG     = { company:T.bluL, subcon:T.grnL, vendor:T.ambL };
   const TYPE_BM     = { company:T.bluM, subcon:T.grnM, vendor:T.ambM };
 
+  // Load vendors: project-scoped list (selector/daily) + company master (picker)
+  const loadVendors = async () => {
+    try {
+      const [pr, co] = await Promise.all([
+        api.get(`/labour-vendors/project/${projectId}`),
+        api.get("/labour-vendors"),
+      ]);
+      if (pr?.success) setVendorLib(pr.data || []);
+      if (co?.success) setCompanyVendorLib(co.data || []);
+    } catch(_) {}
+  };
+
   // ── Load libraries + rate card on mount ─────────────────────────
   useEffect(() => {
     api.get("/library/workers").then(r=>{ if(r.success) setWorkerLib(r.data||[]); }).catch(()=>{});
     api.get("/finance/parties?type=Subcontractor").then(r=>{ if(r.success) setSubconLib(r.data||[]); }).catch(()=>{});
-    api.get("/labour-vendors").then(r=>{ if(r.success) setVendorLib(r.data||[]); }).catch(()=>{});
+    loadVendors();
     api.get("/library/labour-rates").then(r=>{ if(r.success) setRateCard(r.data||[]); }).catch(()=>{});
-  }, []);
+    /* eslint-disable-next-line */
+  }, [projectId]);
 
   // ── Load workforce + attendance for project ──────────────────────
   useEffect(() => {
@@ -500,9 +521,12 @@ function TabAttendance({ project }) {
               } else {
                 setVSkills([]);
               }
+              // default to picking from company master; if none exist, register new
+              setVendorPickSel(new Set());
+              setAddVendorMode(companyVendorLib.length ? "pick" : "new");
               setShowAddVendor(true);
             }}
-            title="Add new labour vendor"
+            title="Add a vendor to this project"
             style={{padding:"4px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontSize:11.5,fontWeight:600,cursor:"pointer",display:"inline-flex",alignItems:"center",gap:5,fontFamily:"inherit",flexShrink:0,transition:"all .12s"}}
             onMouseEnter={el=>{el.currentTarget.style.background=T.surfaceB; el.currentTarget.style.borderColor=T.b2;}}
             onMouseLeave={el=>{el.currentTarget.style.background=T.surface; el.currentTarget.style.borderColor=T.b1;}}>
@@ -1000,11 +1024,38 @@ function TabAttendance({ project }) {
               const vSkillsCount = (vd?.skills||[]).length;
               return(
               <>
-                {/* Skill count + edit hint (compact, label removed) */}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"flex-end",marginBottom:8,gap:10}}>
+                {/* Skill count + Add Skill (add a skill this vendor newly supplies) */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8,gap:10}}>
+                  <button onClick={()=>{ const rc=rateCard.find(r=>{const n=r.role||r.name||r.skill; return n && !(vd?.skills||[]).some(s=>s.skill===n);}); const sk=rc?(rc.role||rc.name||rc.skill):""; setSkillForm({skill:sk,rate:getRateForRole(sk)||""}); setShowAddSkill(v=>!v); }}
+                    style={{padding:"4px 11px",borderRadius:6,border:`1px solid ${T.amb}`,background:showAddSkill?T.amb:T.ambL,color:showAddSkill?"white":T.amb,fontSize:11,fontWeight:700,cursor:"pointer"}}>
+                    {showAddSkill?"× Cancel":"+ Add Skill"}
+                  </button>
                   <span style={{fontSize:11,color:T.t4,fontWeight:500}}>{vSkillsCount} skill{vSkillsCount!==1?"s":""} · rates locked at onboarding</span>
-                  {vSkillsCount===0&&<span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>Edit vendor to add skills</span>}
                 </div>
+                {showAddSkill&&(()=>{
+                  const cr = getRateForRole(skillForm.skill);
+                  const differs = cr>0 && Number(skillForm.rate)!==cr;
+                  return(
+                  <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,padding:"10px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:8}}>
+                    <select value={skillForm.skill} onChange={e=>{const sk=e.target.value; setSkillForm({skill:sk,rate:getRateForRole(sk)||""});}}
+                      style={{flex:1,padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12.5,fontFamily:"inherit",background:"white"}}>
+                      <option value="">— Select skill —</option>
+                      {rateCard.map(rc=>{const n=rc.role||rc.name||rc.skill; if(!n) return null; const has=(vd?.skills||[]).some(s=>s.skill===n); return <option key={rc.id} value={n} disabled={has}>{n}{has?" (added)":""}</option>;})}
+                    </select>
+                    <input type="number" value={cr||""} disabled placeholder="Card" title="Card rate" style={{width:78,padding:"7px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,textAlign:"right",background:cr>0?T.grnL:T.surfaceB,color:cr>0?T.grn:T.t4,fontWeight:600,boxSizing:"border-box"}}/>
+                    <input type="number" value={skillForm.rate} onChange={e=>setSkillForm(f=>({...f,rate:e.target.value}))} placeholder="Rate" min={0}
+                      style={{width:78,padding:"7px 8px",borderRadius:6,border:`1.5px solid ${differs?T.ambM:T.b1}`,fontSize:13,fontWeight:700,color:differs?T.amb:T.t1,textAlign:"right",fontFamily:"inherit",background:differs?"white":"white",boxSizing:"border-box"}}/>
+                    <button disabled={addSkillSaving||!skillForm.skill||!(Number(skillForm.rate)>0)} onClick={async()=>{
+                      setAddSkillSaving(true);
+                      try {
+                        const r = await api.post(`/labour-vendors/${vd.id}/skills`, { skill:skillForm.skill, rate:Number(skillForm.rate), card_rate:getRateForRole(skillForm.skill)||0 });
+                        if(r?.success){ await loadVendors(); setShowAddSkill(false); setSkillForm({skill:"",rate:""}); }
+                        else alert(r?.message||"Add skill failed");
+                      } catch(e){ alert("Error: "+e.message); }
+                      setAddSkillSaving(false);
+                    }} style={{padding:"7px 13px",borderRadius:6,background:(!skillForm.skill||!(Number(skillForm.rate)>0))?"#ccc":T.amb,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:"pointer",opacity:addSkillSaving?.7:1,whiteSpace:"nowrap"}}>{addSkillSaving?"...":"Add"}</button>
+                  </div>);
+                })()}
 
                 {vSkillsCount===0?(
                   <div style={{padding:"30px 18px",textAlign:"center",border:`1.5px dashed ${T.b1}`,borderRadius:10,background:T.surfaceB,marginBottom:10}}>
@@ -1471,8 +1522,8 @@ function TabAttendance({ project }) {
         <div style={{position:"fixed",top:0,right:0,height:"100vh",width:620,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.18)",zIndex:301,fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif",display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div>
-              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add Labour Vendor</div>
-              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Vendor info + skills they supply with rates (auto from rate card)</div>
+              <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add Vendor to Project</div>
+              <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:2}}>Pick from company vendors, or register a new one</div>
             </div>
             <button onClick={()=>setShowAddVendor(false)} title="Close"
               style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.6)",padding:6,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",transition:"background .12s"}}
@@ -1481,7 +1532,43 @@ function TabAttendance({ project }) {
               <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
             </button>
           </div>
+          {/* Mode tabs */}
+          <div style={{display:"flex",gap:6,padding:"10px 18px 0",flexShrink:0}}>
+            {[["pick","Add existing"],["new","Register new"]].map(([id,l])=>(
+              <button key={id} onClick={()=>setAddVendorMode(id)}
+                style={{flex:1,padding:"8px",borderRadius:7,border:`1.5px solid ${addVendorMode===id?T.amb:T.b1}`,background:addVendorMode===id?T.ambL:T.surface,color:addVendorMode===id?T.amb:T.t3,fontSize:12,fontWeight:700,cursor:"pointer"}}>{l}</button>
+            ))}
+          </div>
           <div style={{padding:"14px 18px",overflowY:"auto",flex:1}}>
+          {addVendorMode==="pick"?(()=>{
+            // Company vendors NOT already on this project
+            const onProject = new Set(vendorLib.map(v=>String(v.id)));
+            const available = companyVendorLib.filter(v=>!onProject.has(String(v.id)));
+            const toggle = id => setVendorPickSel(prev=>{ const n=new Set(prev); n.has(id)?n.delete(id):n.add(id); return n; });
+            return(<>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:10}}>Is project pe kaun se vendor kaam karte hain — company master se select karo.</div>
+              {available.length===0?(
+                <div style={{padding:"24px 16px",textAlign:"center",border:`1.5px dashed ${T.b1}`,borderRadius:10,background:T.surfaceB,fontSize:12.5,color:T.t3}}>
+                  {companyVendorLib.length===0?"Company me koi labour vendor register nahi — \"Register new\" se naya banao.":"Saare company vendors is project me already add hain."}
+                </div>
+              ):available.map(v=>{
+                const sel = vendorPickSel.has(v.id);
+                const skc = (v.skills||[]).length;
+                return(
+                  <div key={v.id} onClick={()=>toggle(v.id)}
+                    style={{display:"flex",alignItems:"center",gap:11,padding:"10px 12px",borderRadius:9,border:`1.5px solid ${sel?T.amb:T.b1}`,background:sel?T.ambL:T.surface,marginBottom:7,cursor:"pointer"}}>
+                    <div style={{width:18,height:18,borderRadius:5,border:`2px solid ${sel?T.amb:T.b2}`,background:sel?T.amb:"white",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                      {sel&&<svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={3.5} strokeLinecap="round" strokeLinejoin="round"><path d="M20 6L9 17l-5-5"/></svg>}
+                    </div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{v.name}</div>
+                      <div style={{fontSize:10.5,color:T.t4}}>{[v.city,v.phone].filter(Boolean).join(" · ")||"—"} · {skc} skill{skc!==1?"s":""}</div>
+                    </div>
+                  </div>
+                );
+              })}
+            </>);
+          })():(<>
             {/* Vendor info */}
             <div style={{fontSize:11,fontWeight:700,color:T.amb,marginBottom:10,letterSpacing:".4px"}}>1. VENDOR DETAILS</div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
@@ -1590,35 +1677,53 @@ function TabAttendance({ project }) {
               style={{padding:"6px 14px",borderRadius:6,border:`1.5px dashed ${T.amb}`,background:T.ambL,color:T.amb,fontSize:12,fontWeight:600,cursor:rateCard.length?"pointer":"not-allowed",marginTop:8,opacity:rateCard.length?1:.5}}>
               + Add Skill {rateCard.length === 0 ? "(rate card empty)" : ""}
             </button>
+          </>)}
           </div>
-          {/* Footer */}
+          {/* Footer — mode-dependent */}
           <div style={{padding:"11px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",gap:8,flexShrink:0,background:T.surface}}>
             <button onClick={()=>setShowAddVendor(false)} style={{flex:1,padding:"9px",borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-            <button onClick={async()=>{
-              if(!vForm.name.trim()) return alert("Vendor name required");
-              const validSkills = vSkills.filter(s=>s.skill && Number(s.rate)>0);
-              if(!validSkills.length) return alert("Add at least one skill with rate");
-              setVSaving(true);
-              try {
-                const res = await api.post("/labour-vendors", {
-                  ...vForm, name: vForm.name.trim(),
-                  skills: validSkills.map(s=>({ skill:s.skill, rate:Number(s.rate), card_rate:getRateForRole(s.skill)||0 })),
-                });
-                if(res.success) {
-                  // refresh vendor list
-                  const r = await api.get("/labour-vendors");
-                  if(r.success) setVendorLib(r.data||[]);
-                  setSelVendorId(String(res.data.id));
+            {addVendorMode==="pick"?(
+              <button onClick={async()=>{
+                if(!vendorPickSel.size) return;
+                setPickSaving(true);
+                try {
+                  const ids = Array.from(vendorPickSel);
+                  for (const vid of ids) { await api.post(`/labour-vendors/project/${projectId}`, { vendor_id: vid }); }
+                  await loadVendors();
+                  setSelVendorId(String(ids[0]));
+                  setVendorPickSel(new Set());
                   setShowAddVendor(false);
-                } else {
-                  alert(res.message || "Save failed");
-                }
-              } catch(e) { alert("Error: " + e.message); }
-              setVSaving(false);
-            }} disabled={vSaving||!vForm.name.trim()}
-              style={{flex:2,padding:"9px",borderRadius:7,background:vForm.name.trim()?T.amb:"#ccc",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:vForm.name.trim()?"pointer":"not-allowed",opacity:vSaving?.7:1}}>
-              {vSaving?"Saving...":"Save Vendor + Skills"}
-            </button>
+                } catch(e){ alert("Error: "+e.message); }
+                setPickSaving(false);
+              }} disabled={pickSaving||!vendorPickSel.size}
+                style={{flex:2,padding:"9px",borderRadius:7,background:vendorPickSel.size?T.amb:"#ccc",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:vendorPickSel.size?"pointer":"not-allowed",opacity:pickSaving?.7:1}}>
+                {pickSaving?"Adding...":`Add ${vendorPickSel.size||""} to project`}
+              </button>
+            ):(
+              <button onClick={async()=>{
+                if(!vForm.name.trim()) return alert("Vendor name required");
+                const validSkills = vSkills.filter(s=>s.skill && Number(s.rate)>0);
+                if(!validSkills.length) return alert("Add at least one skill with rate");
+                setVSaving(true);
+                try {
+                  const res = await api.post("/labour-vendors", {
+                    ...vForm, name: vForm.name.trim(),
+                    skills: validSkills.map(s=>({ skill:s.skill, rate:Number(s.rate), card_rate:getRateForRole(s.skill)||0 })),
+                  });
+                  if(res.success) {
+                    // link the new company vendor to THIS project
+                    try { await api.post(`/labour-vendors/project/${projectId}`, { vendor_id: res.data.id }); } catch(_){}
+                    await loadVendors();
+                    setSelVendorId(String(res.data.id));
+                    setShowAddVendor(false);
+                  } else { alert(res.message || "Save failed"); }
+                } catch(e) { alert("Error: " + e.message); }
+                setVSaving(false);
+              }} disabled={vSaving||!vForm.name.trim()}
+                style={{flex:2,padding:"9px",borderRadius:7,background:vForm.name.trim()?T.amb:"#ccc",color:"white",fontSize:12.5,fontWeight:700,border:"none",cursor:vForm.name.trim()?"pointer":"not-allowed",opacity:vSaving?.7:1}}>
+                {vSaving?"Saving...":"Save Vendor + Skills"}
+              </button>
+            )}
           </div>
         </div>
       </>)}
