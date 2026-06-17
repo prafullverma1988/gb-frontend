@@ -1510,6 +1510,9 @@ function ProcurementModule(){
     expectedDelivery: m.po_expected_delivery
             ? fmtDate(m.po_expected_delivery)
             : (m.expected_delivery ? fmtDate(m.expected_delivery) : null),
+    etaRaw: m.po_expected_delivery
+            ? String(m.po_expected_delivery).split("T")[0]
+            : (m.expected_delivery ? String(m.expected_delivery).split("T")[0] : null),
     challan:m.challan_no||null, rejectedReason:m.rejected_reason||null,
     receivedQty:parseFloat(m.received_qty)||null, inStock:0, approxAmount:m.approx_amount||0,
   });
@@ -1647,7 +1650,18 @@ function ProcurementModule(){
   const [approveTgt,setApproveTgt]=useState(null);
   const [rejectTgt,setRejectTgt]=useState(null);
   const [markRecvTgt,setMarkRecvTgt]=useState(null);
+  const [rowMenu,setRowMenu]=useState(null);   // ordered-row 3-dot menu open id
   const [showBulkOrder,setShowBulkOrder]=useState(false);
+  const [etaChip,setEtaChip]=useState("All");   // Ordered-tab delivery-followup filter
+
+  // ETA bucket in days from today: <0 overdue, 0 today, >0 upcoming, null if no ETA.
+  const _etaDays=(raw)=>{ if(!raw) return null; const d=new Date(raw); if(isNaN(d.getTime())) return null; d.setHours(0,0,0,0); const t=new Date(); t.setHours(0,0,0,0); return Math.round((d-t)/86400000); };
+  const _etaMatch=(raw,chip)=>{ const dd=_etaDays(raw);
+    if(chip==="Overdue") return dd!=null&&dd<0;
+    if(chip==="Today")   return dd===0;
+    if(chip==="3d")      return dd!=null&&dd>=0&&dd<=3;
+    if(chip==="7d")      return dd!=null&&dd>=0&&dd<=7;
+    return true; };
 
   // ── Counts ── (Closed MRs are excluded from all active tabs)
   const isClosed = m => m.mrStatus === "Closed";
@@ -1678,6 +1692,7 @@ function ProcurementModule(){
       if(!matchById&&!matchByName) return false;
     }
     if(mrMaterial!=="All" && (m.item||"").trim().toLowerCase()!==mrMaterial.toLowerCase()) return false;
+    if(mrTab==="Ordered" && etaChip!=="All" && !_etaMatch(m.etaRaw,etaChip)) return false;
     if(mrSearch){
       const q = mrSearch.toLowerCase();
       const hay = `${m.item||""} ${m.project||""} ${m.id||""} ${m.requestedBy||""}`.toLowerCase();
@@ -1778,6 +1793,18 @@ function ProcurementModule(){
     setMRs(p=>p.map(m=>m.id===id?{...m,matStatus:newStatus,receivedQty:rQty,challan}:m));
     setMarkRecvTgt(null);
     setMrTab("Received");
+  };
+  // Close an ordered MR with a reason → moves to the Closed tab.
+  const closeMR=async(m)=>{
+    setRowMenu(null);
+    const reason=await window.promptAsync(`Close ${m.id} — ${m.item}?\n\nKis reason se order cancel kar rahe ho? (compulsory)`);
+    if(reason===null) return;
+    if(!reason.trim()){ window.alert("Reason zaroori hai"); return; }
+    try{
+      const r=await api.put("/procurement/mrs/"+m.id,{mr_status:"Closed",closed_reason:reason.trim()});
+      if(r?.success===false){ window.alert(r.message||"Close failed"); return; }
+      setMRs(p=>p.map(x=>x.id===m.id?{...x,mrStatus:"Closed",closedReason:reason.trim()}:x));
+    }catch(e){ window.alert(e?.message||"Network error"); }
   };
   const saveGRN=async(poId,challan,rows,vendorOverride)=>{
     const po=pos.find(p=>p.id===poId);
@@ -1915,7 +1942,7 @@ function ProcurementModule(){
                 const cnt=mrTabCounts[key];
                 const isAct=mrTab===key;
                 return(
-                  <button key={key} onClick={()=>{setMrTab(key);setSelected({});}}
+                  <button key={key} onClick={()=>{setMrTab(key);setSelected({});setEtaChip("All");}}
                     style={{flex:1,padding:"10px 8px",border:"none",background:isAct?meta.bg:"none",color:isAct?meta.c:T.t3,fontSize:12,fontWeight:isAct?700:400,cursor:"pointer",borderBottom:isAct?`2px solid ${meta.c}`:"2px solid transparent",transition:"all 0.15s",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
                     <span style={{width:7,height:7,borderRadius:"50%",background:isAct?meta.c:T.b2,flexShrink:0}}/>
                     {meta.label}
@@ -1961,6 +1988,34 @@ function ProcurementModule(){
                 </button>
               )}
             </div>
+
+            {/* Ordered tab — delivery (ETA) followup chips: Overdue / Today / 3d / 7d */}
+            {mrTab==="Ordered"&&(()=>{
+              const ordered=mrs.filter(m=>!isClosed(m)&&m.matStatus==="Ordered");
+              const cnt=chip=>ordered.filter(m=>_etaMatch(m.etaRaw,chip)).length;
+              const chips=[
+                {k:"All",     l:"All",         c:T.t3},
+                {k:"Overdue", l:"Overdue",     c:T.red},
+                {k:"Today",   l:"Today",       c:T.amb},
+                {k:"3d",      l:"Next 3 days", c:T.blu},
+                {k:"7d",      l:"Next 7 days", c:T.pur},
+              ];
+              return(
+                <div style={{display:"flex",gap:6,alignItems:"center",marginBottom:10,flexWrap:"wrap",flexShrink:0}}>
+                  <span style={{fontSize:10.5,color:T.t4,fontWeight:600,marginRight:2}}>Delivery</span>
+                  {chips.map(ch=>{
+                    const act=etaChip===ch.k; const n=ch.k==="All"?ordered.length:cnt(ch.k);
+                    return(
+                      <button key={ch.k} onClick={()=>setEtaChip(ch.k)}
+                        style={{display:"flex",alignItems:"center",gap:6,padding:"5px 12px",borderRadius:16,fontSize:11.5,fontWeight:act?700:500,cursor:"pointer",border:`1px solid ${act?ch.c:T.b1}`,background:act?ch.c+"14":T.surface,color:act?ch.c:T.t3,transition:"all .15s"}}>
+                        {ch.l}
+                        <span style={{fontSize:10,fontWeight:700,minWidth:14,textAlign:"center",color:act?ch.c:T.t4}}>{n}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })()}
 
             {/* MR List — clean like screenshot */}
             <div style={{flex:1,overflowY:"auto",overflowX:"hidden",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
@@ -2099,9 +2154,26 @@ function ProcurementModule(){
                         </div>
                         <div style={{fontSize:10.5,color:T.t4}}>{m.isFromWarehouse?"From warehouse stock":`ETA: ${m.expectedDelivery||"TBD"}`}</div>
                       </div>
-                      <button onClick={()=>setMarkRecvTgt(m)} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
-                        <IcChk size={12} color={T.grn}/> Mark Received
-                      </button>
+                      <div style={{position:"relative",display:"flex",justifyContent:"flex-end"}}>
+                        <button onClick={(e)=>{e.stopPropagation();setRowMenu(rowMenu===m.id?null:m.id);}} title="Actions"
+                          style={{width:30,height:30,borderRadius:6,background:rowMenu===m.id?T.surfaceB:"none",border:`1px solid ${rowMenu===m.id?T.b1:"transparent"}`,color:T.t3,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,lineHeight:1,fontWeight:700}}>⋮</button>
+                        {rowMenu===m.id&&(<>
+                          <div onClick={(e)=>{e.stopPropagation();setRowMenu(null);}} style={{position:"fixed",inset:0,zIndex:50}}/>
+                          <div style={{position:"absolute",right:0,top:34,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,0.14)",zIndex:51,width:200,overflow:"hidden"}}>
+                            <button onClick={(e)=>{e.stopPropagation();setRowMenu(null);setMarkRecvTgt(m);}}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.grn,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.grnL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <IcChk size={14} color={T.grn}/> Mark Received
+                            </button>
+                            <div style={{height:1,background:T.b1}}/>
+                            <button onClick={(e)=>{e.stopPropagation();closeMR(m);}}
+                              style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"10px 13px",border:"none",background:"none",color:T.red,fontSize:12.5,fontWeight:600,cursor:"pointer",textAlign:"left"}}
+                              onMouseEnter={e=>e.currentTarget.style.background=T.redL} onMouseLeave={e=>e.currentTarget.style.background="none"}>
+                              <IcX size={13} color={T.red}/> Close with reason
+                            </button>
+                          </div>
+                        </>)}
+                      </div>
                     </div>
                   ))}
                 </>
