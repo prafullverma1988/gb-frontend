@@ -1513,7 +1513,7 @@ function ProcurementModule(){
     etaRaw: m.po_expected_delivery
             ? String(m.po_expected_delivery).split("T")[0]
             : (m.expected_delivery ? String(m.expected_delivery).split("T")[0] : null),
-    challan:m.challan_no||null, rejectedReason:m.rejected_reason||null,
+    challan:m.challan_no||null, rejectedReason:m.rejected_reason||null, closed_reason:m.closed_reason||null,
     receivedQty:parseFloat(m.received_qty)||null, inStock:0, approxAmount:m.approx_amount||0,
   });
   const mapPO=p=>({
@@ -1803,7 +1803,7 @@ function ProcurementModule(){
     try{
       const r=await api.put("/procurement/mrs/"+m.id,{mr_status:"Closed",closed_reason:reason.trim()});
       if(r?.success===false){ window.alert(r.message||"Close failed"); return; }
-      setMRs(p=>p.map(x=>x.id===m.id?{...x,mrStatus:"Closed",closedReason:reason.trim()}:x));
+      setMRs(p=>p.map(x=>x.id===m.id?{...x,mrStatus:"Closed",closed_reason:reason.trim()}:x));
     }catch(e){ window.alert(e?.message||"Network error"); }
   };
   const saveGRN=async(poId,challan,rows,vendorOverride)=>{
