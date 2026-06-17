@@ -4724,6 +4724,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 } catch(e){}
                 setEquipActing(null);
                 loadEquipReview();
+                refreshPendPmts();   // confirmed → pending settlement appears immediately
               };
               const doApproveRate = async () => {
                 setEquipActing(row.id);
@@ -4751,6 +4752,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 setEquipActing(null);
                 setEquipRouteEdit(null);
                 loadEquipReview();
+                refreshPendPmts();   // confirmed → pending settlement appears immediately
               };
               const accent=isRateBlocking?T.amb:T.blu;
               return (
