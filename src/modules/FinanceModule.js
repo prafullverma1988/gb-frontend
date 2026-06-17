@@ -2385,8 +2385,7 @@ function ThreadMsg({admin,name,message,photo,when}){
 // running ledger balance, plus a per-day "Day Balance" (net in−out).
 // Negative balances render in red WITH a leading minus sign (fmtS).
 // ══════════════════════════════════════════════════════════════
-function CashDayBook({ txns }){
-  const [view,setView]   = useState("cashbook"); // cashbook | daybook
+function CashDayBook({ txns, view="cashbook" }){ // view driven by parent sub-tab (cashbook | daybook)
   const [chip,setChip]   = useState("All");      // All | Receipts | Payments
   const [fSite,setFSite] = useState("All");
   const [fHead,setFHead] = useState("All");
@@ -2481,29 +2480,8 @@ function CashDayBook({ txns }){
     <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
       {/* Toolbar */}
       <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"9px 11px",marginBottom:8,flexShrink:0}}>
-        {/* Row 1: view toggle + date range + search */}
-        <div style={{display:"flex",gap:7,alignItems:"center",marginBottom:8,flexWrap:"wrap"}}>
-          <div style={{display:"flex",background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3,gap:2}}>
-            {[["cashbook","Cash Book"],["daybook","Day Book"]].map(([id,l])=>(
-              <button key={id} onClick={()=>setView(id)}
-                style={{padding:"5px 13px",borderRadius:5,border:"none",background:view===id?T.blu:"none",color:view===id?"white":T.t3,fontSize:12,fontWeight:view===id?700:500,cursor:"pointer"}}>{l}</button>
-            ))}
-          </div>
-          <input type="date" value={fFrom} onChange={e=>setFFrom(e.target.value)} style={{...selStyle,width:130}}/>
-          <span style={{fontSize:11,color:T.t4}}>to</span>
-          <input type="date" value={fTo} onChange={e=>setFTo(e.target.value)} style={{...selStyle,width:130}}/>
-          <div style={{position:"relative",flex:1,minWidth:150}}>
-            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={12} color={T.t4}/></span>
-            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search description or party..."
-              style={{...selStyle,width:"100%",paddingLeft:25,boxSizing:"border-box"}}/>
-          </div>
-          <div style={{marginLeft:"auto",display:"flex",gap:6}}>
-            <button onClick={dlExcel} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
-            <button onClick={printOut} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF / Print</button>
-          </div>
-        </div>
-        {/* Row 2: in/out chips + dropdown filters */}
-        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+        {/* Row 1: in/out chips + dropdown filters (filters on top — same order as Fin Activity, so switching tabs doesn't shift the layout) */}
+        <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:8,minHeight:30}}>
           {chips.map(([id,l])=>{const on=chip===id;const col=id==="Receipts"?T.grn:id==="Payments"?T.red:T.slt;return(
             <button key={id} onClick={()=>setChip(id)}
               style={{padding:"4px 12px",borderRadius:20,border:`1.5px solid ${on?col:T.b1}`,background:on?(id==="Receipts"?T.grnL:id==="Payments"?T.redL:T.sltL):T.surfaceB,color:on?col:T.t3,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer"}}>{l}</button>
@@ -2518,6 +2496,21 @@ function CashDayBook({ txns }){
             <button onClick={()=>{setFSite("All");setFHead("All");setFMOP("All");setFAcc("All");setFParty("All");setChip("All");setSearch("");setFFrom("");setFTo("");}}
               style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer"}}>Clear</button>
           )}
+        </div>
+        {/* Row 2: search + date range + exports (below the filters — same order as Fin Activity) */}
+        <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
+          <div style={{position:"relative",flex:1,minWidth:150}}>
+            <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={12} color={T.t4}/></span>
+            <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search description or party..."
+              style={{...selStyle,width:"100%",paddingLeft:25,boxSizing:"border-box"}}/>
+          </div>
+          <input type="date" value={fFrom} onChange={e=>setFFrom(e.target.value)} style={{...selStyle,width:130}}/>
+          <span style={{fontSize:11,color:T.t4}}>to</span>
+          <input type="date" value={fTo} onChange={e=>setFTo(e.target.value)} style={{...selStyle,width:130}}/>
+          <div style={{display:"flex",gap:6}}>
+            <button onClick={dlExcel} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
+            <button onClick={printOut} style={{display:"flex",alignItems:"center",gap:4,padding:"5px 11px",borderRadius:6,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF / Print</button>
+          </div>
         </div>
       </div>
 
@@ -3182,7 +3175,7 @@ function FinanceModule(){
       {l:"Total Pending",v:`₹${fmt(pendTotal)}`,sub:`${pendPmts.length} items`,Icon:IcClock7,c:T.slt,bg:T.sltL,brd:"#CBD5E0"},
     ],
   };
-  const curTiles=TILE_SETS[tab]||TILE_SETS.party;
+  const curTiles=TILE_SETS[tab==="daybook"?"cashbook":tab]||TILE_SETS.party;
 
   // ── Ledger helpers ──────────────────────────────────────────
   const getLedgerRows=(party)=>{
@@ -3485,7 +3478,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
     {key:"ledgers",label:"Ledgers & Cash",tabs:[
       {id:"party",l:"Party Ledger"},
       {id:"transaction",l:"Fin Activity"},
-      {id:"cashbook",l:"Cash Book / Day Book"},
+      {id:"cashbook",l:"Cash Book"},
+      {id:"daybook",l:"Day Book"},
     ]},
     {key:"payments",label:"Payments",tabs:[
       {id:"payreq",l:`Payment Requests${pendPR>0?` (${pendPR})`:""}`},
@@ -3519,22 +3513,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
 
-      {/* ── Stat Tiles (compact) ── */}
-      <div style={{padding:"10px 18px 6px",flexShrink:0}}>
-        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
-          {curTiles.map((s,i)=>{const TileIcon=s.Icon;return(
-            <div key={i} style={{padding:"10px 13px",background:"#FFFFFF",border:"1px solid #E2E8F0",borderRadius:"10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:9.5,color:"#64748B",fontWeight:600,letterSpacing:".4px",textTransform:"uppercase",marginBottom:2}}>{s.l}</div>
-                <div style={{fontSize:18,fontWeight:700,color:"#0F172A",letterSpacing:"-.3px",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.v}</div>
-                <div style={{fontSize:10,color:"#94A3B8",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.sub}</div>
-              </div>
-              <div style={{width:30,height:30,borderRadius:"50%",background:"#F1F5F9",color:"#475569",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:8}}>
-                {TileIcon ? <TileIcon size={14} color="currentColor"/> : null}
-              </div>
-            </div>
-          );})}
-        </div>
+      {/* ── Thin summary strip (replaced the space-hungry KPI tiles) ── */}
+      <div style={{padding:"10px 18px 4px",flexShrink:0,display:"flex",gap:24,alignItems:"baseline",flexWrap:"wrap"}}>
+        {curTiles.map((s,i)=>(
+          <span key={i} style={{display:"inline-flex",alignItems:"baseline",gap:7}}>
+            <span style={{fontSize:10,color:T.t4,fontWeight:500,textTransform:"uppercase",letterSpacing:".4px"}}>{s.l}</span>
+            <span style={{fontSize:15,fontWeight:600,color:s.c||T.t1,fontVariantNumeric:"tabular-nums"}}>{s.v}</span>
+          </span>
+        ))}
       </div>
 
       {/* ── Tab bar — 2-level: group toggle + sub-tabs ── */}
@@ -3711,7 +3697,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
             colors:{"Overdue":{c:T.red,bg:T.redL},"Due in 7d":{c:T.red,bg:T.redL},"Due in 15d":{c:T.amb,bg:T.ambL},"Due in 30d":{c:T.grn,bg:T.grnL}},
           },
         };
-        const cfg=FILTER_CONFIGS[tab];
+        // transaction (Fin Activity): chips now render INSIDE its own toolbar as
+        // Row 1 (same one-card layout as Cash Book / Day Book) so switching
+        // between these sub-tabs doesn't shift the table position.
+        const cfg=tab==="transaction"?null:FILTER_CONFIGS[tab];
         if(!cfg) return null;
         return(
           <div style={{margin:"0 18px 8px",padding:"7px 12px",background:T.surface,borderRadius:"0 0 8px 8px",border:`1px solid ${T.b1}`,borderTop:"none",display:"flex",alignItems:"center",gap:6,flexWrap:"wrap",flexShrink:0}}>
@@ -3893,7 +3882,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   <div style={{padding:"11px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",alignItems:"center",gap:11,flexShrink:0}}>
                     <div style={{width:38,height:38,borderRadius:"50%",background:dTc+"1A",color:dTc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,fontWeight:700,flexShrink:0}}>{dInitials}</div>
                     <div style={{flex:1,minWidth:0}}>
-                      <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selParty.name}</div>
+                      <div style={{fontSize:14,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selParty.name}</div>
                       <div style={{fontSize:11,color:T.t4}}>{selParty.type} · {ledgerRows.length} transactions</div>
                     </div>
                     <span style={{fontSize:11,color:T.grn,fontWeight:600,whiteSpace:"nowrap"}}>CR ₹{fmtN(totalCR)}</span>
@@ -4147,26 +4136,45 @@ Status: ${ledgerRow.status||"unpaid"}`;
         {/* CASH BOOK TAB */}
         {tab==="transaction"&&(
           <div style={{display:"flex",flexDirection:"column",flex:1,overflow:"hidden"}}>
-            {/* Toolbar — tight against filter bar */}
-            <div style={{background:T.surface,borderRadius:8,padding:"6px 10px",marginBottom:6,border:`1px solid ${T.b1}`,display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",flexShrink:0}}>
-              <div style={{position:"relative",flex:1,minWidth:160}}>
-                <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
-                <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search narration or party..."
-                  style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${txnSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:txnSearch?T.bluL:T.surface}}/>
+            {/* Toolbar — one card: Row 1 = type chips, Row 2 = search/date/exports.
+                Same padding/margins as Cash Book / Day Book so the table starts at
+                the identical Y on every Ledgers & Cash sub-tab (no screen jump). */}
+            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"9px 11px",marginBottom:8,flexShrink:0}}>
+              {/* Row 1: type filter chips */}
+              <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:8,minHeight:30}}>
+                {[["All",null],["Payment In",{c:T.grn,bg:T.grnL}],["Payment Out",{c:T.red,bg:T.redL}],["Material",{c:T.blu,bg:T.bluL}],["Site Expense",{c:T.amb,bg:T.ambL}],["Sub-Con",{c:T.slt,bg:T.sltL}],["Party Payment",{c:T.pur,bg:T.purL}],["Unpaid",{c:T.red,bg:T.redL}]].map(([id,col])=>{
+                  const on=chipTxn===id;const cc=col||{c:T.slt,bg:T.sltL};return(
+                  <button key={id} onClick={()=>setChipTxn(id)}
+                    style={{padding:"4px 12px",borderRadius:20,border:`1.5px solid ${on?cc.c:T.b1}`,background:on?cc.bg:T.surfaceB,color:on?cc.c:T.t3,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5}}>
+                    {id}
+                    {id==="Unpaid"&&<span style={{background:T.red,color:"white",fontSize:8,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{activeTxns.filter(t=>t.status!=="paid").length}</span>}
+                  </button>
+                );})}
+                {chipTxn!=="All"&&(
+                  <button onClick={()=>setChipTxn("All")}
+                    style={{marginLeft:"auto",padding:"3px 9px",borderRadius:20,border:`1px solid ${T.b1}`,background:"none",color:T.t4,fontSize:11,cursor:"pointer",fontFamily:"inherit"}}>Clear</button>
+                )}
               </div>
-              <div style={{display:"flex",alignItems:"center",gap:5}}>
-                <IcCalDue size={13} color={T.t4}/>
-                <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
-                <span style={{fontSize:11,color:T.t4}}>to</span>
-                <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
+              {/* Row 2: search + date range + unbilled + exports */}
+              <div style={{display:"flex",gap:7,alignItems:"center",flexWrap:"wrap"}}>
+                <div style={{position:"relative",flex:1,minWidth:160}}>
+                  <span style={{position:"absolute",left:8,top:"50%",transform:"translateY(-50%)",lineHeight:0,pointerEvents:"none"}}><IcSrch size={13} color={T.t4}/></span>
+                  <input value={txnSearch} onChange={e=>setTxnSearch(e.target.value)} placeholder="Search narration or party..."
+                    style={{width:"100%",height:31,padding:"0 8px 0 27px",borderRadius:7,border:`1.5px solid ${txnSearch?T.blu:T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:txnSearch?T.bluL:T.surface}}/>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:5}}>
+                  <IcCalDue size={13} color={T.t4}/>
+                  <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
+                  <span style={{fontSize:11,color:T.t4}}>to</span>
+                  <input type="date" style={{height:31,padding:"0 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}/>
+                </div>
+                <button onClick={()=>setShowUB(true)} style={{display:"flex",alignItems:"center",gap:5,height:31,padding:"0 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.pur}22`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
+                  <IcUB size={13} color={T.pur}/> Unbilled
+                  <span style={{background:T.pur,color:"white",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{UNBILLED_PARTIES.length}</span>
+                </button>
+                <button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
+                <button onClick={dlTxnPDF} style={{height:31,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>
               </div>
-              <button onClick={()=>setShowUB(true)} style={{display:"flex",alignItems:"center",gap:5,height:31,padding:"0 11px",borderRadius:6,background:T.purL,border:`1px solid ${T.pur}22`,color:T.pur,fontSize:11.5,fontWeight:700,cursor:"pointer",flexShrink:0}}>
-                <IcUB size={13} color={T.pur}/> Unbilled
-                <span style={{background:T.pur,color:"white",fontSize:9,fontWeight:800,padding:"1px 5px",borderRadius:10}}>{UNBILLED_PARTIES.length}</span>
-              </button>
-              <button onClick={dlTxnCSV} style={{height:31,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>Excel</button>
-              <button onClick={dlTxnPDF} style={{height:31,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>PDF</button>
-
             </div>
 
 
@@ -4174,9 +4182,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
             {/* Transactions Table — new 7-col layout */}
             <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
               {/* Sticky header */}
-              <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"7px 14px",background:T.surfaceB,borderBottom:`2px solid ${T.b1}`,flexShrink:0,gap:6}}>
+              <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"8px 14px",background:"#1E293B",flexShrink:0,gap:6}}>
                 {["Date","Type","Party","Site","Note","Amount","Status"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===5?"right":"left"}}>{h}</span>
+                  <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===5?"right":"left"}}>{h}</span>
                 ))}
               </div>
               {/* Scrollable body */}
@@ -4277,8 +4285,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
         )}
 
         {/* CASH BOOK + DAY BOOK TAB */}
-        {tab==="cashbook"&&(
-          <CashDayBook txns={cbTxnsBase}/>
+        {(tab==="cashbook"||tab==="daybook")&&(
+          <CashDayBook txns={cbTxnsBase} view={tab==="daybook"?"daybook":"cashbook"}/>
         )}
 
         {/* PAYMENT REQUESTS TAB */}
