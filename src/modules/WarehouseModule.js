@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import api from "../config/api";
 import SearchSelect from "../components/SearchSelect";
 import LibrarySelect from "../components/LibrarySelect";
@@ -1915,46 +1915,128 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
 }
 
 // ── STOCK TAB ─────────────────────────────────────────────────────
-function StockTab({stock,onSelect,onAddMaterial}){
+function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue}){
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
   const [showLow,setShowLow]=useState(false);
-  const [view,setView]=useState("grid");
+  const [view,setView]=useState("group");
+  const [sort,setSort]=useState("name");
+  const [collapsed,setCollapsed]=useState({});
 
-  const filtered=stock.filter(m=>{
-    if(cat!=="All"&&m.category!==cat) return false;
-    if(showLow&&m.qty>=m.minQty) return false;
-    if(search&&!m.name.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
+  // ── Movement velocity per material (from grns + issues transaction history) ──
+  const velMap=useMemo(()=>{
+    const m={};
+    (grns||[]).forEach(g=>(g.items||[]).forEach(it=>{
+      if(!it.matId) return;
+      if(!m[it.matId]) m[it.matId]={inCount:0,outCount:0};
+      m[it.matId].inCount++;
+    }));
+    (issues||[]).forEach(i=>(i.items||[]).forEach(it=>{
+      if(!it.matId) return;
+      if(!m[it.matId]) m[it.matId]={inCount:0,outCount:0};
+      m[it.matId].outCount++;
+    }));
+    return m;
+  },[grns,issues]);
 
-  const getStockStatus=(m)=>{
-    if(m.qty===0) return{label:"Out",c:T.red,bg:T.redL,brd:T.redM};
-    if(m.qty<m.minQty) return{label:"Low",c:T.amb,bg:T.ambL,brd:T.ambM};
-    if(m.maxQty&&m.qty>m.maxQty*0.8) return{label:"High",c:T.grn,bg:T.grnL,brd:T.grnM};
-    return{label:"Normal",c:T.blu,bg:T.bluL,brd:T.bluM};
+  const getVel=(m)=>{
+    const v=velMap[m.id]||{outCount:0};
+    if(v.outCount>=5) return{label:"Fast Moving",icon:"🔥",c:"#DC2626",bg:"#FEF2F2"};
+    if(v.outCount>=2) return{label:"Active",icon:"⚡",c:T.blu,bg:T.bluL};
+    return{label:"Slow",icon:"",c:T.t4,bg:T.surfaceB};
+  };
+
+  const getHealth=(m)=>{
+    if(m.qty===0)              return{label:"Out",      c:"#EF4444",bg:"#FEF2F2",brd:"#FECACA",pri:0};
+    if(m.qty<m.minQty)         return{label:"Low",      c:T.amb,    bg:T.ambL,  brd:T.ambM,   pri:1};
+    if(m.maxQty&&m.qty>m.maxQty*0.95) return{label:"High",c:"#7C3AED",bg:"#F5F3FF",brd:"#DDD6FE",pri:3};
+    return                            {label:"OK",       c:T.grn,    bg:T.grnL,  brd:T.grnM,   pri:2};
+  };
+
+  // Stock bar: shows fill vs max (or 3×min as proxy). Amber tick marks min threshold.
+  const getBar=(m)=>{
+    const cap=m.maxQty||(m.minQty*3)||(m.qty*2)||100;
+    const pct=Math.min(100,(m.qty/cap)*100);
+    const minPct=m.minQty?Math.min(100,(m.minQty/cap)*100):0;
+    const color=m.qty===0?"#EF4444":m.qty<m.minQty?T.amb:T.grn;
+    return{pct,minPct,color,cap};
+  };
+
+  const filtered=stock
+    .filter(m=>{
+      if(cat!=="All"&&m.category!==cat) return false;
+      if(showLow&&m.qty>=m.minQty) return false;
+      if(search&&!m.name.toLowerCase().includes(search.toLowerCase())) return false;
+      return true;
+    })
+    .sort((a,b)=>{
+      if(sort==="qty")   return a.qty-b.qty;
+      if(sort==="value") return (b.qty*b.rate)-(a.qty*a.rate);
+      if(sort==="low"){
+        const [ah,bh]=[getHealth(a).pri,getHealth(b).pri];
+        if(ah!==bh) return ah-bh;
+      }
+      return a.name.localeCompare(b.name);
+    });
+
+  // Category groups for group view
+  const groups=useMemo(()=>{
+    const g={};
+    filtered.forEach(m=>{
+      const k=m.category||"Uncategorized";
+      if(!g[k]) g[k]=[];
+      g[k].push(m);
+    });
+    return g;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[filtered.map(m=>m.id+m.qty).join(","),sort]);
+
+  const toggleGroup=k=>setCollapsed(p=>({...p,[k]:!p[k]}));
+
+  // Summary totals
+  const totalVal=filtered.reduce((s,m)=>s+m.qty*m.rate,0);
+  const lowCount=filtered.filter(m=>m.qty>0&&m.qty<m.minQty).length;
+  const outCount=filtered.filter(m=>m.qty===0).length;
+
+  // ── Mini stock bar (used in group rows) ──
+  const MiniBar=({m})=>{
+    const {pct,minPct,color}=getBar(m);
+    return(
+      <div style={{position:"relative",height:4,background:T.b1,borderRadius:2,width:80,flexShrink:0}}>
+        <div style={{position:"absolute",left:0,top:0,height:"100%",width:pct+"%",background:color,borderRadius:2}}/>
+        {minPct>0&&<div style={{position:"absolute",left:minPct+"%",top:-2,height:8,width:2,background:"#94A3B8",borderRadius:1}} title={"Min: "+m.minQty}/>}
+      </div>
+    );
   };
 
   return(
     <div>
-      <div style={{display:"flex",gap:8,marginBottom:12,alignItems:"center",flexWrap:"wrap"}}>
+      {/* ── Toolbar ── */}
+      <div style={{display:"flex",gap:8,marginBottom:14,alignItems:"center",flexWrap:"wrap"}}>
         <div style={{position:"relative",flex:1,minWidth:200}}>
           <span style={{position:"absolute",left:9,top:"50%",transform:"translateY(-50%)",pointerEvents:"none"}}><IcSearch size={13} color={T.t4}/></span>
           <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search material..."
-            style={{width:"100%",height:32,padding:"0 9px 0 28px",borderRadius:7,border:`1.5px solid ${search?T.blu:T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+            style={{width:"100%",height:33,padding:"0 9px 0 28px",borderRadius:7,border:`1.5px solid ${search?T.blu:T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
         </div>
         <select value={cat} onChange={e=>setCat(e.target.value)}
-          style={{height:32,padding:"0 10px",borderRadius:7,border:`1.5px solid ${cat!=="All"?T.blu:T.b1}`,background:cat!=="All"?T.bluL:T.surface,fontSize:12,color:cat!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+          style={{height:33,padding:"0 10px",borderRadius:7,border:`1.5px solid ${cat!=="All"?T.blu:T.b1}`,background:cat!=="All"?T.bluL:T.surface,fontSize:12,color:cat!=="All"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
           {CATEGORIES_ALL.map(c=><option key={c}>{c}</option>)}
         </select>
         <button onClick={()=>setShowLow(s=>!s)}
-          style={{height:32,padding:"0 11px",borderRadius:7,border:`1.5px solid ${showLow?T.red:T.b1}`,background:showLow?T.redL:T.surface,color:showLow?T.red:T.t3,fontSize:12,fontWeight:showLow?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-          <IcAlert size={12} color={showLow?T.red:T.t4}/> Low Only
+          style={{height:33,padding:"0 11px",borderRadius:7,border:`1.5px solid ${showLow?"#EF4444":T.b1}`,background:showLow?"#FEF2F2":T.surface,color:showLow?"#EF4444":T.t3,fontSize:12,fontWeight:showLow?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          <IcAlert size={12} color={showLow?"#EF4444":T.t4}/> Low Stock
         </button>
+        <select value={sort} onChange={e=>setSort(e.target.value)}
+          style={{height:33,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,color:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit"}}>
+          <option value="name">Sort: Name</option>
+          <option value="qty">Sort: Qty ↑</option>
+          <option value="value">Sort: Value ↓</option>
+          <option value="low">Sort: Alerts first</option>
+        </select>
         <div style={{display:"flex",gap:2,background:T.surfaceB,borderRadius:7,border:`1px solid ${T.b1}`,padding:3}}>
-          {[["grid","⊞"],["list","☰"]].map(([id,ico])=>(
-            <button key={id} onClick={()=>setView(id)}
-              style={{width:26,height:26,borderRadius:5,border:"none",background:view===id?T.blu:"none",color:view===id?"white":T.t3,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          {[["group","≡≡","Grouped by category"],["grid","⊞","Card grid"],["list","☰","Compact list"]].map(([id,ico,ttl])=>(
+            <button key={id} onClick={()=>setView(id)} title={ttl}
+              style={{width:30,height:27,borderRadius:5,border:"none",background:view===id?T.blu:"none",color:view===id?"white":T.t3,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
               {ico}
             </button>
           ))}
@@ -1962,9 +2044,14 @@ function StockTab({stock,onSelect,onAddMaterial}){
         <Btn onClick={onAddMaterial} c={T.blu} icon={IcAdd} size="sm">New Material</Btn>
       </div>
 
-      <div style={{fontSize:11,color:T.t4,marginBottom:10}}>
-        {filtered.length} items · {filtered.filter(m=>m.qty<m.minQty).length} below minimum
-        {cat!=="All"&&<span style={{marginLeft:6,background:T.bluL,color:T.blu,fontSize:10,fontWeight:600,padding:"1px 7px",borderRadius:20,border:`1px solid ${T.bluM}`}}>{cat}</span>}
+      {/* ── Summary strip ── */}
+      <div style={{display:"flex",gap:10,marginBottom:14,alignItems:"center",fontSize:11.5,color:T.t3,flexWrap:"wrap"}}>
+        <span style={{fontWeight:600,color:T.t2}}>{filtered.length} item{filtered.length!==1?"s":""}</span>
+        <span style={{color:T.b2}}>·</span>
+        <span>₹{fmt(totalVal)} total value</span>
+        {outCount>0&&<><span style={{color:T.b2}}>·</span><span style={{color:"#EF4444",fontWeight:700,background:"#FEF2F2",padding:"2px 9px",borderRadius:20,border:"1px solid #FECACA",fontSize:11}}>🔴 {outCount} Out of Stock</span></>}
+        {lowCount>0&&<><span style={{color:T.b2}}>·</span><span style={{color:T.amb,fontWeight:700,background:T.ambL,padding:"2px 9px",borderRadius:20,border:`1px solid ${T.ambM}`,fontSize:11}}>⚠ {lowCount} Low Stock</span></>}
+        {cat!=="All"&&<span style={{background:T.bluL,color:T.blu,fontSize:10,fontWeight:600,padding:"2px 8px",borderRadius:20,border:`1px solid ${T.bluM}`}}>{cat}</span>}
       </div>
 
       {filtered.length===0&&(
@@ -1972,46 +2059,148 @@ function StockTab({stock,onSelect,onAddMaterial}){
           sub={stock.length===0?"\"New Material\" se SKU add karke shuru karein":""}/>
       )}
 
+      {/* ══════════════════════════════════════════════
+          GROUP VIEW — default, grouped by category
+          ══════════════════════════════════════════════ */}
+      {view==="group"&&filtered.length>0&&(
+        <div style={{display:"flex",flexDirection:"column",gap:8}}>
+          {Object.entries(groups).map(([gKey,items])=>{
+            const isCol=collapsed[gKey];
+            const gVal=items.reduce((s,m)=>s+m.qty*m.rate,0);
+            const gLow=items.filter(m=>m.qty<m.minQty).length;
+            const gOut=items.filter(m=>m.qty===0).length;
+            return(
+              <div key={gKey} style={{background:T.surface,borderRadius:10,border:`1px solid ${gOut>0?"#FECACA":gLow>0?T.ambM:T.b1}`,overflow:"hidden",boxShadow:"0 1px 4px rgba(0,0,0,0.04)"}}>
+
+                {/* Group header */}
+                <div onClick={()=>toggleGroup(gKey)}
+                  style={{display:"flex",alignItems:"center",gap:10,padding:"10px 16px",background:T.surfaceB,cursor:"pointer",borderBottom:isCol?"none":`1px solid ${T.b1}`,userSelect:"none"}}>
+                  <span style={{fontSize:17}}>{getCategoryEmoji(gKey)}</span>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.t1,flex:1,letterSpacing:"-.2px"}}>{gKey}</span>
+                  <span style={{fontSize:11,color:T.t4}}>{items.length} item{items.length!==1?"s":""}</span>
+                  <span style={{color:T.b2,fontSize:10}}>·</span>
+                  <span style={{fontSize:11,fontWeight:600,color:T.blu}}>₹{fmt(gVal)}</span>
+                  {gOut>0&&<span style={{fontSize:10,color:"#EF4444",fontWeight:700,background:"#FEF2F2",padding:"2px 7px",borderRadius:10,border:"1px solid #FECACA"}}>🔴 {gOut} out</span>}
+                  {gLow>0&&<span style={{fontSize:10,color:T.amb,fontWeight:700,background:T.ambL,padding:"2px 7px",borderRadius:10,border:`1px solid ${T.ambM}`}}>⚠ {gLow} low</span>}
+                  <span style={{fontSize:13,color:T.t4,transform:isCol?"rotate(-90deg)":"rotate(0)",transition:"transform .2s",display:"inline-block"}}>▾</span>
+                </div>
+
+                {/* Material rows */}
+                {!isCol&&items.map((m,idx)=>{
+                  const h=getHealth(m);
+                  const v=getVel(m);
+                  const val=m.qty*m.rate;
+                  return(
+                    <div key={m.id}
+                      style={{display:"grid",gridTemplateColumns:"4px 40px 1fr 96px 86px auto 80px",alignItems:"center",borderBottom:idx<items.length-1?`1px solid ${T.b1}`:"none",cursor:"pointer",minHeight:52,transition:"background .1s"}}
+                      onClick={()=>onSelect(m)}
+                      onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF55"}
+                      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+
+                      {/* Health strip */}
+                      <div style={{alignSelf:"stretch",background:h.label==="OK"?T.grn+"40":h.c+"BB"}}/>
+
+                      {/* Emoji */}
+                      <div style={{textAlign:"center",fontSize:17,paddingLeft:2}}>{getCategoryEmoji(m.category)}</div>
+
+                      {/* Name + mini bar */}
+                      <div style={{padding:"8px 10px 8px 6px",minWidth:0}}>
+                        <div style={{fontSize:12.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.name}</div>
+                        <div style={{marginTop:5,display:"flex",alignItems:"center",gap:7}}>
+                          <MiniBar m={m}/>
+                          <span style={{fontSize:9,color:T.t4,whiteSpace:"nowrap"}}>
+                            {m.minQty?`min ${fmtN(m.minQty)}`:"—"}
+                            {m.maxQty?` / ${fmtN(m.maxQty)}`:""}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Qty */}
+                      <div style={{textAlign:"right",paddingRight:14}}>
+                        <span style={{fontSize:20,fontWeight:900,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1,letterSpacing:"-0.5px",lineHeight:1}}>{fmtN(m.qty)}</span>
+                        <span style={{fontSize:10,color:T.t4,marginLeft:3}}>{m.unit}</span>
+                        {h.label!=="OK"&&<div style={{fontSize:9,color:h.c,fontWeight:800,marginTop:1,textTransform:"uppercase",letterSpacing:".3px"}}>{h.label==="Out"?"Out of stock":h.label==="Low"?"Below min":h.label}</div>}
+                      </div>
+
+                      {/* Value */}
+                      <div style={{textAlign:"right",paddingRight:14}}>
+                        <div style={{fontSize:12,fontWeight:700,color:T.blu}}>₹{fmt(val)}</div>
+                        <div style={{fontSize:9.5,color:T.t4}}>@₹{fmtN(m.rate)}/{m.unit}</div>
+                      </div>
+
+                      {/* Velocity (only fast/active) */}
+                      <div style={{paddingRight:10,minWidth:70}}>
+                        {v.label!=="Slow"&&(
+                          <span style={{fontSize:9.5,fontWeight:700,color:v.c,background:v.bg,padding:"2px 7px",borderRadius:10,border:`1px solid ${v.c}33`,whiteSpace:"nowrap"}}>
+                            {v.icon} {v.label}
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Quick actions */}
+                      <div style={{display:"flex",gap:4,paddingRight:12,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+                        {onAddStock&&(
+                          <button onClick={()=>onAddStock(m)} title="Add Stock"
+                            style={{width:28,height:28,borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:T.grn,fontWeight:700}}>+</button>
+                        )}
+                        {onIssue&&(
+                          <button onClick={()=>onIssue(m)} title="Issue to project"
+                            style={{width:28,height:28,borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:T.amb}}>↓</button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ══════════════════════════════════════════
+          GRID VIEW — improved card layout
+          ══════════════════════════════════════════ */}
       {view==="grid"&&filtered.length>0&&(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(220px,1fr))",gap:10}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:10}}>
           {filtered.map(m=>{
-            const ss=getStockStatus(m);
-            const pct=m.maxQty?Math.min(100,(m.qty/m.maxQty)*100):0;
-            const barColor=m.qty===0?T.red:m.qty<m.minQty?T.amb:T.grn;
+            const h=getHealth(m);
+            const v=getVel(m);
             const val=m.qty*m.rate;
+            const {pct,minPct,color:barColor}=getBar(m);
             return(
               <div key={m.id} onClick={()=>onSelect(m)}
-                style={{background:T.surface,borderRadius:10,border:`1.5px solid ${m.qty<m.minQty?T.ambM:T.b1}`,padding:"13px 14px",cursor:"pointer",transition:"all .15s",boxShadow:"0 1px 3px rgba(0,0,0,0.05)"}}
-                onMouseEnter={e=>{e.currentTarget.style.borderColor=T.bluM;e.currentTarget.style.boxShadow="0 0 0 3px rgba(37,99,235,0.08)";}}
-                onMouseLeave={e=>{e.currentTarget.style.borderColor=m.qty<m.minQty?T.ambM:T.b1;e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.05)";}}>
-                <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:8}}>
-                  <div style={{display:"flex",gap:8,alignItems:"center",minWidth:0,flex:1}}>
-                    <span style={{fontSize:20}}>{getCategoryEmoji(m.category)}</span>
-                    <div style={{minWidth:0}}>
-                      <div style={{fontSize:9.5,color:T.t4,fontFamily:"monospace"}}>#{m.id}</div>
-                      <div style={{fontSize:12.5,fontWeight:600,color:T.t1,lineHeight:1.3,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.name}</div>
-                    </div>
+                style={{background:T.surface,borderRadius:10,border:`1px solid ${h.label!=="OK"?h.brd:T.b1}`,borderLeft:`4px solid ${h.c}`,padding:"13px 14px",cursor:"pointer",transition:"all .15s",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",position:"relative"}}
+                onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(0,0,0,0.1)";e.currentTarget.style.transform="translateY(-1px)";}}
+                onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.05)";e.currentTarget.style.transform="";}}>
+                {v.label!=="Slow"&&(
+                  <div style={{position:"absolute",top:10,right:10,fontSize:9.5,fontWeight:700,color:v.c,background:v.bg,padding:"2px 7px",borderRadius:8,border:`1px solid ${v.c}33`}}>
+                    {v.icon} {v.label}
                   </div>
-                  <Pill label={ss.label} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+                )}
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingRight:v.label!=="Slow"?72:0}}>
+                  <span style={{fontSize:19}}>{getCategoryEmoji(m.category)}</span>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.name}</div>
+                    <div style={{fontSize:9.5,color:T.t4}}>{m.location||m.category||"—"}</div>
+                  </div>
                 </div>
-                <div style={{margin:"10px 0 6px",display:"flex",alignItems:"baseline",gap:4}}>
-                  <span style={{fontSize:26,fontWeight:800,color:m.qty<m.minQty?T.red:T.t1,letterSpacing:"-1px"}}>{fmtN(m.qty)}</span>
+                <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:9}}>
+                  <span style={{fontSize:28,fontWeight:900,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1,letterSpacing:"-1px",lineHeight:1}}>{fmtN(m.qty)}</span>
                   <span style={{fontSize:12,color:T.t4,fontWeight:500}}>{m.unit}</span>
+                  {h.label!=="OK"&&<span style={{fontSize:9.5,color:h.c,fontWeight:700,background:h.bg,padding:"1px 6px",borderRadius:6,marginLeft:2}}>{h.label==="Out"?"OUT":h.label.toUpperCase()}</span>}
                 </div>
-                <PBar pct={pct} color={barColor} h={5}/>
-                <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}>
-                  <span style={{fontSize:9.5,color:T.t4}}>Min: {fmtN(m.minQty)}</span>
-                  <span style={{fontSize:9.5,color:T.t4}}>Max: {fmtN(m.maxQty)}</span>
+                {/* Stock bar with min threshold marker */}
+                <div style={{position:"relative",height:5,background:T.b1,borderRadius:3,marginBottom:4}}>
+                  <div style={{position:"absolute",left:0,top:0,height:"100%",width:pct+"%",background:barColor,borderRadius:3}}/>
+                  {minPct>0&&<div style={{position:"absolute",left:minPct+"%",top:-3,height:11,width:2,background:"#94A3B8",borderRadius:1}} title={"Min: "+m.minQty}/>}
                 </div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:10,paddingTop:9,borderTop:`1px solid ${T.b1}`}}>
-                  <div>
-                    <div style={{fontSize:9.5,color:T.t4,marginBottom:1}}>Value</div>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.blu}}>₹{fmt(val)}</div>
-                  </div>
-                  <div style={{textAlign:"right"}}>
-                    <div style={{fontSize:9.5,color:T.t4,marginBottom:1}}>{m.location||"—"}</div>
-                    <div style={{fontSize:10,color:T.t3}}>@₹{fmtN(m.rate)}/{m.unit}</div>
-                  </div>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                  <span style={{fontSize:9.5,color:T.t4}}>Min {m.minQty?fmtN(m.minQty):"—"}</span>
+                  <span style={{fontSize:9.5,color:T.t4}}>Max {m.maxQty?fmtN(m.maxQty):"—"}</span>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:9,borderTop:`1px solid ${T.b1}`}}>
+                  <span style={{fontSize:13,fontWeight:700,color:T.blu}}>₹{fmt(val)}</span>
+                  <span style={{fontSize:10.5,color:T.t4}}>@₹{fmtN(m.rate)}/{m.unit}</span>
                 </div>
               </div>
             );
@@ -2019,34 +2208,43 @@ function StockTab({stock,onSelect,onAddMaterial}){
         </div>
       )}
 
+      {/* ══════════════════════════════════════════
+          LIST VIEW — compact table
+          ══════════════════════════════════════════ */}
       {view==="list"&&filtered.length>0&&(
-        <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"60px 1fr 130px 90px 80px 90px 100px 70px",padding:"7px 14px",background:T.sb,gap:8}}>
-            {["Code","Material","Category","Stock","Unit","Min","Value","Status"].map((h,i)=>(
+        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
+          <div style={{display:"grid",gridTemplateColumns:"4px 50px 1fr 120px 100px 100px 90px",padding:"8px 14px",background:T.sb,gap:8,alignItems:"center"}}>
+            {["","Code","Material","Category","Stock","Value","Status"].map((h,i)=>(
               <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
             ))}
           </div>
           {filtered.map(m=>{
-            const ss=getStockStatus(m);
+            const h=getHealth(m);
+            const v=getVel(m);
             return(
               <div key={m.id} onClick={()=>onSelect(m)}
-                style={{display:"grid",gridTemplateColumns:"60px 1fr 130px 90px 80px 90px 100px 70px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",borderLeft:`3px solid ${ss.c}44`,gap:8}}
+                style={{display:"grid",gridTemplateColumns:"4px 50px 1fr 120px 100px 100px 90px",padding:"9px 14px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",transition:"background .1s",gap:8}}
                 onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                 onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                <div style={{alignSelf:"stretch",background:h.label==="OK"?T.grn+"44":h.c+"99",borderRadius:0}}/>
                 <span style={{fontSize:10.5,color:T.t4,fontFamily:"monospace"}}>#{m.id}</span>
                 <div style={{display:"flex",alignItems:"center",gap:7,minWidth:0}}>
                   <span style={{fontSize:15}}>{getCategoryEmoji(m.category)}</span>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:12.5,fontWeight:500,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.name}</div>
-                    <div style={{fontSize:10,color:T.t4}}>{m.location||"—"}</div>
+                    {v.label!=="Slow"&&<span style={{fontSize:9,color:v.c,fontWeight:700}}>{v.icon} {v.label}</span>}
                   </div>
                 </div>
                 <span style={{fontSize:11,color:T.t3}}>{m.category}</span>
-                <span style={{fontSize:13,fontWeight:700,color:m.qty<m.minQty?T.red:T.t1}}>{fmtN(m.qty)}</span>
-                <span style={{fontSize:11.5,color:T.t3}}>{m.unit}</span>
-                <span style={{fontSize:11.5,color:T.t3}}>{fmtN(m.minQty)}</span>
+                <div>
+                  <span style={{fontSize:13,fontWeight:700,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1}}>{fmtN(m.qty)}</span>
+                  <span style={{fontSize:10,color:T.t4,marginLeft:3}}>{m.unit}</span>
+                </div>
                 <span style={{fontSize:12.5,fontWeight:600,color:T.blu}}>₹{fmt(m.qty*m.rate)}</span>
-                <Pill label={ss.label} c={ss.c} bg={ss.bg} brd={ss.brd}/>
+                {h.label!=="OK"
+                  ?<Pill label={h.label==="Out"?"Out of Stock":"Low"} c={h.c} bg={h.bg} brd={h.brd}/>
+                  :<span style={{fontSize:10,color:T.t4}}>—</span>
+                }
               </div>
             );
           })}
@@ -3358,7 +3556,7 @@ function WarehouseModule(){
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
-        {tab==="stock"&&<StockTab stock={stock} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})}/>}
+        {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onNewGRN={()=>setGrnNewOpen(true)} onVerifyGRN={handleVerifyGRN}
