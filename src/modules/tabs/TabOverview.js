@@ -1,215 +1,434 @@
-import React from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import api from "../../config/api";
 import { T, fmt, STAGES, STAGE_S } from "../shared/tokens";
 import { Pill, PBar, Stat, Panel, PHead } from "../shared/ui";
 
-const D = { milestones:[], expBreakdown:[], tasks:[], attendance:[], dpr:[] };
+/* ────────────────────────────────────────────────────────────────────
+   Project Overview — mirrors the company dashboard's depth at the
+   single-project level, with a Finance / Operations & Team toggle.
+   All data is project-scoped and pulled live from the same endpoints
+   the individual tabs use, so the numbers stay in sync.
+   ──────────────────────────────────────────────────────────────────── */
+
+const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+// Canonical money direction (matches FinanceModule TYPE_META).
+const IN_TYPES  = ["receipt","sales_invoice","material_return"];
+const OUT_TYPES = ["payment","material_purchase","site_expense","party_payment","subcon_expense","wallet_payment"];
+const num = (v)=>Number(v)||0;
+
+/* ── Self-contained charts (no shared chart deps — keeps the tab portable) ── */
+function DonutChart({slices, size=118, r=40, inner=24}){
+  const cx=size/2, cy=size/2;
+  const valid=(slices||[]).filter(s=>s.value>0);
+  if(!valid.length) return (
+    <div style={{width:size,height:size,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:10.5,border:`1.5px dashed ${T.b2}`,borderRadius:"50%",gap:4}}>
+      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-9-9v9z"/><path d="M21 12a9 9 0 00-9-9v9h9z"/></svg>
+      <span style={{fontWeight:600}}>No spend yet</span>
+    </div>
+  );
+  const total=valid.reduce((s,sl)=>s+sl.value,0)||1;
+  const toRad=d=>d*Math.PI/180;
+  const arc=(a,b,oR,iR)=>{
+    const s={x:cx+oR*Math.cos(toRad(a)),y:cy+oR*Math.sin(toRad(a))};
+    const e={x:cx+oR*Math.cos(toRad(b)),y:cy+oR*Math.sin(toRad(b))};
+    const si={x:cx+iR*Math.cos(toRad(b)),y:cy+iR*Math.sin(toRad(b))};
+    const ei={x:cx+iR*Math.cos(toRad(a)),y:cy+iR*Math.sin(toRad(a))};
+    const lg=(b-a)>180?1:0;
+    return `M ${s.x} ${s.y} A ${oR} ${oR} 0 ${lg} 1 ${e.x} ${e.y} L ${si.x} ${si.y} A ${iR} ${iR} 0 ${lg} 0 ${ei.x} ${ei.y} Z`;
+  };
+  let cum=-90;
+  return(
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>
+      {valid.map((sl,i)=>{const deg=(sl.value/total)*360;const a=cum;cum+=deg;return <path key={i} d={arc(a,cum-0.6,r,inner)} fill={sl.color} opacity={0.92}/>;})}
+      <circle cx={cx} cy={cy} r={inner-1} fill={T.surface}/>
+    </svg>
+  );
+}
+
+function CashBars({data, height=148}){
+  if(!data||!data.length) return (
+    <div style={{padding:"40px 16px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
+      <div style={{width:38,height:38,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
+        <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
+      </div>
+      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>No transactions yet</div>
+      <div style={{fontSize:10.5,color:T.t4}}>Money in / out will chart here</div>
+    </div>
+  );
+  const maxV=Math.max(...data.map(d=>Math.max(d.sales,d.expense)),1);
+  const bW=18,gap=5,groupGap=22;
+  const W=data.length*(bW*3+gap*2+groupGap)+20;
+  const pad={top:16,bottom:22,left:6,right:6}; const cH=height-pad.top-pad.bottom;
+  const sy=v=>pad.top+cH-(v/maxV)*cH; const bH=v=>(v/maxV)*cH;
+  let x=pad.left+6;
+  return(
+    <svg width="100%" viewBox={`0 0 ${W} ${height}`} style={{overflow:"visible"}}>
+      {[0,0.5,1].map((p,i)=>(<line key={i} x1={pad.left} y1={pad.top+cH*p} x2={W-pad.right} y2={pad.top+cH*p} stroke={T.b1} strokeWidth={0.8} strokeDasharray={p===0?"0":"3,3"}/>))}
+      {data.map((d,i)=>{
+        const x1=x,x2=x+bW+gap,x3=x+bW*2+gap*2; const m=d.sales-d.expense; const mH=Math.abs((m/maxV)*cH);
+        const cxL=x+bW*1.5+gap; x+=bW*3+gap*2+groupGap;
+        return(<g key={i}>
+          <rect x={x1} y={sy(d.sales)} width={bW} height={bH(d.sales)} rx={2} fill={T.grn} opacity={0.85}/>
+          <rect x={x2} y={sy(d.expense)} width={bW} height={bH(d.expense)} rx={2} fill={T.redM} opacity={0.95}/>
+          <rect x={x3} y={m>=0?sy(m):pad.top+cH} width={bW} height={mH} rx={2} fill={m>=0?T.blu:T.red} opacity={0.85}/>
+          <text x={cxL} y={height-5} textAnchor="middle" fontSize={9} fill={T.t4} fontFamily="'Segoe UI',sans-serif">{d.month}</text>
+        </g>);
+      })}
+    </svg>
+  );
+}
 
 function TabOverview({proj, onRequestPayment}) {
-  const margin = proj.boq - proj.expense;
-  const expTotal = D.expBreakdown.reduce((s,e)=>s+e.amt,0);
+  const [view, setView]   = useState("operations"); // operations | finance
+  const [txns, setTxns]   = useState([]);
+  const [tasks, setTasks] = useState([]);
+  const [mrs, setMrs]     = useState([]);
+  const [team, setTeam]   = useState([]);
+  const [payReqs, setPayReqs] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  // Live data derived from other tabs
-  const ongoingTasks = D.tasks.filter(t=>t.status==="In Progress");
-  const todayAtt = D.attendance[0] || {workers:[]};
-  const presentToday = todayAtt.workers.filter(w=>w.present).length;
-  const matByStage = STAGES.reduce((a,s)=>({...a,[s]:0}),{});
-  const pendingMat = [];
+  useEffect(()=>{
+    const pid = proj?.id;
+    if(!pid){ setLoading(false); return; }
+    let alive=true;
+    Promise.all([
+      api.get(`/finance/transactions?project_id=${pid}&limit=2000`).catch(()=>null),
+      api.get(`/tasks?project_id=${pid}`).catch(()=>null),
+      api.get(`/procurement/mrs?project_id=${pid}`).catch(()=>null),
+      api.get(`/projects/${pid}/workforce`).catch(()=>null),
+      api.get(`/finance/payment-requests?project_id=${pid}`).catch(()=>null),
+    ]).then(([t,tk,m,wf,pr])=>{
+      if(!alive) return;
+      if(t?.success)  setTxns(t.data||[]);
+      if(tk?.success) setTasks((tk.data||[]).filter(x=>!String(x.task_no||"").startsWith("TODO-")));
+      if(m?.success)  setMrs(m.data||[]);
+      if(wf?.success){
+        const d=wf.data;
+        setTeam(Array.isArray(d)?d:[...(d?.company||[]),...(d?.subcon||[]),...(d?.vendor||[])]);
+      }
+      if(pr?.success) setPayReqs(pr.data||[]);
+    }).finally(()=>{ if(alive) setLoading(false); });
+    return ()=>{ alive=false; };
+  },[proj?.id]);
+
+  /* ── FINANCE derivations ── */
+  const fin = useMemo(()=>{
+    const isIn=t=>IN_TYPES.includes(t.type), isOut=t=>OUT_TYPES.includes(t.type);
+    const received=txns.filter(isIn).reduce((s,t)=>s+num(t.amount),0);
+    const spent=txns.filter(isOut).reduce((s,t)=>s+num(t.amount),0);
+    const bm={};
+    txns.forEach(t=>{
+      const k=String(t.date||"").slice(0,7); if(!k) return;
+      if(!bm[k]) bm[k]={in:0,out:0};
+      if(isIn(t)) bm[k].in+=num(t.amount); else if(isOut(t)) bm[k].out+=num(t.amount);
+    });
+    const bars=Object.keys(bm).sort().slice(-6).map(k=>({month:MONTHS[Number(k.split("-")[1])-1]||k, sales:bm[k].in, expense:bm[k].out}));
+    const cat=(keys)=>txns.filter(t=>keys.includes(t.type)).reduce((s,t)=>s+num(t.amount),0);
+    const slices=[
+      {label:"Material Purchase", value:cat(["material_purchase"]),       color:T.blu},
+      {label:"Sub-Contractor",    value:cat(["subcon_expense"]),          color:T.pur},
+      {label:"Labour / Payments", value:cat(["payment","party_payment"]), color:T.grn},
+      {label:"Site Expense",      value:cat(["site_expense"]),            color:T.amb},
+      {label:"Other / Wallet",    value:cat(["wallet_payment"]),          color:T.slt},
+    ].filter(s=>s.value>0);
+    const recent=[...txns].sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))).slice(0,6);
+    const pendingPay=payReqs.filter(p=>["pending","approved"].includes(String(p.status||"").toLowerCase()));
+    const payable=pendingPay.reduce((s,p)=>s+num(p.amount),0);
+    return {received, spent, bars, slices, recent, pendingPay, payable};
+  },[txns, payReqs]);
+
+  /* ── OPERATIONS derivations ── */
+  const ops = useMemo(()=>{
+    const done=s=>/done|complete/i.test(s||"");
+    const open=tasks.filter(t=>!done(t.status));
+    const ongoing=tasks.filter(t=>/progress/i.test(t.status||""));
+    const overdue=open.filter(t=>{ const e=t.base_end||t.actual_end||t.end_date; return e && new Date(e) < new Date(); });
+    const stageOf=(m)=>{
+      const ms=(m.mat_status||"").toLowerCase(); const rs=(m.mr_status||"").toLowerCase();
+      if(ms.includes("used")) return "Used";
+      if(ms.includes("received")) return "Received";
+      if(ms.includes("ordered")) return "Ordered";
+      if(rs.includes("approve")) return "Approved";
+      return "Requested";
+    };
+    const byStage={}; STAGES.forEach(s=>byStage[s]=0);
+    mrs.forEach(m=>{ const s=stageOf(m); byStage[s]=(byStage[s]||0)+1; });
+    const matPending=mrs.filter(m=>["Requested","Approved","Ordered"].includes(stageOf(m))).length;
+    return {open, ongoing, overdue, byStage, matPending};
+  },[tasks, mrs]);
+
+  const margin = num(proj?.boq) - num(proj?.expense);
+  const signed = (n)=>`${n<0?"−":""}₹${fmt(Math.abs(n))}`; // clean ±₹ display
+  const endDate = proj?.end_date || proj?.endDate || proj?.end;
+  let daysLeft="—", daysNote="No end date set";
+  if(endDate){
+    const dl=Math.ceil((new Date(endDate)-new Date())/86400000);
+    daysLeft = dl<0 ? `${Math.abs(dl)}d over` : String(dl);
+    daysNote = "Till "+new Date(endDate).toLocaleDateString("en-IN",{month:"short",year:"numeric"});
+  }
+  const expTotal = fin.slices.reduce((s,e)=>s+e.value,0);
+
+  /* ── Toggle switch ── */
+  const Switch=(
+    <div style={{display:"inline-flex", background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:3}}>
+      {[{v:"operations",l:"Operations & Team",c:T.pur},{v:"finance",l:"Finance",c:T.blu}].map(t=>(
+        <button key={t.v} onClick={()=>setView(t.v)}
+          style={{padding:"8px 18px", border:"none", background:view===t.v?t.c:"transparent", color:view===t.v?"#fff":T.t3, borderRadius:8, fontSize:12.5, fontWeight:700, cursor:"pointer", transition:"all .15s", fontFamily:"inherit"}}>
+          {t.l}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <div style={{padding:"16px 18px", display:"flex", flexDirection:"column", gap:14}}>
 
-      {/* ── QUICK ACTIONS — site team raise a payment request ── */}
-      {onRequestPayment && (
-        <div style={{display:"flex", gap:10, alignItems:"center", justifyContent:"flex-end"}}>
+      {/* ── Header: toggle + request payment ── */}
+      <div style={{display:"flex", alignItems:"center", justifyContent:"space-between", gap:12, flexWrap:"wrap"}}>
+        {Switch}
+        {onRequestPayment && (
           <button onClick={onRequestPayment}
             style={{padding:"8px 16px", borderRadius:8, border:"none", background:T.blu, color:"#fff", fontSize:12.5, fontWeight:700, cursor:"pointer", display:"inline-flex", alignItems:"center", gap:7, fontFamily:"inherit", boxShadow:`0 2px 8px ${T.blu}40`}}>
             <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
             Request Payment
           </button>
+        )}
+      </div>
+
+      {/* ══════════════════ OPERATIONS & TEAM ══════════════════ */}
+      {view==="operations" && (<>
+        {/* KPI row */}
+        <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
+          <Stat label="Progress"      value={`${proj?.progress||0}%`}   note="Physical completion" color={T.blu}/>
+          <Stat label="Days Left"     value={daysLeft}                  note={daysNote}            color={T.pur}/>
+          <Stat label="Open Tasks"    value={String(ops.open.length)}   note={`${ops.ongoing.length} in progress`} color={T.amb}/>
+          <Stat label="Team On Site"  value={String(team.length)}       note="Workforce assigned"  color={T.grn}/>
+          <Stat label="Material Due"  value={String(ops.matPending)}    note="Requests in pipeline" color={T.slt}/>
+          <Stat label="Overdue"       value={String(ops.overdue.length)} note="Tasks need action"  color={ops.overdue.length?T.red:T.grn}/>
         </div>
-      )}
 
-      {/* ── ROW 1 — KPI STATS ── */}
-      <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
-        <Stat label="Progress"    value={`${proj.progress}%`}         note="Physical completion"                         color={T.blu}/>
-        <Stat label="BOQ Value"   value={`₹${fmt(proj.boq)}`}         note="Total contract"                              color={T.slt}/>
-        <Stat label="Spent"       value={`₹${fmt(proj.expense)}`}     note={`${proj.boq?Math.round(proj.expense/proj.boq*100):0}% utilised`} color={T.amb}/>
-        <Stat label="Margin"      value={`₹${fmt(margin)}`}           note={`${proj.boq?Math.round(margin/proj.boq*100):0}% buffer`} color={T.grn}/>
-        <Stat label="Days Left"   value="54"                          note="Till Aug 2025"                               color={T.pur}/>
-        <Stat label="Open Issues" value="3"                           note="Require action"                              color={T.red}/>
-      </div>
-
-      {/* ── ROW 2 — MILESTONES + EXPENSE BREAKDOWN ── */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:14}}>
-
-        {/* Milestones */}
-        <Panel>
-          <PHead title="Project Milestones"/>
-          <div style={{padding:"13px 15px"}}>
-            <div style={{display:"flex", gap:14, alignItems:"flex-start"}}>
-              <div style={{flexShrink:0}}>
-                <svg width={76} height={76} viewBox="0 0 76 76">
-                  <circle r={30} cx={38} cy={38} fill="none" stroke={T.b1} strokeWidth={8}/>
-                  <circle r={30} cx={38} cy={38} fill="none" stroke={T.blu} strokeWidth={8} strokeLinecap="round"
-                    strokeDasharray={`${proj.progress/100*2*Math.PI*30} 999`}
-                    transform="rotate(-90 38 38)" style={{transition:"stroke-dasharray .8s"}}/>
-                  <text x={38} y={42} textAnchor="middle" fontSize={14} fontWeight={700} fill={T.t1}>{proj.progress}%</text>
-                </svg>
+        {/* Progress + Ongoing tasks */}
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1.4fr", gap:14}}>
+          {/* Progress donut */}
+          <Panel>
+            <PHead title="Project Progress"/>
+            <div style={{padding:"16px 15px", display:"flex", gap:16, alignItems:"center"}}>
+              <svg width={92} height={92} viewBox="0 0 92 92" style={{flexShrink:0}}>
+                <circle r={36} cx={46} cy={46} fill="none" stroke={T.b1} strokeWidth={9}/>
+                <circle r={36} cx={46} cy={46} fill="none" stroke={T.blu} strokeWidth={9} strokeLinecap="round"
+                  strokeDasharray={`${(proj?.progress||0)/100*2*Math.PI*36} 999`}
+                  transform="rotate(-90 46 46)" style={{transition:"stroke-dasharray .8s"}}/>
+                <text x={46} y={51} textAnchor="middle" fontSize={18} fontWeight={700} fill={T.t1}>{proj?.progress||0}%</text>
+              </svg>
+              <div style={{flex:1, minWidth:0}}>
+                <div style={{display:"flex", justifyContent:"space-between", marginBottom:8}}>
+                  <span style={{fontSize:11, color:T.t4}}>Tasks done</span>
+                  <span style={{fontSize:12, fontWeight:700, color:T.t1}}>{tasks.length-ops.open.length}/{tasks.length}</span>
+                </div>
+                <PBar pct={tasks.length?Math.round((tasks.length-ops.open.length)/tasks.length*100):0} color={T.grn} h={6}/>
+                <div style={{display:"flex", gap:14, marginTop:12}}>
+                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>In progress</div><div style={{fontSize:15, fontWeight:700, color:T.blu}}>{ops.ongoing.length}</div></div>
+                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Overdue</div><div style={{fontSize:15, fontWeight:700, color:ops.overdue.length?T.red:T.t3}}>{ops.overdue.length}</div></div>
+                  <div><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Total</div><div style={{fontSize:15, fontWeight:700, color:T.t1}}>{tasks.length}</div></div>
+                </div>
               </div>
-              <div style={{flex:1, paddingTop:2}}>
-                {D.milestones.map((m,i)=>(
-                  <div key={i} style={{marginBottom:7}}>
-                    <div style={{display:"flex", alignItems:"center", gap:7, marginBottom:m.pct>0&&!m.done?3:0}}>
-                      <div style={{width:15, height:15, borderRadius:4, border:`1.5px solid ${m.done?T.grn:m.pct>0?T.blu:T.b2}`, background:m.done?T.grn:m.pct>0?T.bluL:"transparent", flexShrink:0, display:"flex", alignItems:"center", justifyContent:"center"}}>
-                        {m.done&&<svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke="white" strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>}
-                        {!m.done&&m.pct>0&&<div style={{width:5,height:5,borderRadius:"50%",background:T.blu}}/>}
+            </div>
+          </Panel>
+
+          {/* Ongoing tasks list */}
+          <Panel>
+            <PHead title="Ongoing Tasks" action={<Pill label={`${ops.ongoing.length} active`} c={T.blu} bg={T.bluL}/>}/>
+            <div style={{maxHeight:230, overflowY:"auto"}}>
+              {ops.ongoing.length===0
+                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No tasks in progress"}</div>
+                : ops.ongoing.slice(0,8).map((t,i)=>{
+                    const pct=num(t.progress??t.progress_pct);
+                    return (
+                      <div key={t.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, borderLeft:`3px solid ${T.blu}44`}}>
+                        <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5, gap:8}}>
+                          <span style={{fontSize:12.5, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.name||t.title||t.task_name||`Task ${t.no||t.id}`}</span>
+                          <span style={{fontSize:12, fontWeight:700, color:T.blu, flexShrink:0}}>{pct}%</span>
+                        </div>
+                        <PBar pct={pct} color={pct>70?T.grn:T.blu} h={4}/>
+                        <div style={{display:"flex", justifyContent:"space-between", marginTop:5}}>
+                          <span style={{fontSize:11, color:T.t4}}>{t.assignee||t.assigned_to_name||t.owner||"Unassigned"}</span>
+                          {(t.base_end||t.end_date)&&<span style={{fontSize:11, color:T.t3}}>Due {new Date(t.base_end||t.end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}</span>}
+                        </div>
                       </div>
-                      <span style={{flex:1, fontSize:11.5, color:m.done?T.t4:T.t1, fontWeight:m.pct>0&&!m.done?700:400, textDecoration:m.done?"line-through":"none", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.label}</span>
-                      <span style={{fontSize:10.5, color:T.t4, flexShrink:0}}>{m.date}</span>
-                    </div>
-                    {m.pct>0&&!m.done&&(
-                      <div style={{marginLeft:22, height:4, background:T.b1, borderRadius:4, overflow:"hidden"}}>
-                        <div style={{height:"100%", width:`${m.pct}%`, background:T.blu, borderRadius:4, transition:"width .5s"}}/>
+                    );
+                  })
+              }
+            </div>
+          </Panel>
+        </div>
+
+        {/* Material + Team */}
+        <div style={{display:"grid", gridTemplateColumns:"1fr 1fr", gap:14}}>
+          {/* Material pipeline */}
+          <Panel>
+            <PHead title="Material Status" action={
+              ops.matPending>0 ? <Pill label={`${ops.matPending} in pipeline`} c={T.amb} bg={T.ambL}/> : <Pill label="All clear" c={T.grn} bg={T.grnL}/>
+            }/>
+            <div style={{padding:"12px 15px"}}>
+              <div style={{display:"flex", gap:6, flexWrap:"wrap", marginBottom:mrs.length?12:0}}>
+                {STAGES.map(s=>{ const ss=STAGE_S[s]; const c=ops.byStage[s]||0; if(!c) return null;
+                  return <Pill key={s} label={`${s} · ${c}`} c={ss.c} bg={ss.bg}/>; })}
+              </div>
+              {mrs.length===0
+                ? <div style={{padding:"18px 0", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No material requests yet"}</div>
+                : (
+                  <div style={{display:"flex", flexDirection:"column", gap:7}}>
+                    {mrs.slice(0,5).map((m,i)=>{
+                      const stage=(()=>{ const ms=(m.mat_status||"").toLowerCase(),rs=(m.mr_status||"").toLowerCase();
+                        if(ms.includes("used"))return"Used"; if(ms.includes("received"))return"Received"; if(ms.includes("ordered"))return"Ordered"; if(rs.includes("approve"))return"Approved"; return"Requested"; })();
+                      const ss=STAGE_S[stage]||STAGE_S.Requested;
+                      return (
+                        <div key={m.id||i} style={{display:"flex", justifyContent:"space-between", alignItems:"center", padding:"7px 10px", background:T.surfaceB, borderRadius:7, borderLeft:`3px solid ${ss.c}`}}>
+                          <div style={{minWidth:0}}>
+                            <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{m.item_name||m.material_name||"Material"}</div>
+                            <div style={{fontSize:10.5, color:T.t4}}>{m.quantity?`${m.quantity} ${m.unit||""}`:""}{m.requested_by?` · ${m.requested_by}`:""}</div>
+                          </div>
+                          <Pill label={stage} c={ss.c} bg={ss.bg}/>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )
+              }
+            </div>
+          </Panel>
+
+          {/* Team / workforce */}
+          <Panel>
+            <PHead title="Team On Site" action={<Pill label={`${team.length} assigned`} c={T.pur} bg={T.purL}/>}/>
+            <div style={{padding:"6px 0 4px", maxHeight:240, overflowY:"auto"}}>
+              {team.length===0
+                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No workforce assigned yet"}</div>
+                : team.slice(0,8).map((w,i)=>{
+                    const name=w.name||w.worker_name||w.company_name||w.subcon_name||"Member";
+                    const role=w.role||w.skill||w.type||"";
+                    const init=name.split(" ").map(s=>s[0]).slice(0,2).join("").toUpperCase();
+                    return (
+                      <div key={w.id||i} style={{padding:"7px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", gap:10}}>
+                        <div style={{width:30, height:30, borderRadius:"50%", background:T.purL, color:T.pur, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, flexShrink:0}}>{init}</div>
+                        <div style={{flex:1, minWidth:0}}>
+                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{name}</div>
+                          {role&&<div style={{fontSize:10.5, color:T.t4, textTransform:"capitalize"}}>{role}</div>}
+                        </div>
                       </div>
-                    )}
-                  </div>
-                ))}
+                    );
+                  })
+              }
+            </div>
+          </Panel>
+        </div>
+      </>)}
+
+      {/* ══════════════════ FINANCE ══════════════════ */}
+      {view==="finance" && (<>
+        {/* KPI row */}
+        <div style={{display:"grid", gridTemplateColumns:"repeat(6,1fr)", gap:10}}>
+          <Stat label="BOQ Value"   value={`₹${fmt(num(proj?.boq))}`}        note="Total contract"      color={T.slt}/>
+          <Stat label="Received"    value={`₹${fmt(fin.received)}`}          note={num(proj?.boq)?`${Math.round(fin.received/num(proj.boq)*100)}% of BOQ`:"Money in"} color={T.grn}/>
+          <Stat label="Spent"       value={`₹${fmt(num(proj?.expense)||fin.spent)}`} note={num(proj?.boq)?`${Math.round((num(proj?.expense)||fin.spent)/num(proj.boq)*100)}% utilised`:"Money out"} color={T.amb}/>
+          <Stat label="Margin"      value={signed(margin)}                  note={num(proj?.boq)?`${Math.round(margin/num(proj.boq)*100)}% buffer`:""} color={margin>=0?T.grn:T.red}/>
+          <Stat label="Receivable"  value={`₹${fmt(Math.max(0,num(proj?.boq)-fin.received))}`} note="Yet to collect" color={T.blu}/>
+          <Stat label="Payable"     value={`₹${fmt(fin.payable)}`}           note={`${fin.pendingPay.length} request${fin.pendingPay.length===1?"":"s"}`} color={fin.payable?T.red:T.grn}/>
+        </div>
+
+        {/* Cashflow + Expense breakdown */}
+        <div style={{display:"grid", gridTemplateColumns:"1.7fr 1fr", gap:14}}>
+          <Panel>
+            <PHead title="Cash Flow — Monthly" action={
+              <div style={{display:"flex", gap:12}}>
+                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.grn,marginRight:4}}/><span style={{color:T.t4}}>In</span></span>
+                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.redM,marginRight:4}}/><span style={{color:T.t4}}>Out</span></span>
+                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.blu,marginRight:4}}/><span style={{color:T.t4}}>Net</span></span>
+              </div>
+            }/>
+            <div style={{padding:"12px 15px"}}>
+              <CashBars data={fin.bars}/>
+              <div style={{display:"flex", justifyContent:"space-around", marginTop:10, paddingTop:10, borderTop:`1px solid ${T.b1}`}}>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Received</div><div style={{fontSize:15, fontWeight:700, color:T.grn}}>₹{fmt(fin.received)}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Spent</div><div style={{fontSize:15, fontWeight:700, color:T.red}}>₹{fmt(num(proj?.expense)||fin.spent)}</div></div>
+                <div style={{textAlign:"center"}}><div style={{fontSize:10, color:T.t4, textTransform:"uppercase", letterSpacing:".4px"}}>Net</div><div style={{fontSize:15, fontWeight:700, color:fin.received-(num(proj?.expense)||fin.spent)>=0?T.blu:T.red}}>{signed(fin.received-(num(proj?.expense)||fin.spent))}</div></div>
               </div>
             </div>
-          </div>
-        </Panel>
+          </Panel>
 
-        {/* Expense Breakdown — category wise */}
-        <Panel>
-          <PHead title="Expense Breakdown" action={
-            <span style={{fontSize:11, color:T.t4}}>Total: <strong style={{color:T.t1}}>₹{fmt(expTotal)}</strong></span>
-          }/>
-          <div style={{padding:"13px 15px"}}>
-            {D.expBreakdown.map((e,i)=>{
-              const pct = Math.round(e.amt/expTotal*100);
-              return (
-                <div key={i} style={{marginBottom:11}}>
-                  <div style={{display:"flex", justifyContent:"space-between", marginBottom:4, alignItems:"flex-start"}}>
-                    <div style={{display:"flex", alignItems:"center", gap:7}}>
-                      <div style={{width:9, height:9, borderRadius:3, background:e.color, flexShrink:0}}/>
-                      <div>
-                        <div style={{fontSize:12.5, fontWeight:600, color:T.t1, lineHeight:1.2}}>{e.label}</div>
-                        <div style={{fontSize:10.5, color:T.t4}}>{e.sub}</div>
+          <Panel>
+            <PHead title="Expense Breakdown" action={<span style={{fontSize:11, color:T.t4}}>Total: <strong style={{color:T.t1}}>₹{fmt(expTotal)}</strong></span>}/>
+            <div style={{padding:"14px 15px", display:"flex", gap:14, alignItems:"center"}}>
+              <DonutChart slices={fin.slices}/>
+              <div style={{flex:1, minWidth:0}}>
+                {fin.slices.length===0
+                  ? <div style={{fontSize:12, color:T.t4}}>{loading?"Loading…":"No expenses recorded"}</div>
+                  : fin.slices.map((s,i)=>(
+                    <div key={i} style={{display:"flex", alignItems:"center", gap:7, marginBottom:7}}>
+                      <div style={{width:9, height:9, borderRadius:3, background:s.color, flexShrink:0}}/>
+                      <span style={{flex:1, fontSize:11.5, color:T.t2, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{s.label}</span>
+                      <span style={{fontSize:11.5, fontWeight:700, color:T.t1}}>₹{fmt(s.value)}</span>
+                      <span style={{fontSize:10, color:T.t4, width:30, textAlign:"right"}}>{Math.round(s.value/(expTotal||1)*100)}%</span>
+                    </div>
+                  ))
+                }
+              </div>
+            </div>
+          </Panel>
+        </div>
+
+        {/* Recent transactions + payment requests */}
+        <div style={{display:"grid", gridTemplateColumns:"1.3fr 1fr", gap:14}}>
+          <Panel>
+            <PHead title="Recent Transactions" action={<Pill label={`${txns.length} total`} c={T.slt} bg={T.sltL}/>}/>
+            <div>
+              {fin.recent.length===0
+                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No transactions yet"}</div>
+                : fin.recent.map((t,i)=>{
+                    const isIn=IN_TYPES.includes(t.type);
+                    return (
+                      <div key={t.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{t.party_name||t.description||t.head_name||"Transaction"}</div>
+                          <div style={{fontSize:10.5, color:T.t4}}>{t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):""}{t.type?` · ${t.type.replace(/_/g," ")}`:""}</div>
+                        </div>
+                        <span style={{fontSize:12.5, fontWeight:700, color:isIn?T.grn:T.red, flexShrink:0, fontVariantNumeric:"tabular-nums"}}>{isIn?"+":"−"}₹{fmt(num(t.amount))}</span>
                       </div>
-                    </div>
-                    <div style={{textAlign:"right", flexShrink:0}}>
-                      <div style={{fontSize:13, fontWeight:700, color:T.t1, fontVariantNumeric:"tabular-nums"}}>₹{fmt(e.amt)}</div>
-                      <div style={{fontSize:10.5, color:T.t4}}>{pct}%</div>
-                    </div>
-                  </div>
-                  <PBar pct={pct} color={e.color} h={5}/>
-                </div>
-              );
-            })}
-          </div>
-        </Panel>
-      </div>
-
-      {/* ── ROW 3 — ONGOING TASKS + MATERIAL + ATTENDANCE ── */}
-      <div style={{display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:14}}>
-
-        {/* Ongoing Tasks */}
-        <Panel>
-          <PHead title="Ongoing Tasks" action={
-            <Pill label={`${ongoingTasks.length} active`} c={T.blu} bg={T.bluL}/>
-          }/>
-          <div style={{padding:"0 0 4px"}}>
-            {ongoingTasks.map(task=>(
-              <div key={task.id} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, borderLeft:`3px solid ${T.blu}44`}}>
-                <div style={{display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:5}}>
-                  <span style={{fontSize:12.5, fontWeight:600, color:T.t1}}>{task.name}</span>
-                  <span style={{fontSize:12, fontWeight:700, color:T.blu}}>{task.progress}%</span>
-                </div>
-                <PBar pct={task.progress} color={task.progress>70?T.grn:T.blu} h={4}/>
-                <div style={{display:"flex", justifyContent:"space-between", marginTop:5}}>
-                  <span style={{fontSize:11, color:T.t4}}>{task.assignee}</span>
-                  <span style={{fontSize:11, color:T.t3}}>
-                    {task.subtasks.filter(s=>s.status==="Done").length}/{task.subtasks.length} subtasks done
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        {/* Material Status */}
-        <Panel>
-          <PHead title="Material Status" action={
-            pendingMat.length>0
-              ? <Pill label={`${pendingMat.length} pending action`} c={T.amb} bg={T.ambL}/>
-              : <Pill label="All clear" c={T.grn} bg={T.grnL}/>
-          }/>
-          {/* Stage summary pills */}
-          <div style={{padding:"10px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", gap:6, flexWrap:"wrap"}}>
-            {STAGES.map(s=>{
-              const ss = STAGE_S[s]; const cnt = matByStage[s]||0;
-              if(!cnt) return null;
-              return <Pill key={s} label={`${s} (${cnt})`} c={ss.c} bg={ss.bg}/>;
-            })}
-          </div>
-          {/* Pending items */}
-          <div style={{padding:"6px 0 4px"}}>
-            {pendingMat.length===0
-              ? <div style={{padding:"16px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>No pending approvals</div>
-              : pendingMat.map(m=>{
-                const ss = STAGE_S[m.stage];
-                return (
-                  <div key={m.id} style={{padding:"7px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center", borderLeft:`3px solid ${ss.c}44`}}>
-                    <div>
-                      <div style={{fontSize:12, fontWeight:500, color:T.t1}}>{m.name}</div>
-                      <div style={{fontSize:11, color:T.t4}}>{m.qty} · {m.by}</div>
-                    </div>
-                    <Pill label={m.stage} c={ss.c} bg={ss.bg}/>
-                  </div>
-                );
-              })
-            }
-          </div>
-        </Panel>
-
-        {/* Today's Attendance */}
-        <Panel>
-          <PHead title={`Attendance — ${todayAtt.date}`} action={
-            <Pill label={`${presentToday}/${todayAtt.workers.length} present`} c={presentToday===todayAtt.workers.length?T.grn:T.amb} bg={presentToday===todayAtt.workers.length?T.grnL:T.ambL}/>
-          }/>
-          {/* Summary bar */}
-          <div style={{padding:"10px 15px", borderBottom:`1px solid ${T.b1}`}}>
-            <div style={{display:"flex", justifyContent:"space-between", marginBottom:4}}>
-              <span style={{fontSize:11, color:T.t3}}>Present</span>
-              <span style={{fontSize:11, color:T.t3}}>{presentToday} of {todayAtt.workers.length}</span>
+                    );
+                  })
+              }
             </div>
-            <div style={{height:6, background:T.b1, borderRadius:4, overflow:"hidden"}}>
-              <div style={{height:"100%", width:`${Math.round(presentToday/todayAtt.workers.length*100)}%`, background:T.grn, borderRadius:4}}/>
-            </div>
-            <div style={{display:"flex", gap:14, marginTop:8}}>
-              <div><span style={{fontSize:11, color:T.t4}}>Total hrs: </span><span style={{fontSize:12, fontWeight:700, color:T.t1}}>{todayAtt.workers.reduce((s,w)=>s+w.hours,0)}h</span></div>
-              <div><span style={{fontSize:11, color:T.t4}}>Weather: </span><span style={{fontSize:12, color:T.t2}}>{(D.dpr[0] || {}).weather || "—"}</span></div>
-            </div>
-          </div>
-          {/* Worker list */}
-          <div style={{padding:"4px 0"}}>
-            {todayAtt.workers.map((w,i)=>(
-              <div key={i} style={{padding:"6px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", borderLeft:`3px solid ${w.present?T.grn:T.red}44`}}>
-                <div>
-                  <div style={{fontSize:12, fontWeight:500, color:T.t1}}>{w.name}</div>
-                  <div style={{fontSize:11, color:T.t4}}>{w.role}</div>
-                </div>
-                <div style={{display:"flex", alignItems:"center", gap:8}}>
-                  {w.hours>0&&<span style={{fontSize:11.5, color:T.t3, fontVariantNumeric:"tabular-nums"}}>{w.hours}h</span>}
-                  <Pill label={w.present?"P":"A"} c={w.present?T.grn:T.red} bg={w.present?T.grnL:T.redL}/>
-                </div>
-              </div>
-            ))}
-          </div>
-          {todayAtt.note&&<div style={{margin:"8px 15px", padding:"7px 10px", background:T.ambL, borderRadius:5, border:`1px solid ${T.ambM}`, borderLeft:`3px solid ${T.amb}`, fontSize:11.5, color:T.amb}}>Note: {todayAtt.note}</div>}
-        </Panel>
+          </Panel>
 
-      </div>
+          <Panel>
+            <PHead title="Payment Requests" action={
+              fin.pendingPay.length>0 ? <Pill label={`${fin.pendingPay.length} pending`} c={T.amb} bg={T.ambL}/> : <Pill label="None" c={T.grn} bg={T.grnL}/>
+            }/>
+            <div>
+              {fin.pendingPay.length===0
+                ? <div style={{padding:"28px 15px", fontSize:12.5, color:T.t4, textAlign:"center"}}>{loading?"Loading…":"No pending payment requests"}</div>
+                : fin.pendingPay.slice(0,6).map((p,i)=>{
+                    const st=String(p.status||"").toLowerCase();
+                    const sc=st==="approved"?{c:T.blu,bg:T.bluL}:{c:T.amb,bg:T.ambL};
+                    return (
+                      <div key={p.id||i} style={{padding:"9px 15px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10}}>
+                        <div style={{minWidth:0}}>
+                          <div style={{fontSize:12, fontWeight:600, color:T.t1, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap"}}>{p.purpose||p.description||p.party_name||"Payment request"}</div>
+                          <div style={{fontSize:10.5, color:T.t4}}>{p.priority?`${p.priority} · `:""}{p.needed_by_date?`by ${new Date(p.needed_by_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"})}`:(p.requested_by||"")}</div>
+                        </div>
+                        <div style={{display:"flex", alignItems:"center", gap:8, flexShrink:0}}>
+                          <span style={{fontSize:12.5, fontWeight:700, color:T.t1}}>₹{fmt(num(p.amount))}</span>
+                          <Pill label={st} c={sc.c} bg={sc.bg}/>
+                        </div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          </Panel>
+        </div>
+      </>)}
+
     </div>
   );
 }
