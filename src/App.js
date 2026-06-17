@@ -988,51 +988,128 @@ function ProjectExpandedRow({p}){
   );
 }
 
+// ══════════════════════════════════════════════════════════════════════
+// DASHBOARD — two-view design: Finance vs Operations.
+// NOTE: data below is hardcoded MOCK for design vision only. Wiring to
+// real APIs is a follow-up step (replace MOCK_* with /dashboard/* calls).
+// ══════════════════════════════════════════════════════════════════════
+const MOCK_FIN = {
+  kpis: [
+    { label:"Total BOQ",      value:"₹1.1Cr",  sub:"5 projects",        color:T.slt, Icon:IcMargin, trend:"up",   trendVal:"+12%" },
+    { label:"Total Received", value:"₹62.4L",  sub:"57% of BOQ",        color:T.grn, Icon:IcCash,   trend:"up",   trendVal:"+8%"  },
+    { label:"Total Spent",    value:"₹48.9L",  sub:"44% of BOQ",        color:T.amb, Icon:IcTruck },
+    { label:"Gross Margin",   value:"₹52.1L",  sub:"47.4% margin",      color:T.grn, Icon:IcTrend,  trend:"up",   trendVal:"47.4%" },
+    { label:"Receivables",    value:"₹13.8L",  sub:"6 invoices due",    color:T.blu, Icon:IcPay },
+    { label:"Payables",       value:"₹9.2L",   sub:"₹3.1L overdue",     color:T.red, Icon:IcAlert },
+  ],
+  cashflow: [
+    { month:"Jan", in:820000, out:610000 }, { month:"Feb", in:940000, out:720000 },
+    { month:"Mar", in:1180000, out:880000 }, { month:"Apr", in:760000, out:540000 },
+    { month:"May", in:1320000, out:910000 }, { month:"Jun", in:1050000, out:680000 },
+  ],
+  expense: [
+    { label:"Material Purchase", value:2240000, color:T.blu },
+    { label:"Sub-Contractor",    value:1460000, color:T.pur },
+    { label:"Direct Labour",     value:730000,  color:T.grn },
+    { label:"Site Expenses",     value:290000,  color:T.amb },
+    { label:"Equipment",         value:170000,  color:T.slt },
+  ],
+  payments: [
+    { id:1, label:"RA Bill #12 — Skyline Apartments", desc:"Client receivable · due in 3d",  amount:480000, color:T.grn, dir:"in"  },
+    { id:2, label:"Abhay Traders — Material PO",       desc:"Vendor payable · overdue 2d",     amount:215000, color:T.red, dir:"out" },
+    { id:3, label:"Subcon RA — Verma Construction",    desc:"Approved · awaiting release",      amount:168000, color:T.amb, dir:"out" },
+    { id:4, label:"June Salary Run",                   desc:"5 staff · pending payout",         amount:56240,  color:T.amb, dir:"out" },
+  ],
+  activity: [
+    { id:1, title:"Payment received", desc:"RA Bill #11 — Skyline", project:"Skyline Apartments", time:"2h ago",  amount:520000, dir:"in"  },
+    { id:2, title:"Vendor paid",      desc:"Cement — Abhay Traders", project:"Harish Villa",      time:"5h ago",  amount:142000, dir:"out" },
+    { id:3, title:"Invoice raised",   desc:"RA Bill #12",            project:"Skyline Apartments", time:"Yesterday", amount:480000, dir:"pending" },
+    { id:4, title:"Advance settled",  desc:"Subcon — Verma",         project:"R K Rathor",        time:"2d ago",  amount:90000,  dir:"out" },
+  ],
+};
+const MOCK_OPS = {
+  kpis: [
+    { label:"Active Projects",  value:4,       sub:"Avg 47% progress", color:T.pur, Icon:IcProj },
+    { label:"Present Today",    value:"18/22", sub:"82% attendance",   color:T.grn, Icon:IcTeam },
+    { label:"Open Tasks",       value:23,      sub:"5 overdue",        color:T.amb, Icon:IcChk },
+    { label:"Pending Approvals",value:6,       sub:"3 high priority",  color:T.red, Icon:IcApprv },
+    { label:"Material Requests",value:5,       sub:"2 awaiting PO",    color:T.blu, Icon:IcProc },
+    { label:"Low Stock Items",  value:3,       sub:"reorder needed",   color:T.amb, Icon:IcWH },
+  ],
+  projects: [
+    { id:1, name:"Skyline Apartments", city:"Raipur", progress:72, status:"Ongoing",     tasks:"8 open",  delay:null,        pm:"Vijay" },
+    { id:2, name:"Harish Villa",       city:"Bhilai", progress:45, status:"Ongoing",     tasks:"6 open",  delay:"2d behind", pm:"Priyanka" },
+    { id:3, name:"R K Rathor",         city:"Bhilai", progress:30, status:"Ongoing",     tasks:"5 open",  delay:null,        pm:"Raganee" },
+    { id:4, name:"Kewal Sahu",         city:"Bhilai", progress:0,  status:"Not Started", tasks:"4 open",  delay:null,        pm:"—" },
+  ],
+  attendance: { present:18, absent:2, leave:2, total:22, byDept:[
+    { dept:"Site Engineers", present:5, total:6 }, { dept:"Supervisors", present:4, total:4 },
+    { dept:"Office Staff", present:6, total:8 }, { dept:"Accounts", present:3, total:4 },
+  ]},
+  procurement: [
+    { label:"Material Requests pending", value:5, color:T.blu },
+    { label:"POs open",                  value:7, color:T.pur },
+    { label:"GRNs today",                value:2, color:T.grn },
+    { label:"Low-stock alerts",          value:3, color:T.amb },
+  ],
+  approvals: [
+    { id:1, label:"MR-36 — Texture Paint",     desc:"Harish · 3 Kg",        time:"5h ago",  pri:"high"   },
+    { id:2, label:"PO-12 — Modular Switches",  desc:"Kewal Sahu · ₹84K",    time:"6h ago",  pri:"high"   },
+    { id:3, label:"Drawing R3 — Floor Plan",   desc:"Design · Skyline",     time:"Yesterday", pri:"med"  },
+    { id:4, label:"Leave — Priyanka (2d)",     desc:"CL · 18–19 Jun",       time:"Yesterday", pri:"low"  },
+  ],
+  activity: [
+    { id:1, title:"DPR submitted",   desc:"Slab casting — Block A", project:"Skyline Apartments", time:"1h ago",  icon:IcSite,  color:T.blu },
+    { id:2, title:"Task completed",  desc:"Electrical rough-in",    project:"Harish Villa",       time:"3h ago",  icon:IcChk,   color:T.grn },
+    { id:3, title:"Punch-in (GPS)",  desc:"Niranjan Kumar · on site", project:"R K Rathor",       time:"4h ago",  icon:IcTeam,  color:T.pur },
+    { id:4, title:"GRN received",    desc:"Steel — 2.4 MT",         project:"Skyline Apartments", time:"Yesterday", icon:IcWH,  color:T.amb },
+  ],
+};
+
 function DashboardModule(){
+  const [view,setView]=useState("finance"); // finance | operations
   const [range,setRange]=useState("month");
   const [selProject,setSelProject]=useState("All");
   const [expandedProjId,setExpandedProjId]=useState(null);
-  const [dismissedAlerts,setDismissedAlerts]=useState([]);
   const [showAllActivity,setShowAllActivity]=useState(false);
   const [showAllActions,setShowAllActions]=useState(false);
-  const [dashData,setDashData]=useState(() => apiCache.get("dashboard:summary"));
 
-  // Stale-while-revalidate: instantly paint last known data (if any)
-  // so coming back to the dashboard feels free, then silently refresh
-  // in the background. Cache TTL is 60 s — short enough that the
-  // numbers stay close to live, long enough to cover quick back-nav
-  // bounces. Mutations elsewhere should call
-  // apiCache.invalidate("dashboard:summary") so the next visit pulls
-  // fresh data.
-  useEffect(()=>{
-    api.get("/dashboard/summary").then(res=>{
-      if(res.success){
-        setDashData(res.data);
-        apiCache.set("dashboard:summary", res.data, 60_000);
-      }
-    }).catch(()=>{});
-  },[]);
+  // ── Finance / Operations switch (shared header) ──
+  const Switch=(
+    <div style={{display:"inline-flex",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:3,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",marginBottom:14}}>
+      {[{v:"finance",l:"Finance",Icon:IcFin,c:T.blu},{v:"operations",l:"Operations & Team",Icon:IcProj,c:T.pur}].map(t=>(
+        <button key={t.v} onClick={()=>setView(t.v)}
+          style={{display:"flex",alignItems:"center",gap:7,padding:"8px 20px",border:"none",background:view===t.v?t.c:"transparent",color:view===t.v?"#fff":T.t3,borderRadius:8,fontSize:12.5,fontWeight:700,cursor:"pointer",transition:"all .15s"}}>
+          <t.Icon size={15} color={view===t.v?"#fff":T.t3}/> {t.l}
+        </button>
+      ))}
+    </div>
+  );
 
-  const dd=dashData||{};
+  if(view==="operations"){
+    return(
+      <div style={{padding:"16px 20px",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
+        {Switch}
+        <OperationsDashboard ops={MOCK_OPS}/>
+      </div>
+    );
+  }
+
+  // ===== FINANCE VIEW (mock-populated for design vision) =====
+  const dd={
+    projects: MOCK_OPS.projects.map(p=>({...p, boq: 2000000+p.id*1500000, expense: 800000+p.id*600000, client:"—", type:"construction" })),
+    cashflow: MOCK_FIN.cashflow, activities: MOCK_FIN.activity, pending_actions: MOCK_FIN.payments,
+    alerts: ALERTS, material_status: MATERIAL_STATUS, expense_breakdown: MOCK_FIN.expense,
+    cash_balance: 1240000, overdue_amount: 310000,
+  };
   const projectsArr=dd.projects||PROJECTS_DATA;
   const cashflowArr=dd.cashflow||CASHFLOW_DATA;
   const activityArr=dd.activities||ACTIVITY_FEED;
   const pendingArr=dd.pending_actions||PENDING_ACTIONS;
-  const alertsArr=dd.alerts||ALERTS;
-  const matStatus=dd.material_status||MATERIAL_STATUS;
-
-  const activeAlerts=alertsArr.filter(a=>!dismissedAlerts.includes(a.id));
   const projects=["All",...projectsArr.map(p=>p.name)];
   const filteredProjects=selProject==="All"?projectsArr:projectsArr.filter(p=>p.name===selProject);
   const num=(v)=>{const n=Number(v);return isFinite(n)?n:0;};
-  const totalBOQ=filteredProjects.reduce((s,p)=>s+num(p.boq||p.boq_value),0);
   const totalExp=filteredProjects.reduce((s,p)=>s+num(p.expense||p.total_expense),0);
-  const totalMargin=totalBOQ-totalExp;
-  const marginPct=totalBOQ>0?((totalMargin/totalBOQ)*100).toFixed(1):0;
-  const cashBalance=num(dd.cash_balance);
-  const activeCount=filteredProjects.filter(p=>p.status==="Ongoing"||p.status==="ongoing").length;
-  const avgProgress=filteredProjects.length>0?Math.round(filteredProjects.reduce((s,p)=>s+num(p.progress),0)/filteredProjects.length):0;
-  const overdueAmt=num(dd.overdue_amount);
   const pendingCount=pendingArr.length;
   const cfData=range==="week"?cashflowArr.slice(-2):range==="month"?cashflowArr.slice(-3):cashflowArr;
   const totalIn=cfData.reduce((s,d)=>s+(d.in||0),0);
@@ -1044,24 +1121,10 @@ function DashboardModule(){
 
   return(
     <div style={{padding:"16px 20px",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
-      {/* Alerts */}
-      {activeAlerts.length>0&&<div style={{marginBottom:12,display:"flex",flexDirection:"column",gap:6}}>
-        {activeAlerts.map(a=>(<div key={a.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderLeft:`3px solid ${a.color}`}}>
-          <a.Icon size={14} color={a.color}/>
-          <span style={{flex:1,fontSize:12.5,color:T.t2,fontWeight:500}}>{a.msg}</span>
-          <button onClick={()=>setDismissedAlerts(p=>[...p,a.id])} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:2,borderRadius:4,transition:"background .12s"}}
-            onMouseEnter={el=>el.currentTarget.style.background=T.surfaceB}
-            onMouseLeave={el=>el.currentTarget.style.background="none"}><IcX size={13}/></button>
-        </div>))}
-      </div>}
-      {/* KPI row */}
+      {Switch}
+      {/* KPI row — Finance (mock vision) */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:12}}>
-        <KpiTile label="Total BOQ" value={`₹${fmt(totalBOQ)}`} sub={`${filteredProjects.length} projects`} color={T.slt} Icon={IcMargin} trend="up" trendVal="+12%"/>
-        <KpiTile label="Total Spent" value={`₹${fmt(totalExp)}`} sub={`${totalBOQ>0?((totalExp/totalBOQ)*100).toFixed(0):0}% of BOQ`} color={T.amb} Icon={IcTruck}/>
-        <KpiTile label="Gross Margin" value={`₹${fmt(totalMargin)}`} sub={`${marginPct}% margin`} color={totalMargin>0?T.grn:T.red} Icon={IcTrend} trend={totalMargin>0?"up":"down"} trendVal={`${marginPct}%`}/>
-        <KpiTile label="Cash Balance" value={`₹${fmt(cashBalance)}`} sub="All accounts" color={T.blu} Icon={IcCash}/>
-        <KpiTile label="Active Projects" value={activeCount} sub={`Avg ${avgProgress}% progress`} color={T.pur} Icon={IcProj}/>
-        <KpiTile label="Pending Actions" value={pendingCount} sub={`₹${fmt(overdueAmt)} overdue`} color={T.red} Icon={IcAlert}/>
+        {MOCK_FIN.kpis.map((k,i)=>(<KpiTile key={i} label={k.label} value={k.value} sub={k.sub} color={k.color} Icon={k.Icon} trend={k.trend} trendVal={k.trendVal}/>))}
       </div>
       {/* Charts row */}
       <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr",gap:12,marginBottom:12}}>
@@ -1121,6 +1184,108 @@ function DashboardModule(){
         </Panel>
         <Panel title="Recent Activity" action={<button onClick={()=>setShowAllActivity(!showAllActivity)} style={{fontSize:11,color:T.blu,background:"none",border:"none",cursor:"pointer",fontWeight:600}}>{showAllActivity?"Collapse":"View all"}</button>}>
           <div style={{overflowY:"auto",maxHeight:260}}>{activityToShow.map((a,i)=>(<div key={a.id} style={{padding:"9px 14px",borderBottom:i<activityToShow.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",transition:"background 0.1s"}} onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB} onMouseLeave={e=>e.currentTarget.style.background="none"}><div style={{width:26,height:26,borderRadius:6,background:`${a.color}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.icon size={13} color={a.color}/></div><div style={{flex:1,minWidth:0}}><div style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{a.title}</span>{a.dir&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:a.dir==="in"?T.grnL:a.dir==="pending"?T.ambL:T.redL,color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red,border:`1px solid ${a.dir==="in"?T.grnM:a.dir==="pending"?T.ambM:T.redM}`,letterSpacing:".3px"}}>{a.dir==="in"?"IN":a.dir==="pending"?"PENDING":"OUT"}</span>}</div><div style={{fontSize:10.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",marginBottom:1}}>{a.desc}</div><div style={{fontSize:10,color:T.t4}}>{a.project} · {a.time}</div></div>{a.amount&&<div style={{fontSize:12.5,fontWeight:700,color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red,flexShrink:0,fontVariantNumeric:"tabular-nums"}}>{a.dir==="in"?"+":"−"}₹{fmtN(a.amount)}</div>}</div>))}</div>
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+// ── OPERATIONS & TEAM DASHBOARD (mock vision) ─────────────────────────
+function OperationsDashboard({ops}){
+  const att=ops.attendance;
+  const pColorOf=(p)=>p>=100?T.grn:p>60?T.blu:p>30?T.amb:p>0?T.slt:T.t4;
+  const priMeta={high:{c:T.red,bg:T.redL,brd:T.redM,l:"HIGH"},med:{c:T.amb,bg:T.ambL,brd:T.ambM,l:"MED"},low:{c:T.slt,bg:T.sltL,brd:T.b2,l:"LOW"}};
+  return(
+    <div>
+      {/* KPI row */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:12}}>
+        {ops.kpis.map((k,i)=>(<KpiTile key={i} label={k.label} value={k.value} sub={k.sub} color={k.color} Icon={k.Icon}/>))}
+      </div>
+      {/* Row 1: Project progress + Team attendance */}
+      <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:12,marginBottom:12}}>
+        <Panel title="Project Progress">
+          <div style={{padding:"6px 0"}}>
+            {ops.projects.map((p,i)=>(
+              <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 16px",borderBottom:i<ops.projects.length-1?`1px solid ${T.b1}`:"none"}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{p.name}</span>
+                    {p.delay&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:T.redL,color:T.red,border:`1px solid ${T.redM}`}}>{p.delay}</span>}
+                  </div>
+                  <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{p.city} · {p.tasks} · PM {p.pm}</div>
+                </div>
+                <div style={{width:140}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}><span style={{fontSize:10,fontWeight:700,color:pColorOf(p.progress)}}>{p.progress}%</span></div>
+                  <div style={{height:6,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:pColorOf(p.progress),borderRadius:3}}/></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel title="Team Attendance — Today">
+          <div style={{padding:"14px 16px"}}>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              {[{l:"Present",v:att.present,c:T.grn},{l:"Absent",v:att.absent,c:T.red},{l:"On Leave",v:att.leave,c:T.amb}].map((s,i)=>(
+                <div key={i} style={{flex:1,background:`${s.c}10`,border:`1px solid ${s.c}33`,borderRadius:9,padding:"10px 8px",textAlign:"center"}}>
+                  <div style={{fontSize:20,fontWeight:800,color:s.c}}>{s.v}</div>
+                  <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:.3}}>{s.l}</div>
+                </div>
+              ))}
+            </div>
+            {att.byDept.map((d,i)=>{
+              const pct=Math.round((d.present/d.total)*100);
+              return(
+                <div key={i} style={{marginBottom:10}}>
+                  <div style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
+                    <span style={{fontSize:11.5,color:T.t2}}>{d.dept}</span>
+                    <span style={{fontSize:11,fontWeight:700,color:T.t1}}>{d.present}/{d.total}</span>
+                  </div>
+                  <div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct>=80?T.grn:pct>=50?T.amb:T.red,borderRadius:3}}/></div>
+                </div>
+              );
+            })}
+          </div>
+        </Panel>
+      </div>
+      {/* Row 2: Procurement/Warehouse status */}
+      <Panel title="Procurement & Warehouse" style={{marginBottom:12}}>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12,padding:"14px 16px"}}>
+          {ops.procurement.map((s,i)=>(
+            <div key={i} style={{background:`${s.color}0D`,border:`1px solid ${s.color}33`,borderRadius:9,padding:"12px 14px"}}>
+              <div style={{fontSize:22,fontWeight:800,color:s.color,lineHeight:1}}>{s.value}</div>
+              <div style={{fontSize:10.5,color:T.t3,marginTop:4}}>{s.label}</div>
+            </div>
+          ))}
+        </div>
+      </Panel>
+      {/* Row 3: Pending Approvals + Operations activity */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1.4fr",gap:12,marginBottom:14}}>
+        <Panel title={<span>Pending Approvals <span style={{background:T.redL,color:T.red,fontSize:10,fontWeight:700,padding:"1px 7px",borderRadius:20,marginLeft:5,border:`1px solid ${T.redM}`}}>{ops.approvals.length}</span></span>}>
+          <div style={{overflowY:"auto",maxHeight:260}}>
+            {ops.approvals.map((a,i)=>{const pm=priMeta[a.pri]||priMeta.low;return(
+              <div key={a.id} style={{padding:"9px 14px",borderBottom:i<ops.approvals.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:11.5,fontWeight:600,color:T.t1,marginBottom:1}}>{a.label}</div>
+                  <div style={{fontSize:10.5,color:T.t4}}>{a.desc} · {a.time}</div>
+                </div>
+                <span style={{fontSize:9,fontWeight:700,padding:"1px 7px",borderRadius:10,background:pm.bg,color:pm.c,border:`1px solid ${pm.brd}`,flexShrink:0}}>{pm.l}</span>
+              </div>
+            );})}
+          </div>
+        </Panel>
+        <Panel title="Recent Operations Activity">
+          <div style={{overflowY:"auto",maxHeight:260}}>
+            {ops.activity.map((a,i)=>(
+              <div key={a.id} style={{padding:"9px 14px",borderBottom:i<ops.activity.length-1?`1px solid ${T.b1}`:"none",display:"flex",alignItems:"center",gap:10}}>
+                <div style={{width:26,height:26,borderRadius:6,background:`${a.color}12`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><a.icon size={13} color={a.color}/></div>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{a.title}</div>
+                  <div style={{fontSize:10.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{a.desc}</div>
+                  <div style={{fontSize:10,color:T.t4}}>{a.project} · {a.time}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </Panel>
       </div>
     </div>
