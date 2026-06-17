@@ -59,8 +59,8 @@ function CashBars({data, height=160}){
   const maxV=Math.max(...data.map(d=>Math.max(d.sales,d.expense)),1);
   // Widen bars + gaps when there are few months so the chart fills the panel
   // instead of rendering as a thin sliver (and so it never over-stretches).
-  const bW = n<=2?34 : n<=4?24 : 18; const gap=6; const groupGap = n<=2?70 : n<=4?40 : 24;
-  const W=n*(bW*3+gap*2+groupGap)+20;
+  const bW = n<=2?40 : n<=4?28 : 20; const gap=8; const groupGap = n<=2?70 : n<=4?44 : 28;
+  const W=n*(bW*2+gap+groupGap)+20;
   const pad={top:16,bottom:22,left:8,right:8}; const cH=height-pad.top-pad.bottom;
   const sy=v=>pad.top+cH-(v/maxV)*cH; const bH=v=>(v/maxV)*cH;
   let x=pad.left+6;
@@ -69,12 +69,10 @@ function CashBars({data, height=160}){
     <svg viewBox={`0 0 ${W} ${height}`} width="100%" height={height} preserveAspectRatio="xMidYMid meet" style={{overflow:"visible", display:"block"}}>
       {[0,0.5,1].map((p,i)=>(<line key={i} x1={pad.left} y1={pad.top+cH*p} x2={W-pad.right} y2={pad.top+cH*p} stroke={T.b1} strokeWidth={0.8} strokeDasharray={p===0?"0":"3,3"}/>))}
       {data.map((d,i)=>{
-        const x1=x,x2=x+bW+gap,x3=x+bW*2+gap*2; const m=d.sales-d.expense; const mH=Math.abs((m/maxV)*cH);
-        const cxL=x+bW*1.5+gap; x+=bW*3+gap*2+groupGap;
+        const x1=x, x2=x+bW+gap; const cxL=x+bW+gap/2; x+=bW*2+gap+groupGap;
         return(<g key={i}>
-          <rect x={x1} y={sy(d.sales)} width={bW} height={bH(d.sales)} rx={2} fill={T.grn} opacity={0.85}/>
-          <rect x={x2} y={sy(d.expense)} width={bW} height={bH(d.expense)} rx={2} fill={T.redM} opacity={0.95}/>
-          <rect x={x3} y={m>=0?sy(m):pad.top+cH} width={bW} height={mH} rx={2} fill={m>=0?T.blu:T.red} opacity={0.85}/>
+          {d.sales>0   && <rect x={x1} y={sy(d.sales)}   width={bW} height={bH(d.sales)}   rx={3} fill={T.grn} opacity={0.85}/>}
+          {d.expense>0 && <rect x={x2} y={sy(d.expense)} width={bW} height={bH(d.expense)} rx={3} fill={T.red} opacity={0.8}/>}
           <text x={cxL} y={height-5} textAnchor="middle" fontSize={9} fill={T.t4} fontFamily="'Segoe UI',sans-serif">{d.month}</text>
         </g>);
       })}
@@ -346,8 +344,7 @@ function TabOverview({proj, onRequestPayment}) {
             <PHead title="Cash Flow — Monthly" action={
               <div style={{display:"flex", gap:12}}>
                 <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.grn,marginRight:4}}/><span style={{color:T.t4}}>In</span></span>
-                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.redM,marginRight:4}}/><span style={{color:T.t4}}>Out</span></span>
-                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.blu,marginRight:4}}/><span style={{color:T.t4}}>Net</span></span>
+                <span style={{fontSize:10.5}}><span style={{display:"inline-block",width:8,height:8,borderRadius:2,background:T.red,marginRight:4}}/><span style={{color:T.t4}}>Out</span></span>
               </div>
             }/>
             <div style={{padding:"12px 15px"}}>
