@@ -1048,7 +1048,7 @@ function TabAttendance({ project }) {
                     <button disabled={addSkillSaving||!skillForm.skill||!(Number(skillForm.rate)>0)} onClick={async()=>{
                       setAddSkillSaving(true);
                       try {
-                        const r = await api.post(`/labour-vendors/${vd.id}/skills`, { skill:skillForm.skill, rate:Number(skillForm.rate), card_rate:getRateForRole(skillForm.skill)||0 });
+                        const r = await api.post(`/labour-vendors/${vd.id}/skills`, { skill:skillForm.skill, rate:Number(skillForm.rate), card_rate:getRateForRole(skillForm.skill)||0, project_id:projectId });
                         if(r?.success){ await loadVendors(); setShowAddSkill(false); setSkillForm({skill:"",rate:""}); }
                         else alert(r?.message||"Add skill failed");
                       } catch(e){ alert("Error: "+e.message); }
@@ -1707,7 +1707,7 @@ function TabAttendance({ project }) {
                 setVSaving(true);
                 try {
                   const res = await api.post("/labour-vendors", {
-                    ...vForm, name: vForm.name.trim(),
+                    ...vForm, name: vForm.name.trim(), project_id: projectId,
                     skills: validSkills.map(s=>({ skill:s.skill, rate:Number(s.rate), card_rate:getRateForRole(s.skill)||0 })),
                   });
                   if(res.success) {
