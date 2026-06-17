@@ -1979,17 +1979,13 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue})
       return a.name.localeCompare(b.name);
     });
 
-  // Category groups for group view
-  const groups=useMemo(()=>{
-    const g={};
-    filtered.forEach(m=>{
-      const k=m.category||"Uncategorized";
-      if(!g[k]) g[k]=[];
-      g[k].push(m);
-    });
-    return g;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  },[filtered.map(m=>m.id+m.qty).join(","),sort]);
+  // Category groups for group view (cheap — plain compute each render)
+  const groups={};
+  filtered.forEach(m=>{
+    const k=m.category||"Uncategorized";
+    if(!groups[k]) groups[k]=[];
+    groups[k].push(m);
+  });
 
   const toggleGroup=k=>setCollapsed(p=>({...p,[k]:!p[k]}));
 
