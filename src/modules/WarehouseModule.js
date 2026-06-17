@@ -1252,9 +1252,16 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
 // Project = "Warehouse" (locked, not selectable)
 // Material picker = Material Library only
 // Unit = library se aata hai, locked (sirf Library me change ho sakta hai)
-function NewMRModal({library,onClose,onSaved}){
+function NewMRModal({library,onClose,onSaved,prefill}){
   const [f,setF]=useState({date:today(),priority:"Medium"});
-  const [items,setItems]=useState([{lib_id:null,name:"",unit:"",qty:"",note:""}]);
+  // When opened from a stock row, pre-select that material by matching the library on name.
+  const [items,setItems]=useState(()=>{
+    if(prefill?.name){
+      const lib=library.find(l=>String(l.name||"").trim().toLowerCase()===String(prefill.name).trim().toLowerCase());
+      return [{lib_id:lib?.id||null,name:lib?.name||prefill.name,unit:lib?.unit||prefill.unit||"",qty:"",note:""}];
+    }
+    return [{lib_id:null,name:"",unit:"",qty:"",note:""}];
+  });
   const [saving,setSaving]=useState(false);
   // pipelineByIdx[i] = { entries:[], total_pending_qty, unit } | null
   const [pipelineByIdx,setPipelineByIdx]=useState({});
@@ -1283,6 +1290,11 @@ function NewMRModal({library,onClose,onSaved}){
       }
     }catch(_){}
   };
+
+  // Prefilled-from-stock: run the duplicate-pipeline check once on open.
+  useEffect(()=>{
+    if(prefill?.name) checkPipeline(0,items[0]?.name||prefill.name);
+  },[]); // run once on mount
 
   const submit=async()=>{
     // If any picked material is already in pipeline, require explicit confirm
@@ -1318,7 +1330,8 @@ function NewMRModal({library,onClose,onSaved}){
   };
 
   return (
-    <ModalShell title="New Material Request" sub="Warehouse ke liye material maango — Library se pick karein"
+    <ModalShell title={prefill?.name?"Quick Request — Procurement":"New Material Request"}
+      sub={prefill?.name?`"${prefill.name}" ke liye procurement ko request bhejein — qty daalein`:"Warehouse ke liye material maango — Library se pick karein"}
       onClose={onClose} width={720}
       footer={<>
         <GhostBtn onClick={onClose}>Cancel</GhostBtn>
@@ -1915,7 +1928,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
 }
 
 // ── STOCK TAB ─────────────────────────────────────────────────────
-function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue}){
+function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue,onQuickRequest}){
   const [search,setSearch]=useState("");
   const [cat,setCat]=useState("All");
   const [showLow,setShowLow]=useState(false);
@@ -2088,7 +2101,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue})
                   const val=m.qty*m.rate;
                   return(
                     <div key={m.id}
-                      style={{display:"grid",gridTemplateColumns:"4px 40px 1fr 96px 86px auto 80px",alignItems:"center",borderBottom:idx<items.length-1?`1px solid ${T.b1}`:"none",cursor:"pointer",minHeight:52,transition:"background .1s"}}
+                      style={{display:"grid",gridTemplateColumns:"4px 40px 1fr 96px 86px auto 112px",alignItems:"center",borderBottom:idx<items.length-1?`1px solid ${T.b1}`:"none",cursor:"pointer",minHeight:50,transition:"background .1s"}}
                       onClick={()=>onSelect(m)}
                       onMouseEnter={e=>e.currentTarget.style.background="#EFF6FF55"}
                       onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
@@ -2113,9 +2126,9 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue})
 
                       {/* Qty */}
                       <div style={{textAlign:"right",paddingRight:14}}>
-                        <span style={{fontSize:20,fontWeight:900,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1,letterSpacing:"-0.5px",lineHeight:1}}>{fmtN(m.qty)}</span>
+                        <span style={{fontSize:16,fontWeight:600,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1,letterSpacing:"-0.1px",lineHeight:1}}>{fmtN(m.qty)}</span>
                         <span style={{fontSize:10,color:T.t4,marginLeft:3}}>{m.unit}</span>
-                        {h.label!=="OK"&&<div style={{fontSize:9,color:h.c,fontWeight:800,marginTop:1,textTransform:"uppercase",letterSpacing:".3px"}}>{h.label==="Out"?"Out of stock":h.label==="Low"?"Below min":h.label}</div>}
+                        {h.label!=="OK"&&<div style={{fontSize:8.5,color:h.c,fontWeight:700,marginTop:2,textTransform:"uppercase",letterSpacing:".3px"}}>{h.label==="Out"?"Out of stock":h.label==="Low"?"Below min":h.label}</div>}
                       </div>
 
                       {/* Value */}
@@ -2134,7 +2147,7 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue})
                       </div>
 
                       {/* Quick actions */}
-                      <div style={{display:"flex",gap:4,paddingRight:12,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
+                      <div style={{display:"flex",gap:5,paddingRight:12,justifyContent:"flex-end"}} onClick={e=>e.stopPropagation()}>
                         {onAddStock&&(
                           <button onClick={()=>onAddStock(m)} title="Add Stock"
                             style={{width:28,height:28,borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:15,color:T.grn,fontWeight:700}}>+</button>
@@ -2142,6 +2155,12 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue})
                         {onIssue&&(
                           <button onClick={()=>onIssue(m)} title="Issue to project"
                             style={{width:28,height:28,borderRadius:7,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:T.amb}}>↓</button>
+                        )}
+                        {onQuickRequest&&(
+                          <button onClick={()=>onQuickRequest(m)} title="Request to procurement"
+                            style={{width:28,height:28,borderRadius:7,background:T.purL,border:`1px solid ${T.purM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.pur}}>
+                            <IcMR size={13} color={T.pur}/>
+                          </button>
                         )}
                       </div>
                     </div>
@@ -2154,50 +2173,90 @@ function StockTab({stock,grns,issues,onSelect,onAddMaterial,onAddStock,onIssue})
       )}
 
       {/* ══════════════════════════════════════════
-          GRID VIEW — improved card layout
+          GRID VIEW — compact cards, grouped by category
           ══════════════════════════════════════════ */}
       {view==="grid"&&filtered.length>0&&(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(230px,1fr))",gap:10}}>
-          {filtered.map(m=>{
-            const h=getHealth(m);
-            const v=getVel(m);
-            const val=m.qty*m.rate;
-            const {pct,minPct,color:barColor}=getBar(m);
+        <div style={{display:"flex",flexDirection:"column",gap:14}}>
+          {Object.entries(groups).map(([gKey,items])=>{
+            const isCol=collapsed[gKey];
+            const gVal=items.reduce((s,m)=>s+m.qty*m.rate,0);
+            const gLow=items.filter(m=>m.qty<m.minQty).length;
+            const gOut=items.filter(m=>m.qty===0).length;
             return(
-              <div key={m.id} onClick={()=>onSelect(m)}
-                style={{background:T.surface,borderRadius:10,border:`1px solid ${h.label!=="OK"?h.brd:T.b1}`,borderLeft:`4px solid ${h.c}`,padding:"13px 14px",cursor:"pointer",transition:"all .15s",boxShadow:"0 1px 4px rgba(0,0,0,0.05)",position:"relative"}}
-                onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 4px 14px rgba(0,0,0,0.1)";e.currentTarget.style.transform="translateY(-1px)";}}
-                onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 4px rgba(0,0,0,0.05)";e.currentTarget.style.transform="";}}>
-                {v.label!=="Slow"&&(
-                  <div style={{position:"absolute",top:10,right:10,fontSize:9.5,fontWeight:700,color:v.c,background:v.bg,padding:"2px 7px",borderRadius:8,border:`1px solid ${v.c}33`}}>
-                    {v.icon} {v.label}
+              <div key={gKey}>
+                {/* Category header */}
+                <div onClick={()=>toggleGroup(gKey)}
+                  style={{display:"flex",alignItems:"center",gap:9,padding:"6px 4px 8px",cursor:"pointer",userSelect:"none",borderBottom:`1px solid ${T.b1}`,marginBottom:isCol?0:10}}>
+                  <span style={{fontSize:15}}>{getCategoryEmoji(gKey)}</span>
+                  <span style={{fontSize:12,fontWeight:700,color:T.t1,letterSpacing:"-.2px"}}>{gKey}</span>
+                  <span style={{fontSize:10.5,color:T.t4}}>{items.length}</span>
+                  <span style={{color:T.b2,fontSize:9}}>·</span>
+                  <span style={{fontSize:10.5,fontWeight:600,color:T.blu}}>₹{fmt(gVal)}</span>
+                  {gOut>0&&<span style={{fontSize:9.5,color:"#EF4444",fontWeight:700,background:"#FEF2F2",padding:"1px 6px",borderRadius:9,border:"1px solid #FECACA"}}>🔴 {gOut}</span>}
+                  {gLow>0&&<span style={{fontSize:9.5,color:T.amb,fontWeight:700,background:T.ambL,padding:"1px 6px",borderRadius:9,border:`1px solid ${T.ambM}`}}>⚠ {gLow}</span>}
+                  <span style={{flex:1}}/>
+                  <span style={{fontSize:12,color:T.t4,transform:isCol?"rotate(-90deg)":"rotate(0)",transition:"transform .2s",display:"inline-block"}}>▾</span>
+                </div>
+
+                {/* Compact card grid */}
+                {!isCol&&(
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(178px,1fr))",gap:9}}>
+                    {items.map(m=>{
+                      const h=getHealth(m);
+                      const v=getVel(m);
+                      const val=m.qty*m.rate;
+                      const {pct,minPct,color:barColor}=getBar(m);
+                      return(
+                        <div key={m.id} onClick={()=>onSelect(m)}
+                          style={{background:T.surface,borderRadius:9,border:`1px solid ${h.label!=="OK"?h.brd:T.b1}`,borderLeft:`3px solid ${h.c}`,padding:"10px 11px",cursor:"pointer",transition:"all .15s",boxShadow:"0 1px 3px rgba(0,0,0,0.04)",position:"relative"}}
+                          onMouseEnter={e=>{e.currentTarget.style.boxShadow="0 3px 10px rgba(0,0,0,0.09)";e.currentTarget.style.transform="translateY(-1px)";}}
+                          onMouseLeave={e=>{e.currentTarget.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)";e.currentTarget.style.transform="";}}>
+
+                          {/* name row */}
+                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8,minWidth:0}}>
+                            <span style={{fontSize:15,flexShrink:0}}>{getCategoryEmoji(m.category)}</span>
+                            <div style={{fontSize:11.5,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",flex:1}}>{m.name}</div>
+                            {v.label!=="Slow"&&<span title={v.label} style={{fontSize:11,flexShrink:0}}>{v.icon}</span>}
+                          </div>
+
+                          {/* qty — clean, not heavy */}
+                          <div style={{display:"flex",alignItems:"baseline",gap:3,marginBottom:7}}>
+                            <span style={{fontSize:19,fontWeight:700,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1,letterSpacing:"-.3px",lineHeight:1}}>{fmtN(m.qty)}</span>
+                            <span style={{fontSize:10.5,color:T.t4}}>{m.unit}</span>
+                            {h.label!=="OK"&&<span style={{fontSize:8.5,color:h.c,fontWeight:700,background:h.bg,padding:"1px 5px",borderRadius:5,marginLeft:"auto"}}>{h.label==="Out"?"OUT":h.label.toUpperCase()}</span>}
+                          </div>
+
+                          {/* stock bar */}
+                          <div style={{position:"relative",height:4,background:T.b1,borderRadius:2,marginBottom:8}}>
+                            <div style={{position:"absolute",left:0,top:0,height:"100%",width:pct+"%",background:barColor,borderRadius:2}}/>
+                            {minPct>0&&<div style={{position:"absolute",left:minPct+"%",top:-2.5,height:9,width:2,background:"#94A3B8",borderRadius:1}} title={"Min: "+m.minQty}/>}
+                          </div>
+
+                          {/* footer: value + quick actions */}
+                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:7,borderTop:`1px solid ${T.b1}`}}>
+                            <span style={{fontSize:11.5,fontWeight:600,color:T.blu}}>₹{fmt(val)}</span>
+                            <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+                              {onAddStock&&(
+                                <button onClick={()=>onAddStock(m)} title="Add Stock"
+                                  style={{width:23,height:23,borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:T.grn,fontWeight:700}}>+</button>
+                              )}
+                              {onIssue&&(
+                                <button onClick={()=>onIssue(m)} title="Issue to project"
+                                  style={{width:23,height:23,borderRadius:6,background:T.ambL,border:`1px solid ${T.ambM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:T.amb}}>↓</button>
+                              )}
+                              {onQuickRequest&&(
+                                <button onClick={()=>onQuickRequest(m)} title="Request to procurement"
+                                  style={{width:23,height:23,borderRadius:6,background:T.purL,border:`1px solid ${T.purM}`,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",color:T.pur}}>
+                                  <IcMR size={11} color={T.pur}/>
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
-                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10,paddingRight:v.label!=="Slow"?72:0}}>
-                  <span style={{fontSize:19}}>{getCategoryEmoji(m.category)}</span>
-                  <div style={{minWidth:0}}>
-                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{m.name}</div>
-                    <div style={{fontSize:9.5,color:T.t4}}>{m.location||m.category||"—"}</div>
-                  </div>
-                </div>
-                <div style={{display:"flex",alignItems:"baseline",gap:4,marginBottom:9}}>
-                  <span style={{fontSize:28,fontWeight:900,color:h.label==="Out"?"#EF4444":h.label==="Low"?T.amb:T.t1,letterSpacing:"-1px",lineHeight:1}}>{fmtN(m.qty)}</span>
-                  <span style={{fontSize:12,color:T.t4,fontWeight:500}}>{m.unit}</span>
-                  {h.label!=="OK"&&<span style={{fontSize:9.5,color:h.c,fontWeight:700,background:h.bg,padding:"1px 6px",borderRadius:6,marginLeft:2}}>{h.label==="Out"?"OUT":h.label.toUpperCase()}</span>}
-                </div>
-                {/* Stock bar with min threshold marker */}
-                <div style={{position:"relative",height:5,background:T.b1,borderRadius:3,marginBottom:4}}>
-                  <div style={{position:"absolute",left:0,top:0,height:"100%",width:pct+"%",background:barColor,borderRadius:3}}/>
-                  {minPct>0&&<div style={{position:"absolute",left:minPct+"%",top:-3,height:11,width:2,background:"#94A3B8",borderRadius:1}} title={"Min: "+m.minQty}/>}
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
-                  <span style={{fontSize:9.5,color:T.t4}}>Min {m.minQty?fmtN(m.minQty):"—"}</span>
-                  <span style={{fontSize:9.5,color:T.t4}}>Max {m.maxQty?fmtN(m.maxQty):"—"}</span>
-                </div>
-                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",paddingTop:9,borderTop:`1px solid ${T.b1}`}}>
-                  <span style={{fontSize:13,fontWeight:700,color:T.blu}}>₹{fmt(val)}</span>
-                  <span style={{fontSize:10.5,color:T.t4}}>@₹{fmtN(m.rate)}/{m.unit}</span>
-                </div>
               </div>
             );
           })}
@@ -3331,6 +3390,7 @@ function WarehouseModule(){
   const [grnNewOpen,setGrnNewOpen]=useState(false);
   const [issueNewOpen,setIssueNewOpen]=useState(false);
   const [mrNewOpen,setMrNewOpen]=useState(false);
+  const [mrPrefill,setMrPrefill]=useState(null);  // {name,unit} when MR raised from a stock row
   const [transferNewOpen,setTransferNewOpen]=useState(false);
   const [issueFromMR,setIssueFromMR]=useState(null);    // {mr} when issuing against MR
   const [matDetail,setMatDetail]=useState(null);
@@ -3552,7 +3612,7 @@ function WarehouseModule(){
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"12px 18px 16px"}}>
-        {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)}/>}
+        {tab==="stock"&&<StockTab stock={stock} grns={grns} issues={issues} onSelect={m=>setMatDetail(m)} onAddMaterial={()=>setMatModalOpen({})} onAddStock={m=>setAddStockTarget(m)} onIssue={m=>setIssueTarget(m)} onQuickRequest={m=>{setMrPrefill({name:m.name,unit:m.unit});setMrNewOpen(true);}}/>}
         {tab==="grn"&&<MaterialInTab grns={grns} mrs={mrs} projects={projects} users={users} library={library}
           procMode={procMode}
           onNewGRN={()=>setGrnNewOpen(true)} onVerifyGRN={handleVerifyGRN}
@@ -3644,8 +3704,8 @@ function WarehouseModule(){
           onClose={()=>setIssueNewOpen(false)} onSaved={()=>loadAll()}/>
       )}
       {mrNewOpen&&(
-        <NewMRModal library={library}
-          onClose={()=>setMrNewOpen(false)} onSaved={()=>loadAll()}/>
+        <NewMRModal library={library} prefill={mrPrefill}
+          onClose={()=>{setMrNewOpen(false);setMrPrefill(null);}} onSaved={()=>loadAll()}/>
       )}
       {transferNewOpen&&(
         <NewTransferModal stock={stock} projects={projects}
