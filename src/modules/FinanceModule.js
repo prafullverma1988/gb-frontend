@@ -3009,6 +3009,9 @@ function FinanceModule(){
     await Promise.allSettled([
       refreshParties(),refreshTxns(),refreshAccounts(),
       refreshPayReqs(),refreshPendPmts(),refreshProjects(),
+      // Also reload Unbilled GRN list (the in-tab green Refresh was removed —
+      // the single top-bar Refresh now covers it too).
+      (typeof loadUnbilledGRNs==="function"?loadUnbilledGRNs():Promise.resolve()),
     ]);
   };
 
@@ -3667,13 +3670,13 @@ Status: ${ledgerRow.status||"unpaid"}`;
             </div>
           </div>
         </div>
-        {/* Level 2: sub-tabs of the active group — light underline style */}
-        <div key={activeGroup.key} style={{display:"flex",gap:24,marginTop:6,borderBottom:`1px solid ${T.b1}`,animation:"fadeSlideIn .26s ease"}}>
+        {/* Level 2: sub-tabs of the active group — segmented switch (matches the group toggle) */}
+        <div key={activeGroup.key} style={{display:"inline-flex",background:T.surfaceB,borderRadius:8,padding:3,gap:2,marginTop:8,border:`1px solid ${T.b1}`,animation:"fadeSlideIn .26s ease"}}>
           {activeGroup.tabs.map(t=>{
             const on=tab===t.id;
             return(
               <button key={t.id} onClick={()=>setTab(t.id)}
-                style={{padding:"0 2px 9px",border:"none",background:"none",borderBottom:`2px solid ${on?T.blu:"transparent"}`,marginBottom:-1,color:on?T.t1:T.t3,fontSize:13,fontWeight:on?700:500,cursor:"pointer",transition:"color .15s",whiteSpace:"nowrap"}}>
+                style={{padding:"6px 15px",borderRadius:6,border:`1px solid ${on?T.b1:"transparent"}`,background:on?T.surface:"none",color:on?T.t1:T.t3,fontSize:12.5,fontWeight:on?700:500,cursor:"pointer",transition:"all .15s",whiteSpace:"nowrap",boxShadow:on?"0 1px 3px rgba(0,0,0,0.06)":"none"}}>
                 {t.l}
               </button>
             );
@@ -4900,60 +4903,6 @@ Status: ${ledgerRow.status||"unpaid"}`;
               <button onClick={()=>setGrnFilter({project:"All",material:"",head:"All"})}
                 style={{fontSize:11,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,borderRadius:5,padding:"3px 9px",cursor:"pointer"}}>Clear ×</button>
             )}
-            <button onClick={async()=>{
-                if(!await window.confirmAsync("Re-link existing bills to their source GRNs?\n\nUse this after adding a missing vendor to Party Master so old bills auto-link properly."))return;
-                try{
-                  const r=await api.post("/finance/admin/relink-bills",{});
-                  if(r.success){
-                    alert(`✓ ${r.linked || 0} bill(s) re-linked to source GRNs.\n  • via party match: ${r.via_party || 0}\n  • via description fallback: ${r.via_description || 0}`);
-                    loadUnbilledGRNs();
-                  } else {
-                    alert("Failed: "+(r.message||"Unknown error"));
-                  }
-                }catch(e){alert("Network error: "+e.message);}
-              }}
-              style={{height:30,padding:"0 12px",borderRadius:6,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",marginRight:5}}>
-              🔗 Re-link Bills
-            </button>
-            {/* Clean duplicate bills — testing tool, hard-deletes duplicate
-                (party_id, challan_no, project_id) buckets keeping the earliest. */}
-            <button onClick={async()=>{
-                if(!await window.confirmAsync("⚠ HARD-DELETE duplicate bills?\n\nFor every (vendor + challan + project) combo with multiple bills, the earliest will be KEPT and the rest will be PERMANENTLY DELETED.\n\nAccount balances + project expense + party balance will be reversed automatically.\n\nThis cannot be undone. Proceed?"))return;
-                try{
-                  const r=await api.post("/finance/admin/clean-duplicate-bills",{});
-                  if(r.success){
-                    alert(`✓ ${r.message}\n\nKept: ${r.kept?.length||0} bill(s)\nDeleted: ${r.deleted?.length||0} duplicate bill(s)\nGRNs locked: ${r.stamped_grns||0}`);
-                    loadUnbilledGRNs();
-                    if(typeof refreshTxns==="function") refreshTxns();
-                  } else {
-                    alert("Failed: "+(r.message||"Unknown error"));
-                  }
-                }catch(e){alert("Network error: "+e.message);}
-              }}
-              style={{height:30,padding:"0 12px",borderRadius:6,background:T.redL,color:T.red,border:`1px solid ${T.redM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",marginRight:5}}>
-              🧹 Clean Duplicates
-            </button>
-            {/* Sync Inventory — recovers Add-Item rows from past bills that
-                missed Phase 5 (creates Auto-Bill GRNs for items present in
-                transaction_items but absent from any project grn_items). */}
-            <button onClick={async()=>{
-                if(!await window.confirmAsync("Sync inventory from past bills?\n\nFor every material_purchase bill, line items NOT yet present in any GRN for the same project will be added via an Auto-Bill GRN. Safe to run multiple times — only missing items get added."))return;
-                try{
-                  const r=await api.post("/finance/admin/sync-bill-inventory",{});
-                  if(r.success){
-                    alert(`✓ ${r.message}\n\nBills scanned: ${r.bills_scanned||0}\nItems recovered: ${r.items_recovered||0}\nAuto-Bill GRNs created: ${r.auto_grns_created||0}`);
-                  } else {
-                    alert("Failed: "+(r.message||"Unknown error"));
-                  }
-                }catch(e){alert("Network error: "+e.message);}
-              }}
-              style={{height:30,padding:"0 12px",borderRadius:6,background:T.ambL,color:T.amb,border:`1px solid ${T.ambM}`,fontSize:11.5,fontWeight:600,cursor:"pointer",marginRight:5}}>
-              📦 Sync Inventory
-            </button>
-            <button onClick={loadUnbilledGRNs}
-              style={{height:30,padding:"0 12px",borderRadius:6,background:T.grnL,color:T.grn,border:`1px solid ${T.grnM}`,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
-              ↻ Refresh
-            </button>
           </div>
 
           {/* GRN List */}
@@ -5070,15 +5019,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
 
             return(
               <div style={{display:"flex",flexDirection:"column",gap:8}}>
-                {/* Section header */}
-                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 14px",background:T.purL,border:`1px solid ${T.pur}33`,borderRadius:7}}>
-                  <div style={{display:"flex",alignItems:"center",gap:10}}>
-                    <span style={{fontSize:13,fontWeight:700,color:T.pur,letterSpacing:".2px"}}>UNBILLED MATERIAL — Vendor wise</span>
-                    <span style={{fontSize:11,color:T.t3}}>· {groupArr.length} vendor{groupArr.length===1?"":"s"} · {totalItems} item{totalItems===1?"":"s"}</span>
-                  </div>
+                {/* Compact summary line — plain text + selected count (only while picking) */}
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"0 2px 2px"}}>
+                  <span style={{fontSize:11.5,color:T.t4,fontWeight:500}}>{groupArr.length} vendor{groupArr.length===1?"":"s"} · {totalItems} item{totalItems===1?"":"s"}</span>
                   {totalSelected>0&&(
-                    <span style={{fontSize:11,color:T.pur,fontWeight:700,background:"white",padding:"3px 10px",borderRadius:20,border:`1px solid ${T.pur}55`}}>
-                      {totalSelected} item{totalSelected===1?"":"s"} selected
+                    <span style={{fontSize:11,color:T.blu,fontWeight:700,background:T.bluL,padding:"3px 10px",borderRadius:20,border:`1px solid ${T.bluM}`}}>
+                      {totalSelected} selected
                     </span>
                   )}
                 </div>
