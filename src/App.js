@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense } from "react";
+import { useState, useEffect, useRef, lazy, Suspense, Fragment } from "react";
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth } from "./config/api";
 import apiCache from "./utils/apiCache";
 import UploadToast from "./components/UploadToast";
@@ -1044,10 +1044,22 @@ const MOCK_OPS = {
     { label:"Low Stock Items",  value:3,       sub:"reorder needed",   color:T.amb, Icon:IcWH },
   ],
   projects: [
-    { id:1, name:"Skyline Apartments", city:"Raipur", progress:72, status:"Ongoing",     tasks:"8 open",  delay:null,        pm:"Vijay" },
-    { id:2, name:"Harish Villa",       city:"Bhilai", progress:45, status:"Ongoing",     tasks:"6 open",  delay:"2d behind", pm:"Priyanka" },
-    { id:3, name:"R K Rathor",         city:"Bhilai", progress:30, status:"Ongoing",     tasks:"5 open",  delay:null,        pm:"Raganee" },
-    { id:4, name:"Kewal Sahu",         city:"Bhilai", progress:0,  status:"Not Started", tasks:"4 open",  delay:null,        pm:"—" },
+    { id:1, name:"Skyline Apartments", city:"Raipur", progress:72, status:"Ongoing", tasks:"8 open", delay:null, pm:"Vijay",
+      recent:[ {t:"2nd floor slab casting", on:"Today", by:"Vijay"}, {t:"Electrical rough-in — Block A", on:"Yesterday", by:"Niranjan"}, {t:"Column shuttering 3rd flr", on:"3d ago", by:"Vijay"} ],
+      next:{ t:"Block-A flooring start", due:"in 2d", by:"Vijay" },
+      issues:[ {title:"Cement shortage", member:"Niranjan Kumar", progress:60, hurdle:"Vendor delay 2d"}, {title:"Lift shaft RCC pending", member:"Vijay Sahu", progress:30, hurdle:null} ] },
+    { id:2, name:"Harish Villa", city:"Bhilai", progress:45, status:"Ongoing", tasks:"6 open", delay:"2d behind", pm:"Priyanka",
+      recent:[ {t:"Internal plastering started", on:"Today", by:"Harsh"}, {t:"Plumbing rough-in done", on:"2d ago", by:"Harsh"} ],
+      next:{ t:"Brickwork — 1st floor", due:"in 1d", by:"Priyanka" },
+      issues:[ {title:"Labour shortage", member:"Harsh Sahu", progress:40, hurdle:"2 mason short"}, {title:"Drawing R3 approval", member:"Priyanka", progress:70, hurdle:"Awaiting client sign-off"} ] },
+    { id:3, name:"R K Rathor", city:"Bhilai", progress:30, status:"Ongoing", tasks:"5 open", delay:null, pm:"Raganee",
+      recent:[ {t:"Block-C excavation shuru", on:"Today", by:"Niranjan"}, {t:"Steel 2.4 MT received", on:"Yesterday", by:"Store"} ],
+      next:{ t:"Plinth beam casting", due:"in 5d", by:"Raganee" },
+      issues:[ {title:"Soil compaction slow", member:"Niranjan Kumar", progress:50, hurdle:"Rain forecast"} ] },
+    { id:4, name:"Kewal Sahu", city:"Bhilai", progress:0, status:"Not Started", tasks:"4 open", delay:null, pm:"—",
+      recent:[],
+      next:{ t:"Site mobilization", due:"on start", by:"—" },
+      issues:[ {title:"Layout approval pending", member:"—", progress:0, hurdle:"Awaiting client BOQ sign"} ] },
   ],
   attendance: { present:18, absent:2, leave:2, total:22, byDept:[
     { dept:"Site Engineers", present:5, total:6 }, { dept:"Supervisors", present:4, total:4 },
@@ -1227,11 +1239,11 @@ function DashboardModule(){
 
 // ── OPERATIONS & TEAM DASHBOARD (mock vision) ─────────────────────────
 function OperationsDashboard({ops}){
+  const [expProj,setExpProj]=useState(null);
   const att=ops.attendance;
   const pColorOf=(p)=>p>=100?T.grn:p>60?T.blu:p>30?T.amb:p>0?T.slt:T.t4;
   const priMeta={high:{c:T.red,bg:T.redL,brd:T.redM,l:"HIGH"},med:{c:T.amb,bg:T.ambL,brd:T.ambM,l:"MED"},low:{c:T.slt,bg:T.sltL,brd:T.b2,l:"LOW"}};
   const stMeta={present:{c:T.grn,bg:T.grnL,l:"Present"},absent:{c:T.red,bg:T.redL,l:"Absent"},leave:{c:T.amb,bg:T.ambL,l:"On Leave"}};
-  const pipeMax=Math.max(...ops.pipeline.map(s=>s.count));
   return(
     <div>
       {/* KPI row */}
@@ -1240,23 +1252,67 @@ function OperationsDashboard({ops}){
       </div>
       {/* Row 1: Project progress + Team attendance (named) */}
       <div style={{display:"grid",gridTemplateColumns:"1.6fr 1fr",gap:12,marginBottom:12}}>
-        <Panel title="Project Progress">
+        <Panel title="Project Progress" action={<span style={{fontSize:11,color:T.t4}}>click for detail</span>}>
           <div style={{padding:"6px 0"}}>
-            {ops.projects.map((p,i)=>(
-              <div key={p.id} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 16px",borderBottom:i<ops.projects.length-1?`1px solid ${T.b1}`:"none"}}>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8}}>
-                    <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{p.name}</span>
-                    {p.delay&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:T.redL,color:T.red,border:`1px solid ${T.redM}`}}>{p.delay}</span>}
+            {ops.projects.map((p,i)=>{
+              const isExp=expProj===p.id;
+              return(
+              <div key={p.id} style={{borderBottom:i<ops.projects.length-1?`1px solid ${T.b1}`:"none"}}>
+                <div onClick={()=>setExpProj(isExp?null:p.id)} style={{display:"flex",alignItems:"center",gap:12,padding:"11px 16px",cursor:"pointer",background:isExp?T.bluL:"none",borderLeft:isExp?`3px solid ${T.blu}`:"3px solid transparent"}}
+                  onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.surfaceB;}} onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background="none";}}>
+                  <svg width={12} height={12} viewBox="0 0 14 14" fill="none" stroke={T.t4} strokeWidth={1.6} style={{flexShrink:0}}><path d={isExp?"M2 5l5 5 5-5":"M5 2l5 5-5 5"}/></svg>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                      <span style={{fontSize:12.5,fontWeight:600,color:isExp?T.blu:T.t1}}>{p.name}</span>
+                      {p.delay&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:T.redL,color:T.red,border:`1px solid ${T.redM}`}}>{p.delay}</span>}
+                      {p.issues&&p.issues.length>0&&<span style={{fontSize:9,fontWeight:700,padding:"1px 6px",borderRadius:10,background:T.ambL,color:T.amb}}>{p.issues.length} issue{p.issues.length>1?"s":""}</span>}
+                    </div>
+                    <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{p.city} · {p.tasks} · PM {p.pm}</div>
                   </div>
-                  <div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{p.city} · {p.tasks} · PM {p.pm}</div>
+                  <div style={{width:130}}>
+                    <div style={{display:"flex",justifyContent:"flex-end",marginBottom:3}}><span style={{fontSize:10,fontWeight:700,color:pColorOf(p.progress)}}>{p.progress}%</span></div>
+                    <div style={{height:6,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:pColorOf(p.progress),borderRadius:3}}/></div>
+                  </div>
                 </div>
-                <div style={{width:140}}>
-                  <div style={{display:"flex",justifyContent:"flex-end",marginBottom:3}}><span style={{fontSize:10,fontWeight:700,color:pColorOf(p.progress)}}>{p.progress}%</span></div>
-                  <div style={{height:6,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:pColorOf(p.progress),borderRadius:3}}/></div>
-                </div>
+                {isExp&&(
+                  <div style={{padding:"12px 16px 16px 31px",background:T.bluL,borderLeft:`3px solid ${T.blu}`}}>
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:14,marginBottom:14}}>
+                      {/* Last 7 days */}
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:6}}>Last 7 days</div>
+                        {p.recent.length?p.recent.map((r,j)=>(
+                          <div key={j} style={{display:"flex",gap:7,alignItems:"flex-start",marginBottom:6}}>
+                            <IcChk size={12} color={T.grn} style={{marginTop:1,flexShrink:0}}/>
+                            <div><div style={{fontSize:11.5,color:T.t1,fontWeight:500}}>{r.t}</div><div style={{fontSize:9.5,color:T.t4}}>{r.on} · {r.by}</div></div>
+                          </div>
+                        )):<div style={{fontSize:11,color:T.t4}}>Koi recent task nahi</div>}
+                        {/* Next task */}
+                        <div style={{marginTop:8,padding:"7px 10px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`}}>
+                          <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:.3}}>Next task</div>
+                          <div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{p.next.t}</div>
+                          <div style={{fontSize:9.5,color:T.blu}}>due {p.next.due} · {p.next.by}</div>
+                        </div>
+                      </div>
+                      {/* Pending issues + member + progress + hurdles */}
+                      <div>
+                        <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:6}}>Pending issues</div>
+                        {p.issues.length?p.issues.map((is,j)=>(
+                          <div key={j} style={{padding:"8px 10px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`,marginBottom:7}}>
+                            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:8}}>
+                              <span style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{is.title}</span>
+                              <span style={{fontSize:10,fontWeight:700,color:pColorOf(is.progress)}}>{is.progress}%</span>
+                            </div>
+                            <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",margin:"4px 0 5px"}}><div style={{height:"100%",width:`${is.progress}%`,background:pColorOf(is.progress),borderRadius:2}}/></div>
+                            <div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:T.t3}}><IcTeam size={10} color={T.t4}/>{is.member}</div>
+                            {is.hurdle&&<div style={{display:"flex",alignItems:"center",gap:5,fontSize:10,color:T.red,marginTop:3}}><IcAlert size={10} color={T.red}/>{is.hurdle}</div>}
+                          </div>
+                        )):<div style={{fontSize:11,color:T.grn}}>✓ No pending issues</div>}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-            ))}
+            );})}
           </div>
         </Panel>
         <Panel title="Team Attendance — Today" action={<span style={{fontSize:11,fontWeight:700,color:T.grn}}>{att.present}/{att.total} present</span>}>
@@ -1284,21 +1340,19 @@ function OperationsDashboard({ops}){
           </div>
         </Panel>
       </div>
-      {/* Row 2: Procurement pipeline (MR → PO → GRN) */}
+      {/* Row 2: Procurement pipeline (compact — MR → PO → GRN, numbers only) */}
       <Panel title="Procurement Pipeline" style={{marginBottom:12}}>
-        <div style={{padding:"16px 18px"}}>
+        <div style={{padding:"14px 18px",display:"flex",alignItems:"center",gap:6}}>
           {ops.pipeline.map((s,i)=>(
-            <div key={i} style={{marginBottom:i<ops.pipeline.length-1?14:0}}>
-              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
-                <span style={{fontSize:12,fontWeight:600,color:T.t2}}>{s.stage} <span style={{fontSize:10,color:T.t4,fontWeight:400}}>· {s.sub}</span></span>
-                <span style={{fontSize:13,fontWeight:800,color:s.color}}>{s.count}</span>
+            <Fragment key={i}>
+              <div style={{flex:1,background:`${s.color}0D`,border:`1px solid ${s.color}33`,borderRadius:9,padding:"10px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div><div style={{fontSize:11.5,fontWeight:600,color:T.t2}}>{s.stage}</div><div style={{fontSize:9.5,color:T.t4}}>{s.sub}</div></div>
+                <div style={{fontSize:24,fontWeight:800,color:s.color,lineHeight:1}}>{s.count}</div>
               </div>
-              <div style={{height:10,background:T.surfaceB,borderRadius:5,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${Math.round((s.count/pipeMax)*100)}%`,background:s.color,borderRadius:5,transition:"width .3s"}}/>
-              </div>
-            </div>
+              {i<ops.pipeline.length-1&&<svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={2} style={{flexShrink:0}}><path d="M5 12h14M13 6l6 6-6 6"/></svg>}
+            </Fragment>
           ))}
-          <div style={{fontSize:10.5,color:T.t4,marginTop:12,display:"flex",alignItems:"center",gap:5}}><IcWH size={11} color={T.t4}/> Material Request → Purchase Order → GRN flow · low-stock 3 items reorder pending</div>
+          <div style={{flexShrink:0,paddingLeft:8,fontSize:10.5,color:T.amb,fontWeight:600,display:"flex",alignItems:"center",gap:4}}><IcWH size={12} color={T.amb}/>3 low-stock</div>
         </div>
       </Panel>
       {/* Row 3: Site Activity (Pulse) + Pending Approvals */}
