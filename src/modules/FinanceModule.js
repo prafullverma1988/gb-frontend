@@ -3519,18 +3519,18 @@ Status: ${ledgerRow.status||"unpaid"}`;
   return(
     <div style={{background:T.bg,height:"100%",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
 
-      {/* ── Stat Tiles ── */}
-      <div style={{padding:"14px 18px 10px",flexShrink:0}}>
+      {/* ── Stat Tiles (compact) ── */}
+      <div style={{padding:"10px 18px 6px",flexShrink:0}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
           {curTiles.map((s,i)=>{const TileIcon=s.Icon;return(
-            <div key={i} style={{padding:"16px 20px",background:"#FFFFFF",border:"1px solid #E2E8F0",borderRadius:"12px",boxShadow:"0 1px 3px rgba(0,0,0,0.05)",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div key={i} style={{padding:"10px 13px",background:"#FFFFFF",border:"1px solid #E2E8F0",borderRadius:"10px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:10.5,color:"#64748B",fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",marginBottom:5}}>{s.l}</div>
-                <div style={{fontSize:24,fontWeight:700,color:"#0F172A",letterSpacing:"-.5px",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.v}</div>
-                <div style={{fontSize:11.5,color:"#94A3B8",marginTop:5,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.sub}</div>
+                <div style={{fontSize:9.5,color:"#64748B",fontWeight:600,letterSpacing:".4px",textTransform:"uppercase",marginBottom:2}}>{s.l}</div>
+                <div style={{fontSize:18,fontWeight:700,color:"#0F172A",letterSpacing:"-.3px",lineHeight:1.1,fontVariantNumeric:"tabular-nums"}}>{s.v}</div>
+                <div style={{fontSize:10,color:"#94A3B8",marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.sub}</div>
               </div>
-              <div style={{width:38,height:38,borderRadius:"50%",background:"#F1F5F9",color:"#475569",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:10}}>
-                {TileIcon ? <TileIcon size={16} color="currentColor"/> : null}
+              <div style={{width:30,height:30,borderRadius:"50%",background:"#F1F5F9",color:"#475569",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginLeft:8}}>
+                {TileIcon ? <TileIcon size={14} color="currentColor"/> : null}
               </div>
             </div>
           );})}
@@ -3896,26 +3896,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       <div style={{fontSize:14,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{selParty.name}</div>
                       <div style={{fontSize:11,color:T.t4}}>{selParty.type} · {ledgerRows.length} transactions</div>
                     </div>
+                    <span style={{fontSize:11,color:T.grn,fontWeight:600,whiteSpace:"nowrap"}}>CR ₹{fmtN(totalCR)}</span>
+                    <span style={{fontSize:11,color:T.red,fontWeight:600,whiteSpace:"nowrap"}}>DR ₹{fmtN(totalDR)}</span>
                     <span style={{background:chipC.bg,color:chipC.fg,fontSize:11,fontWeight:700,padding:"4px 10px",borderRadius:8,border:`1px solid ${chipC.br}`}}>₹{fmtN(computedBal)} · {computedBalType}</span>
                     <button onClick={()=>downloadLedgerCSV(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:11,fontWeight:600,cursor:"pointer"}}>CSV</button>
                     <button onClick={()=>downloadLedgerPDF(selParty)} style={{height:28,padding:"0 10px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:600,cursor:"pointer"}}>PDF</button>
                     <button onClick={()=>setSelParty(null)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,display:"flex",padding:3}}><IcX size={16}/></button>
                   </div>
-                  {/* Summary cards: Credit · Debit · Balance */}
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10,padding:"12px 14px",borderBottom:`1px solid ${T.b1}`,flexShrink:0}}>
-                    <div style={{background:T.grnL,borderRadius:8,padding:"9px 12px",border:`1px solid ${T.grnM}`}}>
-                      <div style={{fontSize:10.5,color:T.grn,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Total credit</div>
-                      <div style={{fontSize:17,fontWeight:800,color:T.grn,marginTop:2}}>₹{fmtN(totalCR)}</div>
-                    </div>
-                    <div style={{background:T.redL,borderRadius:8,padding:"9px 12px",border:`1px solid ${T.redM}`}}>
-                      <div style={{fontSize:10.5,color:T.red,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>Total debit</div>
-                      <div style={{fontSize:17,fontWeight:800,color:T.red,marginTop:2}}>₹{fmtN(totalDR)}</div>
-                    </div>
-                    <div style={{background:chipC.bg,borderRadius:8,padding:"9px 12px",border:`1px solid ${chipC.br}`}}>
-                      <div style={{fontSize:10.5,color:chipC.fg,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px"}}>{computedBalType}</div>
-                      <div style={{fontSize:17,fontWeight:800,color:chipC.fg,marginTop:2}}>₹{fmtN(computedBal)}</div>
-                    </div>
-                  </div>
+                  {/* Per-party CR/DR/Balance now live as compact chips in the header
+                      + the Closing Balance row — the big summary cards were dropped
+                      to give the transaction table more vertical room. */}
                   {/* ── Compact filter toolbar: search · date range · project · type ── */}
                   <div style={{display:"flex",alignItems:"center",gap:6,padding:"7px 14px",background:T.surface,borderBottom:`1px solid ${T.b1}`,flexShrink:0,flexWrap:"wrap"}}>
                     <div style={{position:"relative",flex:1,minWidth:150}}>
@@ -4016,9 +4006,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             <span style={{fontSize:11.5,color:T.t4,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
                             {/* 2. Project */}
                             <span style={{fontSize:11.5,color:T.t3,fontWeight:500,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={siteLabel}>{siteLabel||"—"}</span>
-                            {/* 3. Note (user-typed only) */}
+                            {/* 3. Note — hard-truncated so verbose auto-notes stay short (full text on hover / in the drawer) */}
                             <span style={{fontSize:12,color:hasNote?T.t1:T.t4,fontWeight:hasNote?500:400,fontStyle:hasNote?"normal":"italic",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={noteLabel}>
-                              {hasNote ? noteLabel : "—"}
+                              {hasNote ? (noteLabel.length>42?noteLabel.slice(0,42)+"…":noteLabel) : "—"}
                             </span>
                             {/* 4. Type — bill-expand for bills, PDF/Share for customer invoices */}
                             <div style={{display:"flex",flexDirection:"column",gap:1}}>
@@ -4029,14 +4019,12 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                 <span onClick={e=>{e.stopPropagation();setSelBill(isExpanded?null:txn.id);}} style={{fontSize:9,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1}}>{isExpanded?"▲ hide":"▼ view bill"}{hasItems?` (${txn.items.length})`:""}</span>
                               )}
                               {txn.sourceKind==="customer_invoice" && (
-                                <div style={{display:"flex",gap:6,marginTop:2}}>
-                                  <span onClick={e=>{e.stopPropagation();downloadInvoicePDF(txn.refId, selParty.name);}}
-                                    title="Download / Print PDF"
-                                    style={{fontSize:9,color:T.red,fontWeight:700,cursor:"pointer"}}>📄 PDF</span>
-                                  <span onClick={e=>{e.stopPropagation();shareInvoice(txn, selParty.name, "whatsapp");}}
-                                    title="Share via WhatsApp"
-                                    style={{fontSize:9,color:T.grn,fontWeight:700,cursor:"pointer"}}>🔗 Share</span>
-                                </div>
+                                /* Compact attach indicator — open the row to download / share in the side drawer */
+                                <span onClick={e=>{e.stopPropagation();setSelTxn(txn);}} title="Invoice attached — open to download / share"
+                                  style={{display:"inline-flex",alignItems:"center",gap:3,fontSize:9.5,color:T.blu,fontWeight:600,cursor:"pointer",marginTop:1,width:"fit-content"}}>
+                                  <svg width={10} height={10} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 01-8.49-8.49l9.19-9.19a4 4 0 015.66 5.66l-9.2 9.19a2 2 0 01-2.83-2.83l8.49-8.48"/></svg>
+                                  PDF
+                                </span>
                               )}
                             </div>
                             {/* 5. CR */}
@@ -5345,6 +5333,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
         onClose={()=>{ setSelTxn(null); setSelTxnHighlight(null); }}
         onChanged={async()=>{ await refreshTxns(); await refreshPendPmts(); await refreshParties(); }}
         highlightItem={selTxnHighlight}
+        onDownloadInvoice={(t)=>downloadInvoicePDF(t.refId, t.party||"")}
+        onShareInvoice={(t)=>shareInvoice(t, t.party||"", "whatsapp")}
       />
 
       {/* ══ Bill Conflict Warning Modal ══ */}

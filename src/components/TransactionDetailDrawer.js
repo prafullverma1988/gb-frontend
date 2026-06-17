@@ -74,7 +74,7 @@ const isoDate = (d) => {
 // Billed Material tab where each row maps to one txn.items[i]), pass an
 // identifier { item_name, amount } and the drawer will highlight + auto-
 // scroll to that row so the user knows which one they clicked.
-export default function TransactionDetailDrawer({ txn, onClose, onChanged, highlightItem = null }) {
+export default function TransactionDetailDrawer({ txn, onClose, onChanged, highlightItem = null, onDownloadInvoice = null, onShareInvoice = null }) {
   const open = !!txn;
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({});
@@ -223,6 +223,26 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
           {err && (
             <div style={{ padding: "8px 11px", background: T.redL, border: `1px solid ${T.redM}`, borderRadius: 6, color: T.red, fontSize: 12, marginBottom: 12 }}>
               {err}
+            </div>
+          )}
+
+          {/* Invoice attached → Download / Share (moved here from the inline row) */}
+          {!editing && txn.sourceKind === "customer_invoice" && (onDownloadInvoice || onShareInvoice) && (
+            <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+              {onDownloadInvoice && (
+                <button onClick={() => onDownloadInvoice(txn)}
+                  style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.redL, border: `1px solid ${T.redM}`, color: T.red, fontSize: 12.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M7 10l5 5 5-5M12 15V3"/></svg>
+                  Download PDF
+                </button>
+              )}
+              {onShareInvoice && (
+                <button onClick={() => onShareInvoice(txn)}
+                  style={{ flex: 1, padding: "9px", borderRadius: 8, background: T.grnL, border: `1px solid ${T.grnM}`, color: T.grn, fontSize: 12.5, fontWeight: 700, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 6 }}>
+                  <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8M16 6l-4-4-4 4M12 2v13"/></svg>
+                  Share
+                </button>
+              )}
             </div>
           )}
 
