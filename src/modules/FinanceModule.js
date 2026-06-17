@@ -2907,7 +2907,7 @@ function FinanceModule(){
     }
     return {
       id:p.id,
-      type:p.type==="payment_request"||p.type==="pr"?"pr":"bill",
+      type:p.type==="payment_request"||p.type==="pr"?"pr":(p.type==="settlement"?"settlement":"bill"),
       no:p.reference_no||p.pr_number||`PP-${p.id}`,
       party:p.party_name||p.party||"",
       project:p.project_name||p.project||"",
@@ -2916,6 +2916,12 @@ function FinanceModule(){
       dueDateRaw,
       daysToDue: daysToDue ?? null,
       overdue:p.overdue===true||(dueDateRaw&&new Date(dueDateRaw)<new Date(new Date().setHours(0,0,0,0))),
+      // Issue & Settlement engine extras (settlement rows only)
+      against: p.against_name||null,            // jiske ledger pe charge hoga
+      itemType: p.item_type||null,              // equipment|material|service
+      payToType: p.pay_to_type||null,           // vendor|subcon|none
+      costAgainstType: p.cost_against_type||null,
+      source: p.source||null, paidBy: p.paid_by||null,
     };
   };
 
@@ -4544,11 +4550,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   const pri=pmt.overdue?"High":pmt.priority||pmt.type==="pr"?"Medium":"Low";
                   const pm=pri==="High"?{c:T.red,bg:T.redL}:pri==="Medium"?{c:T.amb,bg:T.ambL}:{c:T.grn,bg:T.grnL};
                   // Type label
+                  const _it=pmt.itemType||"Settlement";
                   const typeLabel=pmt.type==="pr"?"Approved PR":
+                    pmt.type==="settlement"?(_it.charAt(0).toUpperCase()+_it.slice(1)):
                     pmt.subType==="subcon"?"Sub-Con":
                     pmt.subType==="staff"?"Staff":
                     pmt.party?.toLowerCase().includes("labour")?"Labour":"Vendor";
                   const typeC=pmt.type==="pr"?{c:T.grn,bg:T.grnL}:
+                    pmt.type==="settlement"?{c:T.blu,bg:T.bluL}:
                     typeLabel==="Sub-Con"?{c:T.slt,bg:T.sltL}:
                     typeLabel==="Staff"?{c:T.pur,bg:T.purL}:{c:T.amb,bg:T.ambL};
                   return(
@@ -4560,8 +4569,13 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{pmt.no}</span></span>
                       {/* Type */}
                       <span style={{fontSize:10,fontWeight:700,color:typeC.c,background:typeC.bg,padding:"2px 7px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{typeLabel}</span>
-                      {/* Party Name */}
-                      <span style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pmt.party||"—"}</span>
+                      {/* Party Name (+ "against" sub-line for settlements) */}
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pmt.party||"—"}</div>
+                        {pmt.type==="settlement"&&pmt.against&&pmt.costAgainstType&&pmt.costAgainstType!=="company"&&(
+                          <div style={{fontSize:9.5,color:T.t4,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>against {pmt.against} · {pmt.costAgainstType}</div>
+                        )}
+                      </div>
                       {/* Invoice Amt */}
                       <span style={{fontSize:12.5,color:T.t2,textAlign:"right",fontWeight:500}}>₹{fmtN(pmt.amount)}</span>
                       {/* Balance Due */}
@@ -4575,6 +4589,17 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       <span style={{fontSize:10,fontWeight:700,color:pm.c,background:pm.bg,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{pri}</span>
                       {/* Action — Pay + Extend + Close */}
                       {(()=>{
+                        if(pmt.type==="settlement"){
+                          // Phase 1: settlement is visible + payable-pending. The actual
+                          // Pay routing (vendor cash + against-party contra) is Phase 2.
+                          return (
+                            <button onClick={()=>window.alert("Pay flow Phase 2 me aa raha hai — vendor ko cash + subcon/client ke against contra. Abhi confirm hoke Pending Payments me aa gaya.")}
+                              title="Pay (Phase 2)"
+                              style={{padding:"5px 9px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
+                              <IcSend size={9} color="white"/> Pay
+                            </button>
+                          );
+                        }
                         const sourceKind = pmt.type==="pr"?"pr":"bill";
                         const sourceId = pmt.type==="pr"
                           ? parseInt(String(pmt.id).replace(/^pr-/,""))
