@@ -45,7 +45,7 @@ function DonutChart({slices, size=118, r=40, inner=24}){
   );
 }
 
-function CashBars({data, height=148}){
+function CashBars({data, height=160}){
   if(!data||!data.length) return (
     <div style={{padding:"40px 16px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
       <div style={{width:38,height:38,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -55,14 +55,18 @@ function CashBars({data, height=148}){
       <div style={{fontSize:10.5,color:T.t4}}>Money in / out will chart here</div>
     </div>
   );
+  const n=data.length;
   const maxV=Math.max(...data.map(d=>Math.max(d.sales,d.expense)),1);
-  const bW=18,gap=5,groupGap=22;
-  const W=data.length*(bW*3+gap*2+groupGap)+20;
-  const pad={top:16,bottom:22,left:6,right:6}; const cH=height-pad.top-pad.bottom;
+  // Widen bars + gaps when there are few months so the chart fills the panel
+  // instead of rendering as a thin sliver (and so it never over-stretches).
+  const bW = n<=2?34 : n<=4?24 : 18; const gap=6; const groupGap = n<=2?70 : n<=4?40 : 24;
+  const W=n*(bW*3+gap*2+groupGap)+20;
+  const pad={top:16,bottom:22,left:8,right:8}; const cH=height-pad.top-pad.bottom;
   const sy=v=>pad.top+cH-(v/maxV)*cH; const bH=v=>(v/maxV)*cH;
   let x=pad.left+6;
   return(
-    <svg width="100%" viewBox={`0 0 ${W} ${height}`} style={{overflow:"visible"}}>
+    // Explicit height + preserveAspectRatio so the SVG can never balloon vertically.
+    <svg viewBox={`0 0 ${W} ${height}`} width="100%" height={height} preserveAspectRatio="xMidYMid meet" style={{overflow:"visible", display:"block"}}>
       {[0,0.5,1].map((p,i)=>(<line key={i} x1={pad.left} y1={pad.top+cH*p} x2={W-pad.right} y2={pad.top+cH*p} stroke={T.b1} strokeWidth={0.8} strokeDasharray={p===0?"0":"3,3"}/>))}
       {data.map((d,i)=>{
         const x1=x,x2=x+bW+gap,x3=x+bW*2+gap*2; const m=d.sales-d.expense; const mH=Math.abs((m/maxV)*cH);
