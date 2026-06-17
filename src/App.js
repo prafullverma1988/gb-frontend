@@ -1403,64 +1403,105 @@ function OperationsDashboard({ops}){
 }
 
 // ── REAL-TIME PROJECT FINANCIALS (Finance view toggle, mock vision) ───
-// Per-project live health: physical progress vs billed vs cost — spots
-// under-billing and cost-overrun at a glance. Margin = invoiced − expense.
+// Compact list (like Summary) — small data per row; click to expand full
+// financial detail WITH charts. Margin = invoiced − expense; health spots
+// under-billing and cost-overrun at a glance.
 function RealtimeFinancials({projects}){
+  const [exp,setExp]=useState(null);
+  const calc=(p)=>{
+    const billedPct=p.boq>0?(p.invoiced/p.boq)*100:0;
+    const costPct=p.boq>0?(p.expense/p.boq)*100:0;
+    const realized=p.invoiced-p.expense;
+    const mPct=p.invoiced>0?(realized/p.invoiced)*100:0;
+    const health=costPct>p.progress+8?{c:T.red,bg:T.redL,l:"Cost overrun"}
+      :p.progress>billedPct+12?{c:T.amb,bg:T.ambL,l:"Under-billed"}
+      :{c:T.grn,bg:T.grnL,l:"On track"};
+    return {billedPct,costPct,realized,mPct,health};
+  };
+  const GC="2.2fr 130px 80px 80px 150px 110px 34px";
   const Bar=({label,pct,color})=>(
-    <div style={{marginBottom:6}}>
+    <div style={{marginBottom:7}}>
       <div style={{display:"flex",justifyContent:"space-between",marginBottom:2}}>
-        <span style={{fontSize:10,color:T.t3}}>{label}</span>
-        <span style={{fontSize:10,fontWeight:700,color}}>{Math.round(pct)}%</span>
+        <span style={{fontSize:10.5,color:T.t3}}>{label}</span>
+        <span style={{fontSize:10.5,fontWeight:700,color}}>{Math.round(pct)}%</span>
       </div>
-      <div style={{height:6,background:T.surfaceB,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:color,borderRadius:3}}/></div>
+      <div style={{height:7,background:T.surface,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.min(pct,100)}%`,background:color,borderRadius:4}}/></div>
     </div>
   );
   return(
-    <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>
+    <div style={{overflowX:"auto"}}>
+      {/* header */}
+      <div style={{display:"grid",gridTemplateColumns:GC,padding:"8px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
+        {["Project","Progress","Billed","Cost","Realized Margin","Health",""].map((h,i)=>(<span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".5px",textAlign:i>=1&&i<=3?"center":"left"}}>{h}</span>))}
+      </div>
       {projects.map(p=>{
-        const billedPct=p.boq>0?(p.invoiced/p.boq)*100:0;
-        const costPct=p.boq>0?(p.expense/p.boq)*100:0;
-        const realized=p.invoiced-p.expense;
-        const mPct=p.invoiced>0?(realized/p.invoiced)*100:0;
-        const health=costPct>p.progress+8?{c:T.red,bg:T.redL,l:"Cost overrun"}
-          :p.progress>billedPct+12?{c:T.amb,bg:T.ambL,l:"Under-billed"}
-          :{c:T.grn,bg:T.grnL,l:"On track"};
+        const c=calc(p); const isExp=exp===p.id;
+        // cash position donut: received / outstanding (invoiced−received) / unbilled (boq−invoiced)
+        const outstanding=Math.max(0,p.invoiced-p.received);
+        const unbilled=Math.max(0,p.boq-p.invoiced);
+        const cashSlices=[{label:"Received",value:p.received,color:T.grn},{label:"Outstanding",value:outstanding,color:T.amb},{label:"Unbilled",value:unbilled,color:T.slt}].filter(s=>s.value>0);
+        const cmpMax=Math.max(p.invoiced,p.received,p.expense,1);
         return(
-          <div key={p.id} style={{border:`1px solid ${T.b1}`,borderRadius:10,padding:"13px 15px",borderTop:`3px solid ${health.c}`}}>
-            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",marginBottom:10}}>
-              <div>
-                <div style={{fontSize:13,fontWeight:700,color:T.t1}}>{p.name}</div>
-                <div style={{fontSize:10.5,color:T.t4}}>{p.city} · BOQ ₹{fmt(p.boq)}</div>
-              </div>
-              <span style={{fontSize:9.5,fontWeight:700,padding:"2px 9px",borderRadius:12,background:health.bg,color:health.c}}>{health.l}</span>
+          <Fragment key={p.id}>
+            <div onClick={()=>setExp(isExp?null:p.id)} style={{display:"grid",gridTemplateColumns:GC,padding:"11px 14px",borderBottom:`1px solid ${isExp?T.bluM:T.b1}`,alignItems:"center",cursor:"pointer",background:isExp?T.bluL:"none",borderLeft:isExp?`3px solid ${T.blu}`:"3px solid transparent"}}
+              onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.surfaceB;}} onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background="none";}}>
+              <div style={{minWidth:0}}><div style={{fontSize:12.5,fontWeight:600,color:isExp?T.blu:T.t1}}>{p.name}</div><div style={{fontSize:10.5,color:T.t4}}>{p.city} · BOQ ₹{fmt(p.boq)}</div></div>
+              <div><div style={{display:"flex",justifyContent:"flex-end",marginBottom:2}}><span style={{fontSize:10,fontWeight:700,color:T.blu}}>{p.progress}%</span></div><div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",width:`${p.progress}%`,background:T.blu,borderRadius:3}}/></div></div>
+              <span style={{fontSize:12,fontWeight:700,color:T.pur,textAlign:"center"}}>{Math.round(c.billedPct)}%</span>
+              <span style={{fontSize:12,fontWeight:700,color:c.costPct>p.progress+8?T.red:T.amb,textAlign:"center"}}>{Math.round(c.costPct)}%</span>
+              <span style={{fontSize:12,fontWeight:700,color:c.realized>=0?T.grn:T.red,textAlign:"center",fontVariantNumeric:"tabular-nums"}}>₹{fmt(c.realized)} ({c.mPct.toFixed(0)}%)</span>
+              <span style={{textAlign:"center"}}><span style={{fontSize:9.5,fontWeight:700,padding:"2px 9px",borderRadius:12,background:c.health.bg,color:c.health.c,whiteSpace:"nowrap"}}>{c.health.l}</span></span>
+              <span style={{display:"flex",justifyContent:"center"}}><svg width={14} height={14} viewBox="0 0 14 14" fill="none" stroke={T.t4} strokeWidth={1.5}><path d={isExp?"M2 5l5 5 5-5":"M2 9l5-5 5 5"}/></svg></span>
             </div>
-            {/* triple progress: physical vs billed vs cost */}
-            <Bar label="Physical progress" pct={p.progress} color={T.blu}/>
-            <Bar label="Billed (invoiced)" pct={billedPct} color={T.pur}/>
-            <Bar label="Cost incurred"     pct={costPct} color={costPct>p.progress+8?T.red:T.amb}/>
-            {/* metrics grid */}
-            <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:"8px 12px",marginTop:11,paddingTop:11,borderTop:`1px solid ${T.b1}`}}>
-              {[
-                {l:"Invoiced till date", v:`₹${fmt(p.invoiced)}`, c:T.t1},
-                {l:"Received",           v:`₹${fmt(p.received)}`, c:T.grn},
-                {l:"Expense till date",  v:`₹${fmt(p.expense)}`,  c:T.amb},
-                {l:"Realized margin",    v:`₹${fmt(realized)} (${mPct.toFixed(0)}%)`, c:realized>=0?T.grn:T.red},
-              ].map((m,i)=>(
-                <div key={i}>
-                  <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:.3}}>{m.l}</div>
-                  <div style={{fontSize:13,fontWeight:700,color:m.c,fontVariantNumeric:"tabular-nums"}}>{m.v}</div>
+            {isExp&&(
+              <div style={{padding:"14px 16px",background:T.bluL,borderBottom:`1px solid ${T.b1}`,borderLeft:`3px solid ${T.blu}`,display:"grid",gridTemplateColumns:"1.1fr 0.9fr 1fr",gap:18}}>
+                {/* Col 1 — progress vs billed vs cost bars */}
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>Progress vs Billing vs Cost</div>
+                  <Bar label="Physical progress" pct={p.progress} color={T.blu}/>
+                  <Bar label="Billed (invoiced)" pct={c.billedPct} color={T.pur}/>
+                  <Bar label="Cost incurred"     pct={c.costPct} color={c.costPct>p.progress+8?T.red:T.amb}/>
+                  {/* compare bars: invoiced / received / expense */}
+                  <div style={{marginTop:12}}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>Invoiced · Received · Expense</div>
+                    {[{l:"Invoiced",v:p.invoiced,c:T.blu},{l:"Received",v:p.received,c:T.grn},{l:"Expense",v:p.expense,c:T.amb}].map((b,i)=>(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
+                        <span style={{fontSize:10,color:T.t3,width:60,flexShrink:0}}>{b.l}</span>
+                        <div style={{flex:1,height:9,background:T.surface,borderRadius:5,overflow:"hidden"}}><div style={{height:"100%",width:`${Math.round((b.v/cmpMax)*100)}%`,background:b.c,borderRadius:5}}/></div>
+                        <span style={{fontSize:10.5,fontWeight:700,color:b.c,width:48,textAlign:"right",flexShrink:0}}>₹{fmt(b.v)}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ))}
-            </div>
-            {/* next invoice from payment schedule */}
-            <div style={{marginTop:10,padding:"8px 11px",background:T.bluL,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <div>
-                <div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:.3}}>Next invoice · {p.next.milestone}</div>
-                <div style={{fontSize:10.5,color:T.t3}}>due {p.next.due}</div>
+                {/* Col 2 — cash position donut */}
+                <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
+                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8,alignSelf:"flex-start"}}>Cash Position</div>
+                  {cashSlices.length?<><DonutChart slices={cashSlices} size={120} cx={60} cy={60} r={42} inner={26}/>
+                  <div style={{width:"100%",marginTop:10}}>{cashSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><div style={{width:9,height:9,borderRadius:2,background:s.color}}/><span style={{fontSize:10.5,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:10.5,fontWeight:700,color:T.t1}}>₹{fmt(s.value)}</span></div>))}</div></>
+                  :<div style={{fontSize:11.5,color:T.t4,padding:"30px 0"}}>Billing abhi shuru nahi hui</div>}
+                </div>
+                {/* Col 3 — key metrics + next invoice */}
+                <div>
+                  <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8}}>Financials</div>
+                  {[
+                    {l:"Invoiced till date",v:`₹${fmt(p.invoiced)}`,c:T.t1},
+                    {l:"Received",v:`₹${fmt(p.received)}`,c:T.grn},
+                    {l:"Expense till date",v:`₹${fmt(p.expense)}`,c:T.amb},
+                    {l:"Realized margin",v:`₹${fmt(c.realized)} (${c.mPct.toFixed(0)}%)`,c:c.realized>=0?T.grn:T.red},
+                  ].map((m,i)=>(
+                    <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:i<3?`1px solid ${T.b1}`:"none"}}>
+                      <span style={{fontSize:11,color:T.t3}}>{m.l}</span>
+                      <span style={{fontSize:12,fontWeight:700,color:m.c,fontVariantNumeric:"tabular-nums"}}>{m.v}</span>
+                    </div>
+                  ))}
+                  <div style={{marginTop:10,padding:"9px 11px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:.3}}>Next invoice · {p.next.milestone}</div><div style={{fontSize:10.5,color:T.t3}}>due {p.next.due}</div></div>
+                    <div style={{fontSize:15,fontWeight:800,color:T.blu}}>₹{fmt(p.next.value)}</div>
+                  </div>
+                </div>
               </div>
-              <div style={{fontSize:14,fontWeight:800,color:T.blu}}>₹{fmt(p.next.value)}</div>
-            </div>
-          </div>
+            )}
+          </Fragment>
         );
       })}
     </div>
