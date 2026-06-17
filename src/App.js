@@ -1111,6 +1111,16 @@ function DashboardModule(){
   const [showAllActivity,setShowAllActivity]=useState(false);
   const [showAllActions,setShowAllActions]=useState(false);
   const [finProjView,setFinProjView]=useState("summary"); // summary | realtime
+  const [ov,setOv]=useState(()=>apiCache.get("dashboard:overview"));
+
+  // Real data — one call powers both views. Mock stays as the pre-load
+  // placeholder so first paint isn't blank; replaced once /overview lands.
+  useEffect(()=>{
+    api.get("/dashboard/overview").then(r=>{
+      if(r.success){ setOv(r.data); apiCache.set("dashboard:overview", r.data, 60_000); }
+    }).catch(()=>{});
+  },[]);
+  const f=ov?.finance, o=ov?.operations;
 
   // ── Finance / Operations switch (shared header) ──
   const Switch=(
@@ -1124,22 +1134,54 @@ function DashboardModule(){
     </div>
   );
 
+  // ── Operations data: attach presentational icons/colours to server data ──
+  const opsData = o ? {
+    kpis: [
+      {label:"Active Projects",   value:o.kpis.activeProjects, sub:`${o.projects.length} total`,            color:T.pur, Icon:IcProj},
+      {label:"Present Today",     value:o.kpis.presentToday,   sub:"attendance today",                      color:T.grn, Icon:IcTeam},
+      {label:"Active Tasks",      value:o.kpis.openTasks,      sub:`${o.kpis.overdueTasks} overdue`,         color:T.amb, Icon:IcChk},
+      {label:"Pending Approvals", value:o.kpis.pendingApprovals, sub:"to review",                           color:T.red, Icon:IcApprv},
+      {label:"Material Requests", value:o.kpis.materialRequests, sub:"pending",                             color:T.blu, Icon:IcProc},
+      {label:"Low Stock Items",   value:o.kpis.lowStock,       sub:"reorder needed",                        color:T.amb, Icon:IcWH},
+    ],
+    projects:o.projects, attendance:o.attendance, team:o.team,
+    pipeline:(o.pipeline||[]).map((s,i)=>({...s,color:[T.blu,T.pur,T.grn][i]||T.slt})),
+    approvals:o.approvals, siteActivity:o.siteActivity, alerts:o.alerts,
+  } : MOCK_OPS;
+
   if(view==="operations"){
     return(
       <div style={{padding:"16px 20px",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
         {Switch}
-        <OperationsDashboard ops={MOCK_OPS}/>
+        <OperationsDashboard ops={opsData}/>
       </div>
     );
   }
 
-  // ===== FINANCE VIEW (mock-populated for design vision) =====
-  const dd={
+  // ===== FINANCE VIEW =====
+  const finPayments = f ? (f.payments||[]).map(p=>({...p, color:p.dir==="in"?T.grn:T.red, Icon:p.dir==="in"?IcPay:IcTruck})) : MOCK_FIN.payments;
+  const finActivityArr = f ? (f.activity||[]).map(a=>({...a, color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red, icon:a.dir==="in"?IcCash:IcPay})) : MOCK_FIN.activity;
+  const finProjData = f ? (f.projectFin||[]) : MOCK_FIN.projectFin;
+  const dd = f ? {
+    projects: f.summaryProjects||[], cashflow: f.cashflow||[], activities: finActivityArr, pending_actions: finPayments,
+    expense_breakdown: (f.expense&&f.expense.length)?f.expense:undefined,
+    cash_balance: 0, overdue_amount: f.kpis.payablesOverdue||0, alerts: [],
+  } : {
     projects: MOCK_OPS.projects.map(p=>({...p, boq: 2000000+p.id*1500000, expense: 800000+p.id*600000, client:"—", type:"construction" })),
     cashflow: MOCK_FIN.cashflow, activities: MOCK_FIN.activity, pending_actions: MOCK_FIN.payments,
     alerts: ALERTS, material_status: MATERIAL_STATUS, expense_breakdown: MOCK_FIN.expense,
     cash_balance: 1240000, overdue_amount: 310000,
   };
+  // Finance KPI tiles from real data (icons/colours presentational)
+  const k=f&&f.kpis;
+  const finKpis = k ? [
+    {label:"Total BOQ",      value:`₹${fmt(k.totalBOQ)}`,   sub:`${o?o.projects.length:0} projects`, color:T.slt, Icon:IcMargin},
+    {label:"Total Received", value:`₹${fmt(k.received)}`,    sub:k.totalBOQ>0?`${Math.round(k.received/k.totalBOQ*100)}% of BOQ`:"received", color:T.grn, Icon:IcCash},
+    {label:"Total Spent",    value:`₹${fmt(k.spent)}`,       sub:k.totalBOQ>0?`${Math.round(k.spent/k.totalBOQ*100)}% of BOQ`:"spent", color:T.amb, Icon:IcTruck},
+    {label:"Gross Margin",   value:`₹${fmt(k.grossMargin)}`, sub:`${k.totalBOQ>0?((k.grossMargin/k.totalBOQ)*100).toFixed(1):0}% margin`, color:k.grossMargin>=0?T.grn:T.red, Icon:IcTrend},
+    {label:"Receivables",    value:`₹${fmt(k.receivables)}`, sub:"outstanding", color:T.blu, Icon:IcPay},
+    {label:"Payables",       value:`₹${fmt(k.payables)}`,    sub:k.payablesOverdue>0?`₹${fmt(k.payablesOverdue)} overdue`:"on time", color:T.red, Icon:IcAlert},
+  ] : MOCK_FIN.kpis;
   const projectsArr=dd.projects||PROJECTS_DATA;
   const cashflowArr=dd.cashflow||CASHFLOW_DATA;
   const activityArr=dd.activities||ACTIVITY_FEED;
@@ -1160,9 +1202,9 @@ function DashboardModule(){
   return(
     <div style={{padding:"16px 20px",fontFamily:"'Segoe UI',system-ui,sans-serif"}}>
       {Switch}
-      {/* KPI row — Finance (mock vision) */}
+      {/* KPI row — Finance */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(6,1fr)",gap:10,marginBottom:12}}>
-        {MOCK_FIN.kpis.map((k,i)=>(<KpiTile key={i} label={k.label} value={k.value} sub={k.sub} color={k.color} Icon={k.Icon} trend={k.trend} trendVal={k.trendVal}/>))}
+        {finKpis.map((k,i)=>(<KpiTile key={i} label={k.label} value={k.value} sub={k.sub} color={k.color} Icon={k.Icon} trend={k.trend} trendVal={k.trendVal}/>))}
       </div>
       {/* Charts row */}
       <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr",gap:12,marginBottom:12}}>
@@ -1185,7 +1227,7 @@ function DashboardModule(){
           </div>
           <select value={selProject} onChange={e=>setSelProject(e.target.value)} style={{padding:"4px 8px",borderRadius:6,border:`1px solid ${T.b1}`,fontSize:11.5,color:T.t2,background:T.surface,outline:"none",fontFamily:"inherit"}}>{projects.map(p=>(<option key={p}>{p}</option>))}</select>
         </div>} style={{marginBottom:12}}>
-        {finProjView==="realtime" ? <RealtimeFinancials projects={MOCK_FIN.projectFin}/> : (
+        {finProjView==="realtime" ? <RealtimeFinancials projects={finProjData}/> : (
         <div style={{overflowX:"auto"}}>
           <table style={{width:"100%",borderCollapse:"collapse"}}>
             <thead><tr style={{display:"grid",gridTemplateColumns:"2fr 1.2fr 110px 80px 90px 90px 90px 70px 80px 40px",padding:"8px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
