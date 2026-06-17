@@ -2755,6 +2755,10 @@ function FinanceModule(){
   const [chipTxn,setChipTxn]=useState("All");
   const [chipPR,setChipPR]=useState("All");
   const [chipPend,setChipPend]=useState("All");
+  // Settlement Pay (Issue & Settlement engine) — simple modal: pick account → pay.
+  const [settlePay,setSettlePay]=useState(null);   // the settlement row being paid
+  const [settleAcct,setSettleAcct]=useState("");
+  const [settleBusy,setSettleBusy]=useState(false);
   // Universal search — single box, matches ANY column value (no, type, party, amount, priority, date, status...)
   const [searchPend,setSearchPend]=useState("");
   const [searchPR,setSearchPR]=useState("");
@@ -4593,8 +4597,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           // Phase 1: settlement is visible + payable-pending. The actual
                           // Pay routing (vendor cash + against-party contra) is Phase 2.
                           return (
-                            <button onClick={()=>window.alert("Pay flow Phase 2 me aa raha hai — vendor ko cash + subcon/client ke against contra. Abhi confirm hoke Pending Payments me aa gaya.")}
-                              title="Pay (Phase 2)"
+                            <button onClick={()=>{ setSettleAcct(""); setSettlePay(pmt); }}
+                              title="Record payment"
                               style={{padding:"5px 9px",borderRadius:5,background:T.blu,color:"white",border:"none",cursor:"pointer",fontSize:10.5,fontWeight:700,display:"flex",alignItems:"center",gap:3}}>
                               <IcSend size={9} color="white"/> Pay
                             </button>
@@ -5353,6 +5357,41 @@ Status: ${ledgerRow.status||"unpaid"}`;
           dbProjects={[...new Set([...apiProjects,...activeTxns.map(t=>t.project)].filter(Boolean))]}
         />
       )}
+      {/* ══ Settlement Pay — simple modal (cash + contra routed on backend) ══ */}
+      {settlePay&&(()=>{
+        const onBehalf=settlePay.costAgainstType&&settlePay.costAgainstType!=="company"&&settlePay.against;
+        const doPay=async()=>{
+          setSettleBusy(true);
+          try{
+            const r=await api.post(`/finance/settlements/${settlePay.id}/pay`,{account_id:settleAcct||null,mop:"cash"});
+            if(r?.success===false){window.alert(r.message||"Pay failed");setSettleBusy(false);return;}
+            setSettlePay(null);setSettleBusy(false);
+            refreshPendPmts();refreshParties();refreshAccounts();
+          }catch(e){window.alert(e?.message||"Network error");setSettleBusy(false);}
+        };
+        return(
+          <>
+            <div onClick={()=>!settleBusy&&setSettlePay(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:3000,backdropFilter:"blur(2px)"}}/>
+            <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:"min(420px,92vw)",background:T.surface,borderRadius:12,zIndex:3001,boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
+              <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1}}>Record Payment</div>
+              <div style={{padding:"16px 18px"}}>
+                <div style={{fontSize:13,color:T.t1,marginBottom:3}}>{settlePay.party}{settlePay.itemType?` · ${settlePay.itemType}`:""}</div>
+                <div style={{fontSize:22,fontWeight:800,color:T.t1,marginBottom:10}}>₹{fmtN(settlePay.amount)}</div>
+                {onBehalf&&(<div style={{fontSize:11.5,color:T.amb,background:T.ambL,padding:"8px 10px",borderRadius:8,marginBottom:12,lineHeight:1.4}}><b>{settlePay.party}</b> ko cash jaayega · cost <b>{settlePay.against}</b> ({settlePay.costAgainstType}) ke against charge hoga.</div>)}
+                <div style={{fontSize:11,color:T.t4,marginBottom:5,fontWeight:600}}>Pay from account</div>
+                <select value={settleAcct} onChange={e=>setSettleAcct(e.target.value)} style={{width:"100%",padding:"9px 10px",borderRadius:8,border:`1.5px solid ${T.b1}`,fontSize:13,outline:"none",marginBottom:16,background:T.surface,color:T.t1}}>
+                  <option value="">Select account…</option>
+                  {activeAccounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+                <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                  <button onClick={()=>setSettlePay(null)} disabled={settleBusy} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.surface,color:T.t2,fontWeight:600,cursor:"pointer",fontSize:13}}>Cancel</button>
+                  <button onClick={doPay} disabled={settleBusy||!settleAcct} style={{padding:"9px 18px",borderRadius:8,border:"none",background:(settleBusy||!settleAcct)?T.t4:T.blu,color:"white",fontWeight:700,cursor:(settleBusy||!settleAcct)?"default":"pointer",fontSize:13}}>{settleBusy?"Paying…":"Confirm Pay"}</button>
+                </div>
+              </div>
+            </div>
+          </>
+        );
+      })()}
       {/* ══ Transaction Detail Drawer (Fin Activity + Party Ledger row click) ══ */}
       <TransactionDetailDrawer
         txn={selTxn}
