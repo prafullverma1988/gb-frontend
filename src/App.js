@@ -1015,16 +1015,16 @@ const MOCK_FIN = {
     { label:"Equipment",         value:170000,  color:T.slt },
   ],
   payments: [
-    { id:1, label:"RA Bill #12 — Skyline Apartments", desc:"Client receivable · due in 3d",  amount:480000, color:T.grn, dir:"in"  },
-    { id:2, label:"Abhay Traders — Material PO",       desc:"Vendor payable · overdue 2d",     amount:215000, color:T.red, dir:"out" },
-    { id:3, label:"Subcon RA — Verma Construction",    desc:"Approved · awaiting release",      amount:168000, color:T.amb, dir:"out" },
-    { id:4, label:"June Salary Run",                   desc:"5 staff · pending payout",         amount:56240,  color:T.amb, dir:"out" },
+    { id:1, label:"RA Bill #12 — Skyline Apartments", desc:"Client receivable · due in 3d",  amount:480000, color:T.grn, dir:"in",  Icon:IcPay  },
+    { id:2, label:"Abhay Traders — Material PO",       desc:"Vendor payable · overdue 2d",     amount:215000, color:T.red, dir:"out", Icon:IcTruck },
+    { id:3, label:"Subcon RA — Verma Construction",    desc:"Approved · awaiting release",      amount:168000, color:T.amb, dir:"out", Icon:IcApprv },
+    { id:4, label:"June Salary Run",                   desc:"5 staff · pending payout",         amount:56240,  color:T.amb, dir:"out", Icon:IcTeam },
   ],
   activity: [
-    { id:1, title:"Payment received", desc:"RA Bill #11 — Skyline", project:"Skyline Apartments", time:"2h ago",  amount:520000, dir:"in"  },
-    { id:2, title:"Vendor paid",      desc:"Cement — Abhay Traders", project:"Harish Villa",      time:"5h ago",  amount:142000, dir:"out" },
-    { id:3, title:"Invoice raised",   desc:"RA Bill #12",            project:"Skyline Apartments", time:"Yesterday", amount:480000, dir:"pending" },
-    { id:4, title:"Advance settled",  desc:"Subcon — Verma",         project:"R K Rathor",        time:"2d ago",  amount:90000,  dir:"out" },
+    { id:1, title:"Payment received", desc:"RA Bill #11 — Skyline", project:"Skyline Apartments", time:"2h ago",  amount:520000, dir:"in",      icon:IcCash },
+    { id:2, title:"Vendor paid",      desc:"Cement — Abhay Traders", project:"Harish Villa",      time:"5h ago",  amount:142000, dir:"out",     icon:IcTruck },
+    { id:3, title:"Invoice raised",   desc:"RA Bill #12",            project:"Skyline Apartments", time:"Yesterday", amount:480000, dir:"pending", icon:IcPay },
+    { id:4, title:"Advance settled",  desc:"Subcon — Verma",         project:"R K Rathor",        time:"2d ago",  amount:90000,  dir:"out",     icon:IcApprv },
   ],
 };
 const MOCK_OPS = {
