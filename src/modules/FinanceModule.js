@@ -4022,7 +4022,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             </span>
                             {/* 4. Type — bill-expand for bills, PDF/Share for customer invoices */}
                             <div style={{display:"flex",flexDirection:"column",gap:1}}>
-                              <span style={{display:"inline-block",background:txn.sourceKind==="customer_invoice"?T.bluL:T.sltL,color:txn.sourceKind==="customer_invoice"?T.blu:T.slt,fontSize:10.5,fontWeight:600,padding:"2px 8px",borderRadius:12,border:`1px solid ${txn.sourceKind==="customer_invoice"?T.bluM:T.slt+"33"}`,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",width:"fit-content",maxWidth:"100%"}}>
+                              <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:500,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",width:"fit-content",maxWidth:"100%"}}><span style={{width:6,height:6,borderRadius:"50%",background:txn.sourceKind==="customer_invoice"?T.blu:T.slt,flexShrink:0}}/>
                                 {txn.invoiceNo ? `${typeLabel} · ${txn.invoiceNo}` : typeLabel}
                               </span>
                               {isBillType && txn.sourceKind!=="customer_invoice" && (
@@ -4242,7 +4242,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       {/* 1. Date */}
                       <span style={{fontSize:11.5,color:T.t3,fontWeight:500,whiteSpace:"nowrap"}}>{txn.date}</span>
                       {/* 2. Type */}
-                      <span style={{fontSize:11,fontWeight:700,color:meta.color,background:meta.bg,padding:"2px 8px",borderRadius:20,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"inline-block",maxWidth:"100%"}}>{meta.label}</span>
+                      <span style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:11.5,fontWeight:500,color:T.t2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}><span style={{width:6,height:6,borderRadius:"50%",background:meta.color,flexShrink:0}}/>{meta.label}</span>
                       {/* 3. Party */}
                       <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{partyLabel}</span>
                       {/* 4. Site */}
@@ -4253,7 +4253,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       <span style={{fontSize:13,fontWeight:800,color:amtColor,textAlign:"right",whiteSpace:"nowrap"}}>{amtPrefix}₹{fmtN(txn.amount)}</span>
                       {/* 7. Status */}
                       <div style={{display:"flex",justifyContent:"center"}}>
-                        <span style={{fontSize:9,fontWeight:700,padding:"2px 6px",borderRadius:10,background:txn.status==="paid"?T.grnL:txn.status==="unpaid"?T.redL:T.ambL,color:txn.status==="paid"?T.grn:txn.status==="unpaid"?T.red:T.amb,border:`1px solid ${txn.status==="paid"?T.grnM:txn.status==="unpaid"?T.redM:T.ambM}`,whiteSpace:"nowrap"}}>{txn.status||"—"}</span>
+                        <span style={{fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:20,background:txn.status==="paid"?T.grnL:txn.status==="unpaid"?T.redL:T.ambL,color:txn.status==="paid"?T.grn:txn.status==="unpaid"?T.red:T.amb,whiteSpace:"nowrap"}}>{txn.status||"—"}</span>
                       </div>
                     </div>
                   );
@@ -4382,7 +4382,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         const pt=pi?.type||"Vendor";
                         const ptMap={"Material Supplier":{c:"#0277BD",bg:"#E1F5FE",s:"Mat. Supplier"},"Sub-Con":{c:T.slt,bg:T.sltL,s:"Sub-Con"},"Labour":{c:T.pur,bg:T.purL,s:"Labour"},"Client":{c:T.grn,bg:T.grnL,s:"Client"}};
                         const ptc=ptMap[pt]||{c:T.amb,bg:T.ambL,s:pt};
-                        return <span style={{fontSize:10,fontWeight:700,color:ptc.c,background:ptc.bg,padding:"2px 6px",borderRadius:10,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",display:"inline-block",maxWidth:"100%"}}>{ptc.s}</span>;
+                        return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:500,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}><span style={{width:6,height:6,borderRadius:"50%",background:ptc.c,flexShrink:0}}/>{ptc.s}</span>;
                       })()}
                       {/* Project */}
                       <span style={{fontSize:11.5,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.project||"—"}</span>
@@ -4393,15 +4393,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </div>
                       {/* Req By */}
                       <span style={{fontSize:11.5,color:T.t2,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.by||"—"}</span>
-                      {/* Priority */}
-                      <span style={{fontSize:10,fontWeight:700,color:pm.c,background:pm.bg,padding:"2px 7px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{pri}</span>
+                      {/* Priority — plain muted text (High stays red) */}
+                      <span style={{fontSize:11,fontWeight:500,color:pri==="High"?T.red:T.t3,whiteSpace:"nowrap"}}>{pri}</span>
                       {/* Amount */}
                       <div style={{textAlign:"right"}}>
                         <div style={{fontSize:13,fontWeight:700,color:T.t1}}>₹{fmtN(req.amount)}</div>
                         {req.originalAmt&&<div style={{fontSize:10,color:T.t4,textDecoration:"line-through"}}>₹{fmtN(req.originalAmt)}</div>}
                       </div>
-                      {/* Status */}
-                      <span><span style={{fontSize:10,fontWeight:700,padding:"3px 8px",borderRadius:10,background:sc.bg,color:sc.c,border:`1px solid ${sc.brd}`,whiteSpace:"nowrap"}}>{req.status}</span></span>
+                      {/* Status — soft subtle pill (no border) */}
+                      <span><span style={{fontSize:10,fontWeight:600,padding:"3px 9px",borderRadius:20,background:sc.bg,color:sc.c,whiteSpace:"nowrap"}}>{req.status}</span></span>
                       {/* Action */}
                       <div style={{display:"flex",gap:4,alignItems:"center",flexWrap:"wrap"}}>
                         {req.status==="Pending"&&(<>
@@ -4575,8 +4575,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
                       {/* Invoice No */}
                       <span><span style={{fontSize:11,fontWeight:600,color:T.blu,background:T.bluL,padding:"2px 7px",borderRadius:5,border:`1px solid ${T.bluM}`}}>{pmt.no}</span></span>
-                      {/* Type */}
-                      <span style={{fontSize:10,fontWeight:700,color:typeC.c,background:typeC.bg,padding:"2px 7px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{typeLabel}</span>
+                      {/* Type — dot + muted text */}
+                      <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:500,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}><span style={{width:6,height:6,borderRadius:"50%",background:typeC.c,flexShrink:0}}/>{typeLabel}</span>
                       {/* Party Name (+ "against" sub-line for settlements) */}
                       <div style={{minWidth:0}}>
                         <div style={{fontSize:12.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{pmt.party||"—"}</div>
@@ -4593,8 +4593,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{fontSize:12,color:pmt.overdue?T.red:T.t2,fontWeight:pmt.overdue?700:400}}>{pmt.date||"—"}</div>
                         <div style={{fontSize:9.5,color:pmt.overdue?T.red:T.grn,fontWeight:600}}>{pmt.overdue?"OVERDUE":"Upcoming"}</div>
                       </div>
-                      {/* Priority */}
-                      <span style={{fontSize:10,fontWeight:700,color:pm.c,background:pm.bg,padding:"2px 8px",borderRadius:10,whiteSpace:"nowrap",display:"inline-block"}}>{pri}</span>
+                      {/* Priority — plain muted text (High stays red) */}
+                      <span style={{fontSize:11,fontWeight:500,color:pri==="High"?T.red:T.t3,whiteSpace:"nowrap"}}>{pri}</span>
                       {/* Action — Pay + Extend + Close */}
                       {(()=>{
                         if(pmt.type==="settlement"){
