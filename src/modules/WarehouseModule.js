@@ -2822,33 +2822,40 @@ function MRTab({mrs,onNew,onIssue,onApprove,onReject,onClose,onOrder,onGrn,onSen
           const totalValue = (mr.items||[]).reduce((s,it)=>s+Number(it.qty||0)*Number(it.rate||0),0);
           return(
             <div key={mr.id} style={{background:T.surface,borderRadius:9,border:`1px solid ${mr.status==="Pending"?T.ambM:T.b1}`,overflow:"hidden",boxShadow:mr.status==="Pending"?"0 2px 8px rgba(217,119,6,0.08)":"0 1px 3px rgba(0,0,0,0.04)"}}>
-              <div style={{padding:"11px 14px",display:"flex",alignItems:"flex-start",gap:12,borderLeft:`4px solid ${ss.c}`,flexWrap:"wrap"}}>
-                <div style={{flex:1,minWidth:200}}>
-                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4,flexWrap:"wrap"}}>
+              <div style={{padding:"11px 16px",display:"grid",gridTemplateColumns:"minmax(220px,1.2fr) minmax(160px,1fr) 92px max-content",gap:16,alignItems:"center",borderLeft:`4px solid ${ss.c}`}}>
+                {/* COL 1 — identity */}
+                <div style={{minWidth:0}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:4,flexWrap:"wrap"}}>
                     <span style={{fontSize:12.5,fontWeight:700,color:T.blu,fontFamily:"monospace"}}>{mr.id}</span>
                     <Pill label={mr.status} c={ss.c} bg={ss.bg} brd={ss.brd}/>
                     <Pill label={mr.priority} c={ps.c} bg={ps.bg}/>
-                    <span style={{fontSize:10.5,color:T.t4}}>{mr.date}</span>
                     {mr.linked_procurement_mr_id&&<Pill label="From Procurement" c={T.cyn} bg={T.cynL} brd={T.cynM}/>}
                   </div>
-                  <div style={{fontSize:12,fontWeight:600,color:T.t1,marginBottom:3}}>{mr.project}</div>
-                  <div style={{fontSize:11,color:T.t4}}>
-                    by {mr.requestedBy}
-                    {mr.vendor&&<span style={{marginLeft:8,color:T.t3}}>· vendor: <b>{mr.vendor}</b></span>}
-                    {mr.po_no&&<span style={{marginLeft:6,color:T.t3,fontFamily:"monospace"}}>· {mr.po_no}</span>}
+                  <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{mr.project}</div>
+                  <div style={{fontSize:10.5,color:T.t4,marginTop:2,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                    {mr.date} · by {mr.requestedBy}
+                    {mr.vendor&&<span style={{color:T.t3}}> · {mr.vendor}</span>}
+                    {mr.po_no&&<span style={{color:T.t3,fontFamily:"monospace"}}> · {mr.po_no}</span>}
                   </div>
                 </div>
-                <div style={{minWidth:200,maxWidth:280,flex:1}}>
-                  {mr.items.slice(0,4).map((it,i)=>(
-                    <div key={i} style={{display:"flex",justifyContent:"space-between",marginBottom:3}}>
-                      <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",maxWidth:160}}>{it.material_name||it.name}</span>
-                      <span style={{fontSize:11.5,fontWeight:600,color:T.t1,flexShrink:0,marginLeft:6}}>{fmtN(it.qty)} {it.unit}{Number(it.rate)>0?<span style={{color:T.t4,marginLeft:4}}>· ₹{Number(it.rate)}</span>:""}</span>
+                {/* COL 2 — material(s) + qty, right-aligned qty so numbers line up */}
+                <div style={{minWidth:0}}>
+                  {mr.items.slice(0,3).map((it,i)=>(
+                    <div key={i} style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",gap:10,marginBottom:i<Math.min(mr.items.length,3)-1?4:0}}>
+                      <span style={{fontSize:11.5,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.material_name||it.name}</span>
+                      <span style={{fontSize:11.5,fontWeight:700,color:T.t1,flexShrink:0,whiteSpace:"nowrap"}}>{fmtN(it.qty)} <span style={{fontWeight:500,color:T.t4}}>{it.unit}</span></span>
                     </div>
                   ))}
-                  {mr.items.length>4&&<div style={{fontSize:10.5,color:T.t4}}>+{mr.items.length-4} more</div>}
-                  {totalValue>0&&<div style={{fontSize:11,fontWeight:700,color:T.blu,marginTop:3}}>Total: ₹{fmtN(totalValue)}</div>}
+                  {mr.items.length>3&&<div style={{fontSize:10,color:T.t4,marginTop:3}}>+{mr.items.length-3} more item{mr.items.length-3>1?"s":""}</div>}
                 </div>
-                <div style={{display:"flex",gap:6,alignItems:"center",flexShrink:0,flexWrap:"wrap"}}>
+                {/* COL 3 — total value */}
+                <div style={{textAlign:"right"}}>
+                  {totalValue>0
+                    ?<><div style={{fontSize:13,fontWeight:700,color:T.blu,lineHeight:1.1}}>₹{fmtN(totalValue)}</div><div style={{fontSize:8.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginTop:1}}>Total</div></>
+                    :<span style={{fontSize:12,color:T.b2}}>—</span>}
+                </div>
+                {/* COL 4 — actions */}
+                <div style={{display:"flex",gap:6,alignItems:"center",justifyContent:"flex-end",flexWrap:"wrap"}}>
                   {/* PENDING — admin/super_admin can act inline; everyone else
                       sees the "approval pending" badge as before. */}
                   {mr.status==="Pending"&&onApprove&&onReject&&(
