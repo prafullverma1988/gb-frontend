@@ -3834,7 +3834,8 @@ Status: ${ledgerRow.status||"unpaid"}`;
                         <div style={{width:34,height:34,borderRadius:"50%",background:tc+"1A",color:tc,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,flexShrink:0}}>{initials}</div>
                         <div style={{flex:1,minWidth:0}}>
                           <div style={{fontSize:12.5,fontWeight:600,color:isS?T.blu:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.name}</div>
-                          <span style={{display:"inline-block",marginTop:3,background:tc+"18",color:tc,fontSize:9.5,fontWeight:600,padding:"1px 7px",borderRadius:20,border:`1px solid ${tc}22`}}>{p.type}</span>
+                          {/* Type as a subtle muted label (no heavy chip — avatar colour already hints the type) */}
+                          <div style={{fontSize:10.5,color:T.t4,marginTop:1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.type}</div>
                         </div>
                         <div style={{textAlign:"right",flexShrink:0}}>
                           <div style={{fontSize:12.5,fontWeight:700,color:["To Pay","Advance Received"].includes(p.balType)?T.red:T.grn}}>₹{fmt(p.balance)}</div>
