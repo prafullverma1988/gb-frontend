@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, lazy, Suspense, Fragment } from "react";
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth } from "./config/api";
 import apiCache from "./utils/apiCache";
+import EChart from "./components/EChart";
 import UploadToast from "./components/UploadToast";
 import { ToastProvider } from "./components/Toast";
 import { ConfirmProvider } from "./components/ConfirmDialog";
@@ -282,43 +283,6 @@ function DonutChart({slices,size=110,cx=55,cy=55,r=38,inner=22}){
     return `M ${s.x} ${s.y} A ${outerR} ${outerR} 0 ${lg} 1 ${e.x} ${e.y} L ${si.x} ${si.y} A ${innerR} ${innerR} 0 ${lg} 0 ${ei.x} ${ei.y} Z`;
   };
   return(<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{slices.map((sl,i)=>{const deg=(sl.value/total)*360;const start=cumDeg;cumDeg+=deg;return <path key={i} d={arc(start,cumDeg-0.5,r,inner)} fill={sl.color} opacity={0.9}/>;})}<circle cx={cx} cy={cy} r={inner-1} fill={T.surface}/></svg>);
-}
-function CashLineChart({data,height=90}){
-  if(!data||data.length<2) return (
-    <div style={{padding:"18px 16px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:7}}>
-      <div style={{width:36,height:36,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-      </div>
-      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>{data?.length===1?"Add more data points":"No cash flow data yet"}</div>
-    </div>
-  );
-  const maxV=Math.max(...data.flatMap(d=>[d.in,d.out]),1);
-  const W=360,pad={top:10,bottom:22,left:8,right:8};
-  const cW=W-pad.left-pad.right; const cH=height-pad.top-pad.bottom;
-  const n=data.length;
-  const px=(i)=>pad.left+(i/Math.max(n-1,1))*cW;
-  const py=(v)=>pad.top+cH-(v/maxV)*cH;
-  const linePoints=(key)=>data.map((d,i)=>`${px(i)},${py(d[key])}`).join(' ');
-  const areaPath=(key,fillY)=>{const pts=data.map((d,i)=>`${px(i)},${py(d[key])}`);return `M${px(0)},${fillY} L${pts.join(' L')} L${px(n-1)},${fillY} Z`;};
-  return(<svg width="100%" viewBox={`0 0 ${W} ${height}`} style={{overflow:"visible"}}>{[0,0.5,1].map((p,i)=>(<line key={i} x1={pad.left} y1={pad.top+cH*p} x2={W-pad.right} y2={pad.top+cH*p} stroke={T.b1} strokeWidth={0.7} strokeDasharray={p===0?"0":"3,3"}/>))}<path d={areaPath("in",pad.top+cH)} fill={T.grn} opacity={0.1}/><polyline points={linePoints("in")} fill="none" stroke={T.grn} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"/><path d={areaPath("out",pad.top+cH)} fill={T.red} opacity={0.1}/><polyline points={linePoints("out")} fill="none" stroke={T.red} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4,2"/>{data.map((d,i)=>(<g key={i}><circle cx={px(i)} cy={py(d.in)} r={3} fill={T.grn}/><circle cx={px(i)} cy={py(d.out)} r={3} fill={T.red}/><text x={px(i)} y={height-5} textAnchor="middle" fontSize={9} fill={T.t4} fontFamily="'Segoe UI',sans-serif">{d.month}</text></g>))}</svg>);
-}
-function FinanceBarChart({data,height=130}){
-  if(!data||data.length<1) return (
-    <div style={{padding:"36px 16px",textAlign:"center",display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-      <div style={{width:38,height:38,borderRadius:"50%",border:`1.5px dashed ${T.b2}`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-        <svg width={17} height={17} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M12 20V10M18 20V4M6 20v-6"/></svg>
-      </div>
-      <div style={{fontSize:11.5,color:T.t3,fontWeight:600}}>No revenue/expense yet</div>
-      <div style={{fontSize:10.5,color:T.t4}}>Add transactions to see trends</div>
-    </div>
-  );
-  const maxV=Math.max(...data.map(d=>Math.max(d.sales,d.expense)),1);
-  const bW=18,gap=5,groupGap=20;
-  const total=data.length; const W=total*(bW*3+gap*2+groupGap)+20;
-  const pad={top:16,bottom:22,left:6,right:6}; const cH=height-pad.top-pad.bottom;
-  const sy=v=>pad.top+cH-(v/maxV)*cH; const bH=v=>(v/maxV)*cH;
-  let x=pad.left+6;
-  return(<svg width="100%" viewBox={`0 0 ${W} ${height}`} style={{overflow:"visible"}}>{[0,0.5,1].map((p,i)=>(<line key={i} x1={pad.left} y1={pad.top+cH*p} x2={W-pad.right} y2={pad.top+cH*p} stroke={T.b1} strokeWidth={0.8} strokeDasharray={p===0?"0":"3,3"}/>))}{data.map((d,i)=>{const x1=x,x2=x+bW+gap,x3=x+bW*2+gap*2;const margin=d.sales-d.expense;const mH=Math.abs((margin/maxV)*cH);const mY=margin>=0?sy(d.sales)-mH:sy(d.sales);const cx=x+bW*1.5+gap;x+=bW*3+gap*2+groupGap;return(<g key={i}><rect x={x1} y={sy(d.sales)} width={bW} height={bH(d.sales)} rx={2} fill={T.blu} opacity={0.8}/><rect x={x2} y={sy(d.expense)} width={bW} height={bH(d.expense)} rx={2} fill={T.redM} opacity={0.9}/><rect x={x3} y={margin>=0?sy(margin):pad.top+cH} width={bW} height={mH} rx={2} fill={margin>=0?T.grn:T.red} opacity={0.85}/><text x={cx} y={height-5} textAnchor="middle" fontSize={9} fill={T.t4} fontFamily="'Segoe UI',sans-serif">{d.month}</text></g>);})}</svg>);
 }
 function ProjectMiniCard({p,onClick}){
   const sm=STATUS_META[p.status]||STATUS_META["Ongoing"];
@@ -1103,6 +1067,54 @@ const MOCK_OPS = {
   ],
 };
 
+// ── ECharts option builders (GB theme) ───────────────────────────────
+const _EAX={axisLine:{lineStyle:{color:T.b1}},axisTick:{show:false},axisLabel:{color:T.t4,fontSize:10}};
+const _ETB={right:6,top:-3,feature:{saveAsImage:{title:"Save"}},iconStyle:{borderColor:T.t4}};
+function eBarOption(data){
+  return {
+    tooltip:{trigger:"axis",axisPointer:{type:"shadow"},valueFormatter:v=>"₹"+fmt(v)},
+    legend:{data:["Revenue","Expense"],bottom:0,itemWidth:10,itemHeight:10,textStyle:{color:T.t3,fontSize:11}},
+    toolbox:{..._ETB,feature:{magicType:{type:["bar","line"]},saveAsImage:{title:"Save"}}},
+    grid:{left:46,right:12,top:18,bottom:34},
+    xAxis:{type:"category",data:data.map(d=>d.month),..._EAX},
+    yAxis:{type:"value",axisLabel:{color:T.t4,fontSize:10,formatter:v=>fmt(v)},splitLine:{lineStyle:{color:T.b1,type:"dashed"}}},
+    series:[
+      {name:"Revenue",type:"bar",data:data.map(d=>d.sales),itemStyle:{color:T.blu,borderRadius:[3,3,0,0]},barMaxWidth:18},
+      {name:"Expense",type:"bar",data:data.map(d=>d.expense),itemStyle:{color:T.red,borderRadius:[3,3,0,0]},barMaxWidth:18},
+    ],
+  };
+}
+function eDonutOption(slices){
+  const total=slices.reduce((s,x)=>s+x.value,0);
+  return {
+    tooltip:{trigger:"item",valueFormatter:v=>"₹"+fmt(v)},
+    legend:{type:"scroll",orient:"vertical",right:0,top:"center",itemWidth:9,itemHeight:9,textStyle:{color:T.t3,fontSize:10.5}},
+    title:{text:"Total\n₹"+fmt(total),left:"33%",top:"42%",textAlign:"center",textStyle:{color:T.t1,fontSize:14,fontWeight:700,lineHeight:16}},
+    series:[{
+      type:"pie",radius:["52%","74%"],center:["34%","50%"],avoidLabelOverlap:true,
+      itemStyle:{borderColor:"#fff",borderWidth:2},
+      label:{show:true,formatter:"{b}\n₹{c}",fontSize:9.5,color:T.t3,lineHeight:12},
+      labelLine:{show:true,length:8,length2:8},
+      data:slices.map(s=>({value:s.value,name:s.label,itemStyle:{color:s.color}})),
+    }],
+  };
+}
+function eLineOption(cf){
+  return {
+    tooltip:{trigger:"axis",valueFormatter:v=>"₹"+fmt(v)},
+    legend:{data:["IN","OUT"],bottom:0,itemWidth:10,itemHeight:10,textStyle:{color:T.t3,fontSize:11}},
+    toolbox:_ETB,
+    grid:{left:46,right:12,top:14,bottom:30},
+    xAxis:{type:"category",boundaryGap:false,data:cf.map(d=>d.month),..._EAX},
+    yAxis:{type:"value",axisLabel:{color:T.t4,fontSize:10,formatter:v=>fmt(v)},splitLine:{lineStyle:{color:T.b1,type:"dashed"}}},
+    series:[
+      {name:"IN",type:"line",smooth:true,symbol:"circle",symbolSize:5,data:cf.map(d=>d.in),itemStyle:{color:T.grn},areaStyle:{color:T.grn,opacity:0.12}},
+      {name:"OUT",type:"line",smooth:true,symbol:"circle",symbolSize:5,data:cf.map(d=>d.out),itemStyle:{color:T.red},areaStyle:{color:T.red,opacity:0.1}},
+    ],
+  };
+}
+const EChartEmpty=({msg})=>(<div style={{height:180,display:"flex",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:12.5}}>{msg||"No data yet"}</div>);
+
 function DashboardModule(){
   const [view,setView]=useState("finance"); // finance | operations
   const [range,setRange]=useState("month");
@@ -1209,13 +1221,19 @@ function DashboardModule(){
       {/* Charts row */}
       <div style={{display:"grid",gridTemplateColumns:"1.5fr 1fr 1fr",gap:12,marginBottom:12}}>
         <Panel title="Finance Overview" action={<div style={{display:"flex",gap:4}}>{["week","month","quarter"].map(r=>(<button key={r} onClick={()=>setRange(r)} style={{padding:"3px 9px",borderRadius:5,border:`1px solid ${range===r?T.blu:T.b1}`,background:range===r?T.blu:"none",color:range===r?"white":T.t3,fontSize:10.5,cursor:"pointer",fontWeight:range===r?600:400}}>{r.charAt(0).toUpperCase()+r.slice(1)}</button>))}</div>}>
-          <div style={{padding:"14px 16px"}}><FinanceBarChart data={financeBarData} height={130}/><div style={{display:"flex",gap:14,marginTop:10}}>{[{l:"Revenue",v:totalIn,c:T.blu},{l:"Expense",v:totalOut,c:T.red},{l:"Net",v:totalIn-totalOut,c:(totalIn-totalOut)>=0?T.grn:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div></div>
+          <div style={{padding:"10px 10px 4px"}}>
+            {financeBarData.length?<EChart option={eBarOption(financeBarData)} height={186}/>:<EChartEmpty msg="No revenue/expense data in range"/>}
+            <div style={{display:"flex",gap:16,padding:"4px 8px 6px"}}>{[{l:"Revenue",v:totalIn,c:T.blu},{l:"Expense",v:totalOut,c:T.red},{l:"Net",v:totalIn-totalOut,c:(totalIn-totalOut)>=0?T.grn:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div>
+          </div>
         </Panel>
         <Panel title="Expense Breakdown">
-          <div style={{padding:"14px 16px",display:"flex",flexDirection:"column",alignItems:"center",gap:12}}><DonutChart slices={expSlices} size={110} cx={55} cy={55} r={38} inner={22}/><div style={{width:"100%"}}>{expSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:5}}><div style={{width:9,height:9,borderRadius:2,background:s.color,flexShrink:0}}/><span style={{fontSize:11,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:11,fontWeight:600,color:T.t1}}>₹{fmt(s.value)}</span></div>))}</div></div>
+          <div style={{padding:"8px 6px"}}>{expSlices.length?<EChart option={eDonutOption(expSlices)} height={212}/>:<EChartEmpty msg="No expenses recorded"/>}</div>
         </Panel>
         <Panel title="Cash Flow Trend">
-          <div style={{padding:"14px 16px"}}><CashLineChart data={cashflowArr} height={90}/><div style={{display:"flex",gap:14,marginTop:10}}>{[{l:"IN",v:cashflowArr.reduce((s,d)=>s+(d.in||0),0),c:T.grn},{l:"OUT",v:cashflowArr.reduce((s,d)=>s+(d.out||0),0),c:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div></div>
+          <div style={{padding:"10px 10px 4px"}}>
+            {cashflowArr.length?<EChart option={eLineOption(cashflowArr)} height={168}/>:<EChartEmpty msg="No cash-flow data yet"/>}
+            <div style={{display:"flex",gap:16,padding:"4px 8px 6px"}}>{[{l:"IN",v:cashflowArr.reduce((s,d)=>s+(d.in||0),0),c:T.grn},{l:"OUT",v:cashflowArr.reduce((s,d)=>s+(d.out||0),0),c:T.red}].map((s,i)=>(<div key={i}><div style={{fontSize:9.5,color:T.t4,textTransform:"uppercase",letterSpacing:"0.4px",marginBottom:2}}>{s.l}</div><div style={{fontSize:13.5,fontWeight:700,color:s.c}}>₹{fmt(s.v)}</div></div>))}</div>
+          </div>
         </Panel>
       </div>
       {/* Projects table */}
