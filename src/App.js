@@ -1084,18 +1084,24 @@ function eBarOption(data){
     ],
   };
 }
+// Distinct construction-friendly palette so same-coloured slices never repeat,
+// regardless of how the backend labelled them.
+const EPALETTE=[T.blu,T.pur,T.grn,T.amb,"#0EA5E9","#DB2777",T.slt,"#CA8A04","#0D9488","#9333EA"];
+const prettyLabel=(s)=>String(s||"").replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase());
 function eDonutOption(slices){
   const total=slices.reduce((s,x)=>s+x.value,0);
   return {
+    color:EPALETTE,
     tooltip:{trigger:"item",valueFormatter:v=>"₹"+fmt(v)},
     legend:{type:"scroll",orient:"vertical",right:0,top:"center",itemWidth:9,itemHeight:9,textStyle:{color:T.t3,fontSize:10.5}},
     title:{text:"Total\n₹"+fmt(total),left:"33%",top:"42%",textAlign:"center",textStyle:{color:T.t1,fontSize:14,fontWeight:700,lineHeight:16}},
     series:[{
-      type:"pie",radius:["52%","74%"],center:["34%","50%"],avoidLabelOverlap:true,
+      type:"pie",radius:["52%","74%"],center:["34%","50%"],avoidLabelOverlap:true,minAngle:6,
       itemStyle:{borderColor:"#fff",borderWidth:2},
-      label:{show:true,formatter:"{b}\n₹{c}",fontSize:9.5,color:T.t3,lineHeight:12},
+      // hide labels for tiny (<4%) slices so leader lines don't clutter; legend still lists them
+      label:{show:true,formatter:p=>p.percent<4?"":`${p.name}\n₹${fmt(p.value)}`,fontSize:9.5,color:T.t3,lineHeight:12},
       labelLine:{show:true,length:8,length2:8},
-      data:slices.map(s=>({value:s.value,name:s.label,itemStyle:{color:s.color}})),
+      data:slices.map((s,i)=>({value:s.value,name:prettyLabel(s.label),itemStyle:{color:EPALETTE[i%EPALETTE.length]}})),
     }],
   };
 }
