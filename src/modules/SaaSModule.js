@@ -509,6 +509,9 @@ function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
   const [search, setSearch]       = useState("");
   const [detail, setDetail]       = useState(null);
   const [credentials, setCredentials] = useState(null); // shows after create
+  const [resetTarget, setResetTarget] = useState(null);  // company whose admin login is being reset
+  const [resetMobile, setResetMobile] = useState("");    // optional new mobile in reset flow
+  const [resetting, setResetting]     = useState(false);
 
   const filtered = companies.filter(c => {
     if (filter === "active" && !c.is_active) return false;
@@ -521,8 +524,12 @@ function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
   });
 
   const createCompany = async () => {
-    if (!form.name || !form.admin_name || !form.admin_email) {
-      setToast({ msg:"Company name, admin name and email are required", type:"error" }); return;
+    if (!form.name || !form.admin_name || !form.admin_email || !form.phone) {
+      setToast({ msg:"Company name, admin name, email and admin mobile are required", type:"error" }); return;
+    }
+    // Mobile is the admin's login id (login screen is mobile-only) — must be valid
+    if (!/^[6-9]\d{9}$/.test((form.phone||"").trim())) {
+      setToast({ msg:"Enter a valid 10-digit admin mobile number — this is the login id", type:"error" }); return;
     }
     setSaving(true);
     const res = await apiFetch("/saas-admin/companies", { method:"POST", body: form });
@@ -531,6 +538,28 @@ function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
       setShowModal(false);
       setCredentials(res.data?.credentials || null);
       setForm({ name:"", admin_name:"", admin_email:"", phone:"", city:"", state:"", module_type:"construction_individual" });
+      reload();
+    } else {
+      setToast({ msg: res.message, type:"error" });
+    }
+  };
+
+  const resetAdminLogin = async () => {
+    if (!resetTarget) return;
+    // mobile optional — but if the admin currently has none, it must be provided
+    const m = (resetMobile || "").trim();
+    if (m && !/^[6-9]\d{9}$/.test(m)) {
+      setToast({ msg:"Enter a valid 10-digit mobile number", type:"error" }); return;
+    }
+    setResetting(true);
+    const res = await apiFetch("/saas-admin/companies/" + resetTarget.id + "/reset-admin-login", {
+      method:"POST", body: m ? { mobile:m } : {},
+    });
+    setResetting(false);
+    if (res.success) {
+      setResetTarget(null);
+      setResetMobile("");
+      setCredentials(res.data?.credentials || null); // reuse the credentials popup
       reload();
     } else {
       setToast({ msg: res.message, type:"error" });
@@ -643,6 +672,11 @@ function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
               </div>
             ))}
           </div>
+          {/* Admin login controls — regenerate password / set login mobile */}
+          <div style={{ marginTop:14, paddingTop:14, borderTop:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap" }}>
+            <div style={{ fontSize:11, color:T.t4 }}>Admin can't login or forgot password? Generate a new password (and set their login mobile if missing).</div>
+            <Btn variant="outline" onClick={() => { setResetTarget(detail); setResetMobile(""); }}>Reset Admin Login</Btn>
+          </div>
         </div>
       )}
 
@@ -666,17 +700,43 @@ function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
                 <InputField label="Admin Email" required value={form.admin_email} onChange={v => setForm(p=>({...p,admin_email:v}))} placeholder="admin@company.com"/>
               </div>
               <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
-                <InputField label="Phone" value={form.phone} onChange={v => setForm(p=>({...p,phone:v}))} placeholder="9876543210"/>
+                <InputField label="Admin Mobile" required value={form.phone} onChange={v => setForm(p=>({...p,phone:v.replace(/\D/g,"").slice(0,10)}))} placeholder="9876543210"/>
                 <InputField label="City" value={form.city} onChange={v => setForm(p=>({...p,city:v}))} placeholder="Raipur"/>
                 <InputField label="State" value={form.state} onChange={v => setForm(p=>({...p,state:v}))} placeholder="Chhattisgarh"/>
               </div>
               <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb }}>
-                <strong>Note:</strong> A secure password will be auto-generated. You'll see the login credentials after creation - share them with the company admin. They should change it on first login.
+                <strong>Note:</strong> Admin Mobile is the login id — the app login is <strong>mobile + password</strong>. A secure password is auto-generated and shown once after creation; share the <strong>mobile + password</strong> with the company admin. They should change it on first login.
               </div>
             </div>
             <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
               <Btn onClick={() => setShowModal(false)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
               <Btn onClick={createCompany} disabled={saving} style={{ flex:2 }}>{saving ? "Registering..." : "Register Company"}</Btn>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* Reset Admin Login Modal */}
+      {resetTarget && (
+        <>
+          <div onClick={() => setResetTarget(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:440, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
+            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Reset Admin Login</div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{resetTarget.name}</div>
+              </div>
+              <button onClick={() => setResetTarget(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+            </div>
+            <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+              <InputField label="Login Mobile (leave blank to keep current)" value={resetMobile} onChange={v => setResetMobile(v.replace(/\D/g,"").slice(0,10))} placeholder="Set / change 10-digit mobile"/>
+              <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb }}>
+                A new password will be generated and shown once. Share the <strong>mobile + password</strong> with the admin. (OTP login also works as a fallback.)
+              </div>
+            </div>
+            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+              <Btn onClick={() => setResetTarget(null)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+              <Btn onClick={resetAdminLogin} disabled={resetting} style={{ flex:2 }}>{resetting ? "Resetting..." : "Generate New Password"}</Btn>
             </div>
           </div>
         </>
@@ -691,14 +751,15 @@ function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
               <div style={{ width:48, height:48, borderRadius:"50%", background:"rgba(255,255,255,0.2)", display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:10 }}>
                 <IcChk size={24} color="white"/>
               </div>
-              <div style={{ fontSize:17, fontWeight:800, color:"white" }}>Company Registered!</div>
+              <div style={{ fontSize:17, fontWeight:800, color:"white" }}>Login Credentials</div>
               <div style={{ fontSize:12, color:"rgba(255,255,255,0.7)", marginTop:4 }}>Share these credentials with the company admin</div>
             </div>
             <div style={{ padding:"24px 22px" }}>
               <div style={{ background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 18px", marginBottom:16 }}>
                 <div style={{ marginBottom:12 }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Login Email</div>
-                  <div style={{ fontSize:15, fontWeight:700, color:T.blu, fontFamily:"monospace", letterSpacing:"0.3px" }}>{credentials.email}</div>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Login Mobile</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:T.blu, fontFamily:"monospace", letterSpacing:"0.5px" }}>{credentials.mobile || credentials.email}</div>
+                  {credentials.email && <div style={{ fontSize:10.5, color:T.t4, marginTop:3 }}>Email (reference only): {credentials.email}</div>}
                 </div>
                 <div>
                   <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Auto-Generated Password</div>
@@ -710,7 +771,7 @@ function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
               </div>
               <div style={{ display:"flex", gap:8 }}>
                 <Btn variant="outline" style={{ flex:1 }} onClick={() => {
-                  navigator.clipboard.writeText(`Email: ${credentials.email}\nPassword: ${credentials.password}`);
+                  navigator.clipboard.writeText(`Login Mobile: ${credentials.mobile || ""}\nPassword: ${credentials.password}\nLogin with mobile + password.`);
                   setToast({ msg:"Credentials copied to clipboard!", type:"success" });
                 }}><IcClip size={13}/> Copy Credentials</Btn>
                 <Btn style={{ flex:1 }} onClick={() => setCredentials(null)}>Done</Btn>
