@@ -264,26 +264,6 @@ function CashFlowChart({data,height=110}){
     </svg>
   );
 }
-function DonutChart({slices,size=110,cx=55,cy=55,r=38,inner=22}){
-  if(!slices||!slices.length||slices.every(s=>!s.value)) return (
-    <div style={{width:size,height:size,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",color:T.t4,fontSize:10.5,border:`1.5px dashed ${T.b2}`,borderRadius:"50%",gap:4}}>
-      <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round"><path d="M21 12a9 9 0 11-9-9v9z"/><path d="M21 12a9 9 0 00-9-9v9h9z"/></svg>
-      <span style={{fontWeight:600}}>No data</span>
-    </div>
-  );
-  let cumDeg=-90;
-  const total=slices.reduce((s,sl)=>s+sl.value,0)||1;
-  const toRad=d=>d*Math.PI/180;
-  const arc=(startDeg,endDeg,outerR,innerR)=>{
-    const s={x:cx+outerR*Math.cos(toRad(startDeg)),y:cy+outerR*Math.sin(toRad(startDeg))};
-    const e={x:cx+outerR*Math.cos(toRad(endDeg)),y:cy+outerR*Math.sin(toRad(endDeg))};
-    const si={x:cx+innerR*Math.cos(toRad(endDeg)),y:cy+innerR*Math.sin(toRad(endDeg))};
-    const ei={x:cx+innerR*Math.cos(toRad(startDeg)),y:cy+innerR*Math.sin(toRad(startDeg))};
-    const lg=(endDeg-startDeg)>180?1:0;
-    return `M ${s.x} ${s.y} A ${outerR} ${outerR} 0 ${lg} 1 ${e.x} ${e.y} L ${si.x} ${si.y} A ${innerR} ${innerR} 0 ${lg} 0 ${ei.x} ${ei.y} Z`;
-  };
-  return(<svg width={size} height={size} viewBox={`0 0 ${size} ${size}`}>{slices.map((sl,i)=>{const deg=(sl.value/total)*360;const start=cumDeg;cumDeg+=deg;return <path key={i} d={arc(start,cumDeg-0.5,r,inner)} fill={sl.color} opacity={0.9}/>;})}<circle cx={cx} cy={cy} r={inner-1} fill={T.surface}/></svg>);
-}
 function ProjectMiniCard({p,onClick}){
   const sm=STATUS_META[p.status]||STATUS_META["Ongoing"];
   const margin=p.boq-p.expense; const marginPct=p.boq>0?((margin/p.boq)*100).toFixed(0):0;
@@ -935,13 +915,13 @@ function ProjectExpandedRow({p}){
         <div>
           <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>Expense Breakdown</div>
           <div style={{display:"flex",gap:12,alignItems:"center"}}>
-            <DonutChart slices={expSlices} size={100} cx={50} cy={50} r={36} inner={22}/>
+            <div style={{width:104,height:104,flexShrink:0}}><EChart option={eDonutMini(expSlices)} height={104}/></div>
             <div style={{flex:1}}>{expSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}><div style={{width:8,height:8,borderRadius:2,background:s.color,flexShrink:0}}/><span style={{fontSize:10.5,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:10.5,fontWeight:600,color:T.t1}}>₹{fmt(s.value)}</span></div>))}</div>
           </div>
         </div>
         <div>
           <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>Monthly Spend Trend</div>
-          {(()=>{const mData=[{month:"Oct",expense:p.expense*0.08},{month:"Nov",expense:p.expense*0.12},{month:"Dec",expense:p.expense*0.18},{month:"Jan",expense:p.expense*0.15},{month:"Feb",expense:p.expense*0.22},{month:"Mar",expense:p.expense*0.25}];const maxE=Math.max(...mData.map(d=>d.expense));const W=220,H=70,pad=8;const cW=W-pad*2,cH=H-pad-18;return(<svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{overflow:"visible"}}>{mData.map((d,i)=>{const bW=24,x=pad+i*(cW/(mData.length-1))-bW/2;const bH=(d.expense/maxE)*cH;return(<g key={i}><rect x={x} y={pad+cH-bH} width={bW} height={bH} rx={2} fill={T.amb} opacity={0.7}/><text x={pad+i*(cW/(mData.length-1))} y={H-4} textAnchor="middle" fontSize={8.5} fill={T.t4} fontFamily="'Segoe UI',sans-serif">{d.month}</text></g>);})}</svg>);})()}
+          <EChart option={eBarMini([{month:"Oct",expense:p.expense*0.08},{month:"Nov",expense:p.expense*0.12},{month:"Dec",expense:p.expense*0.18},{month:"Jan",expense:p.expense*0.15},{month:"Feb",expense:p.expense*0.22},{month:"Mar",expense:p.expense*0.25}])} height={96}/>
         </div>
         <div>
           <div style={{fontSize:11,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:10}}>Details</div>
@@ -1103,6 +1083,28 @@ function eDonutOption(slices){
       labelLine:{show:true,length:8,length2:8},
       data:slices.map((s,i)=>({value:s.value,name:prettyLabel(s.label),itemStyle:{color:EPALETTE[i%EPALETTE.length]}})),
     }],
+  };
+}
+// Compact donut (no external legend — caller renders its own legend beside it)
+function eDonutMini(slices){
+  const total=slices.reduce((s,x)=>s+x.value,0);
+  return {
+    tooltip:{trigger:"item",valueFormatter:v=>"₹"+fmt(v)},
+    title:{text:"₹"+fmt(total),left:"center",top:"center",textStyle:{color:T.t1,fontSize:13,fontWeight:700}},
+    series:[{
+      type:"pie",radius:["56%","80%"],center:["50%","50%"],avoidLabelOverlap:true,minAngle:5,
+      itemStyle:{borderColor:"#fff",borderWidth:2},label:{show:false},labelLine:{show:false},
+      data:slices.map((s,i)=>({value:s.value,name:prettyLabel(s.label),itemStyle:{color:s.color||EPALETTE[i%EPALETTE.length]}})),
+    }],
+  };
+}
+function eBarMini(data,color){
+  return {
+    tooltip:{trigger:"axis",valueFormatter:v=>"₹"+fmt(v)},
+    grid:{left:38,right:8,top:10,bottom:20},
+    xAxis:{type:"category",data:data.map(d=>d.month),axisTick:{show:false},axisLine:{lineStyle:{color:T.b1}},axisLabel:{color:T.t4,fontSize:8.5}},
+    yAxis:{type:"value",axisLabel:{color:T.t4,fontSize:8.5,formatter:v=>fmt(v)},splitLine:{lineStyle:{color:T.b1,type:"dashed"}}},
+    series:[{type:"bar",data:data.map(d=>d.expense),itemStyle:{color:color||T.amb,borderRadius:[2,2,0,0]},barMaxWidth:16}],
   };
 }
 function eLineOption(cf){
@@ -1542,7 +1544,7 @@ function RealtimeFinancials({projects}){
                 {/* Col 2 — cash position donut */}
                 <div style={{display:"flex",flexDirection:"column",alignItems:"center"}}>
                   <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4,marginBottom:8,alignSelf:"flex-start"}}>Cash Position</div>
-                  {cashSlices.length?<><DonutChart slices={cashSlices} size={120} cx={60} cy={60} r={42} inner={26}/>
+                  {cashSlices.length?<><div style={{width:128,height:128}}><EChart option={eDonutMini(cashSlices)} height={128}/></div>
                   <div style={{width:"100%",marginTop:10}}>{cashSlices.map((s,i)=>(<div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}><div style={{width:9,height:9,borderRadius:2,background:s.color}}/><span style={{fontSize:10.5,color:T.t3,flex:1}}>{s.label}</span><span style={{fontSize:10.5,fontWeight:700,color:T.t1}}>₹{fmt(s.value)}</span></div>))}</div></>
                   :<div style={{fontSize:11.5,color:T.t4,padding:"30px 0"}}>Billing abhi shuru nahi hui</div>}
                 </div>
