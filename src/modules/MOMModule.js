@@ -683,24 +683,554 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
   </>);
 }
 
+// ── MEETING MODE (AI: record → transcribe → extract → create) ──
+const MM_TYPE={
+  mr:{label:"Material",color:T.amb,bg:T.ambL,tip:"→ Material Request banega"},
+  task:{label:"Task",color:T.blu,bg:T.bluL,tip:"→ Project Task banega"},
+  todo:{label:"Todo",color:T.grn,bg:T.grnL,tip:"→ Todo banega"},
+  issue:{label:"Issue",color:T.red,bg:T.redL,tip:"→ Issue (Site Issues task me)"},
+  task_update:{label:"Task update",color:T.pur,bg:T.purL,tip:"→ Existing task update hoga"},
+};
+const MM_ORDER=["mr","task","issue","task_update","todo"];
+// Fuzzy-match an AI-extracted assignee name to a real company user.
+function mmMatchUser(name,users){
+  if(!name||!users||!users.length) return null;
+  const n=String(name).trim().toLowerCase(); if(!n) return null;
+  let u=users.find(x=>(x.name||"").toLowerCase()===n); if(u) return u;
+  const first=n.split(/\s+/)[0];
+  u=users.find(x=>(x.name||"").toLowerCase().split(/\s+/)[0]===first); if(u) return u;
+  u=users.find(x=>{const xn=(x.name||"").toLowerCase(); return xn&&(xn.indexOf(n)>-1||n.indexOf(xn)>-1);});
+  return u||null;
+}
+// Plain-text minutes for WhatsApp / copy.
+function mmMinutesText(m,refs){
+  const L=[];
+  L.push("📋 "+((m&&m.title)||"Meeting"));
+  if(m&&m.summary){ L.push(""); L.push(m.summary); }
+  const ok=(refs||[]).filter(r=>r.ok);
+  if(ok.length){ L.push(""); L.push("Action items:"); ok.forEach(r=>L.push("• ["+(MM_TYPE[r.type]?MM_TYPE[r.type].label:r.type)+"] "+r.title+(r.ref?" ("+r.ref+")":""))); }
+  L.push(""); L.push("— Sanchalan Meeting Mode");
+  return L.join("\n");
+}
+const MM_SAMPLE="Site pe aaj meeting hui. 50 bag cement aur 500 kg sariya kal site pe chahiye, ye urgent hai warna RCC ka kaam ruk jayega. Ramesh ne bola slab ki shuttering kal tak complete kar dega. Suresh bijli connection wale issue ko follow up karega. Aur client ko site ki updated photos bhejni hai.";
+const fmtSecs=s=>String(Math.floor(s/60)).padStart(2,"0")+":"+String(s%60).padStart(2,"0");
+const MIC_PATH="M12 1a3 3 0 00-3 3v7a3 3 0 006 0V4a3 3 0 00-3-3zM19 10v1a7 7 0 01-14 0v-1M12 18v4M8 22h8";
+
+function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
+  const inp={...inputStyle,padding:"6px 8px",fontSize:12};
+  const isUpd=it.type==="task_update";
+  const needProj=allMode&&(it.type==="mr"||it.type==="task"||it.type==="issue")&&!it.project;
+  return(
+    <div style={{background:T.surface,border:`1px solid ${it._include?meta.color+"66":T.b1}`,borderRadius:9,padding:11,marginBottom:8,opacity:it._include?1:0.55}}>
+      <div style={{display:"flex",alignItems:"flex-start",gap:10}}>
+        <div onClick={()=>onPatch(it._id,{_include:!it._include})}
+          style={{width:21,height:21,borderRadius:5,border:`2px solid ${it._include?meta.color:T.b2}`,background:it._include?meta.color:"transparent",flexShrink:0,marginTop:1,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+          {it._include&&<IcChk size={12} color="white"/>}
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          {isUpd?(
+            <>
+              <div style={{fontSize:12.5,fontWeight:600,color:T.t1,marginBottom:6}}>{it.task_name||it.title||"Existing task"}{allMode&&it.project?<span style={{fontSize:10,fontWeight:500,color:T.t4}}>  ·  {it.project}</span>:null}</div>
+              <div style={{display:"flex",gap:6,marginBottom:6,flexWrap:"wrap"}}>
+                <select value={it.status||""} onChange={e=>onPatch(it._id,{status:e.target.value})} style={{...inp,width:"auto"}}>
+                  <option value="">— status —</option>
+                  {["Not Started","Ongoing","Completed"].map(s=><option key={s}>{s}</option>)}
+                </select>
+                <input type="number" value={it.progress>=0?it.progress:""} onChange={e=>onPatch(it._id,{progress:e.target.value===""?-1:Number(e.target.value)})} placeholder="%" style={{...inp,width:64}}/>
+                <input value={it.note||""} onChange={e=>onPatch(it._id,{note:e.target.value})} placeholder="Progress note (optional)" style={{...inp,flex:1,minWidth:120}}/>
+              </div>
+              <div style={{fontSize:9.5,color:it.task_id?T.t4:T.red}}>{it.task_id?("Task #"+it.task_id):"⚠ koi existing task match nahi — skip ho jayega"}</div>
+            </>
+          ):(
+            <>
+              <input value={it.title} onChange={e=>onPatch(it._id,{title:e.target.value})} style={{...inp,fontWeight:600,fontSize:12.5,marginBottom:6}}/>
+              {it.type==="mr"?(
+                <div style={{display:"flex",gap:6}}>
+                  <input type="number" value={it.quantity} onChange={e=>onPatch(it._id,{quantity:e.target.value})} placeholder="Qty" style={{...inp,width:70}}/>
+                  <input value={it.unit} onChange={e=>onPatch(it._id,{unit:e.target.value})} placeholder="unit" style={{...inp,width:80}}/>
+                  <input value={it.due_date} onChange={e=>onPatch(it._id,{due_date:e.target.value})} placeholder="YYYY-MM-DD" style={{...inp,flex:1}}/>
+                </div>
+              ):(
+                <textarea value={it.description} onChange={e=>onPatch(it._id,{description:e.target.value})} rows={2} placeholder="Details" style={{...inp,width:"100%",resize:"none",lineHeight:1.4,fontFamily:"inherit"}}/>
+              )}
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,flexWrap:"wrap"}}>
+                {it.type!=="mr"&&<select value={it.priority} onChange={e=>onPatch(it._id,{priority:e.target.value})} style={{...inp,padding:"4px 7px",width:"auto"}}>{["Low","Medium","High"].map(p=><option key={p}>{p}</option>)}</select>}
+                {allMode&&(
+                  <select value={it.project||""} onChange={e=>onPatch(it._id,{project:e.target.value})}
+                    style={{...inp,padding:"4px 7px",width:"auto",maxWidth:150,border:`1.5px solid ${needProj?T.amb:T.b1}`,color:needProj?T.amb:T.t1}}>
+                    <option value="">⚠ project…</option>
+                    {projects.map(p=><option key={p.id} value={p.name}>{p.name}</option>)}
+                  </select>
+                )}
+                {it.assignee?<span style={{fontSize:10.5,color:T.t3}}>@ {it.assignee}</span>:null}
+                <span style={{marginLeft:"auto",fontSize:9.5,color:T.t4}}>{Math.round((it.confidence||0)*100)}%</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
+  const [step,setStep]=useState("capture");           // capture | review | done
+  const [mode,setMode]=useState("single");            // single | all (multi-project)
+  const [projects,setProjects]=useState([]);
+  const [proj,setProj]=useState(projectId?String(projectId):"");
+  const [title,setTitle]=useState("");
+  const [transcript,setTranscript]=useState("");
+  const [recording,setRecording]=useState(false);
+  const [recSecs,setRecSecs]=useState(0);
+  const [transcribing,setTranscribing]=useState(false);
+  const [recInfo,setRecInfo]=useState("");
+  const [extracting,setExtracting]=useState(false);
+  const [meeting,setMeeting]=useState(null);
+  const [items,setItems]=useState([]);
+  const [committing,setCommitting]=useState(false);
+  const [result,setResult]=useState(null);
+  const [err,setErr]=useState("");
+  const [users,setUsers]=useState([]);       // staff (assignee auto-match)
+  const [audioUrl,setAudioUrl]=useState(null); // archived recording
+  const [weather,setWeather]=useState(null);   // weather suggestions
+  const [copied,setCopied]=useState(false);
+  const mrRef=useRef(null),chunksRef=useRef([]),streamRef=useRef(null),timerRef=useRef(null);
+
+  useEffect(()=>{
+    api.get("/projects").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setProjects(r.data); }).catch(()=>{});
+    api.get("/settings/users").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setUsers(r.data); }).catch(()=>{});
+    return ()=>{ if(timerRef.current) clearInterval(timerRef.current); if(streamRef.current){ try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(e){} } };
+  },[]);
+
+  const projName=id=>projects.find(p=>String(p.id)===String(id))?.name||projectName||"";
+  const loadWeather=pid=>{ setWeather(null); if(!pid) return; api.get("/meetings/weather?project_id="+pid).then(r=>{ if(r&&r.success) setWeather(r); }).catch(()=>{}); };
+  const addSuggestion=sug=>setItems(prev=>prev.some(x=>x.title===sug.title&&x.type===sug.type)?prev:[...prev,{...sug,_id:"w"+prev.length+"_"+(sug.title||"").length,_include:true}]);
+  const blobToB64=blob=>new Promise((res,rej)=>{ const fr=new FileReader(); fr.onerror=rej; fr.onloadend=()=>res(fr.result); fr.readAsDataURL(blob); });
+
+  const startRec=async()=>{
+    setErr(""); setRecInfo("");
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia||!window.MediaRecorder){ setErr("Is browser pe recording support nahi — neeche transcript paste karein."); return; }
+    try{
+      const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+      streamRef.current=stream;
+      const mime=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg"].find(t=>{try{return window.MediaRecorder.isTypeSupported(t);}catch(e){return false;}})||"";
+      const mr=mime?new window.MediaRecorder(stream,{mimeType:mime,audioBitsPerSecond:32000}):new window.MediaRecorder(stream);
+      chunksRef.current=[];
+      mr.ondataavailable=e=>{ if(e.data&&e.data.size) chunksRef.current.push(e.data); };
+      mr.onstop=onRecStop;
+      mrRef.current=mr; mr.start();
+      setRecording(true); setRecSecs(0);
+      timerRef.current=setInterval(()=>setRecSecs(s=>s+1),1000);
+    }catch(e){ if(streamRef.current){try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(_){}} setErr("Mic permission chahiye — allow karke dobara try karein."); }
+  };
+  const stopRec=()=>{ if(timerRef.current){clearInterval(timerRef.current);timerRef.current=null;} try{ if(mrRef.current&&mrRef.current.state!=="inactive") mrRef.current.stop(); }catch(e){} setRecording(false); };
+  const onRecStop=async()=>{
+    const blob=new Blob(chunksRef.current,{type:(mrRef.current&&mrRef.current.mimeType)||"audio/webm"}); chunksRef.current=[];
+    if(streamRef.current){try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(e){} streamRef.current=null;}
+    if(!blob.size){ setErr("Recording khali rahi — dobara try karein."); return; }
+    setTranscribing(true);
+    try{
+      const b64=await blobToB64(blob);
+      const r=await api.post("/meetings/transcribe",{audio_base64:b64,mime_type:blob.type});
+      setTranscribing(false);
+      if(!r||!r.success){ setErr(r?.message||"Transcription fail hua."); return; }
+      setTranscript(p=>(p&&p.trim()?p.trim()+" ":"")+(r.transcript||""));
+      if(r.audio_url) setAudioUrl(r.audio_url);
+      if(r.mock) setRecInfo("Demo transcript (backend pe SARVAM_API_KEY set karein real transcription ke liye).");
+    }catch(e){ setTranscribing(false); setErr("Audio process nahi hua — dobara try karein."); }
+  };
+
+  const doExtract=async()=>{
+    if(!transcript.trim()){ setErr("Pehle record karein ya transcript daalein."); return; }
+    setErr(""); setExtracting(true);
+    const r=await api.post("/meetings/extract",{transcript:transcript.trim(),mode,project_id:proj||undefined,project_name:projName(proj)||undefined,title:title.trim()||undefined,audio_url:audioUrl||undefined});
+    setExtracting(false);
+    if(!r||!r.success){ setErr(r?.message||"AI extraction fail hua."); return; }
+    setMeeting(r.data);
+    setItems((r.data.items||[]).map((it,i)=>({...it,_id:i,_include:true})));
+    if(mode==="single") loadWeather(proj||r.data.project_id); else setWeather(null);
+    setStep("review");
+  };
+  const patchItem=(id,patch)=>setItems(p=>p.map(it=>it._id===id?{...it,...patch}:it));
+
+  const commit=async()=>{
+    const chosen=items.filter(it=>it._include);
+    if(!chosen.length){ setErr("Kam se kam ek item select karein."); return; }
+    const allMode=mode==="all";
+    // resolve a project id per item (all-mode: from item.project name; single: the picked project)
+    const pidFor=it=>{
+      if(allMode){ const p=projects.find(pp=>pp.name===(it.project||"")); return p?p.id:null; }
+      return proj||(meeting&&meeting.project_id)||null;
+    };
+    const needProj=chosen.filter(it=>(it.type==="mr"||it.type==="task"||it.type==="issue")&&!pidFor(it));
+    if(needProj.length){ setErr(allMode?`${needProj.length} item ko project assign karein (dropdown).`:"Material/Task/Issue ke liye project select karein."); return; }
+    setErr(""); setCommitting(true);
+    const refs=[];
+    const holderCache={}; // project_id -> "Site Issues" holder task id (issues need a parent task)
+    const getHolder=async(pid)=>{
+      if(holderCache[pid]!==undefined) return holderCache[pid];
+      let tid=null;
+      try{
+        const lr=await api.get("/tasks?project_id="+pid);
+        const list=(lr&&lr.data)||[];
+        const found=list.find(t=>(t.name||"").toLowerCase()==="site issues");
+        if(found) tid=found.id;
+        else { const cr=await api.post("/tasks",{project_id:pid,name:"Site Issues",title:"Site Issues",category:"General"}); tid=cr?.data?.id||null; }
+      }catch(e){}
+      holderCache[pid]=tid; return tid;
+    };
+    for(const it of chosen){
+      const pid=pidFor(it);
+      const mu=(it.type==="task"||it.type==="todo"||it.type==="issue")?mmMatchUser(it.assignee,users):null;
+      try{
+        let r,ref;
+        if(it.type==="mr"){
+          r=await api.post("/procurement/mrs",{project_id:pid,project_name:projName(pid),item_name:it.title,quantity:Number(it.quantity)||1,unit:it.unit||"Nos",notes:it.description||null,required_date:it.due_date||null});
+          ref=r?.data?.mr_number||r?.data?.id;
+        }else if(it.type==="task"){
+          r=await api.post("/tasks",{project_id:pid,parent_id:null,name:it.title,title:it.title,description:(it.description||"")+(it.assignee&&!mu?`\n(Assignee: ${it.assignee})`:""),category:"General",assigned_to:mu?mu.id:null});
+          ref=r?.data?.task_no?("#"+r.data.task_no):r?.data?.id;
+        }else if(it.type==="todo"){
+          r=await api.post("/projects/company-todos",{title:it.title,description:it.description||"",priority:it.priority||"Medium",category:"Other",due_date:it.due_date||"",project_id:pid||null,assigned_to:mu?mu.id:undefined});
+          ref=r?.data?.id;
+        }else if(it.type==="issue"){
+          const holder=await getHolder(pid);
+          if(holder){ r=await api.post("/tasks/"+holder+"/issues",{title:it.title,description:it.description||"",priority:it.priority||"Medium",assigned_to:mu?mu.name:(it.assignee||null)}); ref=r?.data?.id?"raised":undefined; }
+          else r={success:false};
+        }else if(it.type==="task_update"){
+          if(it.task_id){
+            const body={};
+            if(it.status) body.status=it.status;
+            if(typeof it.progress==="number"&&it.progress>=0) body.progress=it.progress;
+            r=(it.status||body.progress!=null)?await api.put("/tasks/"+it.task_id,body):{success:true};
+            if(it.note){ try{ await api.post("/tasks/"+it.task_id+"/comments",{text:it.note}); }catch(e){} }
+            ref=it.status||(body.progress!=null?it.progress+"%":"updated");
+          } else r={success:false};
+        }
+        const id=it.type==="task_update"?it.task_id:(r&&r.data?r.data.id:undefined);
+        refs.push({type:it.type,title:isUpdTitle(it),ok:!!(r&&(r.success||r.data)),ref,id});
+      }catch(e){ refs.push({type:it.type,title:isUpdTitle(it),ok:false}); }
+    }
+    // Create the MOM (minutes) so the meeting shows up in this list
+    let createdMOM=null;
+    try{
+      const me=JSON.parse(localStorage.getItem("gb_user")||"{}");
+      const grp=tp=>chosen.filter(it=>it.type===tp);
+      const tag=it=>allMode&&it.project?` [${it.project}]`:"";
+      const todoActions=[...grp("todo"),...grp("issue")].map((it,i)=>({id:"A"+(i+1),task:(it.type==="issue"?"[Issue] ":"")+it.title+tag(it),assignee:it.assignee||"",dueDate:it.due_date||"",status:"Pending",priority:it.priority||"Medium"}));
+      const disc=[];
+      if(grp("mr").length) disc.push({point:"Materials: "+grp("mr").map(m=>`${m.title} (${m.quantity||""} ${m.unit||""})`.trim()+tag(m)).join(", ")});
+      if(grp("task").length) disc.push({point:"Tasks: "+grp("task").map(t=>t.title+tag(t)).join(", ")});
+      if(grp("task_update").length) disc.push({point:"Task updates: "+grp("task_update").map(t=>`${t.task_name||t.title} → ${t.status||""}${t.progress>=0?` ${t.progress}%`:""}`.trim()).join(", ")});
+      const singlePid=allMode?null:(proj||(meeting&&meeting.project_id)||null);
+      const payload={
+        title:title.trim()||(meeting&&meeting.summary?meeting.summary.slice(0,50):"Meeting"),
+        type:allMode?"Progress Review":"Site Review", site:allMode?"Multiple projects":projName(singlePid), project_id:singlePid, venue:"",
+        date:TODAY, time:new Date().toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}),
+        conductedBy:me.name||"", attendees:[], agenda:(meeting&&meeting.summary)||"",
+        notes:transcript, discussion:disc, actionItems:todoActions, nextMeeting:null, status:"Finalized",
+      };
+      const mr=await api.post("/mom",payload);
+      if(mr&&mr.success) createdMOM=mr.data;
+    }catch(e){}
+    if(meeting&&meeting.id){ try{ await api.patch("/meetings/"+meeting.id,{status:"committed",committed_refs:refs}); }catch(e){} }
+    setCommitting(false);
+    setResult({refs,mom:createdMOM});
+    if(createdMOM&&onComplete) onComplete(createdMOM);
+  };
+  const isUpdTitle=it=>it.type==="task_update"?(it.task_name||it.title):it.title;
+
+  const inputStyle={width:"100%",padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const labelStyle={fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4};
+  const btnP=on=>({background:on?T.blu:T.b1,color:on?"white":T.t4,border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:on?"pointer":"not-allowed"});
+  const btnS={background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:600,cursor:"pointer"};
+  const chosenCount=items.filter(it=>it._include).length;
+
+  return(
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+      <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(680px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden"}}>
+        {/* header */}
+        <div style={{background:T.sb,padding:"13px 18px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{width:30,height:30,borderRadius:8,background:"rgba(124,58,237,0.25)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <Ic d={MIC_PATH} size={16} color="#C4B5FD"/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:14,fontWeight:700,color:"white"}}>Meeting Mode</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>{step==="review"?"Review & approve — phir sab create ho jayega":step==="done"?"Ho gaya":"Record ya paste karein → AI nikalegi action items"}</div>
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><IcX size={18} color="rgba(255,255,255,0.7)"/></button>
+        </div>
+
+        {/* content */}
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+          {step==="capture"&&(
+            <>
+              <div style={{display:"flex",gap:5,marginBottom:12,background:T.sltL,padding:4,borderRadius:9}}>
+                {[{k:"single",l:"Single project"},{k:"all",l:"All projects"}].map(o=>(
+                  <button key={o.k} onClick={()=>setMode(o.k)}
+                    style={{flex:1,padding:"8px",borderRadius:6,border:"none",cursor:"pointer",fontSize:12,fontWeight:700,background:mode===o.k?T.surface:"transparent",color:mode===o.k?T.t1:T.t3,boxShadow:mode===o.k?"0 1px 3px rgba(0,0,0,0.12)":"none"}}>{o.l}</button>
+                ))}
+              </div>
+              {mode==="single"?(
+                <div style={{marginBottom:12}}>
+                  <label style={labelStyle}>Project <span style={{color:T.t4,textTransform:"none",fontWeight:500}}>(Material/Task ke liye)</span></label>
+                  <select value={proj} onChange={e=>setProj(e.target.value)} style={inputStyle}>
+                    <option value="">Select project…</option>
+                    {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              ):(
+                <div style={{marginBottom:12,fontSize:11,color:T.t2,background:T.purL,border:`1px solid ${T.purM}`,borderRadius:8,padding:"9px 11px",lineHeight:1.5}}>
+                  <b style={{color:T.pur}}>All-projects mode:</b> ek hi recording me saare projects ki baat karein (ek-ek karke). AI har item ko uske project se jod dega + existing tasks update karega. Project pick zaroori nahi.
+                </div>
+              )}
+              <div style={{marginBottom:12}}>
+                <label style={labelStyle}>Meeting title (optional)</label>
+                <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Site review — 21 Jun" style={inputStyle}/>
+              </div>
+              {transcribing?(
+                <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,padding:12,borderRadius:9,background:T.bluL,marginBottom:12}}>
+                  <span style={{width:14,height:14,border:`2px solid ${T.blu}`,borderTopColor:"transparent",borderRadius:"50%",display:"inline-block",animation:"spin .8s linear infinite"}}/>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.blu}}>Audio transcribe ho raha hai…</span>
+                </div>
+              ):recording?(
+                <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 13px",borderRadius:9,background:T.redL,border:`1px solid ${T.redM}`,marginBottom:12}}>
+                  <span style={{width:11,height:11,borderRadius:"50%",background:T.red,animation:"mmpulse 1s ease-in-out infinite"}}/>
+                  <span style={{fontSize:14,fontWeight:700,color:T.red,fontVariantNumeric:"tabular-nums"}}>{fmtSecs(recSecs)}</span>
+                  <span style={{fontSize:11.5,color:T.t3}}>Recording…</span>
+                  <button onClick={stopRec} style={{marginLeft:"auto",background:T.red,color:"white",border:"none",borderRadius:7,padding:"8px 15px",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>Stop & transcribe</button>
+                </div>
+              ):(
+                <button onClick={startRec} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:T.purL,color:T.pur,border:`1.5px solid ${T.purM}`,borderRadius:9,padding:12,fontSize:13.5,fontWeight:700,cursor:"pointer",marginBottom:12}}>
+                  <Ic d={MIC_PATH} size={17} color={T.pur}/> Meeting record karein (laptop mic)
+                </button>
+              )}
+              {recInfo&&<div style={{fontSize:10.5,color:T.amb,marginTop:-6,marginBottom:10}}>{recInfo}</div>}
+              <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 10px"}}>
+                <div style={{flex:1,height:1,background:T.b1}}/><span style={{fontSize:10,color:T.t4}}>ya likh ke daalein</span><div style={{flex:1,height:1,background:T.b1}}/>
+              </div>
+              <textarea value={transcript} onChange={e=>setTranscript(e.target.value)} rows={6} placeholder="Meeting ki baat-cheet yahan paste/type karein… (Hindi / Hinglish bhi chalega)" style={{...inputStyle,resize:"vertical",lineHeight:1.5}}/>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:6}}>
+                <button onClick={()=>{setTranscript(MM_SAMPLE);setErr("");}} style={{background:"none",border:"none",color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer",padding:0}}>Sample try karein</button>
+                <span style={{fontSize:10.5,color:T.t4}}>{transcript.trim()?transcript.trim().length+" chars":""}</span>
+              </div>
+            </>
+          )}
+
+          {step==="review"&&(
+            <>
+              {meeting&&meeting.summary?(
+                <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"10px 13px",marginBottom:14}}>
+                  <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>AI Summary</div>
+                  <div style={{fontSize:12.5,color:T.t2,lineHeight:1.5}}>{meeting.summary}</div>
+                </div>
+              ):null}
+              {mode==="single"?(
+                <div style={{marginBottom:14}}>
+                  <label style={labelStyle}>Project <span style={{color:T.t4,textTransform:"none",fontWeight:500}}>(Material/Task ke liye zaroori)</span></label>
+                  <select value={proj} onChange={e=>setProj(e.target.value)} style={inputStyle}>
+                    <option value="">Select project…</option>
+                    {projects.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}
+                  </select>
+                </div>
+              ):(
+                <div style={{marginBottom:12,fontSize:11,color:T.t3}}>Har item ka <b style={{color:T.pur}}>project</b> neeche check/correct karein — AI ne auto-assign kiya hai.</div>
+              )}
+              {audioUrl&&(
+                <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                  <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Recording</span>
+                  <audio src={audioUrl} controls style={{height:30,flex:1}}/>
+                </div>
+              )}
+              {mode==="single"&&weather&&weather.suggestions&&weather.suggestions.length>0&&(
+                <div style={{background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,padding:"10px 13px",marginBottom:14}}>
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:6}}>
+                    <span style={{fontSize:15}}>{/rain|storm|drizzle|thunder/i.test(weather.condition||"")?"🌧️":((weather.temp||0)>=38?"☀️":"⛅")}</span>
+                    <span style={{fontSize:11.5,fontWeight:700,color:T.t1}}>Weather suggestions</span>
+                    {weather.mock&&<span style={{fontSize:9,color:T.amb,background:T.ambL,padding:"2px 6px",borderRadius:5}}>demo</span>}
+                  </div>
+                  <div style={{fontSize:11,color:T.t3,marginBottom:8}}>{weather.summary}</div>
+                  {weather.suggestions.map((s,i)=>{
+                    const added=items.some(x=>x.title===s.title&&x.type===s.type);
+                    return(
+                      <div key={i} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                        <span style={{fontSize:9,fontWeight:700,color:MM_TYPE[s.type]?.color,background:MM_TYPE[s.type]?.bg,padding:"2px 6px",borderRadius:5}}>{MM_TYPE[s.type]?.label}</span>
+                        <span style={{flex:1,fontSize:11.5,color:T.t2}}>{s.title}</span>
+                        <button onClick={()=>addSuggestion(s)} disabled={added} style={{background:added?T.grnL:T.blu,color:added?T.grn:"white",border:"none",borderRadius:7,padding:"5px 11px",fontSize:11,fontWeight:700,cursor:added?"default":"pointer"}}>{added?"✓ Added":"+ Add"}</button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {items.length===0&&<div style={{textAlign:"center",padding:"24px",color:T.t4,fontSize:12.5}}>Is meeting me koi action item nahi mila.</div>}
+              {MM_ORDER.map(tp=>{
+                const grp=items.filter(it=>it.type===tp); if(!grp.length) return null;
+                const meta=MM_TYPE[tp];
+                return(
+                  <div key={tp} style={{marginBottom:12}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:7}}>
+                      <span style={{fontSize:10,fontWeight:700,color:meta.color}}>{meta.label.toUpperCase()}</span>
+                      <span style={{fontSize:10,color:T.t4}}>{meta.tip}</span>
+                    </div>
+                    {grp.map(it=><MMItem key={it._id} it={it} meta={meta} onPatch={patchItem} inputStyle={inputStyle} allMode={mode==="all"} projects={projects}/>)}
+                  </div>
+                );
+              })}
+            </>
+          )}
+
+          {step==="done"&&result&&(()=>{
+            const ok=result.refs.filter(r=>r.ok).length, by=tp=>result.refs.filter(r=>r.type===tp&&r.ok).length;
+            return(
+              <div>
+                <div style={{textAlign:"center",padding:"10px 0 16px"}}>
+                  <div style={{width:54,height:54,borderRadius:27,background:T.grnL,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 10px"}}><IcChk size={28} color={T.grn}/></div>
+                  <div style={{fontSize:16,fontWeight:700,color:T.t1}}>{ok} item{ok!==1?"s":""} create ho gaye</div>
+                  <div style={{fontSize:12,color:T.t3,marginTop:3}}>{(MM_ORDER.filter(tp=>by(tp)>0).map(tp=>`${by(tp)} ${MM_TYPE[tp].label}`).join(" · ")||"0 items")+(result.mom?" · 1 MOM logged":"")}</div>
+                </div>
+                {result.refs.map((r,i)=>(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"9px 12px",marginBottom:7}}>
+                    <span style={{fontSize:9.5,fontWeight:700,color:MM_TYPE[r.type].color,background:MM_TYPE[r.type].bg,padding:"3px 7px",borderRadius:5}}>{MM_TYPE[r.type].label}</span>
+                    <span style={{flex:1,fontSize:12.5,color:T.t1}}>{r.title}</span>
+                    {r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red,fontWeight:600}}>Fail</span>}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+        </div>
+
+        {err&&<div style={{padding:"8px 18px",background:T.redL,borderTop:`1px solid ${T.redM}`,color:T.red,fontSize:12,fontWeight:500,flexShrink:0}}>{err}</div>}
+
+        {/* footer */}
+        <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,background:T.surfaceB,display:"flex",gap:8,flexShrink:0,alignItems:"center"}}>
+          {step==="capture"&&(<>
+            <button onClick={onClose} style={btnS}>Cancel</button>
+            <div style={{flex:1}}/>
+            <button onClick={doExtract} disabled={extracting||!transcript.trim()} style={btnP(!extracting&&!!transcript.trim())}>{extracting?"AI soch rahi hai…":"Extract action items →"}</button>
+          </>)}
+          {step==="review"&&(<>
+            <button onClick={()=>setStep("capture")} style={btnS}>← Back</button>
+            <div style={{flex:1}}/>
+            <button onClick={commit} disabled={committing||!chosenCount} style={btnP(!committing&&!!chosenCount)}>{committing?"Ban raha hai…":`Approve & Create (${chosenCount})`}</button>
+          </>)}
+          {step==="done"&&result&&(<>
+            <button onClick={()=>{const t=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary},result.refs);window.open("https://wa.me/?text="+encodeURIComponent(t),"_blank");}}
+              style={{background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Share on WhatsApp</button>
+            <button onClick={()=>{const t=mmMinutesText({title:title||(meeting&&meeting.title)||"Meeting",summary:meeting&&meeting.summary},result.refs);try{navigator.clipboard.writeText(t).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),1800);});}catch(e){}}} style={btnS}>{copied?"✓ Copied":"Copy"}</button>
+            <div style={{flex:1}}/>
+            <button onClick={onClose} style={btnP(true)}>Done</button>
+          </>)}
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ── AI MEETING DETAIL (analytics + items + audio + transcript + share) ──
+function MeetingDetailModal({meeting,onClose}){
+  const [status,setStatus]=useState(null);
+  const [copied,setCopied]=useState(false);
+  useEffect(()=>{
+    if(meeting&&meeting.id&&meeting.status==="committed"){
+      api.get("/meetings/"+meeting.id+"/status").then(r=>{ if(r&&r.success) setStatus(r.data); }).catch(()=>{});
+    }
+  },[meeting]);
+  if(!meeting) return null;
+  const refs=meeting.committed_refs||[];
+  const okRefs=refs.filter(r=>r.ok);
+  const committed=meeting.status==="committed";
+  const share=()=>{ window.open("https://wa.me/?text="+encodeURIComponent(mmMinutesText(meeting,refs)),"_blank"); };
+  const copy=()=>{ const t=mmMinutesText(meeting,refs); try{ navigator.clipboard.writeText(t).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),1800); }); }catch(e){} };
+  return(
+    <>
+      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+      <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(620px,96vw)",background:T.surface,boxShadow:"-8px 0 40px rgba(0,0,0,0.2)",zIndex:401,display:"flex",flexDirection:"column",animation:"slideIn .2s ease"}}>
+        <div style={{background:T.sb,padding:"14px 18px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:700,color:"white",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{meeting.title||"AI Meeting"}</div>
+            <div style={{fontSize:10.5,color:"rgba(255,255,255,0.5)",marginTop:1}}>{fmtDate(meeting.created_at)}{meeting.project_name?" · "+meeting.project_name:""}</div>
+          </div>
+          <span style={{fontSize:9.5,fontWeight:700,color:committed?"#A7F3D0":"#FDE68A",background:"rgba(255,255,255,0.1)",padding:"3px 9px",borderRadius:6}}>{committed?"Committed":"Review"}</span>
+          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><IcX size={18} color="rgba(255,255,255,0.7)"/></button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+          {meeting.summary?(
+            <div style={{background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:9,padding:"10px 13px",marginBottom:14}}>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.blu,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>AI Summary</div>
+              <div style={{fontSize:12.5,color:T.t2,lineHeight:1.5}}>{meeting.summary}</div>
+            </div>
+          ):null}
+          {committed&&okRefs.length>0&&(
+            <>
+              <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:"12px 14px",marginBottom:12}}>
+                <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                  <span style={{fontSize:11,fontWeight:700,color:T.t1}}>Action items progress</span>
+                  <span style={{fontSize:11,fontWeight:700,color:T.grn}}>{status?`${status.done}/${status.total} done`:"…"}</span>
+                </div>
+                <div style={{height:7,background:T.surfaceB,borderRadius:4,overflow:"hidden"}}><div style={{height:"100%",width:status&&status.total?Math.round(status.done/status.total*100)+"%":"0%",background:T.grn,transition:"width .3s"}}/></div>
+              </div>
+              <div style={{display:"flex",gap:8,marginBottom:14}}>
+                <button onClick={share} style={{flex:1,background:"#25D366",color:"white",border:"none",borderRadius:8,padding:"10px",fontSize:13,fontWeight:700,cursor:"pointer"}}>Share on WhatsApp</button>
+                <button onClick={copy} style={{background:T.surface,border:`1px solid ${T.b1}`,color:T.t2,borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:600,cursor:"pointer"}}>{copied?"✓ Copied":"Copy"}</button>
+              </div>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:8}}>Created ({okRefs.length})</div>
+              {refs.map((r,i)=>{
+                const st=status&&status.items?status.items[i]:null;
+                return(
+                  <div key={i} style={{display:"flex",alignItems:"center",gap:10,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"9px 12px",marginBottom:7}}>
+                    <span style={{fontSize:9,fontWeight:700,color:MM_TYPE[r.type]?.color,background:MM_TYPE[r.type]?.bg,padding:"2px 7px",borderRadius:5}}>{MM_TYPE[r.type]?.label}</span>
+                    <span style={{flex:1,fontSize:12.5,color:T.t1}}>{r.title}</span>
+                    {st?<span style={{fontSize:10,fontWeight:700,color:st.done?T.grn:T.amb,background:st.done?T.grnL:T.ambL,padding:"3px 8px",borderRadius:6}}>{st.status}</span>:(r.ok?<span style={{fontSize:11,color:T.grn,fontWeight:600}}>{r.ref||"✓"}</span>:<span style={{fontSize:11,color:T.red}}>Fail</span>)}
+                  </div>
+                );
+              })}
+            </>
+          )}
+          {!committed&&<div style={{fontSize:12,color:T.t4,marginBottom:14}}>Ye meeting abhi review me hai — items create nahi hue.</div>}
+          {meeting.audio_url?(
+            <div style={{marginTop:8,marginBottom:14}}>
+              <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>Recording</div>
+              <audio src={meeting.audio_url} controls style={{width:"100%",height:34}}/>
+            </div>
+          ):null}
+          <div style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6,marginTop:8}}>Transcript</div>
+          <div style={{background:T.surfaceB,border:`1px solid ${T.b1}`,borderRadius:9,padding:"11px 13px",fontSize:12,color:T.t3,lineHeight:1.55,whiteSpace:"pre-wrap"}}>{meeting.transcript||"—"}</div>
+          <div style={{height:16}}/>
+        </div>
+      </div>
+    </>
+  );
+}
+
 // ── MAIN MOM MODULE ────────────────────────────────────────────
 function MOMModule({projectId=null,projectName="",embedded=false}={}){
   const [moms,setMoms]=useState(INIT_MOMS);
   const [selMOM,setSelMOM]=useState(null);
   const [showCreate,setShowCreate]=useState(false);
+  const [showMeetingMode,setShowMeetingMode]=useState(false);
   const [search,setSearch]=useState("");
   const [fSite,setFSite]=useState("All");
   const [fType,setFType]=useState("All");
-  const [view,setView]=useState("cards"); // cards | actions
+  const [view,setView]=useState("cards"); // cards | actions | meetings
+  const [meetings,setMeetings]=useState([]);   // AI Meeting Mode records
+  const [selMeeting,setSelMeeting]=useState(null);
 
   // Project-scoped mode: filter to a single project on the server.
   // Otherwise companywide list.
   const projectScoped = !!projectId;
+  const loadMeetings=()=>{
+    api.get("/meetings"+(projectScoped?`?project_id=${projectId}`:"")).then(r=>{
+      if(r&&r.success&&Array.isArray(r.data)) setMeetings(r.data);
+    }).catch(()=>{});
+  };
   useEffect(()=>{
     const url = projectScoped ? `/mom?project_id=${projectId}` : "/mom";
     api.get(url).then(r=>{
       if(r.success && Array.isArray(r.data)) setMoms(r.data);
     }).catch(()=>{});
+    loadMeetings();
   },[projectId, projectScoped]);
 
   const sites=useMemo(()=>[...new Set(moms.map(m=>m.site).filter(Boolean))],[moms]);
@@ -752,13 +1282,14 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
       <div style={{margin:"0 18px",flexShrink:0}}>
         <div style={{background:T.sb,borderRadius:10,padding:"0 10px",display:"flex",alignItems:"center",gap:6,boxShadow:"0 2px 10px rgba(0,0,0,0.2)"}}>
           {/* View toggle */}
-          {[{id:"cards",l:"All MOMs",I:IcMOM},{id:"actions",l:"Action Tracker",I:IcAction}].map(v=>{
+          {[{id:"cards",l:"All MOMs",I:IcMOM},{id:"actions",l:"Action Tracker",I:IcAction},{id:"meetings",l:"AI Meetings",I:(p)=><Ic {...p} d={MIC_PATH}/>}].map(v=>{
             const ViewIcon=v.I;
             return(
             <button key={v.id} onClick={()=>setView(v.id)}
               style={{display:"flex",alignItems:"center",gap:5,padding:"10px 12px",border:"none",background:"none",fontSize:12.5,fontWeight:view===v.id?600:400,color:view===v.id?"white":"rgba(255,255,255,0.45)",cursor:"pointer",borderBottom:view===v.id?"2px solid #2563EB":"2px solid transparent",transition:"all .15s",whiteSpace:"nowrap"}}>
               <ViewIcon size={13} color="currentColor"/> {v.l}
               {v.id==="actions"&&pendingActionsCount>0&&<span style={{background:T.amb,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{pendingActionsCount}</span>}
+              {v.id==="meetings"&&meetings.filter(m=>m.status!=="committed").length>0&&<span style={{background:T.pur,color:"white",fontSize:9,fontWeight:800,padding:"0 5px",borderRadius:10}}>{meetings.filter(m=>m.status!=="committed").length}</span>}
             </button>
           );})}
           <div style={{flex:1}}/>
@@ -800,6 +1331,11 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
             ]}
             rows={filtered}
           />
+          {/* Meeting Mode (AI) */}
+          <button onClick={()=>setShowMeetingMode(true)} title="AI: record meeting → auto action items"
+            style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.pur,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",whiteSpace:"nowrap"}}>
+            <Ic d={MIC_PATH} size={13} color="white"/> Meeting Mode
+          </button>
           {/* New MOM */}
           <button onClick={()=>setShowCreate(true)}
             style={{display:"flex",alignItems:"center",gap:5,padding:"6px 13px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
@@ -864,11 +1400,38 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
             </div>
           </div>
         )}
+        {/* AI MEETINGS VIEW */}
+        {view==="meetings"&&(
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(320px,1fr))",gap:12}}>
+            {meetings.map(mt=>{
+              const made=(mt.committed_refs||[]).filter(r=>r.ok).length, n=(mt.items||[]).length, committed=mt.status==="committed";
+              return(
+                <div key={mt.id} onClick={()=>setSelMeeting(mt)} style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:"13px 15px",cursor:"pointer",borderLeft:`3px solid ${committed?T.grn:T.amb}`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:7}}>
+                    <div style={{width:30,height:30,borderRadius:8,background:committed?T.grnL:T.purL,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ic d={MIC_PATH} size={15} color={committed?T.grn:T.pur}/></div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:13,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{mt.title||(mt.summary?mt.summary.slice(0,38):"Meeting #"+mt.id)}</div>
+                      <div style={{fontSize:10.5,color:T.t4}}>{fmtDate(mt.created_at)}{mt.project_name?" · "+mt.project_name:""}</div>
+                    </div>
+                  </div>
+                  {mt.summary&&<div style={{fontSize:11.5,color:T.t3,lineHeight:1.45,marginBottom:8,maxHeight:33,overflow:"hidden"}}>{mt.summary}</div>}
+                  <div style={{display:"flex",alignItems:"center",gap:7}}>
+                    {committed?<span style={{fontSize:9.5,fontWeight:700,color:T.grn,background:T.grnL,padding:"3px 8px",borderRadius:6}}>{made} created</span>:<span style={{fontSize:9.5,fontWeight:700,color:T.amb,background:T.ambL,padding:"3px 8px",borderRadius:6}}>{n} to review</span>}
+                    {mt.audio_url&&<span style={{fontSize:9.5,color:T.t4}}>🎙️ audio</span>}
+                  </div>
+                </div>
+              );
+            })}
+            {meetings.length===0&&<div style={{gridColumn:"1/-1",padding:"50px",textAlign:"center",color:T.t4,fontSize:13}}>Abhi koi AI meeting nahi — toolbar me <b>Meeting Mode</b> se shuru karein.</div>}
+          </div>
+        )}
       </div>
 
       {/* Modals */}
+      {selMeeting&&<MeetingDetailModal meeting={selMeeting} onClose={()=>setSelMeeting(null)}/>}
       {selMOM&&<MOMDetailDrawer mom={selMOM} onClose={()=>setSelMOM(null)} onUpdate={updateMOM}/>}
       {showCreate&&<CreateMOMModal projectId={projectId} projectName={projectName} onClose={()=>setShowCreate(false)} onSave={mom=>setMoms(p=>[mom,...p])}/>}
+      {showMeetingMode&&<MeetingModeModal projectId={projectId} projectName={projectName} onClose={()=>{setShowMeetingMode(false); loadMeetings();}} onComplete={mom=>{setMoms(p=>[mom,...p]); loadMeetings();}}/>}
 
       <style>{`
         *{box-sizing:border-box}
@@ -876,6 +1439,7 @@ function MOMModule({projectId=null,projectName="",embedded=false}={}){
         select,input,textarea{font-family:'Segoe UI',system-ui,sans-serif}
         @keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
         @keyframes spin{to{transform:rotate(360deg)}}
+        @keyframes mmpulse{0%,100%{opacity:1}50%{opacity:.3}}
       `}</style>
     </div>
   );

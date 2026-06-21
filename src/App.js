@@ -36,6 +36,7 @@ const ReportsModule      = lazyWithPreload("reports",      () => import("./modul
 const ProjectDetailPage  = lazyWithPreload("projectDetail",() => import("./modules/ProjectDetailPage"));
 const ProjectsPage       = lazyWithPreload("projects",     () => import("./modules/ProjectsModule"));
 const SaaSModule         = lazyWithPreload("saas",         () => import("./modules/SaaSModule"));
+const SaaSLeadsModule    = lazyWithPreload("saas-leads",   () => import("./modules/SaaSLeadsModule"));
 
 // ── PREFETCH: Dashboard load hone ke baad background me sab load karo ──
 // safePreload — wraps preload() so a chunk-load failure on flaky network
@@ -79,6 +80,7 @@ function prefetchAllModules(){
     safePreload("TownshipCRMModule",   TownshipCRMModule);
     safePreload("ReportsModule",       ReportsModule);
     safePreload("SaaSModule",          SaaSModule);
+    safePreload("SaaSLeadsModule",     SaaSLeadsModule);
   }, 2000);
 }
 
@@ -169,6 +171,7 @@ const NAV_GROUPS=[
     {id:"library",  label:"Library",    Icon:IcLib, sc:"L"},
     {id:"settings", label:"Settings",   Icon:IcSet, sc:"S"},
     {id:"saas",     label:"SaaS Admin", Icon:IcStar,badge:"SA",bc:"#7C3AED"},
+    {id:"saas-leads", label:"SaaS Leads", Icon:IcFilter, badge:"NEW", bc:"#0891B2"},
   ]},
 ];
 
@@ -1771,6 +1774,7 @@ export default function App(){
     settings:{title:"Settings",sub:"Configuration"},
     profile:{title:"My Profile",sub:"Your Account"},
     saas:{title:"SaaS Admin",sub:"Platform Management"},
+    "saas-leads":{title:"SaaS Leads",sub:"Sales Pipeline"},
   };
 
   // Check if a module is enabled
@@ -1800,6 +1804,7 @@ export default function App(){
     settings:  <SettingsModule/>,
     profile:   <SettingsModule initialSection="profile"/>,
     saas:     <SaaSModule/>,
+    "saas-leads": <SaaSLeadsModule/>,
   };
 
   const page=PAGES[nav]||PAGES.dashboard;
