@@ -594,7 +594,6 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
 
   // Approval counts for this project
   const [approvalCount, setApprovalCount] = useState(0);
-  const [approvalsByModule, setApprovalsByModule] = useState([]);
   const [showApprovalDrawer, setShowApprovalDrawer] = useState(false);
   const [showSitePulse, setShowSitePulse] = useState(false);
   const [showProjectSettings, setShowProjectSettings] = useState(false);
@@ -603,11 +602,12 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
   const [paymentReq, setPaymentReq] = useState(null);
   const loadApprovalCounts=()=>{
     if(!project?.id) return;
-    api.get("/approvals/counts?project_id="+project.id).then(r=>{
-      if(r.success&&r.data){
-        setApprovalCount(r.data.total||0);
-        setApprovalsByModule(r.data.byModule||[]);
-      }
+    // Badge = items where it's THIS user's turn (scope=my). An item waiting on
+    // someone else (e.g. the PM) must NOT light up the admin's badge — this keeps
+    // the header count in sync with the drawer's "My approvals" view. (Was
+    // /approvals/counts total, which disagreed with the scope=my list.)
+    api.get("/approvals/pending?project_id="+project.id+"&scope=my").then(r=>{
+      if(r.success) setApprovalCount((r.data||[]).length);
     }).catch(()=>{});
   };
   useEffect(()=>{ loadApprovalCounts(); },[project?.id]);
@@ -1001,16 +1001,30 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
   const [loading, setLoading] = useState(true);
   const [acting, setActing] = useState({});
   const [errMsg, setErrMsg] = useState("");
+  const [scope, setScope] = useState("my");   // my (actionable now) | all (whole project queue)
+  // Only admin / super_admin / PM may switch to the "All" view (matches the
+  // backend scope gate). Read the cached user the same way the parent page does.
+  const _cu = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
+  const canSeeAll = ["admin","super_admin","project_manager"].includes(_cu.role);
 
   const load = async () => {
     setLoading(true); setErrMsg("");
     try {
-      const res = await api.get("/approvals/pending?project_id=" + projectId);
+      // Fetch the "all" queue (backend downgrades to "my" for non-admins) so every
+      // item carries a _canActNow flag. The My/All toggle then filters client-side:
+      // an item waiting on someone else (e.g. the PM) shows ONLY under "All",
+      // read-only — it never inflates the actionable "My" count or the badge.
+      const res = await api.get("/approvals/pending?project_id=" + projectId + "&scope=all");
       setItems(res.success ? res.data || [] : []);
     } catch (e) { setErrMsg("Failed to load approvals"); }
     setLoading(false);
   };
   useEffect(() => { load(); }, [projectId]);
+
+  const inScope = (i) => scope === "all" ? true : (i._canActNow !== false);
+  const myCount  = items.filter(i => i._canActNow !== false).length;
+  const allCount = items.length;
+  const visible  = items.filter(inScope);
 
   const fmtAmt = n => n >= 100000 ? "₹" + (n / 100000).toFixed(1) + "L" : n >= 1000 ? "₹" + (n / 1000).toFixed(0) + "K" : "₹" + n;
 
@@ -1057,12 +1071,26 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
     <div style={{ position: "fixed", right: 0, top: 0, bottom: 0, width: 420, background: T.bg, zIndex: 301, boxShadow: "-4px 0 28px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column", fontFamily: "'Segoe UI',sans-serif" }}>
       {/* Header */}
       <div style={{ background: "#0D1B2A", padding: "14px 18px", flexShrink: 0 }}>
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 4 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
           <div style={{ fontSize: 15, fontWeight: 700, color: "white" }}>Pending Approvals</div>
           <button onClick={onClose} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", fontSize: 18, padding: 4 }}>✕</button>
         </div>
+        {/* My Approvals / All toggle — only admin/super_admin/PM (mirrors the
+            global Pending Approvals drawer). "My" = items it's my turn to act on;
+            "All" = whole project queue (items waiting on others are read-only). */}
+        {canSeeAll && (
+          <div style={{ display: "flex", background: "rgba(255,255,255,0.08)", borderRadius: 20, padding: 3, gap: 3, marginBottom: 8 }}>
+            {[{v:"my",label:"My approvals",n:myCount},{v:"all",label:"All",n:allCount}].map(o=>(
+              <button key={o.v} onClick={()=>setScope(o.v)}
+                style={{ flex: 1, padding: "6px", border: "none", borderRadius: 20, cursor: "pointer", fontSize: 11.5, fontWeight: scope===o.v?700:500, background: scope===o.v?T.amb:"transparent", color: scope===o.v?"white":"rgba(255,255,255,0.55)", display:"flex", alignItems:"center", justifyContent:"center", gap:5 }}>
+                {o.label}
+                <span style={{ background: scope===o.v?"rgba(255,255,255,0.28)":"rgba(255,255,255,0.12)", color:"white", fontSize:9.5, fontWeight:700, padding:"1px 6px", borderRadius:10 }}>{o.n}</span>
+              </button>
+            ))}
+          </div>
+        )}
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <span style={{ background: T.amb, color: "white", fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20 }}>{items.length} pending</span>
+          <span style={{ background: T.amb, color: "white", fontSize: 11, fontWeight: 700, padding: "2px 10px", borderRadius: 20 }}>{visible.length} pending</span>
           <span style={{ fontSize: 10.5, color: "rgba(255,255,255,0.4)" }}>{projectName}</span>
           <button onClick={load} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.1)", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.6)", fontSize: 10.5, padding: "3px 9px", borderRadius: 5 }}>↻ Refresh</button>
         </div>
@@ -1072,14 +1100,14 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
       <div style={{ flex: 1, overflowY: "auto", padding: "8px 14px" }}>
         {errMsg && <div style={{ margin: "4px 0 8px", padding: "8px 12px", background: T.redL, border: "1px solid " + T.redM, borderRadius: 7, fontSize: 12, color: T.red }}>{errMsg}</div>}
         {loading && <div style={{ textAlign: "center", padding: "40px", color: T.t4, fontSize: 13 }}>Loading approvals...</div>}
-        {!loading && items.length === 0 && (
+        {!loading && visible.length === 0 && (
           <div style={{ textAlign: "center", padding: "60px 20px" }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>✅</div>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.t2 }}>No pending approvals!</div>
-            <div style={{ fontSize: 12, color: T.t4, marginTop: 4 }}>All approval requests are clear</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.t2 }}>{scope==="my" ? "No pending approvals!" : "Nothing pending"}</div>
+            <div style={{ fontSize: 12, color: T.t4, marginTop: 4 }}>{scope==="my" ? "All approval requests are clear" : "This project's approval queue is empty"}</div>
           </div>
         )}
-        {!loading && items.map(item => {
+        {!loading && visible.map(item => {
           const mc = MOD_COLORS[item.module] || T.slt;
           const act = acting[item.id];
           const src = item._source;
@@ -1110,25 +1138,32 @@ function ProjectApprovalDrawer({projectId, projectName, onClose}){
                   <span style={{ fontSize: 9.5, color: T.t4, marginLeft: 4 }}>Pending: {item.pending_role || "—"}</span>
                 </div>
               )}
-              {/* Action buttons */}
-              <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
-                {src !== "purchase_order" && (
-                  <button onClick={() => handleAction(item, "reject")} disabled={!!act}
-                    style={{ flex: 1, padding: "6px", borderRadius: 6, background: T.redL, border: "1px solid " + T.redM, color: T.red, fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                    {act === "rejecting" ? "..." : "✕ Reject"}
+              {/* Action buttons — only when it's the viewer's turn (_canActNow).
+                  In the "All" view, items waiting on someone else are read-only. */}
+              {item._canActNow === false ? (
+                <div style={{ marginTop: 6, padding: "5px 10px", borderRadius: 6, background: T.amb + "14", border: "1px solid " + T.amb + "55", fontSize: 10.5, color: T.amb, fontWeight: 600, display: "flex", alignItems: "center", gap: 5 }}>
+                  ⏳ Waiting on {item.pending_role || item._waitingOn || "approver"}
+                </div>
+              ) : (
+                <div style={{ display: "flex", gap: 6, marginTop: 6 }}>
+                  {src !== "purchase_order" && (
+                    <button onClick={() => handleAction(item, "reject")} disabled={!!act}
+                      style={{ flex: 1, padding: "6px", borderRadius: 6, background: T.redL, border: "1px solid " + T.redM, color: T.red, fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
+                      {act === "rejecting" ? "..." : "✕ Reject"}
+                    </button>
+                  )}
+                  {src === "design" && (
+                    <button onClick={() => handleAction(item, "Revision")} disabled={!!act}
+                      style={{ flex: 1, padding: "6px", borderRadius: 6, background: "#DBEAFE", border: "1px solid #93C5FD", color: "#1D4ED8", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
+                      ↻ Revision
+                    </button>
+                  )}
+                  <button onClick={() => handleAction(item, "approve")} disabled={!!act}
+                    style={{ flex: 2, padding: "6px", borderRadius: 6, background: act === "approving" ? T.b1 : T.grn, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
+                    {act === "approving" ? "Approving..." : "✓ Approve"}
                   </button>
-                )}
-                {src === "design" && (
-                  <button onClick={() => handleAction(item, "Revision")} disabled={!!act}
-                    style={{ flex: 1, padding: "6px", borderRadius: 6, background: "#DBEAFE", border: "1px solid #93C5FD", color: "#1D4ED8", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                    ↻ Revision
-                  </button>
-                )}
-                <button onClick={() => handleAction(item, "approve")} disabled={!!act}
-                  style={{ flex: 2, padding: "6px", borderRadius: 6, background: act === "approving" ? T.b1 : T.grn, border: "none", color: "white", fontSize: 11, fontWeight: 700, cursor: act ? "not-allowed" : "pointer" }}>
-                  {act === "approving" ? "Approving..." : "✓ Approve"}
-                </button>
-              </div>
+                </div>
+              )}
             </div>
           );
         })}
