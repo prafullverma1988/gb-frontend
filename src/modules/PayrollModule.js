@@ -3582,7 +3582,6 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
               {num:"max_shift_hours",t:"Normal shift",d:"Itne ghante ke baad HI site chhodne pe auto-logout shuru (pehle nahi — worker free aata-jaata hai)",suf:"hours",mn:1,mx:24},
               {tog:"geo_exit_enabled",num:"geo_exit_minutes",t:"Shift ke baad site chhodne pe logout",d:"Shift ke baad itne min continuous site se bahar = auto punch-out (exit time pe)",suf:"min",mn:1,mx:240},
               {num:"hard_cap_hours",t:"Absolute max (safety)",d:"Itne ghante baad har haal me band — app band ya site na chhode tab bhi",suf:"hours",mn:1,mx:48},
-              {tog:"reminder_enabled",num:"reminder_after_hours",t:"Punch-out reminder",d:"Itne ghante baad worker ko 'still punched in' notification",suf:"hours",mn:1,mx:24},
             ].map((row,ri)=>{
               const masterOn=att.autoclose_enabled==="1";
               const dim=!row.master&&!masterOn;
@@ -3613,6 +3612,47 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
                 </div>
               );
             })}
+            {/* Punch-out reminder — has a "when" mode */}
+            <div style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderTop:`1px solid ${T.b1}`,opacity:att.autoclose_enabled==="1"?1:0.45}}>
+              <label style={{position:"relative",display:"inline-block",width:38,height:22,flexShrink:0,marginTop:2}}>
+                <input type="checkbox" checked={att.reminder_enabled==="1"} onChange={e=>setA("reminder_enabled",e.target.checked?"1":"0")} style={{opacity:0,width:0,height:0}}/>
+                <span style={{position:"absolute",cursor:"pointer",inset:0,background:att.reminder_enabled==="1"?T.grn:T.t4,borderRadius:22,transition:".2s"}}>
+                  <span style={{position:"absolute",height:16,width:16,left:att.reminder_enabled==="1"?19:3,top:3,background:"white",borderRadius:"50%",transition:".2s"}}/>
+                </span>
+              </label>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Punch-out reminder</div>
+                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>Worker ko "still punched in" notification — <b>kab bhejni hai</b> choose karo.</div>
+                {att.reminder_enabled==="1" && (
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                    <select value={att.reminder_mode||"after_hours"} onChange={e=>setA("reminder_mode",e.target.value)}
+                      style={{padding:"7px 9px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t1,background:T.surface,outline:"none",fontFamily:"inherit",cursor:"pointer"}}>
+                      <option value="after_hours">Punch-in ke baad (ghante)</option>
+                      <option value="at_shift_end">Shift end pe (normal shift poori hone pe)</option>
+                      <option value="fixed_time">Roz fixed time pe</option>
+                    </select>
+                    {(att.reminder_mode||"after_hours")==="after_hours" && (
+                      <span style={{display:"flex",alignItems:"center",gap:5}}>
+                        <input type="number" min={1} max={24} value={att.reminder_after_hours} onChange={e=>setA("reminder_after_hours",e.target.value)}
+                          style={{width:50,padding:"7px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1,textAlign:"center",outline:"none",fontFamily:"inherit"}}/>
+                        <span style={{fontSize:11,color:T.t3,fontWeight:600}}>hours baad</span>
+                      </span>
+                    )}
+                    {att.reminder_mode==="fixed_time" && (
+                      <span style={{display:"flex",alignItems:"center",gap:5}}>
+                        <span style={{fontSize:11,color:T.t3,fontWeight:600}}>roz</span>
+                        <input type="time" value={att.reminder_time||"18:00"} onChange={e=>setA("reminder_time",e.target.value)}
+                          style={{padding:"6px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:700,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
+                        <span style={{fontSize:11,color:T.t3,fontWeight:600}}>baje</span>
+                      </span>
+                    )}
+                    {att.reminder_mode==="at_shift_end" && (
+                      <span style={{fontSize:11,color:T.t4,fontWeight:600}}>= {att.max_shift_hours||12}h ke baad</span>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
             <button onClick={saveAtt}
               style={{marginTop:14,padding:"10px 24px",borderRadius:8,background:attSaved?T.grn:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
               <IcChk size={14} color="white"/> {attSaved?"Saved!":"Save Attendance Settings"}
