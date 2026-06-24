@@ -3653,6 +3653,33 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
                 )}
               </div>
             </div>
+            {/* Punch-IN reminder (geofence arrival) */}
+            <div style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderTop:`1px solid ${T.b1}`}}>
+              <label style={{position:"relative",display:"inline-block",width:38,height:22,flexShrink:0,marginTop:2}}>
+                <input type="checkbox" checked={att.punchin_reminder_enabled==="1"} onChange={e=>setA("punchin_reminder_enabled",e.target.checked?"1":"0")} style={{opacity:0,width:0,height:0}}/>
+                <span style={{position:"absolute",cursor:"pointer",inset:0,background:att.punchin_reminder_enabled==="1"?T.grn:T.t4,borderRadius:22,transition:".2s"}}>
+                  <span style={{position:"absolute",height:16,width:16,left:att.punchin_reminder_enabled==="1"?19:3,top:3,background:"white",borderRadius:"50%",transition:".2s"}}/>
+                </span>
+              </label>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Punch-IN reminder (site pe aate hi)</div>
+                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>Worker site fence ke andar aaye + punched-in na ho → <b>soft-vibration</b> reminder ([Punch In]/[Skip]). App khulne/resume pe check.</div>
+                {att.punchin_reminder_enabled==="1" && (
+                  <div style={{display:"flex",alignItems:"center",gap:7,marginTop:8,flexWrap:"wrap"}}>
+                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>Window</span>
+                    <input type="time" value={att.punchin_window_start||"06:00"} onChange={e=>setA("punchin_window_start",e.target.value)}
+                      style={{padding:"6px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:700,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
+                    <span style={{fontSize:11,color:T.t3}}>se</span>
+                    <input type="time" value={att.punchin_window_end||"20:00"} onChange={e=>setA("punchin_window_end",e.target.value)}
+                      style={{padding:"6px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:700,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
+                    <span style={{fontSize:11,color:T.t3,fontWeight:600,marginLeft:4}}>· har</span>
+                    <input type="number" min={1} max={12} value={att.punchin_cooldown_hours} onChange={e=>setA("punchin_cooldown_hours",e.target.value)}
+                      style={{width:46,padding:"7px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1,textAlign:"center",outline:"none",fontFamily:"inherit"}}/>
+                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>ghante me ek baar</span>
+                  </div>
+                )}
+              </div>
+            </div>
             <button onClick={saveAtt}
               style={{marginTop:14,padding:"10px 24px",borderRadius:8,background:attSaved?T.grn:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
               <IcChk size={14} color="white"/> {attSaved?"Saved!":"Save Attendance Settings"}
