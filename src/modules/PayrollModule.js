@@ -3574,33 +3574,45 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
             <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Attendance & Auto Punch-Out</span>
           </div>
           <div style={{padding:"16px"}}>
-            <div style={{fontSize:11.5,color:T.t3,marginBottom:6,lineHeight:1.6}}>
-              Worker punch-out karna bhool jaye to system khud handle karega — har auto-close <b>HR review queue</b> me jata hai (Attendance tab), salary se pehle review zaroori.
+            <div style={{fontSize:11.5,color:T.t3,marginBottom:8,lineHeight:1.6}}>
+              Worker din bhar site se <b>aata-jaata</b> reh sakta hai — koi auto-logout nahi. Sirf <b>normal shift poori hone ke baad</b> agar wo site chhod de to auto punch-out. App band ho / site na chhode to <b>absolute max</b> backstop. Har auto-close <b>HR review queue</b> me jata hai.
             </div>
             {[
-              {k:"autoclose_enabled",nk:"max_shift_hours",t:"Auto-close long sessions",d:"Itne ghante se zyada open session khud band (out-time = last GPS ping)",suf:"hours",mn:1,mx:24},
-              {k:"geo_exit_enabled",nk:"geo_exit_minutes",t:"Site se bahar → auto punch-out",d:"Fence se itne min continuous bahar = auto punch-out (exit time pe)",suf:"min",mn:1,mx:240},
-              {k:"reminder_enabled",nk:"reminder_after_hours",t:"Punch-out reminder",d:"Itne ghante baad worker ko 'still punched in' notification",suf:"hours",mn:1,mx:24},
-            ].map(row=>(
-              <div key={row.k} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderTop:`1px solid ${T.b1}`}}>
-                <label style={{position:"relative",display:"inline-block",width:38,height:22,flexShrink:0,marginTop:2}}>
-                  <input type="checkbox" checked={att[row.k]==="1"} onChange={e=>setA(row.k,e.target.checked?"1":"0")} style={{opacity:0,width:0,height:0}}/>
-                  <span style={{position:"absolute",cursor:"pointer",inset:0,background:att[row.k]==="1"?T.grn:T.t4,borderRadius:22,transition:".2s"}}>
-                    <span style={{position:"absolute",height:16,width:16,left:att[row.k]==="1"?19:3,top:3,background:"white",borderRadius:"50%",transition:".2s"}}/>
-                  </span>
-                </label>
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{row.t}</div>
-                  <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>{row.d}</div>
+              {tog:"autoclose_enabled",t:"Auto punch-out",d:"Master switch — neeche ka poora logic on/off",master:true},
+              {num:"max_shift_hours",t:"Normal shift",d:"Itne ghante ke baad HI site chhodne pe auto-logout shuru (pehle nahi — worker free aata-jaata hai)",suf:"hours",mn:1,mx:24},
+              {tog:"geo_exit_enabled",num:"geo_exit_minutes",t:"Shift ke baad site chhodne pe logout",d:"Shift ke baad itne min continuous site se bahar = auto punch-out (exit time pe)",suf:"min",mn:1,mx:240},
+              {num:"hard_cap_hours",t:"Absolute max (safety)",d:"Itne ghante baad har haal me band — app band ya site na chhode tab bhi",suf:"hours",mn:1,mx:48},
+              {tog:"reminder_enabled",num:"reminder_after_hours",t:"Punch-out reminder",d:"Itne ghante baad worker ko 'still punched in' notification",suf:"hours",mn:1,mx:24},
+            ].map((row,ri)=>{
+              const masterOn=att.autoclose_enabled==="1";
+              const dim=!row.master&&!masterOn;
+              const togOn=row.tog?att[row.tog]==="1":true;
+              const numOn=(row.master?true:masterOn)&&togOn;
+              return(
+                <div key={ri} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderTop:`1px solid ${T.b1}`,opacity:dim?0.45:1}}>
+                  {row.tog?(
+                    <label style={{position:"relative",display:"inline-block",width:38,height:22,flexShrink:0,marginTop:2}}>
+                      <input type="checkbox" checked={att[row.tog]==="1"} onChange={e=>setA(row.tog,e.target.checked?"1":"0")} style={{opacity:0,width:0,height:0}}/>
+                      <span style={{position:"absolute",cursor:"pointer",inset:0,background:att[row.tog]==="1"?T.grn:T.t4,borderRadius:22,transition:".2s"}}>
+                        <span style={{position:"absolute",height:16,width:16,left:att[row.tog]==="1"?19:3,top:3,background:"white",borderRadius:"50%",transition:".2s"}}/>
+                      </span>
+                    </label>
+                  ):<span style={{width:38,flexShrink:0}}/>}
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{row.t}</div>
+                    <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>{row.d}</div>
+                  </div>
+                  {row.num?(
+                    <div style={{display:"flex",alignItems:"center",gap:5,opacity:numOn?1:0.4}}>
+                      <input type="number" min={row.mn} max={row.mx} value={att[row.num]} disabled={!numOn}
+                        onChange={e=>setA(row.num,e.target.value)}
+                        style={{width:52,padding:"7px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1,textAlign:"center",outline:"none",fontFamily:"inherit"}}/>
+                      <span style={{fontSize:11,color:T.t3,fontWeight:600}}>{row.suf}</span>
+                    </div>
+                  ):null}
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:5,opacity:att[row.k]==="1"?1:0.4}}>
-                  <input type="number" min={row.mn} max={row.mx} value={att[row.nk]} disabled={att[row.k]!=="1"}
-                    onChange={e=>setA(row.nk,e.target.value)}
-                    style={{width:52,padding:"7px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1,textAlign:"center",outline:"none",fontFamily:"inherit"}}/>
-                  <span style={{fontSize:11,color:T.t3,fontWeight:600}}>{row.suf}</span>
-                </div>
-              </div>
-            ))}
+              );
+            })}
             <button onClick={saveAtt}
               style={{marginTop:14,padding:"10px 24px",borderRadius:8,background:attSaved?T.grn:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
               <IcChk size={14} color="white"/> {attSaved?"Saved!":"Save Attendance Settings"}
