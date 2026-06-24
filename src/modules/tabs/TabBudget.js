@@ -61,6 +61,21 @@ export default function TabBudget({ project }) {
     walk(0, 0); return out;
   }, [tasks]);
 
+  // per-task: is it covered by a budgeted ancestor, or does it have a budgeted descendant?
+  const flags = useMemo(() => {
+    const byId = {}; tasks.forEach((t) => (byId[t.id] = t));
+    const kids = {}; tasks.forEach((t) => { const p = t.parent_id || 0; (kids[p] = kids[p] || []).push(t); });
+    const out = {};
+    tasks.forEach((t) => {
+      let p = t.parent_id, cover = null; const guard = new Set([t.id]);
+      while (p && byId[p] && !guard.has(p)) { if (byId[p].is_budget_node) { cover = byId[p]; break; } guard.add(p); p = byId[p].parent_id; }
+      let hasDesc = false; const st = [...(kids[t.id] || [])];
+      while (st.length) { const c = st.pop(); if (c.is_budget_node) { hasDesc = true; break; } (kids[c.id] || []).forEach((x) => st.push(x)); }
+      out[t.id] = { cover, hasDesc };
+    });
+    return out;
+  }, [tasks]);
+
   const openTask = async (id) => {
     const row = tasks.find((t) => t.id === id);
     setSelRoll(Number(row?.roll_pct || 0)); setSelKids(!!row?.has_children); setSelNode(!!row?.is_budget_node);
@@ -177,16 +192,22 @@ export default function TabBudget({ project }) {
               <tbody>
                 {tree.map((t) => {
                   const node = t.is_budget_node;
+                  const fl = flags[t.id] || {};
+                  const canBudget = node || (!fl.cover && !fl.hasDesc);
                   const v = Number(t.variance || 0);
+                  const onRow = canBudget ? () => openTask(t.id)
+                    : () => flash(fl.cover ? `Covered by ${fl.cover.task_no} — budget at that level` : "A sub-task already has a budget — remove it first", "error");
                   return (
-                    <tr key={t.id} onClick={() => openTask(t.id)} style={{ cursor: "pointer", background: node ? "transparent" : T.surface }}
+                    <tr key={t.id} onClick={onRow} style={{ cursor: canBudget ? "pointer" : "not-allowed", background: "transparent" }}
                       onMouseEnter={(e) => e.currentTarget.style.background = T.surfaceB}
                       onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                       <td style={{ ...td, paddingLeft: 10 + t._d * 18 }}>
                         <span style={{ color: T.t4, marginRight: 6, fontSize: 11 }}>{t.task_no}</span>
                         <span style={{ fontWeight: node ? 700 : 400, color: node ? T.t1 : T.t3 }}>{t.name}</span>
                         {node ? <span style={{ marginLeft: 7, fontSize: 9, color: T.blu, background: T.bluL, padding: "1px 6px", borderRadius: 10, fontWeight: 700 }}>BUDGET{t.roll_pct != null ? " · " + t.roll_pct + "%" : ""}</span>
-                              : <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>operational</span>}
+                          : fl.cover ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>↳ covered by {fl.cover.task_no}</span>
+                          : fl.hasDesc ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.amb }}>has budgeted sub-task</span>
+                          : <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>operational</span>}
                       </td>
                       <td style={{ ...td, color: T.t3 }}>{node ? (t.unit || "—") : ""}</td>
                       <td style={{ ...td, textAlign: "right", fontWeight: node ? 600 : 400, color: node ? T.t1 : T.t4 }}>{node ? inr(t.scope_amt) : ""}</td>
@@ -194,7 +215,7 @@ export default function TabBudget({ project }) {
                       <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? inr(t.earned) : ""}</td>
                       <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? (Number(t.actual_amt) ? inr(t.actual_amt) : "—") : ""}</td>
                       <td style={{ ...td, textAlign: "right", fontWeight: 700, color: node ? (v >= 0 ? T.grn : T.red) : T.t4 }}>{node ? inr(v) : ""}</td>
-                      <td style={{ ...td, textAlign: "center", color: T.blu }}>{node ? "›" : <span style={{ fontSize: 10.5, color: T.t4 }}>+ budget</span>}</td>
+                      <td style={{ ...td, textAlign: "center" }}>{node ? <span style={{ color: T.blu }}>›</span> : canBudget ? <span style={{ fontSize: 10.5, color: T.blu }}>+ budget</span> : <span style={{ fontSize: 10.5, color: T.t4 }}>—</span>}</td>
                     </tr>
                   );
                 })}
