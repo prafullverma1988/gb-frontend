@@ -63,18 +63,16 @@ export default function TabBudget({ project }) {
     return kids;
   }, [tasks]);
 
-  // depth-first ordered tree — respects collapse (fold) + level filter
+  // depth-first ordered tree — driven purely by the collapse map
   const tree = useMemo(() => {
-    const maxDepth = levelFilter === "All" ? Infinity : parseInt(levelFilter, 10) - 1;
     const out = [];
     const walk = (pid, d) => (kidsMap[pid] || []).forEach((t) => {
       out.push({ ...t, _d: d, _hasKids: !!(kidsMap[t.id] && kidsMap[t.id].length) });
-      if (d >= maxDepth) return;                              // level filter cap
-      if (levelFilter === "All" && collapsed[t.id]) return;   // manual fold
+      if (collapsed[t.id]) return;                            // folded — skip its subtree
       walk(t.id, d + 1);
     });
     walk(0, 0); return out;
-  }, [kidsMap, collapsed, levelFilter]);
+  }, [kidsMap, collapsed]);
 
   // level dropdown metadata: depth → label + cumulative count (full tree)
   const levelMeta = useMemo(() => {
@@ -94,9 +92,22 @@ export default function TabBudget({ project }) {
   }, [kidsMap]);
 
   const allParentIds = useMemo(() => Object.keys(kidsMap).filter((k) => k !== "0"), [kidsMap]);
-  const toggleCollapse = (id) => setCollapsed((p) => ({ ...p, [id]: !p[id] }));
-  const collapseAll = () => { const c = {}; allParentIds.forEach((id) => (c[id] = true)); setCollapsed(c); };
-  const expandAll = () => setCollapsed({});
+  const toggleCollapse = (id) => { setCollapsed((p) => ({ ...p, [id]: !p[id] })); setLevelFilter("custom"); };
+  const collapseAll = () => { const c = {}; allParentIds.forEach((id) => (c[id] = true)); setCollapsed(c); setLevelFilter("custom"); };
+  const expandAll = () => { setCollapsed({}); setLevelFilter("All"); };
+  // dropdown = "collapse to this level" preset; per-row chevrons still drill in afterwards
+  const applyLevel = (val) => {
+    setLevelFilter(val);
+    if (val === "All") return setCollapsed({});
+    if (val === "custom") return;
+    const maxVisible = parseInt(val, 10) - 1;   // deepest depth kept open
+    const c = {};
+    const walk = (pid, d) => (kidsMap[pid] || []).forEach((t) => {
+      if (kidsMap[t.id] && kidsMap[t.id].length && d >= maxVisible) c[t.id] = true;
+      walk(t.id, d + 1);
+    });
+    walk(0, 0); setCollapsed(c);
+  };
 
   // per-task: is it covered by a budgeted ancestor, or does it have a budgeted descendant?
   const flags = useMemo(() => {
@@ -208,15 +219,16 @@ export default function TabBudget({ project }) {
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>Tasks <span style={{ fontSize: 12, fontWeight: 400, color: T.t4 }}>· {totals.budget_nodes || 0} budgeted</span></div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)}
+          <select value={levelFilter} onChange={(e) => applyLevel(e.target.value)}
             style={{ height: 32, padding: "0 10px", borderRadius: 7, border: `1.5px solid ${levelFilter !== "All" ? T.blu : T.b1}`, background: levelFilter !== "All" ? T.bluL : T.surface, color: levelFilter !== "All" ? T.blu : T.t2, fontSize: 11.5, fontWeight: levelFilter !== "All" ? 700 : 400, fontFamily: "inherit", cursor: "pointer", outline: "none" }}>
             <option value="All">All Levels ({tasks.length})</option>
             {levelMeta.map((lv) => (
               <option key={lv.depth} value={String(lv.depth + 1)}>L{lv.depth + 1} — {lv.label}{lv.depth > 0 ? " (upto)" : ""} ({lv.cum})</option>
             ))}
+            {levelFilter === "custom" && <option value="custom">Custom view</option>}
           </select>
-          <button onClick={collapseAll} disabled={levelFilter !== "All"} title="Collapse all" style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: levelFilter !== "All" ? "default" : "pointer", fontSize: 13, fontFamily: "inherit", opacity: levelFilter !== "All" ? 0.45 : 1 }}>⊟</button>
-          <button onClick={expandAll} disabled={levelFilter !== "All"} title="Expand all" style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: levelFilter !== "All" ? "default" : "pointer", fontSize: 13, fontFamily: "inherit", opacity: levelFilter !== "All" ? 0.45 : 1 }}>⊞</button>
+          <button onClick={collapseAll} title="Collapse all" style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>⊟</button>
+          <button onClick={expandAll} title="Expand all" style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: "pointer", fontSize: 13, fontFamily: "inherit" }}>⊞</button>
           <button onClick={load} style={{ height: 32, padding: "0 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>↻ Refresh</button>
         </div>
       </div>
@@ -243,19 +255,20 @@ export default function TabBudget({ project }) {
                   const fl = flags[t.id] || {};
                   const canBudget = node || (!fl.cover && !fl.hasDesc);
                   const v = Number(t.variance || 0);
-                  const onRow = canBudget ? () => openTask(t.id)
+                  const openDrawer = canBudget ? () => openTask(t.id)
                     : () => flash(fl.cover ? `Covered by ${fl.cover.task_no} — budget at that level` : "A sub-task already has a budget — remove it first", "error");
+                  const rowClick = t._hasKids ? () => toggleCollapse(t.id) : openDrawer;  // parents expand, leaves open the drawer
                   return (
-                    <tr key={t.id} onClick={onRow} style={{ cursor: canBudget ? "pointer" : "not-allowed", background: "transparent" }}
+                    <tr key={t.id} onClick={rowClick} style={{ cursor: (t._hasKids || canBudget) ? "pointer" : "not-allowed", background: "transparent" }}
                       onMouseEnter={(e) => e.currentTarget.style.background = T.surfaceB}
                       onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                       <td style={{ ...td, paddingLeft: 10 + t._d * 18 }}>
-                        {t._hasKids && levelFilter === "All"
-                          ? <span onClick={(e) => { e.stopPropagation(); toggleCollapse(t.id); }} style={{ display: "inline-block", width: 15, marginRight: 3, color: T.t3, cursor: "pointer", fontSize: 10, textAlign: "center" }}>{collapsed[t.id] ? "▸" : "▾"}</span>
-                          : <span style={{ display: "inline-block", width: 15, marginRight: 3 }} />}
+                        {t._hasKids
+                          ? <span onClick={(e) => { e.stopPropagation(); toggleCollapse(t.id); }} title={collapsed[t.id] ? "Expand" : "Collapse"} style={{ display: "inline-block", width: 18, marginRight: 4, color: T.t2, cursor: "pointer", fontSize: 11, textAlign: "center", userSelect: "none" }}>{collapsed[t.id] ? "▶" : "▼"}</span>
+                          : <span style={{ display: "inline-block", width: 18, marginRight: 4 }} />}
                         <span style={{ color: T.t4, marginRight: 6, fontSize: 11 }}>{t.task_no}</span>
                         <span style={{ fontWeight: node ? 700 : 400, color: node ? T.t1 : T.t3 }}>{t.name}</span>
-                        {collapsed[t.id] && levelFilter === "All" && descCount[t.id] ? <span style={{ marginLeft: 6, fontSize: 10, color: T.t4 }}>+{descCount[t.id]}</span> : null}
+                        {collapsed[t.id] && descCount[t.id] ? <span style={{ marginLeft: 6, fontSize: 10, color: T.t4 }}>+{descCount[t.id]}</span> : null}
                         {node ? <span style={{ marginLeft: 7, fontSize: 9, color: T.blu, background: T.bluL, padding: "1px 6px", borderRadius: 10, fontWeight: 700 }}>BUDGET{t.roll_pct != null ? " · " + t.roll_pct + "%" : ""}</span>
                           : fl.cover ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>↳ covered by {fl.cover.task_no}</span>
                           : fl.hasDesc ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.amb }}>has budgeted sub-task</span>
@@ -267,7 +280,7 @@ export default function TabBudget({ project }) {
                       <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? inr(t.earned) : ""}</td>
                       <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? (Number(t.actual_amt) ? inr(t.actual_amt) : "—") : ""}</td>
                       <td style={{ ...td, textAlign: "right", fontWeight: 700, color: node ? (v >= 0 ? T.grn : T.red) : T.t4 }}>{node ? inr(v) : ""}</td>
-                      <td style={{ ...td, textAlign: "center" }}>{node ? <span style={{ color: T.blu }}>›</span> : canBudget ? <span style={{ fontSize: 10.5, color: T.blu }}>+ budget</span> : <span style={{ fontSize: 10.5, color: T.t4 }}>—</span>}</td>
+                      <td style={{ ...td, textAlign: "center" }} onClick={(e) => { e.stopPropagation(); openDrawer(); }}>{node ? <span style={{ color: T.blu, cursor: "pointer" }}>open ›</span> : canBudget ? <span style={{ fontSize: 10.5, color: T.blu, cursor: "pointer", whiteSpace: "nowrap" }}>+ budget</span> : <span style={{ fontSize: 10.5, color: T.t4 }}>—</span>}</td>
                     </tr>
                   );
                 })}
