@@ -18,6 +18,7 @@ import { Pill, PBar, Stat, Panel, PHead, THead, AddBtn, SecBtn, FilterTabs, TabI
 
 // ── TAB CODE-SPLITTING — each tab chunk loads on first open ──────────
 const TabEstimate    = lazy(() => import("./tabs/TabEstimate"));
+const TabBudget      = lazy(() => import("./tabs/TabBudget"));
 const TabTasks       = lazy(() => import("./tabs/TabTasks"));
 const TabSubcon      = lazy(() => import("./tabs/TabSubcon"));
 const TabMaterial    = lazy(() => import("./tabs/TabMaterial"));
@@ -146,6 +147,7 @@ const TABS = [
   {id:"overview",   label:"Overview",    key:"o", Icon:IcOverview},
   {id:"design",     label:"Design",      key:"d", Icon:IcDesign},
   {id:"estimate",   label:"Estimate",    key:"e", Icon:IcEstimate},
+  {id:"budget",     label:"Budget",      key:"g", Icon:IcEstimate},
   {id:"party",      label:"Party",       key:"p", Icon:IcParty},
   {id:"transaction",label:"Transaction", key:"t", Icon:IcTrans},
   {id:"todo",       label:"To Do",       key:"k", Icon:IcTodo},
@@ -680,6 +682,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     overview:    <TabOverview    proj={project} onRequestPayment={()=>setPaymentReq({})}/>,
     design:      <TabDesign project={project} isAdmin={isAdmin}/>,
     estimate:    <TabEstimate project={project}/>,
+    budget:      <TabBudget project={project}/>,
     party:       <TabParty projectId={project.id} projectName={project.name}/>,
     transaction: <TabTransaction projectId={project.id} projectName={project.name}/>,
     todo:        <TabTodo projectId={project.id}/>,
