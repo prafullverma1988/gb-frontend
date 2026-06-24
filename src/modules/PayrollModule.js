@@ -1007,6 +1007,8 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
 function PunchReviewStrip({onActed}){
   const [rows,setRows]=useState([]);
   const [acting,setActing]=useState(null);
+  const [openId,setOpenId]=useState(null);          // session whose day-timeline is expanded
+  const [tl,setTl]=useState({});                    // { [sessionId]: {loading,pings} }
   const load=useCallback(()=>{
     api.get("/attendance-sessions/pending-review").then(r=>{
       if(r.success) setRows(r.data||[]);
@@ -1022,6 +1024,17 @@ function PunchReviewStrip({onActed}){
     }catch(e){ alert(e.message); }
     setActing(null);
   };
+  const toggleTimeline=async(id)=>{
+    if(openId===id){ setOpenId(null); return; }
+    setOpenId(id);
+    if(!tl[id]){
+      setTl(p=>({...p,[id]:{loading:true,pings:[]}}));
+      try{
+        const r=await api.get(`/attendance-sessions/timeline/${id}`);
+        setTl(p=>({...p,[id]:{loading:false,pings:(r.success&&r.data&&r.data.pings)||[]}}));
+      }catch(e){ setTl(p=>({...p,[id]:{loading:false,pings:[]}})); }
+    }
+  };
   if(!rows.length) return null;
   return(
     <div style={{background:"#F0FDFA",border:"2px dashed #0D9488",borderRadius:10,padding:"11px 14px",marginBottom:12}}>
@@ -1029,24 +1042,50 @@ function PunchReviewStrip({onActed}){
         📍 Punch Review — {rows.length} geofence ke bahar
       </div>
       <div style={{display:"flex",flexDirection:"column",gap:7}}>
-        {rows.map(s=>(
-          <div key={s.id} style={{background:T.surface,border:"1px solid #99F6E4",borderRadius:8,padding:"8px 11px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-            <div style={{flex:1,minWidth:180}}>
-              <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{s.user_name||"Staff"} {s.project_name&&<span style={{fontWeight:400,color:T.t3}}>· {s.project_name}</span>}</div>
-              <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>
-                🕐 {s.punch_in_at?new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
-                {s.punch_in_lat!=null&&<>
+        {rows.map(s=>{
+          const t=tl[s.id];
+          return(
+          <div key={s.id} style={{background:T.surface,border:"1px solid #99F6E4",borderRadius:8,padding:"8px 11px"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:180}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>{s.user_name||"Staff"} {s.project_name&&<span style={{fontWeight:400,color:T.t3}}>· {s.project_name}</span>}</div>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>
+                  🕐 {s.punch_in_at?new Date(s.punch_in_at).toLocaleString("en-IN",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—"}
+                  {s.punch_in_lat!=null&&<>
+                    {" · "}
+                    <a href={`https://www.google.com/maps?q=${s.punch_in_lat},${s.punch_in_lng}`} target="_blank" rel="noreferrer" style={{color:"#0D9488",fontWeight:600,textDecoration:"none"}}>📍 map ↗</a>
+                  </>}
                   {" · "}
-                  <a href={`https://www.google.com/maps?q=${s.punch_in_lat},${s.punch_in_lng}`} target="_blank" rel="noreferrer" style={{color:"#0D9488",fontWeight:600,textDecoration:"none"}}>📍 map ↗</a>
-                </>}
+                  <button onClick={()=>toggleTimeline(s.id)} style={{background:"none",border:"none",color:"#0D9488",fontWeight:600,fontSize:10.5,cursor:"pointer",padding:0}}>🗺️ {openId===s.id?"hide timeline":"din ka timeline"}</button>
+                </div>
+                {s.out_reason&&<div style={{fontSize:10.5,color:T.t2,marginTop:2}}>📝 <b>Reason:</b> {s.out_reason}</div>}
               </div>
+              <button disabled={acting===s.id} onClick={()=>act(s.id,"reject")}
+                style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
+              <button disabled={acting===s.id} onClick={()=>act(s.id,"approve")}
+                style={{padding:"5px 13px",borderRadius:6,background:"#0D9488",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===s.id?"…":"✓ Approve"}</button>
             </div>
-            <button disabled={acting===s.id} onClick={()=>act(s.id,"reject")}
-              style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
-            <button disabled={acting===s.id} onClick={()=>act(s.id,"approve")}
-              style={{padding:"5px 13px",borderRadius:6,background:"#0D9488",border:"none",color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===s.id?"…":"✓ Approve"}</button>
+            {openId===s.id&&(
+              <div style={{marginTop:8,paddingTop:8,borderTop:"1px dashed #99F6E4"}}>
+                {t&&t.loading?(
+                  <div style={{fontSize:10.5,color:T.t4}}>Timeline load ho raha…</div>
+                ):(t&&t.pings&&t.pings.length?(
+                  <div style={{display:"flex",flexDirection:"column",gap:3,maxHeight:160,overflowY:"auto"}}>
+                    <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:2}}>Us din ka GPS timeline ({t.pings.length} points):</div>
+                    {t.pings.map((p,i)=>(
+                      <div key={i} style={{fontSize:10,color:T.t3,fontFamily:"monospace",display:"flex",gap:8}}>
+                        <span style={{color:T.t4}}>{p.ts?new Date(p.ts).toLocaleTimeString("en-IN",{hour:"2-digit",minute:"2-digit"}):("#"+(i+1))}</span>
+                        <a href={`https://www.google.com/maps?q=${p.lat},${p.lng}`} target="_blank" rel="noreferrer" style={{color:"#0D9488",textDecoration:"none"}}>{Number(p.lat).toFixed(5)}, {Number(p.lng).toFixed(5)} ↗</a>
+                      </div>
+                    ))}
+                  </div>
+                ):(
+                  <div style={{fontSize:10.5,color:T.t4}}>Koi GPS ping nahi mili is session me (sirf punch-in location upar map link me hai).</div>
+                ))}
+              </div>
+            )}
           </div>
-        ))}
+        );})}
       </div>
     </div>
   );
@@ -4648,7 +4687,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
   if(!isAdmin) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Create Salary run is only accessible to admins.</div>;
   if(loading) return <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Loading payroll run…</div>;
 
-  const errs=pre?(pre.pendingLeaves.length>0?1:0)+(pre.pendingAttEdits.length>0?1:0):0;
+  const errs=pre?(pre.pendingLeaves.length>0?1:0)+(pre.pendingAttEdits.length>0?1:0)+((pre.pendingReviews&&pre.pendingReviews.length>0)?1:0):0;
   const warns=pre?(pre.unmarkedStaff.length>0?1:0)+(pre.zeroSalaryStaff.length>0?1:0):0;
 
   return(
@@ -4675,6 +4714,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
             {[
               pre.pendingLeaves.length>0&&{type:"error",label:`${pre.pendingLeaves.length} leave application(s) pending approval`,sub:pre.pendingLeaves.slice(0,3).map(l=>`${l.staff_name} (${l.leave_name})`).join(" · "),action:"Review Leaves",go:"office-leave"},
               pre.pendingAttEdits.length>0&&{type:"error",label:`${pre.pendingAttEdits.length} attendance edit request(s) pending`,sub:"Approve/reject in Attendance tab",action:"Open Attendance",go:"office-att"},
+              pre.pendingReviews&&pre.pendingReviews.length>0&&{type:"error",label:`${pre.pendingReviews.length} outside-geofence punch(es) review pending`,sub:pre.pendingReviews.slice(0,3).map(r=>`${r.user_name}${r.out_reason?" ("+r.out_reason+")":""}`).join(" · ")+" — salary finalize ke liye review compulsory",action:"Review Punches",go:"office-att"},
               pre.unmarkedStaff.length>0&&{type:"warn",label:`${pre.unmarkedStaff.length} staff ke unmarked days hain`,sub:pre.unmarkedStaff.slice(0,3).map(s=>`${s.name} (${s.unmarkedDays}d)`).join(" · ")+" — unmarked = no pay",action:"Open Attendance",go:"office-att"},
               pre.zeroSalaryStaff.length>0&&{type:"warn",label:`${pre.zeroSalaryStaff.length} staff ki salary structure incomplete`,sub:pre.zeroSalaryStaff.slice(0,3).map(s=>s.name).join(" · ")+" — ₹0 salary banegi",action:"Edit Staff",go:"office-salary"},
               {type:"ok",label:"GPS punch data synced",sub:`${pre.punchSessionCount} mobile sessions is month — grid me merged`},
