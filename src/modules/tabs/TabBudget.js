@@ -1,13 +1,12 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import api from "../../config/api";
 import { T } from "../shared/tokens";
 
-// ── Budget tab — task-wise + project-wise cost estimate + variance ──
-// P1: per-task rate analysis (Material/Labour/Machinery/Overhead),
-//     coefficient-based (qty/unit × scope qty) → estimate (cost).
-// P2: record DPR progress (done qty + actual M/L/Mc/Expense, Fill-from-
-//     estimate) → variance (planned vs actual). Additive; existing DPR
-//     free-text untouched.
+// ── Budget tab — budget at chosen nodes, earned-value tracking ──
+// Budget lives on chosen "budget nodes" (usually parent/milestone tasks).
+// Sub-tasks below are OPERATIONAL (scheduling/progress only, no budget).
+// Each node's % rolls up from its descendant leaves (duration-weighted) →
+// earned = estimate × % → vs actual (DPR) → variance. Additive.
 
 const CATS = [
   { id: "material",  label: "Material",  c: T.blu },
@@ -22,7 +21,7 @@ const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(
 export default function TabBudget({ project }) {
   const projectId = project?.id;
   const [tasks, setTasks]   = useState([]);
-  const [totals, setTotals] = useState({ scope: 0, estimate: 0, margin: 0, margin_pct: 0 });
+  const [totals, setTotals] = useState({});
   const [units, setUnits]   = useState([]);
   const [loading, setLoading] = useState(true);
   const [sel, setSel]       = useState(null);
@@ -30,11 +29,13 @@ export default function TabBudget({ project }) {
   const [lines, setLines]   = useState([]);
   const [byCat, setByCat]   = useState({});
   const [progress, setProgress] = useState([]);
+  const [selRoll, setSelRoll] = useState(0);
+  const [selKids, setSelKids] = useState(false);
+  const [selNode, setSelNode] = useState(false);
   const [cat, setCat]       = useState("material");
-  const [mode, setMode]     = useState("plan");      // plan | actuals
+  const [mode, setMode]     = useState("plan");
   const [saving, setSaving] = useState(false);
   const [toast, setToast]   = useState(null);
-  // progress-entry form
   const [pDate, setPDate]   = useState(today());
   const [pDone, setPDone]   = useState("");
   const [pLines, setPLines] = useState([]);
@@ -51,7 +52,18 @@ export default function TabBudget({ project }) {
   }, [projectId]);
   useEffect(() => { load(); }, [load]);
 
+  // depth-first ordered tree for display
+  const tree = useMemo(() => {
+    const ids = new Set(tasks.map((t) => t.id));
+    const kids = {};
+    tasks.forEach((t) => { const p = (t.parent_id && ids.has(t.parent_id)) ? t.parent_id : 0; (kids[p] = kids[p] || []).push(t); });
+    const out = []; const walk = (pid, d) => (kids[pid] || []).forEach((t) => { out.push({ ...t, _d: d }); walk(t.id, d + 1); });
+    walk(0, 0); return out;
+  }, [tasks]);
+
   const openTask = async (id) => {
+    const row = tasks.find((t) => t.id === id);
+    setSelRoll(Number(row?.roll_pct || 0)); setSelKids(!!row?.has_children); setSelNode(!!row?.is_budget_node);
     const r = await api.get(`/budget/task/${id}`);
     if (!r?.success) return flash(r?.message || "Failed to open", "error");
     setHdr({ ...r.data.task });
@@ -63,7 +75,7 @@ export default function TabBudget({ project }) {
     setSel(id);
   };
 
-  // ── estimate (plan) calcs ──
+  // estimate (plan)
   const scope = Number(hdr?.scope_qty || 0);
   const lineQty = (l) => Number(l.qty_per_unit || 0) * scope;
   const lineAmt = (l) => lineQty(l) * Number(l.rate || 0);
@@ -78,7 +90,7 @@ export default function TabBudget({ project }) {
     setSaving(true);
     const h = await api.patch(`/budget/task/${sel}`, {
       unit: hdr.unit, scope_qty: hdr.scope_qty, billing_rate: hdr.billing_rate,
-      stage: hdr.stage, stage_order: hdr.stage_order, non_billable_ra: hdr.non_billable_ra ? 1 : 0,
+      stage: hdr.stage, stage_order: hdr.stage_order, non_billable_ra: hdr.non_billable_ra ? 1 : 0, is_budget_node: 1,
     });
     const payload = lines.map((l) => ({ category: l.category, item_name: l.item_name, unit: l.unit, qty_per_unit: Number(l.qty_per_unit || 0), rate: Number(l.rate || 0) }));
     const ln = await api.put(`/budget/task/${sel}/lines`, { lines: payload });
@@ -86,10 +98,15 @@ export default function TabBudget({ project }) {
     if (h?.success && ln?.success) { flash("Budget saved"); setSel(null); load(); }
     else flash((h?.message || ln?.message) || "Save failed", "error");
   };
+  const removeNode = async () => {
+    if (!window.confirm("Remove budget from this task? Estimate lines are cleared.")) return;
+    await api.put(`/budget/task/${sel}/lines`, { lines: [] });
+    await api.patch(`/budget/task/${sel}`, { is_budget_node: 0 });
+    flash("Budget removed"); setSel(null); load();
+  };
 
-  // ── actuals / variance calcs ──
-  const done = Number(hdr?.done_qty || 0);
-  const frac = scope > 0 ? done / scope : 0;
+  // actuals / variance — earned uses rolled-up % (from sub-tasks)
+  const frac = Number(selRoll || 0) / 100;
   const plannedCat = (cid) => Number(byCat[cid]?.estimate || 0) * frac;
   const actualCat  = (cid) => Number(byCat[cid]?.actual || 0);
   const plannedTot = CATS.reduce((s, c) => s + plannedCat(c.id), 0);
@@ -102,21 +119,17 @@ export default function TabBudget({ project }) {
   const setPLine = (idx, f, v) => setPLines((p) => p.map((l, i) => i === idx ? { ...l, [f]: v } : l));
   const pAmt = (l) => Number(l.qty || 0) * Number(l.rate || 0);
   const saveProgress = async () => {
-    if (!(Number(pDone) > 0)) return flash("Enter quantity done", "error");
+    if (!(Number(pDone) > 0) && !pLines.length) return flash("Enter qty done or actual lines", "error");
     setPSaving(true);
     const r = await api.post(`/budget/task/${sel}/progress`, {
-      report_date: pDate, done_qty: Number(pDone),
+      report_date: pDate, done_qty: Number(pDone || 0),
       lines: pLines.map((l) => ({ category: l.category, item_name: l.item_name, unit: l.unit, qty: Number(l.qty || 0), rate: Number(l.rate || 0) })),
     });
     setPSaving(false);
-    if (r?.success) { flash("Progress recorded"); setPDone(""); setPLines([]); openTask(sel); load(); }
+    if (r?.success) { flash("Recorded"); setPDone(""); setPLines([]); openTask(sel); load(); }
     else flash(r?.message || "Failed", "error");
   };
-  const delProgress = async (id) => {
-    const r = await api.del(`/budget/progress/${id}`);
-    if (r?.success) { flash("Entry removed"); openTask(sel); load(); }
-    else flash(r?.message || "Failed", "error");
-  };
+  const delProgress = async (id) => { const r = await api.del(`/budget/progress/${id}`); if (r?.success) { openTask(sel); load(); } };
 
   const inp = { width: "100%", padding: "7px 9px", border: `1px solid ${T.b1}`, borderRadius: 7, fontSize: 12.5, color: T.t1, background: T.surfaceB, outline: "none", fontFamily: "inherit" };
   const td  = { padding: "7px 9px", borderBottom: `1px solid ${T.b1}`, fontSize: 12.5 };
@@ -129,11 +142,10 @@ export default function TabBudget({ project }) {
           background: toast.t === "error" ? T.redL : T.grnL, color: toast.t === "error" ? T.red : T.grn, border: `1px solid ${toast.t === "error" ? T.redM : T.grnM}` }}>{toast.m}</div>
       )}
 
-      {/* project totals */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 16 }}>
         {[["Scope (revenue)", inr(totals.scope), T.blu], ["Estimate (cost)", inr(totals.estimate), T.amb],
-          ["Margin", inr(totals.margin) + "  (" + (totals.margin_pct ?? 0) + "%)", (totals.margin >= 0 ? T.grn : T.red)],
-          ["Tasks", String(tasks.length), T.slt]].map(([l, v, c]) => (
+          ["Margin", inr(totals.margin) + "  (" + (totals.margin_pct ?? 0) + "%)", (Number(totals.margin) >= 0 ? T.grn : T.red)],
+          ["Variance (earned − actual)", inr(totals.variance), (Number(totals.variance) >= 0 ? T.grn : T.red)]].map(([l, v, c]) => (
           <div key={l} style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, borderTop: `3px solid ${c}`, padding: "12px 14px" }}>
             <div style={{ fontSize: 21, fontWeight: 800, color: c, letterSpacing: "-0.4px", fontVariantNumeric: "tabular-nums" }}>{v}</div>
             <div style={{ fontSize: 11, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginTop: 3 }}>{l}</div>
@@ -141,44 +153,48 @@ export default function TabBudget({ project }) {
         ))}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>Task budgets</div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>Tasks <span style={{ fontSize: 12, fontWeight: 400, color: T.t4 }}>· {totals.budget_nodes || 0} budgeted</span></div>
         <button onClick={load} style={{ ...inp, width: "auto", cursor: "pointer", background: T.surface }}>↻ Refresh</button>
       </div>
+      <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 10 }}>Set a budget on main / milestone tasks; sub-tasks below stay operational and roll their progress up.</div>
 
       {loading ? (
         <div style={{ padding: 50, textAlign: "center", color: T.t4, fontSize: 13 }}>Loading budget…</div>
       ) : !tasks.length ? (
         <div style={{ padding: 40, textAlign: "center", color: T.t4, fontSize: 13, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 12 }}>
-          No tasks yet. Add tasks in the <b>Tasks</b> tab, then plan each task's budget here.
+          No tasks yet. Add tasks in the <b>Tasks</b> tab first.
         </div>
       ) : (
         <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 12, overflow: "hidden" }}>
           <div style={{ overflowX: "auto" }}>
             <table style={{ width: "100%", borderCollapse: "collapse" }}>
               <thead><tr style={{ background: T.surfaceB }}>
-                {["Task", "Stage", "Unit", "Scope qty", "Done", "Scope amt", "Estimate", "Actual", "Margin", ""].map((h, i) => (
-                  <th key={i} style={{ ...th, textAlign: i >= 3 && i <= 8 ? "right" : "left" }}>{h}</th>
+                {["Task", "Unit", "Scope amt", "Estimate", "Earned", "Actual", "Variance", ""].map((h, i) => (
+                  <th key={i} style={{ ...th, textAlign: i >= 2 && i <= 6 ? "right" : "left" }}>{h}</th>
                 ))}
               </tr></thead>
               <tbody>
-                {tasks.map((t) => {
-                  const mg = Number(t.margin || 0);
-                  const dq = Number(t.done_qty || 0), sq = Number(t.scope_qty || 0);
+                {tree.map((t) => {
+                  const node = t.is_budget_node;
+                  const v = Number(t.variance || 0);
                   return (
-                    <tr key={t.id} onClick={() => openTask(t.id)} style={{ cursor: "pointer" }}
+                    <tr key={t.id} onClick={() => openTask(t.id)} style={{ cursor: "pointer", background: node ? "transparent" : T.surface }}
                       onMouseEnter={(e) => e.currentTarget.style.background = T.surfaceB}
                       onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
-                      <td style={td}><span style={{ color: T.t4, marginRight: 6 }}>{t.task_no}</span><span style={{ fontWeight: 600, color: T.t1 }}>{t.name}</span></td>
-                      <td style={{ ...td, color: T.t3 }}>{t.stage || "—"}</td>
-                      <td style={{ ...td, color: T.t3 }}>{t.unit || "—"}</td>
-                      <td style={{ ...td, textAlign: "right" }}>{sq ? n2(sq) : "—"}</td>
-                      <td style={{ ...td, textAlign: "right", color: T.t3 }}>{dq ? n2(dq) + (sq ? ` (${Math.round(dq / sq * 100)}%)` : "") : "—"}</td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{inr(t.scope_amt)}</td>
-                      <td style={{ ...td, textAlign: "right", color: T.amb }}>{inr(t.estimate_amt)}</td>
-                      <td style={{ ...td, textAlign: "right", color: T.t2 }}>{Number(t.actual_amt) ? inr(t.actual_amt) : "—"}</td>
-                      <td style={{ ...td, textAlign: "right", fontWeight: 700, color: mg >= 0 ? T.grn : T.red }}>{inr(mg)}</td>
-                      <td style={{ ...td, textAlign: "center", color: T.blu }}>›</td>
+                      <td style={{ ...td, paddingLeft: 10 + t._d * 18 }}>
+                        <span style={{ color: T.t4, marginRight: 6, fontSize: 11 }}>{t.task_no}</span>
+                        <span style={{ fontWeight: node ? 700 : 400, color: node ? T.t1 : T.t3 }}>{t.name}</span>
+                        {node ? <span style={{ marginLeft: 7, fontSize: 9, color: T.blu, background: T.bluL, padding: "1px 6px", borderRadius: 10, fontWeight: 700 }}>BUDGET{t.roll_pct != null ? " · " + t.roll_pct + "%" : ""}</span>
+                              : <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>operational</span>}
+                      </td>
+                      <td style={{ ...td, color: T.t3 }}>{node ? (t.unit || "—") : ""}</td>
+                      <td style={{ ...td, textAlign: "right", fontWeight: node ? 600 : 400, color: node ? T.t1 : T.t4 }}>{node ? inr(t.scope_amt) : ""}</td>
+                      <td style={{ ...td, textAlign: "right", color: node ? T.amb : T.t4 }}>{node ? inr(t.estimate_amt) : ""}</td>
+                      <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? inr(t.earned) : ""}</td>
+                      <td style={{ ...td, textAlign: "right", color: T.t2 }}>{node ? (Number(t.actual_amt) ? inr(t.actual_amt) : "—") : ""}</td>
+                      <td style={{ ...td, textAlign: "right", fontWeight: 700, color: node ? (v >= 0 ? T.grn : T.red) : T.t4 }}>{node ? inr(v) : ""}</td>
+                      <td style={{ ...td, textAlign: "center", color: T.blu }}>{node ? "›" : <span style={{ fontSize: 10.5, color: T.t4 }}>+ budget</span>}</td>
                     </tr>
                   );
                 })}
@@ -188,19 +204,18 @@ export default function TabBudget({ project }) {
         </div>
       )}
 
-      {/* ── task drawer ── */}
+      {/* task drawer */}
       {sel && hdr && (
         <>
           <div onClick={() => setSel(null)} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,.4)", zIndex: 1000 }} />
           <div style={{ position: "fixed", top: 0, right: 0, width: "min(580px,100%)", height: "100vh", background: T.surface, zIndex: 1001, boxShadow: "-8px 0 30px rgba(0,0,0,.12)", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "14px 18px", borderBottom: `1px solid ${T.b1}`, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div><div style={{ fontSize: 15, fontWeight: 800, color: T.t1 }}>{hdr.task_no} · {hdr.name}</div>
-                <div style={{ fontSize: 11.5, color: T.t3, marginTop: 1 }}>Task budget</div></div>
+                <div style={{ fontSize: 11.5, color: T.t3, marginTop: 1 }}>{selKids ? "Budget node · progress rolls up from sub-tasks" : "Task budget"}{selNode ? "" : " · not budgeted yet"}</div></div>
               <button onClick={() => setSel(null)} style={{ ...inp, width: "auto", cursor: "pointer", background: T.surfaceB }}>✕</button>
             </div>
 
             <div style={{ flex: 1, overflowY: "auto", padding: "14px 18px" }}>
-              {/* header fields */}
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 12 }}>
                 <div><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Unit</div>
                   <select value={hdr.unit || ""} onChange={(e) => setHdr({ ...hdr, unit: e.target.value })} style={{ ...inp, cursor: "pointer" }}>
@@ -221,7 +236,6 @@ export default function TabBudget({ project }) {
                 <span style={{ color: T.blu, fontWeight: 800, fontVariantNumeric: "tabular-nums" }}>{inr(scopeAmt)}</span>
               </div>
 
-              {/* mode toggle */}
               <div style={{ display: "flex", background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 8, padding: 3, marginBottom: 14 }}>
                 {[["plan", "Plan (estimate)"], ["actuals", "Actuals & variance"]].map(([m, l]) => (
                   <button key={m} onClick={() => setMode(m)} style={{ flex: 1, padding: "7px", border: "none", borderRadius: 6, fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "inherit",
@@ -229,7 +243,6 @@ export default function TabBudget({ project }) {
                 ))}
               </div>
 
-              {/* ── PLAN: estimate editor ── */}
               {mode === "plan" && (
                 <>
                   <div style={{ display: "flex", gap: 4, borderBottom: `1px solid ${T.b1}`, marginBottom: 10 }}>
@@ -254,16 +267,21 @@ export default function TabBudget({ project }) {
                       {!lines.some((l) => l.category === cat) && <tr><td colSpan={6} style={{ ...td, textAlign: "center", color: T.t4 }}>No {cat} lines yet.</td></tr>}
                     </tbody>
                   </table>
-                  <button onClick={addLine} style={{ marginTop: 8, fontSize: 12, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>+ Add {cat} line</button>
+                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
+                    <button onClick={addLine} style={{ fontSize: 12, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>+ Add {cat} line</button>
+                    {selNode && <button onClick={removeNode} style={{ fontSize: 12, color: T.red, background: "none", border: "none", cursor: "pointer" }}>Remove budget</button>}
+                  </div>
                 </>
               )}
 
-              {/* ── ACTUALS & VARIANCE ── */}
               {mode === "actuals" && (
                 <>
-                  <div style={{ fontSize: 12, color: T.t3, marginBottom: 8 }}>Done: <b style={{ color: T.t1 }}>{n2(done)} {hdr.unit}</b>{scope ? ` of ${n2(scope)} (${Math.round(frac * 100)}%)` : ""}</div>
+                  <div style={{ fontSize: 12, color: T.t3, marginBottom: 8 }}>
+                    {selKids ? <>Progress (rolled up from sub-tasks): <b style={{ color: T.t1 }}>{Math.round(selRoll)}%</b></>
+                             : <>Done: <b style={{ color: T.t1 }}>{n2(hdr.done_qty)} {hdr.unit}</b>{scope ? ` of ${n2(scope)} (${Math.round(frac * 100)}%)` : ""}</>}
+                  </div>
                   <table style={{ width: "100%", borderCollapse: "collapse", marginBottom: 16 }}>
-                    <thead><tr>{["Category", "Planned (done)", "Actual", "Variance", ""].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h}</th>)}</tr></thead>
+                    <thead><tr>{["Category", "Planned (earned)", "Actual", "Variance", ""].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 1 && i <= 3 ? "right" : "left" }}>{h}</th>)}</tr></thead>
                     <tbody>
                       {CATS.map((c) => {
                         const pl = plannedCat(c.id), ac = actualCat(c.id), v = pl - ac, ok = v >= 0;
@@ -287,12 +305,11 @@ export default function TabBudget({ project }) {
                     </tbody>
                   </table>
 
-                  {/* record progress */}
                   <div style={{ background: T.surfaceB, border: `1px solid ${T.b1}`, borderRadius: 10, padding: "12px 14px", marginBottom: 14 }}>
-                    <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>Record progress (DPR)</div>
+                    <div style={{ fontSize: 12.5, fontWeight: 700, color: T.t1, marginBottom: 10 }}>Record actuals (DPR)</div>
                     <div style={{ display: "flex", gap: 10, marginBottom: 10 }}>
                       <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Date</div><input type="date" value={pDate} onChange={(e) => setPDate(e.target.value)} style={inp} /></div>
-                      <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Qty done ({hdr.unit})</div><input type="number" value={pDone} onChange={(e) => setPDone(e.target.value)} style={{ ...inp, textAlign: "right" }} /></div>
+                      <div style={{ flex: 1 }}><div style={{ fontSize: 11, color: T.t3, marginBottom: 4 }}>Qty done {selKids ? "(optional)" : `(${hdr.unit || ""})`}</div><input type="number" value={pDone} onChange={(e) => setPDone(e.target.value)} style={{ ...inp, textAlign: "right" }} /></div>
                       <button onClick={fillFromEstimate} style={{ ...inp, width: "auto", alignSelf: "flex-end", cursor: "pointer", background: T.bluL, color: T.blu, border: `1px solid ${T.bluM}`, fontWeight: 600, whiteSpace: "nowrap" }}>↺ Fill from estimate</button>
                     </div>
                     {pLines.length > 0 && (
@@ -301,10 +318,10 @@ export default function TabBudget({ project }) {
                         <tbody>
                           {pLines.map((l, idx) => (
                             <tr key={idx}>
-                              <td style={{ ...td, padding: "4px 6px", width: 70 }}><span style={{ fontSize: 10, color: T.t4 }}>{l.category.slice(0, 4)}</span></td>
+                              <td style={{ ...td, padding: "4px 6px", width: 56 }}><span style={{ fontSize: 10, color: T.t4 }}>{l.category.slice(0, 4)}</span></td>
                               <td style={{ ...td, padding: "4px 6px" }}><input value={l.item_name || ""} onChange={(e) => setPLine(idx, "item_name", e.target.value)} style={{ ...inp, padding: "5px 7px" }} /></td>
-                              <td style={{ ...td, padding: "4px 6px", width: 70 }}><input type="number" step="0.01" value={l.qty ?? ""} onChange={(e) => setPLine(idx, "qty", e.target.value)} style={{ ...inp, padding: "5px 7px", textAlign: "right" }} /></td>
-                              <td style={{ ...td, padding: "4px 6px", width: 70 }}><input type="number" value={l.rate ?? ""} onChange={(e) => setPLine(idx, "rate", e.target.value)} style={{ ...inp, padding: "5px 7px", textAlign: "right" }} /></td>
+                              <td style={{ ...td, padding: "4px 6px", width: 64 }}><input type="number" step="0.01" value={l.qty ?? ""} onChange={(e) => setPLine(idx, "qty", e.target.value)} style={{ ...inp, padding: "5px 7px", textAlign: "right" }} /></td>
+                              <td style={{ ...td, padding: "4px 6px", width: 64 }}><input type="number" value={l.rate ?? ""} onChange={(e) => setPLine(idx, "rate", e.target.value)} style={{ ...inp, padding: "5px 7px", textAlign: "right" }} /></td>
                               <td style={{ ...td, padding: "4px 6px", textAlign: "right", fontWeight: 600 }}>{inr(pAmt(l))}</td>
                               <td style={{ ...td, padding: "4px 6px", textAlign: "center" }}><button onClick={() => setPLines((p) => p.filter((_, i) => i !== idx))} style={{ border: "none", background: "none", color: T.t4, cursor: "pointer" }}>✕</button></td>
                             </tr>
@@ -312,32 +329,30 @@ export default function TabBudget({ project }) {
                         </tbody>
                       </table>
                     )}
-                    <button onClick={saveProgress} disabled={pSaving} style={{ width: "100%", padding: "9px", borderRadius: 8, border: "none", background: pSaving ? T.b2 : T.grn, color: "#fff", fontSize: 13, fontWeight: 700, cursor: pSaving ? "default" : "pointer", fontFamily: "inherit" }}>{pSaving ? "Saving…" : "Save progress"}</button>
+                    <button onClick={saveProgress} disabled={pSaving} style={{ width: "100%", padding: "9px", borderRadius: 8, border: "none", background: pSaving ? T.b2 : T.grn, color: "#fff", fontSize: 13, fontWeight: 700, cursor: pSaving ? "default" : "pointer", fontFamily: "inherit" }}>{pSaving ? "Saving…" : "Save actuals"}</button>
                   </div>
 
-                  {/* history */}
                   <div style={{ fontSize: 11, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginBottom: 8 }}>History</div>
                   {progress.length ? progress.map((p) => (
                     <div key={p.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: `1px solid ${T.b1}`, fontSize: 12.5 }}>
                       <span style={{ color: T.t2 }}>{p.report_date}</span>
-                      <span style={{ color: T.t1, fontWeight: 600 }}>{n2(p.done_qty)} {hdr.unit}</span>
+                      <span style={{ color: T.t1, fontWeight: 600 }}>{Number(p.done_qty) ? n2(p.done_qty) + " " + (hdr.unit || "") : "cost entry"}</span>
                       <span style={{ marginLeft: "auto" }}><button onClick={() => delProgress(p.id)} style={{ border: "none", background: "none", color: T.t4, cursor: "pointer", fontSize: 13 }}>✕</button></span>
                     </div>
-                  )) : <div style={{ fontSize: 12, color: T.t4 }}>No progress recorded yet.</div>}
+                  )) : <div style={{ fontSize: 12, color: T.t4 }}>No actuals recorded yet.</div>}
                 </>
               )}
             </div>
 
-            {/* footer */}
             <div style={{ padding: "12px 18px", borderTop: `1px solid ${T.b1}` }}>
               {mode === "plan" ? (
                 <>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}><span style={{ color: T.t3 }}>Estimate (cost)</span><span style={{ fontWeight: 700, color: T.amb }}>{inr(estimate)}</span></div>
                   <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 10 }}><span style={{ color: T.t3 }}>Margin</span><span style={{ fontWeight: 800, color: (scopeAmt - estimate) >= 0 ? T.grn : T.red }}>{inr(scopeAmt - estimate)} ({scopeAmt > 0 ? Math.round((scopeAmt - estimate) / scopeAmt * 100) : 0}%)</span></div>
-                  <button onClick={saveAll} disabled={saving} style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", background: saving ? T.b2 : T.blu, color: "#fff", fontSize: 14, fontWeight: 700, cursor: saving ? "default" : "pointer", fontFamily: "inherit" }}>{saving ? "Saving…" : "Save budget"}</button>
+                  <button onClick={saveAll} disabled={saving} style={{ width: "100%", padding: "11px", borderRadius: 9, border: "none", background: saving ? T.b2 : T.blu, color: "#fff", fontSize: 14, fontWeight: 700, cursor: saving ? "default" : "pointer", fontFamily: "inherit" }}>{saving ? "Saving…" : (selNode ? "Save budget" : "Set as budget node")}</button>
                 </>
               ) : (
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: T.t3 }}>Variance (planned − actual)</span><span style={{ fontWeight: 800, color: (plannedTot - actualTot) >= 0 ? T.grn : T.red }}>{inr(plannedTot - actualTot)}</span></div>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13 }}><span style={{ color: T.t3 }}>Variance (earned − actual)</span><span style={{ fontWeight: 800, color: (plannedTot - actualTot) >= 0 ? T.grn : T.red }}>{inr(plannedTot - actualTot)}</span></div>
               )}
             </div>
           </div>
