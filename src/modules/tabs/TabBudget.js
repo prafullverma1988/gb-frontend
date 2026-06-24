@@ -17,6 +17,7 @@ const CATS = [
 const inr = (n) => { const v = Math.round(Number(n) || 0); return (v < 0 ? "-₹" : "₹") + Math.abs(v).toLocaleString("en-IN"); };
 const n2  = (n) => (Math.round((Number(n) || 0) * 100) / 100).toLocaleString("en-IN");
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`; };
+const DEPTH_LABELS = ["Phase", "Package", "Activity", "Sub-task", "Detail", "Item"];
 
 export default function TabBudget({ project }) {
   const projectId = project?.id;
@@ -24,6 +25,8 @@ export default function TabBudget({ project }) {
   const [totals, setTotals] = useState({});
   const [units, setUnits]   = useState([]);
   const [loading, setLoading] = useState(true);
+  const [collapsed, setCollapsed]     = useState({});
+  const [levelFilter, setLevelFilter] = useState("All");
   const [sel, setSel]       = useState(null);
   const [hdr, setHdr]       = useState(null);
   const [lines, setLines]   = useState([]);
@@ -52,14 +55,48 @@ export default function TabBudget({ project }) {
   }, [projectId]);
   useEffect(() => { load(); }, [load]);
 
-  // depth-first ordered tree for display
-  const tree = useMemo(() => {
+  // parent → children map (orphans re-rooted)
+  const kidsMap = useMemo(() => {
     const ids = new Set(tasks.map((t) => t.id));
     const kids = {};
     tasks.forEach((t) => { const p = (t.parent_id && ids.has(t.parent_id)) ? t.parent_id : 0; (kids[p] = kids[p] || []).push(t); });
-    const out = []; const walk = (pid, d) => (kids[pid] || []).forEach((t) => { out.push({ ...t, _d: d }); walk(t.id, d + 1); });
-    walk(0, 0); return out;
+    return kids;
   }, [tasks]);
+
+  // depth-first ordered tree — respects collapse (fold) + level filter
+  const tree = useMemo(() => {
+    const maxDepth = levelFilter === "All" ? Infinity : parseInt(levelFilter, 10) - 1;
+    const out = [];
+    const walk = (pid, d) => (kidsMap[pid] || []).forEach((t) => {
+      out.push({ ...t, _d: d, _hasKids: !!(kidsMap[t.id] && kidsMap[t.id].length) });
+      if (d >= maxDepth) return;                              // level filter cap
+      if (levelFilter === "All" && collapsed[t.id]) return;   // manual fold
+      walk(t.id, d + 1);
+    });
+    walk(0, 0); return out;
+  }, [kidsMap, collapsed, levelFilter]);
+
+  // level dropdown metadata: depth → label + cumulative count (full tree)
+  const levelMeta = useMemo(() => {
+    const counts = {};
+    const walk = (pid, d) => (kidsMap[pid] || []).forEach((t) => { counts[d] = (counts[d] || 0) + 1; walk(t.id, d + 1); });
+    walk(0, 0);
+    let cum = 0;
+    return Object.keys(counts).map(Number).sort((a, b) => a - b).map((d) => { cum += counts[d]; return { depth: d, label: DEPTH_LABELS[d] || `L${d + 1}`, count: counts[d], cum }; });
+  }, [kidsMap]);
+
+  // total descendants per task (shown beside a collapsed row)
+  const descCount = useMemo(() => {
+    const memo = {};
+    const count = (id) => { if (memo[id] != null) return memo[id]; let n = 0; (kidsMap[id] || []).forEach((c) => { n += 1 + count(c.id); }); memo[id] = n; return n; };
+    Object.keys(kidsMap).forEach((pid) => (kidsMap[pid] || []).forEach((t) => count(t.id)));
+    return memo;
+  }, [kidsMap]);
+
+  const allParentIds = useMemo(() => Object.keys(kidsMap).filter((k) => k !== "0"), [kidsMap]);
+  const toggleCollapse = (id) => setCollapsed((p) => ({ ...p, [id]: !p[id] }));
+  const collapseAll = () => { const c = {}; allParentIds.forEach((id) => (c[id] = true)); setCollapsed(c); };
+  const expandAll = () => setCollapsed({});
 
   // per-task: is it covered by a budgeted ancestor, or does it have a budgeted descendant?
   const flags = useMemo(() => {
@@ -168,9 +205,20 @@ export default function TabBudget({ project }) {
         ))}
       </div>
 
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8, gap: 10, flexWrap: "wrap" }}>
         <div style={{ fontSize: 14, fontWeight: 700, color: T.t1 }}>Tasks <span style={{ fontSize: 12, fontWeight: 400, color: T.t4 }}>· {totals.budget_nodes || 0} budgeted</span></div>
-        <button onClick={load} style={{ ...inp, width: "auto", cursor: "pointer", background: T.surface }}>↻ Refresh</button>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <select value={levelFilter} onChange={(e) => setLevelFilter(e.target.value)}
+            style={{ height: 32, padding: "0 10px", borderRadius: 7, border: `1.5px solid ${levelFilter !== "All" ? T.blu : T.b1}`, background: levelFilter !== "All" ? T.bluL : T.surface, color: levelFilter !== "All" ? T.blu : T.t2, fontSize: 11.5, fontWeight: levelFilter !== "All" ? 700 : 400, fontFamily: "inherit", cursor: "pointer", outline: "none" }}>
+            <option value="All">All Levels ({tasks.length})</option>
+            {levelMeta.map((lv) => (
+              <option key={lv.depth} value={String(lv.depth + 1)}>L{lv.depth + 1} — {lv.label}{lv.depth > 0 ? " (upto)" : ""} ({lv.cum})</option>
+            ))}
+          </select>
+          <button onClick={collapseAll} disabled={levelFilter !== "All"} title="Collapse all" style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: levelFilter !== "All" ? "default" : "pointer", fontSize: 13, fontFamily: "inherit", opacity: levelFilter !== "All" ? 0.45 : 1 }}>⊟</button>
+          <button onClick={expandAll} disabled={levelFilter !== "All"} title="Expand all" style={{ height: 32, width: 32, borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t3, cursor: levelFilter !== "All" ? "default" : "pointer", fontSize: 13, fontFamily: "inherit", opacity: levelFilter !== "All" ? 0.45 : 1 }}>⊞</button>
+          <button onClick={load} style={{ height: 32, padding: "0 12px", borderRadius: 7, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>↻ Refresh</button>
+        </div>
       </div>
       <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 10 }}>Set a budget on main / milestone tasks; sub-tasks below stay operational and roll their progress up.</div>
 
@@ -202,8 +250,12 @@ export default function TabBudget({ project }) {
                       onMouseEnter={(e) => e.currentTarget.style.background = T.surfaceB}
                       onMouseLeave={(e) => e.currentTarget.style.background = "transparent"}>
                       <td style={{ ...td, paddingLeft: 10 + t._d * 18 }}>
+                        {t._hasKids && levelFilter === "All"
+                          ? <span onClick={(e) => { e.stopPropagation(); toggleCollapse(t.id); }} style={{ display: "inline-block", width: 15, marginRight: 3, color: T.t3, cursor: "pointer", fontSize: 10, textAlign: "center" }}>{collapsed[t.id] ? "▸" : "▾"}</span>
+                          : <span style={{ display: "inline-block", width: 15, marginRight: 3 }} />}
                         <span style={{ color: T.t4, marginRight: 6, fontSize: 11 }}>{t.task_no}</span>
                         <span style={{ fontWeight: node ? 700 : 400, color: node ? T.t1 : T.t3 }}>{t.name}</span>
+                        {collapsed[t.id] && levelFilter === "All" && descCount[t.id] ? <span style={{ marginLeft: 6, fontSize: 10, color: T.t4 }}>+{descCount[t.id]}</span> : null}
                         {node ? <span style={{ marginLeft: 7, fontSize: 9, color: T.blu, background: T.bluL, padding: "1px 6px", borderRadius: 10, fontWeight: 700 }}>BUDGET{t.roll_pct != null ? " · " + t.roll_pct + "%" : ""}</span>
                           : fl.cover ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.t4 }}>↳ covered by {fl.cover.task_no}</span>
                           : fl.hasDesc ? <span style={{ marginLeft: 7, fontSize: 9.5, color: T.amb }}>has budgeted sub-task</span>
