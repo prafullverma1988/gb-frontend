@@ -3469,6 +3469,16 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
     setTimeout(()=>setSaved(false),2000);
   };
 
+  // Attendance auto-punch-out settings (separate endpoint).
+  const [att,setAtt]=useState(null);
+  const [attSaved,setAttSaved]=useState(false);
+  useEffect(()=>{ api.get("/attendance-sessions/settings").then(r=>{ if(r&&r.success) setAtt(r.data); }).catch(()=>{}); },[]);
+  const setA=(k,v)=>setAtt(p=>({...p,[k]:v}));
+  const saveAtt=async()=>{
+    try{ const r=await api.put("/attendance-sessions/settings",att); if(r&&r.success) setAtt(r.data); }catch(e){ console.error("Save att settings:",e); }
+    setAttSaved(true); setTimeout(()=>setAttSaved(false),2000);
+  };
+
   return(
     <div style={{maxWidth:600}}>
       <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:14}}>
@@ -3555,6 +3565,49 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
           ))}
         </div>
       </div>
+
+      {/* Attendance & Auto Punch-Out settings */}
+      {att && (
+        <div style={{background:T.surface,borderRadius:10,border:`1px solid ${T.b1}`,overflow:"hidden",marginTop:14}}>
+          <div style={{padding:"12px 16px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:8}}>
+            <span style={{fontSize:15}}>📍</span>
+            <span style={{fontSize:13,fontWeight:700,color:T.t1}}>Attendance & Auto Punch-Out</span>
+          </div>
+          <div style={{padding:"16px"}}>
+            <div style={{fontSize:11.5,color:T.t3,marginBottom:6,lineHeight:1.6}}>
+              Worker punch-out karna bhool jaye to system khud handle karega — har auto-close <b>HR review queue</b> me jata hai (Attendance tab), salary se pehle review zaroori.
+            </div>
+            {[
+              {k:"autoclose_enabled",nk:"max_shift_hours",t:"Auto-close long sessions",d:"Itne ghante se zyada open session khud band (out-time = last GPS ping)",suf:"hours",mn:1,mx:24},
+              {k:"geo_exit_enabled",nk:"geo_exit_minutes",t:"Site se bahar → auto punch-out",d:"Fence se itne min continuous bahar = auto punch-out (exit time pe)",suf:"min",mn:1,mx:240},
+              {k:"reminder_enabled",nk:"reminder_after_hours",t:"Punch-out reminder",d:"Itne ghante baad worker ko 'still punched in' notification",suf:"hours",mn:1,mx:24},
+            ].map(row=>(
+              <div key={row.k} style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderTop:`1px solid ${T.b1}`}}>
+                <label style={{position:"relative",display:"inline-block",width:38,height:22,flexShrink:0,marginTop:2}}>
+                  <input type="checkbox" checked={att[row.k]==="1"} onChange={e=>setA(row.k,e.target.checked?"1":"0")} style={{opacity:0,width:0,height:0}}/>
+                  <span style={{position:"absolute",cursor:"pointer",inset:0,background:att[row.k]==="1"?T.grn:T.t4,borderRadius:22,transition:".2s"}}>
+                    <span style={{position:"absolute",height:16,width:16,left:att[row.k]==="1"?19:3,top:3,background:"white",borderRadius:"50%",transition:".2s"}}/>
+                  </span>
+                </label>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{row.t}</div>
+                  <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>{row.d}</div>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:5,opacity:att[row.k]==="1"?1:0.4}}>
+                  <input type="number" min={row.mn} max={row.mx} value={att[row.nk]} disabled={att[row.k]!=="1"}
+                    onChange={e=>setA(row.nk,e.target.value)}
+                    style={{width:52,padding:"7px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:14,fontWeight:700,color:T.t1,textAlign:"center",outline:"none",fontFamily:"inherit"}}/>
+                  <span style={{fontSize:11,color:T.t3,fontWeight:600}}>{row.suf}</span>
+                </div>
+              </div>
+            ))}
+            <button onClick={saveAtt}
+              style={{marginTop:14,padding:"10px 24px",borderRadius:8,background:attSaved?T.grn:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
+              <IcChk size={14} color="white"/> {attSaved?"Saved!":"Save Attendance Settings"}
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
