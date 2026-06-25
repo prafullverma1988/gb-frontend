@@ -447,7 +447,17 @@ function TabTasks({ projectId, isAdmin }) {
   };
   useEffect(()=>{ if(projectId) loadTaskIssues(); },[projectId]);
 
-  const toggleCollapse=(id)=>setCollapsed(p=>({...p,[id]:!p[id]}));
+  const toggleCollapse=(id)=>{setCollapsed(p=>({...p,[id]:!p[id]}));setLevelFilter("custom");};
+  // Level dropdown = "collapse to this level" preset; per-row toggles still drill in afterwards
+  const applyLevel=(val)=>{
+    setLevelFilter(val);
+    if(val==="All") return setCollapsed({});
+    if(val==="custom") return;
+    const maxVisible=parseInt(val,10)-1;   // deepest depth kept open
+    const c={};
+    (function walk(list,d){ list.forEach(t=>{ if(t.children?.length){ if(d>=maxVisible) c[t.id]=true; walk(t.children,d+1); } }); })(tasks,0);
+    setCollapsed(c);
+  };
 
   const handleOpen=(t)=>{
     if(t.dhyanRakhen){setPendingTask(t);setDhyanTask(t);}
@@ -493,10 +503,9 @@ function TabTasks({ projectId, isAdmin }) {
     return out;
   }
 
-  function renderRow(t, depth=0, sno=[], maxDepth=undefined){
+  function renderRow(t, depth=0, sno=[]){
     const hasKids=t.children?.length>0;
-    // when level filter is active, force-expand all nodes so all levels are visible
-    const isOpen = maxDepth!==undefined ? true : !collapsed[t.id];
+    const isOpen = !collapsed[t.id];
     const ss=STATUS_C[t.status]||STATUS_C["Not Started"];
     const delay=ptDelayDays(t);
     const lvlColors=[T.blu,T.grn,T.amb,"#7C3AED","#EC4899","#0891B2","#84CC16"];
@@ -673,7 +682,7 @@ function TabTasks({ projectId, isAdmin }) {
             ))}
           </div>
         )}
-        {hasKids&&isOpen&&(maxDepth===undefined||depth+1<=maxDepth)&&t.children.map(ch=>renderRow(ch,depth+1,undefined,maxDepth))}
+        {hasKids&&isOpen&&t.children.map(ch=>renderRow(ch,depth+1))}
       </div>
     );
   }
@@ -893,7 +902,7 @@ function TabTasks({ projectId, isAdmin }) {
         </div>}
         {/* Gantt range synced from unified date range above */}
         {/* Level dropdown — All + L1(n) L2(n) ... */}
-        <select value={levelFilter} onChange={e=>setLevelFilter(e.target.value)}
+        <select value={levelFilter} onChange={e=>applyLevel(e.target.value)}
           style={{height:32,padding:"0 10px",borderRadius:6,border:`1.5px solid ${levelFilter!=="All"?T.blu:T.b1}`,background:levelFilter!=="All"?T.bluL:T.surface,color:levelFilter!=="All"?T.blu:T.t2,fontSize:11.5,fontWeight:levelFilter!=="All"?700:400,fontFamily:"inherit",cursor:"pointer",outline:"none"}}>
           <option value="All">All Levels ({allFlat.length})</option>
           {levelMeta.levels.map(lv=>(
@@ -901,6 +910,7 @@ function TabTasks({ projectId, isAdmin }) {
               L{lv.depth+1} — {lv.label}{lv.depth>0?" (upto)":""} ({lv.cumCount})
             </option>
           ))}
+          {levelFilter==="custom"&&<option value="custom">Custom view</option>}
         </select>
         {/* CSV Export */}
         <button onClick={()=>{
@@ -1218,9 +1228,7 @@ function TabTasks({ projectId, isAdmin }) {
                     );
                   })
               /* ── NORMAL HIERARCHY VIEW ── */
-              : levelFilter==="All"
-                ? filtered.map(t=>renderRow(t,0))
-                : filtered.map(t=>renderRow(t,0,undefined,parseInt(levelFilter)-1))
+              : filtered.map(t=>renderRow(t,0))
             }
           </div>
         </div>
@@ -1233,7 +1241,6 @@ function TabTasks({ projectId, isAdmin }) {
             tasks={filtered}
             cpm={cpmData}
             phaseCodeMap={phaseCodeMap}
-            levelFilter={levelFilter}
             collapsed={collapsed}
             onToggleCollapse={toggleCollapse}
             ganttScale={ganttScale}
@@ -2020,7 +2027,7 @@ function BaselineHistoryModal({ projectId, canBaseline, onClose, onDeleted }) {
 }
 
 // ── Inline Gantt for project detail ──────────────────────────────
-function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleCollapse, ganttScale, ganttRange, onRemoveDep, onAddDep, onCascadeFix}){
+function PTGantt({tasks, cpm, phaseCodeMap, collapsed, onToggleCollapse, ganttScale, ganttRange, onRemoveDep, onAddDep, onCascadeFix}){
   // HTML-overlay dep panel: hover shows preview, click PINS it so you can interact
   const [hoveredId, setHoveredId]   = React.useState(null);
   const [pinnedId,  setPinnedId]    = React.useState(null);
@@ -2054,14 +2061,12 @@ function PTGantt({tasks, cpm, phaseCodeMap, levelFilter, collapsed, onToggleColl
   const pcm=phaseCodeMap||{};
   const hasCpm=cpm&&Object.keys(cmap).length>0;
   const scale = ganttScale || "month";
-  const maxDepth = levelFilter==="All" ? 999 : parseInt(levelFilter)-1;
-
-  // Flatten respecting levelFilter + collapsed state
+  // Flatten respecting the collapse map (level dropdown writes it; chevrons toggle it)
   const allFlat=(function flatD(list,depth=0,out=[]){
     list.forEach(t=>{
       out.push({...t,level:depth+1,_depth:depth});
       const isOpen = !(collapsed&&collapsed[t.id]);
-      if(t.children?.length && isOpen && depth<maxDepth) flatD(t.children,depth+1,out);
+      if(t.children?.length && isOpen) flatD(t.children,depth+1,out);
     });
     return out;
   })(tasks);
