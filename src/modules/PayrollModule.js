@@ -3680,6 +3680,27 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
                 )}
               </div>
             </div>
+            {/* Daily punch-in reminder — fires even when app is fully closed */}
+            <div style={{display:"flex",alignItems:"flex-start",gap:12,padding:"12px 0",borderTop:`1px solid ${T.b1}`}}>
+              <label style={{position:"relative",display:"inline-block",width:38,height:22,flexShrink:0,marginTop:2}}>
+                <input type="checkbox" checked={att.punchin_daily_enabled==="1"} onChange={e=>setA("punchin_daily_enabled",e.target.checked?"1":"0")} style={{opacity:0,width:0,height:0}}/>
+                <span style={{position:"absolute",cursor:"pointer",inset:0,background:att.punchin_daily_enabled==="1"?T.grn:T.t4,borderRadius:22,transition:".2s"}}>
+                  <span style={{position:"absolute",height:16,width:16,left:att.punchin_daily_enabled==="1"?19:3,top:3,background:"white",borderRadius:"50%",transition:".2s"}}/>
+                </span>
+              </label>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>Daily punch-in reminder <span style={{color:T.grn}}>(app band ho tab bhi)</span></div>
+                <div style={{fontSize:11,color:T.t3,marginTop:2,lineHeight:1.5}}>Roz fixed time pe punch-in reminder — app <b>bilkul band</b> ho tab bhi baje (OS-scheduled, no battery drain). [Punch In]/[Skip].</div>
+                {att.punchin_daily_enabled==="1" && (
+                  <div style={{display:"flex",alignItems:"center",gap:6,marginTop:8}}>
+                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>roz</span>
+                    <input type="time" value={att.punchin_daily_time||"09:30"} onChange={e=>setA("punchin_daily_time",e.target.value)}
+                      style={{padding:"6px 8px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:700,color:T.t1,outline:"none",fontFamily:"inherit"}}/>
+                    <span style={{fontSize:11,color:T.t3,fontWeight:600}}>baje</span>
+                  </div>
+                )}
+              </div>
+            </div>
             <button onClick={saveAtt}
               style={{marginTop:14,padding:"10px 24px",borderRadius:8,background:attSaved?T.grn:T.blu,color:"white",fontSize:13,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:7}}>
               <IcChk size={14} color="white"/> {attSaved?"Saved!":"Save Attendance Settings"}
