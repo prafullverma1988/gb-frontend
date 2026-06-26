@@ -31,6 +31,7 @@ const IcSearch    = p => <Ic {...p} d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 
 const IcActivity  = p => <Ic {...p} d="M22 12h-4l-3 9L9 3l-3 9H2" />;
 const IcDollar    = p => <Ic {...p} d="M12 1v22M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6" />;
 const IcFolder    = p => <Ic {...p} d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z" />;
+const IcEdit      = p => <Ic {...p} d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7M18.5 2.5a2.12 2.12 0 013 3L12 15l-4 1 1-4 9.5-9.5z" />;
 const IcCog       = p => <Ic {...p} d="M12 15a3 3 0 100-6 3 3 0 000 6zM19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />;
 const IcChevD     = p => <Ic {...p} d="M6 9l6 6 6-6" />;
 const IcChevR     = p => <Ic {...p} d="M9 18l6-6-6-6" />;
@@ -1398,6 +1399,10 @@ function CompanyDetailPage({ companyId, onBack }) {
   const [noteText, setNoteText] = useState("");
   const [noteType, setNoteType] = useState("note");
   const [savingNote, setSavingNote] = useState(false);
+  const [editUser, setEditUser] = useState(null);       // user row being edited
+  const [savingUser, setSavingUser] = useState(false);
+  const [newCreds, setNewCreds] = useState(null);       // {name,mobile,email,password} after reset
+  const [resettingId, setResettingId] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1424,6 +1429,27 @@ function CompanyDetailPage({ companyId, onBack }) {
     if (!await window.confirmAsync("Delete this note?")) return;
     await apiFetch("/saas-admin/crm-notes/" + nid, { method:"DELETE" });
     load();
+  };
+
+  const saveUser = async () => {
+    if (!editUser) return;
+    setSavingUser(true);
+    const res = await apiFetch("/saas-admin/companies/" + companyId + "/users/" + editUser.id, {
+      method:"PATCH",
+      body:{ name: editUser.name, email: editUser.email, phone: editUser.phone, role: editUser.role, is_active: editUser.is_active ? 1 : 0 },
+    });
+    setSavingUser(false);
+    if (res.success) { setEditUser(null); load(); setToast({ msg:"User updated", type:"success" }); }
+    else setToast({ msg: res.message || "Update failed", type:"error" });
+  };
+
+  const resetUserPassword = async (u) => {
+    if (!await window.confirmAsync(`Reset password for ${u.name}? A new password will be generated and shown once.`)) return;
+    setResettingId(u.id);
+    const res = await apiFetch("/saas-admin/companies/" + companyId + "/users/" + u.id + "/reset-password", { method:"POST" });
+    setResettingId(null);
+    if (res.success && res.data) { setNewCreds(res.data.credentials); load(); }
+    else setToast({ msg: res.message || "Reset failed", type:"error" });
   };
 
   if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading company details...</div>;
@@ -1572,18 +1598,31 @@ function CompanyDetailPage({ companyId, onBack }) {
         </div>
       )}
 
-      {/* TAB 3: Users */}
+      {/* TAB 3: Users — edit / reset-password per user */}
       {tab === "users" && (
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          <TableHeader columns={["Name","Email","Role","Last Login","Status"]} gridCols="1.5fr 2fr 1fr 1fr 100px"/>
+          <TableHeader columns={["Name / Mobile","Email","Role","Last Login","Status","Actions"]} gridCols="1.5fr 1.7fr 1fr 0.9fr 84px 88px"/>
           {users.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No users</div>}
           {users.map((u, i) => (
-            <div key={i} style={{ display:"grid", gridTemplateColumns:"1.5fr 2fr 1fr 1fr 100px", padding:"11px 16px", borderBottom: i < users.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
-              <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{u.name}</div>
-              <div style={{ fontSize:11, color:T.t3 }}>{u.email}</div>
-              <div><Badge text={u.role} color={T.pur}/></div>
-              <div style={{ fontSize:11, color:T.t4 }}>{u.last_login ? fmtDateTime(u.last_login) : "Never"}</div>
+            <div key={u.id || i} style={{ display:"grid", gridTemplateColumns:"1.5fr 1.7fr 1fr 0.9fr 84px 88px", padding:"11px 16px", borderBottom: i < users.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center" }}>
+              <div style={{ minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{u.name}</div>
+                <div style={{ fontSize:10.5, color:T.t4, fontFamily:"monospace" }}>{u.phone || "no mobile"}</div>
+              </div>
+              <div style={{ fontSize:11, color:T.t3, overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>{u.email || "--"}</div>
+              <div><Badge text={(u.role||"").replace(/_/g," ")} color={T.pur}/></div>
+              <div style={{ fontSize:10.5, color:T.t4 }}>{u.last_login ? fmtDateTime(u.last_login) : "Never"}</div>
               <div><Badge text={u.is_active ? "Active" : "Inactive"} color={u.is_active ? T.grn : T.red}/></div>
+              <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }}>
+                <button onClick={() => setEditUser({ id:u.id, name:u.name||"", email:u.email||"", phone:u.phone||"", role:u.role||"", is_active: !!u.is_active })} title="Edit user"
+                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.bluM}`, background:T.bluL, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <IcEdit size={12} color={T.blu}/>
+                </button>
+                <button onClick={() => resetUserPassword(u)} disabled={resettingId === u.id} title="Reset password"
+                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.ambM}`, background:T.ambL, cursor: resettingId===u.id ? "wait" : "pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                  <IcLock size={12} color={T.amb}/>
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -1692,6 +1731,93 @@ function CompanyDetailPage({ companyId, onBack }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit User Modal */}
+      {editUser && (
+        <>
+          <div onClick={() => setEditUser(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:460, maxWidth:"94vw", background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
+            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Edit User</div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{company.name}</div>
+              </div>
+              <button onClick={() => setEditUser(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+            </div>
+            <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+              <InputField label="Name" value={editUser.name} onChange={v => setEditUser({ ...editUser, name:v })} placeholder="Full name"/>
+              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12 }}>
+                <InputField label="Login Mobile" value={editUser.phone} onChange={v => setEditUser({ ...editUser, phone:v.replace(/\D/g,"").slice(0,10) })} placeholder="10-digit mobile"/>
+                <SelectField label="Role" value={editUser.role} onChange={v => setEditUser({ ...editUser, role:v })}
+                  options={(() => {
+                    const base = [
+                      { value:"admin", label:"Admin" },
+                      { value:"project_manager", label:"Project Manager" },
+                      { value:"supervisor", label:"Site Supervisor" },
+                      { value:"accountant", label:"Accountant" },
+                      { value:"viewer", label:"Viewer" },
+                    ];
+                    return base.some(o => o.value === editUser.role) ? base : [{ value:editUser.role, label:(editUser.role||"—")+" (current)" }, ...base];
+                  })()}/>
+              </div>
+              <InputField label="Email (reference)" value={editUser.email} onChange={v => setEditUser({ ...editUser, email:v })} placeholder="name@example.com"/>
+              <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"4px 2px" }}>
+                <div>
+                  <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>Account Active</div>
+                  <div style={{ fontSize:10.5, color:T.t4 }}>Inactive users can't log in</div>
+                </div>
+                <Toggle value={editUser.is_active} onChange={v => setEditUser({ ...editUser, is_active:v })}/>
+              </div>
+              <div style={{ padding:"9px 13px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11, color:T.amb }}>
+                Login is <strong>mobile + password</strong>. To hand a fresh password, use <strong>Reset password</strong> (🔒) on the user row.
+              </div>
+            </div>
+            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+              <Btn onClick={() => setEditUser(null)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+              <Btn onClick={saveUser} disabled={savingUser} style={{ flex:2 }}>{savingUser ? "Saving..." : "Save Changes"}</Btn>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* New-credentials Modal (after a user password reset) */}
+      {newCreds && (
+        <>
+          <div onClick={() => setNewCreds(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:500, backdropFilter:"blur(3px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:440, maxWidth:"94vw", background:T.surface, borderRadius:16, zIndex:501, boxShadow:"0 24px 64px rgba(0,0,0,0.3)", overflow:"hidden" }}>
+            <div style={{ padding:"20px 22px", background:"linear-gradient(135deg, #059669, #10B981)", textAlign:"center" }}>
+              <div style={{ width:48, height:48, borderRadius:"50%", background:"rgba(255,255,255,0.2)", display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:10 }}>
+                <IcChk size={24} color="white"/>
+              </div>
+              <div style={{ fontSize:17, fontWeight:800, color:"white" }}>New Password</div>
+              <div style={{ fontSize:12, color:"rgba(255,255,255,0.75)", marginTop:4 }}>Share these with {newCreds.name || "the user"}</div>
+            </div>
+            <div style={{ padding:"24px 22px" }}>
+              <div style={{ background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 18px", marginBottom:16 }}>
+                <div style={{ marginBottom:12 }}>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Login Mobile</div>
+                  <div style={{ fontSize:16, fontWeight:800, color:T.blu, fontFamily:"monospace", letterSpacing:"0.5px" }}>{newCreds.mobile || "— (set a mobile via Edit)"}</div>
+                  {newCreds.email && <div style={{ fontSize:10.5, color:T.t4, marginTop:3 }}>Email (reference): {newCreds.email}</div>}
+                </div>
+                <div>
+                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>New Password</div>
+                  <div style={{ fontSize:18, fontWeight:800, color:T.t1, fontFamily:"monospace", letterSpacing:"1px", background:T.ambL, padding:"8px 12px", borderRadius:6, border:`1px solid ${T.ambM}` }}>{newCreds.password}</div>
+                </div>
+              </div>
+              <div style={{ padding:"10px 14px", background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, fontSize:11, color:T.red, marginBottom:16 }}>
+                <strong>Shown once!</strong> Copy it now. The user must change it after first login.
+              </div>
+              <div style={{ display:"flex", gap:8 }}>
+                <Btn variant="outline" style={{ flex:1 }} onClick={() => {
+                  navigator.clipboard.writeText(`Login Mobile: ${newCreds.mobile || ""}\nPassword: ${newCreds.password}\nLogin with mobile + password.`);
+                  setToast({ msg:"Credentials copied!", type:"success" });
+                }}><IcClip size={13}/> Copy</Btn>
+                <Btn style={{ flex:1 }} onClick={() => setNewCreds(null)}>Done</Btn>
+              </div>
+            </div>
+          </div>
+        </>
       )}
     </div>
   );
