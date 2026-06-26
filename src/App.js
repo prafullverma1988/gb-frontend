@@ -275,6 +275,27 @@ function ProjectMiniCard({p,onClick}){
 }
 
 
+// ── MSG91 OTP widget (client-side OTP — uses MSG91's own DLT-registered sender,
+// so NO DLT registration is needed on our side) ───────────────────────────────
+const MSG91_WIDGET_ID="36667a653376393136333230";
+const MSG91_TOKEN_AUTH="544869TnDCU60vsF0j6a3e1799P1";
+let _otpWidgetReady=null;
+function loadOtpWidget(){
+  if(_otpWidgetReady)return _otpWidgetReady;
+  _otpWidgetReady=new Promise((resolve)=>{
+    const init=()=>{ try{ window.initSendOTP({widgetId:MSG91_WIDGET_ID,tokenAuth:MSG91_TOKEN_AUTH,exposeMethods:true,success:()=>{},failure:()=>{}}); resolve(true);}catch(_){resolve(false);} };
+    if(window.initSendOTP)return init();
+    const s=document.createElement("script");
+    s.src="https://verify.msg91.com/otp-provider.js"; s.async=true;
+    s.onload=init; s.onerror=()=>resolve(false);
+    document.body.appendChild(s);
+  });
+  return _otpWidgetReady;
+}
+function widgetSendOtp(mobile){ return new Promise((resolve,reject)=>{ if(!window.sendOtp)return reject(new Error("OTP service not ready")); window.sendOtp("91"+mobile,(d)=>resolve(d),(e)=>reject(e)); }); }
+function widgetVerifyOtp(otp){ return new Promise((resolve,reject)=>{ if(!window.verifyOtp)return reject(new Error("OTP service not ready")); window.verifyOtp(otp,(d)=>resolve(d),(e)=>reject(e)); }); }
+function extractAccessToken(d){ if(!d)return ""; if(typeof d==="string")return d; return d.message||d["access-token"]||d.accessToken||d.token||""; }
+
 // ── LOGIN ─────────────────────────────────────────────────────────────
 function LoginScreen({onLogin}){
   // stage: 'mobile' | 'choose' | 'password' | 'otp'
@@ -287,6 +308,8 @@ function LoginScreen({onLogin}){
   const [error,setError]=useState("");
   const [info,setInfo]=useState("");
   const [devOtp,setDevOtp]=useState("");
+  const [otpMode,setOtpMode]=useState(null);   // 'widget' | 'dev'
+  useEffect(()=>{loadOtpWidget();},[]);
 
   const resetMsgs=()=>{setError("");setInfo("");};
   const goBack=()=>{resetMsgs();setStage(stage==="password"||stage==="otp"?"choose":"mobile");};
@@ -302,13 +325,18 @@ function LoginScreen({onLogin}){
   const handleRequestOtp=async()=>{
     resetMsgs();setLoading(true);
     try{
-      const res=await api.requestOtp(mobile);
-      if(res.success){
-        setStage("otp");
-        setInfo("OTP sent to your mobile");
-        if(res.dev_otp)setDevOtp(res.dev_otp);
-      }else{setError(res.message||"Could not send OTP");}
-    }catch(err){setError("Server not reachable. Please try again.");}
+      const res=await api.requestOtp(mobile);   // backend: account-exists check
+      if(!res||!res.success){setError((res&&res.message)||"Could not send OTP");setLoading(false);return;}
+      const mode=res.otp_mode||(res.dev_otp?"dev":"widget");
+      setOtpMode(mode);
+      if(mode==="widget"){
+        await loadOtpWidget();
+        await widgetSendOtp(mobile);   // MSG91 sends the real OTP
+        setDevOtp("");
+      }else{ setDevOtp(res.dev_otp||""); }
+      setStage("otp");
+      setInfo("OTP sent to your mobile");
+    }catch(err){setError("OTP could not be sent. Please try again.");}
     setLoading(false);
   };
 
@@ -328,13 +356,21 @@ function LoginScreen({onLogin}){
   // Stage 3b: OTP login
   const handleOtpLogin=async()=>{
     resetMsgs();
-    if(!/^\d{4}$/.test(otp)){setError("Enter the 4-digit OTP");return;}
+    if(!/^\d{4,6}$/.test(otp)){setError("Enter the OTP");return;}
     setLoading(true);
     try{
-      const res=await api.loginOtp(mobile,otp);
-      if(res.success){onLogin(res.user,res.companies);}
-      else{setError(res.message||"Invalid OTP");}
-    }catch(err){setError("Server not reachable. Please try again.");}
+      let res;
+      if(otpMode==="widget"){
+        const d=await widgetVerifyOtp(otp);      // MSG91 verifies the typed OTP
+        const token=extractAccessToken(d);
+        if(!token){setError("Invalid OTP");setLoading(false);return;}
+        res=await api.loginOtp(mobile,otp,token);
+      }else{
+        res=await api.loginOtp(mobile,otp);
+      }
+      if(res&&res.success){onLogin(res.user,res.companies);}
+      else{setError((res&&res.message)||"Invalid OTP");}
+    }catch(err){setError((err&&err.message)||"Invalid OTP");}
     setLoading(false);
   };
 
@@ -393,7 +429,7 @@ function LoginScreen({onLogin}){
             <div style={{fontSize:13,color:C.tm,textAlign:"center",marginBottom:20}}>+91 {mobile} <button onClick={goBack} style={{background:"none",border:"none",color:C.p,fontSize:12,fontWeight:600,cursor:"pointer",marginLeft:6}}>Change</button></div>
             <div style={{marginBottom:22}}>
               <label style={labelStyle}>Enter OTP (4-digit)</label>
-              <input type="tel" inputMode="numeric" maxLength={4} placeholder="••••" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,""))} style={{...inputStyle,letterSpacing:"8px",textAlign:"center",fontSize:18,fontWeight:700}} onKeyDown={e=>e.key==="Enter"&&handleOtpLogin()} autoFocus/>
+              <input type="tel" inputMode="numeric" maxLength={6} placeholder="••••••" value={otp} onChange={e=>setOtp(e.target.value.replace(/\D/g,"").slice(0,6))} style={{...inputStyle,letterSpacing:"8px",textAlign:"center",fontSize:18,fontWeight:700}} onKeyDown={e=>e.key==="Enter"&&handleOtpLogin()} autoFocus/>
             </div>
             <button onClick={handleOtpLogin} disabled={loading} style={primaryBtn(loading)}>{loading?"Verifying...":"Verify & Login"}</button>
             <div style={{textAlign:"center",marginTop:14}}>

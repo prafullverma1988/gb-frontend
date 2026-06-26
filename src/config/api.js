@@ -160,7 +160,7 @@ api.requestOtp = async (mobile) => {
 };
 
 // ── Mobile + OTP: verify OTP & login ─────────────────────────
-api.loginOtp = async (mobile, otp) => {
+api.loginOtp = async (mobile, otp, accessToken) => {
   if (MOCK_AUTH) {
     if (mobile !== _mockOtpMobile || !_mockOtp) {
       return { success: false, message: "Please request a new OTP" };
@@ -174,7 +174,7 @@ api.loginOtp = async (mobile, otp) => {
     if (!email) return { success: false, message: "Mobile number not registered" };
     return await api.login(email, MOCK_ADMIN_PASSWORD);
   }
-  const res  = await fetch(`${API_BASE}/auth/login/otp`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,otp}) });
+  const res  = await fetch(`${API_BASE}/auth/login/otp`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,otp,accessToken}) });
   const data = await res.json();
   if (data.success) saveAuth(data.token, data.user, data.companies);
   return data;
