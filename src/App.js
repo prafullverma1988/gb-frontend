@@ -311,6 +311,8 @@ function LoginScreen({onLogin}){
   const [otpMode,setOtpMode]=useState(null);   // 'widget' | 'dev'
   const [chgPending,setChgPending]=useState(null); // {user,companies} awaiting forced password change
   const [np1,setNp1]=useState(""); const [np2,setNp2]=useState("");
+  const [pickerOptions,setPickerOptions]=useState([]); // multi-company picker
+  const [pendingTok,setPendingTok]=useState("");
   useEffect(()=>{loadOtpWidget();},[]);
 
   const resetMsgs=()=>{setError("");setInfo("");};
@@ -349,10 +351,8 @@ function LoginScreen({onLogin}){
     setLoading(true);
     try{
       const res=await api.loginPassword(mobile,pass);
-      if(res.success){
-        if(res.user&&res.user.must_change_password){ resetMsgs(); setNp1("");setNp2(""); setChgPending({user:res.user,companies:res.companies}); setStage("change"); }
-        else onLogin(res.user,res.companies);
-      }
+      if(res.success&&res.multi_company){ setPickerOptions(res.options||[]); setPendingTok(res.pending); resetMsgs(); setStage("picker"); }
+      else if(res.success){ completeLogin(res); }
       else{setError(res.message||"Login failed");}
     }catch(err){setError("Server not reachable. Please try again.");}
     setLoading(false);
@@ -373,7 +373,8 @@ function LoginScreen({onLogin}){
       }else{
         res=await api.loginOtp(mobile,otp);
       }
-      if(res&&res.success){onLogin(res.user,res.companies);}
+      if(res&&res.success&&res.multi_company){ setPickerOptions(res.options||[]); setPendingTok(res.pending); resetMsgs(); setStage("picker"); }
+      else if(res&&res.success){ completeLogin(res); }
       else{setError((res&&res.message)||"Invalid OTP");}
     }catch(err){setError((err&&err.message)||"Invalid OTP");}
     setLoading(false);
@@ -389,6 +390,21 @@ function LoginScreen({onLogin}){
       const res=await api.put("/auth/change-password",{current_password:pass,new_password:np1});
       if(res&&res.success){ const c=chgPending; setChgPending(null); onLogin(c.user,c.companies); }
       else{ setError((res&&res.message)||"Password change nahi hua"); }
+    }catch(err){setError("Server not reachable. Please try again.");}
+    setLoading(false);
+  };
+
+  // After a successful login (direct OR after company pick): force password change if needed, else enter.
+  const completeLogin=(res)=>{
+    if(res.user&&res.user.must_change_password){ resetMsgs(); setNp1("");setNp2(""); setChgPending({user:res.user,companies:res.companies}); setStage("change"); }
+    else onLogin(res.user,res.companies);
+  };
+  const handleSelectCompany=async(opt)=>{
+    resetMsgs();setLoading(true);
+    try{
+      const res=await api.loginSelect(pendingTok,opt.user_id,opt.company_id);
+      if(res&&res.success&&res.token){ completeLogin(res); }
+      else{ setError((res&&res.message)||"Company select nahi hua"); }
     }catch(err){setError("Server not reachable. Please try again.");}
     setLoading(false);
   };
@@ -456,6 +472,26 @@ function LoginScreen({onLogin}){
               <input type={show?"text":"password"} value={np2} onChange={e=>setNp2(e.target.value)} style={inputStyle} onKeyDown={e=>e.key==="Enter"&&handleForceChange()}/>
             </div>
             <button onClick={handleForceChange} disabled={loading} style={primaryBtn(loading)}>{loading?"Saving...":"Set New Password & Continue"}</button>
+          </>
+        )}
+
+        {stage==="picker"&&(
+          <>
+            <div style={{fontSize:14,fontWeight:700,color:C.t,textAlign:"center",marginBottom:4}}>Select company</div>
+            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:18}}>Aapka mobile in companies me registered hai — jisme login karna hai chuno.</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10}}>
+              {pickerOptions.map((o,i)=>(
+                <button key={i} onClick={()=>handleSelectCompany(o)} disabled={loading}
+                  style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"13px 16px",borderRadius:10,border:`1.5px solid ${C.b}`,background:T.sltL,cursor:"pointer",textAlign:"left",fontFamily:"inherit"}}>
+                  <div>
+                    <div style={{fontSize:14,fontWeight:700,color:C.t}}>{o.company_name||"Company"}</div>
+                    <div style={{fontSize:11,color:C.tm,marginTop:2}}>{(o.role||"").replace(/_/g," ")}{o.domain_label?" · "+o.domain_label:""}</div>
+                  </div>
+                  <span style={{color:C.p,fontSize:20,fontWeight:700}}>›</span>
+                </button>
+              ))}
+            </div>
+            <button onClick={()=>{setStage("password");resetMsgs();}} style={{...secondaryBtn,marginTop:14}}>Back</button>
           </>
         )}
 

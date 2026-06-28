@@ -114,7 +114,7 @@ api.del   = (endpoint, body, opts)  => api(endpoint, body !== undefined ? { meth
 api.login = async (email, password) => {
   const res  = await fetch(`${API_BASE}/auth/login`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({email,password}) });
   const data = await res.json();
-  if (data.success) saveAuth(data.token, data.user, data.companies);
+  if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
 };
 
@@ -141,7 +141,7 @@ api.loginPassword = async (mobile, password) => {
   }
   const res  = await fetch(`${API_BASE}/auth/login/password`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,password}) });
   const data = await res.json();
-  if (data.success) saveAuth(data.token, data.user, data.companies);
+  if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
 };
 
@@ -176,12 +176,20 @@ api.loginOtp = async (mobile, otp, accessToken) => {
   }
   const res  = await fetch(`${API_BASE}/auth/login/otp`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({mobile,otp,accessToken}) });
   const data = await res.json();
-  if (data.success) saveAuth(data.token, data.user, data.companies);
+  if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
+  return data;
+};
+// Multi-company login: after login returns multi_company, the user picks a
+// company → exchange the pending token for a real auth token.
+api.loginSelect = async (pending, user_id, company_id) => {
+  const res  = await fetch(`${API_BASE}/auth/login/select`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ pending, user_id, company_id }) });
+  const data = await res.json();
+  if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
 };
 api.switchCompany = async (companyId) => {
   const data = await api.post("/auth/switch-company", { company_id: companyId });
-  if (data.success) saveAuth(data.token, data.user, data.companies);
+  if (data.success && data.token) saveAuth(data.token, data.user, data.companies);
   return data;
 };
 api.logout = () => { clearAuth(); window.location.reload(); };
