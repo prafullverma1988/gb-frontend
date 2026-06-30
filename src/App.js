@@ -359,6 +359,8 @@ function LoginScreen({onLogin}){
   };
 
   // Stage 3b: OTP login
+  // Cache the MSG91 access-token so a retry (backend hiccup) reuses the same
+  // token instead of re-calling widgetVerifyOtp which fails with "already verified".
   const handleOtpLogin=async()=>{
     resetMsgs();
     if(!/^\d{4,6}$/.test(otp)){setError("Enter the OTP");return;}
@@ -366,10 +368,16 @@ function LoginScreen({onLogin}){
     try{
       let res;
       if(otpMode==="widget"){
-        const d=await widgetVerifyOtp(otp);      // MSG91 verifies the typed OTP
-        const token=extractAccessToken(d);
-        if(!token){setError("Invalid OTP");setLoading(false);return;}
+        if(!window.__otpTokenCache) window.__otpTokenCache={};
+        let token = window.__otpTokenCache[mobile];
+        if(!token){
+          const d=await widgetVerifyOtp(otp);    // one-time MSG91 call
+          token=extractAccessToken(d);
+          if(!token){setError("Invalid OTP");setLoading(false);return;}
+          window.__otpTokenCache[mobile]=token;   // cache for retry
+        }
         res=await api.loginOtp(mobile,otp,token);
+        if(res&&res.success) delete window.__otpTokenCache[mobile];
       }else{
         res=await api.loginOtp(mobile,otp);
       }
