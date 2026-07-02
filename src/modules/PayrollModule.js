@@ -2231,7 +2231,7 @@ function AddStaffModal({onClose,onSaved}){
 }
 
 // ── MONTHLY SALARY TAB ────────────────────────────────────────────
-function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,isAdmin,onStaffUpdate}){
+function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,isAdmin,onStaffUpdate,holidays}){
   const [search,setSearch]=useState("");
   const [payStatus,setPayStatus]=useState({});
   // local paymentType overrides — can be toggled per employee
@@ -2358,6 +2358,12 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
   const filtered=staff.filter(e=>e.salaryEnabled!==false).filter(e=>!search||e.name.toLowerCase().includes(search.toLowerCase())||(e.role||"").toLowerCase().includes(search.toLowerCase()));
 
   const WD=workingDays||26;
+  // Holidays payable (mirrors backend computeRun): non-optional, non-Sunday
+  // holidays of this month are paid days for attendance-type staff.
+  const payableHolidayDays=(holidays||[]).filter(h=>{
+    const d=new Date(h.holiday_date);
+    return d.getFullYear()===year&&d.getMonth()===month&&!h.is_optional&&d.getDay()!==0;
+  }).map(h=>new Date(h.holiday_date).getDate());
   const calcNet=(emp)=>{
     const days=att[emp.id]||{};
     const P=Object.values(days).filter(v=>v==="P").length;
@@ -2368,11 +2374,16 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
     const lopSet=lopDays[emp.id]||new Set();
     let L_paid=0, L_unpaid=0;
     Object.entries(days).forEach(([d,v])=>{ if(v==="L"){ if(lopSet.has(Number(d))) L_unpaid++; else L_paid++; } });
-    const effective=P+(H*0.5)+L_paid;
+    const pType=paymentTypes[emp.id]||emp.paymentType||"fixed";
+    // Holidays on/after join date (mid-month joiners) — attendance staff only;
+    // no cap at WD (extra Sunday work marked P legitimately exceeds WD).
+    let joinDay=1;
+    if(emp.joinDate){ const jd=new Date(emp.joinDate); if(jd.getFullYear()===year&&jd.getMonth()===month) joinDay=jd.getDate(); }
+    const payableHolidays=pType==="attendance"?payableHolidayDays.filter(d=>d>=joinDay).length:0;
+    const effective=P+(H*0.5)+L_paid+payableHolidays;
     // Petrol + Special allowance added as part of gross (Phase 2 fields,
     // default 0 when not set so legacy rows keep working)
     const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone+(emp.petrolAllowance||0)+(emp.specialAllowance||0);
-    const pType=paymentTypes[emp.id]||emp.paymentType||"fixed";
     const gross=pType==="fixed"
       ? fullGross
       : Math.round((fullGross/WD)*effective);
@@ -2387,11 +2398,11 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
       else pfFull=Math.round(Math.min(emp.basicSalary,15000)*0.12); // capped_15k
     }
     const esicApplicable=emp.esicApplicable===undefined?true:!!emp.esicApplicable;
-    const esiFull=(esicApplicable&&gross<=21000)?Math.round(gross*0.0075):0;
-    // Prorate deductions for attendance-paid staff (else cap at full
-    // gross days). For 'fixed' staff, PF/ESI is full month value.
+    // ESI: eligibility on the monthly WAGE (fullGross ≤ ₹21k), deduction 0.75%
+    // of earned gross — gross is already prorated, so no re-proration.
+    const esi=(esicApplicable&&fullGross<=21000)?Math.round(gross*0.0075):0;
+    // PF prorated for attendance-paid staff; 'fixed' staff full month value.
     const pf=pType==="fixed"?pfFull:Math.round((pfFull/WD)*effective);
-    const esi=pType==="fixed"?esiFull:Math.round((esiFull/WD)*effective);
     const adv=(advances||[]).find(a=>a.empId===emp.id&&a.status==="Pending deduction")?.amount||0;
     // Manual TDS for this month (looked up from `tdsByEmpMonth` if set)
     const tds=Math.round((tdsByEmpMonth&&tdsByEmpMonth[emp.id])||0);
@@ -4607,7 +4618,8 @@ function RunAttEditModal({emp,month,year,holidaySet,workingDays,onClose,onSave})
 
   const inp={width:"100%",padding:"8px 10px",border:`1px solid ${T.b2}`,borderRadius:8,fontSize:13,fontWeight:700,textAlign:"center",fontFamily:"inherit"};
   const fields=[["P","Present",T.grn],["H","Half Day",T.amb],["A","Absent",T.red]];
-  const payable=target.P+target.H*0.5+emp.paid_leave;
+  // Delta on the server-computed payable_days so holiday/half-LOP credits stay intact
+  const payable=Number(emp.payable_days)+(target.P-emp.P)+(target.H-emp.H)*0.5;
   const otAmt=emp.full_gross>0?Math.round((emp.full_gross/(workingDays||26)/8)*target.ot):0;
   const changedCount=target.P!==emp.P||target.H!==emp.H||target.A!==emp.A;
   const changedOt=target.ot!==emp.ot_hours;
@@ -4823,10 +4835,12 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
     if(reason===null) return;
     setBusy(true);
     try{
-      await api.post(`/payroll/run/${finalized.id}/revert`,{reason});
-      flash("Run reverted — period unlocked");
-      setFinalized(null); setItems([]); setStep(0); await loadPre();
-      if(onChanged) onChanged();
+      const r=await api.post(`/payroll/run/${finalized.id}/revert`,{reason});
+      if(r.success){
+        flash("Run reverted — period unlocked, deducted advances restored");
+        setFinalized(null); setItems([]); setStep(0); await loadPre();
+        if(onChanged) onChanged();
+      }else flash(r.message||"Revert failed");
     }catch(e){ flash(e?.response?.data?.message||"Revert failed"); }
     setBusy(false);
   };
@@ -4947,7 +4961,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
               </tbody>
             </table>
           </RWCard>
-          <div style={{fontSize:11.5,color:T.t3,marginTop:10}}>Payable = Present + (Half × 0.5) + Paid Leave. OT × per-hour rate (Gross ÷ {workingDays||26} ÷ 8) salary me add. Leave Leave-tab se manage hoti hai.</div>
+          <div style={{fontSize:11.5,color:T.t3,marginTop:10}}>Payable = Present + (Half × 0.5) + Paid Leave + Holidays. OT × per-hour rate (Gross ÷ {workingDays||26} ÷ 8) salary me add. Leave Leave-tab se manage hoti hai.</div>
         </div>
       )}
 
@@ -5302,9 +5316,9 @@ function PayrollModule(){
       else pfFull=Math.round(Math.min(emp.basicSalary,15000)*0.12);
     }
     const esicApplicable=emp.esicApplicable===undefined?true:!!emp.esicApplicable;
-    const esiFull=(esicApplicable&&gross<=21000)?Math.round(gross*0.0075):0;
+    // ESI eligibility on wage (fullGross), deduction on earned gross — no re-proration
+    const esi=(esicApplicable&&fullGross<=21000)?Math.round(gross*0.0075):0;
     const pf=pType==="fixed"?pfFull:Math.round((pfFull/WD)*eff);
-    const esi=pType==="fixed"?esiFull:Math.round((esiFull/WD)*eff);
     // Clamp net at 0 — never display negative payroll
     return s+Math.max(0,gross-pf-esi);
   },0);
@@ -5482,7 +5496,7 @@ function PayrollModule(){
           <GeofenceAdminTab isAdmin={isAdmin}/>
         )}
         {mode==="office" && tab==="office-salary" && (
-          <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin} onStaffUpdate={loadAll}/>
+          <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} holidays={holidays} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin} onStaffUpdate={loadAll}/>
         )}
         {mode==="office" && tab==="office-run" && (
           isAdmin
