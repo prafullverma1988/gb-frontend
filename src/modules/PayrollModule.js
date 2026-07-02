@@ -1254,7 +1254,8 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
     ? fullGross
     : Math.round((fullGross/WD)*effective);
   const pf=Math.round(emp.basicSalary*0.12);
-  const esi=emp.basicSalary<=21000?Math.round(grossEarned*0.0075):0;
+  // ESI eligibility on wage (fullGross ≤ ₹21k), deduction on earned gross
+  const esi=fullGross<=21000?Math.round(grossEarned*0.0075):0;
   const tds=grossEarned>15000?Math.round(grossEarned*0.05):0;
   const advDed=ADVANCE_DATA.find(a=>a.empId===emp.id&&a.status==="Pending deduction");
   const advDeduction=advDed?.amount||0;
