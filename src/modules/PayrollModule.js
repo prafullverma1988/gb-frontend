@@ -529,12 +529,14 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
     setSubmitting(false);
   };
 
+  const [reviewErr,setReviewErr]=useState({});  // {appId: message} — inline error on the card
   const review=async(id,action,note)=>{
+    setReviewErr(p=>({...p,[id]:""}));
     try{
       const r=await api.patch(`/payroll/leave-applications/${id}/review`,{action,note:note||null});
       if(r.success){ await reload(); if(action==="approve"&&onAttendanceChanged) onAttendanceChanged(); }
-      else alert(r.message||"Review failed");
-    }catch(e){ alert(e.message); }
+      else setReviewErr(p=>({...p,[id]:r.message||"Review failed"}));
+    }catch(e){ setReviewErr(p=>({...p,[id]:e.message||"Review failed"})); }
   };
   const cancel=async(id)=>{
     if(!await window.confirmAsync("Cancel this leave application?")) return;
@@ -542,6 +544,18 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
       const r=await api.patch(`/payroll/leave-applications/${id}/cancel`,{});
       if(r.success) await reload();
       else alert(r.message);
+    }catch(e){ alert(e.message); }
+  };
+  // Admin-only: cancel an APPROVED leave — restores balance + unmarks 'L' days
+  const cancelApproved=async(a)=>{
+    if(!await window.confirmAsync(`${a.staff_name} ki approved leave (${fmtDate(a.from_date)} → ${fmtDate(a.to_date)}) cancel karein? Balance restore hoga aur grid ke 'L' days unmark ho jayenge.`)) return;
+    const reason=await window.promptAsync("Cancel reason (required):");
+    if(reason===null) return;
+    if(!String(reason).trim()){ alert("Reason required"); return; }
+    try{
+      const r=await api.patch(`/payroll/leave-applications/${a.id}/cancel-approved`,{reason:String(reason).trim()});
+      if(r.success){ await reload(); if(onAttendanceChanged) onAttendanceChanged(); }
+      else alert(r.message||"Cancel failed");
     }catch(e){ alert(e.message); }
   };
 
@@ -666,6 +680,10 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
                   {a.status==="Pending"&&(a.applied_by===currentUser.id||isAdmin)&&(
                     <button onClick={()=>cancel(a.id)} style={{padding:"3px 8px",borderRadius:5,background:T.sltL,border:`1px solid ${T.b1}`,color:T.t3,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Cancel</button>
                   )}
+                  {a.status==="Approved"&&isAdmin&&(
+                    <button onClick={()=>cancelApproved(a)} title="Balance restore + 'L' days unmark honge"
+                      style={{padding:"3px 8px",borderRadius:5,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+                  )}
                 </div>
               </div>
             );
@@ -704,6 +722,9 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
                   </button>
                 </div>
               </div>
+              {reviewErr[a.id]&&(
+                <div style={{padding:"7px 10px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:6,fontSize:11.5,color:T.red,fontWeight:600}}>{reviewErr[a.id]}</div>
+              )}
             </div>
           ))}
         </div>
@@ -723,6 +744,17 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
                 }}
                 style={{padding:"6px 12px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
                 Allocate {year} Balances
+              </button>
+              <button onClick={async()=>{
+                  if(!await window.confirmAsync(`Carry-forward ${year-1} → ${year}? Carry-forward waale leave types ka bacha balance ${year} ke carried_fwd me SET hoga (idempotent — dobara chalane par double nahi hota).`)) return;
+                  try{
+                    const r=await api.post("/payroll/leave-balances/rollover",{from_year:year-1,to_year:year});
+                    if(r.success){ alert(`${r.rolled} balance row(s) rolled forward`); await reload(); }
+                    else alert(r.message||"Rollover failed");
+                  }catch(e){ alert(e.message); }
+                }}
+                style={{padding:"6px 12px",borderRadius:7,background:T.purL,border:`1px solid ${T.pur}33`,color:T.pur,fontSize:11.5,fontWeight:600,cursor:"pointer"}}>
+                ⟳ Carry-forward {year-1} → {year}
               </button>
             </div>
           )}
@@ -2266,10 +2298,11 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
     }catch(e){ /* endpoint comes online with Phase 2 backend — silent */ }
   };
 
-  // ─── LOP day-set per staff for this month (Phase 3) ──────
+  // ─── LOP day-map per staff for this month (Phase 3) ──────
   // Approved leave applications with is_unpaid=1 → mark those dates as
-  // "L but unpaid" so calcNet treats them like A (no salary).
-  const [lopDays,setLopDays]=useState({});  // {staffId: Set<dayNum>}
+  // "L but unpaid". Fraction 0.5 for half-day LOP (worked half stays
+  // payable), 1 for a full unpaid day — mirrors backend computeRun.
+  const [lopDays,setLopDays]=useState({});  // {staffId: Map<dayNum,fraction>}
   const loadLopDays=async()=>{
     try{
       const yfmt=year, mfmt=String(month+1).padStart(2,"0");
@@ -2281,11 +2314,11 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
       const lopOnly=(r.data||[]).filter(a=>a.is_unpaid);
       const map={};
       lopOnly.forEach(a=>{
-        if(!map[a.staff_id]) map[a.staff_id]=new Set();
+        if(!map[a.staff_id]) map[a.staff_id]=new Map();
         const f=new Date(a.from_date), t=new Date(a.to_date);
         const cur=new Date(f);
         while(cur<=t){
-          if(cur.getFullYear()===year && cur.getMonth()===month) map[a.staff_id].add(cur.getDate());
+          if(cur.getFullYear()===year && cur.getMonth()===month) map[a.staff_id].set(cur.getDate(),a.is_half_day?0.5:1);
           cur.setDate(cur.getDate()+1);
         }
       });
@@ -2370,17 +2403,18 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
     const H=Object.values(days).filter(v=>v==="H").length;
     const A=Object.values(days).filter(v=>v==="A").length;
     // Paid leave counts as present; LOP (unpaid) leave does NOT.
-    // lopDays[emp.id] holds the set of day-numbers approved as LOP this month.
-    const lopSet=lopDays[emp.id]||new Set();
-    let L_paid=0, L_unpaid=0;
-    Object.entries(days).forEach(([d,v])=>{ if(v==="L"){ if(lopSet.has(Number(d))) L_unpaid++; else L_paid++; } });
+    // lopDays[emp.id] holds Map<day,fraction> approved as LOP this month —
+    // 0.5 for half-day LOP (worked half stays payable), 1 for full day.
+    const lopSet=lopDays[emp.id]||new Map();
+    let L_paid=0, L_unpaid=0, lopHalfCredit=0;
+    Object.entries(days).forEach(([d,v])=>{ if(v==="L"){ const frac=lopSet.get(Number(d)); if(frac===undefined) L_paid++; else { L_unpaid+=frac; if(frac===0.5) lopHalfCredit+=0.5; } } });
     const pType=paymentTypes[emp.id]||emp.paymentType||"fixed";
     // Holidays on/after join date (mid-month joiners) — attendance staff only;
     // no cap at WD (extra Sunday work marked P legitimately exceeds WD).
     let joinDay=1;
     if(emp.joinDate){ const jd=new Date(emp.joinDate); if(jd.getFullYear()===year&&jd.getMonth()===month) joinDay=jd.getDate(); }
     const payableHolidays=pType==="attendance"?payableHolidayDays.filter(d=>d>=joinDay).length:0;
-    const effective=P+(H*0.5)+L_paid+payableHolidays;
+    const effective=P+(H*0.5)+L_paid+lopHalfCredit+payableHolidays;
     // Petrol + Special allowance added as part of gross (Phase 2 fields,
     // default 0 when not set so legacy rows keep working)
     const fullGross=emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone+(emp.petrolAllowance||0)+(emp.specialAllowance||0);
