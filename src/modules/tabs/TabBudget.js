@@ -162,7 +162,7 @@ export default function TabBudget({ project }) {
     else flash((h?.message || ln?.message) || "Save failed", "error");
   };
   const removeNode = async () => {
-    if (!window.confirm("Remove budget from this task? Estimate lines are cleared.")) return;
+    if (!(await window.confirmAsync("Remove budget from this task? Estimate lines are cleared."))) return;
     await api.put(`/budget/task/${sel}/lines`, { lines: [] });
     await api.patch(`/budget/task/${sel}`, { is_budget_node: 0 });
     flash("Budget removed"); setSel(null); load();

@@ -1805,6 +1805,8 @@ export default function App(){
           const updated={...user, module_permissions: res.module_permissions};
           setUser(updated);
           try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
+          // Rolling refresh: backend re-issues the token once >7d old.
+          if(res.refreshed_token){ try{ localStorage.setItem("gb_token", res.refreshed_token); }catch(_){} }
         }
       }catch(_){}
     };

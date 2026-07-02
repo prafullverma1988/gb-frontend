@@ -431,7 +431,7 @@ function LeadDrawer({ lead, agents, onClose, onSave, onNote, onDelete }) {
             <Btn color={T.grn} onClick={()=>onSave({ ...f, stage:"won" })}><IcChk size={13}/>Won</Btn>
             <Btn variant="ghost" color={T.slt} onClick={()=>onSave({ ...f, stage:"lost" })}>Lost</Btn>
           </div>
-          <Btn variant="ghost" color={T.red} onClick={()=>{ if(window.confirm("Delete this lead?")) onDelete(); }}><IcTrash size={13}/></Btn>
+          <Btn variant="ghost" color={T.red} onClick={async()=>{ if(await window.confirmAsync("Delete this lead?")) onDelete(); }}><IcTrash size={13}/></Btn>
         </div>
       </div>
     </>
