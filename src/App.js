@@ -283,17 +283,29 @@ let _otpWidgetReady=null;
 function loadOtpWidget(){
   if(_otpWidgetReady)return _otpWidgetReady;
   _otpWidgetReady=new Promise((resolve)=>{
-    const init=()=>{ try{ window.initSendOTP({widgetId:MSG91_WIDGET_ID,tokenAuth:MSG91_TOKEN_AUTH,exposeMethods:true,success:()=>{},failure:()=>{}}); resolve(true);}catch(_){resolve(false);} };
+    let settled=false;
+    const done=(v)=>{ if(settled)return; settled=true; if(!v)_otpWidgetReady=null; resolve(v); };
+    setTimeout(()=>done(false),12000); // overall guard — don't hang forever
+    const init=()=>{
+      try{
+        // Resolve ONLY when MSG91's success fires (window.sendOtp is set by then).
+        // Poll as fallback in case success fires synchronously before our handler.
+        window.initSendOTP({widgetId:MSG91_WIDGET_ID,tokenAuth:MSG91_TOKEN_AUTH,exposeMethods:true,
+          success:()=>done(true), failure:()=>done(false)});
+        const poll=setInterval(()=>{ if(window.sendOtp){clearInterval(poll);done(true);} },100);
+        setTimeout(()=>clearInterval(poll),10000);
+      }catch(_){done(false);}
+    };
     if(window.initSendOTP)return init();
     const s=document.createElement("script");
     s.src="https://verify.msg91.com/otp-provider.js"; s.async=true;
-    s.onload=init; s.onerror=()=>resolve(false);
+    s.onload=init; s.onerror=()=>done(false);
     document.body.appendChild(s);
   });
   return _otpWidgetReady;
 }
-function widgetSendOtp(mobile){ return new Promise((resolve,reject)=>{ if(!window.sendOtp)return reject(new Error("OTP service not ready")); window.sendOtp("91"+mobile,(d)=>resolve(d),(e)=>reject(e)); }); }
-function widgetVerifyOtp(otp){ return new Promise((resolve,reject)=>{ if(!window.verifyOtp)return reject(new Error("OTP service not ready")); window.verifyOtp(otp,(d)=>resolve(d),(e)=>reject(e)); }); }
+function widgetSendOtp(mobile){ return new Promise((resolve,reject)=>{ if(!window.sendOtp)return reject(new Error("OTP service not ready")); const t=setTimeout(()=>reject(new Error("OTP timed out — please use Password login")),15000); window.sendOtp("91"+mobile,(d)=>{clearTimeout(t);resolve(d);},(e)=>{clearTimeout(t);reject(e);}); }); }
+function widgetVerifyOtp(otp){ return new Promise((resolve,reject)=>{ if(!window.verifyOtp)return reject(new Error("OTP service not ready")); const t=setTimeout(()=>reject(new Error("Verification timed out — please use Password login")),15000); window.verifyOtp(otp,(d)=>{clearTimeout(t);resolve(d);},(e)=>{clearTimeout(t);reject(e);}); }); }
 function extractAccessToken(d){ if(!d)return ""; if(typeof d==="string")return d; return d.message||d["access-token"]||d.accessToken||d.token||""; }
 
 // ── LOGIN ─────────────────────────────────────────────────────────────
