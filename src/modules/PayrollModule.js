@@ -561,6 +561,16 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
 
   const inp={width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
 
+  // Apply-form balance context — selected staff × type ka available balance
+  // (allocated + carried_fwd − used, from already-loaded /leave-balances).
+  const selType=types.find(t=>t.id===Number(form.leave_type_id))||null;
+  const selBalance=(()=>{
+    if(!form.staff_id||!selType||selType.is_unpaid) return null;   // LOP: no balance limit
+    const b=balances.find(x=>x.staff_id===Number(form.staff_id)&&x.leave_type_id===selType.id);
+    return b?Number(b.balance):0;
+  })();
+  const overBalance=selBalance!==null&&!preview.loading&&preview.days>selBalance;
+
   // ─── Sub-tabs strip ────────────────────────────────────
   const SUB_TABS=[
     {id:"apply", l:"Apply", c:T.grn},
@@ -615,6 +625,14 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
               <input type="date" value={form.to_date} onChange={e=>setForm(p=>({...p,to_date:e.target.value}))} disabled={form.is_half_day} style={{...inp,opacity:form.is_half_day?0.5:1}}/>
             </div>
           </div>
+          {selBalance!==null&&(
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+              <span style={{fontSize:10.5,fontWeight:700,padding:"3px 9px",borderRadius:10,background:selBalance>0?T.grnL:T.redL,color:selBalance>0?T.grn:T.red,border:`1px solid ${selBalance>0?T.grnM:T.redM}`}}>
+                Balance: {selBalance} din
+              </span>
+              <span style={{fontSize:10,color:T.t4}}>{selType.code} · {selType.name}</span>
+            </div>
+          )}
           <label style={{display:"flex",alignItems:"center",gap:7,fontSize:12,color:T.t2,marginBottom:10,cursor:"pointer"}}>
             <input type="checkbox" checked={form.is_half_day} onChange={e=>setForm(p=>({...p,is_half_day:e.target.checked,to_date:e.target.checked?p.from_date:p.to_date}))}/>
             Half-day leave (single date)
@@ -641,6 +659,12 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
               <span style={{fontSize:11.5,color:T.t3}}>Computed working days:</span>
               <span style={{fontSize:14,fontWeight:800,color:T.blu}}>{preview.loading?"…":preview.days}</span>
               <span style={{fontSize:10.5,color:T.t4,marginLeft:"auto"}}>Sundays + non-optional holidays auto-excluded</span>
+            </div>
+          )}
+          {form.from_date && form.to_date && overBalance && (
+            <div style={{padding:"8px 11px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:7,marginBottom:10,display:"flex",alignItems:"center",gap:7}}>
+              <IcAlert size={13} color={T.amb}/>
+              <span style={{fontSize:11.5,color:T.t2}}><b style={{color:T.amb}}>Balance se zyada</b> — {preview.days} din maange, balance sirf {selBalance} din. Approve par block hoga; excess ke liye LOP consider karein.</span>
             </div>
           )}
 
@@ -1128,6 +1152,29 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
   const now=new Date();const today=(now.getMonth()===month&&now.getFullYear()===year)?now.getDate():month<now.getMonth()||year<now.getFullYear()?daysInMonth:0;
   const ATT_COLORS={"P":{bg:"#ECFDF5",c:"#059669",label:"P"},"A":{bg:"#FEF2F2",c:"#DC2626",label:"A"},"H":{bg:"#FFFBEB",c:"#D97706",label:"H"},"L":{bg:"#EFF6FF",c:"#2563EB",label:"L"},null:{bg:T.surfaceB,c:T.t4,label:"·"}};
 
+  // Half-day 'L' markers — approved is_half_day applications this month
+  // (half-day apply single-date hoti hai, so from_date is the day).
+  const [halfL,setHalfL]=useState({});   // {staffId: Set<day>}
+  useEffect(()=>{
+    let alive=true;
+    const mfmt=String(month+1).padStart(2,"0");
+    const lastD=new Date(year,month+1,0).getDate();
+    api.get(`/payroll/leave-applications?status=Approved&from=${year}-${mfmt}-01&to=${year}-${mfmt}-${String(lastD).padStart(2,"0")}`)
+      .then(r=>{
+        if(!alive||!r.success) return;
+        const map={};
+        (r.data||[]).filter(a=>a.is_half_day).forEach(a=>{
+          const d=new Date(a.from_date);
+          if(d.getMonth()===month&&d.getFullYear()===year){
+            if(!map[a.staff_id]) map[a.staff_id]=new Set();
+            map[a.staff_id].add(d.getDate());
+          }
+        });
+        setHalfL(map);
+      }).catch(()=>{});
+    return()=>{ alive=false; };
+  },[month,year,att]);
+
   // Build a day → holiday lookup for current month/year
   const holidayByDay={};
   holidays.forEach(h=>{
@@ -1198,14 +1245,15 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
               const isFuture=d>today;
               const hol=holidayByDay[d];
               const isHolBlock=isHolidayCell(d);
-              const cellBg=isHolBlock?"#FEE2E2":isFuture?"transparent":sc.bg;
-              const cellColor=isHolBlock?T.red:isFuture?T.b2:sc.c;
+              const isHalfL=status==="L"&&!!halfL[emp.id]?.has(d);
+              const cellBg=isHolBlock?"#FEE2E2":isFuture?"transparent":isHalfL?"#FEF3C7":sc.bg;
+              const cellColor=isHolBlock?T.red:isFuture?T.b2:isHalfL?"#B45309":sc.c;
               return(
                 <div key={d}
                   onClick={()=>!isFuture&&!isHolBlock&&toggleAtt(emp.id,d)}
-                  style={{position:"relative",width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:cellBg,borderRadius:4,cursor:isFuture||isHolBlock?"default":"pointer",fontSize:9.5,fontWeight:700,color:cellColor,border:`1px solid ${isHolBlock?"#FCA5A5":isFuture?"transparent":sc.bg}`,transition:"all .1s",margin:"0 1px"}}
-                  title={hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:punchDays[emp.id]?.[d]?`${emp.name} - Day ${d} · 📍 GPS punch (mobile)`:`${emp.name} - Day ${d}`}>
-                  {isHolBlock?"H":isFuture?"":sc.label}
+                  style={{position:"relative",width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:cellBg,borderRadius:4,cursor:isFuture||isHolBlock?"default":"pointer",fontSize:9.5,fontWeight:700,color:cellColor,border:`1px solid ${isHolBlock?"#FCA5A5":isFuture?"transparent":isHalfL?"#FDE68A":sc.bg}`,transition:"all .1s",margin:"0 1px"}}
+                  title={hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:isHalfL?`${emp.name} - Day ${d} · Half-day leave`:punchDays[emp.id]?.[d]?`${emp.name} - Day ${d} · 📍 GPS punch (mobile)`:`${emp.name} - Day ${d}`}>
+                  {isHolBlock?"H":isFuture?"":isHalfL?"L½":sc.label}
                   {/* GPS-punch source badge — auto-Present from mobile punch */}
                   {!isFuture&&!isHolBlock&&punchDays[emp.id]?.[d]&&(
                     <span style={{position:"absolute",top:-1,right:0,fontSize:7,lineHeight:1}}>📍</span>
@@ -5013,7 +5061,7 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
                       <td style={{textAlign:"center",color:T.blu,fontSize:11.5}}>{e.gps_days>0?<span style={{display:"inline-flex",alignItems:"center",gap:3}}><IcGPS size={11} color={T.blu}/>{e.gps_days}</span>:"—"}</td>
                       <td style={{textAlign:"center",color:T.amb,fontWeight:600}}>{e.H||"—"}</td>
                       <td style={{textAlign:"center",color:T.pur,fontWeight:600}}>{e.paid_leave||"—"}</td>
-                      <td style={{textAlign:"center",color:T.red,fontWeight:600}}>{e.unpaid_leave||"—"}</td>
+                      <td style={{textAlign:"center",color:T.red,fontWeight:600}}>{e.unpaid_leave?(Number(e.unpaid_leave)%1!==0?<span>{Number(e.unpaid_leave)} <span style={{fontSize:9,padding:"1px 4px",borderRadius:6,background:"#FEF3C7",color:"#B45309",fontWeight:800}}>½</span></span>:Number(e.unpaid_leave)):"—"}</td>
                       <td style={{textAlign:"center",color:T.red,fontWeight:700}}>{e.A||"—"}</td>
                       <td style={{textAlign:"center",color:T.blu,fontWeight:700}}>{e.ot_hours||"—"}</td>
                       <td style={{textAlign:"center"}}><Pill label={`${e.payable_days} / ${workingDays||26}`} c={T.blu} bg={T.bluL}/></td>
