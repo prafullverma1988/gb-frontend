@@ -3136,7 +3136,9 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
       if(!alive||!r.success) return;
       setRunRecs((r.data||[]).map(it=>({
         id:"run-"+it.id, name:it.staff_name, designation:it.designation||"", role:it.designation||"",
-        amount:Number(it.net_amount)||0, status:it.pay_status==="paid"?"Paid":"Pending",
+        amount:Number(it.net_amount)||0,
+        settled:Number(it.settled)||0,
+        status:it.pay_status==="paid"?"Paid":(it.pay_status==="partial"?"Partial":"Pending"),
         salaryDate:it.finalized_at?String(it.finalized_at).split("T")[0]:"", dueDate:null,
         paidDate:it.paid_at?String(it.paid_at).split("T")[0]:null, txRef:it.tx_ref||"",
         month:(it.month_num||1)-1, year:it.year_num, source:"Run",
@@ -3163,10 +3165,15 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
 
   const markPaid=async(rec)=>{
     if(rec.source==="Run"){
-      // Run-generated payment → update payroll_run_items
+      // Run-generated payment → settle the remaining via the salary ledger
+      // (keeps staff_salary_ledger + pay_status in sync; partial-safe).
       const itemId=String(rec.id).replace("run-","");
-      try{ await api.patch("/payroll/run-items/"+itemId,{pay_status:"paid",payment_method:"manual",tx_ref:payForm.txRef}); }catch(err){console.error("Mark paid (run):",err);}
-      setRunRecs(p=>p.map(r=>r.id===rec.id?{...r,status:"Paid",paidDate:payForm.paidDate,txRef:payForm.txRef}:r));
+      const remaining=Math.max(0,(Number(rec.amount)||0)-(Number(rec.settled)||0));
+      try{
+        const r=await api.post("/wallets/salary/settle",{run_item_id:Number(itemId),amount:remaining,payment_method:"manual",tx_ref:payForm.txRef||undefined});
+        if(!r.success){ window.alert(r.message||"Settle failed"); setMarkPayModal(null); return; }
+      }catch(err){ console.error("Mark paid (run):",err); window.alert("Settle failed"); setMarkPayModal(null); return; }
+      setRunRecs(p=>p.map(r=>r.id===rec.id?{...r,status:"Paid",settled:rec.amount,paidDate:payForm.paidDate,txRef:payForm.txRef}:r));
       setMarkPayModal(null);
       return;
     }
@@ -3210,7 +3217,7 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
 
       {/* Controls */}
       <div style={{display:"flex",gap:8,marginBottom:10,alignItems:"center",flexWrap:"wrap"}}>
-        {["All","Pending","Paid"].map(s=>(
+        {["All","Pending","Partial","Paid"].map(s=>(
           <button key={s} onClick={()=>setFilterStatus(s)}
             style={{padding:"5px 13px",borderRadius:20,border:`1.5px solid ${filterStatus===s?T.blu:T.b1}`,background:filterStatus===s?T.bluL:"none",color:filterStatus===s?T.blu:T.t3,fontSize:11.5,fontWeight:filterStatus===s?700:400,cursor:"pointer"}}>
             {s} {s!=="All"&&<span style={{fontWeight:800}}>{allRecs.filter(r=>r.status===s).length}</span>}
@@ -4879,8 +4886,30 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
     }catch(e){ flash(e?.response?.data?.message||"Revert failed"); }
     setBusy(false);
   };
-  const markPaid=async(it)=>{
-    try{ const r=await api.patch(`/payroll/run-items/${it.id}`,{pay_status:"paid"}); if(r.success) setItems(p=>p.map(x=>x.id===it.id?r.data:x)); }catch(e){ flash("Update failed"); }
+  // Settle modal — payments go through the salary ledger (partial allowed),
+  // pay_status syncs backend-side (pending → partial → paid).
+  const [settleIt,setSettleIt]=useState(null);
+  const [settleForm,setSettleForm]=useState({amount:"",method:"bank_transfer",txRef:""});
+  const openSettle=(it)=>{
+    const remaining=Math.max(0,(Number(it.net_amount)||0)-(Number(it.settled)||0));
+    setSettleForm({amount:String(remaining),method:"bank_transfer",txRef:""});
+    setSettleIt(it);
+  };
+  const doSettle=async()=>{
+    const amt=Number(settleForm.amount);
+    if(!amt||amt<=0){ flash("Amount sahi bharo"); return; }
+    setBusy(true);
+    try{
+      const r=await api.post("/wallets/salary/settle",{run_item_id:settleIt.id,amount:amt,payment_method:settleForm.method,tx_ref:settleForm.txRef||undefined});
+      if(r.success){
+        const ri=await api.get(`/payroll/run/${finalized.id}/items`);
+        if(ri.success) setItems(ri.data.items||[]);
+        flash(r.data?.pay_status==="paid"?"Paid ✓":"Partial settle ✓");
+        setSettleIt(null);
+        if(onChanged) onChanged();
+      }else flash(r.message||"Settle failed");
+    }catch(e){ flash(e?.response?.data?.message||"Settle failed"); }
+    setBusy(false);
   };
   const openPayslip=async(it)=>{
     try{ const r=await api.get(`/payroll/run-items/${it.id}/payslip`); if(r.success) printRunPayslip(r.data.item,r.data.run); }catch(e){ flash("Payslip load failed"); }
@@ -5008,8 +5037,41 @@ function PayrollRunWizard({month,year,isAdmin,workingDays,setTab,onChanged}){
       {/* STEP 3 — FINALIZE / LOCKED VIEW */}
       {step===3&&(
         <RunFinalize preview={preview} adjs={adjs} finalized={finalized} items={items} month={month} year={year}
-          busy={busy} onFinalize={doFinalize} onRevert={doRevert} onMarkPaid={markPaid} onPayslip={openPayslip} isAdmin={isAdmin}/>
+          busy={busy} onFinalize={doFinalize} onRevert={doRevert} onMarkPaid={openSettle} onPayslip={openPayslip} isAdmin={isAdmin}/>
       )}
+
+      {/* SETTLE MODAL — salary payment via ledger (partial allowed) */}
+      {settleIt&&(()=>{
+        const net=Number(settleIt.net_amount)||0;
+        const already=Number(settleIt.settled)||0;
+        const remaining=Math.max(0,net-already);
+        return(
+          <div onClick={()=>setSettleIt(null)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:120,display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,padding:"18px 20px",width:380,maxWidth:"92vw",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
+              <div style={{fontSize:14,fontWeight:800,color:T.t1,marginBottom:4}}>Settle salary — {settleIt.staff_name}</div>
+              <div style={{fontSize:11.5,color:T.t3,marginBottom:12}}>Net ₹{fmtN(net)}{already>0?` · ₹${fmtN(already)} settle ho chuka`:""} · Remaining <b style={{color:T.amb}}>₹{fmtN(remaining)}</b></div>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Amount</label>
+              <input type="number" value={settleForm.amount} onChange={e=>setSettleForm(f=>({...f,amount:e.target.value}))}
+                style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Payment Method</label>
+              <select value={settleForm.method} onChange={e=>setSettleForm(f=>({...f,method:e.target.value}))}
+                style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12.5,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
+                <option value="bank_transfer">Bank Transfer / NEFT</option>
+                <option value="upi">UPI</option>
+                <option value="cash">Cash</option>
+                <option value="cheque">Cheque</option>
+              </select>
+              <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Tx Ref (optional)</label>
+              <input value={settleForm.txRef} onChange={e=>setSettleForm(f=>({...f,txRef:e.target.value}))} placeholder="UTR / cheque no."
+                style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12.5,boxSizing:"border-box",margin:"4px 0 14px"}}/>
+              <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+                <button onClick={()=>setSettleIt(null)} style={{padding:"9px 16px",borderRadius:8,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+                <button disabled={busy} onClick={doSettle} style={{padding:"9px 18px",borderRadius:8,border:"none",background:T.grn,color:"#fff",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>{busy?"Saving…":"Settle ₹"+fmtN(Number(settleForm.amount)||0)}</button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* NAV */}
       {!finalized&&(
@@ -5145,8 +5207,14 @@ function RunFinalize({preview,adjs,finalized,items,month,year,busy,onFinalize,on
                   <div style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{it.staff_name}</div>
                   <div style={{fontSize:10.5,color:T.t4}}>Net ₹{fmtN(it.net_amount)}{it.ot_amount>0?` (incl. OT ₹${fmtN(it.ot_amount)})`:""}</div>
                 </div>
-                <Pill label={it.pay_status==="paid"?"Paid":"Pending"} c={it.pay_status==="paid"?T.grn:T.amb} bg={it.pay_status==="paid"?T.grnL:T.ambL}/>
-                {it.pay_status!=="paid"&&isAdmin&&<button onClick={()=>onMarkPaid(it)} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer"}}>Mark Paid</button>}
+                {(()=>{
+                  const settled=Number(it.settled)||0, net=Number(it.net_amount)||0;
+                  if(it.pay_status==="paid")   return <Pill label="Paid" c={T.grn} bg={T.grnL}/>;
+                  if(it.pay_status==="hold")   return <Pill label="Hold" c={T.slt} bg={T.sltL||T.surfaceB}/>;
+                  if(it.pay_status==="partial"||settled>0) return <Pill label={`Partial (₹${fmtN(settled)} of ₹${fmtN(net)})`} c={T.blu} bg={T.bluL}/>;
+                  return <Pill label="Pending" c={T.amb} bg={T.ambL}/>;
+                })()}
+                {it.pay_status!=="paid"&&isAdmin&&<button onClick={()=>onMarkPaid(it)} style={{fontSize:11,fontWeight:600,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}33`,borderRadius:7,padding:"5px 11px",cursor:"pointer"}}>Settle / Pay</button>}
                 <button onClick={()=>onPayslip(it)} style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer"}}>Payslip</button>
               </div>
             ))}

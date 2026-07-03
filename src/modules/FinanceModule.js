@@ -2255,6 +2255,21 @@ function WalletApprovalsPanel({approvals,photoPolicy,onChange}){
     if(r&&r.success) setThread({txn_id:id,data:r.data.transaction,clarifications:r.data.clarifications||[]});
   };
 
+  // ── Salary settle-requests (staff: imprest → salary) — B3 ──
+  const [settleReqs,setSettleReqs]=useState([]);
+  const loadSettleReqs=()=>{
+    api.get("/wallets/salary/settle-requests").then(r=>{ if(r&&r.success) setSettleReqs(r.data||[]); }).catch(()=>{});
+  };
+  useEffect(()=>{ loadSettleReqs(); },[]);
+  const actSettleReq=async(id,action)=>{
+    setBusy("sr-"+id);
+    const r=await api.post("/wallets/salary/settle-request/"+id+"/"+action,{});
+    setBusy(null);
+    if(!r||r.success===false){window.alert((r&&r.message)||"Action fail");return;}
+    window.alert(action==="confirm"?"Settle confirm — wallet se salary me adjust ho gaya ✓":"Request reject ho gayi");
+    loadSettleReqs(); onChange();
+  };
+
   return (
     <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
@@ -2262,8 +2277,27 @@ function WalletApprovalsPanel({approvals,photoPolicy,onChange}){
           <div style={{fontSize:14,fontWeight:700,color:T.t1}}>Wallet Approval Queue</div>
           <div style={{fontSize:11,color:T.t4}}>Staff ke wallet expense / transfer jo approval ka intezaar kar rahe hain</div>
         </div>
-        <button onClick={onChange} style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:11.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Refresh</button>
+        <button onClick={()=>{onChange();loadSettleReqs();}} style={{padding:"6px 12px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:11.5,fontWeight:600,color:T.t3,cursor:"pointer"}}>Refresh</button>
       </div>
+
+      {/* Salary settle-requests — imprest → salary conversion (confirm = wallet debit + ledger settlement) */}
+      {settleReqs.length>0&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,fontWeight:700,color:T.pur,textTransform:"uppercase",letterSpacing:.4,marginBottom:6}}>Salary Settle Requests ({settleReqs.length})</div>
+          {settleReqs.map(r=>(
+            <div key={r.id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 13px",background:T.purL,border:`1px solid ${T.purM||T.b1}`,borderRadius:9,marginBottom:6}}>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:700,color:T.t1}}>{r.staff_name} — ₹{fmtN(Number(r.amount))}</div>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:1}}>Wallet se salary me settle karna chahte hain{r.note?` · "${r.note}"`:""}</div>
+              </div>
+              <button disabled={busy==="sr-"+r.id} onClick={()=>actSettleReq(r.id,"confirm")}
+                style={{padding:"6px 13px",borderRadius:7,border:"none",background:T.grn,color:"white",fontSize:11,fontWeight:700,cursor:"pointer"}}>Confirm</button>
+              <button disabled={busy==="sr-"+r.id} onClick={()=>actSettleReq(r.id,"reject")}
+                style={{padding:"6px 13px",borderRadius:7,border:`1px solid ${T.redM}`,background:T.redL,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>Reject</button>
+            </div>
+          ))}
+        </div>
+      )}
 
       {approvals.length===0&&(
         <div style={{padding:"40px 0",textAlign:"center",fontSize:12.5,color:T.t4}}>Koi pending approval nahi — sab clear hai</div>
@@ -2356,6 +2390,74 @@ function WalletApprovalsPanel({approvals,photoPolicy,onChange}){
 }
 function btnGhost(){return{padding:"8px 14px",borderRadius:7,border:`1px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"};}
 function btnSolid(c){return{padding:"8px 16px",borderRadius:7,border:"none",background:c,color:"white",fontSize:12,fontWeight:700,cursor:"pointer"};}
+
+// ── Send-to-staff modal — 3-bucket allocation (B4) ─────────────────
+// salary → salary-ledger settlement, NO wallet credit (imprest untouched)
+// imprest → wallet credit (existing behaviour) · petrol → credit tagged petrol
+function SendToStaffModal({staff,onClose,onDone}){
+  const due=Number(staff.salaryDue)||0;
+  const [bucket,setBucket]=useState(due>0?"salary":"imprest"); // salary pre-selected when dues exist
+  const [amount,setAmount]=useState(due>0?String(due):"");
+  const [method,setMethod]=useState("bank_transfer");
+  const [txRef,setTxRef]=useState("");
+  const [note,setNote]=useState("");
+  const [busy,setBusy]=useState(false);
+  const BUCKETS=[
+    {id:"salary", l:"Salary", sub:due>0?`Due ₹${fmtN(due)}`:"Koi due nahi", c:T.red},
+    {id:"imprest",l:"Imprest",sub:"Wallet credit (kharche ke liye)", c:T.blu},
+    {id:"petrol", l:"Petrol", sub:"Petrol allowance credit", c:T.amb},
+  ];
+  const doSend=async()=>{
+    const amt=Number(amount);
+    if(!amt||amt<=0){window.alert("Amount sahi bharo");return;}
+    if(bucket==="salary"&&amt>due){window.alert(`Salary due ₹${fmtN(due)} hi hai — usse zyada salary bucket me nahi ja sakta`);return;}
+    setBusy(true);
+    try{
+      const r=await api.post("/wallets/send-to-staff",{staff_party_id:staff.id,amount:amt,bucket,payment_method:method,tx_ref:txRef||undefined,note:note||undefined});
+      if(r&&r.success){ window.alert(bucket==="salary"?"Salary settle ho gayi ✓":"Wallet credit ho gaya ✓"); onDone(); }
+      else window.alert((r&&r.message)||"Send failed");
+    }catch(e){ window.alert("Send failed"); }
+    setBusy(false);
+  };
+  return(
+    <ModalW title={`Send to ${staff.name}`} onClose={onClose}>
+      <div style={{display:"flex",gap:6,marginBottom:12}}>
+        {BUCKETS.map(b=>(
+          <button key={b.id} onClick={()=>{setBucket(b.id); if(b.id==="salary"&&due>0&&!Number(amount)) setAmount(String(due));}}
+            style={{flex:1,padding:"9px 6px",borderRadius:8,border:`1.5px solid ${bucket===b.id?b.c:T.b1}`,background:bucket===b.id?b.c+"11":T.surface,cursor:"pointer",textAlign:"left"}}>
+            <div style={{fontSize:11.5,fontWeight:800,color:bucket===b.id?b.c:T.t2}}>{b.l}</div>
+            <div style={{fontSize:9,color:T.t4,marginTop:2}}>{b.sub}</div>
+          </button>
+        ))}
+      </div>
+      {bucket==="salary"&&due<=0&&<div style={{fontSize:11,color:T.amb,background:T.ambL,padding:"7px 10px",borderRadius:7,marginBottom:10}}>Is staff ka koi salary due pending nahi — pehle payroll finalize karo, ya imprest/petrol chuno.</div>}
+      {bucket==="salary"&&due>0&&<div style={{fontSize:11,color:T.t3,background:T.surfaceB,padding:"7px 10px",borderRadius:7,marginBottom:10}}>Salary bucket: paisa <b>salary ledger</b> me settle hoga — wallet balance nahi badhega. Current due <b style={{color:T.red}}>₹{fmtN(due)}</b>.</div>}
+      <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Amount</label>
+      <input type="number" value={amount} onChange={e=>setAmount(e.target.value)}
+        style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:13,fontWeight:700,boxSizing:"border-box",margin:"4px 0 10px"}}/>
+      <div style={{display:"flex",gap:8}}>
+        <div style={{flex:1}}>
+          <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Method</label>
+          <select value={method} onChange={e=>setMethod(e.target.value)}
+            style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px",background:T.surface}}>
+            <option value="bank_transfer">Bank / NEFT</option><option value="upi">UPI</option><option value="cash">Cash</option><option value="cheque">Cheque</option>
+          </select>
+        </div>
+        <div style={{flex:1}}>
+          <label style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:.4}}>Tx Ref</label>
+          <input value={txRef} onChange={e=>setTxRef(e.target.value)} placeholder="UTR (optional)"
+            style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b2}`,fontSize:12,boxSizing:"border-box",margin:"4px 0 10px"}}/>
+        </div>
+      </div>
+      <input value={note} onChange={e=>setNote(e.target.value)} placeholder="Note (optional)"
+        style={{width:"100%",padding:"9px 11px",borderRadius:8,border:`1px solid ${T.b1}`,fontSize:12,boxSizing:"border-box",marginBottom:12}}/>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <button onClick={onClose} style={btnGhost()}>Cancel</button>
+        <button disabled={busy} onClick={doSend} style={btnSolid(bucket==="salary"?T.red:T.blu)}>{busy?"Sending…":`Send ₹${fmtN(Number(amount)||0)}`}</button>
+      </div>
+    </ModalW>
+  );
+}
 function ModalW({title,onClose,children}){
   return createPortal(
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -2656,6 +2758,9 @@ function FinanceModule(){
   const [selTxn,setSelTxn]=useState(null);
   // Staff wallets — live data (Phase 2; replaces the old mock array)
   const [walletList,setWalletList]=useState([]);
+  // Salary bucket: outstanding due per staff party (separate ledger — imprest
+  // untouched). Drives the red "Salary due" chip + send-modal default bucket.
+  const [salaryDues,setSalaryDues]=useState({});
   const loadWallets=()=>{
     api.get("/wallets/staff").then(res=>{
       if(res&&res.success){
@@ -2669,8 +2774,13 @@ function FinanceModule(){
         })));
       }
     }).catch(()=>{});
+    api.get("/wallets/salary/dues").then(res=>{
+      if(res&&res.success) setSalaryDues(res.data||{});
+    }).catch(()=>{});
   };
   useEffect(()=>{ loadWallets(); },[]);
+  // Send-to-staff modal (3-bucket allocation: salary | imprest | petrol)
+  const [sendStaff,setSendStaff]=useState(null); // wallet row being sent to
   // Wallet approval queue + photo policy (Phase 2)
   const [walletApprovals,setWalletApprovals]=useState([]);
   const [walletPhotoPolicy,setWalletPhotoPolicy]=useState({});
@@ -3588,12 +3698,17 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     ):(
                       <>
                       {walletList.length===0&&<div style={{padding:"14px 8px",textAlign:"center",fontSize:11,color:T.t4}}>Koi staff wallet nahi</div>}
-                      {walletList.map(w=>{const pct=w.limit>0?Math.min(100,Math.round(w.balance/w.limit*100)):0;return(
+                      {walletList.map(w=>{const pct=w.limit>0?Math.min(100,Math.round(w.balance/w.limit*100)):0;const due=Number(salaryDues[w.id])||0;return(
                         <div key={w.id} style={{padding:"8px 10px",borderRadius:7,marginBottom:4,background:T.surfaceB,border:`1px solid ${T.b1}`}}>
                           <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:5}}>
                             <div style={{width:26,height:26,borderRadius:"50%",background:w.color+"22",border:`1px solid ${w.color}44`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:w.color,flexShrink:0}}>{w.initials}</div>
                             <div style={{flex:1}}><div style={{fontSize:11.5,fontWeight:600,color:T.t1}}>{w.name}</div><div style={{fontSize:10,color:T.t4}}>{w.pending>0?`₹${fmtN(w.pending)} pending`:w.role}</div></div>
                             <div style={{textAlign:"right"}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>₹{fmtN(w.balance)}</div><div style={{fontSize:9,color:T.t4}}>{w.limit>0?`/ ₹${fmtN(w.limit)}`:"No limit"}</div></div>
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:w.limit>0?5:0}}>
+                            {due>0&&<span style={{fontSize:9.5,fontWeight:700,color:T.red,background:T.redL,border:`1px solid ${T.redM}`,padding:"2px 7px",borderRadius:10}}>Salary due ₹{fmtN(due)}</span>}
+                            <button onClick={()=>{setShowAccPanel(false);setSendStaff({...w,salaryDue:due});}}
+                              style={{marginLeft:"auto",fontSize:10,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.bluM}`,borderRadius:6,padding:"3px 10px",cursor:"pointer"}}>Send ₹</button>
                           </div>
                           {w.limit>0&&<>
                           <div style={{height:3,background:T.b1,borderRadius:2,overflow:"hidden"}}><div style={{height:"100%",width:`${pct}%`,background:pct>80?T.red:pct>50?T.amb:T.grn,borderRadius:2}}/></div>
@@ -3607,6 +3722,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 </div>
               </>)}
             </div>
+            {sendStaff&&<SendToStaffModal staff={sendStaff} onClose={()=>setSendStaff(null)} onDone={()=>{setSendStaff(null);loadWallets();}}/>}
             {/* Create Transaction dropdown */}
             <div style={{position:"relative"}}>
               <button onClick={()=>setShowCreateTxn(!showCreateTxn)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
