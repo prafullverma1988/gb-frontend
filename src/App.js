@@ -498,7 +498,7 @@ function LoginScreen({onLogin}){
         {stage==="picker"&&(
           <>
             <div style={{fontSize:14,fontWeight:700,color:C.t,textAlign:"center",marginBottom:4}}>Select company</div>
-            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:18}}>Aapka mobile in companies me registered hai — jisme login karna hai chuno.</div>
+            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:18}}>Aapka mobile in companies me registered hai — kisi se bhi shuru karo. Login ke baad app ke andar se baaki companies me bina dobara login kiye switch kar sakte ho.</div>
             <div style={{display:"flex",flexDirection:"column",gap:10}}>
               {pickerOptions.map((o,i)=>(
                 <button key={i} onClick={()=>handleSelectCompany(o)} disabled={loading}
