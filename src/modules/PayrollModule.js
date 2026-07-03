@@ -1276,7 +1276,7 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
 
       {/* Legend */}
       <div style={{display:"flex",gap:12,marginTop:10,padding:"6px 10px",background:T.surfaceB,borderRadius:6,width:"fit-content"}}>
-        {[["P","Present",T.grn,T.grnL],["H","Half Day",T.amb,T.ambL],["A","Absent",T.red,T.redL],["L","Leave",T.blu,T.bluL]].map(([k,lbl,c,bg])=>(
+        {[["P","Present",T.grn,T.grnL],["H","Half Day",T.amb,T.ambL],["A","Absent",T.red,T.redL],["L","Leave",T.blu,T.bluL],["L½","Half-day Leave","#B45309","#FEF3C7"]].map(([k,lbl,c,bg])=>(
           <div key={k} style={{display:"flex",alignItems:"center",gap:5}}>
             <div style={{width:18,height:18,borderRadius:4,background:bg,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9.5,fontWeight:700,color:c}}>{k}</div>
             <span style={{fontSize:10.5,color:T.t3}}>{lbl}</span>
