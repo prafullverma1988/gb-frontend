@@ -3609,7 +3609,7 @@ function PayrollSettingsTab({defaultDueDays,setDefaultDueDays,workingDays,setWor
             {step:"1",title:"Salary Create karo",desc:"Payroll → Manual Salary tab mein entry banao — name, amount, due date set karo",c:T.blu},
             {step:"2",title:"Auto Finance Queue",desc:"Due date 7 days se kam bacha → Finance → Pending Payments mein amber warning",c:T.amb},
             {step:"3",title:"Due Date pe Red Alert",desc:"Due date aa gayi → Finance mein red urgent highlight",c:T.red},
-            {step:"4",title:"Finance Mark Paid",desc:"Finance team payment kare → Salary Ledger mein Paid update ho jaata hai",c:T.grn},
+            {step:"4",title:"Finance Settle / Pay",desc:"Finance team payment kare (partial bhi) → Salary Ledger mein Partial/Paid update ho jaata hai",c:T.grn},
           ].map((s,i)=>(
             <div key={i} style={{display:"flex",gap:12,marginBottom:i<3?12:0}}>
               <div style={{width:24,height:24,borderRadius:"50%",background:s.c,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:11,fontWeight:800,color:"white"}}>{s.step}</div>
@@ -5185,7 +5185,7 @@ function RunFinalize({preview,adjs,finalized,items,month,year,busy,onFinalize,on
           <RWKpi label="Net Payout" value={`₹${fmtN(totN)}`} color={T.grn} bg={T.grnL}/>
         </div>
         {!finalized&&<div style={{marginTop:16,padding:"12px 14px",background:T.sltL||T.surfaceB,borderRadius:10,fontSize:12,color:T.t2,lineHeight:1.65}}>
-          <b>Finalize karne par:</b><br/>① Har employee ka attendance+OT+salary snapshot freeze (payroll_run_items)<br/>② {MONTHS[month]} attendance <b>lock</b> — edit sirf revert se<br/>③ Payslips generate honge<br/>④ Payment status "Pending" — bank transfer ke baad "Mark Paid"</div>}
+          <b>Finalize karne par:</b><br/>① Har employee ka attendance+OT+salary snapshot freeze (payroll_run_items)<br/>② {MONTHS[month]} attendance <b>lock</b> — edit sirf revert se<br/>③ Payslips generate honge<br/>④ Payment status "Pending" — bank transfer ke baad "Settle / Pay" (partial bhi chalega)</div>}
       </RWCard>
       {!finalized?(
         <button disabled={busy||count===0} onClick={onFinalize} style={{width:"100%",padding:"14px",background:count===0?T.b2:T.grn,color:"#fff",border:"none",borderRadius:11,fontSize:14,fontWeight:800,cursor:count===0?"default":"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:8}}><IcLock size={16} color="#fff"/> {busy?"Finalizing…":`Finalize & Lock ${MONTHS[month]} ${year} Payroll`}</button>
