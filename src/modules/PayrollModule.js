@@ -454,10 +454,13 @@ function PendingReviewQueue({onChanged}){
   );
 }
 
-// ── LEAVE TAB (Payroll v2 — Phase 3) ─────────────────────────────
-// Sub-tabs: Apply / My Leaves / Pending Approvals / Balance
-function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
-  const [subTab,setSubTab]=useState("apply");
+// ── LEAVE TAB (Payroll v2 — Phase 3; HR-view rework 2026-07) ─────
+// Sub-tabs: Pending Approvals (default) / All Leaves / Balance / Holidays.
+// Self-service apply mobile app me hai; web par sirf on-behalf entry (modal).
+function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHolidays}){
+  const [subTab,setSubTab]=useState(isAdmin?"pending":"all");
+  const [showApply,setShowApply]=useState(false);
+  const [coverApp,setCoverApp]=useState(null);   // pending app being reviewed in Coverage Check modal
   const [types,setTypes]=useState([]);
   const [apps,setApps]=useState([]);
   const [balances,setBalances]=useState([]);
@@ -523,7 +526,8 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
         setForm({staff_id:"",leave_type_id:"",from_date:"",to_date:"",is_half_day:false,half_day_part:"first",reason:""});
         setPreview({days:0,loading:false});
         await reload();
-        setSubTab("my");
+        setShowApply(false);
+        setSubTab("all");
       }else setErr(r.message||"Apply failed");
     }catch(e){ setErr(e.message||"Network error"); }
     setSubmitting(false);
@@ -573,16 +577,16 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
 
   // ─── Sub-tabs strip ────────────────────────────────────
   const SUB_TABS=[
-    {id:"apply", l:"Apply", c:T.grn},
-    {id:"my",    l:"My Leaves", c:T.blu, badge:apps.length},
     {id:"pending", l:"Pending Approvals", c:T.amb, badge:pendingApps.length, adminOnly:true},
+    {id:"all",     l:"All Leaves", c:T.blu, badge:apps.length},
     {id:"balance", l:"Balance", c:T.pur, badge:balances.length},
+    {id:"holidays",l:"Holidays", c:T.grn},
   ];
 
   return(
     <div>
       {/* Sub-tabs */}
-      <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6}}>
+      <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6,alignItems:"center"}}>
         {SUB_TABS.filter(s=>!s.adminOnly||isAdmin).map(s=>{
           const active=subTab===s.id;
           return(
@@ -593,14 +597,28 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
             </button>
           );
         })}
+        <span style={{flex:1}}/>
+        <button onClick={()=>setShowApply(true)}
+          title="Staff phone par bataye to HR yahan se entry kar sakta hai — self-apply mobile app me hai"
+          style={{padding:"6px 13px",borderRadius:7,border:`1px solid ${T.grn}44`,background:T.grnL,color:T.grn,fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          <IcAdd size={12}/> Leave Entry (on behalf)
+        </button>
       </div>
 
       {loading && <div style={{textAlign:"center",padding:"30px 0",color:T.t4,fontSize:12}}>Loading…</div>}
 
-      {/* ─── APPLY ─── */}
-      {!loading && subTab==="apply" && (
-        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:16,maxWidth:640}}>
-          <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:10}}>Apply for Leave</div>
+      {/* ─── ON-BEHALF LEAVE ENTRY (modal) ─── */}
+      {showApply && (
+        <div onClick={()=>!submitting&&setShowApply(false)}
+          style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9998,padding:16}}>
+        <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:12,padding:16,width:640,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:700,color:T.t1}}>Leave Entry — on behalf</div>
+              <div style={{fontSize:10.5,color:T.t4,marginTop:2}}>Staff ki self-apply mobile app me hai; ye HR/admin entry hai</div>
+            </div>
+            <button onClick={()=>!submitting&&setShowApply(false)} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}><IcX size={16}/></button>
+          </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
             <div>
               <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Staff Member</div>
@@ -674,10 +692,11 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
             {submitting?"Submitting…":"Submit Application"}
           </button>
         </div>
+        </div>
       )}
 
-      {/* ─── MY LEAVES / ALL LEAVES list ─── */}
-      {!loading && subTab==="my" && (
+      {/* ─── ALL LEAVES list ─── */}
+      {!loading && subTab==="all" && (
         <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"160px 140px 90px 110px 110px 90px 100px",padding:"8px 14px",background:T.sb,color:"rgba(255,255,255,.55)",fontSize:9.5,fontWeight:700,textTransform:"uppercase",letterSpacing:".3px"}}>
             {["Staff","Type","Days","From","To","Status","Actions"].map((h,i)=><span key={i}>{h}</span>)}
@@ -740,9 +759,10 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
                     style={{padding:"6px 12px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11.5,fontWeight:700,cursor:"pointer"}}>
                     ✕ Reject
                   </button>
-                  <button onClick={()=>review(a.id,"approve")}
+                  <button onClick={()=>setCoverApp(a)}
+                    title="Coverage check ke saath review"
                     style={{padding:"6px 14px",borderRadius:6,background:T.grn,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
-                    ✓ Approve
+                    ✓ Review
                   </button>
                 </div>
               </div>
@@ -808,6 +828,129 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged}){
           </div>
         </div>
       )}
+
+      {/* ─── HOLIDAYS (Calendar merged here) ─── */}
+      {!loading && subTab==="holidays" && (
+        <HolidayCalendarTab holidays={holidays} setHolidays={setHolidays} month={month} year={year} isAdmin={isAdmin}/>
+      )}
+
+      {/* ─── COVERAGE CHECK (approve modal) ─── */}
+      {coverApp && (
+        <LeaveCoverageModal app={coverApp} onClose={()=>setCoverApp(null)}
+          onDecide={async(action,note)=>{ await review(coverApp.id,action,note); setCoverApp(null); }}/>
+      )}
+    </div>
+  );
+}
+
+// ── LEAVE COVERAGE CHECK MODAL ───────────────────────────────────
+// Approve se pehle ek nazar: same project / same role me in dates par
+// aur kaun leave pe hai + worst-day coverage risk. Data:
+// GET /payroll/leave-applications/:id/context
+function LeaveCoverageModal({app,onClose,onDecide}){
+  const [ctx,setCtx]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [acting,setActing]=useState(false);
+  useEffect(()=>{
+    let dead=false;
+    api.get(`/payroll/leave-applications/${app.id}/context`)
+      .then(r=>{ if(!dead&&r.success) setCtx(r.data); })
+      .catch(()=>{})
+      .finally(()=>{ if(!dead) setLoading(false); });
+    return ()=>{ dead=true; };
+  },[app.id]);
+
+  const risk=ctx?.risk||null;
+  const Chip=({label,c=T.slt,bg=T.sltL})=>(
+    <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:bg,color:c,fontWeight:700}}>{label}</span>
+  );
+  const Row=({l,v})=>(
+    <div style={{display:"flex",justifyContent:"space-between",gap:10,padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
+      <span style={{fontSize:11.5,color:T.t3}}>{l}</span>
+      <span style={{fontSize:12,fontWeight:700,color:T.t1,textAlign:"right"}}>{v}</span>
+    </div>
+  );
+  const OverlapList=({title,items})=>(
+    <div style={{marginBottom:12}}>
+      <div style={{fontSize:10,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px",marginBottom:6}}>{title}</div>
+      {items.length===0
+        ? <div style={{fontSize:11.5,color:T.t4}}>Koi nahi — clear ✓</div>
+        : items.map(o=>(
+          <div key={o.id} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 0"}}>
+            <Avatar name={o.staff_name} size={24}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{o.staff_name} <span style={{fontSize:10.5,color:T.t4,fontWeight:500}}>· {o.staff_role||"—"}{o.staff_project?` · ${o.staff_project}`:""}</span></div>
+              <div style={{fontSize:10.5,color:T.t4}}>{fmtDate(o.from_date)} → {fmtDate(o.to_date)} · {o.leave_code}</div>
+            </div>
+            <Chip label={o.status} c={o.status==="Approved"?T.grn:T.amb} bg={o.status==="Approved"?T.grnL:T.ambL}/>
+          </div>
+        ))}
+    </div>
+  );
+
+  return(
+    <div onClick={()=>!acting&&onClose()}
+      style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+      <div onClick={e=>e.stopPropagation()}
+        style={{background:T.surface,borderRadius:12,width:760,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div style={{fontSize:15,fontWeight:800,color:T.t1}}>Leave Approval — Coverage Check</div>
+          <button onClick={()=>!acting&&onClose()} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}><IcX size={18}/></button>
+        </div>
+        <div style={{flex:1,overflowY:"auto",padding:"14px 18px"}}>
+          {loading ? <div style={{textAlign:"center",padding:"40px 0",color:T.t4,fontSize:12}}>Coverage check ho raha hai…</div> : (
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1.15fr",gap:18}}>
+              {/* Left — application detail */}
+              <div>
+                <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+                  <Avatar name={app.staff_name} size={36}/>
+                  <div>
+                    <div style={{fontSize:13.5,fontWeight:800,color:T.t1}}>{app.staff_name}</div>
+                    <div style={{display:"flex",gap:5,marginTop:3}}>
+                      {app.staff_role&&<Chip label={app.staff_role} c={T.blu} bg={T.bluL}/>}
+                      {ctx?.app?.staff_project&&<Chip label={ctx.app.staff_project} c={T.pur} bg={T.purL}/>}
+                    </div>
+                  </div>
+                </div>
+                <Row l="Leave Type" v={`${app.leave_code} ${app.is_unpaid?"(LOP)":"(Paid)"}`}/>
+                <Row l="Dates" v={`${fmtDate(app.from_date)} → ${fmtDate(app.to_date)}`}/>
+                <Row l="Days" v={`${Number(app.days)}${app.is_half_day?" (half-day)":""}`}/>
+                {ctx?.balance!=null&&<Row l="Balance available" v={`${Number(ctx.balance)} din`}/>}
+                {app.reason&&<Row l="Reason" v={app.reason}/>}
+                {ctx?.balance!=null&&Number(app.days)>Number(ctx.balance)&&(
+                  <div style={{marginTop:10,padding:"8px 11px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,fontSize:11.5,color:T.red,fontWeight:600}}>
+                    Balance se zyada — approve backend par block hoga
+                  </div>
+                )}
+              </div>
+              {/* Right — coverage context */}
+              <div>
+                {risk&&(
+                  <div style={{display:"flex",gap:8,padding:"10px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:9,marginBottom:12}}>
+                    <IcAlert size={15} color={T.red}/>
+                    <span style={{fontSize:12,color:T.t1,fontWeight:600}}>{risk.message}</span>
+                  </div>
+                )}
+                <OverlapList title={`Same project${ctx?.app?.staff_project?` (${ctx.app.staff_project})`:""} — in dates par leave`} items={ctx?.sameProject||[]}/>
+                <OverlapList title={`Same role${app.staff_role?` (${app.staff_role})`:""} — company-wide`} items={ctx?.sameRole||[]}/>
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8,flexShrink:0}}>
+          <button disabled={acting} onClick={async()=>{
+              const note=await window.promptAsync("Reject reason (optional):");
+              setActing(true); await onDecide("reject",note||null); setActing(false);
+            }}
+            style={{padding:"8px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.redM}`,color:T.red,fontSize:12,fontWeight:700,cursor:"pointer"}}>
+            Reject
+          </button>
+          <button disabled={acting||loading} onClick={async()=>{ setActing(true); await onDecide("approve",null); setActing(false); }}
+            style={{padding:"8px 18px",borderRadius:7,background:risk?T.amb:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+            {risk?<><IcAlert size={13} color="#fff"/> Phir bhi Approve</>:<>✓ Approve</>}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1147,8 +1290,398 @@ function PunchReviewStrip({onActed}){
   );
 }
 
-function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],punchDays={}}){
+// ── DAY ATTENDANCE VIEW (2026-07 rework) ─────────────────────────
+// Din-wise marking — aaj ki date default, sabhi manual staff ki list,
+// ek click me sahi status select (no cycle-toggle mistakes), bulk "sab P".
+// App users (GPS punch) alag read-only table — unki attendance geo-tag
+// se aati hai, yahan sirf dikhti hai; review PunchReviewStrip me hota hai.
+function DayAttendanceView({staff,att,setAtt,month,year,onAttChange,holidays=[],punchDays={},notes={},dayLocks={},isAdmin,onLocksChanged}){
+  const now=new Date();
+  const isCurMonth=now.getMonth()===month&&now.getFullYear()===year;
   const daysInMonth=new Date(year,month+1,0).getDate();
+  const isPastMonth=year<now.getFullYear()||(year===now.getFullYear()&&month<now.getMonth());
+  const maxDay=isCurMonth?now.getDate():isPastMonth?daysInMonth:0;   // future month → 0 (no marking)
+  const [day,setDay]=useState(isCurMonth?now.getDate():isPastMonth?daysInMonth:1);
+  useEffect(()=>{
+    const n=new Date();
+    const cur=n.getMonth()===month&&n.getFullYear()===year;
+    const dim=new Date(year,month+1,0).getDate();
+    const past=year<n.getFullYear()||(year===n.getFullYear()&&month<n.getMonth());
+    setDay(cur?n.getDate():past?dim:1);
+  },[month,year]);
+
+  const dateObj=new Date(year,month,day);
+  const dateISO=`${year}-${String(month+1).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
+  const dow=dateObj.getDay();
+  const holiday=holidays.find(h=>{const d=new Date(h.holiday_date);return d.getDate()===day&&d.getMonth()===month&&d.getFullYear()===year;});
+  const lock=dayLocks[dateISO]||null;   // {status:'locked'|'approved',...}
+  const blocked=(holiday&&!holiday.is_optional)||maxDay===0||!!lock;
+
+  const manual=staff.filter(s=>!s.isAppUser);
+  const appUsers=staff.filter(s=>s.isAppUser);
+  const getStatus=(id)=>att[id]?.[day]??null;
+  const mark=(empId,status,note)=>{
+    if(blocked) return;
+    setAtt(p=>({...p,[empId]:{...p[empId],[day]:status}}));
+    if(onAttChange) onAttChange(empId,day,status,note);
+  };
+  // App user manual mark — reason compulsory (GPS punch system hote hue manual kyu, audit ke liye)
+  const markAppUser=async(emp,status)=>{
+    if(blocked) return;
+    const reason=await window.promptAsync(`${emp.name} app user hai (GPS punch). Manual ${status} mark karne ka reason:`);
+    if(reason===null) return;
+    if(!String(reason).trim()){ alert("Reason zaroori hai"); return; }
+    mark(emp.id,status,String(reason).trim());
+  };
+  const [bulking,setBulking]=useState(false);
+  const [locking,setLocking]=useState(false);
+  const [showEditReq,setShowEditReq]=useState(false);
+  const unmarkedManual=manual.filter(s=>!getStatus(s.id));
+  const bulkPresent=async()=>{
+    if(blocked||unmarkedManual.length===0) return;
+    if(!await window.confirmAsync(`${unmarkedManual.length} unmarked staff ko ${fmtDate(dateObj)} ke liye Present mark karein?`)) return;
+    setBulking(true);
+    unmarkedManual.forEach(s=>mark(s.id,"P"));
+    setBulking(false);
+  };
+  const lockDay=async()=>{
+    const unm=staff.filter(s=>!getStatus(s.id)).length;
+    if(!await window.confirmAsync(`${fmtDate(dateObj)} ka attendance lock karein?${unm>0?` (${unm} staff abhi unmarked hain — lock ke baad change sirf Edit Request se hoga)`:""} Admin approve karega.`)) return;
+    setLocking(true);
+    try{
+      const r=await api.post("/payroll/attendance/day-locks",{date:dateISO});
+      if(r.success){ onLocksChanged&&onLocksChanged(); }
+      else alert(r.message||"Lock failed");
+    }catch(e){ alert(e.message); }
+    setLocking(false);
+  };
+  const approveDay=async()=>{
+    if(!await window.confirmAsync(`${fmtDate(dateObj)} ka attendance approve karein? Approve ke baad bhi change Edit Request se hi hoga.`)) return;
+    setLocking(true);
+    try{
+      const r=await api.patch("/payroll/attendance/day-locks/approve",{date:dateISO});
+      if(r.success){ onLocksChanged&&onLocksChanged(); }
+      else alert(r.message||"Approve failed");
+    }catch(e){ alert(e.message); }
+    setLocking(false);
+  };
+  const unlockDay=async()=>{
+    if(!await window.confirmAsync(`${fmtDate(dateObj)} ka lock hatayein? Marking wapas khul jayegi.`)) return;
+    setLocking(true);
+    try{
+      const r=await api.del(`/payroll/attendance/day-locks?date=${dateISO}`);
+      if(r.success){ onLocksChanged&&onLocksChanged(); }
+      else alert(r.message||"Unlock failed");
+    }catch(e){ alert(e.message); }
+    setLocking(false);
+  };
+
+  const counts=(list)=>{
+    const c={P:0,A:0,H:0,L:0,U:0};
+    list.forEach(s=>{const v=getStatus(s.id);if(v&&c[v]!=null)c[v]++;else if(!v)c.U++;});
+    return c;
+  };
+  const cm=counts(manual), ca=counts(appUsers);
+  const STATUS_META={P:{l:"Present",c:T.grn,bg:T.grnL},A:{l:"Absent",c:T.red,bg:T.redL},H:{l:"Half Day",c:T.amb,bg:T.ambL},L:{l:"Leave",c:T.blu,bg:T.bluL}};
+  const Chip=({v})=>{
+    const m=STATUS_META[v];
+    return m
+      ? <span style={{fontSize:10.5,fontWeight:800,padding:"3px 10px",borderRadius:10,background:m.bg,color:m.c}}>{v} · {m.l}</span>
+      : <span style={{fontSize:10.5,fontWeight:700,padding:"3px 10px",borderRadius:10,background:T.sltL,color:T.t4}}>Unmarked</span>;
+  };
+
+  // Date strip — ‹ date › + weekday, clamp 1..maxDay
+  const canPrev=day>1, canNext=day<maxDay;
+  const DOW=["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+  return(
+    <div style={{maxWidth:980}}>
+      {/* Date strip */}
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,flexWrap:"wrap"}}>
+        <div style={{display:"flex",alignItems:"center",gap:6,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:"6px 10px"}}>
+          <button disabled={!canPrev} onClick={()=>setDay(d=>d-1)} style={{border:"none",background:"none",cursor:canPrev?"pointer":"default",color:canPrev?T.t2:T.b2,fontSize:15,fontWeight:800,padding:"0 4px"}}>‹</button>
+          <div style={{textAlign:"center",minWidth:150}}>
+            <div style={{fontSize:13,fontWeight:800,color:T.t1}}>{fmtDate(dateObj)}{isCurMonth&&day===now.getDate()?" · Aaj":""}</div>
+            <div style={{fontSize:10,color:dow===0?T.red:T.t4,fontWeight:600}}>{DOW[dow]}{dow===0?" — week off":""}</div>
+          </div>
+          <button disabled={!canNext} onClick={()=>setDay(d=>d+1)} style={{border:"none",background:"none",cursor:canNext?"pointer":"default",color:canNext?T.t2:T.b2,fontSize:15,fontWeight:800,padding:"0 4px"}}>›</button>
+        </div>
+        {holiday&&(
+          <span style={{fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:9,background:holiday.is_optional?T.ambL:T.redL,color:holiday.is_optional?T.amb:T.red,border:`1px solid ${holiday.is_optional?T.ambM:T.redM}`}}>
+            🎉 {holiday.name}{holiday.is_optional?" (Optional)":" — Holiday, marking band"}
+          </span>
+        )}
+        {lock&&(
+          <span style={{fontSize:11,fontWeight:700,padding:"5px 12px",borderRadius:9,
+            background:lock.status==="approved"?T.grnL:T.ambL,color:lock.status==="approved"?T.grn:T.amb,
+            border:`1px solid ${lock.status==="approved"?T.grnM:T.ambM}`}}>
+            {lock.status==="approved"
+              ? `✓ Approved${lock.approved_by_name?` by ${lock.approved_by_name}`:""}`
+              : `🔒 Locked${lock.locked_by_name?` by ${lock.locked_by_name}`:""} — admin approval pending`}
+          </span>
+        )}
+        <span style={{flex:1}}/>
+        <div style={{display:"flex",gap:6,alignItems:"center",fontSize:10.5,color:T.t3,fontWeight:600}}>
+          <span style={{color:T.grn}}>{cm.P+ca.P} P</span>·<span style={{color:T.red}}>{cm.A+ca.A} A</span>·<span style={{color:T.amb}}>{cm.H+ca.H} H</span>·<span style={{color:T.blu}}>{cm.L+ca.L} L</span>·<span style={{color:T.t4}}>{cm.U+ca.U} unmarked</span>
+        </div>
+        {/* Lock-flow actions */}
+        {maxDay>0&&!(holiday&&!holiday.is_optional)&&(
+          !lock?(
+            <button disabled={locking} onClick={lockDay}
+              style={{fontSize:11,fontWeight:700,color:"#fff",background:T.sb,border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
+              🔒 Din lock karo
+            </button>
+          ):(
+            <div style={{display:"flex",gap:6}}>
+              {lock.status==="locked"&&isAdmin&&(
+                <button disabled={locking} onClick={approveDay}
+                  style={{fontSize:11,fontWeight:700,color:"#fff",background:T.grn,border:"none",borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
+                  ✓ Approve Day
+                </button>
+              )}
+              <button onClick={()=>setShowEditReq(true)}
+                style={{fontSize:11,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:8,padding:"7px 14px",cursor:"pointer"}}>
+                ✏️ Edit Request
+              </button>
+              {isAdmin&&(
+                <button disabled={locking} onClick={unlockDay} title="Lock hatao — marking wapas khulegi"
+                  style={{fontSize:11,fontWeight:700,color:T.t3,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"7px 12px",cursor:"pointer"}}>
+                  Unlock
+                </button>
+              )}
+            </div>
+          )
+        )}
+      </div>
+
+      {showEditReq&&(
+        <StaffAttEditModal staff={staff} date={dateISO} dateLabel={fmtDate(dateObj)} att={att} day={day}
+          onClose={()=>setShowEditReq(false)}
+          onSubmitted={()=>{ setShowEditReq(false); alert("Edit request submit — admin approve karega tab attendance change hogi"); }}/>
+      )}
+
+      {maxDay===0?(
+        <div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:13}}>Future month — attendance abhi mark nahi ho sakti</div>
+      ):(
+      <>
+      {/* ── Manual staff — marking yahan hoti hai ── */}
+      <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,overflow:"hidden",marginBottom:14}}>
+        <div style={{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
+          <div style={{fontSize:12,fontWeight:800,color:T.t1}}>Manual Attendance <span style={{fontWeight:600,color:T.t4}}>· {manual.length} staff</span></div>
+          <span style={{flex:1}}/>
+          {!blocked&&unmarkedManual.length>0&&(
+            <button disabled={bulking} onClick={bulkPresent}
+              style={{fontSize:11,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grn}44`,borderRadius:7,padding:"5px 12px",cursor:"pointer"}}>
+              ✓ Baaki {unmarkedManual.length} ko Present mark karo
+            </button>
+          )}
+        </div>
+        {manual.length===0&&<div style={{padding:"26px 14px",textAlign:"center",color:T.t4,fontSize:12}}>Koi manual staff nahi — sab app users hain</div>}
+        {manual.map((emp,i)=>{
+          const v=getStatus(emp.id);
+          const isLeave=v==="L";
+          const note=notes[emp.id]?.[day];
+          return(
+            <div key={emp.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderTop:i>0?`1px solid ${T.b1}`:"none"}}>
+              <Avatar name={emp.name} size={28}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emp.name}</div>
+                <div style={{fontSize:10,color:T.t4}}>{emp.role||"—"}{note&&<span style={{color:T.amb,fontWeight:600}}> · 📝 {note}</span>}</div>
+              </div>
+              {isLeave?(
+                <Chip v="L"/>
+              ):blocked?(
+                <Chip v={v}/>
+              ):(
+                <div style={{display:"flex",gap:5}}>
+                  {["P","A","H"].map(s=>{
+                    const m=STATUS_META[s];
+                    const active=v===s;
+                    return(
+                      <button key={s} onClick={()=>mark(emp.id,s)} title={m.l}
+                        style={{width:34,height:28,borderRadius:7,fontSize:11.5,fontWeight:800,cursor:"pointer",transition:"all .12s",
+                          border:`1.5px solid ${active?m.c:T.b1}`,background:active?m.c:T.surface,color:active?"#fff":T.t3}}>
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── App users — GPS punch se auto, sirf review ── */}
+      <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,overflow:"hidden"}}>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${T.b1}`,background:T.surfaceB}}>
+          <div style={{fontSize:12,fontWeight:800,color:T.t1}}>📍 App Users — GPS Punch <span style={{fontWeight:600,color:T.t4}}>· {appUsers.length} staff</span></div>
+          <div style={{fontSize:10,color:T.t4,marginTop:2}}>Attendance mobile geo-tag punch se auto aati hai. Manual mark karna pade (punch bhool gaya, phone issue) to reason compulsory — audit me dikhega. Geofence-bahar punch upar Punch Review me approve/reject hote hain.</div>
+        </div>
+        {appUsers.length===0&&<div style={{padding:"26px 14px",textAlign:"center",color:T.t4,fontSize:12}}>Koi app user nahi</div>}
+        {appUsers.map((emp,i)=>{
+          const v=getStatus(emp.id);
+          const punched=!!punchDays[emp.id]?.[day];
+          const note=notes[emp.id]?.[day];
+          const isLeave=v==="L";
+          return(
+            <div key={emp.id} style={{display:"flex",alignItems:"center",gap:10,padding:"9px 14px",borderTop:i>0?`1px solid ${T.b1}`:"none"}}>
+              <Avatar name={emp.name} size={28} color={T.slt}/>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{emp.name}</div>
+                <div style={{fontSize:10,color:T.t4}}>{emp.role||"—"}{note&&<span style={{color:T.amb,fontWeight:600}}> · 📝 {note}</span>}</div>
+              </div>
+              {punched&&<span style={{fontSize:9.5,fontWeight:700,color:"#0D9488",background:"#F0FDFA",border:"1px solid #99F6E4",borderRadius:10,padding:"2px 8px"}}>📍 GPS punch</span>}
+              {isLeave||blocked?(
+                <Chip v={v}/>
+              ):(
+                <div style={{display:"flex",gap:5,alignItems:"center"}}>
+                  {!v&&<span style={{fontSize:10,color:T.t4,marginRight:2}}>manual (reason):</span>}
+                  {v&&<Chip v={v}/>}
+                  {["P","A","H"].map(s=>{
+                    const m=STATUS_META[s];
+                    const active=v===s;
+                    return(
+                      <button key={s} onClick={()=>markAppUser(emp,s)} title={`${m.l} — reason ke saath manual mark`}
+                        style={{width:30,height:26,borderRadius:7,fontSize:10.5,fontWeight:800,cursor:"pointer",transition:"all .12s",
+                          border:`1.5px dashed ${active?m.c:T.b2}`,background:active?m.bg:T.surface,color:active?m.c:T.t4}}>
+                        {s}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+      </>
+      )}
+    </div>
+  );
+}
+
+// ── STAFF ATT EDIT REQUEST MODAL ─────────────────────────────────
+// Locked/approved din ki attendance change ka rasta — wahi flow jo
+// labour attendance me hai: request + reason → admin approve → apply.
+function StaffAttEditModal({staff,date,dateLabel,att,day,onClose,onSubmitted}){
+  const [rows,setRows]=useState([{staff_id:"",new_status:"P"}]);
+  const [reason,setReason]=useState("");
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const inp={width:"100%",padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit"};
+  const cur=(id)=>att[Number(id)]?.[day]||"—";
+  const submit=async()=>{
+    setErr("");
+    const changes=rows.filter(r=>r.staff_id).map(r=>({staff_id:Number(r.staff_id),date,new_status:r.new_status}));
+    if(changes.length===0){ setErr("Kam se kam ek staff select karein"); return; }
+    if(!reason.trim()){ setErr("Reason zaroori hai"); return; }
+    setSaving(true);
+    try{
+      const r=await api.post("/payroll/attendance-edit-requests",{scope:"staff",date_from:date,date_to:date,changes,reason:reason.trim()});
+      if(r.success) onSubmitted&&onSubmitted();
+      else setErr(r.message||"Submit failed");
+    }catch(e){ setErr(e.message||"Network error"); }
+    setSaving(false);
+  };
+  return(
+    <div onClick={()=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+      <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,width:520,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
+        <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+          <div>
+            <div style={{fontSize:14.5,fontWeight:800,color:T.t1}}>Attendance Edit Request</div>
+            <div style={{fontSize:11,color:T.t4,marginTop:2}}>{dateLabel} — din locked hai; admin approve karega tab change hogi</div>
+          </div>
+          <button onClick={()=>!saving&&onClose()} style={{background:"none",border:"none",cursor:"pointer",padding:4,color:T.t4}}><IcX size={16}/></button>
+        </div>
+        <div style={{padding:"14px 18px"}}>
+          {rows.map((r,i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"1fr 90px 90px 28px",gap:8,marginBottom:8,alignItems:"center"}}>
+              <select value={r.staff_id} onChange={e=>setRows(p=>p.map((x,j)=>j===i?{...x,staff_id:e.target.value}:x))} style={inp}>
+                <option value="">— Staff —</option>
+                {staff.map(s=><option key={s.id} value={s.id}>{s.name}{s.isAppUser?" 📱":""}</option>)}
+              </select>
+              <div style={{fontSize:11,color:T.t3,textAlign:"center"}}>abhi: <b>{cur(r.staff_id)}</b></div>
+              <select value={r.new_status} onChange={e=>setRows(p=>p.map((x,j)=>j===i?{...x,new_status:e.target.value}:x))} style={inp}>
+                {["P","A","H","L"].map(s=><option key={s} value={s}>{s}</option>)}
+              </select>
+              <button onClick={()=>setRows(p=>p.length>1?p.filter((_,j)=>j!==i):p)} style={{background:"none",border:"none",cursor:"pointer",color:T.t4,fontSize:15}}>×</button>
+            </div>
+          ))}
+          <button onClick={()=>setRows(p=>[...p,{staff_id:"",new_status:"P"}])}
+            style={{fontSize:11,fontWeight:600,color:T.blu,background:"none",border:"none",cursor:"pointer",padding:0,marginBottom:12}}>+ aur staff add karo</button>
+          <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>Reason (zaroori)</div>
+          <textarea value={reason} onChange={e=>setReason(e.target.value)} rows={2} placeholder="Change kyu chahiye — e.g. galat mark hua tha, site visit pe tha…" style={{...inp,resize:"vertical"}}/>
+          {err&&<div style={{marginTop:8,padding:"7px 10px",background:T.redL,color:T.red,borderRadius:6,fontSize:11.5}}>{err}</div>}
+        </div>
+        <div style={{padding:"12px 18px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8}}>
+          <button onClick={()=>!saving&&onClose()} style={{padding:"7px 16px",borderRadius:7,background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,fontSize:12,fontWeight:600,cursor:"pointer"}}>Cancel</button>
+          <button onClick={submit} disabled={saving}
+            style={{padding:"7px 18px",borderRadius:7,background:saving?T.t4:T.blu,color:"#fff",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+            {saving?"Submitting…":"Submit Request"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── STAFF EDIT-REQUESTS STRIP (admin) — pending requests approve/reject ──
+function StaffEditRequestsStrip({staff,onActed}){
+  const [rows,setRows]=useState([]);
+  const [acting,setActing]=useState(null);
+  const load=useCallback(()=>{
+    api.get("/payroll/attendance-edit-requests?status=pending&scope=staff")
+      .then(r=>{ if(r.success) setRows(r.data||[]); })
+      .catch(()=>{});
+  },[]);
+  useEffect(()=>{ load(); },[load]);
+  const staffName=(id)=>staff.find(s=>s.id===Number(id))?.name||`#${id}`;
+  const act=async(id,status)=>{
+    const notes=status==="rejected"?(await window.promptAsync("Reject reason (optional):")||null):null;
+    setActing(id);
+    try{
+      const r=await api.patch(`/payroll/attendance-edit-requests/${id}`,{status,approval_notes:notes});
+      if(r.success){ setRows(p=>p.filter(x=>x.id!==id)); onActed&&onActed(); }
+      else alert(r.message||"Failed");
+    }catch(e){ alert(e.message); }
+    setActing(null);
+  };
+  if(!rows.length) return null;
+  return(
+    <div style={{background:T.bluL,border:`2px dashed ${T.blu}66`,borderRadius:10,padding:"11px 14px",marginBottom:12}}>
+      <div style={{fontSize:12.5,fontWeight:800,color:T.blu,marginBottom:8}}>✏️ Attendance Edit Requests — {rows.length} pending</div>
+      <div style={{display:"flex",flexDirection:"column",gap:7}}>
+        {rows.map(r=>{
+          const changes=Array.isArray(r.changes)?r.changes:[];
+          return(
+            <div key={r.id} style={{background:T.surface,border:`1px solid ${T.bluM}`,borderRadius:8,padding:"8px 11px",display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.t1}}>
+                  {changes.map((c,i)=><span key={i}>{i>0&&", "}{staffName(c.staff_id)} → <b style={{color:T.blu}}>{c.new_status}</b></span>)}
+                  <span style={{fontWeight:400,color:T.t3}}> · {fmtDate(r.date_from)}</span>
+                </div>
+                <div style={{fontSize:10.5,color:T.t3,marginTop:2}}>📝 {r.reason||"—"} <span style={{color:T.t4}}>· by {r.requester_name||"?"}</span></div>
+              </div>
+              <button disabled={acting===r.id} onClick={()=>act(r.id,"rejected")}
+                style={{padding:"5px 11px",borderRadius:6,background:T.redL,border:`1px solid ${T.redM}`,color:T.red,fontSize:11,fontWeight:700,cursor:"pointer"}}>✕ Reject</button>
+              <button disabled={acting===r.id} onClick={()=>act(r.id,"approved")}
+                style={{padding:"5px 13px",borderRadius:6,background:T.blu,border:"none",color:"#fff",fontSize:11,fontWeight:700,cursor:"pointer"}}>{acting===r.id?"…":"✓ Approve & Apply"}</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],punchDays={},dayLocks={}}){
+  const daysInMonth=new Date(year,month+1,0).getDate();
+  // Locked/approved days is month me — cells read-only (change = edit request via Day View)
+  const lockedDaySet=new Set(Object.keys(dayLocks).map(d=>{
+    const x=new Date(d+"T00:00:00");
+    return (x.getMonth()===month&&x.getFullYear()===year)?x.getDate():null;
+  }).filter(Boolean));
   const now=new Date();const today=(now.getMonth()===month&&now.getFullYear()===year)?now.getDate():month<now.getMonth()||year<now.getFullYear()?daysInMonth:0;
   const ATT_COLORS={"P":{bg:"#ECFDF5",c:"#059669",label:"P"},"A":{bg:"#FEF2F2",c:"#DC2626",label:"A"},"H":{bg:"#FFFBEB",c:"#D97706",label:"H"},"L":{bg:"#EFF6FF",c:"#2563EB",label:"L"},null:{bg:T.surfaceB,c:T.t4,label:"·"}};
 
@@ -1183,14 +1716,13 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
   });
   const isHolidayCell=(day)=>!!holidayByDay[day]&&!holidayByDay[day].is_optional;
 
-  const toggleAtt=(empId,day)=>{
-    if(day>today) return;
-    if(isHolidayCell(day)) return;  // block toggle on confirmed holidays
-    const cur=att[empId]?.[day];
-    const cycle=["P","A","H","L"];
-    const next=cur===null||!cycle.includes(cur)?"P":cycle[(cycle.indexOf(cur)+1)%cycle.length];
-    setAtt(p=>({...p,[empId]:{...p[empId],[day]:next}}));
-    if(onAttChange) onAttChange(empId,day,next);
+  // Click-cycle hataya (galti se status badal jaata tha) — ab click par
+  // chhota dropdown khulta hai, deliberate select ke baad hi change hota hai.
+  const [selCell,setSelCell]=useState(null);   // "empId_day" | null
+  const setStatus=(empId,day,status)=>{
+    setAtt(p=>({...p,[empId]:{...p[empId],[day]:status}}));
+    if(onAttChange) onAttChange(empId,day,status);
+    setSelCell(null);
   };
 
   const getStats=(empId)=>{
@@ -1216,6 +1748,7 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
             <div key={d} title={hol?hol.name+(hol.is_optional?" (Optional)":""):""}
               style={{width:28,flexShrink:0,textAlign:"center",fontSize:9.5,fontWeight:isToday?800:isSun||hol?600:400,color:isToday?T.blu:hol&&!hol.is_optional?T.red:hol?T.amb:isSun?T.red:isFuture?T.b2:T.t4,padding:"3px 0"}}>
               {d}
+              {lockedDaySet.has(d)&&<div style={{fontSize:6,lineHeight:1,marginTop:1}}>🔒</div>}
               {isSun&&!hol&&<div style={{width:4,height:4,borderRadius:"50%",background:isFuture?T.b2:T.red,margin:"1px auto 0"}}/>}
               {hol&&<div style={{width:4,height:4,borderRadius:"50%",background:hol.is_optional?T.amb:T.red,margin:"1px auto 0"}}/>}
             </div>
@@ -1248,15 +1781,34 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
               const isHalfL=status==="L"&&!!halfL[emp.id]?.has(d);
               const cellBg=isHolBlock?"#FEE2E2":isFuture?"transparent":isHalfL?"#FEF3C7":sc.bg;
               const cellColor=isHolBlock?T.red:isFuture?T.b2:isHalfL?"#B45309":sc.c;
+              const isAppUser=!!emp.isAppUser;
+              const isDayLocked=lockedDaySet.has(d);
+              const editable=!isFuture&&!isHolBlock&&!isAppUser&&!isDayLocked;
+              const cellKey=`${emp.id}_${d}`;
+              const menuOpen=selCell===cellKey;
               return(
                 <div key={d}
-                  onClick={()=>!isFuture&&!isHolBlock&&toggleAtt(emp.id,d)}
-                  style={{position:"relative",width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:cellBg,borderRadius:4,cursor:isFuture||isHolBlock?"default":"pointer",fontSize:9.5,fontWeight:700,color:cellColor,border:`1px solid ${isHolBlock?"#FCA5A5":isFuture?"transparent":isHalfL?"#FDE68A":sc.bg}`,transition:"all .1s",margin:"0 1px"}}
-                  title={hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:isHalfL?`${emp.name} - Day ${d} · Half-day leave`:punchDays[emp.id]?.[d]?`${emp.name} - Day ${d} · 📍 GPS punch (mobile)`:`${emp.name} - Day ${d}`}>
+                  onClick={()=>editable&&setSelCell(menuOpen?null:cellKey)}
+                  style={{position:"relative",width:28,height:28,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",background:cellBg,borderRadius:4,cursor:editable?"pointer":"default",fontSize:9.5,fontWeight:700,color:cellColor,border:`1px solid ${menuOpen?T.blu:isHolBlock?"#FCA5A5":isFuture?"transparent":isHalfL?"#FDE68A":sc.bg}`,transition:"all .1s",margin:"0 1px",zIndex:menuOpen?30:"auto"}}
+                  title={hol?`Holiday: ${hol.name}${hol.is_optional?" (Optional)":""}`:isDayLocked?`${emp.name} - Day ${d} · 🔒 Din locked — change Edit Request se (Day View)`:isAppUser?`${emp.name} - Day ${d} · App user — GPS punch se auto; manual mark Day View me reason ke saath`:isHalfL?`${emp.name} - Day ${d} · Half-day leave`:punchDays[emp.id]?.[d]?`${emp.name} - Day ${d} · 📍 GPS punch (mobile)`:`${emp.name} - Day ${d}`}>
                   {isHolBlock?"H":isFuture?"":isHalfL?"L½":sc.label}
                   {/* GPS-punch source badge — auto-Present from mobile punch */}
                   {!isFuture&&!isHolBlock&&punchDays[emp.id]?.[d]&&(
                     <span style={{position:"absolute",top:-1,right:0,fontSize:7,lineHeight:1}}>📍</span>
+                  )}
+                  {/* Status dropdown — deliberate select, no accidental toggle */}
+                  {menuOpen&&(
+                    <>
+                      <div onClick={e=>{e.stopPropagation();setSelCell(null);}} style={{position:"fixed",inset:0,zIndex:31,cursor:"default"}}/>
+                      <div onClick={e=>e.stopPropagation()} style={{position:"absolute",top:30,left:"50%",transform:"translateX(-50%)",zIndex:32,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,.18)",padding:4,display:"flex",gap:3}}>
+                        {[["P","Present",T.grn],["A","Absent",T.red],["H","Half Day",T.amb],["L","Leave",T.blu]].map(([k,lbl,c])=>(
+                          <button key={k} title={lbl} onClick={()=>setStatus(emp.id,d,k)}
+                            style={{width:26,height:26,borderRadius:6,border:`1.5px solid ${status===k?c:T.b1}`,background:status===k?c:T.surface,color:status===k?"#fff":c,fontSize:10.5,fontWeight:800,cursor:"pointer"}}>
+                            {k}
+                          </button>
+                        ))}
+                      </div>
+                    </>
                   )}
                 </div>
               );
@@ -1282,7 +1834,7 @@ function MonthlyAttGrid({staff,att,setAtt,month,year,onAttChange,holidays=[],pun
             <span style={{fontSize:10.5,color:T.t3}}>{lbl}</span>
           </div>
         ))}
-        <div style={{fontSize:10.5,color:T.t4,borderLeft:`1px solid ${T.b1}`,paddingLeft:10}}>Click cell to toggle</div>
+        <div style={{fontSize:10.5,color:T.t4,borderLeft:`1px solid ${T.b1}`,paddingLeft:10}}>Cell click → status select · 📍 = GPS punch (app users read-only)</div>
       </div>
     </div>
   );
@@ -1945,6 +2497,22 @@ function DailyWagesTab({workers,att,setAtt,selProject,setSelProject,month,year,o
   );
 }
 
+// Modal form helpers — MODULE scope par, component ke andar nahi.
+// Andar define karne se har keystroke pe naya component-type banta tha
+// → React input remount karta tha → cursor/focus ud jaata tha.
+const ModalSect=({title,children})=>(
+  <div style={{marginBottom:14}}>
+    <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${T.b1}`}}>{title}</div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{children}</div>
+  </div>
+);
+const ModalField=({label,children,full})=>(
+  <div style={full?{gridColumn:"1 / -1"}:{}}>
+    <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{label}</div>
+    {children}
+  </div>
+);
+
 // ── EDIT STAFF MASTER MODAL (Payroll v2 — Phase 2) ──────────────
 // Admin can edit personal, salary structure, PF/ESIC config from here.
 // All fields map to columns on payroll_staff. Saves via PATCH /payroll/staff/:id.
@@ -1956,6 +2524,7 @@ function EditStaffModal({emp,onClose,onSaved}){
     aadhaar:     emp.aadhaar||"",
     role:        emp.role||"",
     dept:        emp.dept||"",
+    project:     emp.project||"",
     salary_enabled: emp.salaryEnabled===false?0:1,
     payment_type:emp.paymentType||"fixed",
     basic_salary:    emp.basicSalary||0,
@@ -1987,18 +2556,7 @@ function EditStaffModal({emp,onClose,onSaved}){
     }catch(e){ setErr(e.message||"Network error"); }
     setSaving(false);
   };
-  const Sect=({title,children})=>(
-    <div style={{marginBottom:14}}>
-      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${T.b1}`}}>{title}</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{children}</div>
-    </div>
-  );
-  const F=({label,children,full})=>(
-    <div style={full?{gridColumn:"1 / -1"}:{}}>
-      <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{label}</div>
-      {children}
-    </div>
-  );
+  const Sect=ModalSect, F=ModalField;   // module-scope helpers — focus-loss fix
   const inp={width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface};
   return(
     <div onClick={()=>!saving&&onClose()}
@@ -2022,6 +2580,8 @@ function EditStaffModal({emp,onClose,onSaved}){
             <F label="Aadhaar"><input style={inp} value={form.aadhaar} onChange={e=>set("aadhaar",e.target.value)} placeholder="12-digit"/></F>
             <F label="Role / Designation"><input style={inp} value={form.role} onChange={e=>set("role",e.target.value)}/></F>
             <F label="Department"><input style={inp} value={form.dept} onChange={e=>set("dept",e.target.value)}/></F>
+            {/* Dropdown (not free text) — Overview ki project-wise coverage typo se na toote */}
+            <F label="Posting / Project" full><SearchSelect value={form.project} options={PROJECTS||[]} onChange={v=>set("project",v)} placeholder="— Office / koi project nahi —"/></F>
           </Sect>
           <Sect title="Salary — Earnings (₹/month)">
             <F label="Basic"><input style={inp} type="number" value={form.basic_salary} onChange={e=>set("basic_salary",Number(e.target.value)||0)}/></F>
@@ -2113,6 +2673,7 @@ function AddStaffModal({onClose,onSaved}){
   const [err,setErr]=useState("");
   const [form,setForm]=useState({
     name:"", designation:"", phone:"", staff_subtype:"office",
+    project:"",
     payment_type:"fixed",
     basic_salary:0, hra:0, conveyance:0, medical:0, phone_allowance:0,
     petrol_allowance:0, special_allowance:0,
@@ -2175,6 +2736,7 @@ function AddStaffModal({onClose,onSaved}){
         pf_applicable:form.pf_applicable?1:0, pf_method:form.pf_method,
         pf_custom_amount:Number(form.pf_custom_amount)||0,
         esic_applicable:form.esic_applicable?1:0,
+        project:form.project||null,
         join_date:new Date().toISOString().slice(0,10),
       });
       if(sRes.success){ onSaved&&onSaved(); }
@@ -2183,18 +2745,7 @@ function AddStaffModal({onClose,onSaved}){
     setSaving(false);
   };
 
-  const Sect=({title,children})=>(
-    <div style={{marginBottom:14}}>
-      <div style={{fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",marginBottom:6,paddingBottom:4,borderBottom:`1px solid ${T.b1}`}}>{title}</div>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>{children}</div>
-    </div>
-  );
-  const F=({label,children,full})=>(
-    <div style={full?{gridColumn:"1 / -1"}:{}}>
-      <div style={{fontSize:10,color:T.t4,fontWeight:600,marginBottom:3}}>{label}</div>
-      {children}
-    </div>
-  );
+  const Sect=ModalSect, F=ModalField;   // module-scope helpers — focus-loss fix
   const inp={width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface};
 
   return(
@@ -2255,6 +2806,8 @@ function AddStaffModal({onClose,onSaved}){
                 <option value="wages">Daily Wages Worker</option>
               </select>
             </F>
+            {/* Dropdown (not free text) — Overview ki project-wise coverage typo se na toote */}
+            <F label="Posting / Project" full><SearchSelect value={form.project} options={PROJECTS||[]} onChange={v=>set("project",v)} placeholder="— Office / koi project nahi —"/></F>
           </Sect>
           <Sect title="Salary — Earnings (₹/month)">
             <F label="Basic"><input style={inp} type="number" value={form.basic_salary} onChange={e=>set("basic_salary",e.target.value)}/></F>
@@ -5273,6 +5826,205 @@ function RunFinalize({preview,adjs,finalized,items,month,year,busy,onFinalize,on
   );
 }
 
+// ── TEAM & HR OVERVIEW TAB ────────────────────────────────────────
+// Landing dashboard: Action Center (pending kaam) + Manpower Outlook
+// (aaj + agle 4 din — kaun leave pe, project coverage). Data:
+// GET /payroll/overview (leaves overlap + staff project/role base).
+function OverviewTab({isAdmin,setTab,onOpenSalary}){
+  const [ov,setOv]=useState(null);
+  const [loading,setLoading]=useState(true);
+  const [err,setErr]=useState("");
+  const [selDay,setSelDay]=useState(null);   // index into ov.days — null = koi detail nahi
+  const load=useCallback(()=>{
+    setLoading(true);setErr("");
+    api.get("/payroll/overview?days=5")
+      .then(r=>{ if(r.success) setOv(r.data); else setErr(r.message||"Load failed"); })
+      .catch(e=>setErr(e.message||"Network error"))
+      .finally(()=>setLoading(false));
+  },[]);
+  useEffect(()=>{ load(); },[load]);
+
+  if(loading) return <div style={{textAlign:"center",padding:"50px 0",color:T.t4,fontSize:12}}>Overview load ho raha hai…</div>;
+  if(err||!ov) return <ErrorRetry onRetry={load}/>;
+
+  const DOW=["Sun","Mon","Tue","Wed","Thu","Fri","Sat"];
+  const dayLabel=(d,i)=>{
+    const x=new Date(d.date+"T00:00:00");
+    return `${DOW[x.getDay()]} ${String(x.getDate()).padStart(2,"0")}${i===0?" · Aaj":""}`;
+  };
+  const projName=(p)=>p||"Office / No project";
+
+  // Coverage warnings for a day: project+role bucket me kitne absent vs total
+  const dayWarnings=(day)=>{
+    const buckets={};   // "proj||role" → Set(staff)
+    day.onLeave.forEach(l=>{
+      const k=`${(l.project||"").trim().toLowerCase()}||${(l.role||"").trim().toLowerCase()}`;
+      (buckets[k]=buckets[k]||[]).push(l);
+    });
+    const warns=[];
+    Object.values(buckets).forEach(list=>{
+      const {project,role}=list[0];
+      const pj=(ov.projects||[]).find(p=>(p.project||"").trim().toLowerCase()===(project||"").trim().toLowerCase());
+      // Role totals case-insensitively summed — DB me "Supervisor"/"supervisor" dono hain
+      const total=pj?Object.entries(pj.roles).reduce((s,[k,n])=>s+((k.trim().toLowerCase()===(role||"").trim().toLowerCase())?n:0),0):0;
+      const absent=list.length;
+      if(total>0&&absent/total>=0.5){
+        warns.push({sev:absent>=total?"red":"amb",
+          text:`${projName(project)}: ${total} me se ${absent} ${role||"staff"} leave pe${absent>=total?" — koi nahi bachega":""}`});
+      }
+    });
+    return warns;
+  };
+
+  // Project coverage matrix — sirf named projects (office bucket alag row, end me)
+  const covRows=(ov.projects||[]).filter(p=>p.total>0)
+    .sort((a,b)=>(a.project?0:1)-(b.project?0:1)||b.total-a.total);
+  const absentCount=(day,project)=>day.onLeave.filter(l=>(l.project||"").trim().toLowerCase()===(project||"").trim().toLowerCase()).length;
+
+  const actions=ov.actions;
+  const actionRows=actions?[
+    actions.pendingLeaves>0&&{c:T.amb,l:`${actions.pendingLeaves} leave approval${actions.pendingLeaves>1?"s":""} pending`,btn:"Review",go:()=>setTab("office-leave")},
+    actions.pendingAttEdits>0&&{c:T.blu,l:`${actions.pendingAttEdits} attendance edit request${actions.pendingAttEdits>1?"s":""}`,btn:"Review",go:()=>setTab("office-att")},
+    actions.pendingReviews>0&&{c:T.red,l:`${actions.pendingReviews} outside-geofence punch review pending`,btn:"Review",go:()=>setTab("office-att")},
+    actions.settleRequests.count>0&&{c:T.grn,l:`${actions.settleRequests.count} salary settle request${actions.settleRequests.count>1?"s":""} — ₹${fmtN(actions.settleRequests.amount)}`,sub:"Finance → Staff Wallets me confirm hote hain"},
+    !actions.run.finalized&&{c:T.pur,l:`${MONTHS[actions.run.month-1]} payroll run pending`,btn:"Start Run",go:()=>onOpenSalary("run")},
+    actions.run.finalized&&{c:T.grn,l:`${MONTHS[actions.run.month-1]} payroll finalized 🔒`,btn:"View",go:()=>onOpenSalary("run")},
+  ].filter(Boolean):[];
+
+  const selected=selDay!=null?ov.days[selDay]:null;
+
+  return(
+    <div style={{display:"grid",gap:12,maxWidth:1080}}>
+
+      {/* ─── ACTION CENTER ─── */}
+      {isAdmin&&actions&&(
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:"4px 16px"}}>
+          <div style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".5px",padding:"10px 0 4px"}}>Action Center</div>
+          {actionRows.length===0&&<div style={{padding:"10px 0 14px",fontSize:12.5,color:T.grn,fontWeight:600}}>Sab clear — koi pending action nahi ✓</div>}
+          {actionRows.map((r,i)=>(
+            <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",borderTop:i>0?`1px solid ${T.b1}`:"none"}}>
+              <span style={{width:7,height:7,borderRadius:"50%",background:r.c,flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0}}>
+                <span style={{fontSize:12.5,color:T.t1,fontWeight:600}}>{r.l}</span>
+                {r.sub&&<div style={{fontSize:10.5,color:T.t4,marginTop:1}}>{r.sub}</div>}
+              </div>
+              {r.btn&&<button onClick={r.go} style={{fontSize:11.5,fontWeight:700,color:T.blu,background:T.bluL,border:`1px solid ${T.blu}33`,borderRadius:7,padding:"5px 13px",cursor:"pointer",flexShrink:0}}>{r.btn} →</button>}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* ─── MANPOWER OUTLOOK ─── */}
+      <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:16}}>
+        <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:12}}>
+          <div style={{fontSize:13,fontWeight:800,color:T.t1}}>Manpower Outlook — Next 4 Days</div>
+          <div style={{fontSize:10.5,color:T.t4}}>din par click karo — detail neeche</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:`repeat(${ov.days.length},1fr)`,gap:10}}>
+          {ov.days.map((d,i)=>{
+            const off=d.dow===0||d.holiday;
+            const active=selDay===i;
+            const nLeave=d.onLeave.length;
+            return(
+              <button key={d.date} onClick={()=>setSelDay(active?null:i)}
+                style={{padding:"12px 8px",borderRadius:10,cursor:"pointer",textAlign:"center",fontFamily:"inherit",
+                  border:`1.5px solid ${active?T.blu:T.b1}`,background:active?T.bluL:T.surfaceB,transition:"all .15s"}}>
+                <div style={{fontSize:10.5,fontWeight:700,color:i===0?T.blu:T.t3}}>{dayLabel(d,i)}</div>
+                {off?(
+                  <>
+                    <div style={{fontSize:20,fontWeight:800,color:T.t4,margin:"8px 0 2px"}}>—</div>
+                    <div style={{fontSize:10.5,color:T.t4}}>{d.holiday||"Week off"}</div>
+                  </>
+                ):(
+                  <>
+                    <div style={{fontSize:24,fontWeight:800,color:T.t1,margin:"6px 0 0",lineHeight:1.1}}>{d.available}</div>
+                    <div style={{fontSize:10,color:T.t4,marginBottom:4}}>available</div>
+                    {nLeave>0
+                      ? <div style={{fontSize:10.5,fontWeight:700,color:T.amb}}>⚠ {nLeave} leave</div>
+                      : <div style={{fontSize:10.5,fontWeight:700,color:T.grn}}>✓ Full team</div>}
+                    {d.pending.length>0&&<div style={{fontSize:9.5,color:T.t4,marginTop:1}}>+{d.pending.length} pending</div>}
+                  </>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Day detail — click par */}
+        {selected&&(
+          <div style={{marginTop:12,border:`1px solid ${T.b1}`,borderRadius:10,padding:"12px 14px",background:T.surfaceB}}>
+            <div style={{fontSize:12,fontWeight:800,color:T.t1,marginBottom:8}}>
+              {fmtDate(selected.date)} — {selected.onLeave.length>0?`${selected.onLeave.length} staff leave par`:"koi approved leave nahi"}
+              {selected.holiday&&<span style={{fontSize:10.5,fontWeight:600,color:T.amb,marginLeft:8}}>🎉 {selected.holiday}</span>}
+            </div>
+            {selected.onLeave.map(l=>(
+              <div key={`a${l.app_id}`} style={{display:"flex",alignItems:"center",gap:9,padding:"6px 0"}}>
+                <Avatar name={l.name} size={26}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{l.name}</span>
+                  <span style={{fontSize:10.5,color:T.t4,marginLeft:6}}>{l.leave_code} · {fmtDate(l.from_date)} → {fmtDate(l.to_date)}{l.is_half_day?" (½)":""}</span>
+                </div>
+                {l.role&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700}}>{l.role}</span>}
+                <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700}}>{projName(l.project)}</span>
+              </div>
+            ))}
+            {selected.pending.map(l=>(
+              <div key={`p${l.app_id}`} style={{display:"flex",alignItems:"center",gap:9,padding:"6px 0",opacity:.75}}>
+                <Avatar name={l.name} size={26}/>
+                <div style={{flex:1,minWidth:0}}>
+                  <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{l.name}</span>
+                  <span style={{fontSize:10,fontWeight:700,color:T.amb,marginLeft:6}}>• pending approval</span>
+                </div>
+                {l.role&&<span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.bluL,color:T.blu,fontWeight:700}}>{l.role}</span>}
+                <span style={{fontSize:10,padding:"2px 8px",borderRadius:10,background:T.purL,color:T.pur,fontWeight:700}}>{projName(l.project)}</span>
+              </div>
+            ))}
+            {dayWarnings(selected).map((w,i)=>(
+              <div key={i} style={{display:"flex",alignItems:"center",gap:7,marginTop:8,padding:"7px 11px",borderRadius:7,
+                background:w.sev==="red"?T.redL:T.ambL,border:`1px solid ${w.sev==="red"?T.redM:T.ambM}`}}>
+                <IcAlert size={13} color={w.sev==="red"?T.red:T.amb}/>
+                <span style={{fontSize:11.5,fontWeight:700,color:w.sev==="red"?T.red:T.amb}}>{w.text}</span>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* ─── PROJECT COVERAGE ─── */}
+      {covRows.length>0&&(
+        <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,padding:16}}>
+          <div style={{display:"flex",alignItems:"baseline",justifyContent:"space-between",marginBottom:10}}>
+            <div style={{fontSize:13,fontWeight:800,color:T.t1}}>Project Coverage</div>
+            <div style={{fontSize:10.5,color:T.t4}}>next 4 days basis — available staff per din</div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:`minmax(160px,1.4fr) 70px repeat(${ov.days.length},1fr)`,gap:0,fontSize:11.5}}>
+            <div style={{padding:"6px 8px",fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Project</div>
+            <div style={{padding:"6px 8px",fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase"}}>Staff</div>
+            {ov.days.map((d,i)=><div key={d.date} style={{padding:"6px 4px",fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",textAlign:"center"}}>{dayLabel(d,i).split(" · ")[0]}</div>)}
+            {covRows.map(p=>(
+              [
+                <div key={p.project+"_n"} style={{padding:"8px",borderTop:`1px solid ${T.b1}`,fontWeight:700,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{projName(p.project)}</div>,
+                <div key={p.project+"_t"} style={{padding:"8px",borderTop:`1px solid ${T.b1}`,color:T.t3,fontWeight:600}}>{p.total}</div>,
+                ...ov.days.map(d=>{
+                  const off=d.dow===0||d.holiday;
+                  const abs=absentCount(d,p.project);
+                  const avail=p.total-abs;
+                  const c=off?T.t4:abs===0?T.grn:(abs/p.total>=0.5?T.red:T.amb);
+                  return(
+                    <div key={p.project+d.date} style={{padding:"8px 4px",borderTop:`1px solid ${T.b1}`,textAlign:"center",fontWeight:800,color:c}}>
+                      {off?"—":avail}{!off&&abs>0&&<span style={{fontSize:9.5,fontWeight:600,color:c}}> (−{abs})</span>}
+                    </div>
+                  );
+                })
+              ]
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── MAIN PAYROLL MODULE ───────────────────────────────────────────
 function PayrollModule(){
   const currentUser = (() => { try { return JSON.parse(localStorage.getItem("gb_user")) || {}; } catch { return {}; } })();
@@ -5284,11 +6036,14 @@ function PayrollModule(){
     setMode(m);
     localStorage.setItem("gb_payroll_mode",m);
     // Reset to first tab of the new mode
-    setTab(m==="office"?"office-att":"daily-workers");
+    setTab(m==="office"?"office-overview":"daily-workers");
   };
   const [tab,setTab]=useState(()=>
-    (localStorage.getItem("gb_payroll_mode")||"office")==="office"?"office-att":"daily-workers"
+    (localStorage.getItem("gb_payroll_mode")||"office")==="office"?"office-overview":"daily-workers"
   );
+  // Sub-tab state for grouped tabs (Salary group + Settings gear)
+  const [salarySub,setSalarySub]=useState("monthly");   // monthly | run | ledger
+  const [settingsSub,setSettingsSub]=useState("config"); // config | sites
   const [month,setMonth]=useState(CUR_MONTH);
   const [year,setYear]=useState(CUR_YEAR);
   const [loading,setLoading]=useState(true);
@@ -5298,8 +6053,11 @@ function PayrollModule(){
   const [advances,setAdvances]=useState([]);
   const [monthlyAtt,setMonthlyAtt]=useState({});
   const [punchDays,setPunchDays]=useState({});   // {staffId:{day:true}} — GPS punch source badge
+  const [attNotes,setAttNotes]=useState({});     // {staffId:{day:note}} — app-user manual-mark reasons
+  const [dayLocks,setDayLocks]=useState({});     // {"YYYY-MM-DD": lockRow} — day-lock/approve flow
   const [attFilter,setAttFilter]=useState("all"); // all | sal (salary staff) | app (app users)
   const [attSearch,setAttSearch]=useState("");
+  const [attView,setAttView]=useState("day");     // day (aaj — marking) | grid (month overview)
   const [dailyAtt,setDailyAtt]=useState({});
   const [selSlipEmp,setSelSlipEmp]=useState(null);
   const [selSlipPayType,setSelSlipPayType]=useState("fixed");
@@ -5396,13 +6154,16 @@ function PayrollModule(){
   // Load attendance when month/year changes
   const loadAttendance=useCallback(async()=>{
     try{
-      const [mRes,dRes]=await Promise.all([
+      const [mRes,dRes,lRes]=await Promise.all([
         api.get("/payroll/attendance/monthly?month="+month+"&year="+year),
         api.get("/payroll/attendance/daily?month="+month+"&year="+year),
+        api.get("/payroll/attendance/day-locks?month="+month+"&year="+year).catch(()=>({data:{}})),
       ]);
       setMonthlyAtt(mRes.data||{});
       setPunchDays(mRes.punchDays||{});
+      setAttNotes(mRes.notes||{});
       setDailyAtt(dRes.data||{});
+      setDayLocks(lRes.data||{});
     }catch(err){console.error("Load attendance:",err);}
   },[month,year]);
 
@@ -5419,9 +6180,11 @@ function PayrollModule(){
   useEffect(()=>{loadHolidays();},[loadHolidays]);
 
   // Attendance API callbacks
-  const onMonthlyAttChange=(empId,day,status)=>{
+  const onMonthlyAttChange=(empId,day,status,note)=>{
     const m=month+1;const dateStr=`${year}-${String(m).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
-    api.post("/payroll/attendance/monthly",{staff_id:empId,date:dateStr,status}).catch(err=>console.error(err));
+    api.post("/payroll/attendance/monthly",{staff_id:empId,date:dateStr,status,note:note||null})
+      .then(r=>{ if(!r.success){ alert(r.message||"Attendance save failed"); loadAttendance(); } })
+      .catch(err=>{ alert(err.message||"Attendance save failed — din locked ho sakta hai"); loadAttendance(); });
   };
   const onDailyAttChange=(wId,day,status,ot)=>{
     const m=month+1;const dateStr=`${year}-${String(m).padStart(2,"0")}-${String(day).padStart(2,"0")}`;
@@ -5486,26 +6249,22 @@ function PayrollModule(){
 
   const pendingAdvances=advances.filter(a=>a.status==="Pending deduction").reduce((s,a)=>s+a.amount,0);
 
-  // Office Staff mode — 8 tabs
+  // Office Staff mode — 5 tabs (Settings gear icon me, right side)
   const TABS_OFFICE=[
-    {id:"office-att",      l:"Attendance",        sub:"From Mobile Punch"},
-    {id:"office-salary",   l:"Monthly Salary",    sub:"Auto-calculated"},
-    ...(isAdmin?[{id:"office-run", l:"Create Salary", sub:"Month-end payroll run"}]:[]),
-    {id:"office-ledger",   l:"Salary Ledger",     sub:"Payment history"},
-    {id:"office-advances", l:"Advances",          sub:"Advance tracking"},
-    {id:"office-leave",    l:"Leave",             sub:"Apply & approve"},
-    {id:"office-calendar", l:"Calendar",          sub:"Holidays & leaves"},
-    {id:"office-sites",    l:"Sites",             sub:"Geofences & review"},
-    {id:"office-settings", l:"Settings",          sub:"Payroll config"},
+    {id:"office-overview", l:"Overview",   sub:"Team & HR dashboard"},
+    {id:"office-att",      l:"Attendance", sub:"From Mobile Punch"},
+    {id:"office-leave",    l:"Leave",      sub:"Approvals & holidays"},
+    {id:"office-salary",   l:"Salary",     sub:"Monthly · Run · Ledger"},
+    {id:"office-advances", l:"Advances",   sub:"Advance tracking"},
   ];
-  // Daily Wages Labour mode — 4 tabs
+  // Daily Wages Labour mode — 3 tabs (Settings gear me)
   const TABS_DAILY=[
     {id:"daily-workers",   l:"Workers",           sub:"Labour master"},
     {id:"daily-att",       l:"Daily Attendance",  sub:"Project-wise"},
     {id:"daily-payments",  l:"Payments",          sub:"Weekly / monthly"},
-    {id:"daily-settings",  l:"Settings",          sub:"Rates & cycle"},
   ];
   const TABS = mode==="office" ? TABS_OFFICE : TABS_DAILY;
+  const settingsTabId = mode==="office" ? "office-settings" : "daily-settings";
 
   // Pending payroll for the CURRENT month/year (real number):
   //   pending = max(0, totalMonthlyNet − paid for this month)
@@ -5547,8 +6306,8 @@ function PayrollModule(){
         </div>
       </div>
 
-      {/* KPI Tiles */}
-      <div style={{padding:"10px 18px 8px",flexShrink:0}}>
+      {/* KPI Tiles — office me sirf Overview par (baaki tabs ko poori height) */}
+      {(mode==="daily"||tab==="office-overview")&&<div style={{padding:"10px 18px 8px",flexShrink:0}}>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10}}>
           {TILES.map((s,i)=>(
             <div key={i} style={{padding:"12px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,borderTop:`3px solid ${s.c}`}}>
@@ -5558,7 +6317,7 @@ function PayrollModule(){
             </div>
           ))}
         </div>
-      </div>
+      </div>}
 
       {/* Dark tab bar with month picker */}
       <div style={{margin:"0 18px",flexShrink:0}}>
@@ -5572,9 +6331,14 @@ function PayrollModule(){
               </button>
             ))}
           </div>
+          {/* Settings — gear (config roz ka kaam nahi, isliye tab nahi) */}
+          <button onClick={()=>setTab(settingsTabId)} title="Settings"
+            style={{display:"flex",alignItems:"center",padding:"5px 8px",borderRadius:6,border:"none",background:tab===settingsTabId?"rgba(255,255,255,0.14)":"none",color:tab===settingsTabId?"white":"rgba(255,255,255,0.45)",cursor:"pointer"}}>
+            <IcSet size={15} color="currentColor"/>
+          </button>
           {/* Export */}
           <button onClick={()=>{
-            if(tab==="office-salary"){
+            if(tab==="office-salary"&&salarySub==="monthly"){
               const WD=workingDays||26;
               exportCSV(["Name","Role","Dept","Basic","HRA","Conv","Medical","Phone","Days Present","Gross","PF","Net"],
                 staff.map(emp=>{const days=monthlyAtt[emp.id]||{};const P=Object.values(days).filter(v=>v==="P").length;const H=Object.values(days).filter(v=>v==="H").length;const eff=P+(H*0.5);const perDay=(emp.basicSalary+emp.hra+emp.conveyance+emp.medical+emp.phone)/(WD);const gross=Math.round(perDay*eff);const pf=Math.round(emp.basicSalary*0.12);return[emp.name,emp.role,emp.dept,emp.basicSalary,emp.hra,emp.conveyance,emp.medical,emp.phone,eff,gross,pf,gross-pf];}),
@@ -5585,7 +6349,7 @@ function PayrollModule(){
                 `daily_wages_${MONTHS[month]}_${year}.csv`);
             }else if(tab==="office-advances"){
               exportCSV(["Name","Amount","Date","Reason","Status"],advances.map(a=>[a.name,a.amount,a.date,a.reason,a.status]),`advances_${MONTHS[month]}_${year}.csv`);
-            }else if(tab==="office-ledger"){
+            }else if(tab==="office-salary"&&salarySub==="ledger"){
               exportCSV(["Name","Designation","Amount","Status","Salary Date","Due Date","Paid Date","Notes"],
                 salaryRecords.filter(r=>r.month===month&&r.year===year).map(r=>[r.name,r.designation,r.amount,r.status,r.salaryDate,r.dueDate,r.paidDate||"",r.notes||""]),
                 `salary_ledger_${MONTHS[month]}_${year}.csv`);
@@ -5615,9 +6379,18 @@ function PayrollModule(){
         {mode==="office" && tab==="office-att" && (
           <>
           <PunchReviewStrip onActed={loadAttendance}/>
-          {/* Filter bar — one attendance place, filterable */}
-          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:10,flexWrap:"wrap"}}>
-            {[
+          {isAdmin&&<StaffEditRequestsStrip staff={staff} onActed={loadAttendance}/>}
+          {/* View toggle + search — Day view (marking) | Month grid (overview) */}
+          <div style={{display:"flex",gap:8,alignItems:"center",marginBottom:12,flexWrap:"wrap"}}>
+            <div style={{display:"inline-flex",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,padding:3}}>
+              {[{v:"day",l:"📅 Aaj — Day View"},{v:"grid",l:"Month Grid"}].map(o=>(
+                <button key={o.v} onClick={()=>setAttView(o.v)}
+                  style={{padding:"6px 14px",borderRadius:7,border:"none",background:attView===o.v?T.blu:"transparent",color:attView===o.v?"#fff":T.t3,fontSize:11.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",transition:"all .15s"}}>
+                  {o.l}
+                </button>
+              ))}
+            </div>
+            {attView==="grid"&&[
               {v:"all",  l:"All",            n:staff.length},
               {v:"sal",  l:"💰 Salary staff", n:staff.filter(s=>s.salaryEnabled!==false).length},
               {v:"app",  l:"📱 App users",    n:staff.filter(s=>s.isAppUser).length},
@@ -5630,40 +6403,81 @@ function PayrollModule(){
             <input value={attSearch} onChange={e=>setAttSearch(e.target.value)} placeholder="Search name…"
               style={{marginLeft:"auto",height:28,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:11.5,outline:"none",fontFamily:"inherit",width:160}}/>
           </div>
-          <MonthlyAttGrid
-            staff={staff
-              .filter(s=>attFilter==="all"?true:attFilter==="sal"?s.salaryEnabled!==false:s.isAppUser)
-              .filter(s=>!attSearch||s.name.toLowerCase().includes(attSearch.toLowerCase()))}
-            att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays} punchDays={punchDays}/>
+          {attView==="day"?(
+            <DayAttendanceView
+              staff={staff.filter(s=>!attSearch||s.name.toLowerCase().includes(attSearch.toLowerCase()))}
+              att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays} punchDays={punchDays}
+              notes={attNotes} dayLocks={dayLocks} isAdmin={isAdmin} onLocksChanged={loadAttendance}/>
+          ):(
+            <MonthlyAttGrid
+              staff={staff
+                .filter(s=>attFilter==="all"?true:attFilter==="sal"?s.salaryEnabled!==false:s.isAppUser)
+                .filter(s=>!attSearch||s.name.toLowerCase().includes(attSearch.toLowerCase()))}
+              att={monthlyAtt} setAtt={setMonthlyAtt} month={month} year={year} onAttChange={onMonthlyAttChange} holidays={holidays} punchDays={punchDays}
+              dayLocks={dayLocks}/>
+          )}
           </>
         )}
+        {mode==="office" && tab==="office-overview" && (
+          <OverviewTab isAdmin={isAdmin} setTab={setTab}
+            onOpenSalary={(sub)=>{ setSalarySub(sub); setTab("office-salary"); }}/>
+        )}
         {mode==="office" && tab==="office-leave" && (
-          <LeaveTab staff={staff} month={month} year={year} isAdmin={isAdmin} onAttendanceChanged={loadAttendance}/>
-        )}
-        {mode==="office" && tab==="office-calendar" && (
-          <HolidayCalendarTab holidays={holidays} setHolidays={setHolidays} month={month} year={year} isAdmin={isAdmin}/>
-        )}
-        {mode==="office" && tab==="office-sites" && (
-          <GeofenceAdminTab isAdmin={isAdmin}/>
+          <LeaveTab staff={staff} month={month} year={year} isAdmin={isAdmin} onAttendanceChanged={loadAttendance}
+            holidays={holidays} setHolidays={setHolidays}/>
         )}
         {mode==="office" && tab==="office-salary" && (
-          <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} holidays={holidays} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin} onStaffUpdate={loadAll}/>
-        )}
-        {mode==="office" && tab==="office-run" && (
-          isAdmin
-            ? <PayrollRunWizard month={month} year={year} isAdmin={isAdmin} workingDays={workingDays} setTab={setTab} onChanged={loadAll}/>
-            : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Create Salary run is only accessible to admins.</div>
-        )}
-        {mode==="office" && tab==="office-ledger" && (
-          <SalaryLedgerTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} month={month} year={year}/>
+          <div>
+            {/* Salary group — Monthly / Create Salary / Ledger */}
+            <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6}}>
+              {[
+                {id:"monthly", l:"Monthly Salary", c:T.blu},
+                ...(isAdmin?[{id:"run", l:"Create Salary", c:T.grn}]:[]),
+                {id:"ledger",  l:"Salary Ledger", c:T.pur},
+              ].map(s=>(
+                <button key={s.id} onClick={()=>setSalarySub(s.id)}
+                  style={{padding:"6px 13px",borderRadius:7,border:"none",background:salarySub===s.id?s.c:"transparent",color:salarySub===s.id?"white":T.t3,fontSize:12,fontWeight:salarySub===s.id?700:500,cursor:"pointer",transition:"all .15s"}}>
+                  {s.l}
+                </button>
+              ))}
+            </div>
+            {salarySub==="monthly" && (
+              <MonthlySalaryTab staff={staff} att={monthlyAtt} month={month} year={year} advances={advances} workingDays={WORKING_DAYS} holidays={holidays} onViewSlip={(emp,pType)=>{setSelSlipEmp(emp);setSelSlipPayType(pType||emp.paymentType||"fixed");}} isAdmin={isAdmin} onStaffUpdate={loadAll}/>
+            )}
+            {salarySub==="run" && (
+              isAdmin
+                ? <PayrollRunWizard month={month} year={year} isAdmin={isAdmin} workingDays={workingDays}
+                    setTab={(id)=>{ if(id==="office-salary") setSalarySub("monthly"); else setTab(id); }} onChanged={loadAll}/>
+                : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Create Salary run is only accessible to admins.</div>
+            )}
+            {salarySub==="ledger" && (
+              <SalaryLedgerTab salaryRecords={salaryRecords} setSalaryRecords={setSalaryRecords} month={month} year={year}/>
+            )}
+          </div>
         )}
         {mode==="office" && tab==="office-advances" && (
           <AdvancesTab advances={advances} setAdvances={setAdvances} isAdmin={isAdmin}/>
         )}
         {mode==="office" && tab==="office-settings" && (
-          isAdmin
-            ? <PayrollSettingsTab defaultDueDays={defaultDueDays} setDefaultDueDays={setDefaultDueDays} workingDays={workingDays} setWorkingDays={setWorkingDays}/>
-            : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Settings are only accessible to admins.</div>
+          isAdmin ? (
+            <div>
+              {/* Settings group — Payroll Config / Sites & Geofences */}
+              <div style={{display:"flex",gap:6,marginBottom:14,borderBottom:`1px solid ${T.b1}`,paddingBottom:6}}>
+                {[
+                  {id:"config", l:"Payroll Config", c:T.blu},
+                  {id:"sites",  l:"Sites & Geofences", c:T.grn},
+                ].map(s=>(
+                  <button key={s.id} onClick={()=>setSettingsSub(s.id)}
+                    style={{padding:"6px 13px",borderRadius:7,border:"none",background:settingsSub===s.id?s.c:"transparent",color:settingsSub===s.id?"white":T.t3,fontSize:12,fontWeight:settingsSub===s.id?700:500,cursor:"pointer",transition:"all .15s"}}>
+                    {s.l}
+                  </button>
+                ))}
+              </div>
+              {settingsSub==="config"
+                ? <PayrollSettingsTab defaultDueDays={defaultDueDays} setDefaultDueDays={setDefaultDueDays} workingDays={workingDays} setWorkingDays={setWorkingDays}/>
+                : <GeofenceAdminTab isAdmin={isAdmin}/>}
+            </div>
+          ) : <div style={{textAlign:"center",padding:"60px 0",color:T.t4,fontSize:13}}>Settings are only accessible to admins.</div>
         )}
 
         {/* ─── DAILY WAGES MODE ─── */}
