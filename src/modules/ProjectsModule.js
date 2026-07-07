@@ -1681,7 +1681,10 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const mrByStage  = s => data.mrs.filter(m=>m.stage===s); // unfiltered count for badge
 
   // ── PO splits ──
-  const pendingPOs  = data.pos.filter(p=>!p.approval_status||p.approval_status==="Pending");
+  // POs awaiting sign-off carry approval_status='Draft' (ProcurementModule's
+  // vocabulary) — legacy rows may use 'Pending'/NULL. Without 'Draft' here the
+  // engine counted them in the tile while the drawer hid them (tile≠drawer).
+  const pendingPOs  = data.pos.filter(p=>!p.approval_status||p.approval_status==="Pending"||p.approval_status==="Draft");
   const approvedPOs = data.pos.filter(p=>p.approval_status==="Approved");
 
   // ── Warehouse splits ──
