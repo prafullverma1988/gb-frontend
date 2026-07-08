@@ -715,8 +715,10 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   const activeDomain = user?.company_domain || "construction_individual";
   const activeIcon = domainIcons[activeDomain] || "🏗️";
   const activeColor = domainColors[activeDomain] || C.p;
-  // Sidebar brand: the logged-in company's uploaded logo, else the default GB mark.
+  // Sidebar brand: the logged-in company's uploaded logo, else a Company-Profile
+  // style initials avatar (blue→amber gradient + company initials).
   const activeLogo = (companies||[]).find(c=>c.id===user?.company_id)?.logo_url;
+  const initialsOf = (n) => (n||"CO").split(" ").filter(Boolean).map(w=>w[0]).join("").slice(0,2).toUpperCase();
 
   const handleCreate=async()=>{
     if(!newCo.name.trim()||creating) return;
@@ -779,8 +781,9 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
           style={{padding:(!isMobile&&collapsed)?"10px 0":"10px 12px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.08)",minHeight:48,justifyContent:(!isMobile&&collapsed)?"center":"flex-start",cursor:showLabel?"pointer":"default",transition:"background .15s"}}
           onMouseEnter={e=>{if(showLabel) e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{width:32,height:32,borderRadius:7,overflow:"hidden",background:activeLogo?"#fff":`linear-gradient(135deg,${activeColor},${activeColor}99)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>
-            <img src={activeLogo||"/icon-192.png"} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.currentTarget.onerror=null;e.currentTarget.src="/icon-192.png";}}/>
+          <div style={{width:32,height:32,borderRadius:7,overflow:"hidden",background:"linear-gradient(135deg,#1565C0,#FF6F00)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,position:"relative"}}>
+            <span style={{color:"#fff",fontWeight:800,fontSize:12.5,letterSpacing:"-.3px"}}>{initialsOf(user?.company_name)}</span>
+            {activeLogo&&<img src={activeLogo} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",background:"#fff"}} onError={e=>{e.currentTarget.style.display="none";}}/>}
           </div>
           {showLabel&&<div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             <span style={{color:"#fff",fontWeight:700,fontSize:13.5,letterSpacing:"-.1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.company_name||"Company"}</span>
@@ -801,8 +804,9 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
                   style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",cursor:isActive?"default":"pointer",background:isActive?"rgba(255,255,255,0.08)":"transparent",transition:"background .12s",borderLeft:isActive?`3px solid ${clr}`:"3px solid transparent"}}
                   onMouseEnter={e=>{if(!isActive) e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
                   onMouseLeave={e=>{if(!isActive) e.currentTarget.style.background="transparent";}}>
-                  <div style={{width:28,height:28,borderRadius:7,overflow:"hidden",background:co.logo_url?"#fff":`linear-gradient(135deg,${clr},${clr}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>
-                    <img src={co.logo_url||"/icon-192.png"} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.currentTarget.onerror=null;e.currentTarget.src="/icon-192.png";}}/>
+                  <div style={{width:28,height:28,borderRadius:7,overflow:"hidden",background:"linear-gradient(135deg,#1565C0,#FF6F00)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,position:"relative"}}>
+                    <span style={{color:"#fff",fontWeight:800,fontSize:11,letterSpacing:"-.3px"}}>{initialsOf(co.name)}</span>
+                    {co.logo_url&&<img src={co.logo_url} alt="" style={{position:"absolute",inset:0,width:"100%",height:"100%",objectFit:"cover",background:"#fff"}} onError={e=>{e.currentTarget.style.display="none";}}/>}
                   </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:isActive?700:500,color:"white",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{co.name}</div>
