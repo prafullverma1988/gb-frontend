@@ -2733,10 +2733,605 @@ const th = { padding:"10px 14px", textAlign:"left", fontSize:10.5, fontWeight:70
 const td = { padding:"11px 14px", color:T.t2 };
 
 // ════════════════════════════════════════════════════════════════════════
+// TAB: CLIENTS & BILLING
+// Client = paying customer above companies. We sell users + companies +
+// projects; limits are enforced hard at the creation APIs. Billing is a
+// client-level subscription contract with an auto-issued quarterly invoice
+// schedule — every value manually overridable from here.
+// ════════════════════════════════════════════════════════════════════════
+const fmtAmt = n => "₹" + (parseFloat(n) || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+const limitStr = (used, max) => `${fmtNum(used)} / ${max > 0 ? fmtNum(max) : "∞"}`;
+const limitColor = (used, max) => (max > 0 && used >= max) ? T.red : (max > 0 && used >= max * 0.8) ? T.amb : T.t2;
+const SUB_COLORS = { pending: T.amb, active: T.grn, suspended: T.red, expired: T.slt, cancelled: T.t4 };
+const INV_COLORS = { scheduled: T.slt, issued: T.blu, paid: T.grn, cancelled: T.t4 };
+const CYCLE_LABELS = { monthly: "Monthly", quarterly: "Quarterly", half_yearly: "Half-Yearly", yearly: "Yearly" };
+
+function ClientFormModal({ initial, onClose, onSaved, setToast }) {
+  const isEdit = !!initial?.id;
+  const [f, setF] = useState({
+    name: initial?.name || "", contact_person: initial?.contact_person || "",
+    phone: initial?.phone || "", email: initial?.email || "", gstin: initial?.gstin || "",
+    address: initial?.address || "", city: initial?.city || "", state: initial?.state || "",
+    max_companies: initial?.max_companies ?? 1, max_users: initial?.max_users ?? 0, max_projects: initial?.max_projects ?? 0,
+    notes: initial?.notes || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (v) => setF(p => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!f.name.trim()) return setToast({ msg: "Client name required", type: "error" });
+    setSaving(true);
+    const res = isEdit
+      ? await apiFetch(`/saas-admin/clients/${initial.id}`, { method: "PUT", body: f })
+      : await apiFetch("/saas-admin/clients", { method: "POST", body: f });
+    setSaving(false);
+    if (res.success) { setToast({ msg: isEdit ? "Client updated" : "Client created" }); onSaved(); onClose(); }
+    else setToast({ msg: res.message || "Failed", type: "error" });
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:560, maxHeight:"90vh", overflowY:"auto", background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+        <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:"white" }}>{isEdit ? "Edit Client" : "New Client"}</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Paying customer — limits & billing live at this level</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+        </div>
+        <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <InputField label="Client Name" required value={f.name} onChange={set("name")} placeholder="e.g. Ratna Khanij"/>
+            <InputField label="Contact Person" value={f.contact_person} onChange={set("contact_person")} placeholder="Owner / decision maker"/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+            <InputField label="Mobile" value={f.phone} onChange={v => set("phone")(v.replace(/\D/g, "").slice(0, 10))} placeholder="9876543210"/>
+            <InputField label="Email" value={f.email} onChange={set("email")} placeholder="contact@client.com"/>
+            <InputField label="GSTIN" value={f.gstin} onChange={v => set("gstin")(v.toUpperCase().slice(0, 15))} placeholder="22AAAAA0000A1Z5"/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr", gap:10 }}>
+            <InputField label="Address" value={f.address} onChange={set("address")} placeholder="Street / area"/>
+            <InputField label="City" value={f.city} onChange={set("city")} placeholder="Raipur"/>
+            <InputField label="State" value={f.state} onChange={set("state")} placeholder="Chhattisgarh"/>
+          </div>
+          <div style={{ padding:"12px 14px", background:T.bluL, border:`1px solid ${T.bluM}`, borderRadius:8 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:T.blu, marginBottom:8, textTransform:"uppercase", letterSpacing:"0.5px" }}>Plan Limits — hard-blocked at creation (0 = unlimited)</div>
+            <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+              <InputField label="Max Companies" type="number" value={f.max_companies} onChange={set("max_companies")}/>
+              <InputField label="Max Users" type="number" value={f.max_users} onChange={set("max_users")}/>
+              <InputField label="Max Projects" type="number" value={f.max_projects} onChange={set("max_projects")}/>
+            </div>
+          </div>
+          <InputField label="Notes" value={f.notes} onChange={set("notes")} placeholder="Internal notes"/>
+        </div>
+        <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+          <Btn onClick={onClose} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+          <Btn onClick={save} disabled={saving} style={{ flex:2 }}>{saving ? "Saving..." : (isEdit ? "Save Changes" : "Create Client")}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function SubscriptionFormModal({ clientId, initial, onClose, onSaved, setToast }) {
+  const isEdit = !!initial?.id;
+  const [f, setF] = useState({
+    committed_users: initial?.committed_users ?? 30,
+    base_annual_value: initial?.base_annual_value ?? "",
+    gst_rate: initial?.gst_rate ?? 18,
+    billing_cycle: initial?.billing_cycle || "quarterly",
+    term_months: initial?.term_months ?? 12,
+    order_ref: initial?.order_ref || "", quotation_ref: initial?.quotation_ref || "",
+    notes: initial?.notes || "", start_date: "",
+  });
+  // Standard published rate card as the starting point — edit per deal
+  const [slabs, setSlabs] = useState(initial?.slabs?.length
+    ? initial.slabs.map(s => ({ from_users: s.from_users, to_users: s.to_users ?? "", annual_rate_per_user: s.annual_rate_per_user }))
+    : [{ from_users: 31, to_users: 50, annual_rate_per_user: 10000 },
+       { from_users: 51, to_users: 100, annual_rate_per_user: 7000 },
+       { from_users: 101, to_users: "", annual_rate_per_user: 5000 }]);
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (v) => setF(p => ({ ...p, [k]: v }));
+  const setSlab = (i, k, v) => setSlabs(p => p.map((s, j) => j === i ? { ...s, [k]: v } : s));
+
+  const save = async () => {
+    if (!f.base_annual_value) return setToast({ msg: "Annual value required", type: "error" });
+    setSaving(true);
+    const body = { ...f, slabs: slabs.filter(s => s.from_users && s.annual_rate_per_user) };
+    if (!body.start_date) delete body.start_date;
+    const res = isEdit
+      ? await apiFetch(`/saas-admin/client-subscriptions/${initial.id}`, { method: "PUT", body })
+      : await apiFetch(`/saas-admin/clients/${clientId}/subscriptions`, { method: "POST", body });
+    setSaving(false);
+    if (res.success) { setToast({ msg: isEdit ? "Subscription updated" : "Subscription created" }); onSaved(); onClose(); }
+    else setToast({ msg: res.message || "Failed", type: "error" });
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:600, maxHeight:"90vh", overflowY:"auto", background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+        <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:"white" }}>{isEdit ? "Edit Subscription" : "New Subscription"}</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Invoice schedule auto-generates on activation — everything stays editable</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+        </div>
+        <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+            <InputField label="Committed Users" type="number" value={f.committed_users} onChange={set("committed_users")}/>
+            <InputField label="Annual Value (₹, excl. GST)" required type="number" value={f.base_annual_value} onChange={set("base_annual_value")} placeholder="330000"/>
+            <InputField label="GST %" type="number" value={f.gst_rate} onChange={set("gst_rate")}/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+            <SelectField label="Billing Cycle" value={f.billing_cycle} onChange={set("billing_cycle")}
+              options={Object.entries(CYCLE_LABELS).map(([value, label]) => ({ value, label }))}/>
+            <InputField label="Term (months)" type="number" value={f.term_months} onChange={set("term_months")}/>
+            {!isEdit && <InputField label="Start Date (blank = pending)" type="date" value={f.start_date} onChange={set("start_date")}/>}
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <InputField label="Order Ref" value={f.order_ref} onChange={set("order_ref")} placeholder="PHX/SAN/SOC/2026-27/001"/>
+            <InputField label="Quotation Ref" value={f.quotation_ref} onChange={set("quotation_ref")} placeholder="PHX/SAN/2026-27/001"/>
+          </div>
+          <div style={{ padding:"12px 14px", background:T.purL, border:`1px solid ${T.purM}`, borderRadius:8 }}>
+            <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:8 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:T.pur, textTransform:"uppercase", letterSpacing:"0.5px" }}>Additional-User Slabs (annual ₹/user beyond committed)</div>
+              <Btn variant="outline" color={T.pur} onClick={() => setSlabs(p => [...p, { from_users: "", to_users: "", annual_rate_per_user: "" }])} style={{ padding:"3px 9px", fontSize:11 }}><IcPlus size={11}/> Slab</Btn>
+            </div>
+            {slabs.map((s, i) => (
+              <div key={i} style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr 32px", gap:8, marginBottom:6, alignItems:"end" }}>
+                <InputField label={i === 0 ? "From user #" : ""} type="number" value={s.from_users} onChange={v => setSlab(i, "from_users", v)}/>
+                <InputField label={i === 0 ? "To user # (blank = ∞)" : ""} type="number" value={s.to_users} onChange={v => setSlab(i, "to_users", v)}/>
+                <InputField label={i === 0 ? "Annual ₹ / user" : ""} type="number" value={s.annual_rate_per_user} onChange={v => setSlab(i, "annual_rate_per_user", v)}/>
+                <button onClick={() => setSlabs(p => p.filter((_, j) => j !== i))} style={{ background:"none", border:"none", cursor:"pointer", color:T.red, display:"flex", paddingBottom:9 }}><IcX size={14}/></button>
+              </div>
+            ))}
+          </div>
+          <InputField label="Notes" value={f.notes} onChange={set("notes")} placeholder="e.g. includes 2–3 UI/UX + 2–3 dashboard customizations"/>
+        </div>
+        <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+          <Btn onClick={onClose} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+          <Btn onClick={save} disabled={saving} style={{ flex:2 }}>{saving ? "Saving..." : (isEdit ? "Save Changes" : "Create Subscription")}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function InvoiceEditModal({ invoice, onClose, onSaved, setToast }) {
+  const [f, setF] = useState({
+    invoice_no: invoice.invoice_no || "", period_label: invoice.period_label || "",
+    base_amount: invoice.base_amount, addl_users: invoice.addl_users || 0,
+    addl_amount: invoice.addl_amount, adjustment: invoice.adjustment || 0,
+    gst_rate: invoice.gst_rate, due_date: invoice.due_date ? String(invoice.due_date).slice(0, 10) : "",
+    notes: invoice.notes || "",
+  });
+  const [addlDirty, setAddlDirty] = useState(false); // manual ₹ override vs slab recompute
+  const [saving, setSaving] = useState(false);
+  const set = (k) => (v) => setF(p => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    setSaving(true);
+    const body = { ...f };
+    if (!addlDirty) delete body.addl_amount; // let backend recompute from slabs
+    const res = await apiFetch(`/saas-admin/client-invoices/${invoice.id}`, { method: "PUT", body });
+    setSaving(false);
+    if (res.success) { setToast({ msg: "Invoice updated" }); onSaved(); onClose(); }
+    else setToast({ msg: res.message || "Failed", type: "error" });
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:540, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+        <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Edit Invoice</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{invoice.period_label}</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+        </div>
+        <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <InputField label="Invoice No." value={f.invoice_no} onChange={set("invoice_no")} placeholder="PHX/INV/2026-27/001"/>
+            <InputField label="Period Label" value={f.period_label} onChange={set("period_label")}/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+            <InputField label="Base Amount (₹)" type="number" value={f.base_amount} onChange={set("base_amount")}/>
+            <InputField label="Addl. Users" type="number" value={f.addl_users} onChange={set("addl_users")}/>
+            <InputField label="Addl. Amount (₹)" type="number" value={f.addl_amount} onChange={v => { setAddlDirty(true); set("addl_amount")(v); }}/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+            <InputField label="Adjustment ± (₹)" type="number" value={f.adjustment} onChange={set("adjustment")}/>
+            <InputField label="GST %" type="number" value={f.gst_rate} onChange={set("gst_rate")}/>
+            <InputField label="Due Date" type="date" value={f.due_date} onChange={set("due_date")}/>
+          </div>
+          <InputField label="Notes" value={f.notes} onChange={set("notes")}/>
+          <div style={{ fontSize:11, color:T.t4 }}>Addl. Amount blank chhodne par slabs se auto-calculate hota hai; type karne par manual override.</div>
+        </div>
+        <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+          <Btn onClick={onClose} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+          <Btn onClick={save} disabled={saving} style={{ flex:2 }}>{saving ? "Saving..." : "Save Invoice"}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ClientDetail({ clientId, onBack }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
+  const [editClient, setEditClient] = useState(false);
+  const [showSub, setShowSub] = useState(null);        // "new" | subscription object
+  const [activateSub, setActivateSub] = useState(null); // subscription object
+  const [activateDate, setActivateDate] = useState("");
+  const [editInv, setEditInv] = useState(null);
+  const [payInv, setPayInv] = useState(null);
+  const [payRef, setPayRef] = useState("");
+  const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
+  const [allCompanies, setAllCompanies] = useState([]);
+  const [assignCompanyId, setAssignCompanyId] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    apiFetch(`/saas-admin/clients/${clientId}`).then(res => {
+      if (res.success) setData(res.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [clientId]);
+  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    apiFetch("/saas-admin/companies").then(res => { if (res.success) setAllCompanies(res.data); }).catch(() => {});
+  }, []);
+
+  const act = async (path, body, okMsg) => {
+    setBusy(true);
+    const res = await apiFetch(path, { method: "POST", body: body || {} });
+    setBusy(false);
+    if (res.success) { setToast({ msg: okMsg || res.message || "Done" }); load(); }
+    else setToast({ msg: res.message || "Failed", type: "error" });
+    return res.success;
+  };
+
+  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading client...</div>;
+  if (!data) return <div style={{ padding:60, textAlign:"center", color:T.red, fontSize:13 }}>Failed to load.<br/><Btn onClick={onBack} variant="outline" style={{ marginTop:12 }}>← Back</Btn></div>;
+
+  const { client, companies, usage, subscriptions, invoices } = data;
+  const currentSub = subscriptions.find(s => ["active", "pending", "suspended"].includes(s.status)) || subscriptions[0] || null;
+  const unassigned = allCompanies.filter(c => !companies.some(m => m.id === c.id));
+
+  const toggleSuspend = async () => {
+    const next = client.status === "suspended" ? "active" : "suspended";
+    if (next === "suspended" && !window.confirm(`Suspend ${client.name}? New companies/users/projects will be blocked immediately.`)) return;
+    const res = await apiFetch(`/saas-admin/clients/${client.id}`, { method: "PUT", body: { status: next } });
+    if (res.success) { setToast({ msg: next === "suspended" ? "Client suspended" : "Client reactivated" }); load(); }
+    else setToast({ msg: res.message || "Failed", type: "error" });
+  };
+
+  const limitCard = (label, used, max) => (
+    <div style={{ flex:1, padding:"12px 16px", background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10 }}>
+      <div style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", marginBottom:4 }}>{label}</div>
+      <div style={{ fontSize:20, fontWeight:800, color:limitColor(used, max) }}>{limitStr(used, max)}</div>
+      {max > 0 && used >= max && <div style={{ fontSize:10, color:T.red, fontWeight:600, marginTop:2 }}>LIMIT REACHED — creation blocked</div>}
+    </div>
+  );
+
+  return (
+    <div style={{ padding:"18px 24px" }}>
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+
+      {/* Header */}
+      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:16 }}>
+        <button onClick={onBack} style={{ padding:"7px 12px", border:`1px solid ${T.b1}`, background:T.surface, borderRadius:8, cursor:"pointer", display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.t2, fontFamily:"inherit" }}>
+          <IcChevL size={14}/> Back
+        </button>
+        <div style={{ width:48, height:48, borderRadius:10, background:client.is_internal ? T.purL : T.bluL, display:"flex", alignItems:"center", justifyContent:"center" }}>
+          <span style={{ fontSize:20, fontWeight:800, color:client.is_internal ? T.pur : T.blu }}>{(client.name || "?")[0]}</span>
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ fontSize:18, fontWeight:800, color:T.t1, display:"flex", alignItems:"center", gap:10 }}>
+            {client.name}
+            {client.is_internal ? <Badge text="INTERNAL" color={T.pur}/> : null}
+            <Badge text={client.status === "suspended" ? "SUSPENDED" : "Active"} color={client.status === "suspended" ? T.red : T.grn}/>
+          </div>
+          <div style={{ fontSize:11, color:T.t4 }}>
+            {[client.contact_person, client.phone, client.email, client.gstin && `GSTIN ${client.gstin}`, [client.city, client.state].filter(Boolean).join(", ")].filter(Boolean).join(" · ") || "No contact details"}
+          </div>
+        </div>
+        <Btn variant="outline" onClick={() => setEditClient(true)}><IcEdit size={13}/> Edit</Btn>
+        <Btn color={client.status === "suspended" ? T.grn : T.red} variant="outline" onClick={toggleSuspend}>
+          {client.status === "suspended" ? "Reactivate" : "Suspend"}
+        </Btn>
+      </div>
+
+      {/* Limits vs usage */}
+      <div style={{ display:"flex", gap:12, marginBottom:16 }}>
+        {limitCard("Companies", usage.companies, client.max_companies)}
+        {limitCard("Users (billable seats)", usage.users, client.max_users)}
+        {limitCard("Projects", usage.projects, client.max_projects)}
+      </div>
+
+      <div style={{ display:"grid", gridTemplateColumns:"1fr 1.6fr", gap:16, alignItems:"start" }}>
+        {/* Companies */}
+        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
+          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, fontSize:12.5, fontWeight:700, color:T.t1 }}>Companies ({companies.length})</div>
+          {companies.length === 0 && <div style={{ padding:"20px 16px", fontSize:12, color:T.t4 }}>No company linked yet — company banane ke baad yaha assign karo.</div>}
+          {companies.map(c => (
+            <div key={c.id} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div>
+                <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{c.name}</div>
+                <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug} · {c.user_count} users · {c.project_count} projects</div>
+              </div>
+              <Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/>
+            </div>
+          ))}
+          <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
+            <div style={{ flex:1 }}>
+              <SelectField value={assignCompanyId} onChange={setAssignCompanyId} placeholder="Assign existing company..."
+                options={unassigned.map(c => ({ value: c.id, label: c.name }))}/>
+            </div>
+            <Btn variant="outline" disabled={!assignCompanyId || busy} onClick={async () => {
+              setBusy(true);
+              const res = await apiFetch(`/saas-admin/clients/${client.id}/assign-company`, { method: "PUT", body: { company_id: assignCompanyId } });
+              setBusy(false);
+              if (res.success) { setToast({ msg: res.message }); setAssignCompanyId(""); load(); }
+              else setToast({ msg: res.message || "Failed", type: "error" });
+            }}>Assign</Btn>
+          </div>
+        </div>
+
+        {/* Subscription + invoices */}
+        <div style={{ display:"flex", flexDirection:"column", gap:16 }}>
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
+            <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Subscription</div>
+              <div style={{ display:"flex", gap:8 }}>
+                {currentSub && <Btn variant="outline" onClick={() => setShowSub(currentSub)} style={{ padding:"5px 10px", fontSize:11.5 }}><IcEdit size={12}/> Edit</Btn>}
+                {!currentSub && <Btn onClick={() => setShowSub("new")} style={{ padding:"5px 10px", fontSize:11.5 }}><IcPlus size={12}/> New Subscription</Btn>}
+              </div>
+            </div>
+            {!currentSub ? (
+              <div style={{ padding:"20px 16px", fontSize:12, color:T.t4 }}>No subscription yet.</div>
+            ) : (
+              <div style={{ padding:"14px 16px" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
+                  <Badge text={currentSub.status.toUpperCase()} color={SUB_COLORS[currentSub.status] || T.slt}/>
+                  <span style={{ fontSize:12, color:T.t3 }}>{CYCLE_LABELS[currentSub.billing_cycle]} · {currentSub.term_months} months{currentSub.order_ref ? ` · ${currentSub.order_ref}` : ""}</span>
+                  {currentSub.status === "pending" && (
+                    <Btn color={T.grn} onClick={() => { setActivateSub(currentSub); setActivateDate(new Date().toISOString().slice(0, 10)); }} style={{ padding:"5px 12px", fontSize:11.5, marginLeft:"auto" }}>Activate →</Btn>
+                  )}
+                </div>
+                <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:10 }}>
+                  <div><div style={{ fontSize:10, color:T.t4, textTransform:"uppercase", fontWeight:600 }}>Annual Value</div><div style={{ fontSize:15, fontWeight:800, color:T.t1 }}>{fmtAmt(currentSub.base_annual_value)}</div><div style={{ fontSize:10, color:T.t4 }}>+ GST {parseFloat(currentSub.gst_rate)}%</div></div>
+                  <div><div style={{ fontSize:10, color:T.t4, textTransform:"uppercase", fontWeight:600 }}>Committed Users</div><div style={{ fontSize:15, fontWeight:800, color:T.t1 }}>{currentSub.committed_users}</div></div>
+                  <div><div style={{ fontSize:10, color:T.t4, textTransform:"uppercase", fontWeight:600 }}>Start</div><div style={{ fontSize:13, fontWeight:700, color:T.t2 }}>{fmtDate(currentSub.start_date)}</div></div>
+                  <div><div style={{ fontSize:10, color:T.t4, textTransform:"uppercase", fontWeight:600 }}>End</div><div style={{ fontSize:13, fontWeight:700, color:T.t2 }}>{fmtDate(currentSub.end_date)}</div></div>
+                </div>
+                {currentSub.slabs?.length > 0 && (
+                  <div style={{ marginTop:10, fontSize:11, color:T.t3 }}>
+                    Slabs: {currentSub.slabs.map(s => `${s.from_users}–${s.to_users || "∞"} @ ${fmtAmt(s.annual_rate_per_user)}/user`).join(" · ")}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Invoices */}
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
+            <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+              <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Invoices ({invoices.filter(i => i.status !== "cancelled").length})</div>
+              {currentSub && (
+                <Btn variant="outline" onClick={async () => {
+                  const label = window.prompt("Invoice label (e.g. 'Pro-rata 5 users Aug–Oct')");
+                  if (label === null) return;
+                  const amt = window.prompt("Base amount ₹ (excl. GST)", "0");
+                  if (amt === null) return;
+                  await act(`/saas-admin/client-subscriptions/${currentSub.id}/invoices`, { period_label: label || "Manual invoice", base_amount: parseFloat(amt) || 0 }, "Manual invoice added");
+                }} style={{ padding:"5px 10px", fontSize:11.5 }}><IcPlus size={12}/> Manual Invoice</Btn>
+              )}
+            </div>
+            {invoices.length === 0 ? (
+              <div style={{ padding:"20px 16px", fontSize:12, color:T.t4 }}>Koi invoice nahi — subscription activate hone par schedule auto-ban jayega.</div>
+            ) : (
+              <div style={{ overflowX:"auto" }}>
+                <table style={{ width:"100%", borderCollapse:"collapse", fontSize:12 }}>
+                  <thead><tr style={{ background:T.surfaceB }}>
+                    {["Period", "Base", "Addl.", "GST", "Total", "Status", "Due", "Actions"].map(h => <th key={h} style={th}>{h}</th>)}
+                  </tr></thead>
+                  <tbody>
+                    {invoices.map(inv => (
+                      <tr key={inv.id} style={{ borderTop:`1px solid ${T.b1}`, opacity: inv.status === "cancelled" ? 0.45 : 1 }}>
+                        <td style={td}>
+                          <div style={{ fontWeight:600, color:T.t1 }}>{inv.period_label}</div>
+                          {inv.invoice_no && <div style={{ fontSize:10, color:T.t4 }}>{inv.invoice_no}</div>}
+                        </td>
+                        <td style={td}>{fmtAmt(inv.base_amount)}</td>
+                        <td style={td}>{inv.addl_users > 0 ? `${inv.addl_users}u · ${fmtAmt(inv.addl_amount)}` : "--"}{parseFloat(inv.adjustment) ? <div style={{ fontSize:10, color:T.amb }}>adj {fmtAmt(inv.adjustment)}</div> : null}</td>
+                        <td style={td}>{fmtAmt(inv.gst_amount)}</td>
+                        <td style={{ ...td, fontWeight:700, color:T.t1 }}>{fmtAmt(inv.total_amount)}</td>
+                        <td style={td}>
+                          <Badge text={inv.is_overdue ? "OVERDUE" : inv.status.toUpperCase()} color={inv.is_overdue ? T.red : (INV_COLORS[inv.status] || T.slt)}/>
+                          {inv.status === "paid" && inv.paid_at && <div style={{ fontSize:10, color:T.t4, marginTop:2 }}>{fmtDate(inv.paid_at)}{inv.payment_ref ? ` · ${inv.payment_ref}` : ""}</div>}
+                        </td>
+                        <td style={td}>{fmtDate(inv.due_date)}</td>
+                        <td style={td}>
+                          <div style={{ display:"flex", gap:6, flexWrap:"wrap" }}>
+                            {inv.status === "scheduled" && <Btn variant="outline" onClick={() => act(`/saas-admin/client-invoices/${inv.id}/issue`, {}, "Invoice issued")} style={{ padding:"3px 8px", fontSize:10.5 }}>Issue</Btn>}
+                            {["scheduled", "issued"].includes(inv.status) && <Btn color={T.grn} onClick={() => { setPayInv(inv); setPayRef(""); setPayDate(new Date().toISOString().slice(0, 10)); }} style={{ padding:"3px 8px", fontSize:10.5 }}>Mark Paid</Btn>}
+                            {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" onClick={() => setEditInv(inv)} style={{ padding:"3px 8px", fontSize:10.5 }}><IcEdit size={10}/></Btn>}
+                            {["scheduled", "issued"].includes(inv.status) && <Btn variant="outline" color={T.red} onClick={() => window.confirm("Cancel this invoice?") && act(`/saas-admin/client-invoices/${inv.id}/cancel`, {}, "Invoice cancelled")} style={{ padding:"3px 8px", fontSize:10.5 }}><IcX size={10}/></Btn>}
+                            {inv.status === "paid" && <Btn variant="outline" color={T.amb} onClick={() => window.confirm("Revert this payment?") && act(`/saas-admin/client-invoices/${inv.id}/revert-paid`, {}, "Payment reverted")} style={{ padding:"3px 8px", fontSize:10.5 }}>Revert</Btn>}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Modals */}
+      {editClient && <ClientFormModal initial={client} onClose={() => setEditClient(false)} onSaved={load} setToast={setToast}/>}
+      {showSub && <SubscriptionFormModal clientId={client.id} initial={showSub === "new" ? null : showSub} onClose={() => setShowSub(null)} onSaved={load} setToast={setToast}/>}
+      {activateSub && (
+        <>
+          <div onClick={() => setActivateSub(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:420, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, background:"#0D1B2A" }}>
+              <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Activate Subscription</div>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Start date se {activateSub.term_months}-month term + invoice schedule generate hoga</div>
+            </div>
+            <div style={{ padding:"20px 22px" }}>
+              <InputField label="Subscription Start Date" type="date" required value={activateDate} onChange={setActivateDate}/>
+            </div>
+            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+              <Btn onClick={() => setActivateSub(null)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+              <Btn color={T.grn} disabled={!activateDate || busy} onClick={async () => {
+                const ok = await act(`/saas-admin/client-subscriptions/${activateSub.id}/activate`, { start_date: activateDate });
+                if (ok) setActivateSub(null);
+              }} style={{ flex:2 }}>{busy ? "Activating..." : "Activate & Generate Invoices"}</Btn>
+            </div>
+          </div>
+        </>
+      )}
+      {payInv && (
+        <>
+          <div onClick={() => setPayInv(null)} style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:420, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, background:"#0D1B2A" }}>
+              <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Record Payment</div>
+              <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{payInv.period_label} · {fmtAmt(payInv.total_amount)}</div>
+            </div>
+            <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+              <InputField label="Payment Date" type="date" value={payDate} onChange={setPayDate}/>
+              <InputField label="Payment Reference (UTR / cheque no.)" value={payRef} onChange={setPayRef} placeholder="Optional"/>
+            </div>
+            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+              <Btn onClick={() => setPayInv(null)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+              <Btn color={T.grn} disabled={busy} onClick={async () => {
+                const ok = await act(`/saas-admin/client-invoices/${payInv.id}/mark-paid`, { payment_ref: payRef, paid_date: payDate }, "Payment recorded");
+                if (ok) setPayInv(null);
+              }} style={{ flex:2 }}>{busy ? "Saving..." : "Record Payment"}</Btn>
+            </div>
+          </div>
+        </>
+      )}
+      {editInv && <InvoiceEditModal invoice={editInv} onClose={() => setEditInv(null)} onSaved={load} setToast={setToast}/>}
+    </div>
+  );
+}
+
+function TabClients() {
+  const [clients, setClients] = useState([]);
+  const [overview, setOverview] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [selId, setSelId] = useState(null);
+  const [showNew, setShowNew] = useState(false);
+  const [showInternal, setShowInternal] = useState(false);
+  const [toast, setToast] = useState(null);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    Promise.all([
+      apiFetch("/saas-admin/clients"),
+      apiFetch("/saas-admin/billing/overview"),
+    ]).then(([r1, r2]) => {
+      if (r1.success) setClients(r1.data);
+      if (r2.success) setOverview(r2.data);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  if (selId) return <ClientDetail clientId={selId} onBack={() => { setSelId(null); load(); }}/>;
+  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading clients...</div>;
+
+  const kpi = overview?.kpi || {};
+  const visible = clients.filter(c => showInternal || !c.is_internal);
+  const overdueInvoices = (overview?.upcoming || []).filter(i => i.is_overdue);
+
+  return (
+    <div style={{ padding:"18px 24px" }}>
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+      <PageHeader title="Clients & Billing" sub="Paying customers — plan limits (companies / users / projects) + subscription billing"
+        right={<>
+          <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, color:T.t3, cursor:"pointer" }}>
+            <input type="checkbox" checked={showInternal} onChange={e => setShowInternal(e.target.checked)}/> Internal bhi dikhao
+          </label>
+          <Btn variant="outline" onClick={load}><IcRefresh size={13}/></Btn>
+          <Btn onClick={() => setShowNew(true)}><IcPlus size={14}/> New Client</Btn>
+        </>}/>
+
+      {/* Billing KPIs */}
+      <div style={{ display:"grid", gridTemplateColumns:"repeat(4, 1fr)", gap:12, marginBottom:16 }}>
+        <StatCard label="Active Subscriptions" value={fmtNum(kpi.active_subs)} sub={`${fmtNum(kpi.pending_subs)} pending activation`} color={T.grn} Icon={IcDollar}/>
+        <StatCard label="Annual Contract Value" value={"₹" + fmtMoney(kpi.active_acv)} sub="active subs, excl. GST" color={T.blu} Icon={IcTrend}/>
+        <StatCard label="Collected" value={"₹" + fmtMoney(kpi.collected)} sub="all-time, incl. GST" color={T.cyn} Icon={IcChk}/>
+        <StatCard label="Outstanding" value={"₹" + fmtMoney(kpi.outstanding)} sub={kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue_amount)}` : "nothing overdue"} color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
+      </div>
+
+      {/* Overdue strip */}
+      {overdueInvoices.length > 0 && (
+        <div style={{ padding:"12px 16px", background:T.redL, border:`1px solid ${T.redM}`, borderRadius:10, marginBottom:16 }}>
+          <div style={{ fontSize:11.5, fontWeight:700, color:T.red, marginBottom:6 }}>⚠ OVERDUE — follow up needed</div>
+          {overdueInvoices.slice(0, 5).map(i => (
+            <div key={i.id} style={{ fontSize:12, color:T.t2, padding:"3px 0" }}>
+              <strong>{i.client_name}</strong> · {i.period_label} · {fmtAmt(i.total_amount)} · due {fmtDate(i.due_date)}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Clients table */}
+      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
+        <TableHeader gridCols="2fr 1fr 1fr 1fr 1.2fr 1fr 1fr" columns={["Client", "Companies", "Users", "Projects", "Subscription", "Next Due", "Collected"]}/>
+        {visible.length === 0 && <EmptyState Icon={IcUsers} text="Koi client nahi — New Client se shuru karo"/>}
+        {visible.map(c => (
+          <div key={c.id} onClick={() => setSelId(c.id)}
+            style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1.2fr 1fr 1fr", padding:"12px 16px", borderTop:`1px solid ${T.b1}`, cursor:"pointer", alignItems:"center", background: c.status === "suspended" ? T.redL : "transparent" }}
+            onMouseEnter={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : T.surfaceB}
+            onMouseLeave={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : "transparent"}>
+            <div>
+              <div style={{ fontSize:13, fontWeight:700, color:T.t1, display:"flex", alignItems:"center", gap:8 }}>
+                {c.name}
+                {c.is_internal ? <Badge text="INT" color={T.pur}/> : null}
+                {c.status === "suspended" && <Badge text="SUSPENDED" color={T.red}/>}
+              </div>
+              <div style={{ fontSize:10.5, color:T.t4 }}>{[c.city, c.state].filter(Boolean).join(", ") || "--"}</div>
+            </div>
+            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.company_count, c.max_companies) }}>{limitStr(c.company_count, c.max_companies)}</div>
+            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.user_count, c.max_users) }}>{limitStr(c.user_count, c.max_users)}</div>
+            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.project_count, c.max_projects) }}>{limitStr(c.project_count, c.max_projects)}</div>
+            <div>
+              {c.sub_status
+                ? <><Badge text={c.sub_status.toUpperCase()} color={SUB_COLORS[c.sub_status] || T.slt}/>{c.sub_end && <div style={{ fontSize:10, color:T.t4, marginTop:3 }}>till {fmtDate(c.sub_end)}</div>}</>
+                : <span style={{ fontSize:11, color:T.t4 }}>--</span>}
+            </div>
+            <div style={{ fontSize:11.5, color: c.overdue_count > 0 ? T.red : T.t3, fontWeight: c.overdue_count > 0 ? 700 : 400 }}>
+              {c.overdue_count > 0 ? `${c.overdue_count} OVERDUE` : (c.next_due ? fmtDate(c.next_due) : "--")}
+            </div>
+            <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>{parseFloat(c.total_collected) > 0 ? fmtAmt(c.total_collected) : "--"}</div>
+          </div>
+        ))}
+      </div>
+
+      {showNew && <ClientFormModal onClose={() => setShowNew(false)} onSaved={load} setToast={setToast}/>}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // MAIN SAAS MODULE
 // ════════════════════════════════════════════════════════════════════════
 const TABS = [
   { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
+  { id:"clients",   label:"Clients & Billing", Icon:IcDollar  },
   { id:"companies", label:"Companies",        Icon:IcBuilding },
   { id:"crm",       label:"CRM & Health",     Icon:IcActivity },
   { id:"analytics", label:"Analytics",        Icon:IcTrend    },
@@ -2814,6 +3409,7 @@ export default function SaaSModule() {
         ) : (
           <>
             {tab === "stats"     && <TabStats/>}
+            {tab === "clients"   && <TabClients/>}
             {tab === "companies" && <TabCompanies companies={companies} reload={loadCompanies} onSelectCompany={handleSelectCompany} onOpenDetail={handleOpenDetail}/>}
             {tab === "crm"       && <TabCRMHealth/>}
             {tab === "analytics" && <TabAnalytics/>}
