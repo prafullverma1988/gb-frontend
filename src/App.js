@@ -715,6 +715,8 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
   const activeDomain = user?.company_domain || "construction_individual";
   const activeIcon = domainIcons[activeDomain] || "🏗️";
   const activeColor = domainColors[activeDomain] || C.p;
+  // Sidebar brand: the logged-in company's uploaded logo, else the default GB mark.
+  const activeLogo = (companies||[]).find(c=>c.id===user?.company_id)?.logo_url;
 
   const handleCreate=async()=>{
     if(!newCo.name.trim()||creating) return;
@@ -740,7 +742,7 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
     township:"Township CRM"
   };
   const isVisible=(id)=>{
-    if(id==="saas") return user?.role==="super_admin";
+    if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
     // Admins always see everything
     if(["admin","super_admin"].includes(user?.role)) return true;
     // Company-level module toggle
@@ -777,7 +779,9 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
           style={{padding:(!isMobile&&collapsed)?"10px 0":"10px 12px",display:"flex",alignItems:"center",gap:10,borderBottom:"1px solid rgba(255,255,255,0.08)",minHeight:48,justifyContent:(!isMobile&&collapsed)?"center":"flex-start",cursor:showLabel?"pointer":"default",transition:"background .15s"}}
           onMouseEnter={e=>{if(showLabel) e.currentTarget.style.background="rgba(255,255,255,0.04)";}}
           onMouseLeave={e=>{e.currentTarget.style.background="transparent";}}>
-          <div style={{width:32,height:32,borderRadius:7,background:`linear-gradient(135deg,${activeColor},${activeColor}99)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>{activeIcon}</div>
+          <div style={{width:32,height:32,borderRadius:7,overflow:"hidden",background:activeLogo?"#fff":`linear-gradient(135deg,${activeColor},${activeColor}99)`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,fontSize:15}}>
+            <img src={activeLogo||"/icon-192.png"} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.currentTarget.onerror=null;e.currentTarget.src="/icon-192.png";}}/>
+          </div>
           {showLabel&&<div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",overflow:"hidden"}}>
             <span style={{color:"#fff",fontWeight:700,fontSize:13.5,letterSpacing:"-.1px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user?.company_name||"Company"}</span>
             <span style={{color:"rgba(255,255,255,0.4)",fontSize:9.5,fontWeight:600,letterSpacing:".5px",textTransform:"uppercase",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{(DOMAINS.find(d=>d.id===activeDomain)||{}).label||"Construction"}</span>
@@ -791,14 +795,15 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
             <div style={{padding:"8px 10px 4px",fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.3)",letterSpacing:"1px",textTransform:"uppercase"}}>Your Companies</div>
             {(companies||[]).map(co=>{
               const isActive=co.id===user?.company_id;
-              const icon=domainIcons[co.domain]||"🏗️";
               const clr=domainColors[co.domain]||C.p;
               return(
                 <div key={co.id} onClick={()=>{if(!isActive){onSwitchCompany(co.id);setShowSwitcher(false);}}}
                   style={{display:"flex",alignItems:"center",gap:9,padding:"9px 12px",cursor:isActive?"default":"pointer",background:isActive?"rgba(255,255,255,0.08)":"transparent",transition:"background .12s",borderLeft:isActive?`3px solid ${clr}`:"3px solid transparent"}}
                   onMouseEnter={e=>{if(!isActive) e.currentTarget.style.background="rgba(255,255,255,0.05)";}}
                   onMouseLeave={e=>{if(!isActive) e.currentTarget.style.background="transparent";}}>
-                  <div style={{width:28,height:28,borderRadius:7,background:`linear-gradient(135deg,${clr},${clr}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>{icon}</div>
+                  <div style={{width:28,height:28,borderRadius:7,overflow:"hidden",background:co.logo_url?"#fff":`linear-gradient(135deg,${clr},${clr}88)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,flexShrink:0}}>
+                    <img src={co.logo_url||"/icon-192.png"} alt="" style={{width:"100%",height:"100%",objectFit:"cover"}} onError={e=>{e.currentTarget.onerror=null;e.currentTarget.src="/icon-192.png";}}/>
+                  </div>
                   <div style={{flex:1,minWidth:0}}>
                     <div style={{fontSize:12,fontWeight:isActive?700:500,color:"white",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{co.name}</div>
                     <div style={{fontSize:9,color:"rgba(255,255,255,0.35)"}}>{co.domain_label||co.domain} · {co.role}</div>
@@ -956,7 +961,7 @@ function MobileBottomNav({active,setActive,enabledModules,user}){
     crm:"CRM",mom:"MOM",payroll:"Payroll"
   };
   const isVisible=(id)=>{
-    if(id==="saas") return user?.role==="super_admin";
+    if(id==="saas"||id==="saas-leads") return user?.role==="super_admin";
     if(["admin","super_admin"].includes(user?.role)) return true;
     if(enabledModules && enabledModules[id]===false) return false;
     const perms = user?.module_permissions;

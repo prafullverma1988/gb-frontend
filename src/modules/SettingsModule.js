@@ -499,17 +499,11 @@ function RolesAccess() {
     if (!editingUser && !String(userForm.phone || "").trim()) return alert("Mobile number required");
     setUserSaving(true);
     let res;
-    // Backend role enum only accepts: admin, supervisor, staff.
-    // Custom roles (project_manager, accountant, viewer) exist in DB from older saves.
-    // On PUT we skip `role` entirely so existing DB value is preserved without a 400.
-    // On POST we map to the nearest valid backend value.
-    const BACKEND_ROLE = { project_manager:"supervisor", accountant:"staff", viewer:"staff" };
-
     if (editingUser) {
       res = await api.put("/settings/users/" + editingUser.id, {
         name: userForm.name, email: userForm.email,
         phone: userForm.phone,
-        // role intentionally omitted on edit — backend rejects custom role ids
+        role: userForm.role,
         designation: userForm.designation || "",
         is_active: userForm.status === "Active" ? 1 : 0,
         projects: userForm.projects || [],
@@ -518,7 +512,7 @@ function RolesAccess() {
       const body = {
         name: userForm.name, email: userForm.email,
         phone: userForm.phone,
-        role: BACKEND_ROLE[userForm.role] || userForm.role,
+        role: userForm.role,
         designation: userForm.designation || "",
         password: userForm.password || "Welcome@123",
         projects: userForm.projects || [],
