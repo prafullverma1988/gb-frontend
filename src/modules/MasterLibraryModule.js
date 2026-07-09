@@ -5771,8 +5771,13 @@ function EquipmentSection() {
     api.get("/finance/parties").then(r => {
       if (r.success) {
         const list = (r.data || []).filter(p => {
-          const t = String(p.type || "").toLowerCase();
-          return t === "vendor" || t === "material vendor" || t === "supplier" || t === "material supplier" || t === "labour vendor";
+          // Canonical stored key is material_vendor; also accept legacy labels
+          // + roles column so multi-role vendors still surface.
+          const t = String(p.type || "").toLowerCase().trim();
+          const roles = String(p.roles || "").toLowerCase();
+          return t === "material_vendor" || roles.includes("material_vendor") ||
+                 t === "vendor" || t === "material vendor" || t === "supplier" ||
+                 t === "material supplier" || t === "labour vendor";
         });
         setVendors(list);
       }
