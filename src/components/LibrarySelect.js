@@ -93,8 +93,12 @@ const TYPE_CONFIG = {
       if (!r.success || !Array.isArray(r.data)) return [];
       return r.data
         .filter(p => {
-          const t = String(p.type || "").toLowerCase();
-          return t === "sub-con" || t === "subcon" || t === "subcontractor" || t === "contractor";
+          // Canonical key is `subcontractor`. Check roles too so a party that
+          // holds subcon as a secondary role still shows in this picker.
+          const t = String(p.type || "").toLowerCase().trim();
+          const roles = String(p.roles || "").toLowerCase();
+          return t === "subcontractor" || roles.includes("subcontractor") ||
+                 t === "sub-con" || t === "subcon" || t === "contractor";
         })
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
@@ -118,7 +122,11 @@ const TYPE_CONFIG = {
       const r = await api.get("/finance/parties");
       if (!r.success || !Array.isArray(r.data)) return [];
       return r.data
-        .filter(p => String(p.type || "").toLowerCase() === "client")
+        .filter(p => {
+          const t = String(p.type || "").toLowerCase().trim();
+          const roles = String(p.roles || "").toLowerCase();
+          return t === "client" || roles.includes("client");
+        })
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
     save: async (form) => {
