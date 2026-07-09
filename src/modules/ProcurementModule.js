@@ -1075,8 +1075,9 @@ function CreatePOModal({onClose,onSave,prefillItems,editPo,dbProjects,dbVendors=
     }).catch(()=>{});
     setSavingVendor(false);
     if(res?.success===false){ alert(res.message||"Save failed"); return; }
-    // Auto-select the new vendor — LibrarySelect surfaces it as synthetic
-    // option when value isn't yet in cache (cache fills on next reload).
+    // Refresh the LibrarySelect supplier cache so the new vendor appears in
+    // the dropdown immediately (not just as a synthetic ghost of the value).
+    try { await LibrarySelect.refresh("supplier"); } catch(_){}
     setForm(p=>({...p,vendor:name}));
     setShowAddVendor(false);
     setNewVendor({name:"",phone:"",city:""});

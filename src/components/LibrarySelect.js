@@ -51,11 +51,15 @@ const TYPE_CONFIG = {
       if (!r.success || !Array.isArray(r.data)) return [];
       return r.data
         .filter(p => {
-          const t = String(p.type || "").toLowerCase();
-          // Accept all legacy + canonical labels for vendor-like parties
-          return t === "material vendor" || t === "material supplier" ||
-                 t === "supplier" || t === "other vendor" ||
-                 t === "material_supplier" || t === "vendor";
+          // Canonical stored key is `material_vendor` (parties.type / roles).
+          // Match that first, then all legacy display labels. Check `roles`
+          // too so multi-role parties (vendor + subcon etc.) still surface.
+          const t = String(p.type || "").toLowerCase().trim();
+          const roles = String(p.roles || "").toLowerCase();
+          return t === "material_vendor" || roles.includes("material_vendor") ||
+                 t === "material vendor" || t === "material supplier" ||
+                 t === "material_supplier" || t === "supplier" ||
+                 t === "other vendor" || t === "vendor";
         })
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
@@ -138,8 +142,11 @@ const TYPE_CONFIG = {
       if (!r.success || !Array.isArray(r.data)) return [];
       return r.data
         .filter(p => {
-          const t = String(p.type || "").toLowerCase();
-          return t === "labour" || t === "labour contractor" || t === "labour vendor";
+          // Canonical stored key is `labour_vendor`; also accept legacy labels.
+          const t = String(p.type || "").toLowerCase().trim();
+          const roles = String(p.roles || "").toLowerCase();
+          return t === "labour_vendor" || roles.includes("labour_vendor") ||
+                 t === "labour" || t === "labour contractor" || t === "labour vendor";
         })
         .map(p => ({ id: p.id, name: p.name, city: p.city, phone: p.phone }));
     },
