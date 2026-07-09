@@ -1046,6 +1046,10 @@ function CreatePOModal({onClose,onSave,prefillItems,editPo,dbProjects,dbVendors=
     setSavingMat(false);
     if(res.success){
       await reloadMatLib();
+      // Also refresh LibrarySelect's material cache — the item pickers read
+      // from it, not from matLib, so without this the new material won't be
+      // pickable until a full reload.
+      try { await LibrarySelect.refresh("material"); } catch(_){}
       setShowAddMat(false);
       setNewMat({name:"",unit:"",hsn:""});
     } else {
