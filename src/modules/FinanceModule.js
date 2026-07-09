@@ -2996,9 +2996,18 @@ function FinanceModule(){
       party:r.party_name||r.party||"",
       project:r.project_name||r.project||"",
       amount:parseFloat(r.amount)||0,
-      status:r.status==="approved"?"Approved":r.status==="rejected"?"Rejected":"Pending",
+      // Map EVERY backend status — earlier this fell through to "Pending" for
+      // 'paid'/'cancelled', so a paid PR reappeared as "Pending" in the list +
+      // pending-approval count (the "regenerated request" bug).
+      status:(()=>{const s=String(r.status||"").toLowerCase();
+        return s==="approved"?"Approved":s==="rejected"?"Rejected":s==="paid"?"Paid":s==="cancelled"?"Cancelled":"Pending";})(),
+      paid:String(r.status||"").toLowerCase()==="paid",
       by:r.requested_by_name||r.requested_by||r.created_by_name||"",
       purpose:r.purpose||r.description||r.note||"",
+      // PR type is encoded as a "[Type]" prefix on the purpose (Site Labour /
+      // Subcontractor / Site Expense / Other) — the beneficiary may be a
+      // free-text worker not in party master, so DON'T guess type from there.
+      prType:(()=>{const m=String(r.purpose||r.description||"").match(/^\[([^\]]+)\]/);return m?m[1].trim():"";})(),
       approvedBy:r.approved_by_name||r.approved_by||"",
       approvedDate:r.approved_at?new Date(r.approved_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
       originalAmt:r.original_amount?parseFloat(r.original_amount):undefined,
@@ -4477,7 +4486,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 return hay.includes(q);
               }).map((req,i)=>{
                 const isEditing=editReqId===req.id;
-                const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:{c:T.amb,bg:T.ambL,brd:T.ambM};
+                const sc=req.status==="Approved"?{c:T.grn,bg:T.grnL,brd:T.grnM}:req.status==="Paid"?{c:T.blu,bg:T.bluL,brd:T.bluM}:req.status==="Rejected"?{c:T.red,bg:T.redL,brd:T.redM}:req.status==="Cancelled"?{c:T.t3,bg:T.sltL,brd:T.b1}:{c:T.amb,bg:T.ambL,brd:T.ambM};
                 const pri=req.priority||"Medium";
                 const pm=pri==="High"?{c:T.red,bg:T.redL}:pri==="Low"?{c:T.grn,bg:T.grnL}:{c:T.amb,bg:T.ambL};
                 return(
@@ -4491,11 +4500,13 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       <span style={{fontSize:11.5,color:T.t3,whiteSpace:"nowrap"}}>{req.date}</span>
                       {/* Party */}
                       <span style={{fontSize:12,color:T.t1,fontWeight:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{req.party||"—"}</span>
-                      {/* Party Type */}
+                      {/* Party Type — derive from the PR's [Type] prefix first
+                          (worker/free-text beneficiaries aren't in party master,
+                          so a party-master lookup wrongly defaulted to "Vendor"). */}
                       {(()=>{
                         const pi=masterParties.find(p=>p.name===req.party);
-                        const pt=pi?.type||"Vendor";
-                        const ptMap={"Material Supplier":{c:"#0277BD",bg:"#E1F5FE",s:"Mat. Supplier"},"Sub-Con":{c:T.slt,bg:T.sltL,s:"Sub-Con"},"Labour":{c:T.pur,bg:T.purL,s:"Labour"},"Client":{c:T.grn,bg:T.grnL,s:"Client"}};
+                        const pt=req.prType||pi?.type||"Vendor";
+                        const ptMap={"Site Labour":{c:T.pur,bg:T.purL,s:"Labour"},"Subcontractor":{c:T.slt,bg:T.sltL,s:"Sub-Con"},"Site Expense":{c:T.amb,bg:T.ambL,s:"Expense"},"Other":{c:T.t3,bg:T.sltL,s:"Other"},"Material Supplier":{c:"#0277BD",bg:"#E1F5FE",s:"Mat. Supplier"},"Sub-Con":{c:T.slt,bg:T.sltL,s:"Sub-Con"},"Labour":{c:T.pur,bg:T.purL,s:"Labour"},"Client":{c:T.grn,bg:T.grnL,s:"Client"}};
                         const ptc=ptMap[pt]||{c:T.amb,bg:T.ambL,s:pt};
                         return <span style={{display:"inline-flex",alignItems:"center",gap:5,fontSize:11,fontWeight:500,color:T.t3,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",maxWidth:"100%"}}><span style={{width:6,height:6,borderRadius:"50%",background:ptc.c,flexShrink:0}}/>{ptc.s}</span>;
                       })()}
