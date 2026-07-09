@@ -87,6 +87,11 @@ function TabMaterial({ project }) {
       if (r?.success) {
         const m = r.data || { id: Date.now(), name, unit: libNewUnit };
         setMatLibReal(prev => [...prev, m].sort((a,b)=>(a.name||"").localeCompare(b.name||"")));
+        // The <LibrarySelect type="material"> picker keeps its OWN module-level
+        // cache — pushing to matLibReal isn't enough, the picker won't see the
+        // new material and shows "No match found". Refresh its cache so the
+        // freshly-added material is immediately pickable in the item rows.
+        try { await LibrarySelect.refresh("material"); } catch(_) {}
         setLibNewName("");
         setLibNewUnit("Nos");
         setShowAddLib(false);

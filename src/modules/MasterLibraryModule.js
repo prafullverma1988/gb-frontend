@@ -360,7 +360,7 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
       // onImport may return { inserted, skipped } from API, or nothing (client-only)
       const successCount = importResult?.inserted ?? validRows.length;
       const skippedCount = importResult?.skipped ?? (preview.rows.length - validRows.length);
-      setResult({ success: successCount, skipped: skippedCount });
+      setResult({ success: successCount, skipped: skippedCount, updated: importResult?.updated || 0 });
     } catch(e) {
       console.error("Import error:", e);
       setResult({ success: 0, skipped: preview.rows.length, error: e.message });
@@ -617,7 +617,8 @@ function ImportExportModal({ open, onClose, mode, sectionName, templateConfig, c
                     <div style={{ fontSize: 14, fontWeight: 700, color: T.green }}>Import Successful!</div>
                     <div style={{ fontSize: 12.5, color: T.textMid, marginTop: 2 }}>
                       {result.success} items imported
-                      {result.skipped > 0 && <span> — {result.skipped} empty rows skipped</span>}
+                      {result.updated > 0 && <span> — {result.updated} existing updated</span>}
+                      {result.skipped > 0 && <span> — {result.skipped} skipped</span>}
                     </div>
                   </div>
                 </div>
@@ -899,7 +900,7 @@ function MaterialMasterSection() {
   const columns = [
     { key: "code", label: "Code", minW: 80, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.blue, background: T.blueSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code}</code> },
     { key: "name", label: "Material Name", minW: 180, render: r => <span style={{ fontWeight: 600 }}>{r.name}</span> },
-    { key: "category", label: "Category", minW: 110, render: r => <Badge text={r.category} color={T.textMid} bg={T.borderLight} /> },
+    { key: "category", label: "Category", minW: 110, render: r => <Badge text={r.category_name || r.category} color={T.textMid} bg={T.borderLight} /> },
     { key: "unit", label: "Unit", minW: 80 },
     { key: "hsnCode", label: "HSN", minW: 60, render: r => <span style={{ fontFamily: "monospace", fontSize: 12 }}>{r.hsnCode}</span> },
     { key: "gstRate", label: "GST", minW: 50, align: "center", render: r => <span style={{ fontWeight: 600, fontSize: 12 }}>{r.gstRate}%</span> },
