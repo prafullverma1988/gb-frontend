@@ -241,6 +241,15 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
   const [vendor,setVendor]=useState("");
   const [delivery,setDelivery]=useState("");
   const [waMsg,setWaMsg]=useState("");
+  // RFQ medium — multiple vendors invited to quote + optional bid end date
+  const [rfqVendors,setRfqVendors]=useState([]);
+  const [rfqVendorPick,setRfqVendorPick]=useState("");
+  const addRfqVendor=(v)=>{
+    const name=(v||"").trim();
+    if(!name)return;
+    setRfqVendors(p=>p.includes(name)?p:[...p,name]);
+    setRfqVendorPick("");
+  };
 
   // Company fulfillment mode — when set to 'warehouse_driven' the
   // procurement side should NOT suggest warehouse routing here: every
@@ -482,8 +491,28 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
           </div>
         )}
         {medium==="rfq"&&(
-          <div style={{background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,padding:"9px 12px",fontSize:11.5,color:T.pur}}>
-            RFQ will be created as Draft. Add vendors and publish to collect quotes.
+          <div style={{display:"flex",flexDirection:"column",gap:10}}>
+            <div style={{background:T.purL,border:`1px solid ${T.purM}`,borderRadius:7,padding:"9px 12px",fontSize:11.5,color:T.pur}}>
+              RFQ Draft banega — vendors select karo, publish karke quotes collect karo, best quote lock karke PO banao.
+            </div>
+            <Fld label="Invite Vendors (2+ recommended)" required>
+              <SearchSelect value={rfqVendorPick}
+                options={(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS).filter(n=>!rfqVendors.includes(n))}
+                onChange={addRfqVendor} placeholder="Vendor add karo..."/>
+            </Fld>
+            {rfqVendors.length>0&&(
+              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                {rfqVendors.map(n=>(
+                  <span key={n} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:14,background:T.purL,border:`1px solid ${T.purM}`,fontSize:11.5,fontWeight:600,color:T.pur}}>
+                    {n}
+                    <button onClick={()=>setRfqVendors(p=>p.filter(x=>x!==n))} style={{border:"none",background:"none",cursor:"pointer",color:T.pur,fontSize:12,lineHeight:1,padding:0}}>×</button>
+                  </span>
+                ))}
+              </div>
+            )}
+            <Fld label="Bid End Date">
+              <Inp type="date" value={delivery} onChange={e=>setDelivery(e.target.value)}/>
+            </Fld>
           </div>
         )}
         {medium==="manual"&&(
@@ -520,8 +549,8 @@ function BulkOrderModal({items,onSave,onClose,dbVendors=[],onWarehouseIssued}){
           <span style={{flex:1}}/>
         ) : (
           <Btn
-            onClick={()=>onSave(medium,vendor,delivery,items)}
-            disabled={!medium||(medium==="manual"&&(!vendor||!delivery))}
+            onClick={()=>onSave(medium,medium==="rfq"?rfqVendors:vendor,delivery,items)}
+            disabled={!medium||(medium==="manual"&&(!vendor||!delivery))||(medium==="rfq"&&rfqVendors.length===0)}
             color={medium==="po"?T.blu:medium==="rfq"?T.pur:T.grn}
             full
             icon={medium==="po"?<IcPO size={14} color="white"/>:medium==="rfq"?<IcRFQ size={14} color="white"/>:<IcWA size={14} color="white"/>}>
@@ -854,7 +883,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
 }
 
 // ── RFQ DETAIL DRAWER ─────────────────────────────────────────────────
-function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish}){
+function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish,onCreatePO}){
   const getMinMax=(idx)=>{const s=rfq.vendors.filter(v=>v.status==="Submitted"&&v.rates[idx]?.rate!=null);if(!s.length)return{min:null,max:null};const r=s.map(v=>v.rates[idx].rate);return{min:Math.min(...r),max:Math.max(...r)};};
   const totalByVendor=(v)=>rfq.items.reduce((s,it,i)=>s+(v.rates[i]?.rate||0)*it.qty,0);
   const allTotals=rfq.vendors.filter(v=>v.status==="Submitted").map(v=>totalByVendor(v));
@@ -937,7 +966,7 @@ function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish}){
       </div>
       <div style={{padding:"12px 16px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
         {rfq.status==="Draft"&&<button onClick={()=>onPublish(rfq.id)} style={{flex:1,padding:"8px",borderRadius:7,background:T.bluL,color:T.blu,border:`1px solid ${T.bluM}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>Publish RFQ</button>}
-        {rfq.locked&&<button style={{flex:1,padding:"8px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcPO size={13} color="white"/> Create PO</button>}
+        {rfq.locked&&<button onClick={()=>onCreatePO&&onCreatePO(rfq)} style={{flex:1,padding:"8px",borderRadius:7,background:T.grn,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:5}}><IcPO size={13} color="white"/> Create PO</button>}
         <button onClick={onClose} style={{flex:1,padding:"8px",borderRadius:7,background:T.surfaceB,color:T.t3,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,cursor:"pointer"}}>Close</button>
       </div>
     </div>
@@ -981,8 +1010,94 @@ function PunchQuoteModal({rfq,vendorIndex,onSave,onClose}){
   );
 }
 
+// ── CREATE RFQ MODAL — standalone RFQ (without going via MRs) ──────────
+function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
+  const [form,setForm]=useState({projectId:"",project:"",bidEnd:"",items:[{desc:"",qty:"",unit:""}]});
+  const [vendors,setVendors]=useState([]);
+  const [vendorPick,setVendorPick]=useState("");
+  const [saving,setSaving]=useState(false);
+  const savingRef=useRef(false);
+  const [matLib,setMatLib]=useState([]);
+  useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
+  const updItem=(i,k,v)=>{
+    const its=[...form.items];
+    its[i]={...its[i],[k]:v};
+    if(k==="desc"){
+      const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
+      if(m?.unit) its[i].unit=m.unit;
+    }
+    setForm(p=>({...p,items:its}));
+  };
+  const addVendor=(v)=>{const n=(v||"").trim();if(!n)return;setVendors(p=>p.includes(n)?p:[...p,n]);setVendorPick("");};
+  const validItems=form.items.filter(it=>it.desc&&Number(it.qty)>0);
+  const canSave=validItems.length>0&&vendors.length>0;
+  return(
+    <Modal onClose={onClose} width={620}>
+      <MHead title="New RFQ" sub="Vendors se quotes compare karne ke liye" onClose={onClose}/>
+      <MBody>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:12}}>
+          <Fld label="Project">
+            <SearchSelect value={form.projectId}
+              options={(dbProjects||[]).map(p=>({key:String(p.id),label:p.name}))}
+              onChange={v=>{const proj=(dbProjects||[]).find(p=>String(p.id)===String(v));setForm(p=>({...p,projectId:v,project:proj?.name||""}));}}
+              placeholder="Select project..."/>
+          </Fld>
+          <Fld label="Bid End Date">
+            <Inp type="date" value={form.bidEnd} onChange={e=>setForm(p=>({...p,bidEnd:e.target.value}))}/>
+          </Fld>
+        </div>
+        <div style={{padding:"10px 12px",background:T.surfaceB,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:12}}>
+          <div style={{fontSize:11,fontWeight:700,color:T.t2,textTransform:"uppercase",letterSpacing:".5px",marginBottom:8}}>Items</div>
+          {form.items.map((it,i)=>(
+            <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 80px 90px 28px",gap:7,alignItems:"center",marginBottom:6}}>
+              <LibrarySelect type="material" value={it.desc} onChange={v=>updItem(i,"desc",v||"")} placeholder="Pick material..." compact hideAddNew/>
+              <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
+                style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+              <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
+              <button onClick={()=>{if(form.items.length===1)return;setForm(p=>({...p,items:p.items.filter((_,j)=>j!==i)}));}} disabled={form.items.length===1}
+                style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
+                <IcX size={12} color={T.red}/>
+              </button>
+            </div>
+          ))}
+          <button onClick={()=>setForm(p=>({...p,items:[...p.items,{desc:"",qty:"",unit:""}]}))}
+            style={{marginTop:4,width:"100%",padding:"8px",borderRadius:7,background:"transparent",border:`1.5px dashed ${T.purM}`,color:T.pur,fontSize:12,fontWeight:700,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:6}}>
+            <IcAdd size={13} color={T.pur}/> Add item
+          </button>
+        </div>
+        <Fld label="Invite Vendors (2+ recommended)" required>
+          <SearchSelect value={vendorPick}
+            options={(dbVendors.length>0?dbVendors.map(v=>v.name||v):VENDORS).filter(n=>!vendors.includes(n))}
+            onChange={addVendor} placeholder="Vendor add karo..."/>
+        </Fld>
+        {vendors.length>0&&(
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+            {vendors.map(n=>(
+              <span key={n} style={{display:"inline-flex",alignItems:"center",gap:6,padding:"4px 10px",borderRadius:14,background:T.purL,border:`1px solid ${T.purM}`,fontSize:11.5,fontWeight:600,color:T.pur}}>
+                {n}
+                <button onClick={()=>setVendors(p=>p.filter(x=>x!==n))} style={{border:"none",background:"none",cursor:"pointer",color:T.pur,fontSize:12,lineHeight:1,padding:0}}>×</button>
+              </span>
+            ))}
+          </div>
+        )}
+      </MBody>
+      <MFoot>
+        <Btn onClick={onClose} outline color={T.slt} full>Cancel</Btn>
+        <Btn onClick={async()=>{
+          if(!canSave||savingRef.current)return;
+          savingRef.current=true;setSaving(true);
+          try{ await onSave(form,validItems,vendors); }
+          finally{ savingRef.current=false;setSaving(false); }
+        }} disabled={!canSave||saving} color={T.pur} full icon={<IcRFQ size={14} color="white"/>}>
+          {saving?"Creating…":"Create RFQ (Draft)"}
+        </Btn>
+      </MFoot>
+    </Modal>
+  );
+}
+
 // ── CREATE PO MODAL — full layout, library-driven, polished ────────────
-function CreatePOModal({onClose,onSave,prefillItems,editPo,dbProjects,dbVendors=[]}){
+function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProjects,dbVendors=[]}){
   // Edit-mode prefill from existing PO
   const isEdit = !!editPo;
   // Auto-fill project from first MR item OR edit PO
@@ -996,7 +1111,7 @@ function CreatePOModal({onClose,onSave,prefillItems,editPo,dbProjects,dbVendors=
   const submittingRef = useRef(false);
 
   const [form,setForm]=useState({
-    vendor:      editPo?.vendor || "",
+    vendor:      editPo?.vendor || prefillVendor || "",
     projectId:   String(autoProjectId),
     project:     autoProjectName,
     deliverySite:autoSite,
@@ -1012,7 +1127,9 @@ function CreatePOModal({onClose,onSave,prefillItems,editPo,dbProjects,dbVendors=
         }))
       : prefillItems
         ?prefillItems.map(m=>({
-            desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,rate:"",
+            // rate prefilled when the item came from a locked RFQ quote
+            desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,
+            rate:(m.rate!=null&&m.rate!=="")?String(m.rate):"",
             // Each prefill row is a source MR — carry its project so the
             // PO can render per-line site even when items span multiple
             // projects (multi-site bulk order).
@@ -1550,15 +1667,32 @@ function ProcurementModule(){
       linked_mr_id:  it.linked_mr_id || null,
     })),
   });
-  const mapRFQ=r=>({
-    id:r.id, rfqNum:r.rfq_number,
-    date:r.created_at?new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
-    project:r.project_name||"—", status:r.status,
-    bidEnd:r.bid_end_date?new Date(r.bid_end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
-    locked:r.locked_vendor||null,
-    items:(r.items||[]).map(it=>({desc:it.description,hsn:it.hsn_code||"",qty:parseFloat(it.quantity)||0,unit:it.unit,deliveryDate:"—"})),
-    vendors:(r.vendors||[]).map(v=>({name:v.vendor_name,status:v.status,rates:(v.rates||[]).map(rt=>({rate:rt.rate,remarks:rt.remarks||""}))})),
-  });
+  const mapRFQ=r=>{
+    // Keep the REAL rfq_items.id on each item — punch-quote must post rates
+    // against it (the old positional i+1 guess corrupted every RFQ after the
+    // first). Vendor rates are likewise aligned to items by rfq_item_id, not
+    // by array position (backend returns them in arbitrary order).
+    const items=(r.items||[]).map(it=>({
+      item_id:it.id, desc:it.description, hsn:it.hsn_code||"",
+      qty:parseFloat(it.quantity)||0, unit:it.unit,
+      linked_mr_id:it.linked_mr_id||null, deliveryDate:"—",
+    }));
+    return {
+      id:r.id, rfqNum:r.rfq_number,
+      date:r.created_at?new Date(r.created_at).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+      project:r.project_name||"—", project_id:r.project_id||null, status:r.status,
+      bidEnd:r.bid_end_date?new Date(r.bid_end_date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"—",
+      locked:r.locked_vendor||null,
+      items,
+      vendors:(r.vendors||[]).map(v=>({
+        name:v.vendor_name, status:v.status,
+        rates:items.map(it=>{
+          const rt=(v.rates||[]).find(x=>x.rfq_item_id===it.item_id);
+          return rt?{rate:rt.rate,remarks:rt.remarks||""}:{rate:null,remarks:""};
+        }),
+      })),
+    };
+  };
 
   // Vendors from backend (for dropdowns).
   // Case-insensitive substring match — DB has mixed-case types like
@@ -1644,6 +1778,7 @@ function ProcurementModule(){
   const [selRFQ,setSelRFQ]=useState(null);
   const [punchTarget,setPunchTarget]=useState(null);
   const [punchVendorIdx,setPunchVendorIdx]=useState(null);
+  const [showCreateRFQ,setShowCreateRFQ]=useState(false);
 
   // MR state
   const [mrTab,setMrTab]=useState("Pending");
@@ -1750,7 +1885,7 @@ function ProcurementModule(){
       // Re-create centralized approval entry so admin sees it again
       try{
         await api.post("/approvals/submit",{
-          module:"Purchase Order",
+          module:"Purchase Order (PO)",
           ref_id:po.id,
           ref_no:po.poNum||"",
           title:po.vendor+" - "+(po.items||[]).length+" items (revised)",
@@ -1762,6 +1897,25 @@ function ProcurementModule(){
     } else {
       alert(res.message||"Resubmit failed");
     }
+  };
+  // Locked RFQ → PO: prefill CreatePOModal with the RFQ items, the locked
+  // vendor and that vendor's punched rates. Items carry linked_mr_id so the
+  // PO links back to (and flips) the source MRs on creation.
+  const [createPOVendor,setCreatePOVendor]=useState("");
+  const createPOFromRFQ=(rfq)=>{
+    if(!rfq?.locked){alert("Pehle ek vendor ka quote lock karo");return;}
+    const winner=rfq.vendors.find(v=>v.name===rfq.locked);
+    const prefill=rfq.items.map((it,i)=>({
+      id:it.linked_mr_id||null,           // MR back-link (null for manual RFQ items)
+      item:it.desc, qty:it.qty, approvedQty:it.qty, unit:it.unit,
+      project_id:rfq.project_id||null,
+      project:(rfq.project&&rfq.project!=="—")?rfq.project:"",
+      rate:winner?.rates?.[i]?.rate??null,
+    }));
+    setCreatePOVendor(rfq.locked);
+    setCreatePOPrefill(prefill);
+    setShowCreatePO(true);
+    setTab("po");
   };
   const lockRFQ=async(rfqId,vendorName)=>{
     await api.patch("/procurement/rfqs/"+rfqId+"/lock",{vendor_name:vendorName});
@@ -1775,7 +1929,8 @@ function ProcurementModule(){
     const rfq=rfqs.find(r=>r.id===rfqId);
     const vendor=rfq?.vendors[vi];
     if(vendor){
-      const items=rfq.items.map((it,i)=>({rfq_item_id:i+1,rate:Number(rates[i]?.rate)||null,remarks:rates[i]?.remark||""}));
+      // Real rfq_items.id (from mapRFQ) — positional i+1 was corrupting rates
+      const items=rfq.items.map((it,i)=>({rfq_item_id:it.item_id,rate:Number(rates[i]?.rate)||null,remarks:rates[i]?.remark||""}));
       await api.post("/procurement/rfqs/"+rfqId+"/punch-quote",{vendor_name:vendor.name,rates:items});
     }
     setRFQs(prev=>prev.map(r=>{if(r.id!==rfqId)return r;const nv=[...r.vendors];nv[vi]={...nv[vi],status:"Submitted",rates:rates.map(rt=>({rate:Number(rt.rate)||null,remarks:rt.remark}))};return{...r,vendors:nv};}));
@@ -1846,6 +2001,31 @@ function ProcurementModule(){
     } else if(medium==="po"){
       setCreatePOPrefill(items);
       setShowCreatePO(true);
+    } else if(medium==="rfq"){
+      // vendor param carries the selected vendor-name ARRAY for RFQ medium.
+      // MRs stay in Approved until the locked RFQ becomes a PO (loop-back via
+      // linked_mr_id on each rfq_item).
+      const vendorNames=Array.isArray(vendor)?vendor:[];
+      const first=items[0]||{};
+      const res=await api.post("/procurement/rfqs",{
+        project_id:first.project_id||null,
+        project_name:(first.project&&first.project!=="—")?first.project:null,
+        bid_end_date:delivery||null,
+        vendor_names:vendorNames,
+        items:items.map(m=>({
+          description:m.item,
+          quantity:m.approvedQty||m.qty,
+          unit:m.unit,
+          linked_mr_id:m.id,
+        })),
+      });
+      if(res.success){
+        const rRes=await api.get("/procurement/rfqs");
+        if(rRes.success)setRFQs(rRes.data.map(mapRFQ));
+        setTab("rfq");
+      } else {
+        alert(res.message||"RFQ create failed");
+      }
     }
     setSelected({});
     setShowBulkOrder(false);
@@ -1927,7 +2107,7 @@ function ProcurementModule(){
           </div>
           <div style={{display:"flex",gap:6}}>
             {tab==="po"&&<button onClick={()=>{setCreatePOPrefill(null);setShowCreatePO(true);}} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> Create PO</button>}
-            {tab==="rfq"&&<button style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> New RFQ</button>}
+            {tab==="rfq"&&<button onClick={()=>setShowCreateRFQ(true)} style={{display:"flex",alignItems:"center",gap:5,padding:"6px 12px",borderRadius:6,background:T.blu,color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}><IcAdd size={13} color="white"/> New RFQ</button>}
           </div>
         </div>
       </div>
@@ -2389,7 +2569,7 @@ function ProcurementModule(){
                     </div>
                     <div style={{display:"flex",gap:5,marginTop:6,justifyContent:"flex-end"}}>
                       {rfq.status==="Draft"&&<button onClick={e=>{e.stopPropagation();publishRFQ(rfq.id);}} style={{padding:"3px 10px",borderRadius:5,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>Publish</button>}
-                      {rfq.locked&&<button onClick={e=>e.stopPropagation()} style={{padding:"3px 10px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>→ Create PO</button>}
+                      {rfq.locked&&<button onClick={e=>{e.stopPropagation();createPOFromRFQ(rfq);}} style={{padding:"3px 10px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer"}}>→ Create PO</button>}
                     </div>
                   </div>
                 </div>
@@ -2422,8 +2602,22 @@ function ProcurementModule(){
           setSelPO(p=>p&&p.id===sendToVendorTarget.id?{...p,orderStatus:"Ordered"}:p);
         }}/>}
       {grnTarget&&<GRNModal po={grnTarget} onClose={()=>setGrnTarget(null)} onSave={saveGRN}/>}
-      {selRFQ&&<RFQDetailDrawer rfq={selRFQ} onClose={()=>setSelRFQ(null)} onPunch={(vi)=>{setPunchTarget(selRFQ);setPunchVendorIdx(vi);setSelRFQ(null);}} onLock={(vName)=>{lockRFQ(selRFQ.id,vName);setSelRFQ(r=>r?{...r,locked:vName}:r);}} onPublish={(id)=>{publishRFQ(id);setSelRFQ(r=>r?{...r,status:"Published",bidStart:"Today",bidEnd:"+5 days"}:r);}}/>}
+      {selRFQ&&<RFQDetailDrawer rfq={selRFQ} onClose={()=>setSelRFQ(null)} onPunch={(vi)=>{setPunchTarget(selRFQ);setPunchVendorIdx(vi);setSelRFQ(null);}} onLock={(vName)=>{lockRFQ(selRFQ.id,vName);setSelRFQ(r=>r?{...r,locked:vName}:r);}} onPublish={(id)=>{publishRFQ(id);setSelRFQ(r=>r?{...r,status:"Published",bidStart:"Today",bidEnd:"+5 days"}:r);}} onCreatePO={(r)=>{setSelRFQ(null);createPOFromRFQ(r);}}/>}
       {punchTarget&&punchVendorIdx!=null&&<PunchQuoteModal rfq={punchTarget} vendorIndex={punchVendorIdx} onSave={(vi,rates)=>savePunch(punchTarget.id,vi,rates)} onClose={()=>{setPunchTarget(null);setPunchVendorIdx(null);}}/>}
+      {showCreateRFQ&&<CreateRFQModal dbProjects={dbProjects} dbVendors={dbVendors} onClose={()=>setShowCreateRFQ(false)} onSave={async(form,validItems,vendors)=>{
+        const res=await api.post("/procurement/rfqs",{
+          project_id:form.projectId||null,
+          project_name:form.project||null,
+          bid_end_date:form.bidEnd||null,
+          vendor_names:vendors,
+          items:validItems.map(it=>({description:it.desc,quantity:Number(it.qty),unit:it.unit||"Nos"})),
+        });
+        if(res.success){
+          const rRes=await api.get("/procurement/rfqs");
+          if(rRes.success)setRFQs(rRes.data.map(mapRFQ));
+          setShowCreateRFQ(false);
+        } else alert(res.message||"RFQ create failed");
+      }}/>}
       {approveTgt&&<ApproveMRModal mr={approveTgt} onSave={saveApproveMR} onClose={()=>setApproveTgt(null)}/>}
       {rejectTgt&&<RejectMRModal mr={rejectTgt} onSave={saveRejectMR} onClose={()=>setRejectTgt(null)}/>}
       {markRecvTgt&&<MarkReceivedModal mr={markRecvTgt} onSave={saveMarkReceived} onClose={()=>setMarkRecvTgt(null)}/>}
@@ -2449,7 +2643,7 @@ function ProcurementModule(){
           const mRes = await api.get("/procurement/mrs");
           if (mRes.success) setMRs(mRes.data.map(mapMR));
         }}/>}
-      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbVendors={dbVendors} editPo={editPo} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);setEditPo(null);}} onSave={async(newPO)=>{
+      {showCreatePO&&<CreatePOModal dbProjects={dbProjects} dbVendors={dbVendors} editPo={editPo} prefillVendor={createPOVendor} onClose={()=>{setShowCreatePO(false);setCreatePOPrefill(null);setCreatePOVendor("");setEditPo(null);}} onSave={async(newPO)=>{
         // EDIT mode — PUT existing PO + flip back to Draft + create fresh approval entry
         // Sanitize date: only valid YYYY-MM-DD reaches backend (no "TBD" / empty / formatted strings)
         const validDate = (d) => d && /^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? d : null;
@@ -2477,7 +2671,7 @@ function ProcurementModule(){
             await api.patch("/procurement/pos/"+newPO.editPoId+"/resubmit",{});
             try {
               await api.post("/approvals/submit",{
-                module:"Purchase Order",
+                module:"Purchase Order (PO)",
                 ref_id: newPO.editPoId,
                 ref_no: editPo?.poNum||"",
                 title: newPO.vendor + " - " + (newPO.items||[]).length + " items (revised)",
@@ -2507,7 +2701,7 @@ function ProcurementModule(){
         if(res.success){
           // Submit for approval
           api.post("/approvals/submit", {
-            module: "Purchase Order",
+            module: "Purchase Order (PO)",
             ref_id: res.data.id,
             ref_no: res.data.po_number || "",
             title: newPO.vendor + " - " + (newPO.items||[]).length + " items",
@@ -2522,6 +2716,7 @@ function ProcurementModule(){
         }
         setShowCreatePO(false);
         setCreatePOPrefill(null);
+        setCreatePOVendor("");
         setSelected({});
         setMrTab("Ordered");
       }} prefillItems={createPOPrefill}/>}
