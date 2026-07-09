@@ -749,7 +749,11 @@ function MaterialCategorySection() {
     if (res.success) setShowModal(false);
     else alert(res.message || "Save failed");
   };
-  const del = (id) => apiDel(id);
+  const del = async (id) => {
+    const res = await apiDel(id);
+    // Backend blocks deletion when materials are still linked — surface why.
+    if (res && res.success === false) alert(res.message || "Category delete nahi ho saki");
+  };
 
   const templateConfig = {
     headers: ["Category Name", "Code", "Description"],
