@@ -16,6 +16,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import api, { getUser } from "../config/api";
 import apiCache from "../utils/apiCache";
 import SearchSelect from "./SearchSelect";
+import LibrarySelect from "./LibrarySelect";
 import { Credit, fmtTimeAgo } from "./Credit";
 
 const T = {
@@ -489,6 +490,15 @@ export default function PaymentRequestDrawer({
                   Change
                 </button>
               </div>
+            ) : type === "labour" ? (
+              // Site Labour = company/daily-wage worker → pick from Worker
+              // Library (inline "+ Add New Worker" available if missing).
+              <LibrarySelect
+                type="worker"
+                value={partyName}
+                onChange={(v) => { setPartyName(v || ""); setPartyId(null); }}
+                placeholder="Worker library se pick karein..."
+              />
             ) : (type === "subcon" || type === "expense") && partyOptions.length > 0 ? (
               <SearchSelect
                 value={partyId ? String(partyId) : ""}
@@ -502,7 +512,7 @@ export default function PaymentRequestDrawer({
               />
             ) : (
               <input value={partyName} onChange={e => setPartyName(e.target.value)}
-                placeholder={type === "labour" ? "e.g. Mason group, Saturday wages" : "Type beneficiary name..."}
+                placeholder="Type beneficiary name..."
                 style={inp} onFocus={e => e.target.style.borderColor = T.blu} onBlur={e => e.target.style.borderColor = T.b1} />
             )}
           </div>

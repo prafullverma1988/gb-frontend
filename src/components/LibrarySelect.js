@@ -35,6 +35,7 @@ const _cache = {
   labour:   { items: null, loading: false, listeners: new Set() },
   "any-party": { items: null, loading: false, listeners: new Set() },
   material: { items: null, loading: false, listeners: new Set() },
+  worker:   { items: null, loading: false, listeners: new Set() },
 };
 
 const TYPE_CONFIG = {
@@ -202,6 +203,26 @@ const TYPE_CONFIG = {
     save: async (form) => {
       return await api.post("/library/materials", {
         name: form.name, unit: form.unit || "Nos",
+      });
+    },
+  },
+  worker: {
+    // Company/site labour (daily-wage workers). Reads the Worker Library
+    // (payroll_workers). Used e.g. by the Site Labour payment request.
+    label: "worker",
+    addTitle: "Add new worker (saved to Library)",
+    fields: [
+      { key: "name",  label: "Worker name *", flex: 2, autoFocus: true, required: true },
+      { key: "phone", label: "Phone",         flex: 1 },
+    ],
+    fetch: async () => {
+      const r = await api.get("/library/workers");
+      if (!r.success || !Array.isArray(r.data)) return [];
+      return r.data.map(w => ({ id: w.id, name: w.name, phone: w.phone, city: w.city }));
+    },
+    save: async (form) => {
+      return await api.post("/library/workers", {
+        name: form.name, phone: form.phone || null,
       });
     },
   },
