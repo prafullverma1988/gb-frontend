@@ -656,8 +656,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   //  - else → all parties (legacy fallback)
   // STAFF_MERGED prefers dbParties.is_staff=1 (live), falls back to
   // /payroll/staff for staff without a party row yet.
-  const PAYABLE_LIST=[...new Set([...SUPPLIER_LIST,...SUBCON_LIST,...STAFF_MERGED])];
-  const RECEIVABLE_LIST=[...new Set([...CLIENT_LIST,...STAFF_MERGED])];
+  // Payment Received / Made are generic cash movements — money can come from
+  // or go to ANY party (client, vendor, subcon, staff), not just the "expected"
+  // type. Restricting these hid valid counterparties (e.g. a company with no
+  // clients saw only staff under "Received From"). Show all parties + staff.
+  const PAYABLE_LIST=[...new Set([...ALL_PARTIES,...STAFF_MERGED])];
+  const RECEIVABLE_LIST=[...new Set([...ALL_PARTIES,...STAFF_MERGED])];
   const partyOptions=type==="Payment Received"?RECEIVABLE_LIST
     :isInvoice?CLIENT_LIST
     :isMaterial?SUPPLIER_LIST
