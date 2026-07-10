@@ -1243,6 +1243,10 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
   const fmtQty=q=>{const n=Number(q)||0;return n%1===0?String(n):String(parseFloat(n.toFixed(3)));};
   const fmtMoney=n=>"₹"+Number(n||0).toLocaleString("en-IN",{maximumFractionDigits:2});
   const ITEM_GRID="1fr 78px 74px 86px";
+  // Several POs stack in the approvals drawer, so the rate table stays folded
+  // until the approver opens it. A missing rate still surfaces while collapsed.
+  const [showItems,setShowItems]=useState(false);
+  const hasZeroRate=(po.items||[]).some(it=>!(Number(it.rate)>0));
   const borderColor=approved?T.grn:T.amb;
   return(
     <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden",borderLeft:"4px solid "+borderColor}}>
@@ -1260,30 +1264,46 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
             </span>
           </div>
         </div>
-        {/* Materials — the FULL list. The approver is signing off on rates, so
-            no item is hidden behind a "+N more". A ₹0 rate is flagged red. */}
+        {/* Materials — collapsed by default; the approver opens it to review
+            every line + rate. A ₹0 rate is flagged red (and badged when shut). */}
         {po.items?.length>0&&(
           <div style={{border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden",marginBottom:8}}>
-            <div style={{display:"grid",gridTemplateColumns:ITEM_GRID,gap:6,padding:"6px 9px",background:T.bg,borderBottom:"1px solid "+T.b1}}>
-              {["Material","Qty","Rate","Amount"].map((h,i)=>(
-                <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",textAlign:i===0?"left":"right"}}>{h}</span>
-              ))}
-            </div>
-            {po.items.map((it,i)=>{
-              const qty=Number(it.quantity)||0, rate=Number(it.rate)||0;
-              return(
-                <div key={i} style={{display:"grid",gridTemplateColumns:ITEM_GRID,gap:6,padding:"7px 9px",alignItems:"center",borderBottom:i<po.items.length-1?"1px solid "+T.b1:"none"}}>
-                  <span style={{fontSize:11.5,fontWeight:500,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</span>
-                  <span style={{fontSize:11,color:T.t3,textAlign:"right",whiteSpace:"nowrap"}}>{fmtQty(qty)} {it.unit||""}</span>
-                  <span style={{fontSize:11,fontWeight:rate?500:700,color:rate?T.t3:T.red,textAlign:"right",whiteSpace:"nowrap"}}>{fmtMoney(rate)}</span>
-                  <span style={{fontSize:11.5,fontWeight:700,color:T.t1,textAlign:"right",whiteSpace:"nowrap"}}>{fmtMoney(qty*rate)}</span>
-                </div>
-              );
-            })}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 9px",background:T.bg,borderTop:"1px solid "+T.b1}}>
-              <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Total</span>
-              <span style={{fontSize:12.5,fontWeight:800,color:T.t1}}>{fmtMoney(po.total_amount)}</span>
-            </div>
+            <button onClick={()=>setShowItems(s=>!s)}
+              style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,padding:"7px 9px",background:T.bg,border:"none",borderBottom:showItems?"1px solid "+T.b1:"none",cursor:"pointer",fontFamily:"inherit",textAlign:"left"}}>
+              <span style={{fontSize:9.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
+                Materials · {po.items.length} item{po.items.length>1?"s":""}
+              </span>
+              <span style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+                {hasZeroRate&&!showItems&&(
+                  <span style={{fontSize:8.5,fontWeight:700,color:T.red,background:T.redL,border:"1px solid "+T.redM,padding:"1px 6px",borderRadius:8,letterSpacing:".3px"}}>RATE MISSING</span>
+                )}
+                <span style={{fontSize:10.5,fontWeight:600,color:T.t4}}>{showItems?"Hide":"View rates"}</span>
+                <svg width={11} height={11} viewBox="0 0 24 24" fill="none" stroke={T.t4} strokeWidth={3} strokeLinecap="round"
+                  style={{transform:showItems?"rotate(180deg)":"none",transition:"transform .15s"}}><path d="M6 9l6 6 6-6"/></svg>
+              </span>
+            </button>
+            {showItems&&(<>
+              <div style={{display:"grid",gridTemplateColumns:ITEM_GRID,gap:6,padding:"6px 9px",background:T.bg,borderBottom:"1px solid "+T.b1}}>
+                {["Material","Qty","Rate","Amount"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",textAlign:i===0?"left":"right"}}>{h}</span>
+                ))}
+              </div>
+              {po.items.map((it,i)=>{
+                const qty=Number(it.quantity)||0, rate=Number(it.rate)||0;
+                return(
+                  <div key={i} style={{display:"grid",gridTemplateColumns:ITEM_GRID,gap:6,padding:"7px 9px",alignItems:"center",borderBottom:i<po.items.length-1?"1px solid "+T.b1:"none"}}>
+                    <span style={{fontSize:11.5,fontWeight:500,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</span>
+                    <span style={{fontSize:11,color:T.t3,textAlign:"right",whiteSpace:"nowrap"}}>{fmtQty(qty)} {it.unit||""}</span>
+                    <span style={{fontSize:11,fontWeight:rate?500:700,color:rate?T.t3:T.red,textAlign:"right",whiteSpace:"nowrap"}}>{fmtMoney(rate)}</span>
+                    <span style={{fontSize:11.5,fontWeight:700,color:T.t1,textAlign:"right",whiteSpace:"nowrap"}}>{fmtMoney(qty*rate)}</span>
+                  </div>
+                );
+              })}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 9px",background:T.bg,borderTop:"1px solid "+T.b1}}>
+                <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Total</span>
+                <span style={{fontSize:12.5,fontWeight:800,color:T.t1}}>{fmtMoney(po.total_amount)}</span>
+              </div>
+            </>)}
           </div>
         )}
         {/* Meta */}
