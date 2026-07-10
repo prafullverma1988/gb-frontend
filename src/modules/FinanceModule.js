@@ -976,6 +976,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     if(savingRef.current||savingTxn) return;       // ← idempotent: ignore subsequent clicks
     const amt=isMaterial||isSubcon||isInvoice?grandTotal:Number(payAmt)||0;
     if(!amt){setSaveErr(isMaterial?"Rate enter karo — Grand Total 0 hai.":"Amount required.");return;}
+    // Party COMPULSORY for supplier bills — no vendor, no material purchase.
+    // (Site Expense is the exception; it has no party dropdown.)
+    if((isMaterial||isSubcon)&&!(party&&String(party).trim())){
+      setSaveErr(isSubcon?"Subcontractor (party) select karein — bina party ke Sub-Con bill nahi ho sakta.":"Vendor (party) select karein — bina party ke Material Purchase nahi ho sakta.");
+      return;
+    }
     setSaveErr("");
     savingRef.current=true; setSavingTxn(true);    // ← lock immediately
     try{
