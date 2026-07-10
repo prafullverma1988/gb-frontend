@@ -149,7 +149,7 @@ const TABS = [
   {id:"estimate",   label:"Estimate",    key:"e", Icon:IcEstimate},
   {id:"budget",     label:"Budget",      key:"g", Icon:IcEstimate},
   {id:"party",      label:"Party",       key:"p", Icon:IcParty},
-  {id:"transaction",label:"Transaction", key:"t", Icon:IcTrans},
+  {id:"transaction",label:"Fin Activity", key:"t", Icon:IcTrans},
   {id:"todo",       label:"To Do",       key:"k", Icon:IcTodo},
   {id:"task",       label:"Tasks",       key:"j", Icon:IcTask},
   {id:"attendance", label:"Attendance",  key:"a", Icon:IcAttend},

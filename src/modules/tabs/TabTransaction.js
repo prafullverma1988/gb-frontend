@@ -4,9 +4,35 @@ import { CreateTransactionModal } from "../FinanceModule";
 import { T, fmtN } from "../shared/tokens";
 import { Pill, Panel, THead, AddBtn } from "../shared/ui";
 
-const D = { invoices:[], transactions:[] };
+const D = { invoices:[] };
+
+// Raw backend txn type → finance-style display label (mirrors FinanceModule).
+const TXN_TYPE_MAP={
+  receipt:"Payment In", payment:"Payment Out", material_purchase:"Material Purchase",
+  site_expense:"Site Expense", party_payment:"Party Payment", subcon_expense:"Sub-Con",
+  material_return:"Material Return", sales_invoice:"Sales Invoice",
+  unbilled_material:"Unbilled Material", wallet_payment:"Wallet Payment",
+  wallet_topup:"Wallet Top-up", bank_transfer:"Bank Transfer", advance:"Advance",
+};
+const BACK_DEBIT=["payment","material_purchase","site_expense","party_payment",
+  "subcon_expense","wallet_payment","wallet_topup","bank_transfer"];
+const mapTxn=t=>{
+  const d=t.date?new Date(t.date):new Date();
+  return {
+    id:t.id,
+    date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
+    party:t.party_name||t.party||"—",
+    note:t.description||t.note||"",
+    type:TXN_TYPE_MAP[t.type]||(t.dr?"Payment Out":"Payment In"),
+    account:t.account_name||t.account||"",
+    amount:parseFloat(t.amount)||0,
+    dr:BACK_DEBIT.includes(t.type)||t.dr===true,
+    status:t.status||"paid",
+  };
+};
 
 function TabTransaction({projectId, projectName}) {
+  const [transactions, setTransactions] = useState([]);
   const [fType,  setFType]  = useState("All");
   const [fParty, setFParty] = useState("All");
   const [fAcct,  setFAcct]  = useState("All");
@@ -36,6 +62,9 @@ function TabTransaction({projectId, projectName}) {
     ]).then(([pRes,aRes,prRes,tRes])=>{
       const allP = (pRes?.success&&Array.isArray(pRes.data)) ? pRes.data : [];
       const projTxns = (tRes?.success&&Array.isArray(tRes.data)) ? tRes.data : [];
+      // Store the real project transactions for the table (this was the bug —
+      // the list rendered a hardcoded empty array, so it always showed zero).
+      setTransactions(projTxns.map(mapTxn));
       // Only parties that have at least 1 transaction on this project
       // (same logic as TabParty). Fallback to all parties if project has no txns yet.
       const projPartyIds = new Set(projTxns.map(t=>Number(t.party_id)).filter(Boolean));
@@ -46,7 +75,7 @@ function TabTransaction({projectId, projectName}) {
   },[projectId]);
 
   const TYPES   = ["All","Payment In","Payment Out","Material Purchase","Site Expense","Sub-Con","Sales Invoice","Advance"];
-  const PARTIES = ["All",...[...new Set(D.transactions.map(t=>t.party))]];
+  const PARTIES = ["All",...[...new Set(transactions.map(t=>t.party).filter(Boolean))]];
   const ACCOUNTS= ["All","HDFC","SBI","Petty Cash","ICICI OD"];
   const STATUSES= ["All","paid","unpaid","unbilled"];
   const INVOICES= ["All",...D.invoices.map(i=>i.no)];
@@ -59,7 +88,7 @@ function TabTransaction({projectId, projectName}) {
   const ACCT_BAL={"HDFC":1823540,"SBI":945200,"Petty Cash":18500,"ICICI OD":-230000};
   const activeFilters=[fType,fParty,fAcct,fStatus,fInvoice,fPayout,selParty].filter(v=>v!=="All").length+(amtMin||amtMax||search?1:0);
 
-  const filtered=D.transactions.filter(t=>{
+  const filtered=transactions.filter(t=>{
     if(fType!=="All"&&t.type!==fType) return false;
     if(fParty!=="All"&&t.party!==fParty) return false;
     if(selParty!=="All"&&t.party!==selParty) return false;
@@ -67,7 +96,7 @@ function TabTransaction({projectId, projectName}) {
     if(fStatus!=="All"&&(t.status||"paid")!==fStatus) return false;
     if(fPayout==="Inflow (Money In)"&&t.dr) return false;
     if(fPayout==="Outflow (Money Out)"&&!t.dr) return false;
-    if(search&&!t.party.toLowerCase().includes(search.toLowerCase())&&!t.note.toLowerCase().includes(search.toLowerCase())) return false;
+    if(search&&!(t.party||"").toLowerCase().includes(search.toLowerCase())&&!(t.note||"").toLowerCase().includes(search.toLowerCase())) return false;
     if(amtMin&&t.amount<Number(amtMin)) return false;
     if(amtMax&&t.amount>Number(amtMax)) return false;
     return true;
