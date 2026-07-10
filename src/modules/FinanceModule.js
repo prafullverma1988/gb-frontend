@@ -1598,9 +1598,9 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   )}
                 </div>
               )}
-              <div style={{display:"grid",gridTemplateColumns:colTpl,padding:"7px 12px",background:T.sb,gap:7}}>
-                {["#","Material Name","Head","Description","Qty","Unit","Rate","Total",""].map((h,i)=>(
-                  <span key={i} style={{fontSize:9.5,fontWeight:700,color:"rgba(255,255,255,0.45)",textTransform:"uppercase",letterSpacing:".3px"}}>{h}</span>
+              <div style={{display:"grid",gridTemplateColumns:colTpl,padding:"9px 12px",background:T.sb,gap:7,borderBottom:`2px solid ${T.sbH}`}}>
+                {["#","Material Name","Category","Description","Qty","UOM","Rate","Total",""].map((h,i)=>(
+                  <span key={i} style={{fontSize:10,fontWeight:700,color:"rgba(255,255,255,0.82)",textTransform:"uppercase",letterSpacing:".4px",textAlign:(i===4||i===6||i===7)?"right":(i===0||i===5)?"center":"left"}}>{h}</span>
                 ))}
               </div>
               {rows.map((row,idx)=>(
