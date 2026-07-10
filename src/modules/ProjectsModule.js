@@ -1238,6 +1238,11 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
   const act=acting["po"+po.id];
   const fmtAmt=n=>n>=100000?`₹${(n/100000).toFixed(2)}L`:n>=1000?`₹${(n/1000).toFixed(0)}K`:`₹${Number(n||0).toLocaleString("en-IN")}`;
   const fmtDate=d=>{if(!d)return"—";return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short",year:"2-digit"});};
+  // "20.000" from the DB reads as noise on an approval card — show 20, but keep
+  // real fractions (2.5 Ton) intact.
+  const fmtQty=q=>{const n=Number(q)||0;return n%1===0?String(n):String(parseFloat(n.toFixed(3)));};
+  const fmtMoney=n=>"₹"+Number(n||0).toLocaleString("en-IN",{maximumFractionDigits:2});
+  const ITEM_GRID="1fr 78px 74px 86px";
   const borderColor=approved?T.grn:T.amb;
   return(
     <div style={{background:T.surface,borderRadius:10,border:"1px solid "+T.b1,overflow:"hidden",borderLeft:"4px solid "+borderColor}}>
@@ -1255,16 +1260,30 @@ function POApprovalCard({po, approved, acting, onApprove, onCancel, canAct=true,
             </span>
           </div>
         </div>
-        {/* Items preview */}
+        {/* Materials — the FULL list. The approver is signing off on rates, so
+            no item is hidden behind a "+N more". A ₹0 rate is flagged red. */}
         {po.items?.length>0&&(
-          <div style={{fontSize:11,color:T.t3,marginBottom:5}}>
-            {po.items.slice(0,2).map((it,i)=>(
-              <div key={i} style={{display:"flex",justifyContent:"space-between"}}>
-                <span>{it.description}</span>
-                <span style={{fontWeight:600}}>{it.quantity} {it.unit} @ ₹{it.rate}</span>
-              </div>
-            ))}
-            {po.items.length>2&&<div style={{color:T.t4,fontStyle:"italic"}}>+{po.items.length-2} more items</div>}
+          <div style={{border:"1px solid "+T.b1,borderRadius:8,overflow:"hidden",marginBottom:8}}>
+            <div style={{display:"grid",gridTemplateColumns:ITEM_GRID,gap:6,padding:"6px 9px",background:T.bg,borderBottom:"1px solid "+T.b1}}>
+              {["Material","Qty","Rate","Amount"].map((h,i)=>(
+                <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",textAlign:i===0?"left":"right"}}>{h}</span>
+              ))}
+            </div>
+            {po.items.map((it,i)=>{
+              const qty=Number(it.quantity)||0, rate=Number(it.rate)||0;
+              return(
+                <div key={i} style={{display:"grid",gridTemplateColumns:ITEM_GRID,gap:6,padding:"7px 9px",alignItems:"center",borderBottom:i<po.items.length-1?"1px solid "+T.b1:"none"}}>
+                  <span style={{fontSize:11.5,fontWeight:500,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{it.description}</span>
+                  <span style={{fontSize:11,color:T.t3,textAlign:"right",whiteSpace:"nowrap"}}>{fmtQty(qty)} {it.unit||""}</span>
+                  <span style={{fontSize:11,fontWeight:rate?500:700,color:rate?T.t3:T.red,textAlign:"right",whiteSpace:"nowrap"}}>{fmtMoney(rate)}</span>
+                  <span style={{fontSize:11.5,fontWeight:700,color:T.t1,textAlign:"right",whiteSpace:"nowrap"}}>{fmtMoney(qty*rate)}</span>
+                </div>
+              );
+            })}
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 9px",background:T.bg,borderTop:"1px solid "+T.b1}}>
+              <span style={{fontSize:9.5,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".4px"}}>Total</span>
+              <span style={{fontSize:12.5,fontWeight:800,color:T.t1}}>{fmtMoney(po.total_amount)}</span>
+            </div>
           </div>
         )}
         {/* Meta */}
