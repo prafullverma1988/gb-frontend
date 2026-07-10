@@ -1006,7 +1006,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         type:backType,
         amount:amt,
         date:billDate||new Date().toISOString().slice(0,10),
-        description:`${type} — ${party||"N/A"} — ${project||""}${note?" — "+note:""}`,
+        // Project is carried in its own project_name field (and has its own
+        // column everywhere it's shown) — keeping it in the description just
+        // repeated it. Format now matches the backend fallback exactly:
+        //   "Type — Party" or "Type — Party — Note"
+        description:`${type} — ${party||"N/A"}${note?" — "+note:""}`,
         mop:mopMap[mop]||"cash",
         party_id:partyObj?.id||null,
         party_name:party||null,
@@ -2960,6 +2964,20 @@ function FinanceModule(){
     };
   };
 
+  // Legacy rows stored the description as "Type — Party — Project[ — Note]".
+  // The project has its own column wherever the description is shown, so drop
+  // exactly that one segment (index 2, where the old generator put it). We
+  // match it against the row's real project name instead of blind-parsing the
+  // last segment, so a party that shares the project's name — or a genuine
+  // note — is never eaten.
+  const stripProjectSeg=(desc,projectName)=>{
+    if(!desc) return "";
+    if(!projectName) return desc;
+    const parts=desc.split(" — ");
+    if(parts.length>=3 && parts[2].trim().toLowerCase()===String(projectName).trim().toLowerCase()) parts.splice(2,1);
+    return parts.join(" — ");
+  };
+
   const mapTxn=t=>{
     const rawDate=t.date||t.transaction_date||t.created_at||"";
     const d=rawDate?new Date(rawDate):new Date();
@@ -2975,7 +2993,7 @@ function FinanceModule(){
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
       ds,
       party:t.party_name||t.party||"",
-      sub:t.description||t.note||t.narration||"",
+      sub:stripProjectSeg(t.description||t.note||t.narration||"", t.project_name||t.project||""),
       project:t.project_name||t.project||"",
       type:frontType,
       account:t.account_name||t.account||"",
@@ -4355,11 +4373,13 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     isBTrow?(txn.dr?T.red:T.grn):T.t2;
                   const amtPrefix=meta.dir==="in"?"+":meta.dir==="out"?"-":
                     isBTrow?(txn.dr?"-":"+"):"";
-                  // Note: show ONLY user-typed note, never auto-generated description
-                  // Extract note: prefer txn.note field; fallback: parse from description (last segment after " — ")
+                  // Note: show ONLY the user-typed note, never the auto description.
+                  // Prefer txn.note; else parse it out of the description, which
+                  // (after the project segment is stripped in mapTxn) is
+                  // "Type — Party" with no note, or "Type — Party — Note" with one.
                   const _rawNote=txn.note&&txn.note.trim()?txn.note.trim():"";
                   const _descParts=(txn.sub||"").split(" — ");
-                  const _descNote=_descParts.length>=4?_descParts[_descParts.length-1].trim():"";
+                  const _descNote=_descParts.length>=3?_descParts[_descParts.length-1].trim():"";
                   const noteText=_rawNote||_descNote||"";
 
                   // Bank Transfer party: show "From → To" accounts
