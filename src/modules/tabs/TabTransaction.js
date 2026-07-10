@@ -2,9 +2,11 @@ import React, { useState, useEffect } from "react";
 import api from "../../config/api";
 import { CreateTransactionModal } from "../FinanceModule";
 import { T, fmtN } from "../shared/tokens";
-import { Pill, Panel, THead, AddBtn } from "../shared/ui";
+import { Pill, Panel, AddBtn } from "../shared/ui";
 
 const D = { invoices:[] };
+// Shared grid template so the header and every row column stay aligned.
+const TXN_GRID = "66px 1.2fr 1.6fr 150px 130px 120px 92px";
 
 // Raw backend txn type → finance-style display label (mirrors FinanceModule).
 const TXN_TYPE_MAP={
@@ -22,7 +24,9 @@ const mapTxn=t=>{
     id:t.id,
     date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
     party:t.party_name||t.party||"—",
-    note:t.description||t.note||"",
+    // ONLY the user's actual note. The auto-generated description is
+    // "Type — Party — Project", all of which already have their own columns.
+    note:(t.note&&t.note.trim())?t.note.trim():"",
     type:TXN_TYPE_MAP[t.type]||(t.dr?"Payment Out":"Payment In"),
     account:t.account_name||t.account||"",
     amount:parseFloat(t.amount)||0,
@@ -252,26 +256,34 @@ function TabTransaction({projectId, projectName}) {
       <div style={{fontSize:11,color:T.t4,marginBottom:6}}>{filtered.length} transaction{filtered.length!==1?"s":""}</div>
 
       <Panel>
-        <THead cols="70px 1fr 1.2fr 160px 100px 120px 90px" headers={["Date","Party","Note","Type","Account","Amount","Status"]}/>
+        {/* Column header — Amount + Status right-aligned to match the cells */}
+        <div style={{display:"grid",gridTemplateColumns:TXN_GRID,padding:"8px 15px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
+          {["Date","Party","Note","Type","Account","Amount","Status"].map((h,i)=>(
+            <span key={i} style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:".6px",textAlign:i>=5?"right":"left"}}>{h}</span>
+          ))}
+        </div>
         {filtered.length===0&&<div style={{padding:"40px",textAlign:"center",color:T.t4,fontSize:13}}>No transactions match filters</div>}
         {filtered.map(txn=>{
           const ts=typeS[txn.type]||{c:T.slt,bg:T.sltL};
           const st=txn.status||"paid";
           const ac=acctColor[txn.account||""]||T.slt;
+          const stCol=st==="paid"?{c:T.grn,bg:T.grnL,b:T.grnM}:st==="unbilled"?{c:T.pur,bg:T.purL,b:T.purM}:{c:T.red,bg:T.redL,b:T.redM};
           return(
-            <div key={txn.id} style={{display:"grid",gridTemplateColumns:"70px 1fr 1.2fr 160px 100px 120px 90px",padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${txn.dr?T.red:T.grn}44`,transition:"background .1s"}}
+            <div key={txn.id} style={{display:"grid",gridTemplateColumns:TXN_GRID,padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",borderLeft:`3px solid ${txn.dr?T.red:T.grn}44`,transition:"background .1s"}}
               onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
               onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-              <span style={{fontSize:11.5,color:T.t4}}>{txn.date}</span>
-              <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{txn.party}</span>
-              <span style={{fontSize:12,color:T.t2}}>{txn.note}</span>
-              <Pill label={txn.type} c={ts.c} bg={ts.bg}/>
-              <div style={{display:"flex",alignItems:"center",gap:5}}>
+              <span style={{fontSize:11.5,color:T.t4,whiteSpace:"nowrap"}}>{txn.date}</span>
+              <span style={{fontSize:12.5,fontWeight:600,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:10}}>{txn.party}</span>
+              <span style={{fontSize:12,color:txn.note?T.t2:T.t4,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",paddingRight:10}}>{txn.note||"—"}</span>
+              <div style={{minWidth:0}}><Pill label={txn.type} c={ts.c} bg={ts.bg}/></div>
+              <div style={{display:"flex",alignItems:"center",gap:5,minWidth:0}}>
                 <div style={{width:7,height:7,borderRadius:"50%",background:ac,flexShrink:0}}/>
-                <span style={{fontSize:11.5,color:T.t2}}>{txn.account||"—"}</span>
+                <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{txn.account||"—"}</span>
               </div>
-              <span style={{fontSize:13,fontWeight:700,color:txn.dr?T.red:T.grn,fontVariantNumeric:"tabular-nums"}}>{txn.dr?"−":"+"} ₹{fmtN(txn.amount)}</span>
-              <span style={{background:st==="paid"?T.grnL:st==="unbilled"?T.purL:T.redL,color:st==="paid"?T.grn:st==="unbilled"?T.pur:T.red,fontSize:9.5,fontWeight:700,padding:"2px 7px",borderRadius:20,border:`1px solid ${st==="paid"?T.grnM:T.redM}`}}>{st}</span>
+              <span style={{fontSize:13,fontWeight:700,color:txn.dr?T.red:T.grn,fontVariantNumeric:"tabular-nums",textAlign:"right",whiteSpace:"nowrap"}}>{txn.dr?"−":"+"} ₹{fmtN(txn.amount)}</span>
+              <div style={{display:"flex",justifyContent:"flex-end"}}>
+                <span style={{background:stCol.bg,color:stCol.c,fontSize:9.5,fontWeight:700,padding:"2px 9px",borderRadius:20,border:`1px solid ${stCol.b}`,textTransform:"uppercase",letterSpacing:".3px"}}>{st}</span>
+              </div>
             </div>
           );
         })}
