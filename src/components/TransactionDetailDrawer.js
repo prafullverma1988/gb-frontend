@@ -81,6 +81,7 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [err, setErr] = useState("");
+  const [editItems, setEditItems] = useState([]);
 
   // Reset state whenever a different txn is opened
   useEffect(() => {
@@ -96,6 +97,22 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         project_name: txn.project_name || txn.project || "",
         reference_no: txn.reference_no || "",
       });
+      // Seed editable line items. When the bill is anchored to a REAL GRN
+      // (txn.grn_locked), existing rows keep material+qty locked and count as
+      // fromGRN (their stock came from that GRN); new rows added here are
+      // direct and re-enter inventory on save.
+      const grnLocked = !!txn.grn_locked;
+      const src = Array.isArray(txn.items) ? txn.items : (Array.isArray(txn.line_items) ? txn.line_items : []);
+      setEditItems(src.map(it => ({
+        item: it.item_name || it.item || it.name || it.description || "",
+        qty: it.qty ?? it.quantity ?? "",
+        unit: it.unit || "",
+        rate: it.rate ?? "",
+        head: it.head || "",
+        description: it.description || "",
+        _fromGRN: grnLocked,
+        _locked: grnLocked,
+      })));
     }
   }, [txn]);
 
@@ -114,12 +131,21 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
   const amtSign = meta.in === true ? "+" : meta.in === false ? "−" : "";
   const amtColor = meta.in === true ? T.grn : meta.in === false ? T.red : T.t2;
 
+  // Material Purchase Bill supports full line-item editing (add/edit/delete).
+  // Amount is derived from the rows, so the manual amount box is hidden.
+  const isMaterialBill = backendType === "material_purchase";
+  const editItemsTotal = editItems.reduce((s, it) => s + (parseFloat(it.qty) || 0) * (parseFloat(it.rate) || 0), 0);
+  const updItem = (i, k, v) => setEditItems(p => p.map((it, idx) => idx === i ? { ...it, [k]: v } : it));
+  const addItem = () => setEditItems(p => [...p, { item: "", qty: "", unit: "", rate: "", head: "", description: "", _fromGRN: false, _locked: false }]);
+  const delItem = (i) => setEditItems(p => p.filter((_, idx) => idx !== i));
+  const miniInp = (align = "left") => ({ width: "100%", padding: "4px 6px", borderRadius: 4, border: `1px solid ${T.b1}`, fontSize: 11.5, outline: "none", boxSizing: "border-box", fontFamily: "inherit", textAlign: align, background: "#fff" });
+
   const handleSave = async () => {
     if (saving) return;
     setSaving(true); setErr("");
     try {
       const payload = {
-        amount: parseFloat(form.amount) || 0,
+        amount: isMaterialBill ? editItemsTotal : (parseFloat(form.amount) || 0),
         date: form.date || undefined,
         // due_date only relevant for bills/invoices — clear it for
         // cash-event types so the column doesn't carry stale values.
@@ -130,6 +156,19 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
         project_name: form.project_name,
         reference_no: form.reference_no,
       };
+      // Material bill → send the edited rows; backend rebuilds transaction_items,
+      // recomputes amount and reconciles inventory. fromGRN rows re-use the
+      // real GRN's stock (not re-added); direct rows re-enter inventory.
+      if (isMaterialBill) {
+        payload.line_items = editItems
+          .filter(it => (it.item || "").trim())
+          .map(it => ({
+            item: (it.item || "").trim(), qty: parseFloat(it.qty) || 0,
+            unit: it.unit || "", rate: parseFloat(it.rate) || 0,
+            head: it.head || "", description: it.description || "",
+            fromGRN: !!it._fromGRN,
+          }));
+      }
       const res = await api.put("/finance/transactions/" + txn.id, payload);
       if (res?.success === false) {
         // Ghost row (deleted in another tab/session) — refresh + close
@@ -263,7 +302,47 @@ export default function TransactionDetailDrawer({ txn, onClose, onChanged, highl
           {/* Edit form */}
           {editing && (
             <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 14 }}>
-              <Field label="Amount *" type="number" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))}/>
+              {isMaterialBill ? (
+                <>
+                  {txn.status === "paid" && (
+                    <div style={{ padding: "8px 11px", background: T.ambL, border: `1px solid ${T.ambM}`, borderRadius: 6, color: T.amb, fontSize: 11.5, lineHeight: 1.4 }}>
+                      ⚠ Yeh bill already <b>paid</b> hai. Items badalne se amount change hoga aur linked payment se mismatch ho sakta hai — zaroori ho tabhi badlein.
+                    </div>
+                  )}
+                  <div>
+                    <label style={lblStyle}>Line Items {txn.grn_locked && <span style={{ fontWeight: 600, color: T.t4 }}>· 🔒 GRN rows locked (rate editable)</span>}</label>
+                    <div style={{ border: `1px solid ${T.b1}`, borderRadius: 8, overflow: "hidden" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 54px 46px 66px 24px", gap: 5, padding: "6px 8px", background: T.surfaceB, borderBottom: `1px solid ${T.b1}` }}>
+                        {["Material", "Qty", "UOM", "Rate", ""].map((h, i) => (
+                          <span key={i} style={{ fontSize: 8.5, fontWeight: 700, color: T.t4, textTransform: "uppercase", textAlign: (i >= 1 && i <= 3) ? "right" : "left" }}>{h}</span>
+                        ))}
+                      </div>
+                      {editItems.map((it, i) => (
+                        <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 54px 46px 66px 24px", gap: 5, padding: "5px 8px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
+                          {it._locked
+                            ? <span title="GRN se locked" style={{ fontSize: 11.5, color: T.t1, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>🔒 {it.item || "—"}</span>
+                            : <input value={it.item} onChange={e => updItem(i, "item", e.target.value)} placeholder="Material" style={miniInp()}/>}
+                          {it._locked
+                            ? <span style={{ fontSize: 11.5, color: T.t2, textAlign: "right" }}>{it.qty || 0}</span>
+                            : <input type="number" value={it.qty} onChange={e => updItem(i, "qty", e.target.value)} placeholder="0" style={miniInp("right")}/>}
+                          <input value={it.unit} onChange={e => updItem(i, "unit", e.target.value)} placeholder="—" disabled={it._locked} style={{ ...miniInp("center"), background: it._locked ? T.surfaceB : "#fff", color: it._locked ? T.t3 : T.t1 }}/>
+                          <input type="number" value={it.rate} onChange={e => updItem(i, "rate", e.target.value)} placeholder="0" style={miniInp("right")}/>
+                          {it._locked
+                            ? <span style={{ color: T.b2, textAlign: "center", fontSize: 11 }}>🔒</span>
+                            : <button onClick={() => delItem(i)} title="Remove" style={{ background: "none", border: "none", color: T.red, cursor: "pointer", fontSize: 15, padding: 0, lineHeight: 1 }}>×</button>}
+                        </div>
+                      ))}
+                      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "7px 9px", background: T.bluL }}>
+                        <button onClick={addItem} style={{ background: "none", border: `1px dashed ${T.b2}`, color: T.blu, borderRadius: 5, fontSize: 11, fontWeight: 700, padding: "3px 10px", cursor: "pointer" }}>+ Add Item</button>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: T.blu }}>Total ₹{Math.round(editItemsTotal).toLocaleString("en-IN")}</span>
+                      </div>
+                    </div>
+                    <div style={{ fontSize: 10, color: T.t4, marginTop: 4 }}>Amount rows se auto-calculate hota hai.</div>
+                  </div>
+                </>
+              ) : (
+                <Field label="Amount *" type="number" value={form.amount} onChange={v => setForm(p => ({ ...p, amount: v }))}/>
+              )}
               {/* Date row: bills get two-column "Bill Date + Due Date";
                   cash events get a single "Transaction Date". The
                   due_date concept only makes sense for credit
