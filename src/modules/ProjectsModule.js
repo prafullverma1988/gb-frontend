@@ -128,9 +128,14 @@ const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
 const PEND_PMTS_DATA=[];
 
+const PULSE_ALL_TYPES=["progress","material","material_request","approval","payment","photo","document"];
 function SitePulseDrawer({onClose}){
   const [site,setSite]=useState("All");
-  const [type,setType]=useState("All");
+  // Multi-select type filter — user tick-marks the activity types they care
+  // about and Saves; the choice persists (per-device) and is applied on every
+  // future open. Default = all types until the user saves a custom set.
+  const [selTypes,setSelTypes]=useState(()=>{ try{const s=JSON.parse(localStorage.getItem("gb_pulse_types"));return Array.isArray(s)&&s.length?s:PULSE_ALL_TYPES;}catch{return PULSE_ALL_TYPES;} });
+  const [showTypeMenu,setShowTypeMenu]=useState(false);
   const [feed,setFeed]=useState([]);
   const [projects,setProjects]=useState([]);
   const [loading,setLoading]=useState(true);
@@ -170,7 +175,11 @@ function SitePulseDrawer({onClose}){
     return new Date(d).toLocaleDateString("en-IN",{day:"numeric",month:"short"});
   };
 
-  const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&(type==="All"||f.feed_type===type));
+  const filtered=feed.filter(f=>(site==="All"||f.project_name===site)&&selTypes.includes(f.feed_type));
+  const allSelected=selTypes.length>=PULSE_ALL_TYPES.length;
+  const toggleType=(k)=>setSelTypes(p=>p.includes(k)?p.filter(x=>x!==k):[...p,k]);
+  const saveFilter=()=>{ try{localStorage.setItem("gb_pulse_types",JSON.stringify(selTypes));}catch(_){} setShowTypeMenu(false); };
+  const resetFilter=()=>setSelTypes(PULSE_ALL_TYPES);
 
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
@@ -190,10 +199,37 @@ function SitePulseDrawer({onClose}){
             <option value="All">All Projects</option>
             {projects.map(s=><option key={s}>{s}</option>)}
           </select>
-          <select value={type} onChange={e=>setType(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t}}>
-            <option value="All">All Types</option>
-            {Object.entries(tagMeta).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
-          </select>
+          <div style={{flex:1,position:"relative"}}>
+            <button onClick={()=>setShowTypeMenu(v=>!v)} style={{width:"100%",padding:"6px 8px",borderRadius:7,border:`1.5px solid ${showTypeMenu?C.p:C.b}`,fontSize:11.5,background:C.bg,outline:"none",fontFamily:"inherit",color:C.t,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",gap:5}}>
+              <span style={{overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{allSelected?"All Types":`${selTypes.length} type${selTypes.length!==1?"s":""}`}</span>
+              <span style={{fontSize:9,color:C.tl,flexShrink:0}}>▼</span>
+            </button>
+            {showTypeMenu&&(
+              <>
+                <div onClick={()=>setShowTypeMenu(false)} style={{position:"fixed",inset:0,zIndex:202}}/>
+                <div style={{position:"absolute",top:"calc(100% + 4px)",right:0,left:0,zIndex:203,background:C.w,border:`1px solid ${C.b}`,borderRadius:9,boxShadow:"0 8px 28px rgba(0,0,0,0.16)",padding:"6px",maxHeight:280,overflowY:"auto"}}>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"4px 6px 6px",borderBottom:`1px solid ${C.b}`,marginBottom:4}}>
+                    <span style={{fontSize:10,fontWeight:800,color:C.tl,textTransform:"uppercase",letterSpacing:".4px"}}>Show types</span>
+                    <button onClick={resetFilter} style={{background:"none",border:"none",color:C.p,fontSize:10.5,fontWeight:700,cursor:"pointer"}}>Reset (all)</button>
+                  </div>
+                  {PULSE_ALL_TYPES.map(k=>{
+                    const on=selTypes.includes(k);
+                    return(
+                      <label key={k} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 6px",borderRadius:6,cursor:"pointer",fontSize:12,color:C.t}}
+                        onMouseEnter={e=>e.currentTarget.style.background=C.bg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+                        <span style={{width:16,height:16,borderRadius:4,border:`1.5px solid ${on?C.p:C.b}`,background:on?C.p:C.w,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,color:"white",fontSize:11,fontWeight:800}}>{on?"✓":""}</span>
+                        <span style={{fontSize:14}}>{(tagMeta[k]||{}).icon}</span>
+                        <span style={{flex:1}}>{(tagMeta[k]||{}).label||k}</span>
+                        <input type="checkbox" checked={on} onChange={()=>toggleType(k)} style={{display:"none"}}/>
+                      </label>
+                    );
+                  })}
+                  <button onClick={saveFilter} disabled={selTypes.length===0} style={{width:"100%",marginTop:5,padding:"8px",borderRadius:7,background:selTypes.length===0?C.b:C.p,color:"white",border:"none",fontSize:12,fontWeight:700,cursor:selTypes.length===0?"not-allowed":"pointer"}}>✓ Save filter</button>
+                  {selTypes.length===0&&<div style={{fontSize:10,color:C.o,textAlign:"center",marginTop:4}}>Kam se kam ek type select karein</div>}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
