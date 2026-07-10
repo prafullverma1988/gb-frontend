@@ -3059,15 +3059,38 @@ function ClientDetail({ clientId, onBack }) {
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
           <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, fontSize:12.5, fontWeight:700, color:T.t1 }}>Companies ({companies.length})</div>
           {companies.length === 0 && <div style={{ padding:"20px 16px", fontSize:12, color:T.t4 }}>No company linked yet — company banane ke baad yaha assign karo.</div>}
-          {companies.map(c => (
-            <div key={c.id} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div>
+          {companies.map(c => {
+            const dl = (obj, fname) => { try { const b = new Blob([JSON.stringify(obj, null, 2)], { type:"application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = fname; a.click(); URL.revokeObjectURL(a.href); } catch(_){} };
+            const doExport = async (e) => {
+              e.stopPropagation();
+              const res = await apiFetch(`/saas-admin/companies/${c.id}/export-data`, { method:"POST" });
+              if (res.success) { dl(res.data, `${c.slug || c.id}-export.json`); setToast({ msg:`Export downloaded — ${res.data.meta.total_rows} rows` }); }
+              else setToast({ msg: res.message || "Export failed", type:"error" });
+            };
+            const doPurge = async (e) => {
+              e.stopPropagation();
+              const nm = await window.promptAsync(`⚠️ HARD DELETE "${c.name}"?\n\nYeh company ka SAARA data permanently delete karega. Pehle ek recovery export download hoga (kabhi wapas chahiye to usse restore). Confirm ke liye company ka naam bilkul waisa hi type karein:`);
+              if (nm === null) return;
+              const res = await apiFetch(`/saas-admin/companies/${c.id}/purge`, { method:"DELETE", body:{ confirm_name: nm } });
+              if (res.success) { if (res.export) dl(res.export, `${c.slug || c.id}-recovery.json`); setToast({ msg: res.message }); load(); }
+              else setToast({ msg: res.message || "Purge failed", type:"error" });
+            };
+            return (
+            <div key={c.id} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+              <div style={{ minWidth:0 }}>
                 <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{c.name}</div>
                 <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug} · {c.user_count} users · {c.project_count} projects</div>
               </div>
-              <Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/>
+              <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
+                <Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/>
+                <button title="Export all data (recovery file)" onClick={doExport}
+                  style={{ padding:"3px 8px", borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB, color:T.t3, fontSize:10.5, fontWeight:600, cursor:"pointer" }}>⬇ Export</button>
+                <button title="Hard delete (export taken first, name confirm)" onClick={doPurge}
+                  style={{ padding:"3px 8px", borderRadius:6, border:`1px solid ${T.redM}`, background:T.redL, color:T.red, fontSize:10.5, fontWeight:700, cursor:"pointer" }}>Purge</button>
+              </div>
             </div>
-          ))}
+            );
+          })}
           <div style={{ padding:"12px 16px", display:"flex", gap:8 }}>
             <div style={{ flex:1 }}>
               <SelectField value={assignCompanyId} onChange={setAssignCompanyId} placeholder="Assign existing company..."
@@ -3264,6 +3287,16 @@ function TabClients() {
           <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, color:T.t3, cursor:"pointer" }}>
             <input type="checkbox" checked={showInternal} onChange={e => setShowInternal(e.target.checked)}/> Internal bhi dikhao
           </label>
+          <Btn variant="outline" onClick={async () => {
+            const cfg = await apiFetch("/saas-admin/lifecycle-config");
+            const cur = cfg.success ? cfg.data : { grace_days:7, retention_days:90 };
+            const g = await window.promptAsync(`Grace period — subscription expire hone ke baad kitne din tak full access rahe (phir login block). Abhi: ${cur.grace_days} din`);
+            if (g === null) return;
+            const r = await window.promptAsync(`Retention window — suspend hone ke baad kitne din data rakhein (phir purge-eligible). Abhi: ${cur.retention_days} din`);
+            if (r === null) return;
+            const res = await apiFetch("/saas-admin/lifecycle-config", { method:"PUT", body:{ grace_days: parseInt(g, 10), retention_days: parseInt(r, 10) } });
+            setToast({ msg: res.success ? res.message : (res.message || "Failed"), type: res.success ? undefined : "error" });
+          }}>⚙ Lifecycle</Btn>
           <Btn variant="outline" onClick={load}><IcRefresh size={13}/></Btn>
           <Btn onClick={() => setShowNew(true)}><IcPlus size={14}/> New Client</Btn>
         </>}/>
@@ -3312,6 +3345,8 @@ function TabClients() {
               {c.sub_status
                 ? <><Badge text={c.sub_status.toUpperCase()} color={SUB_COLORS[c.sub_status] || T.slt}/>{c.sub_end && <div style={{ fontSize:10, color:T.t4, marginTop:3 }}>till {fmtDate(c.sub_end)}</div>}</>
                 : <span style={{ fontSize:11, color:T.t4 }}>--</span>}
+              {c.lifecycle && c.lifecycle.state === "grace" && <div style={{ marginTop:3 }}><Badge text={`GRACE · ${c.lifecycle.graceDaysLeft}d`} color={T.amb}/></div>}
+              {c.lifecycle && c.lifecycle.state === "suspended" && <div style={{ marginTop:3 }}><Badge text={c.lifecycle.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED"} color={T.red}/></div>}
             </div>
             <div style={{ fontSize:11.5, color: c.overdue_count > 0 ? T.red : T.t3, fontWeight: c.overdue_count > 0 ? 700 : 400 }}>
               {c.overdue_count > 0 ? `${c.overdue_count} OVERDUE` : (c.next_due ? fmtDate(c.next_due) : "--")}

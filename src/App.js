@@ -1819,16 +1819,27 @@ export default function App(){
   // Runs on app load + whenever the tab/window regains focus (covers mobile app-resume too).
   useEffect(()=>{
     const refreshPerms=async()=>{
-      if(!loggedIn||["admin","super_admin"].includes(user?.role)) return;
+      // Platform super_admin is not a tenant — never subject to subscription
+      // enforcement. Every other logged-in user (incl. company admin) is
+      // checked so a mid-session subscription lapse blocks them here.
+      if(!loggedIn||user?.role==="super_admin") return;
       try{
         const res=await api.get("/auth/permissions");
-        if(res.success && res.module_permissions){
+        if(!res) return;
+        // Subscription lifecycle: company's access lapsed → block this session.
+        if(res.subscription_blocked){
+          try{ window.alert(res.subscription?.message||"Aapki subscription samaapt ho gayi hai. Access dobara shuru karne ke liye renew karein."); }catch(_){}
+          handleLogout();
+          return;
+        }
+        // Module-permission refresh keeps its original scope (non-admin only).
+        if(res.success && res.module_permissions && user?.role!=="admin"){
           const updated={...user, module_permissions: res.module_permissions};
           setUser(updated);
           try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
-          // Rolling refresh: backend re-issues the token once >7d old.
-          if(res.refreshed_token){ try{ localStorage.setItem("gb_token", res.refreshed_token); }catch(_){} }
         }
+        // Rolling refresh: backend re-issues the token once >7d old.
+        if(res.refreshed_token){ try{ localStorage.setItem("gb_token", res.refreshed_token); }catch(_){} }
       }catch(_){}
     };
     refreshPerms();
