@@ -2997,6 +2997,10 @@ function FinanceModule(){
       project:t.project_name||t.project||"",
       type:frontType,
       account:t.account_name||t.account||"",
+      // Wallet-origin spends (party_pay / site_exp via a staff wallet) have no
+      // company account — money left a staff wallet. paidViaStaff carries that
+      // payer name so the Account column can show WHO/WHERE the cash came from.
+      paidViaStaff:t.paid_via_staff_name||null,
       amount:parseFloat(t.amount)||0,
       dr:isDebit,
       status:t.status||"paid",
@@ -4350,9 +4354,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
             {/* Transactions Table — new 7-col layout */}
             <div style={{flex:1,overflow:"hidden",display:"flex",flexDirection:"column",background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`}}>
               {/* Sticky header */}
-              <div style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"8px 14px",background:"#1E293B",flexShrink:0,gap:6}}>
-                {["Date","Type","Party","Site","Note","Amount","Status"].map((h,i)=>(
-                  <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===5?"right":"left"}}>{h}</span>
+              <div style={{display:"grid",gridTemplateColumns:"66px 118px 128px 88px 118px 1.5fr 108px 64px",padding:"8px 14px",background:"#1E293B",flexShrink:0,gap:6}}>
+                {["Date","Type","Party","Site","Account","Note","Amount","Status"].map((h,i)=>(
+                  <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.5)",textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i===6?"right":"left"}}>{h}</span>
                 ))}
               </div>
               {/* Scrollable body */}
@@ -4402,7 +4406,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   return(
                     <div key={txn.id||i}
                       onClick={()=>setSelTxn(txn)}
-                      style={{display:"grid",gridTemplateColumns:"72px 130px 140px 100px 2fr 120px 70px",padding:"9px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"pointer"}}
+                      style={{display:"grid",gridTemplateColumns:"66px 118px 128px 88px 118px 1.5fr 108px 64px",padding:"9px 14px",gap:6,borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:i%2===0?T.surface:"#FAFBFD",transition:"background 0.1s",cursor:"pointer"}}
                       onMouseEnter={e=>e.currentTarget.style.background=T.bluL+"66"}
                       onMouseLeave={e=>e.currentTarget.style.background=i%2===0?T.surface:"#FAFBFD"}>
                       {/* 1. Date */}
@@ -4413,7 +4417,19 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       <span style={{fontSize:12,color:T.t1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",fontWeight:500}}>{partyLabel}</span>
                       {/* 4. Site */}
                       <span style={{fontSize:11,color:T.t3,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{isBT?"—":(txn.project||"—")}</span>
-                      {/* 5. Note */}
+                      {/* 5. Account — company account, or the staff wallet the
+                          cash moved through (payer) for wallet-origin spends */}
+                      {(()=>{
+                        const isWallet=!!txn.paidViaStaff;
+                        const acct=isWallet?txn.paidViaStaff:(isBT?(txn.account||"—"):(txn.account||"—"));
+                        return (
+                          <span style={{display:"inline-flex",alignItems:"center",gap:4,fontSize:11,color:isWallet?T.pur:T.t2,fontWeight:isWallet?600:500,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}} title={isWallet?`${txn.paidViaStaff} ke wallet se`:acct}>
+                            {isWallet&&<span style={{fontSize:8,fontWeight:800,color:T.pur,background:T.purL,padding:"1px 4px",borderRadius:3,flexShrink:0}}>W</span>}
+                            {acct}
+                          </span>
+                        );
+                      })()}
+                      {/* 6. Note */}
                       <span style={{fontSize:11.5,color:T.t2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{noteText||"—"}</span>
                       {/* 6. Amount — color coded */}
                       <span style={{fontSize:13,fontWeight:800,color:amtColor,textAlign:"right",whiteSpace:"nowrap"}}>{amtPrefix}₹{fmtN(txn.amount)}</span>
