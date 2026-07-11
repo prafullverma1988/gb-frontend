@@ -3009,6 +3009,10 @@ function FinanceModule(){
       // Backend GET /finance/transactions now returns line_items[] for bill-type txns.
       items:t.items||t.line_items||null,
       grn_id:t.grn_id||null,
+      // Wallet-origin spend (staff paid from their imprest wallet). The cash
+      // already left the company at TOP-UP time, so these rows must NOT hit
+      // the company Cash Book / Day Book again (double-count).
+      walletSpend:!!t.paid_via_staff_id,
     };
   };
 
@@ -3275,8 +3279,13 @@ function FinanceModule(){
   // invoices, not cash events — they live in Pending Payments / Billed
   // Material until a Payment Out / Receipt is posted against them.
   const CASH_TXN_TYPES_RAW = ["receipt","payment","party_payment","site_expense","bank_transfer","wallet_payment","wallet_topup"];
-  const isCashEvent = (t) => CASH_TXN_TYPES_RAW.includes(t.txnType||"") ||
-    ["Payment In","Payment Out","Party Payment","Site Expense","Bank Transfer","Wallet Payment","Wallet Top-up"].includes(t.type);
+  // Company Cash Book = COMPANY account movements only. Wallet-origin spends
+  // (walletSpend — staff paying from their imprest) are excluded: that cash
+  // already left the company when the wallet was topped up, so counting the
+  // spend again double-debits the company balance. Wallet spends stay visible
+  // in Fin Activity and in the staff-wallet ledger.
+  const isCashEvent = (t) => !t.walletSpend && (CASH_TXN_TYPES_RAW.includes(t.txnType||"") ||
+    ["Payment In","Payment Out","Party Payment","Site Expense","Bank Transfer","Wallet Payment","Wallet Top-up"].includes(t.type));
   const cbTxnsBase=activeTxns.length>0
     ? activeTxns.filter(isCashEvent)
     : TRANSACTIONS_DATA.filter(isCashEvent);
