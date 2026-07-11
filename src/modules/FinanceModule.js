@@ -3318,7 +3318,10 @@ function FinanceModule(){
         {l:"Opening Balance",v:sgn(openingBal),sub:"Before period · all accounts",Icon:IcBank,c:openingBal>=0?T.blu:T.red,bg:openingBal>=0?T.bluL:T.redL,brd:openingBal>=0?T.bluM:T.redM},
         {l:"Total Receipts",v:`₹${fmt(cbIn)}`,sub:`${cbTxns.filter(t=>!t.dr).length} entries`,Icon:IcRecv,c:T.grn,bg:T.grnL,brd:T.grnM},
         {l:"Total Payments",v:`₹${fmt(cbOut)}`,sub:`${cbTxns.filter(t=>t.dr).length} entries`,Icon:IcSend,c:T.red,bg:T.redL,brd:T.redM},
-        {l:"Cash in Hand",v:sgn(cashInHand),sub:cashInHand>=0?"Bank + Cash + Wallets":"Deficit",Icon:IcWallet,c:cashInHand>=0?T.blu:T.red,bg:cashInHand>=0?T.bluL:T.redL,brd:cashInHand>=0?T.bluM:T.redM},
+        // Split shown so it's obvious how much is COMPANY money (bank+cash)
+        // vs money sitting in staff wallets — avoids "balance kyu kam hai"
+        // confusion now that wallet spends don't touch the company book.
+        {l:"Cash in Hand",v:sgn(cashInHand),sub:`Company ${sgn(totalBal)} · Wallets ${sgn(totalWalletBal)}`,Icon:IcWallet,c:cashInHand>=0?T.blu:T.red,bg:cashInHand>=0?T.bluL:T.redL,brd:cashInHand>=0?T.bluM:T.redM},
       ];
     })(),
     payreq:[
