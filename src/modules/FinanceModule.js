@@ -586,6 +586,78 @@ const MATERIAL_LIBRARY_CONST = Object.freeze([
   "Centering Plate","Prop Stand","Shuttering Oil",
 ]);
 
+// ── Dual-unit billing strip (bill line) ────────────────────────────────
+// Some materials are received by count (TMT = bundle) but billed by weight
+// (kg). When the source GRN already carried that weight the switch is auto-ON
+// with the weight prefilled; otherwise the accountant flips it on and enters
+// the weight (auto-learning the unit + a proportional suggestion from this
+// material's last GRN). Primary (bundle) stays locked; alt (kg) is editable.
+// Switch OFF = a normal single-unit bill line, unchanged.
+function DualBillStrip({ row, onFields }){
+  const [learned,setLearned]=useState(null);      // {alt_unit, ratio}
+  const on=!!row.altOn;
+  const nameKey=(row.material||"").trim();
+  const primaryQty=Number(row.qty)||0;
+  const primaryUnit=row.unit||"";
+  // Learn only when the GRN didn't already supply the weight (fallback case).
+  useEffect(()=>{
+    if(!nameKey||row.grnHadAlt){ setLearned(null); return; }
+    let alive=true;
+    api.get("/procurement/grns/last-alt?name="+encodeURIComponent(nameKey))
+      .then(r=>{ if(alive&&r&&r.success) setLearned(r.data||null); }).catch(()=>{});
+    return ()=>{alive=false;};
+  },[nameKey,row.grnHadAlt]);
+
+  const ratio=row.alt_ratio ?? learned?.ratio ?? null;
+  const units=UNITS_CONST.filter(u=>u!==primaryUnit);
+  const suggest=(ratio&&primaryQty>0)?Math.round(primaryQty*ratio*100)/100:null;
+
+  const toggle=()=>{
+    if(on){ onFields({altOn:false,alt_qty:"",alt_unit:"",weight_source:null}); return; }
+    const defUnit=row.alt_unit||learned?.alt_unit||(units.includes("Kg")?"Kg":units[0]);
+    onFields({
+      altOn:true,
+      alt_unit:defUnit,
+      alt_qty:row.alt_qty||(suggest!=null?String(suggest):""),
+      alt_ratio:learned?.ratio ?? row.alt_ratio ?? null,
+    });
+  };
+
+  const rate=Number(row.rate)||0;
+  const altTotal=(Number(row.alt_qty)||0)*rate;
+
+  return (
+    <div style={{padding:"2px 12px 8px",background:on?T.bluL:"transparent",borderBottom:on?`1px solid ${T.b1}`:"none"}}>
+      <button type="button" onClick={toggle}
+        style={{display:"flex",alignItems:"center",gap:7,background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"inherit"}}>
+        <span style={{width:30,height:17,borderRadius:9,background:on?T.blu:T.b2,position:"relative",transition:"background .15s",flexShrink:0}}>
+          <span style={{position:"absolute",top:2,left:on?15:2,width:13,height:13,borderRadius:"50%",background:"#fff",transition:"left .15s",boxShadow:"0 1px 2px rgba(0,0,0,.25)"}}/>
+        </span>
+        <span style={{fontSize:11,fontWeight:600,color:on?T.blu:T.t3}}>Billing unit alag?</span>
+        {row.grnHadAlt&&on&&<span style={{fontSize:9,fontWeight:700,color:T.grn,background:T.grnL,border:`1px solid ${T.grnM}`,padding:"1px 6px",borderRadius:8}}>GRN weight</span>}
+        {!on&&learned?.alt_unit&&<span style={{fontSize:10,color:T.t4}}>· pichhli baar {learned.alt_unit} me bill hua tha</span>}
+      </button>
+      {on&&(
+        <div style={{display:"flex",alignItems:"center",gap:9,marginTop:7,flexWrap:"wrap"}}>
+          <span style={{fontSize:10.5,color:T.t3}}>Received: <b style={{color:T.t2}}>{primaryQty} {primaryUnit}</b> 🔒</span>
+          <span style={{fontSize:11,color:T.t4}}>→ bill on:</span>
+          <input type="number" value={row.alt_qty||""}
+            onChange={e=>onFields({altOn:true,alt_qty:e.target.value})}
+            placeholder={suggest!=null?String(suggest):"weight"} title="Weighbridge parchi ka weight — editable"
+            style={{width:100,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right",background:T.surface}}/>
+          <select value={row.alt_unit||""} onChange={e=>onFields({altOn:true,alt_unit:e.target.value})}
+            style={{padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
+            {units.map(u=><option key={u}>{u}</option>)}
+          </select>
+          <span style={{fontSize:11,color:T.t3}}>× ₹{rate||0} =</span>
+          <span style={{fontSize:12.5,fontWeight:800,color:altTotal>0?T.grn:T.t4}}>{altTotal>0?`₹${altTotal.toLocaleString("en-IN")}`:"—"}</span>
+          {suggest!=null&&!row.alt_qty&&<span style={{fontSize:10,color:T.t4}}>~{suggest} suggested (×{ratio})</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject,projectId}){
   // Reference the module-scope constants (renamed to keep call sites
   // unchanged — saves dozens of touch-ups below).
@@ -856,22 +928,34 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const invTotal=invMode==="boq"?boqGrandTotal:invFreshTotal;
 
   // ── material / subcon rows — with auto-focus after addRow ────
-  const blankRow=()=>({id:Date.now()+Math.random(),material:"",head:MAT_HEADS[0],desc:"",qty:"",unit:UNITS[0],rate:"",total:0});
+  const blankRow=()=>({id:Date.now()+Math.random(),material:"",head:MAT_HEADS[0],desc:"",qty:"",unit:UNITS[0],rate:"",total:0,
+    altOn:false,alt_qty:"",alt_unit:"",alt_ratio:null,grnHadAlt:false});
   const [rows,setRows]=useState(()=>{
     if(prefillGRN?.items?.length){
-      return prefillGRN.items.map((it,i)=>({
-        id:Date.now()+i+Math.random(),
-        material:it.name||it.description||"",
-        head:it.head||MAT_HEADS[0],
-        desc:it.desc||"",
-        qty:String(it.qty||it.received_qty||""),
-        unit:it.unit||UNITS[0],
-        rate:String(it.rate||""),
-        total:0,
-        fromGRN:true, // material name + qty + unit locked, only rate / head editable
-        grn_id:it.grn_id||null,         // source GRN per row (multi-GRN bills)
-        grn_number:it.grn_number||null,
-      }));
+      return prefillGRN.items.map((it,i)=>{
+        // Dual-unit: if this GRN line was received with a billing-basis weight
+        // (bundle → kg), the switch is auto-ON, weight prefilled + editable.
+        const hadAlt = it.alt_qty!=null && Number(it.alt_qty)>0 && !!it.alt_unit;
+        const pQty = Number(it.qty||it.received_qty||0);
+        return {
+          id:Date.now()+i+Math.random(),
+          material:it.name||it.description||"",
+          head:it.head||MAT_HEADS[0],
+          desc:it.desc||"",
+          qty:String(it.qty||it.received_qty||""),
+          unit:it.unit||UNITS[0],
+          rate:String(it.rate||""),
+          total:0,
+          fromGRN:true, // material name + qty + unit locked, only rate / head editable
+          grn_id:it.grn_id||null,         // source GRN per row (multi-GRN bills)
+          grn_number:it.grn_number||null,
+          altOn:!!hadAlt,
+          alt_qty:hadAlt?String(it.alt_qty):"",
+          alt_unit:hadAlt?it.alt_unit:"",
+          alt_ratio:it.alt_ratio!=null?Number(it.alt_ratio):(hadAlt&&pQty>0?Math.round((Number(it.alt_qty)/pQty)*10000)/10000:null),
+          grnHadAlt:!!hadAlt,
+        };
+      });
     }
     return [blankRow()];
   });
@@ -882,15 +966,25 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Material library — used to auto-lock unit when material is picked
   const [matLib,setMatLib]=useState([]);
   useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
+  // Total = billing-basis qty × rate. On dual-unit rows the billing basis is
+  // the alt (weight) qty; otherwise the primary qty. Rate is per billing unit.
+  const rowTotal=u=>(u.altOn ? Number(u.alt_qty||0) : Number(u.qty||0))*Number(u.rate||0);
   const updRow=(id,k,v)=>setRows(p=>p.map(r=>{
     if(r.id!==id) return r;
     const u={...r,[k]:v};
-    if(k==="qty"||k==="rate") u.total=Number(u.qty||0)*Number(u.rate||0);
+    if(k==="qty"||k==="rate"||k==="alt_qty"||k==="altOn") u.total=rowTotal(u);
     // Auto-lock unit from material library when material is picked
     if(k==="material" && v){
       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
       if(m?.unit) u.unit=m.unit;
     }
+    return u;
+  }));
+  // Multi-field update (dual-unit strip sets altOn/alt_qty/alt_unit together).
+  const updRowFields=(id,obj)=>setRows(p=>p.map(r=>{
+    if(r.id!==id) return r;
+    const u={...r,...obj};
+    u.total=rowTotal(u);
     return u;
   }));
   useEffect(()=>{
@@ -949,17 +1043,28 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       try{ setDelivDate(grn.received_date.split("T")[0]); }catch(_){}
     }
     if(grn.project_name) setProject(grn.project_name);
-    setRows((grn.items||[]).map((it,i)=>({
-      id:Date.now()+i+Math.random(),
-      material:it.description||"",
-      head:MAT_HEADS[0],
-      desc:"",
-      qty:String(it.received_qty||""),
-      unit:it.unit||UNITS[0],
-      rate:"",
-      total:0,
-      fromGRN:true,
-    })));
+    setRows((grn.items||[]).map((it,i)=>{
+      const hadAlt=it.alt_qty!=null&&Number(it.alt_qty)>0&&!!it.alt_unit;
+      const pQty=Number(it.received_qty||0);
+      return {
+        id:Date.now()+i+Math.random(),
+        material:it.description||"",
+        head:MAT_HEADS[0],
+        desc:"",
+        qty:String(it.received_qty||""),
+        unit:it.unit||UNITS[0],
+        rate:"",
+        total:0,
+        fromGRN:true,
+        grn_id:grn.id||null,
+        grn_number:grn.grn_number||null,
+        altOn:!!hadAlt,
+        alt_qty:hadAlt?String(it.alt_qty):"",
+        alt_unit:hadAlt?it.alt_unit:"",
+        alt_ratio:it.alt_ratio!=null?Number(it.alt_ratio):(hadAlt&&pQty>0?Math.round((Number(it.alt_qty)/pQty)*10000)/10000:null),
+        grnHadAlt:!!hadAlt,
+      };
+    }));
   };
 
   // ── helpers ──────────────────────────────────────────────────
@@ -1057,18 +1162,33 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
       // Line items for material/subcon/invoice
       if(isMaterial&&rows?.length){
-        payload.line_items=rows.filter(r=>r.material&&r.qty&&r.rate).map(r=>({
-          item:r.material,           // row field is 'material' not 'item'
-          description:r.desc||"",
-          qty:parseFloat(r.qty)||0,
-          unit:r.unit||"",
-          rate:parseFloat(r.rate)||0,
-          amount:(parseFloat(r.qty)||0)*(parseFloat(r.rate)||0),
-          head:r.head||"",
-          fromGRN: !!r.fromGRN,       // marker so backend can route new rows to inventory
-          grn_id: r.grn_id || null,   // per-row source GRN — used by backend
-                                      // validator when bill spans multi-GRNs
-        }));
+        payload.line_items=rows.filter(r=>r.material&&r.qty&&r.rate).map(r=>{
+          const primaryQty=parseFloat(r.qty)||0;
+          const rate=parseFloat(r.rate)||0;
+          // Dual-unit line: bill in the alt (weight) unit, but keep the
+          // receiving qty/unit as primary_* + record where the weight came
+          // from so the GRN can be backfilled / audited consistently.
+          const useAlt=r.altOn&&Number(r.alt_qty)>0&&!!r.alt_unit;
+          const billQty=useAlt?parseFloat(r.alt_qty):primaryQty;
+          const billUnit=useAlt?r.alt_unit:(r.unit||"");
+          return {
+            item:r.material,           // row field is 'material' not 'item'
+            description:r.desc||"",
+            qty:billQty,
+            unit:billUnit,
+            rate,
+            amount:billQty*rate,
+            head:r.head||"",
+            fromGRN: !!r.fromGRN,       // marker so backend can route new rows to inventory
+            grn_id: r.grn_id || null,   // per-row source GRN — used by backend
+                                        // validator when bill spans multi-GRNs
+            ...(useAlt?{
+              primary_qty:primaryQty,
+              primary_unit:r.unit||"",
+              weight_source:r.grnHadAlt?"grn_verified":"billing_entered",
+            }:{}),
+          };
+        });
       }
       if(isSubcon&&Object.keys(subBoqSel).length){
         payload.subcon_items=Object.keys(subBoqSel).map(bid=>{
@@ -1618,7 +1738,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 ))}
               </div>
               {rows.map((row,idx)=>(
-                <div key={row.id} style={{display:"grid",gridTemplateColumns:colTpl,gap:7,padding:"7px 12px",borderBottom:`1px solid ${T.b1}`,alignItems:"center",background:idx%2===0?T.surface:T.surfaceB}}>
+                <div key={row.id} style={{background:idx%2===0?T.surface:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
+                <div style={{display:"grid",gridTemplateColumns:colTpl,gap:7,padding:"7px 12px",alignItems:"center"}}>
                   <span style={{fontSize:11.5,color:T.t4,textAlign:"center",fontWeight:600}}>{idx+1}{row.fromGRN&&<span title="Locked from GRN" style={{marginLeft:3,fontSize:9}}>🔒</span>}</span>
                   {/* Material — locked only for rows from GRN, new added rows editable */}
                   {row.fromGRN
@@ -1653,6 +1774,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   <button onClick={()=>removeRow(row.id)} style={{background:"none",border:"none",cursor:rows.length>1?"pointer":"not-allowed",color:rows.length>1?T.red:T.b2,display:"flex",padding:0,alignItems:"center",justifyContent:"center"}}>
                     <IcX size={12} color="currentColor"/>
                   </button>
+                </div>
+                {(row.grnHadAlt||row.material)&&<DualBillStrip row={row} onFields={obj=>updRowFields(row.id,obj)}/>}
                 </div>
               ))}
               <div style={{padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
@@ -5129,6 +5252,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   name:it.description||"—",
                   qty:parseFloat(it.received_qty)||0,
                   unit:it.unit||"",
+                  // Dual-unit: billing-basis weight captured on the GRN line.
+                  alt_qty:it.alt_qty!=null?parseFloat(it.alt_qty):null,
+                  alt_unit:it.alt_unit||null,
+                  alt_ratio:it.alt_ratio!=null?parseFloat(it.alt_ratio):null,
                   recvDate:g.received_date,
                   project:g.project_name||"—",
                   challan:g.challan_no||"",
@@ -5174,6 +5301,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   // top-level primary grn_id which only covers row 1).
                   grn_id:p.grn?.id,
                   grn_number:p.grnNumber,
+                  // Dual-unit billing basis, if the GRN captured a weight.
+                  alt_qty:p.alt_qty,
+                  alt_unit:p.alt_unit,
+                  alt_ratio:p.alt_ratio,
                 })),
               };
             };
