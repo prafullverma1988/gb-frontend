@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import api from "../config/api";
 import LiveLocationMap from "./LiveLocationMap";
 
@@ -49,7 +49,7 @@ function StatusDot({ status }) {
 }
 
 function lastSeenText(min) {
-  if (min == null) return "—";
+  if (min == null) return "Location pending";
   if (min < 1) return "Just now";
   if (min < 60) return `${min} min ago`;
   const h = Math.floor(min / 60);
@@ -63,12 +63,17 @@ export default function LiveTeamView() {
   const [selectedId, setSelectedId] = useState(null);
   const [trail, setTrail]           = useState([]);
   const [loading, setLoading]       = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError]           = useState(null);
   const [lastUpdated, setLastUpdated] = useState(null);
   const [statusFilter, setStatusFilter] = useState("all"); // all|active|idle|off_duty
+  const [cityFilter, setCityFilter]     = useState("all");
   const pollTimer = useRef(null);
+  const membersRef = useRef([]);            // avoids re-creating loadTrail every poll
+  useEffect(() => { membersRef.current = members; }, [members]);
 
   const loadLive = useCallback(async () => {
+    setRefreshing(true);
     try {
       const res = await api.get("/location/live");
       if (res?.success) {
@@ -82,6 +87,7 @@ export default function LiveTeamView() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
@@ -92,10 +98,11 @@ export default function LiveTeamView() {
     } catch (e) { /* non-fatal */ }
   }, []);
 
-  // Load trail for selected member's active session (or last 12h)
+  // Load trail for selected member's active session (or last 12h).
+  // Reads members from a ref so it doesn't get recreated on every 15s poll.
   const loadTrail = useCallback(async (userId) => {
     if (!userId) { setTrail([]); return; }
-    const m = members.find(mm => mm.user_id === userId);
+    const m = membersRef.current.find(mm => mm.user_id === userId);
     try {
       let res;
       if (m?.session_id) {
@@ -106,7 +113,7 @@ export default function LiveTeamView() {
       }
       if (res?.success) setTrail(res.data || []);
     } catch (e) { /* ignore */ }
-  }, [members]);
+  }, []);
 
   // ── P4 #69: Visibility-aware polling ──────────────────────────
   // 15s poll for live team locations — pause when the tab is hidden so
@@ -134,17 +141,37 @@ export default function LiveTeamView() {
     };
   }, [loadLive, loadGeofences]);
 
-  // Reload trail when selection changes
+  // Reload trail only when the selected member changes (not on every poll)
   useEffect(() => { loadTrail(selectedId); }, [selectedId, loadTrail]);
 
+  // ── Cities present in the roster (for the city filter) ─────────
+  const cities = useMemo(() => {
+    const set = new Set();
+    members.forEach(m => { if (m.city) set.add(m.city); });
+    return [...set].sort();
+  }, [members]);
+
   // ── Filtering / counts ─────────────────────────────────────
-  const counts = {
-    all:      members.length,
-    active:   members.filter(m => m.live_status === "active").length,
-    idle:     members.filter(m => m.live_status === "idle").length,
-    off_duty: members.filter(m => m.live_status === "off_duty").length,
+  const cityMatch = m => cityFilter === "all" || m.city === cityFilter;
+
+  // Summary strip counts (respect the city filter so admin can drill into a city)
+  const cityScoped = members.filter(cityMatch);
+  const summary = {
+    punchedIn: cityScoped.filter(m => m.session_status === "active").length,
+    active:    cityScoped.filter(m => m.live_status === "active").length,
+    idle:      cityScoped.filter(m => m.live_status === "idle").length,
+    outFence:  cityScoped.filter(m => m.out_of_fence).length,
   };
-  const filtered = members.filter(m => statusFilter === "all" || m.live_status === statusFilter);
+
+  const counts = {
+    all:      cityScoped.length,
+    active:   cityScoped.filter(m => m.live_status === "active").length,
+    idle:     cityScoped.filter(m => m.live_status === "idle").length,
+    off_duty: cityScoped.filter(m => m.live_status === "off_duty").length,
+  };
+  const filtered = members.filter(m =>
+    cityMatch(m) && (statusFilter === "all" || m.live_status === statusFilter)
+  );
 
   if (loading) {
     return (
@@ -157,8 +184,27 @@ export default function LiveTeamView() {
     );
   }
 
+  const SUMMARY_TILES = [
+    { l:"Punched In", v:summary.punchedIn, c:T.blu },
+    { l:"Active",     v:summary.active,    c:T.grn },
+    { l:"Idle",       v:summary.idle,      c:T.amb },
+    { l:"Out of fence", v:summary.outFence, c:summary.outFence > 0 ? T.red : T.t4 },
+  ];
+
   return (
-    <div style={{ display:"grid",gridTemplateColumns:"280px 1fr",gap:12,minHeight:580 }}>
+    <div style={{ display:"flex",flexDirection:"column",gap:10 }}>
+
+      {/* ── Live summary strip ─────────────────────────────────── */}
+      <div style={{ display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:10 }}>
+        {SUMMARY_TILES.map((s,i) => (
+          <div key={i} style={{ padding:"10px 14px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:9,borderTop:`3px solid ${s.c}` }}>
+            <div style={{ fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3 }}>{s.l}</div>
+            <div style={{ fontSize:20,fontWeight:700,color:T.t1,lineHeight:1 }}>{s.v}</div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ display:"grid",gridTemplateColumns:"300px 1fr",gap:12,minHeight:560 }}>
 
       {/* ── LEFT: live grid ─────────────────────────────────── */}
       <div style={{ background:T.surface,border:`1px solid ${T.b1}`,borderRadius:10,display:"flex",flexDirection:"column",overflow:"hidden" }}>
@@ -171,11 +217,24 @@ export default function LiveTeamView() {
               {error && <span style={{ color:T.red,marginLeft:6 }}>· {error}</span>}
             </div>
           </div>
-          <button onClick={loadLive}
-            style={{ padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,color:T.t2,fontSize:11,fontWeight:600,cursor:"pointer" }}>
-            Refresh
+          <button onClick={loadLive} disabled={refreshing}
+            style={{ padding:"5px 10px",borderRadius:6,border:`1px solid ${T.b1}`,background:T.surfaceB,color:T.t2,fontSize:11,fontWeight:600,cursor:refreshing?"default":"pointer",opacity:refreshing?0.7:1,display:"flex",alignItems:"center",gap:5 }}>
+            <span style={{ width:11,height:11,border:`2px solid ${T.b2}`,borderTopColor:T.blu,borderRadius:"50%",display:"inline-block",animation:refreshing?"spin 0.7s linear infinite":"none" }}/>
+            {refreshing ? "Refreshing" : "Refresh"}
           </button>
         </div>
+
+        {/* City filter */}
+        {cities.length > 0 && (
+          <div style={{ padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:7 }}>
+            <span style={{ fontSize:10.5,color:T.t4,fontWeight:600,textTransform:"uppercase",letterSpacing:".3px" }}>City</span>
+            <select value={cityFilter} onChange={e => setCityFilter(e.target.value)}
+              style={{ flex:1,height:28,padding:"0 8px",borderRadius:6,border:`1.5px solid ${cityFilter!=="all"?T.blu:T.b1}`,background:cityFilter!=="all"?T.bluL:T.surface,fontSize:12,color:cityFilter!=="all"?T.blu:T.t2,outline:"none",cursor:"pointer",fontFamily:"inherit" }}>
+              <option value="all">All cities</option>
+              {cities.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+        )}
 
         {/* Filter chips */}
         <div style={{ padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,display:"flex",gap:5,flexWrap:"wrap" }}>
@@ -206,7 +265,7 @@ export default function LiveTeamView() {
           {filtered.length === 0 && (
             <div style={{ padding:"40px 16px",textAlign:"center",color:T.t4,fontSize:12 }}>
               {members.length === 0
-                ? "No location data yet. Members need to punch in from the mobile app."
+                ? "No one is punched in right now. Staff appear here once they punch in from the mobile app."
                 : "No members match this filter."}
             </div>
           )}
@@ -234,15 +293,23 @@ export default function LiveTeamView() {
                   <div style={{ fontSize:11,color:T.t3,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap" }}>
                     {m.live_status === "off_duty"
                       ? "Off duty"
-                      : (m.project_name || "No project")}
+                      : (m.project_name || m.designation || "No project")}
+                    {m.city && <span style={{ color:T.t4 }}> · {m.city}</span>}
                   </div>
-                  <div style={{ fontSize:10,color:T.t4,marginTop:2,display:"flex",gap:8 }}>
-                    <span>{lastSeenText(m.minutes_since_ping)}</span>
+                  <div style={{ fontSize:10,color:T.t4,marginTop:2,display:"flex",gap:8,alignItems:"center",flexWrap:"wrap" }}>
+                    <span style={{ color: m.has_location ? T.t4 : T.amb }}>
+                      {lastSeenText(m.minutes_since_ping)}
+                    </span>
                     {m.battery_pct != null && (
                       <span style={{ color: m.battery_pct < 20 ? T.red : T.t4 }}>
                         🔋 {m.battery_pct}%
                       </span>
                     )}
+                    {m.out_of_fence ? (
+                      <span style={{ color:T.red,fontWeight:700,background:T.redL,padding:"1px 6px",borderRadius:10,border:`1px solid ${T.red}33` }}>
+                        Out of fence
+                      </span>
+                    ) : null}
                   </div>
                 </div>
               </div>
@@ -254,12 +321,12 @@ export default function LiveTeamView() {
       {/* ── RIGHT: map ──────────────────────────────────────── */}
       <div>
         <LiveLocationMap
-          members={members}
+          members={filtered}
           selectedUserId={selectedId}
           trail={trail}
           geofences={geofences}
           onSelectMember={(uid) => setSelectedId(uid === selectedId ? null : uid)}
-          height={580}
+          height={560}
         />
         {selectedId && (
           <div style={{
@@ -278,6 +345,8 @@ export default function LiveTeamView() {
             </button>
           </div>
         )}
+      </div>
+
       </div>
 
       <style>{`
