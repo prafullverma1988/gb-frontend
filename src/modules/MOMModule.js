@@ -775,7 +775,9 @@ function MMItem({it,meta,onPatch,inputStyle,allMode,projects}){
 
 function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   const [step,setStep]=useState("capture");           // capture | review | done
-  const [mode,setMode]=useState("single");            // single | all (multi-project)
+  const [mode,setMode]=useState(projectId?"single":"all"); // default All at company level; Single inside a project
+  const [addingTitle,setAddingTitle]=useState(false);  // "Add new" meeting-title input open
+  const [customTitles,setCustomTitles]=useState([]);   // company's own saved titles (localStorage)
   const [projects,setProjects]=useState([]);
   const [proj,setProj]=useState(projectId?String(projectId):"");
   const [title,setTitle]=useState("");
@@ -799,8 +801,12 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   useEffect(()=>{
     api.get("/projects").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setProjects(r.data); }).catch(()=>{});
     api.get("/settings/users").then(r=>{ if(r&&r.success&&Array.isArray(r.data)) setUsers(r.data); }).catch(()=>{});
+    try{ const s=JSON.parse(localStorage.getItem(mmTitleKey)||"[]"); if(Array.isArray(s)) setCustomTitles(s); }catch(e){}
     return ()=>{ if(timerRef.current) clearInterval(timerRef.current); if(streamRef.current){ try{streamRef.current.getTracks().forEach(t=>t.stop());}catch(e){} } };
   },[]);
+  // per-company key so each firm builds its own meeting-title nomenclature
+  const mmTitleKey=(()=>{ try{ const u=JSON.parse(localStorage.getItem("gb_user")||"{}"); return "mm_titles_"+(u.company_id||u.companyId||"x"); }catch(e){ return "mm_titles"; } })();
+  const addCustomTitle=t=>{ t=(t||"").trim(); if(!t){ setAddingTitle(false); return; } setCustomTitles(prev=>{ if(prev.includes(t)) return prev; const nx=[t,...prev].slice(0,12); try{ localStorage.setItem(mmTitleKey,JSON.stringify(nx)); }catch(e){} return nx; }); setTitle(t); setAddingTitle(false); };
 
   const projName=id=>projects.find(p=>String(p.id)===String(id))?.name||projectName||"";
   const loadWeather=pid=>{ setWeather(null); if(!pid) return; api.get("/meetings/weather?project_id="+pid).then(r=>{ if(r&&r.success) setWeather(r); }).catch(()=>{}); };
@@ -841,6 +847,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   };
 
   const doExtract=async()=>{
+    if(mode==="single"&&!proj){ setErr("Single project mode me pehle project select karein."); return; }
     if(!transcript.trim()){ setErr("Pehle record karein ya transcript daalein."); return; }
     setErr(""); setExtracting(true);
     const r=await api.post("/meetings/extract",{transcript:transcript.trim(),mode,project_id:proj||undefined,project_name:projName(proj)||undefined,title:title.trim()||undefined,audio_url:audioUrl||undefined});
@@ -853,17 +860,27 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   };
   const patchItem=(id,patch)=>setItems(p=>p.map(it=>it._id===id?{...it,...patch}:it));
 
+  // resolve a project id per item (all-mode: from item.project name; single: the picked project)
+  const pidFor=it=>{
+    if(mode==="all"){ const p=projects.find(pp=>pp.name===(it.project||"")); return p?p.id:null; }
+    return proj||(meeting&&meeting.project_id)||null;
+  };
+  const missingProj=()=>items.filter(it=>it._include&&(it.type==="mr"||it.type==="task"||it.type==="issue")&&!pidFor(it));
+  // Review → Overview: validate every item has a project before the summary/submit
+  const goOverview=()=>{
+    const chosen=items.filter(it=>it._include);
+    if(!chosen.length){ setErr("Kam se kam ek item select karein."); return; }
+    const need=missingProj();
+    if(need.length){ setErr(mode==="all"?`${need.length} item ko project assign karein (dropdown).`:"Material/Task/Issue ke liye project select karein."); return; }
+    setErr(""); setStep("overview");
+  };
+
   const commit=async()=>{
     const chosen=items.filter(it=>it._include);
     if(!chosen.length){ setErr("Kam se kam ek item select karein."); return; }
     const allMode=mode==="all";
-    // resolve a project id per item (all-mode: from item.project name; single: the picked project)
-    const pidFor=it=>{
-      if(allMode){ const p=projects.find(pp=>pp.name===(it.project||"")); return p?p.id:null; }
-      return proj||(meeting&&meeting.project_id)||null;
-    };
-    const needProj=chosen.filter(it=>(it.type==="mr"||it.type==="task"||it.type==="issue")&&!pidFor(it));
-    if(needProj.length){ setErr(allMode?`${needProj.length} item ko project assign karein (dropdown).`:"Material/Task/Issue ke liye project select karein."); return; }
+    const need=missingProj();
+    if(need.length){ setErr(allMode?`${need.length} item ko project assign karein (dropdown).`:"Material/Task/Issue ke liye project select karein."); setStep("review"); return; }
     setErr(""); setCommitting(true);
     const refs=[];
     const holderCache={}; // project_id -> "Site Issues" holder task id (issues need a parent task)
@@ -945,6 +962,8 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
   const btnP=on=>({background:on?T.blu:T.b1,color:on?"white":T.t4,border:"none",borderRadius:8,padding:"10px 18px",fontSize:13,fontWeight:700,cursor:on?"pointer":"not-allowed"});
   const btnS={background:T.surface,border:`1px solid ${T.b1}`,color:T.t3,borderRadius:8,padding:"10px 16px",fontSize:13,fontWeight:600,cursor:"pointer"};
   const chosenCount=items.filter(it=>it._include).length;
+  const MM_TITLE_PRESETS=["Daily Meeting","Morning Meeting","Evening Meeting","Site Review","Client Meeting"];
+  const titleOptions=[...MM_TITLE_PRESETS,...customTitles.filter(t=>!MM_TITLE_PRESETS.includes(t))];
 
   return(
     <>
@@ -957,7 +976,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
           </div>
           <div style={{flex:1}}>
             <div style={{fontSize:14,fontWeight:700,color:"white"}}>Meeting Mode</div>
-            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>{step==="review"?"Review & approve — phir sab create ho jayega":step==="done"?"Ho gaya":"Record ya paste karein → AI nikalegi action items"}</div>
+            <div style={{fontSize:10,color:"rgba(255,255,255,0.5)"}}>{step==="review"?"Review & edit — items + project check karein":step==="overview"?"Overview — ek nazar me, phir Submit":step==="done"?"Ho gaya":"Record ya paste karein → AI nikalegi action items"}</div>
           </div>
           <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",padding:4}}><IcX size={18} color="rgba(255,255,255,0.7)"/></button>
         </div>
@@ -986,8 +1005,20 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
                 </div>
               )}
               <div style={{marginBottom:12}}>
-                <label style={labelStyle}>Meeting title (optional)</label>
-                <input value={title} onChange={e=>setTitle(e.target.value)} placeholder="e.g. Site review — 21 Jun" style={inputStyle}/>
+                <label style={labelStyle}>Meeting title</label>
+                {addingTitle?(
+                  <div style={{display:"flex",gap:6}}>
+                    <input autoFocus value={title} onChange={e=>setTitle(e.target.value)} placeholder="Apna meeting title likhein…" style={inputStyle}
+                      onKeyDown={e=>{ if(e.key==="Enter"){ e.preventDefault(); addCustomTitle(title); } }}/>
+                    <button onClick={()=>addCustomTitle(title)} style={{...btnS,padding:"8px 14px",whiteSpace:"nowrap"}}>Save</button>
+                  </div>
+                ):(
+                  <select value={titleOptions.includes(title)?title:""} onChange={e=>{ const v=e.target.value; if(v==="__add__"){ setTitle(""); setAddingTitle(true); } else setTitle(v); }} style={inputStyle}>
+                    <option value="">Select meeting title…</option>
+                    {titleOptions.map(t=><option key={t} value={t}>{t}</option>)}
+                    <option value="__add__">➕ Add new…</option>
+                  </select>
+                )}
               </div>
               {transcribing?(
                 <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:9,padding:12,borderRadius:9,background:T.bluL,marginBottom:12}}>
@@ -1002,9 +1033,13 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
                   <button onClick={stopRec} style={{marginLeft:"auto",background:T.red,color:"white",border:"none",borderRadius:7,padding:"8px 15px",fontSize:12.5,fontWeight:700,cursor:"pointer"}}>Stop & transcribe</button>
                 </div>
               ):(
-                <button onClick={startRec} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:8,background:T.purL,color:T.pur,border:`1.5px solid ${T.purM}`,borderRadius:9,padding:12,fontSize:13.5,fontWeight:700,cursor:"pointer",marginBottom:12}}>
-                  <Ic d={MIC_PATH} size={17} color={T.pur}/> Meeting record karein (laptop mic)
-                </button>
+                <div style={{marginBottom:12}}>
+                  <button onClick={startRec} style={{width:"100%",display:"flex",alignItems:"center",justifyContent:"center",gap:11,background:T.pur,color:"white",border:"none",borderRadius:11,padding:"16px",fontSize:15.5,fontWeight:800,cursor:"pointer",boxShadow:"0 2px 10px rgba(124,58,237,0.28)"}}>
+                    <span style={{width:30,height:30,borderRadius:15,background:"rgba(255,255,255,0.2)",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}><Ic d={MIC_PATH} size={18} color="white"/></span>
+                    Start Meeting — Recording shuru karein
+                  </button>
+                  <div style={{textAlign:"center",fontSize:10.5,color:T.t4,marginTop:6}}>Meeting shuru karte hi record dabana na bhoolein 🎙️</div>
+                </div>
               )}
               {recInfo&&<div style={{fontSize:10.5,color:T.amb,marginTop:-6,marginBottom:10}}>{recInfo}</div>}
               <div style={{display:"flex",alignItems:"center",gap:8,margin:"4px 0 10px"}}>
@@ -1080,6 +1115,33 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
             </>
           )}
 
+          {step==="overview"&&(()=>{
+            const chosen=items.filter(it=>it._include);
+            const groups={};
+            chosen.forEach(it=>{ const pn=mode==="all"?(it.project||"— No project —"):(projName(proj)||"— No project —"); (groups[pn]=groups[pn]||[]).push(it); });
+            const names=Object.keys(groups);
+            return(
+              <>
+                <div style={{fontSize:12.5,color:T.t2,marginBottom:14,lineHeight:1.5}}>Sab kuch ek nazar me — har item apne <b>project</b> ke neeche. Theek lage to <b>Approve &amp; Create</b> karein, warna Back jaake edit karein.</div>
+                {names.map(pn=>(
+                  <div key={pn} style={{marginBottom:14}}>
+                    <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:7,paddingBottom:6,borderBottom:`1px solid ${T.b1}`}}>
+                      <span style={{fontSize:12.5,fontWeight:800,color:T.t1}}>{pn}</span>
+                      <span style={{fontSize:10,color:T.t4}}>{groups[pn].length} item{groups[pn].length!==1?"s":""}</span>
+                    </div>
+                    {groups[pn].map(it=>(
+                      <div key={it._id} style={{display:"flex",alignItems:"center",gap:9,background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"8px 11px",marginBottom:6}}>
+                        <span style={{fontSize:9,fontWeight:700,color:MM_TYPE[it.type]?.color,background:MM_TYPE[it.type]?.bg,padding:"2px 6px",borderRadius:5,flexShrink:0}}>{MM_TYPE[it.type]?.label}</span>
+                        <span style={{flex:1,fontSize:12,color:T.t1,minWidth:0}}>{it.type==="task_update"?(it.task_name||it.title):it.title}{it.type==="mr"&&(it.quantity||it.unit)?<span style={{color:T.t4}}> · {it.quantity} {it.unit}</span>:null}{it.type==="task_update"?<span style={{color:T.t4}}> · {it.status||""}{it.progress>=0?` ${it.progress}%`:""}</span>:null}</span>
+                        {it.assignee?<span style={{fontSize:10,color:T.t3,flexShrink:0}}>@ {it.assignee}</span>:null}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </>
+            );
+          })()}
+
           {step==="done"&&result&&(()=>{
             const ok=result.refs.filter(r=>r.ok).length, by=tp=>result.refs.filter(r=>r.type===tp&&r.ok).length;
             return(
@@ -1112,6 +1174,11 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
           </>)}
           {step==="review"&&(<>
             <button onClick={()=>setStep("capture")} style={btnS}>← Back</button>
+            <div style={{flex:1}}/>
+            <button onClick={goOverview} disabled={!chosenCount} style={btnP(!!chosenCount)}>{`Overview (${chosenCount}) →`}</button>
+          </>)}
+          {step==="overview"&&(<>
+            <button onClick={()=>setStep("review")} style={btnS}>← Back</button>
             <div style={{flex:1}}/>
             <button onClick={commit} disabled={committing||!chosenCount} style={btnP(!committing&&!!chosenCount)}>{committing?"Ban raha hai…":`Approve & Create (${chosenCount})`}</button>
           </>)}
