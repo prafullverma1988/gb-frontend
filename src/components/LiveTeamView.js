@@ -53,8 +53,13 @@ function lastSeenText(min) {
   if (min < 1) return "Just now";
   if (min < 60) return `${min} min ago`;
   const h = Math.floor(min / 60);
-  const m = min % 60;
-  return m === 0 ? `${h}h ago` : `${h}h ${m}m ago`;
+  if (h < 24) {
+    const m = min % 60;
+    return m === 0 ? `${h}h ago` : `${h}h ${m}m ago`;
+  }
+  const d = Math.floor(h / 24);
+  const hr = h % 24;
+  return hr === 0 ? `${d}d ago` : `${d}d ${hr}h ago`;
 }
 
 export default function LiveTeamView() {

@@ -22,6 +22,17 @@ function loadGoogleMaps(apiKey) {
   return _gmapsPromise;
 }
 
+// Humanized "time ago" for the info window (mins → min/h/d)
+function agoText(min) {
+  if (min == null) return "";
+  if (min < 1) return "Just now";
+  if (min < 60) return `${min} min ago`;
+  const h = Math.floor(min / 60);
+  if (h < 24) return `${h}h ago`;
+  const d = Math.floor(h / 24);
+  return `${d}d ago`;
+}
+
 // SVG marker icon — colored pin with initials
 function pinIcon(google, color, label) {
   return {
@@ -130,7 +141,7 @@ export default function LiveLocationMap({
                 <div style="font-weight:700;font-size:13px;margin-bottom:3px">${m.name || ""}</div>
                 <div style="color:#6B7280">${m.project_name || (m.live_status === "off_duty" ? "Off duty" : "—")}</div>
                 <div style="color:#94A3B8;font-size:11px;margin-top:4px">
-                  ${m.minutes_since_ping != null ? `Last seen ${m.minutes_since_ping} min ago` : ""}
+                  ${m.minutes_since_ping != null ? `Last seen ${agoText(m.minutes_since_ping)}` : "Location pending"}
                 </div>
               </div>`;
             infoRef.current.setContent(html);
