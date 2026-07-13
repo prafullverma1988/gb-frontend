@@ -48,7 +48,15 @@ function AddPartyModal({ open, onClose, onSaved }) {
         opening_balance: form.opening_balance ? parseFloat(form.opening_balance) : 0,
         credit_days:     form.credit_days     ? parseInt(form.credit_days)       : 7,
       };
-      const r = await api.post("/finance/parties", payload);
+      let r = await api.post("/finance/parties", payload);
+      // Same-name party is blocked by default (one person = one party, extra
+      // roles go on the roles field). If it's genuinely a different person who
+      // happens to share the name, the user can confirm and force it.
+      if (r?.code === "duplicate_party") {
+        const ok = window.confirm(`${r.message}\n\nKya yeh ALAG insaan/firm hai jiska naam same hai? OK dabao to phir bhi ban jaayegi.`);
+        if (!ok) { setErr(r.message); setSaving(false); return; }
+        r = await api.post("/finance/parties", { ...payload, force: true });
+      }
       if (!r?.success) { setErr(r?.message || "Save failed"); setSaving(false); return; }
       onSaved && onSaved();
       onClose();
