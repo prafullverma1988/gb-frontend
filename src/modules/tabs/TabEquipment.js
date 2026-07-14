@@ -1,9 +1,12 @@
 import React, { useState, useEffect, useCallback } from "react";
 import api from "../../config/api";
 import { T, fmtN, localYMD } from "../shared/tokens";
-import { Pill, Stat, Panel, THead, AddBtn } from "../shared/ui";
+import { Pill, Stat, Panel, THead, AddBtn, FilterTabs } from "../shared/ui";
+import TabTripTracking from "./TabTripTracking";
 
 function TabEquipment({ projectId }) {
+  // Top-level view toggle: existing Equipment sections vs Trip Tracking.
+  const [view, setView] = useState("equipment");
   const [rows,    setRows]    = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
@@ -272,7 +275,14 @@ function TabEquipment({ projectId }) {
   const returned = rows.filter(r => r.status === "Returned").length;
 
   return (
-    <div style={{ padding: "16px 18px" }}>
+    <div>
+      <div style={{ padding: "14px 18px 0" }}>
+        <FilterTabs
+          options={[{ id: "equipment", label: "Equipment" }, { id: "trips", label: "Trip Tracking" }]}
+          active={view} onChange={setView} />
+      </div>
+      {view === "trips" ? <TabTripTracking projectId={projectId} /> : (
+      <div style={{ padding: "16px 18px" }}>
       {/* ── KPI: Total equipment cost ─────────────────────────────── */}
       <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 10, marginBottom: 14 }}>
         <Stat label="Total Equipment Cost" value={`₹${fmtN(Math.round(totalCost))}`}
@@ -663,6 +673,8 @@ function TabEquipment({ projectId }) {
             </div>
           </div>
         </div>
+      )}
+    </div>
       )}
     </div>
   );
