@@ -1,352 +1,223 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import api from "../../config/api";
 import { T } from "../shared/tokens";
-import { Pill, AddBtn, SecBtn, FilterTabs } from "../shared/ui";
+import { Pill, FilterTabs } from "../shared/ui";
 
-const D = { dpr:[], tasks:[] };
+// ── Site / DPR tab — read-only viewer for mobile-submitted DPRs ──
+// DPRs are submitted from the mobile app (with photos/GPS); the web
+// tab lists + renders them and lets an admin approve.
+function TabSite({ project, isAdmin }) {
+  const projectId = project?.id;
+  const [reports, setReports]   = useState([]);
+  const [loading, setLoading]   = useState(true);
+  const [selId, setSelId]       = useState(null);
+  const [view, setView]         = useState("overview");
+  const [approving, setApproving] = useState(false);
 
-function TabSite() {
-  const [selDPR, setSelDPR] = useState(D.dpr[0] || null);
-  const [view, setView]     = useState("overview");
+  const load = () => {
+    if (!projectId) return;
+    setLoading(true);
+    api.get(`/dpr?project_id=${projectId}&limit=60`).then(r => {
+      if (r.success) {
+        setReports(r.data || []);
+        if ((r.data || []).length) setSelId(prev => prev && r.data.find(d => d.id === prev) ? prev : r.data[0].id);
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  };
+  useEffect(load, [projectId]); // eslint-disable-line
+
+  const selDPR = reports.find(d => d.id === selId) || null;
+
+  const fmtDate = (d) => {
+    if (!d) return "";
+    const dt = new Date(d);
+    return dt.toLocaleDateString("en-IN", { weekday: "short", day: "2-digit", month: "short" });
+  };
+
+  const approveDPR = async () => {
+    if (!selDPR || approving) return;
+    setApproving(true);
+    try {
+      const r = await api.patch(`/dpr/${selDPR.id}/approve`, {});
+      if (r && r.success !== false) load();
+      else window.alert((r && r.message) || "Approve failed");
+    } catch (e) { window.alert(e.message || "Approve failed"); }
+    setApproving(false);
+  };
 
   const VIEWS = [
-    {id:"overview", l:"Overview"},
-    {id:"work",     l:"Work Done"},
-    {id:"material", l:"Materials"},
-    {id:"tasks",    l:"Tasks"},
-    {id:"photos",   l:"Photos"},
-    {id:"issues",   l:"Issues"},
+    { id: "overview", l: "Overview" },
+    { id: "work",     l: "Work Done" },
+    { id: "material", l: "Materials" },
+    { id: "photos",   l: "Photos" },
   ];
 
-  // dummy photos for site
-  const PHOTOS = [];
+  if (loading) return (
+    <div style={{ padding: "40px 18px", textAlign: "center", color: T.t4, fontSize: 13 }}>Loading DPRs...</div>
+  );
 
-  // tasks snapshot — from D.tasks
-  const allTasks = D.tasks.flatMap(t=>t.subtasks);
-  const inProgress = allTasks.filter(t=>t.status==="In Progress");
-  const notStarted = allTasks.filter(t=>t.status==="Not Started");
-  const done       = allTasks.filter(t=>t.status==="Done");
+  if (!reports.length) return (
+    <div style={{ padding: "48px 18px", textAlign: "center" }}>
+      <div style={{ fontSize: 34, opacity: .35, marginBottom: 10 }}>📋</div>
+      <div style={{ fontSize: 14, fontWeight: 700, color: T.t2, marginBottom: 5 }}>Abhi koi DPR nahi</div>
+      <div style={{ fontSize: 12.5, color: T.t4, maxWidth: 420, margin: "0 auto", lineHeight: 1.5 }}>
+        Daily Progress Report site se <b>mobile app</b> se submit hota hai (photos + labour + work done ke saath).
+        Submit hote hi yahan dikhega.
+      </div>
+    </div>
+  );
 
-  if(!selDPR) return null;
+  const work = selDPR?.activities || [];
+  const materials = selDPR?.materials || [];
+  const photos = selDPR?.photo_urls || [];
+  const labourTotal = (selDPR?.labour?.skilled || 0) + (selDPR?.labour?.unskilled || 0) + (selDPR?.labour?.supervisor || 0);
 
-  return(
-    <div style={{padding:"14px 18px"}}>
+  return (
+    <div style={{ padding: "14px 18px" }}>
 
-      {/* Header: date switcher + Submit DPR */}
-      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,flexWrap:"wrap",gap:8}}>
+      {/* Header: date switcher + approve */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12, flexWrap: "wrap", gap: 8 }}>
         <FilterTabs
-          options={D.dpr.map(e=>({id:e.date,label:e.date.split(" ").slice(0,2).join(" ")}))}
-          active={selDPR.date}
-          onChange={d=>setSelDPR(D.dpr.find(e=>e.date===d))}/>
-        <div style={{display:"flex",gap:7}}>
-          <SecBtn label="Export PDF"/>
-          <AddBtn label="Submit DPR"/>
-        </div>
+          options={reports.map(e => ({ id: e.id, label: fmtDate(e.report_date) }))}
+          active={selId}
+          onChange={id => { setSelId(id); setView("overview"); }} />
+        {selDPR && (
+          selDPR.approved_at
+            ? <Pill label={`✓ Approved${selDPR.approved_by_name ? " — " + selDPR.approved_by_name : ""}`} c={T.grn} bg={T.grnL} border={T.grnM} />
+            : isAdmin
+              ? <button onClick={approveDPR} disabled={approving}
+                  style={{ padding: "7px 16px", borderRadius: 7, background: T.grn, color: "white", border: "none", fontSize: 12, fontWeight: 700, cursor: "pointer" }}>
+                  {approving ? "Approving..." : "✓ Approve DPR"}
+                </button>
+              : <Pill label="Approval pending" c={T.amb} bg={T.ambL} border={T.ambM} />
+        )}
       </div>
 
-      {/* KPI tiles — always visible */}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(5,1fr)",gap:10,marginBottom:12}}>
+      {!selDPR ? null : (<>
+      {/* KPI tiles */}
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(5,1fr)", gap: 10, marginBottom: 12 }}>
         {[
-          {l:"Labour",  v:selDPR.labourCount, c:T.blu},
-          {l:"Machinery",v:selDPR.machinery,   c:T.slt},
-          {l:"Photos",  v:selDPR.photos,       c:T.grn},
-          {l:"Issues",  v:selDPR.issues.length,c:selDPR.issues.length>0?T.red:T.grn},
-          {l:"Weather", v:selDPR.weather.split(" ")[0], c:T.amb},
-        ].map((s,i)=>(
-          <div key={i} style={{padding:"9px 12px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-            <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{s.l}</div>
-            <div style={{fontSize:17,fontWeight:700,color:s.c,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{s.v}</div>
+          { l: "Labour",    v: labourTotal, c: T.blu },
+          { l: "Work Items",v: work.length, c: T.slt },
+          { l: "Photos",    v: photos.length, c: T.grn },
+          { l: "Issues",    v: selDPR.issues_count || 0, c: (selDPR.issues_count || 0) > 0 ? T.red : T.grn },
+          { l: "Weather",   v: selDPR.weather || "—", c: T.amb },
+        ].map((s, i) => (
+          <div key={i} style={{ padding: "9px 12px", background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 8, borderTop: `3px solid ${s.c}` }}>
+            <div style={{ fontSize: 9.5, color: T.t3, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 3 }}>{s.l}</div>
+            <div style={{ fontSize: 17, fontWeight: 700, color: s.c, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.v}</div>
           </div>
         ))}
       </div>
 
-      {/* Toggle bar — like material / transaction style */}
-      <div style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,padding:"4px",marginBottom:12,display:"flex",gap:2}}>
-        {VIEWS.map(v=>{
-          const isA=view===v.id;
-          // Badge counts
-          const badge = v.id==="issues"&&selDPR.issues.length>0?selDPR.issues.length
-            :v.id==="work"?selDPR.workDone.length
-            :v.id==="material"?selDPR.materials.length
-            :v.id==="tasks"?inProgress.length
-            :v.id==="photos"?PHOTOS.length
-            :null;
-          return(
-            <button key={v.id} onClick={()=>setView(v.id)}
-              style={{flex:1,padding:"7px 10px",borderRadius:6,border:"none",background:isA?T.blu:"none",color:isA?"white":T.t3,fontSize:12,fontWeight:isA?700:400,cursor:"pointer",transition:"all .15s",display:"flex",alignItems:"center",justifyContent:"center",gap:5,whiteSpace:"nowrap"}}>
+      {/* View toggle */}
+      <div style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 8, padding: "4px", marginBottom: 12, display: "flex", gap: 2 }}>
+        {VIEWS.map(v => {
+          const isA = view === v.id;
+          const badge = v.id === "work" ? work.length : v.id === "material" ? materials.length : v.id === "photos" ? photos.length : null;
+          return (
+            <button key={v.id} onClick={() => setView(v.id)}
+              style={{ flex: 1, padding: "7px 10px", borderRadius: 6, border: "none", background: isA ? T.blu : "none", color: isA ? "white" : T.t3, fontSize: 12, fontWeight: isA ? 700 : 400, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", gap: 5, whiteSpace: "nowrap" }}>
               {v.l}
-              {badge!=null&&<span style={{background:isA?"rgba(255,255,255,0.25)":T.b1,color:isA?"white":T.t3,fontSize:9.5,fontWeight:700,padding:"1px 6px",borderRadius:10,minWidth:18,textAlign:"center"}}>{badge}</span>}
+              {badge != null && badge > 0 && <span style={{ background: isA ? "rgba(255,255,255,0.25)" : T.b1, color: isA ? "white" : T.t3, fontSize: 9.5, fontWeight: 700, padding: "1px 6px", borderRadius: 10, minWidth: 18, textAlign: "center" }}>{badge}</span>}
             </button>
           );
         })}
       </div>
 
       {/* ── OVERVIEW ── */}
-      {view==="overview"&&(
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-          {/* Work summary */}
-          <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-            <div style={{padding:"9px 14px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>Work Done Today</span>
-              <span style={{fontSize:10.5,color:T.grn}}>{selDPR.workDone.length} items</span>
+      {view === "overview" && (
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div style={{ background: T.surface, borderRadius: 9, border: `1px solid ${T.b1}`, overflow: "hidden" }}>
+            <div style={{ padding: "9px 14px", background: T.grnL, borderBottom: `1px solid ${T.grnM}`, display: "flex", justifyContent: "space-between" }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: T.grn }}>Work Done Today</span>
+              <span style={{ fontSize: 10.5, color: T.grn }}>{work.length} items</span>
             </div>
-            <div style={{padding:"10px 14px"}}>
-              {selDPR.workDone.map((w,i)=>(
-                <div key={i} style={{display:"flex",gap:8,alignItems:"flex-start",marginBottom:7}}>
-                  <div style={{width:15,height:15,borderRadius:4,background:T.grnL,border:`1px solid ${T.grnM}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
-                    <svg width={8} height={8} viewBox="0 0 10 10" fill="none" stroke={T.grn} strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>
+            <div style={{ padding: "10px 14px" }}>
+              {work.length === 0 && <div style={{ fontSize: 12, color: T.t4 }}>Koi work item nahi</div>}
+              {work.map((w, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, alignItems: "flex-start", marginBottom: 7 }}>
+                  <div style={{ width: 15, height: 15, borderRadius: 4, background: T.grnL, border: `1px solid ${T.grnM}`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                    <svg width={8} height={8} viewBox="0 0 10 10" fill="none" stroke={T.grn} strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3" /></svg>
                   </div>
-                  <span style={{fontSize:12,color:T.t1,lineHeight:1.4}}>{w}</span>
+                  <span style={{ fontSize: 12, color: T.t1, lineHeight: 1.4 }}>
+                    {w.activity}{w.qty ? ` — ${w.qty} ${w.unit || ""}` : ""}{w.pct != null && w.pct !== "" ? ` (${w.pct}%)` : ""}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Materials used */}
-          <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-            <div style={{padding:"9px 14px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:T.blu}}>Materials Used</span>
-              <span style={{fontSize:10.5,color:T.blu}}>{selDPR.materials.length} items</span>
-            </div>
-            <div style={{padding:"10px 14px"}}>
-              {selDPR.materials.map((m,i)=>(
-                <div key={i} style={{display:"flex",gap:8,alignItems:"center",marginBottom:6}}>
-                  <div style={{width:6,height:6,borderRadius:"50%",background:T.blu,flexShrink:0}}/>
-                  <span style={{fontSize:12.5,color:T.t1}}>{m}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Tasks snapshot */}
-          <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-            <div style={{padding:"9px 14px",background:T.purL,borderBottom:`1px solid ${T.purM}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-              <span style={{fontSize:12.5,fontWeight:700,color:T.pur}}>Active Tasks</span>
-              <span style={{fontSize:10.5,color:T.pur}}>{inProgress.length} in progress</span>
-            </div>
-            <div style={{padding:"10px 14px"}}>
-              {inProgress.slice(0,4).map((t,i)=>(
-                <div key={i} style={{marginBottom:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:3}}>
-                    <span style={{fontSize:12,color:T.t1,fontWeight:500}}>{t.name}</span>
-                    <span style={{fontSize:11,fontWeight:600,color:T.blu}}>{t.progress}%</span>
-                  </div>
-                  <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden"}}>
-                    <div style={{height:"100%",width:`${t.progress}%`,background:T.blu,borderRadius:2}}/>
-                  </div>
-                  <div style={{fontSize:10,color:T.t4,marginTop:2}}>@{t.assignee.split(" ")[0]}</div>
-                </div>
-              ))}
-              {inProgress.length===0&&<div style={{fontSize:12,color:T.t4}}>No tasks in progress</div>}
-            </div>
-          </div>
-
-          {/* Photos + Issues combined */}
-          <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            {/* Photos mini */}
-            <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              <div style={{padding:"9px 14px",background:"#F0FDF4",borderBottom:`1px solid ${T.grnM}`,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-                <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>Site Photos</span>
-                <div style={{display:"flex",gap:6}}>
-                  <button style={{fontSize:10.5,color:T.grn,background:"none",border:`1px solid ${T.grnM}`,borderRadius:5,padding:"2px 8px",cursor:"pointer"}}>Camera</button>
-                  <button style={{fontSize:10.5,color:T.grn,background:"none",border:`1px solid ${T.grnM}`,borderRadius:5,padding:"2px 8px",cursor:"pointer"}}>Upload</button>
-                </div>
-              </div>
-              <div style={{padding:"10px 14px",display:"flex",gap:8}}>
-                {PHOTOS.slice(0,3).map((p,i)=>(
-                  <div key={i} style={{width:64,height:64,borderRadius:7,background:p.color+"22",border:`2px solid ${p.color}33`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer",fontSize:18}}>
-                    📷
-                  </div>
-                ))}
-                {PHOTOS.length>3&&<div style={{width:64,height:64,borderRadius:7,background:T.surfaceB,border:`1px solid ${T.b1}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,cursor:"pointer"}}>
-                  <span style={{fontSize:11.5,fontWeight:600,color:T.t3}}>+{PHOTOS.length-3}</span>
-                </div>}
-              </div>
-            </div>
-            {/* Issues */}
-            {selDPR.issues.length>0&&(
-              <div style={{padding:"10px 13px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:9,borderLeft:`4px solid ${T.red}`}}>
-                <div style={{fontSize:11.5,fontWeight:700,color:T.red,marginBottom:6}}>Issues / Snags</div>
-                {selDPR.issues.map((issue,i)=>(
-                  <div key={i} style={{fontSize:12,color:T.red,marginBottom:3,display:"flex",gap:6}}>
-                    <span>•</span><span>{issue}</span>
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {/* Labour breakdown */}
+            <div style={{ background: T.surface, borderRadius: 9, border: `1px solid ${T.b1}`, padding: "10px 14px" }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 8 }}>Labour</div>
+              <div style={{ display: "flex", gap: 10 }}>
+                {[["Skilled", selDPR.labour?.skilled || 0], ["Unskilled", selDPR.labour?.unskilled || 0], ["Supervisor", selDPR.labour?.supervisor || 0]].map(([l, v]) => (
+                  <div key={l} style={{ flex: 1, background: T.surfaceB, borderRadius: 7, padding: "8px 10px", border: `1px solid ${T.b1}` }}>
+                    <div style={{ fontSize: 9.5, color: T.t4 }}>{l}</div>
+                    <div style={{ fontSize: 16, fontWeight: 800, color: T.t1 }}>{v}</div>
                   </div>
                 ))}
               </div>
-            )}
-            {/* Submitted by */}
-            <div style={{padding:"8px 12px",background:T.surface,borderRadius:7,border:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-              <span style={{fontSize:11.5,color:T.t4}}>Submitted by <strong style={{color:T.t1}}>{selDPR.by}</strong></span>
-              <span style={{fontSize:11,color:T.t4}}>{selDPR.date}</span>
+            </div>
+            {/* Remarks + submitted-by */}
+            <div style={{ background: T.surface, borderRadius: 9, border: `1px solid ${T.b1}`, padding: "10px 14px", flex: 1 }}>
+              <div style={{ fontSize: 10.5, fontWeight: 700, color: T.t3, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 6 }}>Remarks</div>
+              <div style={{ fontSize: 12.5, color: selDPR.remarks ? T.t1 : T.t4, lineHeight: 1.5 }}>{selDPR.remarks || "Koi remark nahi"}</div>
+              <div style={{ marginTop: 10, paddingTop: 8, borderTop: `1px dashed ${T.b1}`, fontSize: 11.5, color: T.t4 }}>
+                Submitted by <strong style={{ color: T.t1 }}>{selDPR.submitted_by_name || "—"}</strong>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {/* ── WORK DONE ── */}
-      {view==="work"&&(
-        <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          <div style={{padding:"9px 14px",background:T.grnL,borderBottom:`1px solid ${T.grnM}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:13,fontWeight:700,color:T.grn}}>Work Done — {selDPR.date}</span>
-            <AddBtn label="Add Work Item"/>
+      {view === "work" && (
+        <div style={{ background: T.surface, borderRadius: 9, border: `1px solid ${T.b1}`, overflow: "hidden" }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 100px 90px 90px", padding: "8px 14px", background: T.surfaceB, borderBottom: `2px solid ${T.b1}` }}>
+            {["Activity", "Qty", "Workers", "Progress"].map(h => <span key={h} style={{ fontSize: 10, fontWeight: 700, color: T.t4, textTransform: "uppercase" }}>{h}</span>)}
           </div>
-          <div style={{padding:"12px 16px"}}>
-            {selDPR.workDone.map((w,i)=>(
-              <div key={i} style={{display:"flex",gap:10,alignItems:"flex-start",padding:"9px 0",borderBottom:`1px solid ${T.b1}`}}>
-                <div style={{width:18,height:18,borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0,marginTop:1}}>
-                  <svg width={9} height={9} viewBox="0 0 10 10" fill="none" stroke={T.grn} strokeWidth={2.2}><path d="M2 5l2.5 2.5L8 3"/></svg>
-                </div>
-                <span style={{fontSize:13,color:T.t1,lineHeight:1.5,flex:1}}>{w}</span>
-              </div>
-            ))}
-          </div>
+          {work.length === 0 && <div style={{ padding: "24px", textAlign: "center", color: T.t4, fontSize: 12.5 }}>Koi work item nahi</div>}
+          {work.map((w, i) => (
+            <div key={i} style={{ display: "grid", gridTemplateColumns: "1fr 100px 90px 90px", padding: "10px 14px", borderBottom: `1px solid ${T.b1}`, alignItems: "center" }}>
+              <span style={{ fontSize: 12.5, color: T.t1, fontWeight: 500 }}>{w.activity}</span>
+              <span style={{ fontSize: 12, color: T.t2 }}>{w.qty ? `${w.qty} ${w.unit || ""}` : "—"}</span>
+              <span style={{ fontSize: 12, color: T.t2 }}>{w.workers || "—"}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: T.blu }}>{w.pct != null && w.pct !== "" ? `${w.pct}%` : "—"}</span>
+            </div>
+          ))}
         </div>
       )}
 
       {/* ── MATERIALS ── */}
-      {view==="material"&&(
-        <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-          <div style={{padding:"9px 14px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <span style={{fontSize:13,fontWeight:700,color:T.blu}}>Materials Used — {selDPR.date}</span>
-            <AddBtn label="Add Material"/>
-          </div>
-          <div style={{padding:"12px 16px"}}>
-            {selDPR.materials.map((m,i)=>(
-              <div key={i} style={{display:"flex",gap:10,alignItems:"center",padding:"9px 0",borderBottom:`1px solid ${T.b1}`}}>
-                <div style={{width:8,height:8,borderRadius:"50%",background:T.blu,flexShrink:0}}/>
-                <span style={{fontSize:13,color:T.t1,flex:1}}>{m}</span>
-                <SecBtn label="Edit"/>
+      {view === "material" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(3,1fr)", gap: 10 }}>
+          {materials.length === 0 && <div style={{ gridColumn: "1/-1", padding: "24px", textAlign: "center", color: T.t4, fontSize: 12.5, background: T.surface, borderRadius: 9, border: `1px solid ${T.b1}` }}>Koi material entry nahi</div>}
+          {materials.map((m, i) => (
+            <div key={i} style={{ background: T.surface, borderRadius: 9, border: `1px solid ${T.b1}`, padding: "10px 13px" }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{m.name}</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: T.blu, marginTop: 3 }}>
+                {m.qty} <span style={{ fontSize: 10.5, fontWeight: 400, color: T.t4 }}>{m.unit || ""}</span>
               </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ── TASKS ── */}
-      {view==="tasks"&&(
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {/* Stats */}
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:10}}>
-            {[{l:"In Progress",v:inProgress.length,c:T.blu},{l:"Done",v:done.length,c:T.grn},{l:"Not Started",v:notStarted.length,c:T.slt}].map((s,i)=>(
-              <div key={i} style={{padding:"10px 13px",background:T.surface,border:`1px solid ${T.b1}`,borderRadius:8,borderTop:`3px solid ${s.c}`}}>
-                <div style={{fontSize:9.5,color:T.t3,fontWeight:600,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>{s.l}</div>
-                <div style={{fontSize:20,fontWeight:700,color:s.c}}>{s.v}</div>
-              </div>
-            ))}
-          </div>
-          {/* In Progress tasks */}
-          {inProgress.length>0&&(
-            <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              <div style={{padding:"9px 14px",background:T.bluL,borderBottom:`1px solid ${T.bluM}`}}>
-                <span style={{fontSize:12.5,fontWeight:700,color:T.blu}}>In Progress ({inProgress.length})</span>
-              </div>
-              {inProgress.map((t,i)=>(
-                <div key={i} style={{padding:"10px 15px",borderBottom:`1px solid ${T.b1}`,transition:"background .1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-                    <span style={{fontSize:12.5,fontWeight:600,color:T.t1}}>{t.name}</span>
-                    <span style={{fontSize:12,fontWeight:700,color:T.blu}}>{t.progress}%</span>
-                  </div>
-                  <div style={{height:5,background:T.b1,borderRadius:3,overflow:"hidden",marginBottom:5}}>
-                    <div style={{height:"100%",width:`${t.progress}%`,background:T.blu,borderRadius:3}}/>
-                  </div>
-                  <div style={{display:"flex",gap:10}}>
-                    <span style={{fontSize:11,color:T.t4}}>@{t.assignee}</span>
-                    <span style={{fontSize:11,color:T.t4}}>{t.start} → {t.end}</span>
-                  </div>
-                </div>
-              ))}
             </div>
-          )}
-          {/* Not started */}
-          {notStarted.length>0&&(
-            <div style={{background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,overflow:"hidden"}}>
-              <div style={{padding:"9px 14px",background:T.sltL,borderBottom:`1px solid ${T.b2}`}}>
-                <span style={{fontSize:12.5,fontWeight:700,color:T.slt}}>Not Started ({notStarted.length})</span>
-              </div>
-              {notStarted.map((t,i)=>(
-                <div key={i} style={{padding:"9px 15px",borderBottom:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center",transition:"background .1s"}}
-                  onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
-                  onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                  <div>
-                    <div style={{fontSize:12.5,fontWeight:500,color:T.t2,marginBottom:2}}>{t.name}</div>
-                    <div style={{fontSize:10.5,color:T.t4}}>@{t.assignee} · {t.start} → {t.end}</div>
-                  </div>
-                  <Pill label="Not Started" c={T.slt} bg={T.sltL}/>
-                </div>
-              ))}
-            </div>
-          )}
+          ))}
         </div>
       )}
 
       {/* ── PHOTOS ── */}
-      {view==="photos"&&(
-        <div>
-          <div style={{display:"flex",gap:8,marginBottom:12}}>
-            <button style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:7,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-              📷 Take Photo
-            </button>
-            <button style={{display:"flex",alignItems:"center",gap:5,padding:"7px 14px",borderRadius:7,background:T.bluL,border:`1px solid ${T.bluM}`,color:T.blu,fontSize:12,fontWeight:600,cursor:"pointer"}}>
-              📁 Upload from Gallery
-            </button>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(180px,1fr))",gap:12}}>
-            {PHOTOS.map((p,i)=>(
-              <div key={i} style={{borderRadius:9,overflow:"hidden",border:`1px solid ${T.b1}`,background:T.surface,cursor:"pointer",transition:"box-shadow .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.boxShadow="0 4px 16px rgba(0,0,0,0.1)"}
-                onMouseLeave={e=>e.currentTarget.style.boxShadow="none"}>
-                {/* Photo placeholder */}
-                <div style={{height:130,background:`linear-gradient(135deg,${p.color}22,${p.color}44)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:36}}>📷</div>
-                <div style={{padding:"8px 10px"}}>
-                  <div style={{fontSize:11.5,fontWeight:600,color:T.t1,marginBottom:2}}>{p.caption}</div>
-                  <div style={{display:"flex",justifyContent:"space-between"}}>
-                    <span style={{fontSize:10.5,color:T.t4}}>{p.by.split(" ")[0]}</span>
-                    <span style={{fontSize:10.5,color:T.t4}}>{p.date}</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-            {/* Add photo placeholder */}
-            <div style={{height:192,borderRadius:9,border:`2px dashed ${T.b2}`,background:T.surfaceB,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",cursor:"pointer",gap:8,transition:"all .15s"}}
-              onMouseEnter={e=>{e.currentTarget.style.borderColor=T.blu;e.currentTarget.style.background=T.bluL;}}
-              onMouseLeave={e=>{e.currentTarget.style.borderColor=T.b2;e.currentTarget.style.background=T.surfaceB;}}>
-              <span style={{fontSize:28}}>📷</span>
-              <span style={{fontSize:12,color:T.t4,fontWeight:500}}>Add Photo</span>
-            </div>
-          </div>
+      {view === "photos" && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(4,1fr)", gap: 10 }}>
+          {photos.length === 0 && <div style={{ gridColumn: "1/-1", padding: "24px", textAlign: "center", color: T.t4, fontSize: 12.5, background: T.surface, borderRadius: 9, border: `1px solid ${T.b1}` }}>Is DPR me photos nahi hain</div>}
+          {photos.map((url, i) => (
+            <a key={i} href={url} target="_blank" rel="noreferrer" style={{ display: "block", borderRadius: 9, overflow: "hidden", border: `1px solid ${T.b1}`, background: T.surfaceB }}>
+              <img src={url} alt={`Site photo ${i + 1}`} loading="lazy" style={{ width: "100%", height: 130, objectFit: "cover", display: "block" }} />
+            </a>
+          ))}
         </div>
       )}
-
-      {/* ── ISSUES ── */}
-      {view==="issues"&&(
-        <div>
-          <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
-            <AddBtn label="Report Issue"/>
-          </div>
-          {selDPR.issues.length===0
-            ?<div style={{padding:"48px",textAlign:"center",background:T.surface,borderRadius:9,border:`1px solid ${T.b1}`,color:T.grn}}>
-                <div style={{fontSize:28,marginBottom:10}}>✓</div>
-                <div style={{fontSize:13,fontWeight:600}}>No issues reported today</div>
-              </div>
-            :<div>
-              {selDPR.issues.map((issue,i)=>(
-                <div key={i} style={{display:"flex",gap:12,alignItems:"flex-start",padding:"11px 14px",background:T.surface,borderRadius:8,border:`1px solid ${T.redM}`,borderLeft:`4px solid ${T.red}`,marginBottom:8,boxShadow:`0 1px 4px ${T.red}18`}}>
-                  <div style={{width:28,height:28,borderRadius:7,background:T.redL,border:`1px solid ${T.redM}`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
-                    <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke={T.red} strokeWidth={2}><path d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4M12 17h.01"/></svg>
-                  </div>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,color:T.red,fontWeight:500,lineHeight:1.4}}>{issue}</div>
-                    <div style={{fontSize:10.5,color:T.t4,marginTop:4}}>{selDPR.date} · {selDPR.by}</div>
-                  </div>
-                  <button style={{padding:"4px 10px",borderRadius:5,background:T.grnL,border:`1px solid ${T.grnM}`,color:T.grn,fontSize:10.5,fontWeight:600,cursor:"pointer",flexShrink:0}}>Resolve</button>
-                </div>
-              ))}
-            </div>
-          }
-        </div>
-      )}
-
+      </>)}
     </div>
   );
 }

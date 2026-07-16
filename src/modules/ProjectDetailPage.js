@@ -692,7 +692,7 @@ function ProjectDetailPage({project=PROJ, onBack, onSwitchProject}) {
     subcon:      <TabSubcon projectId={project.id} project={project}/>,
     equipment:   <TabEquipment projectId={project.id}/>,
     files:       <TabFiles projectId={project.id}/>,
-    site:        <TabSite/>,
+    site:        <TabSite project={project} isAdmin={isAdmin}/>,
     mom:         <TabMOM project={project}/>,
     // ── Solar EPC tabs ──
     solar_stages:  <TabSuryaGhar  projectId={project.id}/>,

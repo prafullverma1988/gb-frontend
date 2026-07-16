@@ -434,15 +434,50 @@ function RolesAccess() {
 
   const openCreateRole = () => { setEditingRole(null); setRoleForm({ name: "", desc: "", color: T.teal }); setShowRoleModal(true); };
   const openEditRole = (r) => { setEditingRole(r); setRoleForm({ name: r.name, desc: r.desc, color: r.color }); setShowRoleModal(true); };
-  const saveRole = () => {
-    if (!roleForm.name.trim()) return;
-    if (editingRole) {
-      setRoles(prev => prev.map(r => r.id === editingRole.id ? { ...r, name: roleForm.name, desc: roleForm.desc, color: roleForm.color, colorBg: roleForm.color + "15" } : r));
-    } else {
-      const id = roleForm.name.toLowerCase().replace(/\s+/g, "_");
-      setRoles(prev => [...prev, { id, name: roleForm.name, desc: roleForm.desc, color: roleForm.color, colorBg: roleForm.color + "15", isSystem: false }]);
-    }
-    setShowRoleModal(false);
+  // Custom roles persist via /settings/roles — system roles keep only
+  // local desc/color edits (their names are wired into permission mapping).
+  const [roleSaving, setRoleSaving] = useState(false);
+  const reloadDbRoles = () => api.get("/settings/roles").then(r => { if (r.success) setDbRoles(r.data || []); }).catch(() => {});
+  const saveRole = async () => {
+    if (!roleForm.name.trim() || roleSaving) return;
+    setRoleSaving(true);
+    try {
+      if (editingRole) {
+        if (editingRole.isSystem) {
+          // System role: naam DB/permission mapping se juda hai — sirf desc/color local.
+          setRoles(prev => prev.map(r => r.id === editingRole.id ? { ...r, desc: roleForm.desc, color: roleForm.color, colorBg: roleForm.color + "15" } : r));
+        } else {
+          const res = await api.put("/settings/roles/" + editingRole.dbId, { name: roleForm.name, description: roleForm.desc });
+          if (!res?.success) { alert(res?.message || "Role update failed"); setRoleSaving(false); return; }
+          const slug = res.data?.slug || editingRole.id;
+          setRoles(prev => prev.map(r => r.id === editingRole.id ? { ...r, id: slug, name: roleForm.name, desc: roleForm.desc, color: roleForm.color, colorBg: roleForm.color + "15" } : r));
+          if (selectedRole === editingRole.id) setSelectedRole(slug);
+          reloadDbRoles(); loadUsers();
+        }
+      } else {
+        const res = await api.post("/settings/roles", { name: roleForm.name, description: roleForm.desc });
+        if (!res?.success) { alert(res?.message || "Role create failed"); setRoleSaving(false); return; }
+        const slug = res.data?.slug || roleForm.name.toLowerCase().replace(/\s+/g, "_");
+        setRoles(prev => [...prev, { id: slug, dbId: res.data?.id, name: roleForm.name, desc: roleForm.desc, color: roleForm.color, colorBg: roleForm.color + "15", isSystem: false }]);
+        setPermMatrix(prev => ({ ...prev, [slug]: prev[slug] || {} }));
+        setSelectedRole(slug);
+        reloadDbRoles();
+      }
+      setShowRoleModal(false);
+    } finally { setRoleSaving(false); }
+  };
+  const deleteRole = async () => {
+    if (!editingRole || editingRole.isSystem || roleSaving) return;
+    if (!window.confirm(`"${editingRole.name}" role delete karein? (Users pe laga role pehle badalna hoga)`)) return;
+    setRoleSaving(true);
+    try {
+      const res = await api.del("/settings/roles/" + editingRole.dbId);
+      if (!res?.success) { alert(res?.message || "Role delete failed"); return; }
+      setRoles(prev => prev.filter(r => r.id !== editingRole.id));
+      if (selectedRole === editingRole.id) setSelectedRole("project_manager");
+      reloadDbRoles();
+      setShowRoleModal(false);
+    } finally { setRoleSaving(false); }
   };
 
   // User form
@@ -589,13 +624,31 @@ function RolesAccess() {
     api.get("/settings/roles").then(res => {
       if (!res.success || !res.data?.length) return;
       setDbRoles(res.data);
-      // Pre-populate permMatrix from DB — overrides hardcoded defaults
+      const slugOf = (n) => (n || "").toLowerCase().replace(/[\s&]+/g, "_").replace(/_+/g, "_");
+      const SYSTEM_SLUGS = ["admin", "project_manager", "supervisor", "site_supervisor", "accountant", "viewer", "super_admin", "staff"];
+      // ── Custom roles → role cards (persisted via POST /settings/roles) ──
+      const rolePalette = [T.teal, "#E11D48", "#DB2777", "#0891B2", "#CA8A04", T.purple];
+      const customs = res.data.filter(r => !SYSTEM_SLUGS.includes(slugOf(r.name)));
+      if (customs.length) {
+        setRoles(prev => {
+          const have = new Set(prev.map(r => r.id));
+          const added = customs
+            .filter(c => !have.has(slugOf(c.name)))
+            .map((c, i) => {
+              const col = rolePalette[i % rolePalette.length];
+              return { id: slugOf(c.name), dbId: c.id, name: c.name, desc: c.description || "", color: col, colorBg: col + "15", isSystem: false };
+            });
+          return added.length ? [...prev, ...added] : prev;
+        });
+      }
+      // Pre-populate permMatrix from DB — overrides hardcoded defaults.
+      // Custom roles (unknown keys) start empty so the matrix is editable.
       setPermMatrix(prev => {
         const next = { ...prev };
         for (const dbRole of res.data) {
           // Match by slug: "Project Manager" → "project_manager"
-          const key = (dbRole.name || "").toLowerCase().replace(/[\s&]+/g, "_").replace(/_+/g, "_");
-          if (next[key] === undefined) continue;
+          const key = slugOf(dbRole.name);
+          if (next[key] === undefined) next[key] = {};
           const modMap = {};
           for (const p of (dbRole.permissions || [])) {
             const perms = [];
@@ -903,7 +956,7 @@ function RolesAccess() {
 
       {/* ── Modal: Create / Edit Role ── */}
       <Modal open={showRoleModal} onClose={() => setShowRoleModal(false)} title={editingRole ? "Edit Role" : "Create Custom Role"} desc="Define role name, description, and color" width={480}>
-        <FormField label="Role Name" value={roleForm.name} onChange={v => setRoleForm(p => ({ ...p, name: v }))} placeholder="e.g. Site Engineer" />
+        <FormField label="Role Name" value={roleForm.name} onChange={v => setRoleForm(p => ({ ...p, name: v }))} placeholder="e.g. Site Engineer" disabled={!!(editingRole && editingRole.isSystem)} />
         <div style={{ height: 14 }} />
         <FormField label="Description" value={roleForm.desc} onChange={v => setRoleForm(p => ({ ...p, desc: v }))} placeholder="What can this role do?" />
         <div style={{ height: 16 }} />
@@ -917,10 +970,19 @@ function RolesAccess() {
           </div>
         </div>
         <div style={{ height: 20 }} />
-        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+        <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", alignItems: "center" }}>
+          {editingRole && !editingRole.isSystem && (
+            <button onClick={deleteRole} disabled={roleSaving}
+              style={{ marginRight: "auto", padding: "10px 16px", borderRadius: 8, border: "1.5px solid #FECACA", background: "#FEF2F2", fontSize: 13, fontWeight: 600, color: "#DC2626", cursor: "pointer" }}>
+              Delete Role
+            </button>
+          )}
+          {editingRole && editingRole.isSystem && (
+            <span style={{ marginRight: "auto", fontSize: 11, color: T.textLight }}>System role — naam change nahi hota</span>
+          )}
           <button onClick={() => setShowRoleModal(false)} style={{ padding: "10px 20px", borderRadius: 8, border: `1.5px solid ${T.border}`, background: "white", fontSize: 13, fontWeight: 600, color: T.textMid, cursor: "pointer" }}>Cancel</button>
-          <button onClick={saveRole} style={{ padding: "10px 24px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: "pointer" }}>
-            {editingRole ? "Update Role" : "Create Role"}
+          <button onClick={saveRole} disabled={roleSaving} style={{ padding: "10px 24px", borderRadius: 8, background: `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: roleSaving ? "wait" : "pointer", opacity: roleSaving ? .7 : 1 }}>
+            {roleSaving ? "Saving..." : editingRole ? "Update Role" : "Create Role"}
           </button>
         </div>
       </Modal>

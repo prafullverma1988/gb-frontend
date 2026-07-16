@@ -1844,7 +1844,10 @@ export default function App(){
     };
     refreshPerms();
     window.addEventListener("focus", refreshPerms);
-    return()=>window.removeEventListener("focus", refreshPerms);
+    // 60s poll (same cadence as the mobile app) — an admin's permission
+    // change or a subscription lapse lands without waiting for a refocus.
+    const pollId=setInterval(refreshPerms, 60_000);
+    return()=>{window.removeEventListener("focus", refreshPerms);clearInterval(pollId);};
   },[loggedIn]);
 
   // ── Global keyboard shortcuts ────────────────────────────────────────

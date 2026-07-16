@@ -603,26 +603,37 @@ function NewProjectModal({onClose,onCreated}){
 function DuplicateModal({project,onClose,onConfirm}){
   const [step,setStep]=useState(1);const [done,setDone]=useState(false);
   const [form,setForm]=useState({name:`${project.name} — Copy`,city:project.city,boq:project.boq,start:"",end:""});
-  const [pm,setPM]=useState(project.pm);const [sup,setSup]=useState("");
+  const [saving,setSaving]=useState(false);const [error,setError]=useState("");
+  const [tasksCopied,setTasksCopied]=useState(null);
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
-  const handleCreate=()=>{setDone(true);setTimeout(()=>{onConfirm({...project,id:Date.now(),name:form.name,city:form.city,boq:Number(form.boq),pm,progress:0,status:"Not Started",expense:0,start:form.start||"TBD",end:form.end||"TBD"});onClose();},1400);};
+  // Real duplicate: POST /projects/:id/duplicate (copies task tree, resets execution)
+  const handleCreate=async()=>{
+    if(!form.name.trim()) return setError("New project name required");
+    setSaving(true);setError("");
+    try{
+      const res=await onConfirm({name:form.name.trim(),city:form.city,boq_value:Number(form.boq)||0,start_date:form.start||null,end_date:form.end||null});
+      if(res&&res.success){ setTasksCopied(res.tasks_copied??null); setDone(true); setTimeout(onClose,1600); }
+      else setError((res&&res.message)||"Duplicate failed");
+    }catch(e){ setError(e.message||"Duplicate failed"); }
+    setSaving(false);
+  };
   return(<>
     <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:C.w,borderRadius:16,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:`linear-gradient(135deg,${C.p},${C.p2})`,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
         <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}><IcCopy size={17} color="white"/></div>
-        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"white"}}>Duplicate Project</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.72)"}}>Tasks, dependencies & BOQ carry over automatically</div></div>
+        <div style={{flex:1}}><div style={{fontSize:14,fontWeight:800,color:"white"}}>Duplicate Project</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.72)"}}>Tasks, schedule & dependencies carry over automatically</div></div>
         <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",cursor:"pointer",color:"white",padding:"5px 7px",borderRadius:7,display:"flex"}}><IcX size={14}/></button>
       </div>
       {/* Steps */}
       <div style={{display:"flex",alignItems:"center",padding:"10px 20px",borderBottom:`1px solid ${C.b}`,background:"#FAFBFF"}}>
-        {["Project Details","Team Assignment","Review"].map((s,i)=>(
-          <div key={i} style={{display:"flex",alignItems:"center",flex:i<2?1:"auto"}}>
+        {["Project Details","Review"].map((s,i)=>(
+          <div key={i} style={{display:"flex",alignItems:"center",flex:i<1?1:"auto"}}>
             <div style={{display:"flex",alignItems:"center",gap:6}}>
               <div style={{width:24,height:24,borderRadius:"50%",background:step>i+1?C.g:step===i+1?C.p:C.b,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700,color:step>=i+1?"white":C.tl,transition:"all 0.3s",flexShrink:0}}>{step>i+1?"✓":i+1}</div>
               <span style={{fontSize:11,fontWeight:step===i+1?700:400,color:step===i+1?C.p:step>i+1?C.g:C.tl,whiteSpace:"nowrap"}}>{s}</span>
             </div>
-            {i<2&&<div style={{flex:1,height:2,background:step>i+1?C.g:C.b,margin:"0 10px",borderRadius:2,transition:"background 0.3s"}}/>}
+            {i<1&&<div style={{flex:1,height:2,background:step>i+1?C.g:C.b,margin:"0 10px",borderRadius:2,transition:"background 0.3s"}}/>}
           </div>
         ))}
       </div>
@@ -640,36 +651,23 @@ function DuplicateModal({project,onClose,onConfirm}){
               </div>
             ))}
           </div>
-          <div style={{background:C.gl,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.g,display:"flex",gap:6,marginTop:12}}><span>✅</span><span>All tasks, BOQ items, dependencies & phases will be copied automatically.</span></div>
+          <div style={{background:C.gl,borderRadius:8,padding:"8px 12px",fontSize:11,color:C.g,display:"flex",gap:6,marginTop:12}}><span>✅</span><span>Saare tasks, schedule & dependencies copy honge. Progress/kharcha/estimate copy NAHI hota — naya project clean shuru hota hai.</span></div>
         </div>}
-        {step===2&&<div>
-          <p style={{fontSize:11.5,color:C.tl,margin:"0 0 14px"}}>Click to assign team for the new project.</p>
-          {[{role:"Project Manager",val:pm,setter:setPM,prev:project.pm},{role:"Site Supervisor",val:sup,setter:setSup,prev:""}].map(({role,val,setter,prev})=>(
-            <div key={role} style={{marginBottom:14}}>
-              <div style={{fontSize:10,fontWeight:700,color:C.tm,textTransform:"uppercase",letterSpacing:"0.5px",marginBottom:7}}>{role}</div>
-              <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-                {TEAM.map(t=><button key={t.id} onClick={()=>setter(t.name)} style={{padding:"6px 11px",borderRadius:7,border:`1.5px solid ${val===t.name?t.color:C.b}`,background:val===t.name?t.color+"14":C.bg,fontSize:11.5,color:val===t.name?t.color:C.tm,fontWeight:val===t.name?700:400,cursor:"pointer",display:"flex",alignItems:"center",gap:6,transition:"all 0.15s"}}>
-                  <div style={{width:20,height:20,borderRadius:"50%",background:val===t.name?t.color:C.b,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,fontWeight:700,color:val===t.name?"white":C.tl}}>{t.initials}</div>
-                  {t.name}{prev===t.name&&<span style={{fontSize:8.5,color:C.tl}}>(prev)</span>}
-                </button>)}
-              </div>
-            </div>
-          ))}
-        </div>}
-        {step===3&&(!done
+        {step===2&&(!done
           ?<div>
             <div style={{fontSize:12,fontWeight:700,color:C.t,marginBottom:10}}>Review before creating:</div>
-            {[["Project Name",form.name],["City",form.city],["BOQ",`₹${Number(form.boq).toLocaleString("en-IN")}`],["PM",pm],["Supervisor",sup],["Timeline",`${form.start||"TBD"} → ${form.end||"TBD"}`],["Initial Status","Not Started · 0%"],["Carry Over","Tasks · BOQ · Phases · Dependencies"]].map(([k,v])=>(
+            {[["Project Name",form.name],["City",form.city],["BOQ",`₹${Number(form.boq).toLocaleString("en-IN")}`],["Timeline",`${form.start||"TBD"} → ${form.end||"TBD"}`],["Initial Status","Not Started · 0%"],["Carry Over","Tasks · Schedule · Dependencies"]].map(([k,v])=>(
               <div key={k} style={{display:"flex",padding:"7px 0",borderBottom:`1px solid ${C.b}`}}><span style={{width:140,fontSize:11.5,color:C.tl,flexShrink:0}}>{k}</span><span style={{fontSize:11.5,fontWeight:600,color:C.t}}>{v}</span></div>
             ))}
+            {error&&<div style={{marginTop:10,background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:7,padding:"8px 11px",fontSize:11.5,color:"#DC2626"}}>{error}</div>}
           </div>
-          :<div style={{textAlign:"center",padding:"28px 0"}}><div style={{fontSize:44,marginBottom:10}}>✅</div><div style={{fontSize:15,fontWeight:800,color:C.g}}>Project Created!</div><div style={{fontSize:12,color:C.tl,marginTop:4}}>{form.name} added.</div></div>
+          :<div style={{textAlign:"center",padding:"28px 0"}}><div style={{fontSize:44,marginBottom:10}}>✅</div><div style={{fontSize:15,fontWeight:800,color:C.g}}>Project Created!</div><div style={{fontSize:12,color:C.tl,marginTop:4}}>{form.name} added{tasksCopied!=null?` · ${tasksCopied} tasks copied`:""}.</div></div>
         )}
       </div>
       {!done&&<div style={{padding:"12px 20px",borderTop:`1px solid ${C.b}`,display:"flex",gap:8,background:"#FAFBFF"}}>
         {step>1&&<button onClick={()=>setStep(s=>s-1)} style={{flex:1,padding:"9px",borderRadius:8,border:`1.5px solid ${C.b}`,background:C.bg,fontSize:12,fontWeight:600,color:C.tm,cursor:"pointer"}}>← Back</button>}
-        <button onClick={step<3?()=>setStep(s=>s+1):handleCreate} style={{flex:2,padding:"9px",borderRadius:8,background:step===3?`linear-gradient(135deg,${C.g},#388E3C)`:`linear-gradient(135deg,${C.p},${C.p2})`,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
-          {step===1?"Next: Team →":step===2?"Next: Review →":"✓ Create Duplicate"}
+        <button disabled={saving} onClick={step<2?()=>setStep(2):handleCreate} style={{flex:2,padding:"9px",borderRadius:8,background:step===2?`linear-gradient(135deg,${C.g},#388E3C)`:`linear-gradient(135deg,${C.p},${C.p2})`,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:saving?"wait":"pointer",opacity:saving?.7:1}}>
+          {step===1?"Next: Review →":saving?"Creating...":"✓ Create Duplicate"}
         </button>
       </div>}
     </div>
@@ -3400,28 +3398,14 @@ function ProjectsPage({onSelectProject}){
           setSettingsOf(null);
         }}
       />}
-      {dupOf&&<DuplicateModal project={dupOf} onClose={()=>setDupOf(null)} onConfirm={async(np)=>{
-        try{
-          const res=await api.post("/projects",{
-            name:np.name,
-            client_name:np.client||dupOf._raw?.client_name||"",
-            city:np.city,
-            type:dupOf._raw?.type||"residential",
-            status:"not_started",
-            boq_value:np.boq||0,
-            pm_user_id:dupOf._raw?.pm_user_id||1,
-            start_date:np.start&&np.start!=="TBD"?np.start:null,
-            end_date:np.end&&np.end!=="TBD"?np.end:null,
-          });
-          if(res.success&&res.data){
-            setAllProjects(prev=>[...prev,mapProject(res.data)]);
-          }else{
-            setAllProjects(prev=>[...prev,np]);
-          }
-        }catch(err){
-          console.error("Create project error:",err);
-          setAllProjects(prev=>[...prev,np]);
+      {dupOf&&<DuplicateModal project={dupOf} onClose={()=>setDupOf(null)} onConfirm={async(payload)=>{
+        // Real duplicate — backend copies the full task tree too.
+        const res=await api.post(`/projects/${dupOf.id}/duplicate`,payload);
+        if(res&&res.success&&res.data){
+          setAllProjects(prev=>[...prev,mapProject(res.data)]);
+          apiCache.invalidate("projects");
         }
+        return res;
       }}/>}
       {showNew&&<NewProjectModal onClose={()=>setShowNew(false)} onCreated={np=>setAllProjects(prev=>[...prev,np])}/>}
     </div>
