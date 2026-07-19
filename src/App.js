@@ -37,6 +37,7 @@ const ProjectDetailPage  = lazyWithPreload("projectDetail",() => import("./modul
 const ProjectsPage       = lazyWithPreload("projects",     () => import("./modules/ProjectsModule"));
 const SaaSModule         = lazyWithPreload("saas",         () => import("./modules/SaaSModule"));
 const SaaSLeadsModule    = lazyWithPreload("saas-leads",   () => import("./modules/SaaSLeadsModule"));
+const SahayakModule      = lazyWithPreload("sahayak",      () => import("./modules/SahayakModule"));
 
 // ── PREFETCH: Dashboard load hone ke baad background me sab load karo ──
 // safePreload — wraps preload() so a chunk-load failure on flaky network
@@ -127,6 +128,7 @@ const IcCal   =(p)=><Ic {...p} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2
 const IcFilter=(p)=><Ic {...p} d="M22 3H2l8 9.46V19l4 2v-8.54L22 3"/>;
 const IcStar  =(p)=><Ic {...p} d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
 const IcLock  =(p)=><Ic {...p} d="M19 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2zM7 11V7a5 5 0 0110 0v4"/>;
+const IcHelp  =(p)=><Ic {...p} d="M12 22a10 10 0 100-20 10 10 0 000 20zM9.09 9a3 3 0 015.83 1c0 2-3 3-3 3M12 17h.01"/>;
 
 // ── LAZY LOADING FALLBACK ─────────────────────────────────────────────
 // Minimal fallback — spinner only shows after 300ms delay (avoids flash for cached modules)
@@ -157,6 +159,7 @@ const NAV_GROUPS=[
     {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
     {id:"team",      label:"My Team",      Icon:IcTeam, sc:"T"},
+    {id:"sahayak",   label:"Sahayak",      Icon:IcHelp},
   ]},
   {section:"FINANCE & OPS",items:[
     {id:"design",      label:"Design",      Icon:IcDes,  sc:"D"},
@@ -1832,9 +1835,19 @@ export default function App(){
           handleLogout();
           return;
         }
-        // Module-permission refresh keeps its original scope (non-admin only).
-        if(res.success && res.module_permissions && user?.role!=="admin"){
-          const updated={...user, module_permissions: res.module_permissions};
+        // Live role correction — backend returns the current role from
+        // user_companies. If an admin changed this user's role, sync it here
+        // so the sidebar + menu gating update without a re-login.
+        const liveRole = res.role;
+        const roleChanged = liveRole && liveRole !== user?.role;
+        // Module-permission refresh: applies to any non-admin role. Recompute
+        // "admin" against the live role, not the stale cached one.
+        const effectiveRole = liveRole || user?.role;
+        if(res.success && (roleChanged || (res.module_permissions && effectiveRole!=="admin"))){
+          const updated={...user,
+            ...(roleChanged ? { role: liveRole } : {}),
+            ...(res.module_permissions && effectiveRole!=="admin" ? { module_permissions: res.module_permissions } : {}),
+          };
           setUser(updated);
           try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
         }
@@ -1927,6 +1940,7 @@ export default function App(){
     profile:{title:"My Profile",sub:"Your Account"},
     saas:{title:"SaaS Admin",sub:"Platform Management"},
     "saas-leads":{title:"SaaS Leads",sub:"Sales Pipeline"},
+    sahayak:{title:"Sanchalan Sahayak",sub:"Support & Help"},
   };
 
   // Check if a module is enabled
@@ -1957,6 +1971,7 @@ export default function App(){
     profile:   <SettingsModule initialSection="profile"/>,
     saas:     <SaaSModule/>,
     "saas-leads": <SaaSLeadsModule/>,
+    sahayak:  <SahayakModule/>,
   };
 
   const page=PAGES[nav]||PAGES.dashboard;
