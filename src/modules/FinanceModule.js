@@ -3072,6 +3072,44 @@ function FinanceModule(){
     }catch(e){console.error("Refresh projects:",e);}
   };
 
+  // Reload ONE party's ledger detail. Shared by the party-list click and by
+  // refreshAll — earlier the ledger fetch lived only inside the onClick, so the
+  // top-bar Refresh never updated an already-open ledger; the user had to
+  // click another party and back to force a re-fetch.
+  const loadPartyLedger=async(partyId)=>{
+    if(partyId==null) return;
+    try{
+      const res=await api.get(`/finance/parties/${partyId}/ledger`);
+      if(res.success&&res.data){
+        const BACK_DEBIT_L=["payment","material_purchase","site_expense",
+          "party_payment","subcon_expense","wallet_payment","wallet_topup"];
+        setApiLedger(prev=>({...prev,[partyId]:res.data.map(t=>({
+          id:t.id,
+          dateRaw:t.date||null,
+          date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
+          note:t.note||t.narration||"",
+          sub:t.description||"",
+          project:t.project_name||t.project||"",
+          amount:parseFloat(t.amount)||0,
+          dr:BACK_DEBIT_L.includes(t.type)||t.dr===true,
+          status:t.status||"approved",
+          txnType:t.type||"",
+          items:t.line_items||null,
+          sourceKind:t.source_kind||null,
+          refId:t.ref_id||null,
+          invoiceNo:t.invoice_no||null,
+          invoiceSource:t.invoice_source||null,
+          grossAmount:t.gross_amount!=null?parseFloat(t.gross_amount):null,
+          retentionAmt:t.retention_amt!=null?parseFloat(t.retention_amt):null,
+          tdsAmt:t.tds_amt!=null?parseFloat(t.tds_amt):null,
+          taxAmt:t.tax_amt!=null?parseFloat(t.tax_amt):null,
+          referenceNo:t.reference_no||null,
+          mop:t.mop||null,
+        }))}));
+      }
+    }catch(e){console.log("Ledger fetch error");}
+  };
+
   // Refresh all at once (parallel)
   const refreshAll=async()=>{
     await Promise.allSettled([
@@ -3080,6 +3118,9 @@ function FinanceModule(){
       // Also reload Unbilled GRN list (the in-tab green Refresh was removed —
       // the single top-bar Refresh now covers it too).
       (typeof loadUnbilledGRNs==="function"?loadUnbilledGRNs():Promise.resolve()),
+      // ...and the currently-open party ledger, so Refresh updates the detail
+      // panel too — not just the master party/txn lists.
+      (selParty?.id!=null?loadPartyLedger(selParty.id):Promise.resolve()),
     ]);
   };
 
@@ -3867,43 +3908,9 @@ Status: ${ledgerRow.status||"unpaid"}`;
                   const tc=p.type==="Client"?T.grn:p.type==="Material Supplier"?T.blu:p.type==="Sub-Con"?T.slt:T.amb;
                   const initials=(p.name||"?").trim().split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase()||"?";
                   return(
-                    <div key={p.id} onClick={async()=>{
+                    <div key={p.id} onClick={()=>{
                       setSelParty(p);setSelBill(null);
-                      try{
-                        const res=await api.get(`/finance/parties/${p.id}/ledger`);
-                        if(res.success&&res.data){
-                          const BACK_DEBIT_L=["payment","material_purchase","site_expense",
-                            "party_payment","subcon_expense","wallet_payment","wallet_topup"];
-                          setApiLedger(prev=>({...prev,[p.id]:res.data.map(t=>({
-                            id:t.id,
-                            // Preserve raw ISO for accurate chronological sort;
-                            // `date` is the user-facing short form.
-                            dateRaw:t.date||null,
-                            date:t.date?new Date(t.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"",
-                            note:t.note||t.narration||"",         // actual note field
-                            sub:t.description||"",                // full description
-                            project:t.project_name||t.project||"",// site/project
-                            amount:parseFloat(t.amount)||0,
-                            dr:BACK_DEBIT_L.includes(t.type)||t.dr===true,
-                            status:t.status||"approved",
-                            txnType:t.type||"",
-                            items:t.line_items||null,
-                            // Customer-invoice augmentation fields (only set
-                            // when source_kind=customer_invoice/payment). Used
-                            // for PDF download + WhatsApp share affordances.
-                            sourceKind:t.source_kind||null,
-                            refId:t.ref_id||null,
-                            invoiceNo:t.invoice_no||null,
-                            invoiceSource:t.invoice_source||null,
-                            grossAmount:t.gross_amount!=null?parseFloat(t.gross_amount):null,
-                            retentionAmt:t.retention_amt!=null?parseFloat(t.retention_amt):null,
-                            tdsAmt:t.tds_amt!=null?parseFloat(t.tds_amt):null,
-                            taxAmt:t.tax_amt!=null?parseFloat(t.tax_amt):null,
-                            referenceNo:t.reference_no||null,
-                            mop:t.mop||null,
-                          }))}));
-                        }
-                      }catch(e){console.log("Ledger fetch error");}
+                      loadPartyLedger(p.id);
                     }}
                       style={{padding:"10px 13px",cursor:"pointer",borderBottom:`1px solid ${T.b1}`,background:isS?T.bluL:"none",borderLeft:isS?`3px solid ${T.blu}`:"3px solid transparent",transition:"all 0.12s"}}
                       onMouseEnter={e=>{if(!isS)e.currentTarget.style.background=T.surfaceB;}}
