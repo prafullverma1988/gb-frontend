@@ -328,6 +328,7 @@ function LoginScreen({onLogin}){
   const [np1,setNp1]=useState(""); const [np2,setNp2]=useState("");
   const [pickerOptions,setPickerOptions]=useState([]); // multi-company picker
   const [pendingTok,setPendingTok]=useState("");
+  const [pickerVia,setPickerVia]=useState("password"); // how the picker was reached: 'password' | 'otp'
   useEffect(()=>{loadOtpWidget();},[]);
 
   const resetMsgs=()=>{setError("");setInfo("");};
@@ -366,8 +367,8 @@ function LoginScreen({onLogin}){
     setLoading(true);
     try{
       const res=await api.loginPassword(mobile,pass);
-      if(res.success&&res.multi_company){ setPickerOptions(res.options||[]); setPendingTok(res.pending); resetMsgs(); setStage("picker"); }
-      else if(res.success){ completeLogin(res); }
+      if(res.success&&res.multi_company){ setPickerOptions(res.options||[]); setPendingTok(res.pending); setPickerVia("password"); resetMsgs(); setStage("picker"); }
+      else if(res.success){ completeLogin(res,"password"); }
       else{setError(res.message||"Login failed");}
     }catch(err){setError("Server not reachable. Please try again.");}
     setLoading(false);
@@ -396,8 +397,8 @@ function LoginScreen({onLogin}){
       }else{
         res=await api.loginOtp(mobile,otp);
       }
-      if(res&&res.success&&res.multi_company){ setPickerOptions(res.options||[]); setPendingTok(res.pending); resetMsgs(); setStage("picker"); }
-      else if(res&&res.success){ completeLogin(res); }
+      if(res&&res.success&&res.multi_company){ setPickerOptions(res.options||[]); setPendingTok(res.pending); setPickerVia("otp"); resetMsgs(); setStage("picker"); }
+      else if(res&&res.success){ completeLogin(res,"otp"); }
       else{setError((res&&res.message)||"Invalid OTP");}
     }catch(err){setError((err&&err.message)||"Invalid OTP");}
     setLoading(false);
@@ -417,16 +418,20 @@ function LoginScreen({onLogin}){
     setLoading(false);
   };
 
-  // After a successful login (direct OR after company pick): force password change if needed, else enter.
-  const completeLogin=(res)=>{
-    if(res.user&&res.user.must_change_password){ resetMsgs(); setNp1("");setNp2(""); setChgPending({user:res.user,companies:res.companies}); setStage("change"); }
+  // After a successful login (direct OR after company pick): force password
+  // change ONLY for password logins. An OTP login already proved identity via
+  // the one-time code, so forcing a password change there was a bug — OTP-only
+  // users may never set a password. must_change_password stays set, so if they
+  // later log in with the temp password they'll still be prompted then.
+  const completeLogin=(res,via="password")=>{
+    if(via!=="otp"&&res.user&&res.user.must_change_password){ resetMsgs(); setNp1("");setNp2(""); setChgPending({user:res.user,companies:res.companies}); setStage("change"); }
     else onLogin(res.user,res.companies);
   };
   const handleSelectCompany=async(opt)=>{
     resetMsgs();setLoading(true);
     try{
       const res=await api.loginSelect(pendingTok,opt.user_id,opt.company_id);
-      if(res&&res.success&&res.token){ completeLogin(res); }
+      if(res&&res.success&&res.token){ completeLogin(res,pickerVia); }
       else{ setError((res&&res.message)||"Company select nahi hua"); }
     }catch(err){setError("Server not reachable. Please try again.");}
     setLoading(false);
