@@ -253,19 +253,25 @@ export default function LibrarySelect({
   useEffect(() => {
     const refresh = () => setItems(cacheEntry.items || []);
     cacheEntry.listeners.add(refresh);
-    if (cacheEntry.items == null && !cacheEntry.loading) {
+    // Show whatever is already cached instantly (no flicker)...
+    refresh();
+    // ...then ALWAYS revalidate in the background on mount. Without this the
+    // module-level cache was fetched only once per page-load, so a vendor
+    // added on another screen (Party Master, PO modal, etc.) never appeared
+    // in this dropdown until a full reload — the recurring "added vendor
+    // nahi aa raha" bug. Stale-while-revalidate; the loading guard stops
+    // overlapping fetches when many instances mount together.
+    if (!cacheEntry.loading) {
       cacheEntry.loading = true;
       cfg.fetch().then((data) => {
         cacheEntry.items = data;
         cacheEntry.loading = false;
         cacheEntry.listeners.forEach((fn) => fn());
       }).catch(() => {
-        cacheEntry.items = [];
         cacheEntry.loading = false;
+        if (cacheEntry.items == null) cacheEntry.items = [];
         cacheEntry.listeners.forEach((fn) => fn());
       });
-    } else {
-      refresh();
     }
     return () => cacheEntry.listeners.delete(refresh);
     // eslint-disable-next-line
