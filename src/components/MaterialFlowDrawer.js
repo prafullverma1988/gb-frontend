@@ -313,7 +313,7 @@ export default function MaterialFlowDrawer({ grnId, onClose, onChanged, isAdmin 
 
   return (
     <>
-      <div onClick={onClose}
+      <div 
         style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1500, backdropFilter: "blur(2px)" }}/>
       <div style={{
         position: "fixed", top: 0, right: 0, height: "100vh", width: "min(560px, 100vw)",
@@ -736,7 +736,7 @@ function Section({ color, bg, icon, title, rows = [], empty = false, emptyText =
         </div>
       )}
       {zoom && (
-        <div onClick={() => setZoom(null)}
+        <div 
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.85)", zIndex: 2000, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
           <img src={zoom} alt="" style={{ maxWidth: "92vw", maxHeight: "92vh", borderRadius: 8, boxShadow: "0 20px 60px rgba(0,0,0,0.5)" }}/>
         </div>

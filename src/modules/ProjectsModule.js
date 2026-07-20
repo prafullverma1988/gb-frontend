@@ -182,7 +182,7 @@ function SitePulseDrawer({onClose}){
   const resetFilter=()=>setSelTypes(PULSE_ALL_TYPES);
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(420px,96vw)",background:C.bg,zIndex:201,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",fontFamily:"'Segoe UI',sans-serif",borderRadius:"16px 0 0 16px"}}>
       <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0,borderRadius:"16px 0 0 0"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
@@ -459,7 +459,7 @@ function NewProjectModal({onClose,onCreated}){
     : {grad:`linear-gradient(135deg,${T.blu},#1D4ED8)`,  icon:"🏗️", title:"New Project",           sub:"Add a new construction project"};
 
   return (<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:998}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:998}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:500,background:T.surface,borderRadius:14,boxShadow:"0 20px 60px rgba(0,0,0,.25)",zIndex:999,overflow:"hidden"}}>
 
       {/* Header */}
@@ -618,7 +618,7 @@ function DuplicateModal({project,onClose,onConfirm}){
     setSaving(false);
   };
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:C.w,borderRadius:16,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:`linear-gradient(135deg,${C.p},${C.p2})`,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
         <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}><IcCopy size={17} color="white"/></div>
@@ -802,7 +802,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   );
 
   return (<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:998,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:998,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:999,width:640,maxHeight:"88vh",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
 
       {/* Header */}
@@ -1022,7 +1022,7 @@ function PhotoStrip({ photos, accent = "#2563EB" }) {
         ))}
       </div>
       {zoom && (
-        <div onClick={()=>setZoom(null)}
+        <div 
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.85)",zIndex:2500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
           <img src={zoom} alt="" style={{maxWidth:"92vw",maxHeight:"92vh",borderRadius:8,boxShadow:"0 20px 60px rgba(0,0,0,0.5)"}}/>
         </div>
@@ -2542,7 +2542,7 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
   const headerAccent=mode==="approvals"?T.amb:T.blu;
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:300,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:440,background:T.bg,zIndex:301,boxShadow:"-4px 0 28px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
 
       {/* Header */}
@@ -3505,9 +3505,9 @@ function IssuesDrawer({issues, loading, filter, setFilter, onClose, onIssueClose
   };
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     {fullPhoto&&(
-      <div onClick={()=>setFullPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.92)",zIndex:500,display:"flex",alignItems:"center",justifyContent:"center",cursor:"zoom-out"}}>
         <img src={fullPhoto} style={{maxWidth:"95vw",maxHeight:"90vh",objectFit:"contain",borderRadius:8}}/>
         <button onClick={()=>setFullPhoto(null)} style={{position:"absolute",top:16,right:16,background:"rgba(255,255,255,.15)",border:"none",borderRadius:"50%",width:36,height:36,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
           <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
@@ -3718,7 +3718,7 @@ function TodoDrawer({todos,loading,onClose,onSelectProject}){
   };
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(480px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-8px 0 48px rgba(0,0,0,0.22), -2px 0 8px rgba(0,0,0,0.08)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .32s cubic-bezier(0.16,1,0.3,1)",borderRadius:"16px 0 0 16px"}}>
       {/* Header */}
       <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>

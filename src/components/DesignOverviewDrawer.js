@@ -73,7 +73,7 @@ export default function DesignOverviewDrawer({ open, onClose, onOpenLead, onShar
 
   return (
     <>
-      <div onClick={onClose}
+      <div 
         style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 600, backdropFilter: "blur(2px)" }}/>
       <div style={{ position: "fixed", top: 0, right: 0, height: "100vh", width: "min(560px, 100vw)",
         background: T.surface, zIndex: 601, display: "flex", flexDirection: "column",

@@ -167,7 +167,7 @@ function UploadModal({ show, onClose, projects, dbTitles, dbCats, dbTypes, prefi
 
   return (
     <>
-      <div onClick={()=>!uploading&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,backdropFilter:"blur(2px)"}}/>
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
         background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
         zIndex:501,width:560,maxHeight:"92vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
@@ -942,7 +942,7 @@ export default function DesignModule() {
     };
     return (
       <>
-        <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
           background:T.surface,borderRadius:12,zIndex:601,width:520,maxWidth:"92vw",maxHeight:"90vh",
           display:"flex",flexDirection:"column",boxShadow:"0 24px 60px rgba(0,0,0,0.22)"}}>
@@ -1328,7 +1328,7 @@ export default function DesignModule() {
     },[]);
     return(
       <>
-        <div onClick={()=>setShowVer(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:500}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,zIndex:501,width:460,maxHeight:"80vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
           <div style={{background:T.sb,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div style={{fontSize:13,fontWeight:700,color:"white"}}>Version History — {showVer.title}</div>

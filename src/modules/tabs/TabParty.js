@@ -69,7 +69,7 @@ function AddPartyModal({ open, onClose, onSaved }) {
   const ip = {width:"100%", padding:"8px 10px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:12.5, outline:"none", boxSizing:"border-box", fontFamily:"inherit"};
 
   return (
-    <div onClick={onClose}
+    <div 
       style={{position:"fixed", inset:0, background:"rgba(15,23,42,0.5)", zIndex:300,
         display:"flex", alignItems:"center", justifyContent:"center", padding:14}}>
       <div onClick={e=>e.stopPropagation()}

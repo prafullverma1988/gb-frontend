@@ -280,7 +280,7 @@ const labelStyle = { fontSize:11, fontWeight:600, color:T.t2, marginBottom:4, di
 
 function Modal({ title, onClose, children, width=480 }) {
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
       zIndex:9000, display:"flex", alignItems:"flex-start", justifyContent:"center",
       overflowY:"auto", padding:"40px 16px" }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background:T.surface, borderRadius:12,
@@ -1967,7 +1967,7 @@ function UnitDetailModal({ unit, detail, loading, onClose, onRefresh, onOpenProj
   };
 
   return createPortal(
-    <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
+    <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,0.55)",
       zIndex:9000, display:"flex", alignItems:"flex-start", justifyContent:"center",
       overflowY:"auto", padding:"40px 16px" }}>
       <div onClick={(e) => e.stopPropagation()} style={{ background:T.surface, borderRadius:12,

@@ -2296,7 +2296,7 @@ function TabEstimate({ project }) {
 
       {/* ── MODAL: Edit BOQ → Amendment (admin-approval required) ── */}
       {showEditBoq && selEst && (<>
-        <div onClick={()=>!amendSaving && setShowEditBoq(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:300,backdropFilter:"blur(2px)"}}/>
         <div style={{position:"fixed",top:"4vh",left:"50%",transform:"translateX(-50%)",width:920,maxWidth:"95vw",height:"92vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
             <div>
@@ -2477,7 +2477,7 @@ function TabEstimate({ project }) {
 
       {/* ── MODAL: Quick Manual Estimate (Path 4, existing flow) ── */}
       {showNewEst && (<>
-        <div onClick={()=>setShowNewEst(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:760,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
             <div style={{fontSize:15,fontWeight:700,color:T.t1}}>New Customer Estimate</div>
@@ -2562,7 +2562,7 @@ function TabEstimate({ project }) {
         // "+ Invoice" creates fresh (POST) rather than re-editing (PUT).
         const closeInvModal = () => { setShowNewInv(false); setInvForm(p=>({...p, _editId: undefined })); };
         return (<>
-        <div onClick={closeInvModal} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:680,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{fontSize:15,fontWeight:700,color:T.t1}}>{invForm._editId ? "Edit Manual Invoice" : invForm.source==="manual"?"New Manual Invoice":"New Invoice (from milestones)"}</div>
@@ -2914,7 +2914,7 @@ function TabEstimate({ project }) {
 
       {/* ── MODAL: Payment Schedule Setup ────────────────────────── */}
       {showSetMs && selEst && (<>
-        <div onClick={()=>setShowSetMs(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:620,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Payment Schedule Setup</div>
@@ -3267,7 +3267,7 @@ function TabEstimate({ project }) {
         const items = previewInv.items || [];
         const task = previewInv.trigger_task;
         return (<>
-          <div onClick={()=>!previewConfirming && setPreviewInv(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:340,backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:340,backdropFilter:"blur(2px)"}}/>
           <div style={{position:"fixed",top:"4vh",left:"50%",transform:"translateX(-50%)",width:760,maxWidth:"95vw",maxHeight:"92vh",background:T.surface,borderRadius:12,zIndex:341,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
             {/* Header */}
             <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0,background:"#F5F3FF"}}>
@@ -3639,7 +3639,7 @@ function TabEstimate({ project }) {
         const netRec = gross - retAmt - tdsAmt + taxAmt;
         const set = (k,v) => setHdrEditForm(p => ({ ...p, [k]: v }));
         return (<>
-          <div onClick={()=>!hdrEditSaving && setHdrEditForm(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:350,backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:350,backdropFilter:"blur(2px)"}}/>
           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:480,maxWidth:"95vw",background:T.surface,borderRadius:12,zIndex:351,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div>
@@ -3732,7 +3732,7 @@ function TabEstimate({ project }) {
           for (const r of roots) walk(r, 0);
         }
         return (<>
-          <div onClick={()=>setTaskPickerFor(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:330}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:330}}/>
           <div style={{position:"fixed",top:0,right:0,bottom:0,width:440,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 24px rgba(0,0,0,0.2)",zIndex:331,display:"flex",flexDirection:"column"}}>
             {/* Header */}
             <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
@@ -3915,7 +3915,7 @@ function TabEstimate({ project }) {
           });
         };
         return (<>
-          <div onClick={()=>setItemPickerOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:320}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:320}}/>
           <div style={{position:"fixed",top:0,right:0,bottom:0,width:440,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 24px rgba(0,0,0,0.2)",zIndex:321,display:"flex",flexDirection:"column"}}>
             {/* Header */}
             <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
@@ -4011,7 +4011,7 @@ function TabEstimate({ project }) {
           context is selected.
       */}
       {libPicker && (<>
-        <div onClick={()=>setLibPicker(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:310}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:310}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:760,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:311,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Pick from Client BOQ Library</div>
@@ -4079,7 +4079,7 @@ function TabEstimate({ project }) {
 
       {/* ── MODAL: Record Payment ───────────────────────────────── */}
       {showPay && (<>
-        <div onClick={()=>setShowPay(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:480,maxWidth:"95vw",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)"}}>
           <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
             <div style={{fontSize:15,fontWeight:700,color:T.t1}}>Record Payment</div>

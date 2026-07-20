@@ -153,7 +153,7 @@ export default function MRDetailDrawer({ mr, onClose, onChanged, isAdmin = true 
 
   return (
     <>
-      <div onClick={onClose}
+      <div 
         style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 1500, backdropFilter: "blur(2px)" }}/>
       <div style={{
         position: "fixed", top: 0, right: 0, height: "100vh", width: "min(540px, 100vw)",

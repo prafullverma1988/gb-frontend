@@ -155,9 +155,8 @@ function SaveBtn({ onClick, label = "Save Changes" }) {
 function Modal({ open, onClose, title, desc, width = 560, children }) {
   if (!open) return null;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.font }}
-      onClick={onClose}>
-      {/* backdrop */}
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.font }}>
+      {/* backdrop — click-to-close removed so a stray outside click can't wipe a half-filled form; use the × / Cancel button */}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} />
       {/* panel */}
       <div style={{ position: "relative", width, maxWidth: "92vw", maxHeight: "88vh", background: T.card, borderRadius: 14, boxShadow: T.shadowLg, display: "flex", flexDirection: "column", overflow: "hidden" }}

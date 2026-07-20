@@ -744,7 +744,7 @@ function TabMaterial({ project }) {
         {/* NEW REQUEST — side-slide drawer */}
         {showModal && (<>
           <style>{`@keyframes mrSlideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-          <div onClick={()=>setShowModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.42)",zIndex:400,backdropFilter:"blur(3px)"}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.42)",zIndex:400,backdropFilter:"blur(3px)"}}/>
           <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(560px,96vw)",background:T.bg,zIndex:401,boxShadow:"-8px 0 40px rgba(0,0,0,0.22)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"mrSlideIn .22s ease-out"}}>
 
             {/* ── Header ─────────────────────────────────────────── */}
@@ -1004,7 +1004,7 @@ function TabMaterial({ project }) {
 
         {/* USED LOG DRAWER */}
         {showUsedLog&&(<>
-          <div onClick={()=>setShowUsedLog(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
           <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(580px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
             {/* Header */}
             <div style={{background:"#0F172A",padding:"13px 18px",flexShrink:0}}>
@@ -1120,7 +1120,7 @@ function TabMaterial({ project }) {
         {/* GRN MODAL */}
         {showGRN&&(<>
           <style>{`@keyframes grnSlideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-          <div onClick={()=>setShowGRN(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(3px)"}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(3px)"}}/>
           <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(640px,96vw)",background:T.bg,zIndex:401,boxShadow:"-8px 0 40px rgba(0,0,0,0.22)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"grnSlideIn .22s ease-out"}}>
 
             {/* Header */}

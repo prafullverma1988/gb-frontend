@@ -102,7 +102,8 @@ function FormTextarea({ label, value, onChange, placeholder, rows = 3 }) {
 function Modal({ open, onClose, title, desc, width = 600, children }) {
   if (!open) return null;
   return (
-    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.font }} onClick={onClose}>
+    <div style={{ position: "fixed", inset: 0, zIndex: 9999, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: T.font }}>
+      {/* backdrop — click-to-close removed so a stray outside click can't wipe a half-filled form; use the × / Cancel button */}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} />
       <div style={{ position: "relative", width, maxWidth: "94vw", maxHeight: "90vh", background: T.card, borderRadius: 14, boxShadow: T.shadowLg, display: "flex", flexDirection: "column", overflow: "hidden" }} onClick={e => e.stopPropagation()}>
         <div style={{ padding: "20px 24px", borderBottom: `1px solid ${T.border}`, display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0 }}>
@@ -228,7 +229,7 @@ function DataTable({ columns, data, onEdit, onDelete, onRowClick, hideActions, n
       {/* ── Generic detail drawer ── */}
       {detailMode && detailRow && (
         <>
-          <div onClick={() => setDetailRow(null)}
+          <div 
             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 340, backdropFilter: "blur(2px)" }}/>
           <div style={{ position: "fixed", top: 0, right: 0, height: "100vh", width: 420, maxWidth: "94vw", background: T.card, zIndex: 341, boxShadow: "-8px 0 28px rgba(0,0,0,0.18)", display: "flex", flexDirection: "column" }}>
             <div style={{ padding: "16px 20px", borderBottom: `1px solid ${T.border}`, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 10 }}>
@@ -1225,7 +1226,7 @@ function PartyMasterSection() {
         const bal = Number(p.opening_balance) || 0;
         return (
           <>
-            <div onClick={() => setDetailParty(null)}
+            <div 
               style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:340, backdropFilter:"blur(2px)" }}/>
             <div style={{ position:"fixed", top:0, right:0, height:"100vh", width:440, maxWidth:"94vw", background:T.card, zIndex:341, boxShadow:"-8px 0 28px rgba(0,0,0,0.18)", display:"flex", flexDirection:"column" }}>
               {/* Header */}
@@ -2647,7 +2648,7 @@ function SubconRateCardSection() {
         const alreadyAdded = new Set(pkgCategories.filter(c=>c.structure_id===sid).map(c=>c.category_name));
         const available = workCats.filter(c => !alreadyAdded.has(c.name));
         return (<>
-          <div onClick={closeAddCatDrawer} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9000,backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9000,backdropFilter:"blur(2px)"}}/>
           <div style={{position:"fixed",right:0,top:0,height:"100vh",width:480,maxWidth:"95vw",background:T.card,zIndex:9001,boxShadow:"-8px 0 40px rgba(0,0,0,0.25)",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",background:"#0F172A"}}>
               <div>
@@ -2734,7 +2735,7 @@ function SubconRateCardSection() {
           (!addItemSearch || i.name.toLowerCase().includes(addItemSearch.toLowerCase()) || (i.category||"").toLowerCase().includes(addItemSearch.toLowerCase()))
         );
         return (<>
-          <div onClick={closeAddItemDrawer} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9000,backdropFilter:"blur(2px)"}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:9000,backdropFilter:"blur(2px)"}}/>
           <div style={{position:"fixed",right:0,top:0,height:"100vh",width:520,maxWidth:"95vw",background:T.card,zIndex:9001,boxShadow:"-8px 0 40px rgba(0,0,0,0.25)",display:"flex",flexDirection:"column"}}>
             <div style={{padding:"16px 20px",borderBottom:`1px solid ${T.border}`,background:"#0F172A"}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
@@ -5209,7 +5210,7 @@ function ClientBOQSection() {
       ═══════════════════════════════════════════════════════════════ */}
       {addModal && (
         <>
-          <div onClick={() => setAddModal(null)}
+          <div 
             style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 600 }}/>
           <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
                         width: "min(440px,95vw)", background: "white", borderRadius: 12, zIndex: 601,
@@ -5609,7 +5610,7 @@ function BoqItemLibrarySection() {
 
       {/* Add/Edit modal — Subcon-style */}
       {showAdd && (
-        <div onClick={closeForm}
+        <div 
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>
           <div onClick={e => e.stopPropagation()}
             style={{ background: "white", borderRadius: 12, width: "min(540px, 95vw)", display: "flex", flexDirection: "column", boxShadow: "0 24px 64px rgba(0,0,0,0.35)" }}>

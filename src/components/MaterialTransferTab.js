@@ -264,7 +264,7 @@ function NewTransferModal({ projectId, projectName, isAdmin, onClose, onSaved })
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 600, backdropFilter: "blur(2px)" }}/>
+      <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,42,0.5)", zIndex: 600, backdropFilter: "blur(2px)" }}/>
       <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)", width: "min(560px,94vw)", maxHeight: "88vh", background: T.surface, borderRadius: 12, zIndex: 601, boxShadow: "0 20px 60px rgba(0,0,0,0.25)", display: "flex", flexDirection: "column", overflow: "hidden", fontFamily: "'Segoe UI',system-ui,sans-serif" }}>
         {/* Header */}
         <div style={{ background: "#0D1B2A", padding: "13px 17px" }}>

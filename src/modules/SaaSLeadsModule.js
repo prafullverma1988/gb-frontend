@@ -356,7 +356,7 @@ function LeadDrawer({ lead, agents, onClose, onSave, onNote, onDelete }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.4)", zIndex:1000 }}/>
+      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.4)", zIndex:1000 }}/>
       <div style={{ position:"fixed", top:0, right:0, width:"min(440px,100%)", height:"100vh", background:T.surface, zIndex:1001, boxShadow:"-8px 0 30px rgba(0,0,0,.12)", display:"flex", flexDirection:"column" }}>
         {/* header */}
         <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"flex-start", gap:10 }}>
@@ -445,7 +445,7 @@ function AddLeadModal({ agents, onClose, onCreate }) {
   const submit = () => { if(!f.name.trim()) return; onCreate(f); };
   return (
     <>
-      <div onClick={onClose} style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.45)", zIndex:1100 }}/>
+      <div style={{ position:"fixed", inset:0, background:"rgba(15,23,42,.45)", zIndex:1100 }}/>
       <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:"min(460px,94vw)", maxHeight:"90vh", overflowY:"auto", background:T.surface, borderRadius:14, zIndex:1101, boxShadow:"0 20px 50px rgba(0,0,0,.25)" }}>
         <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
           <div style={{ fontSize:16, fontWeight:800, color:T.t1 }}>Add Lead</div>

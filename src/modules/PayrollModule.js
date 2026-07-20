@@ -609,7 +609,7 @@ function LeaveTab({staff,month,year,isAdmin,onAttendanceChanged,holidays,setHoli
 
       {/* ─── ON-BEHALF LEAVE ENTRY (modal) ─── */}
       {showApply && (
-        <div onClick={()=>!submitting&&setShowApply(false)}
+        <div 
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9998,padding:16}}>
         <div onClick={e=>e.stopPropagation()} style={{background:T.surface,border:`1px solid ${T.b1}`,borderRadius:12,padding:16,width:640,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
@@ -889,7 +889,7 @@ function LeaveCoverageModal({app,onClose,onDecide}){
   );
 
   return(
-    <div onClick={()=>!acting&&onClose()}
+    <div 
       style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
       <div onClick={e=>e.stopPropagation()}
         style={{background:T.surface,borderRadius:12,width:760,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
@@ -1145,7 +1145,7 @@ function HolidayCalendarTab({holidays,setHolidays,month,year,isAdmin}){
 
       {/* Add/Edit modal */}
       {addOpen && (
-        <div onClick={()=>!saving&&setAddOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
           <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,width:420,maxWidth:"100%",padding:20,boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{fontSize:15,fontWeight:800,color:T.t1,marginBottom:14}}>{editId?"Edit Holiday":"Add Holiday"}</div>
             <div style={{display:"grid",gap:9}}>
@@ -1585,7 +1585,7 @@ function StaffAttEditModal({staff,date,dateLabel,att,day,onClose,onSubmitted}){
     setSaving(false);
   };
   return(
-    <div onClick={()=>!saving&&onClose()} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
       <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,width:520,maxWidth:"100%",maxHeight:"90vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
         <div style={{padding:"14px 18px",borderBottom:`1px solid ${T.b1}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
           <div>
@@ -1913,7 +1913,7 @@ function SalarySlipModal({emp,att,month,year,onClose,paymentType,workingDays}){
   };
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(520px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       {/* Header */}
       <div style={{background:"#0D1B2A",padding:"13px 18px",display:"flex",alignItems:"center",gap:12,flexShrink:0}}>
@@ -2083,7 +2083,7 @@ function EditAttendanceModal({workers,att,month,year,onClose,onSubmitted}){
   const changeCount=collectChanges().length;
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(900px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{padding:"14px 18px",background:"#0D1B2A",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div>
@@ -2190,7 +2190,7 @@ function ApprovalQueueModal({onClose,onProcessed,isAdmin}){
     setActingId(null);
   };
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(800px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.3)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{padding:"14px 18px",background:"#0D1B2A",color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{fontSize:14,fontWeight:700}}>📋 Attendance Edit Approvals ({items.length} pending)</div>
@@ -2559,7 +2559,7 @@ function EditStaffModal({emp,onClose,onSaved}){
   const Sect=ModalSect, F=ModalField;   // module-scope helpers — focus-loss fix
   const inp={width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface};
   return(
-    <div onClick={()=>!saving&&onClose()}
+    <div 
       style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
       <div onClick={e=>e.stopPropagation()}
         style={{background:T.surface,borderRadius:12,width:560,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
@@ -2749,7 +2749,7 @@ function AddStaffModal({onClose,onSaved}){
   const inp={width:"100%",padding:"5px 8px",borderRadius:5,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface};
 
   return(
-    <div onClick={()=>!saving&&onClose()}
+    <div 
       style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
       <div onClick={e=>e.stopPropagation()}
         style={{background:T.surface,borderRadius:12,width:560,maxWidth:"100%",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
@@ -3276,7 +3276,7 @@ function MonthlySalaryTab({staff,att,month,year,onViewSlip,advances,workingDays,
 
       {/* ─── Salary Edit Request Modal ─── */}
       {editModalEmp && (
-        <div onClick={()=>!editSubmitting&&setEditModalEmp(null)}
+        <div 
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
           <div onClick={e=>e.stopPropagation()}
             style={{background:T.surface,borderRadius:12,padding:20,width:440,maxWidth:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
@@ -3890,7 +3890,7 @@ function SalaryLedgerTab({salaryRecords,setSalaryRecords,month,year}){
 
       {/* Mark Paid Modal */}
       {markPayModal&&(<>
-        <div onClick={()=>setMarkPayModal(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(1px)"}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:"min(420px,95vw)",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
           <div style={{background:T.sb,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div>
@@ -4492,7 +4492,7 @@ function DailyWorkersTab({workers,setWorkers,isAdmin}){
 
       {/* Add/Edit Modal */}
       {modal && (
-        <div onClick={close} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.5)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:9999,padding:16}}>
           <div onClick={e=>e.stopPropagation()}
             style={{background:T.surface,borderRadius:12,padding:22,width:480,maxWidth:"100%",boxShadow:"0 20px 60px rgba(0,0,0,.3)"}}>
             <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
@@ -4608,7 +4608,7 @@ function WorkerPaymentDrawer({worker,attMonth,month,year,onClose,onMarkPaid,paym
   const alreadyPaid=matchingPayments.filter(p=>p.status==="paid").reduce((s,p)=>s+Number(p.net_amount||0),0);
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
     <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(540px,95vw)",background:T.surface,boxShadow:"-12px 0 32px rgba(0,0,0,0.18)",zIndex:401,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
       {/* Header */}
       <div style={{padding:"15px 20px",background:"linear-gradient(135deg,#0D1B2A 0%,#1B2C3F 100%)",color:"white",display:"flex",alignItems:"center",gap:12}}>
@@ -4940,7 +4940,7 @@ function RateHistoryDrawer({skill,onClose}){
   const items = data?.history || [];
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
     <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(560px,95vw)",background:T.surface,boxShadow:"-12px 0 32px rgba(0,0,0,0.18)",zIndex:401,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
       {/* Header */}
       <div style={{padding:"15px 20px",background:"linear-gradient(135deg,#0D1B2A 0%,#1B2C3F 100%)",color:"white",display:"flex",alignItems:"center",gap:12}}>

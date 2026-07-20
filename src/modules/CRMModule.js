@@ -217,7 +217,7 @@ function WhatsAppModal({lead,onClose}){
   };
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:500,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(500px,95vw)",maxHeight:"88vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:501,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       {/* Header */}
       <div style={{background:"#075E54",padding:"13px 18px",display:"flex",alignItems:"center",gap:10,flexShrink:0}}>
@@ -734,7 +734,7 @@ function LeadDetailDrawer({lead,allLeads,onClose,onUpdate,onWhatsApp,initialTab}
   };
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(560px,95vw)",background:T.bg,zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
 
       {/* Header */}
@@ -3056,7 +3056,7 @@ function AddLeadModal({onClose,onSave,assignedToList,defaultStage}){
   // City + Construction Type are enforced when moving to Follow Up or beyond.
   const canSave = form.name.trim() && form.phone.trim();
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(560px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
         <div><div style={{fontSize:14,fontWeight:700,color:"white"}}>Add New Lead</div><div style={{fontSize:10.5,color:"rgba(255,255,255,0.4)",marginTop:1}}>New client enquiry into the pipeline</div></div>
@@ -3263,7 +3263,7 @@ function TemplateBuilderModal({onClose}){
   };
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.bg,borderRadius:14,width:"min(860px,95vw)",height:"min(620px,90vh)",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,display:"flex",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
 
       {/* Left: Template List */}
@@ -3412,7 +3412,7 @@ const uploadToCloudinary = (file, type="image") => new Promise((resolve, reject)
 // ── Lead Type Selector ────────────────────────────────────────────
 function LeadTypeSelector({onSelect, onClose}) {
   return (<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:400}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:16,width:"min(420px,92vw)",boxShadow:"0 24px 64px rgba(0,0,0,0.28)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"#0D1B2A",padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
@@ -3479,7 +3479,7 @@ function AddSolarLeadModal({onClose, onSave, assignedToList, defaultStage}) {
   );
 
   return (<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:402}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:402}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(540px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.28)",zIndex:403,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"linear-gradient(135deg,#E65100,#FF8F00)",padding:"14px 18px",display:"flex",justifyContent:"space-between",alignItems:"center",flexShrink:0}}>
         <div>
@@ -3785,7 +3785,7 @@ function SolarLeadDetailDrawer({lead, onClose, onUpdate, onConvertToProject}) {
   );
 
   return (<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(520px,96vw)",background:"#F8FAFC",zIndex:301,boxShadow:"-4px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
 
       {/* Header */}
@@ -4660,7 +4660,7 @@ function CRMModule(){
 
       {/* Proposal stage prompt */}
       {quotPromptLead&&(<>
-        <div onClick={()=>setQuotPromptLead(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:500,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:500,backdropFilter:"blur(1px)"}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(400px,90vw)",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:501,overflow:"hidden",animation:"popIn .2s ease",fontFamily:"'Segoe UI',sans-serif"}}>
           <div style={{background:"#D97706",padding:"16px 20px",textAlign:"center"}}>
             <div style={{fontSize:28,marginBottom:6}}>📋</div>
@@ -4689,7 +4689,7 @@ function CRMModule(){
 
       {/* Converted stage — select final quotation */}
       {selectFinalLead&&(<>
-        <div onClick={()=>setSelectFinalLead(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:500,backdropFilter:"blur(1px)"}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:500,backdropFilter:"blur(1px)"}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(420px,90vw)",boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:501,overflow:"hidden",animation:"popIn .2s ease",fontFamily:"'Segoe UI',sans-serif"}}>
           <div style={{background:"#059669",padding:"16px 20px",textAlign:"center"}}>
             <div style={{fontSize:28,marginBottom:6}}>🎉</div>

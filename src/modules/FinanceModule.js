@@ -177,7 +177,7 @@ function SitePulseDrawer({onClose}){
   const tagMeta={"progress":{c:C.g,b:C.gl},"material":{c:C.p,b:C.bl},"issue":{c:C.r,b:C.rl},"approval":{c:C.teal,b:C.tealL}};
   const filtered=PULSE_FEED.filter(f=>(site==="All"||f.site.includes(site))&&(type==="All"||f.type===type));
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:200,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:200,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:390,background:T.bg,zIndex:201,boxShadow:"-8px 0 40px rgba(0,0,0,0.24)",display:"flex",flexDirection:"column",animation:"slideIn 0.22s ease",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
@@ -238,7 +238,7 @@ function DuplicateModal({project,onClose,onConfirm}){
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const handleCreate=()=>{setDone(true);setTimeout(()=>{onConfirm({...project,id:Date.now(),name:form.name,city:form.city,boq:Number(form.boq),pm,progress:0,status:"Not Started",expense:0,start:form.start||"TBD",end:form.end||"TBD"});onClose();},1400);};
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:300,backdropFilter:"blur(3px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,width:500,maxWidth:"95vw",zIndex:301,boxShadow:"0 24px 70px rgba(0,0,0,0.32)",overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:T.blu,padding:"14px 18px",display:"flex",alignItems:"center",gap:10}}>
         <div style={{width:36,height:36,borderRadius:10,background:"rgba(255,255,255,0.18)",display:"flex",alignItems:"center",justifyContent:"center"}}><IcCopy size={17} color="white"/></div>
@@ -1415,7 +1415,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
 
   return(
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:400,backdropFilter:"blur(3px)"}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.52)",zIndex:400,backdropFilter:"blur(3px)"}}/>
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
         background:T.bg,borderRadius:12,
         width:isMaterial||isSubcon||isInvoice?900:700,
@@ -2137,7 +2137,7 @@ function AddPartyModal({onClose,onAdd}){
     setTimeout(()=>{setSaved(false);onClose();},800);
   };
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:400,backdropFilter:"blur(3px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:400,backdropFilter:"blur(3px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
       background:T.bg,borderRadius:12,width:460,maxWidth:"95vw",zIndex:401,
       boxShadow:"0 24px 70px rgba(0,0,0,0.28)",display:"flex",flexDirection:"column",
@@ -2400,7 +2400,7 @@ function SendToStaffModal({staff,onClose,onDone}){
 }
 function ModalW({title,onClose,children}){
   return createPortal(
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{position:"fixed",inset:0,background:"rgba(15,23,42,0.5)",zIndex:300,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:12,padding:"16px 18px",width:380,maxWidth:"92vw",boxShadow:"0 12px 40px rgba(0,0,0,0.25)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
           <span style={{fontSize:14,fontWeight:700,color:T.t1}}>{title}</span>

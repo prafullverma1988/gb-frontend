@@ -229,7 +229,7 @@ function MOMDetailDrawer({mom,onClose,onUpdate}){
   const TABS=[{id:"details",l:"Details"},{id:"discussion",l:"Discussion"},{id:"actions",l:`Actions (${pendingCount} pending)`},{id:"next",l:"Next Meeting"}];
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(620px,95vw)",background:T.bg,zIndex:301,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease"}}>
       {/* Header */}
       <div style={{background:T.sb,padding:"14px 18px",flexShrink:0}}>
@@ -493,7 +493,7 @@ function CreateMOMModal({onClose,onSave,projectId=null,projectName=""}){
   const labelStyle={fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:4};
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(600px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
       {/* Header */}
       <div style={{background:T.sb,padding:"13px 18px",flexShrink:0}}>
@@ -967,7 +967,7 @@ function MeetingModeModal({projectId=null,projectName="",onClose,onComplete}){
 
   return(
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:"min(680px,95vw)",maxHeight:"90vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden"}}>
         {/* header */}
         <div style={{background:T.sb,padding:"13px 18px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
@@ -1212,7 +1212,7 @@ function MeetingDetailModal({meeting,onClose}){
   const copy=()=>{ const t=mmMinutesText(meeting,refs); try{ navigator.clipboard.writeText(t).then(()=>{ setCopied(true); setTimeout(()=>setCopied(false),1800); }); }catch(e){} };
   return(
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
       <div style={{position:"fixed",top:0,right:0,bottom:0,width:"min(620px,96vw)",background:T.surface,boxShadow:"-8px 0 40px rgba(0,0,0,0.2)",zIndex:401,display:"flex",flexDirection:"column",animation:"slideIn .2s ease"}}>
         <div style={{background:T.sb,padding:"14px 18px",flexShrink:0,display:"flex",alignItems:"center",gap:10}}>
           <div style={{flex:1,minWidth:0}}>

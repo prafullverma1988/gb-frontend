@@ -73,7 +73,7 @@ export default function RevisionNoteModal({ mode = "Revision", drawingTitle, onC
 
   return (
     <>
-      <div onClick={onCancel} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 700 }} />
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.5)", zIndex: 700 }} />
       <div style={{
         position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
         background: T.surface, borderRadius: 12, width: 560, maxWidth: "92vw", maxHeight: "90vh",

@@ -107,7 +107,7 @@ export default function MapPicker({ initial, onPick, onClose }) {
 
   return (
     <>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 800 }} />
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.55)", zIndex: 800 }} />
       <div style={{ position: "fixed", top: "50%", left: "50%", transform: "translate(-50%,-50%)",
         width: "min(720px,95vw)", height: "min(560px,88vh)", background: "#fff", borderRadius: 12,
         boxShadow: "0 24px 64px rgba(0,0,0,0.3)", zIndex: 801, display: "flex", flexDirection: "column",

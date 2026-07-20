@@ -139,7 +139,7 @@ const Empty=({label,sub})=>(
 // ── MODAL SHELL ───────────────────────────────────────────────────
 const ModalShell=({title,sub,onClose,children,width=520,footer})=>(
   <>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:400,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:14,width:`min(${width}px,95vw)`,maxHeight:"92vh",boxShadow:"0 24px 64px rgba(0,0,0,0.25)",zIndex:401,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif",display:"flex",flexDirection:"column"}}>
       <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
         <div>
@@ -1169,7 +1169,7 @@ function BatchPickerPanel({data,onClose,onApply,requestedQty,materialName}){
 
   return (
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600,backdropFilter:"blur(2px)"}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:600,backdropFilter:"blur(2px)"}}/>
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:11,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:601,width:680,maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden",fontFamily:"inherit"}}>
         <div style={{padding:"12px 16px",background:T.sb,color:"white",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
           <div>
@@ -1861,7 +1861,7 @@ function MaterialDetailDrawer({material,onClose,onEdit,onDelete,onIssue,onAddSto
   const totalOut=history.filter(h=>h.type==="out").reduce((s,h)=>s+Number(h.qty||0),0);
   return (
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
       <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(560px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
         <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -2362,7 +2362,7 @@ function GRNDetailDrawer({grn,onClose,onVerify}){
   const totalRecv=(grn.items||[]).reduce((s,it)=>s+Number(it.recQty||0),0);
   return (
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
       <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(540px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
         <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -2614,7 +2614,7 @@ function IssueDetailDrawer({issue,onClose,canDelete,canReceive,onDeleted,onRecei
 
   return (
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
       <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(560px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
         <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>
@@ -3219,7 +3219,7 @@ export function TransferDetailDrawer({transfer,onClose,canDelete,canReceive,onDe
 
   return (
     <>
-      <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
       <div style={{position:"fixed",right:0,top:0,bottom:0,width:"min(560px,96vw)",background:T.surface,zIndex:401,boxShadow:"-6px 0 32px rgba(0,0,0,0.18)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .2s ease-out"}}>
         <div style={{background:T.sb,padding:"13px 18px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
           <div style={{display:"flex",alignItems:"center",gap:10}}>

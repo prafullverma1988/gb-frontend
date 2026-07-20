@@ -161,7 +161,7 @@ export default function ShareDrawingDrawer({ target, onClose, onShared }) {
   return (
     <>
       <style>{`@keyframes gbShareSlide{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-      <div onClick={onClose} style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 250 }} />
+      <div style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 250 }} />
       <div style={{
         position: "fixed", top: 0, right: 0, height: "100vh", width: 480, maxWidth: "95vw",
         background: T.surface, boxShadow: "-8px 0 30px rgba(0,0,0,0.18)", zIndex: 251,

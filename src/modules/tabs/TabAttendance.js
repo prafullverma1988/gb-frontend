@@ -539,7 +539,7 @@ function TabAttendance({ project }) {
       {/* ── WORKFORCE PANEL (Company only) ───────────────────────────── */}
       {labType==="company"&&showWfPanel&&(<>
         <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-        <div onClick={()=>setShowWfPanel(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200}}/>
         <div style={{position:"fixed",top:0,right:0,height:"100vh",width:620,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.15)",zIndex:201,display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"}}>
           {/* Header */}
           <div style={{padding:"12px 16px",background:"#0D1B2A",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -1122,7 +1122,7 @@ function TabAttendance({ project }) {
       {/* ── HISTORY DRAWER (side-slide from right) ───────────────────── */}
       {showHistory&&(<>
         <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-        <div onClick={()=>setShowHistory(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,animation:"fadeIn .15s ease-out"}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,animation:"fadeIn .15s ease-out"}}/>
         <div style={{position:"fixed",top:0,right:0,height:"100vh",width:560,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.15)",zIndex:201,display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out",fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif"}}>
           {/* Header */}
           <div style={{padding:"12px 16px",background:"#0D1B2A",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -1235,7 +1235,7 @@ function TabAttendance({ project }) {
 
       {/* ── ADD WORKFORCE MODAL ───────────────────────────────────────── */}
       {showAddWf&&labType==="company"&&(<>
-        <div onClick={()=>setShowAddWf(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.25)",zIndex:301,width:480,maxWidth:"95vw",fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"88vh",display:"flex",flexDirection:"column"}}>
           {/* Header */}
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -1358,7 +1358,7 @@ function TabAttendance({ project }) {
 
       {/* Old vendor/subcon Add modal (non-company) */}
       {showAddWf&&labType!=="company"&&(<>
-        <div onClick={()=>setShowAddWf(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.22)",zIndex:301,width:420,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"90vh",overflowY:"auto"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",position:"sticky",top:0}}>
             <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Add {TYPE_LABELS[labType]} to Project</div>
@@ -1404,7 +1404,7 @@ function TabAttendance({ project }) {
 
       {/* ── SKILLS LIBRARY DRAWER (subcon only — vendor uses Add Vendor modal) ── */}
       {showSkillDrawer && selSubconId && labType==="subcon" && (<>
-        <div onClick={()=>setShowSkillDrawer(false)}
+        <div 
           style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300,backdropFilter:"blur(2px)"}}/>
         <div style={{position:"fixed",top:0,right:0,bottom:0,width:460,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 32px rgba(0,0,0,0.18)",zIndex:301,display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideIn .25s ease-out"}}>
           <style>{`@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
@@ -1518,7 +1518,7 @@ function TabAttendance({ project }) {
       {/* ── ADD LABOUR VENDOR MODAL ──────────────────────────────────── */}
       {showAddVendor&&(<>
         <style>{`@keyframes gbSlideInRight{from{transform:translateX(100%)}to{transform:translateX(0)}}`}</style>
-        <div onClick={()=>setShowAddVendor(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
         <div style={{position:"fixed",top:0,right:0,height:"100vh",width:620,maxWidth:"95vw",background:T.surface,boxShadow:"-8px 0 30px rgba(0,0,0,0.18)",zIndex:301,fontFamily:"'Segoe UI',system-ui,-apple-system,sans-serif",display:"flex",flexDirection:"column",animation:"gbSlideInRight .25s ease-out"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
             <div>
@@ -1730,7 +1730,7 @@ function TabAttendance({ project }) {
 
       {/* ── RATE CHANGE APPROVAL MODAL ────────────────────────────────── */}
       {showRateModal&&rateReqWorker&&(<>
-        <div onClick={()=>setShowRateModal(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:300}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 20px 60px rgba(0,0,0,0.22)",zIndex:301,width:380,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden"}}>
           <div style={{background:"#0D1B2A",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <div style={{fontSize:13.5,fontWeight:700,color:"white"}}>Request Rate Change</div>

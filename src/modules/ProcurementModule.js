@@ -107,7 +107,7 @@ const Pill=({label,c,bg,brd})=>(
 // ── MODAL SHELL ───────────────────────────────────────────────────────
 function Modal({onClose,width=480,children}){
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:300,backdropFilter:"blur(2px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.38)",zIndex:300,backdropFilter:"blur(2px)"}}/>
     <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",zIndex:301,width,fontFamily:"'Segoe UI',sans-serif",overflow:"hidden",maxHeight:"90vh",display:"flex",flexDirection:"column"}}>
       {children}
     </div>
@@ -722,7 +722,7 @@ function PODetailDrawer({po,onClose,onApprove,onShare,onGRN,onEdit,onCancel,onSe
   const totalAmt=d.items?.reduce((s,it)=>s+(it.amount||0),0)||d.amount||0;
 
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:520,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
 
       {/* Header */}
@@ -890,7 +890,7 @@ function RFQDetailDrawer({rfq,onClose,onPunch,onLock,onPublish,onCreatePO}){
   const minTotal=Math.min(...allTotals);const maxTotal=Math.max(...allTotals);
   const rs=RFQ_STATUS[rfq.status]||RFQ_STATUS.Draft;
   return(<>
-    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:200,backdropFilter:"blur(1px)"}}/>
     <div style={{position:"fixed",right:0,top:0,bottom:0,width:680,background:T.bg,zIndex:201,boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif"}}>
       <div style={{background:"#0D1B2A",padding:"14px 18px",flexShrink:0}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>

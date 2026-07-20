@@ -951,7 +951,7 @@ function TabSubcon({ projectId, project }) {
                   const items = billItems[expandedBill];
                   const stC = b.status==="Paid"?T.grn:b.status==="Approved"?T.blu:b.status==="Submitted"?T.amb:T.t4;
                   return (<>
-                    <div onClick={()=>setExpandedBill(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:310,backdropFilter:"blur(2px)"}}/>
+                    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:310,backdropFilter:"blur(2px)"}}/>
                     <div style={{position:"fixed",right:0,top:0,bottom:0,width:580,maxWidth:"95vw",background:T.bg,zIndex:311,boxShadow:"-6px 0 36px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column",fontFamily:"'Segoe UI',sans-serif",animation:"slideInRight .18s ease-out"}}>
                       {/* Header */}
                       <div style={{background:"#0891B2",padding:"14px 18px",flexShrink:0,color:"white"}}>
@@ -1124,7 +1124,7 @@ function TabSubcon({ projectId, project }) {
         };
 
         return (<>
-          <div onClick={()=>setShowSetMs(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:300}}/>
           <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",width:640,maxWidth:"95vw",maxHeight:"90vh",background:T.surface,borderRadius:12,zIndex:301,boxShadow:"0 24px 64px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column"}}>
             {/* Header */}
             <div style={{padding:"14px 18px",borderBottom:"1px solid "+T.b1,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -1403,7 +1403,7 @@ function TabSubcon({ projectId, project }) {
           );
         };
         return (<>
-          <div onClick={()=>setWoItemPickerOpen(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:320}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:320}}/>
           <div style={{position:"fixed",top:0,right:0,bottom:0,width:420,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 24px rgba(0,0,0,0.2)",zIndex:321,display:"flex",flexDirection:"column"}}>
             {/* Header */}
             <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
@@ -1824,7 +1824,7 @@ function TabSubcon({ projectId, project }) {
           for (const r of roots) walk(r, 0);
         }
         return (<>
-          <div onClick={()=>setTaskPickerFor(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:330}}/>
+          <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:330}}/>
           <div style={{position:"fixed",top:0,right:0,bottom:0,width:440,maxWidth:"95vw",background:"white",boxShadow:"-8px 0 24px rgba(0,0,0,0.2)",zIndex:331,display:"flex",flexDirection:"column"}}>
             <div style={{padding:"14px 18px",background:T.t1,color:"white",flexShrink:0}}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
@@ -3128,7 +3128,7 @@ function NewWOModal({ subcons, setSubcons, projectId, project, fmtC, inpStyle, l
 
                   {/* ── SIDE SLIDE PICKER ─────────────────────── */}
                   {iwShowPicker && (<>
-                    <div onClick={()=>setIwShowPicker(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:520,backdropFilter:"blur(2px)"}}/>
+                    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.45)",zIndex:520,backdropFilter:"blur(2px)"}}/>
                     <div style={{position:"fixed",right:0,top:0,bottom:0,width:520,maxWidth:"95vw",background:"white",zIndex:521,boxShadow:"-6px 0 36px rgba(0,0,0,0.3)",display:"flex",flexDirection:"column",animation:"slideInRight .18s ease-out"}}>
                       {/* Picker header */}
                       <div style={{background:"#0F172A",padding:"14px 16px",flexShrink:0}}>
@@ -3488,7 +3488,7 @@ function SubconLibraryFormModal({ onClose, onSaved, inpStyle, lblStyle }) {
   };
 
   return (
-    <div onClick={onClose}
+    <div 
       style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.55)",zIndex:700,display:"flex",alignItems:"center",justifyContent:"center"}}>
       <div onClick={e=>e.stopPropagation()}
         style={{background:T.surface,borderRadius:12,width:"min(560px,95vw)",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 24px 64px rgba(0,0,0,0.35)"}}>

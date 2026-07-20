@@ -69,7 +69,7 @@ function DesignRequestModal({ show, onClose, editReq, reqForm, setReqForm, onSav
   if (!show) return null;
   return (
     <>
-      <div onClick={()=>!saving&&onClose()}
+      <div 
         style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"}}/>
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
         background:"#FFFFFF",borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
@@ -458,7 +458,7 @@ function TabDesign({ project, isAdmin }) {
   // ── UPLOAD MODAL ──────────────────────────────────────────────────
   const UploadModal = () => (
     <>
-      <div onClick={()=>!uploading&&setShowUpload(false)}
+      <div 
         style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400,backdropFilter:"blur(2px)"}}/>
       <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
         background:T.surface,borderRadius:12,boxShadow:"0 24px 64px rgba(0,0,0,0.22)",
@@ -592,7 +592,7 @@ function TabDesign({ project, isAdmin }) {
   // ── REVISION QUEUE PANEL ──────────────────────────────────────────
   const RevisionQueue = () => (
     <>
-      <div onClick={()=>setShowRevQ(false)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
+      <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400}}/>
       <div style={{position:"fixed",right:0,top:0,bottom:0,width:440,background:T.bg,zIndex:401,
         boxShadow:"-4px 0 24px rgba(0,0,0,0.16)",display:"flex",flexDirection:"column"}}>
         <div style={{background:"#D97706",padding:"13px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
@@ -656,7 +656,7 @@ function TabDesign({ project, isAdmin }) {
     },[]);
     return(
       <>
-        <div onClick={()=>setShowVer(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:400}}/>
         <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",
           background:T.surface,borderRadius:12,zIndex:401,width:480,maxHeight:"80vh",
           display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}}>
