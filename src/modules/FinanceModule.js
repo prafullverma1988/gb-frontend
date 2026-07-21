@@ -685,10 +685,11 @@ function DualBillStrip({ row, onFields }){
     });
   };
 
-  const rate=Number(row.rate)||0;
   // Authoritative line total comes from the solver (row.total) — the user may
   // have typed the total directly with rate derived from it.
   const altTotal=Number(row.total)||0;
+  const sInp=(extra={})=>({padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,
+    outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right",background:T.surface,...extra});
 
   return (
     <div style={{padding:"2px 12px 8px",background:on?T.bluL:"transparent",borderBottom:on?`1px solid ${T.b1}`:"none"}}>
@@ -705,16 +706,31 @@ function DualBillStrip({ row, onFields }){
         <div style={{display:"flex",alignItems:"center",gap:9,marginTop:7,flexWrap:"wrap"}}>
           <span style={{fontSize:10.5,color:T.t3}}>Received: <b style={{color:T.t2}}>{primaryQty} {primaryUnit}</b> 🔒</span>
           <span style={{fontSize:11,color:T.t4}}>→ bill on:</span>
+          {/* The billing line lives here, not in the row above: on a dual-unit
+              line the row's Qty column still shows the RECEIVED measure, so the
+              full qty × rate = total triple is editable in this strip with the
+              same any-two-drive-the-third solver. Qty never derives — it's a
+              weighbridge reading, so Total edits always land on Rate. */}
           <input type="number" value={row.alt_qty||""}
-            onChange={e=>onFields({altOn:true,alt_qty:e.target.value})}
+            onChange={e=>onFields({altOn:true,alt_qty:e.target.value},"qty")}
             placeholder={suggest!=null?String(suggest):"weight"} title="Weighbridge parchi ka weight — editable"
-            style={{width:100,padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",textAlign:"right",background:T.surface}}/>
+            style={sInp({width:100})}/>
           <select value={row.alt_unit||""} onChange={e=>onFields({altOn:true,alt_unit:e.target.value})}
             style={{padding:"6px 9px",borderRadius:6,border:`1.5px solid ${T.bluM}`,fontSize:12.5,outline:"none",fontFamily:"inherit",cursor:"pointer",background:T.surface}}>
             {units.map(u=><option key={u}>{u}</option>)}
           </select>
-          <span style={{fontSize:11,color:T.t3}}>× ₹{rate||0} =</span>
-          <span style={{fontSize:12.5,fontWeight:800,color:altTotal>0?T.grn:T.t4}}>{altTotal>0?`₹${altTotal.toLocaleString("en-IN")}`:"—"}</span>
+          <span style={{fontSize:11,color:T.t3}}>× ₹</span>
+          <input type="number" value={row.rate||""}
+            onChange={e=>onFields({rate:e.target.value},"rate")}
+            placeholder="rate" title={row._d==="rate"?"Auto: Total ÷ billing qty":"Rate per billing unit"}
+            style={sInp(row._d==="rate"?{width:92,borderStyle:"dashed",background:T.surfaceB,color:T.t2}:{width:92})}/>
+          <span style={{fontSize:11,color:T.t3}}>=</span>
+          <input type="number" value={row.total||""}
+            onChange={e=>onFields({total:e.target.value},"total")}
+            placeholder="total" title={row._d==="total"?"Auto: billing qty × Rate — total seedha type bhi kar sakte ho":"Entered total — yahi bill amount banega"}
+            style={sInp(row._d==="total"
+              ?{width:110,fontWeight:800,borderStyle:"dashed",background:T.surfaceB,color:altTotal>0?T.grn:T.t4}
+              :{width:110,fontWeight:800,borderColor:T.grnM,background:T.grnL,color:T.grn})}/>
           {suggest!=null&&!row.alt_qty&&<span style={{fontSize:10,color:T.t4}}>~{suggest} suggested (×{ratio})</span>}
         </div>
       )}
@@ -1049,10 +1065,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     return u;
   }));
   // Multi-field update (dual-unit strip sets altOn/alt_qty/alt_unit together).
-  const updRowFields=(id,obj)=>setRows(p=>p.map(r=>{
+  // touchField names which solver member the user edited — the strip carries
+  // the whole qty/rate/total triple, so it can touch any of them.
+  const updRowFields=(id,obj,touchField)=>setRows(p=>p.map(r=>{
     if(r.id!==id) return r;
     let u={...r,...obj};
-    if(obj.alt_qty!==undefined&&obj.alt_qty!==r.alt_qty) u._t=_touch(u._t,"qty");
+    if(touchField) u._t=_touch(u._t,touchField);
+    else if(obj.alt_qty!==undefined&&obj.alt_qty!==r.alt_qty) u._t=_touch(u._t,"qty");
     u=solveLine(u);
     return u;
   }));
@@ -1825,11 +1844,14 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
                   <input data-field="desc" value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Grade, spec, brand..."
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                  {/* Qty — locked only for GRN rows; derived (dashed) when Rate+Total were typed */}
+                  {/* Qty — locked only for GRN rows; derived (dashed) when Rate+Total were typed.
+                      On dual-unit rows this column is the RECEIVED measure, not the billing
+                      basis — the strip below carries the qty that Rate/Total multiply. */}
                   {row.fromGRN
-                    ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>{row.qty}</div>
+                    ?<div title={row.altOn?"Received qty — bill neeche wali billing unit par ban raha hai":undefined}
+                      style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:row.altOn?T.t3:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>{row.qty}</div>
                     :<input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0"
-                      title={row._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(row._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined)}
+                      title={row.altOn?"Received qty — bill neeche wali billing unit par ban raha hai":(row._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(row._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined))}
                       style={inp(row._d==="qty"
                         ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
                         :row._pick==="qty"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
@@ -1861,7 +1883,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                     <IcX size={12} color="currentColor"/>
                   </button>
                 </div>
-                {(row.grnHadAlt||row.material)&&<DualBillStrip row={row} onFields={obj=>updRowFields(row.id,obj)}/>}
+                {(row.grnHadAlt||row.material)&&<DualBillStrip row={row} onFields={(obj,touchField)=>updRowFields(row.id,obj,touchField)}/>}
                 </div>
               ))}
               <div style={{padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`,display:"flex",alignItems:"center",gap:10}}>
