@@ -11,6 +11,10 @@ const IcMic = (p) => <Ic {...p} d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3
 const IcBot = (p) => <Ic {...p} d="M12 8V4H8M4 8h16v12H4zM2 14h2M20 14h2M9 13v2M15 13v2" />;
 const IcTicket = (p) => <Ic {...p} d="M3 7h18v4a2 2 0 000 4v3H3v-3a2 2 0 000-4V7zM13 7v14" />;
 
+// The app-wide fetch timeout is 15s, which is too short for an LLM reply
+// (and for voice: STT + LLM). Sahayak asks for 60s on its own calls only.
+const CHAT_TIMEOUT_MS = 60000;
+
 const ACCENT = T.blu;          // repo token — sober indigo/blue accent
 const ACCENT_SOFT = T.bluL;
 
@@ -77,7 +81,8 @@ export default function SahayakModule() {
     pushMessage({ role: "user", text });
     setSending(true);
     try {
-      const r = await api.post("/support-bot/chat", { text });
+      // LLM answers routinely take longer than the app-wide 15s default.
+      const r = await api.post("/support-bot/chat", { text }, { timeoutMs: CHAT_TIMEOUT_MS });
       if (r && r.success) {
         pushMessage({ role: "bot", text: r.reply, ticket: r.ticket_no || null });
       } else {
@@ -125,7 +130,8 @@ export default function SahayakModule() {
     setTranscribing(true);
     try {
       const b64 = await blobToB64(blob);
-      const r = await api.post("/support-bot/chat", { audio_base64: b64, mime_type: blob.type });
+      // Voice = speech-to-text + LLM, so it needs the longer budget too.
+      const r = await api.post("/support-bot/chat", { audio_base64: b64, mime_type: blob.type }, { timeoutMs: CHAT_TIMEOUT_MS });
       setTranscribing(false);
       if (r && r.success) {
         pushMessage({ role: "user", text: r.transcript || "(awaaz)", transcript: r.transcript || null });
