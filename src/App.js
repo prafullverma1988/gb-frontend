@@ -1081,118 +1081,30 @@ function ProjectExpandedRow({p}){
 
 // ══════════════════════════════════════════════════════════════════════
 // DASHBOARD — two-view design: Finance vs Operations.
-// NOTE: data below is hardcoded MOCK for design vision only. Wiring to
-// real APIs is a follow-up step (replace MOCK_* with /dashboard/* calls).
+// Data comes from /dashboard/overview. When the API returns nothing we render
+// an EMPTY dashboard (zeros / blank lists) — never sample data, so a user is
+// never shown project names or amounts that are not theirs.
 // ══════════════════════════════════════════════════════════════════════
-const MOCK_FIN = {
+const EMPTY_OPS = {
   kpis: [
-    { label:"Total BOQ",      value:"₹1.1Cr",  sub:"5 projects",        color:T.slt, Icon:IcMargin, trend:"up",   trendVal:"+12%" },
-    { label:"Total Received", value:"₹62.4L",  sub:"57% of BOQ",        color:T.grn, Icon:IcCash,   trend:"up",   trendVal:"+8%"  },
-    { label:"Total Spent",    value:"₹48.9L",  sub:"44% of BOQ",        color:T.amb, Icon:IcTruck },
-    { label:"Gross Margin",   value:"₹52.1L",  sub:"47.4% margin",      color:T.grn, Icon:IcTrend,  trend:"up",   trendVal:"47.4%" },
-    { label:"Receivables",    value:"₹13.8L",  sub:"6 invoices due",    color:T.blu, Icon:IcPay },
-    { label:"Payables",       value:"₹9.2L",   sub:"₹3.1L overdue",     color:T.red, Icon:IcAlert },
+    {label:"Active Projects",   value:0, sub:"0 total",        color:T.pur, Icon:IcProj},
+    {label:"Present Today",     value:0, sub:"attendance today", color:T.grn, Icon:IcTeam},
+    {label:"Active Tasks",      value:0, sub:"0 overdue",       color:T.amb, Icon:IcChk},
+    {label:"Pending Approvals", value:0, sub:"to review",       color:T.red, Icon:IcApprv},
+    {label:"Material Requests", value:0, sub:"pending",         color:T.blu, Icon:IcProc},
+    {label:"Low Stock Items",   value:0, sub:"reorder needed",  color:T.amb, Icon:IcWH},
   ],
-  cashflow: [
-    { month:"Jan", in:820000, out:610000 }, { month:"Feb", in:940000, out:720000 },
-    { month:"Mar", in:1180000, out:880000 }, { month:"Apr", in:760000, out:540000 },
-    { month:"May", in:1320000, out:910000 }, { month:"Jun", in:1050000, out:680000 },
-  ],
-  expense: [
-    { label:"Material Purchase", value:2240000, color:T.blu },
-    { label:"Sub-Contractor",    value:1460000, color:T.pur },
-    { label:"Direct Labour",     value:730000,  color:T.grn },
-    { label:"Site Expenses",     value:290000,  color:T.amb },
-    { label:"Equipment",         value:170000,  color:T.slt },
-  ],
-  payments: [
-    { id:1, label:"RA Bill #12 — Skyline Apartments", desc:"Client receivable · due in 3d",  amount:480000, color:T.grn, dir:"in",  Icon:IcPay  },
-    { id:2, label:"Abhay Traders — Material PO",       desc:"Vendor payable · overdue 2d",     amount:215000, color:T.red, dir:"out", Icon:IcTruck },
-    { id:3, label:"Subcon RA — Verma Construction",    desc:"Approved · awaiting release",      amount:168000, color:T.amb, dir:"out", Icon:IcApprv },
-    { id:4, label:"June Salary Run",                   desc:"5 staff · pending payout",         amount:56240,  color:T.amb, dir:"out", Icon:IcTeam },
-  ],
-  activity: [
-    { id:1, title:"Payment received", desc:"RA Bill #11 — Skyline", project:"Skyline Apartments", time:"2h ago",  amount:520000, dir:"in",      icon:IcCash },
-    { id:2, title:"Vendor paid",      desc:"Cement — Abhay Traders", project:"Harish Villa",      time:"5h ago",  amount:142000, dir:"out",     icon:IcTruck },
-    { id:3, title:"Invoice raised",   desc:"RA Bill #12",            project:"Skyline Apartments", time:"Yesterday", amount:480000, dir:"pending", icon:IcPay },
-    { id:4, title:"Advance settled",  desc:"Subcon — Verma",         project:"R K Rathor",        time:"2d ago",  amount:90000,  dir:"out",     icon:IcApprv },
-  ],
-  // Real-time per-project financial health (for the "Real-time Financials" toggle)
-  projectFin: [
-    { id:1, name:"Skyline Apartments", city:"Raipur", boq:3500000, progress:72, invoiced:2200000, received:1800000, expense:1980000, next:{value:480000, milestone:"5th slab", due:"in 3d"} },
-    { id:2, name:"Harish Villa",       city:"Bhilai", boq:5000000, progress:45, invoiced:1750000, received:1500000, expense:2350000, next:{value:600000, milestone:"Brickwork", due:"in 9d"} },
-    { id:3, name:"R K Rathor",         city:"Bhilai", boq:6500000, progress:30, invoiced:2600000, received:2100000, expense:1700000, next:{value:520000, milestone:"Plinth",    due:"in 5d"} },
-    { id:4, name:"Kewal Sahu",         city:"Bhilai", boq:8000000, progress:0,  invoiced:0,       received:0,       expense:120000,  next:{value:800000, milestone:"Mobilization", due:"on start"} },
-  ],
+  projects: [], attendance: {present:0,absent:0,leave:0,total:0,byDept:[]}, team: [],
+  pipeline: [], approvals: [], siteActivity: [], alerts: [],
 };
-const MOCK_OPS = {
-  kpis: [
-    { label:"Active Projects",  value:4,       sub:"Avg 47% progress", color:T.pur, Icon:IcProj },
-    { label:"Present Today",    value:"18/22", sub:"82% attendance",   color:T.grn, Icon:IcTeam },
-    { label:"Open Tasks",       value:23,      sub:"5 overdue",        color:T.amb, Icon:IcChk },
-    { label:"Pending Approvals",value:6,       sub:"3 high priority",  color:T.red, Icon:IcApprv },
-    { label:"Material Requests",value:5,       sub:"2 awaiting PO",    color:T.blu, Icon:IcProc },
-    { label:"Low Stock Items",  value:3,       sub:"reorder needed",   color:T.amb, Icon:IcWH },
-  ],
-  projects: [
-    { id:1, name:"Skyline Apartments", city:"Raipur", progress:72, status:"Ongoing", tasks:"8 open", delay:null, pm:"Vijay",
-      recent:[ {t:"2nd floor slab casting", on:"Today", by:"Vijay"}, {t:"Electrical rough-in — Block A", on:"Yesterday", by:"Niranjan"}, {t:"Column shuttering 3rd flr", on:"3d ago", by:"Vijay"} ],
-      next:{ t:"Block-A flooring start", due:"in 2d", by:"Vijay" },
-      issues:[ {title:"Cement shortage", member:"Niranjan Kumar", progress:60, hurdle:"Vendor delay 2d"}, {title:"Lift shaft RCC pending", member:"Vijay Sahu", progress:30, hurdle:null} ] },
-    { id:2, name:"Harish Villa", city:"Bhilai", progress:45, status:"Ongoing", tasks:"6 open", delay:"2d behind", pm:"Priyanka",
-      recent:[ {t:"Internal plastering started", on:"Today", by:"Harsh"}, {t:"Plumbing rough-in done", on:"2d ago", by:"Harsh"} ],
-      next:{ t:"Brickwork — 1st floor", due:"in 1d", by:"Priyanka" },
-      issues:[ {title:"Labour shortage", member:"Harsh Sahu", progress:40, hurdle:"2 mason short"}, {title:"Drawing R3 approval", member:"Priyanka", progress:70, hurdle:"Awaiting client sign-off"} ] },
-    { id:3, name:"R K Rathor", city:"Bhilai", progress:30, status:"Ongoing", tasks:"5 open", delay:null, pm:"Raganee",
-      recent:[ {t:"Block-C excavation shuru", on:"Today", by:"Niranjan"}, {t:"Steel 2.4 MT received", on:"Yesterday", by:"Store"} ],
-      next:{ t:"Plinth beam casting", due:"in 5d", by:"Raganee" },
-      issues:[ {title:"Soil compaction slow", member:"Niranjan Kumar", progress:50, hurdle:"Rain forecast"} ] },
-    { id:4, name:"Kewal Sahu", city:"Bhilai", progress:0, status:"Not Started", tasks:"4 open", delay:null, pm:"—",
-      recent:[],
-      next:{ t:"Site mobilization", due:"on start", by:"—" },
-      issues:[ {title:"Layout approval pending", member:"—", progress:0, hurdle:"Awaiting client BOQ sign"} ] },
-  ],
-  attendance: { present:18, absent:2, leave:2, total:22, byDept:[
-    { dept:"Site Engineers", present:5, total:6 }, { dept:"Supervisors", present:4, total:4 },
-    { dept:"Office Staff", present:6, total:8 }, { dept:"Accounts", present:3, total:4 },
-  ]},
-  // Named attendance snapshot (GPS punch + location) — like Sanchalan Pulse
-  team: [
-    { name:"Harsh Sahu",     loc:"Harish Villa, Bhilai",   status:"present" },
-    { name:"Niranjan Kumar", loc:"R K Rathor, Bhilai",     status:"present" },
-    { name:"Sunita Patel",   loc:"Head Office, Bhilai",    status:"present" },
-    { name:"Vijay Sahu",     loc:"Skyline, Raipur",        status:"present" },
-    { name:"Ramesh Yadav",   loc:"—",                      status:"absent"  },
-    { name:"Priyanka Sahu",  loc:"On leave (CL)",          status:"leave"   },
-  ],
-  // Procurement pipeline — MR → PO → GRN flow
-  pipeline: [
-    { stage:"Material Requests", count:12, color:T.blu, sub:"2 awaiting PO" },
-    { stage:"Purchase Orders",   count:8,  color:T.pur, sub:"3 partial"     },
-    { stage:"GRN Received",      count:5,  color:T.grn, sub:"2 today"       },
-  ],
-  approvals: [
-    { id:1, label:"MR-36 — Texture Paint",     desc:"Harish · 3 Kg",        time:"5h ago",  pri:"high"   },
-    { id:2, label:"PO-12 — Modular Switches",  desc:"Kewal Sahu · ₹84K",    time:"6h ago",  pri:"high"   },
-    { id:3, label:"Drawing R3 — Floor Plan",   desc:"Design · Skyline",     time:"Yesterday", pri:"med"  },
-    { id:4, label:"Leave — Priyanka (2d)",     desc:"CL · 18–19 Jun",       time:"Yesterday", pri:"low"  },
-  ],
-  // Site activity — project-wise: kya task hua / ho raha hai
-  siteActivity: [
-    { id:1, project:"Skyline Apartments", task:"2nd floor slab casting complete", state:"done",    time:"2h ago" },
-    { id:2, project:"R K Rathor",         task:"Block-C excavation shuru",        state:"ongoing", time:"4h ago" },
-    { id:3, project:"Harish Villa",       task:"Internal plastering started",     state:"ongoing", time:"6h ago" },
-    { id:4, project:"Skyline Apartments", task:"Electrical rough-in — Block A",   state:"done",    time:"Yesterday" },
-    { id:5, project:"R K Rathor",         task:"Steel 2.4 MT received at site",   state:"done",    time:"Yesterday" },
-  ],
-  // Dhyaan chahiye — operational alerts
-  alerts: [
-    { id:1, msg:"5 tasks overdue — review chahiye",        level:"red" },
-    { id:2, msg:"R K Rathor — aaj ka DPR pending",          level:"amb" },
-    { id:3, msg:"4 material requests approval ke liye",     level:"amb" },
-    { id:4, msg:"3 items low stock — reorder karein",       level:"amb" },
-  ],
-};
+const EMPTY_FIN_KPIS = [
+  {label:"Total BOQ",      value:"₹0", sub:"0 projects", color:T.slt, Icon:IcMargin},
+  {label:"Total Received", value:"₹0", sub:"received",   color:T.grn, Icon:IcCash},
+  {label:"Total Spent",    value:"₹0", sub:"spent",      color:T.amb, Icon:IcTruck},
+  {label:"Gross Margin",   value:"₹0", sub:"0% margin",  color:T.grn, Icon:IcTrend},
+  {label:"Receivables",    value:"₹0", sub:"outstanding", color:T.blu, Icon:IcPay},
+  {label:"Payables",       value:"₹0", sub:"on time",    color:T.red, Icon:IcAlert},
+];
 
 // ── ECharts option builders (GB theme) ───────────────────────────────
 const _EAX={axisLine:{lineStyle:{color:T.b1}},axisTick:{show:false},axisLabel:{color:T.t4,fontSize:10}};
@@ -1314,7 +1226,7 @@ function DashboardModule(){
     projects:o.projects, attendance:o.attendance, team:o.team,
     pipeline:(o.pipeline||[]).map((s,i)=>({...s,color:[T.blu,T.pur,T.grn][i]||T.slt})),
     approvals:o.approvals, siteActivity:o.siteActivity, alerts:o.alerts,
-  } : MOCK_OPS;
+  } : EMPTY_OPS;
 
   if(view==="operations"){
     return(
@@ -1326,18 +1238,20 @@ function DashboardModule(){
   }
 
   // ===== FINANCE VIEW =====
-  const finPayments = f ? (f.payments||[]).map(p=>({...p, color:p.dir==="in"?T.grn:T.red, Icon:p.dir==="in"?IcPay:IcTruck})) : MOCK_FIN.payments;
-  const finActivityArr = f ? (f.activity||[]).map(a=>({...a, color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red, icon:a.dir==="in"?IcCash:IcPay})) : MOCK_FIN.activity;
-  const finProjData = f ? (f.projectFin||[]) : MOCK_FIN.projectFin;
+  const finPayments = f ? (f.payments||[]).map(p=>({...p, color:p.dir==="in"?T.grn:T.red, Icon:p.dir==="in"?IcPay:IcTruck})) : [];
+  const finActivityArr = f ? (f.activity||[]).map(a=>({...a, color:a.dir==="in"?T.grn:a.dir==="pending"?T.amb:T.red, icon:a.dir==="in"?IcCash:IcPay})) : [];
+  const finProjData = f ? (f.projectFin||[]) : [];
   const dd = f ? {
     projects: f.summaryProjects||[], cashflow: f.cashflow||[], activities: finActivityArr, pending_actions: finPayments,
     expense_breakdown: (f.expense&&f.expense.length)?f.expense:undefined,
     cash_balance: 0, overdue_amount: f.kpis.payablesOverdue||0, alerts: [],
   } : {
-    projects: MOCK_OPS.projects.map(p=>({...p, boq: 2000000+p.id*1500000, expense: 800000+p.id*600000, client:"—", type:"construction" })),
-    cashflow: MOCK_FIN.cashflow, activities: MOCK_FIN.activity, pending_actions: MOCK_FIN.payments,
-    alerts: ALERTS, material_status: MATERIAL_STATUS, expense_breakdown: MOCK_FIN.expense,
-    cash_balance: 1240000, overdue_amount: 310000,
+    // No data from the API → show an honest EMPTY dashboard. (This used to fall
+    // back to hardcoded sample projects/amounts, so users saw project names and
+    // figures that were not theirs.)
+    projects: [], cashflow: [], activities: [], pending_actions: [],
+    alerts: [], material_status: MATERIAL_STATUS, expense_breakdown: undefined,
+    cash_balance: 0, overdue_amount: 0,
   };
   // Finance KPI tiles from real data (icons/colours presentational)
   const k=f&&f.kpis;
@@ -1348,7 +1262,7 @@ function DashboardModule(){
     {label:"Gross Margin",   value:`₹${fmt(k.grossMargin)}`, sub:`${k.totalBOQ>0?((k.grossMargin/k.totalBOQ)*100).toFixed(1):0}% margin`, color:k.grossMargin>=0?T.grn:T.red, Icon:IcTrend},
     {label:"Receivables",    value:`₹${fmt(k.receivables)}`, sub:"outstanding", color:T.blu, Icon:IcPay},
     {label:"Payables",       value:`₹${fmt(k.payables)}`,    sub:k.payablesOverdue>0?`₹${fmt(k.payablesOverdue)} overdue`:"on time", color:T.red, Icon:IcAlert},
-  ] : MOCK_FIN.kpis;
+  ] : EMPTY_FIN_KPIS;
   const projectsArr=dd.projects||PROJECTS_DATA;
   const cashflowArr=dd.cashflow||CASHFLOW_DATA;
   const activityArr=dd.activities||ACTIVITY_FEED;
