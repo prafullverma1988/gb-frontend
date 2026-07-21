@@ -43,6 +43,37 @@ function fmtDate(d){
   return dd+"/"+m+"/"+y;
 }
 function ptDelayDays(t){if(t.status==="Completed"||!t.baseEnd) return 0;const d=Math.round((new Date()-new Date(t.baseEnd))/(1000*86400));return d>0?d:0;}
+
+// ── Parent (summary) task progress ───────────────────────────────────────
+// A task with children does NOT own its progress — the backend derives it as a
+// duration-weighted average of the whole subtree (gb-backend/utils/taskRollup.js).
+// An admin/PM may pin a manual value with a reason; when they do, the auto
+// number keeps computing underneath so the gap stays visible instead of hidden.
+const PT_OVERRIDE_REASONS={
+  site_judgement:"Site pe actual kaam ka assessment alag hai",
+  client_certified:"Client / consultant ne yeh % certify kiya",
+  boq_measurement:"BOQ / measurement book ke hisaab se",
+  partial_scope:"Kuch sub-tasks abhi plan me add nahi hue",
+  rework:"Rework ki wajah se progress peeche gaya",
+  other:"Other",
+};
+const PT_OVERRIDE_MIN_NOTE=10;
+function ptIsOverridden(t){return t&&t.progress_override!==null&&t.progress_override!==undefined&&t.progress_override!=="";}
+// How far the pinned value has drifted from what the children now say. Past
+// 10 points the badge turns amber — the override has gone stale.
+function ptOverrideDrift(t){
+  if(!ptIsOverridden(t)||t.progress_auto===null||t.progress_auto===undefined) return 0;
+  return Math.abs(Number(t.progress_override)-Number(t.progress_auto));
+}
+function ptOverrideTitle(t){
+  if(!ptIsOverridden(t)) return "";
+  const parts=["Manual "+t.progress_override+"%"];
+  if(t.progress_auto!==null&&t.progress_auto!==undefined) parts.push("Auto "+t.progress_auto+"%");
+  if(t.override_reason) parts.push(PT_OVERRIDE_REASONS[t.override_reason]||t.override_reason);
+  if(t.override_note) parts.push('"'+t.override_note+'"');
+  if(t.override_at) parts.push(fmtDate(t.override_at));
+  return parts.join(" · ");
+}
 // P3: execution delay vs the planned finish. Prefer the FROZEN original
 // baseline (so cascade/rebaseline doesn't hide slippage); fall back to the
 // current plan (base_end). kind: late | early | ontime | running | none
@@ -258,6 +289,7 @@ function TabTasks({ projectId, isAdmin }) {
   const [pendingTask,setPendingTask] = useState(null);
   const [openTask,setOpenTask]       = useState(null);
   const [editTask,setEditTask]       = useState(null);
+  const [overrideTask,setOverrideTask] = useState(null); // parent whose rollup is being pinned
   const [addParent,setAddParent]     = useState(null);
   const [showAdd,setShowAdd]         = useState(false);
   const [depSearch,setDepSearch]     = useState("");
@@ -515,8 +547,12 @@ function TabTasks({ projectId, isAdmin }) {
     const GRID=GRID_TEMPLATE;
     const SEP={borderRight:"1px solid #F1F5F9"};
 
+    // Child rows render INSIDE this wrapper, so a right-click on one bubbles up
+    // and lets the ancestor's handler overwrite the menu with its own task.
+    // stopPropagation keeps the innermost row — the one actually clicked — as
+    // the menu's subject.
     return(
-      <div key={t.id} onContextMenu={e=>{e.preventDefault();setContextMenu({x:e.clientX,y:e.clientY,task:t});}} style={{position:"relative"}}>
+      <div key={t.id} onContextMenu={e=>{e.preventDefault();e.stopPropagation();setContextMenu({x:e.clientX,y:e.clientY,task:t});}} style={{position:"relative"}}>
         <div style={{display:"grid",gridTemplateColumns:GRID,alignItems:"center",height:32,borderBottom:"1px solid #F1F5F9",background:depth===0?"#F8FAFC":"white",transition:"background .1s"}}
           onMouseEnter={e=>{
             e.currentTarget.style.background="#EFF6FF";
@@ -586,12 +622,18 @@ function TabTasks({ projectId, isAdmin }) {
             <span style={{background:ss.bg,color:ss.c,fontSize:9.5,fontWeight:600,padding:"2px 8px",borderRadius:4,whiteSpace:"nowrap",border:"1px solid "+ss.brd}}>{t.status}</span>
           </div>
 
-          {/* Progress */}
-          <div style={{padding:"0 8px",...SEP,display:"flex",flexDirection:"column",justifyContent:"center",height:"100%"}}>
+          {/* Progress — parents show a rolled-up value; "M" marks a pinned override */}
+          <div style={{padding:"0 8px",...SEP,display:"flex",flexDirection:"column",justifyContent:"center",height:"100%"}}
+            title={hasKids?(ptIsOverridden(t)?ptOverrideTitle(t):"Children se auto-calculated (duration-weighted)"):""}>
             <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:3}}>
               <div style={{flex:1,height:4,background:"#E2E8F0",borderRadius:2,overflow:"hidden"}}>
                 <div style={{height:"100%",width:t.progress+"%",background:t.progress===100?"#10B981":t.progress>0?"#3B82F6":"#E2E8F0",borderRadius:2,transition:"width .3s"}}/>
               </div>
+              {hasKids&&ptIsOverridden(t)&&(
+                <span style={{fontSize:8,fontWeight:800,padding:"1px 3px",borderRadius:3,flexShrink:0,lineHeight:1.3,
+                  background:ptOverrideDrift(t)>10?"#FEF3C7":"#EEF2FF",
+                  color:ptOverrideDrift(t)>10?"#B45309":"#4B45C4"}}>M</span>
+              )}
               <span style={{fontSize:10,fontWeight:600,color:t.progress===100?"#10B981":t.progress>0?"#3B82F6":"#94A3B8",flexShrink:0,minWidth:24,textAlign:"right"}}>{t.progress}%</span>
             </div>
           </div>
@@ -1316,10 +1358,19 @@ function TabTasks({ projectId, isAdmin }) {
               null, // divider
               {icon:"M12 5v14M5 12h14",label:"Add Subtask",action:()=>{setAddParent(contextMenu.task);setShowAdd(true);setContextMenu(null);},color:"#10B981",admin:true},
               {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:"Edit Task",action:()=>{setEditTask(contextMenu.task);setContextMenu(null);},admin:true},
-              {icon:"M20 6L9 17l-5-5",label:"Mark Complete",action:async()=>{await api.put("/tasks/"+contextMenu.task.id,{progress:100});setTasks(updateInTree(tasks,contextMenu.task.id,{progress:100,status:"Completed"}));setContextMenu(null);}},
+              // Leaf only — a parent's 100% has to come from its children (or a
+              // reasoned override), never from a one-click shortcut.
+              {icon:"M20 6L9 17l-5-5",label:"Mark Complete",hide:contextMenu.task.children?.length>0,
+                action:async()=>{const r=await api.put("/tasks/"+contextMenu.task.id,{progress:100});setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Update failed");}},
+              {icon:"M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z",label:"Override Progress…",
+                hide:!(contextMenu.task.children?.length>0),admin:true,color:"#4B45C4",
+                action:()=>{setOverrideTask(contextMenu.task);setContextMenu(null);}},
+              {icon:"M3 12a9 9 0 019-9 9 9 0 016.36 2.64L21 8M21 3v5h-5",label:"Reset to Auto",
+                hide:!(contextMenu.task.children?.length>0&&ptIsOverridden(contextMenu.task)),admin:true,
+                action:async()=>{const r=await api.del("/tasks/"+contextMenu.task.id+"/progress-override");setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Reset failed");}},
               null,
               {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{if(await window.confirmAsync("Delete this task?")){await api.del("/tasks/"+contextMenu.task.id);const removeFromTree=(list,id)=>list.filter(t=>t.id!==id).map(t=>({...t,children:removeFromTree(t.children||[],id)}));setTasks(removeFromTree(tasks,contextMenu.task.id));setContextMenu(null);}},color:"#EF4444",admin:true},
-            ].filter(item=>item===null||!item.admin||isAdmin).map((item,i)=>
+            ].filter(item=>item===null||(!item.hide&&(!item.admin||isAdmin))).map((item,i)=>
               item === null
               ? <div key={i} style={{height:1,background:"#F3F4F6",margin:"4px 0"}}/>
               : <button key={i} onClick={item.action}
@@ -1335,14 +1386,28 @@ function TabTasks({ projectId, isAdmin }) {
       </>}
 
       {/* Task Detail drawer */}
-      {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId} onUpdate={(id,u)=>{setTasks(updateInTree(tasks,id,u));}} isMobile={isMobile}/>}
+      {openTask&&<PTTaskDetail task={openTask} allTasks={allFlat} onClose={()=>setOpenTask(null)} projectId={projectId}
+        onUpdate={(id,u)=>{
+          // A leaf's progress moves its whole ancestor chain — pull the tree
+          // again so the phases above it don't sit on stale numbers.
+          if(u&&u.progress!==undefined) refetchTasks();
+          else setTasks(updateInTree(tasks,id,u));
+        }} isMobile={isMobile}/>}
       {showTaskIssues&&<TaskIssueDrawer issues={taskIssues} loading={taskIssuesLoading} filter={taskIssueFilter} setFilter={setTaskIssueFilter} onClose={()=>setShowTaskIssues(false)} onStatusChange={(id,s)=>setTaskIssues(p=>p.map(x=>x.id===id?{...x,status:s}:x))}/>}
+
+      {/* Parent progress override */}
+      {overrideTask&&<PTOverrideModal task={overrideTask} onClose={()=>setOverrideTask(null)}
+        onSaved={async()=>{setOverrideTask(null);await refetchTasks();}}/>}
 
       {/* Edit Task drawer */}
       {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
         const orig = editTask;
         await api.put("/tasks/"+id, { name:u.name, category:u.category, tag:u.tag, status:u.status, progress:u.progress, base_start:u.baseStart, base_end:u.baseEnd, actual_start:u.actualStart||null, actual_end:u.actualEnd||null, duration:u.duration, delay_reason:u.delayReason||"", delay_note:u.delayNote||"", dependencies:u.dependencies, dhyan_rakhen:u.dhyanRakhen });
-        setTasks(updateInTree(tasks,id,{...u, delay_reason:u.delayReason||null, delay_note:u.delayNote||null})); setEditTask(null);
+        setEditTask(null);
+        // Progress or duration moved → every ancestor's rolled-up number moved
+        // with it, so patching this one node in the tree isn't enough.
+        if (u.progress !== undefined || u.duration !== orig.duration) await refetchTasks();
+        else setTasks(updateInTree(tasks,id,{...u, delay_reason:u.delayReason||null, delay_note:u.delayNote||null}));
         // P2e: if the dates moved AND other tasks depend on this one, offer to
         // cascade the shift. The task itself is already saved above; the
         // cascade (dependents) is an explicit, previewed, opt-in follow-up.
@@ -3041,6 +3106,10 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
 
   const [prog,setProg]=useState(task.progress||0);
   const [saving,setSaving]=useState(false);
+  // Summary row: progress is rolled up from the subtree, so this drawer shows
+  // it read-only instead of offering a slider that the backend would reject.
+  const childCount=(allTasks||[]).filter(t=>Number(t.parent_id)===Number(task.id)).length||(task.children?.length||0);
+  const isSummary=childCount>0;
 
   // Materials
   const [materials,setMaterials]=useState([]);
@@ -3319,17 +3388,36 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
             <span style={{fontSize:12,fontWeight:700,color:"#1E293B",textTransform:"uppercase",letterSpacing:".5px"}}>Progress</span>
           </div>
           <div style={{background:"white",borderRadius:12,padding:16,border:"1px solid #E2E8F0",marginBottom:10,boxShadow:"0 1px 3px rgba(0,0,0,.04)"}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:isSummary?10:14}}>
               <span style={{fontSize:14,fontWeight:600,color:"#1E293B"}}>Completion</span>
               <span style={{fontSize:26,fontWeight:800,color:prog===100?"#10B981":prog>0?"#2563EB":"#94A3B8",lineHeight:1}}>{prog}%</span>
             </div>
-            <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}
-              style={{width:"100%",accentColor:"#2563EB",cursor:"pointer",height:8}}/>
-            <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
-              <span style={{fontSize:9,color:"#94A3B8"}}>0%</span>
-              <span style={{fontSize:9,color:"#94A3B8"}}>50%</span>
-              <span style={{fontSize:9,color:"#94A3B8"}}>100%</span>
-            </div>
+            {isSummary?(<>
+              {/* Summary row — the number belongs to the children, not this form */}
+              <div style={{height:8,background:"#E2E8F0",borderRadius:4,overflow:"hidden",marginBottom:10}}>
+                <div style={{height:"100%",width:prog+"%",background:prog===100?"#10B981":"#2563EB",borderRadius:4}}/>
+              </div>
+              {ptIsOverridden(task)?(
+                <div style={{fontSize:11.5,color:"#475569",lineHeight:1.55}}>
+                  <b style={{color:"#4B45C4"}}>Manually pinned at {task.progress_override}%</b>
+                  {task.progress_auto!=null&&<> — children {task.progress_auto}% keh rahe hain.</>}
+                  <br/>{PT_OVERRIDE_REASONS[task.override_reason]||task.override_reason}
+                  {task.override_note&&<> — "{task.override_note}"</>}
+                </div>
+              ):(
+                <div style={{fontSize:11.5,color:"#64748B",lineHeight:1.5}}>
+                  Yeh parent task hai — progress {childCount} sub-task{childCount===1?"":"s"} se auto-calculate hota hai (duration-weighted). Manual value ke liye task list me row par right-click → Override Progress.
+                </div>
+              )}
+            </>):(<>
+              <input type="range" min={0} max={100} step={5} value={prog} onChange={e=>setProg(Number(e.target.value))}
+                style={{width:"100%",accentColor:"#2563EB",cursor:"pointer",height:8}}/>
+              <div style={{display:"flex",justifyContent:"space-between",marginTop:4}}>
+                <span style={{fontSize:9,color:"#94A3B8"}}>0%</span>
+                <span style={{fontSize:9,color:"#94A3B8"}}>50%</span>
+                <span style={{fontSize:9,color:"#94A3B8"}}>100%</span>
+              </div>
+            </>)}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",background:sm.bg,border:"1px solid "+sm.brd,borderRadius:10,marginBottom:12}}>
             <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={sm.c} strokeWidth={2.5}><path d="M20 6L9 17l-5-5"/></svg>
@@ -3338,25 +3426,27 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
               <div style={{fontSize:11,color:"#64748B"}}>{prog===0?"Not started yet":prog===100?"Task complete!":"In progress"}</div>
             </div>
           </div>
-          {/* Quick % buttons */}
-          <div style={{display:"flex",gap:8,marginBottom:14}}>
-            {[0,25,50,75,100].map(p=>(
-              <button key={p} onClick={()=>setProg(p)}
-                style={{flex:1,padding:"12px 0",borderRadius:9,border:"1.5px solid "+(prog===p?"#2563EB":"#E2E8F0"),background:prog===p?"#2563EB":"white",color:prog===p?"white":"#64748B",fontSize:13,fontWeight:prog===p?700:500,cursor:"pointer",transition:"all .15s"}}>
-                {p}%
-              </button>
-            ))}
-          </div>
-          <button onClick={async()=>{
-            setSaving(true);
-            const res=await api.put("/tasks/"+task.id,{progress:prog});
-            setSaving(false);
-            if(res.success){onUpdate(task.id,{progress:prog,status:autoStatus(prog)});onClose();}
-            else alert(res.message||"Save failed");
-          }} disabled={saving}
-            style={{width:"100%",padding:"14px",borderRadius:10,background:saving?"#94A3B8":"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:saving?"default":"pointer",letterSpacing:".2px"}}>
-            {saving?"Saving...":"Save Progress"}
-          </button>
+          {/* Quick % buttons + save — leaf tasks only; a summary row's number is derived */}
+          {!isSummary&&<>
+            <div style={{display:"flex",gap:8,marginBottom:14}}>
+              {[0,25,50,75,100].map(p=>(
+                <button key={p} onClick={()=>setProg(p)}
+                  style={{flex:1,padding:"12px 0",borderRadius:9,border:"1.5px solid "+(prog===p?"#2563EB":"#E2E8F0"),background:prog===p?"#2563EB":"white",color:prog===p?"white":"#64748B",fontSize:13,fontWeight:prog===p?700:500,cursor:"pointer",transition:"all .15s"}}>
+                  {p}%
+                </button>
+              ))}
+            </div>
+            <button onClick={async()=>{
+              setSaving(true);
+              const res=await api.put("/tasks/"+task.id,{progress:prog});
+              setSaving(false);
+              if(res.success){onUpdate(task.id,{progress:prog,status:autoStatus(prog)});onClose();}
+              else alert(res.message||"Save failed");
+            }} disabled={saving}
+              style={{width:"100%",padding:"14px",borderRadius:10,background:saving?"#94A3B8":"#2563EB",color:"white",fontSize:15,fontWeight:700,border:"none",cursor:saving?"default":"pointer",letterSpacing:".2px"}}>
+              {saving?"Saving...":"Save Progress"}
+            </button>
+          </>}
         </div>
 
         {/* ════════════ MATERIALS SECTION ════════════ */}
@@ -4291,6 +4381,115 @@ function PTTaskDetail({task,allTasks,onClose,onUpdate,projectId,isMobile}){
   </>);
 }
 
+// ── Pin a manual % on a summary task ─────────────────────────────────────
+// Deliberately heavier than a slider: the auto value is shown next to the
+// manual one, and a reason + note are required, so an override is always
+// explainable months later when someone asks why a phase read what it read.
+function PTOverrideModal({task,onClose,onSaved}){
+  const auto = (task.progress_auto===null||task.progress_auto===undefined) ? null : Number(task.progress_auto);
+  const [pct,setPct]     = useState(ptIsOverridden(task)?Number(task.progress_override):(auto??(Number(task.progress)||0)));
+  const [reason,setReason]= useState(task.override_reason||"");
+  const [note,setNote]   = useState(task.override_note||"");
+  const [busy,setBusy]   = useState(false);
+  const [error,setError] = useState("");
+
+  const noteShort = note.trim().length < PT_OVERRIDE_MIN_NOTE;
+  const canSave   = !!reason && !noteShort && !busy;
+  const drift     = auto===null ? 0 : Math.abs(pct-auto);
+
+  const save = async()=>{
+    setBusy(true); setError("");
+    const r = await api.put("/tasks/"+task.id+"/progress-override",{progress:pct,reason,note:note.trim()});
+    setBusy(false);
+    if(r.success) onSaved(); else setError(r.message||"Save failed");
+  };
+  const reset = async()=>{
+    setBusy(true); setError("");
+    const r = await api.del("/tasks/"+task.id+"/progress-override");
+    setBusy(false);
+    if(r.success) onSaved(); else setError(r.message||"Reset failed");
+  };
+
+  const L={fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5};
+  return(<>
+    <div onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:400,backdropFilter:"blur(1px)"}}/>
+    <div style={{position:"fixed",left:"50%",top:"50%",transform:"translate(-50%,-50%)",width:"min(440px,94vw)",maxHeight:"90vh",overflowY:"auto",background:T.bg,borderRadius:12,zIndex:401,boxShadow:"0 20px 60px rgba(0,0,0,0.28)",fontFamily:"'Segoe UI',sans-serif"}}>
+      <div style={{background:"#0D1B2A",padding:"12px 16px",borderRadius:"12px 12px 0 0",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div>
+          <div style={{fontSize:13,fontWeight:700,color:"white"}}>Override Progress</div>
+          <div style={{fontSize:10,color:"rgba(255,255,255,0.45)",fontFamily:"monospace",marginTop:1}}>{task.no} — {String(task.name||"").slice(0,32)}</div>
+        </div>
+        <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:"rgba(255,255,255,0.5)",display:"flex"}}>
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6L6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div style={{padding:"14px 16px"}}>
+        {/* What the children actually say */}
+        <div style={{display:"flex",gap:10,marginBottom:14}}>
+          <div style={{flex:1,padding:"10px 12px",borderRadius:8,background:T.surface,border:`1px solid ${T.b1}`}}>
+            <div style={{fontSize:9,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Auto (children)</div>
+            <div style={{fontSize:20,fontWeight:800,color:T.t1,lineHeight:1}}>{auto===null?"—":auto+"%"}</div>
+          </div>
+          <div style={{flex:1,padding:"10px 12px",borderRadius:8,background:"#EEF2FF",border:"1px solid #C7D2FE"}}>
+            <div style={{fontSize:9,color:"#4B45C4",textTransform:"uppercase",letterSpacing:".4px",marginBottom:3}}>Manual</div>
+            <div style={{fontSize:20,fontWeight:800,color:"#4B45C4",lineHeight:1}}>{pct}%</div>
+          </div>
+        </div>
+
+        <label style={L}>Manual progress</label>
+        <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:4}}>
+          <input type="range" min={0} max={100} step={1} value={pct} onChange={e=>setPct(Number(e.target.value))}
+            style={{flex:1,accentColor:"#4B45C4"}}/>
+          <input type="number" min={0} max={100} value={pct}
+            onChange={e=>setPct(Math.max(0,Math.min(100,parseInt(e.target.value,10)||0)))}
+            style={{width:56,padding:"6px 8px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:13,fontWeight:700,color:T.t1,background:T.surface,outline:"none",textAlign:"right",fontFamily:"inherit"}}/>
+        </div>
+        {drift>10&&(
+          <div style={{fontSize:10.5,color:"#B45309",background:"#FEF3C7",border:"1px solid #FDE68A",borderRadius:6,padding:"6px 9px",marginBottom:12}}>
+            Children {auto}% keh rahe hain — {drift} points ka farak hai. Note me wajah zaroor likhein.
+          </div>
+        )}
+        {drift<=10&&<div style={{height:12}}/>}
+
+        <label style={L}>Reason <span style={{color:"#DC2626"}}>*</span></label>
+        <select value={reason} onChange={e=>setReason(e.target.value)}
+          style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${reason?T.b1:"#FCA5A5"}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",marginBottom:12}}>
+          <option value="">Select reason…</option>
+          {Object.entries(PT_OVERRIDE_REASONS).map(([k,v])=><option key={k} value={k}>{v}</option>)}
+        </select>
+
+        <label style={L}>Note <span style={{color:"#DC2626"}}>*</span></label>
+        <textarea value={note} onChange={e=>setNote(e.target.value)} rows={3}
+          placeholder="Kya aur kyun — e.g. footing complete, backfill pending; consultant ne 60% certify kiya"
+          style={{width:"100%",padding:"8px 10px",borderRadius:6,border:`1.5px solid ${noteShort?"#FCA5A5":T.b1}`,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit",resize:"vertical"}}/>
+        <div style={{fontSize:10,color:noteShort?"#DC2626":T.t4,marginTop:4,marginBottom:12}}>
+          {noteShort?`Kam se kam ${PT_OVERRIDE_MIN_NOTE} characters (${note.trim().length}/${PT_OVERRIDE_MIN_NOTE})`:"Yeh note audit log me save hoga."}
+        </div>
+
+        {error&&<div style={{fontSize:11,color:"#DC2626",background:"#FEF2F2",border:"1px solid #FECACA",borderRadius:6,padding:"7px 10px",marginBottom:10}}>{error}</div>}
+
+        <div style={{display:"flex",gap:8}}>
+          {ptIsOverridden(task)&&(
+            <button onClick={reset} disabled={busy}
+              style={{padding:"10px 12px",borderRadius:8,background:"white",color:T.t3,border:`1.5px solid ${T.b1}`,fontSize:12,fontWeight:600,cursor:busy?"default":"pointer",whiteSpace:"nowrap"}}>
+              Reset to Auto
+            </button>
+          )}
+          <button onClick={onClose} disabled={busy}
+            style={{flex:1,padding:"10px",borderRadius:8,background:"white",color:T.t3,border:`1.5px solid ${T.b1}`,fontSize:12.5,fontWeight:600,cursor:busy?"default":"pointer"}}>
+            Cancel
+          </button>
+          <button onClick={save} disabled={!canSave}
+            style={{flex:1,padding:"10px",borderRadius:8,background:canSave?"#4B45C4":"#C7D2FE",color:"white",border:"none",fontSize:12.5,fontWeight:700,cursor:canSave?"pointer":"default"}}>
+            {busy?"Saving…":"Save Override"}
+          </button>
+        </div>
+      </div>
+    </div>
+  </>);
+}
+
 function PTEditTask({task,allTasks,onClose,onSave}){
   const [form,setForm]=useState({name:task.name,category:task.category,tag:task.tag||"",assignee:task.assignee,status:task.status,progress:task.progress,baseStart:task.baseStart||"",baseEnd:task.baseEnd||"",actualStart:task.actualStart||"",actualEnd:task.actualEnd||"",duration:(task.baseStart&&task.baseEnd)?Math.round((new Date(task.baseEnd)-new Date(task.baseStart))/86400000)+1:(task.duration||0),delayReason:task.delay_reason||"",delayNote:task.delay_note||"",dependencies:[...(task.dependencies||[])],dhyanRakhen:task.dhyanRakhen||""});
   const [showDhyan,setShowDhyan]=useState(!!task.dhyanRakhen);
@@ -4304,6 +4503,9 @@ function PTEditTask({task,allTasks,onClose,onSave}){
   const setDur=(v)=>{const n=Math.max(0,parseInt(v,10)||0);setForm(p=>({...p,duration:n,baseEnd:(p.baseStart&&n>0)?_addD(p.baseStart,n-1):p.baseEnd}));};
   const toggleDep=(id)=>setForm(p=>({...p,dependencies:p.dependencies.includes(id)?p.dependencies.filter(x=>x!==id):[...p.dependencies,id]}));
   const filteredForDep=allTasks.filter(t=>t.id!==task.id&&(!depSrch||t.name.toLowerCase().includes(depSrch.toLowerCase())||t.no.includes(depSrch)));
+  // A row with children is a summary row: its progress/status are derived, so
+  // this form must neither edit nor submit them.
+  const isSummary=(task.children?.length>0)||allTasks.some(t=>Number(t.parent_id)===Number(task.id));
   const TEAM_PT=[];
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.35)",zIndex:350,backdropFilter:"blur(1px)"}}/>
@@ -4334,13 +4536,24 @@ function PTEditTask({task,allTasks,onClose,onSave}){
             </div>
           ))}
         </div>
-        {/* Progress */}
+        {/* Progress — derived on a summary row, so it is shown but not editable here */}
         <div style={{marginBottom:10}}><label style={{fontSize:9.5,fontWeight:600,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",display:"block",marginBottom:5}}>Progress — {form.progress}%</label>
-          <div style={{display:"flex",gap:9,alignItems:"center"}}>
-            <input type="range" min={0} max={100} step={5} value={form.progress} onChange={upd("progress")} style={{flex:1,accentColor:T.blu}}/>
-            <span style={{fontSize:13,fontWeight:700,color:T.blu,minWidth:32,textAlign:"right"}}>{form.progress}%</span>
-          </div>
-          <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginTop:4}}><div style={{height:"100%",width:`${form.progress}%`,background:Number(form.progress)===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/></div>
+          {isSummary?(
+            <div style={{padding:"9px 11px",borderRadius:6,background:T.surface,border:`1px solid ${T.b1}`}}>
+              <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginBottom:6}}><div style={{height:"100%",width:`${form.progress}%`,background:Number(form.progress)===100?T.grn:T.blu,borderRadius:2}}/></div>
+              <div style={{fontSize:10.5,color:T.t4}}>
+                {ptIsOverridden(task)
+                  ? `Manually pinned at ${task.progress_override}%${task.progress_auto!=null?` (children ${task.progress_auto}%)`:""}. Right-click the row → Reset to Auto.`
+                  : "Children se auto-calculated (duration-weighted). Manual value ke liye row par right-click → Override Progress."}
+              </div>
+            </div>
+          ):(<>
+            <div style={{display:"flex",gap:9,alignItems:"center"}}>
+              <input type="range" min={0} max={100} step={5} value={form.progress} onChange={upd("progress")} style={{flex:1,accentColor:T.blu}}/>
+              <span style={{fontSize:13,fontWeight:700,color:T.blu,minWidth:32,textAlign:"right"}}>{form.progress}%</span>
+            </div>
+            <div style={{height:4,background:T.b1,borderRadius:2,overflow:"hidden",marginTop:4}}><div style={{height:"100%",width:`${form.progress}%`,background:Number(form.progress)===100?T.grn:T.blu,borderRadius:2,transition:"width .3s"}}/></div>
+          </>)}
         </div>
         {/* Dates + Duration (bidirectional) */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 0.8fr",gap:9,marginBottom:5}}>
@@ -4419,7 +4632,8 @@ function PTEditTask({task,allTasks,onClose,onSave}){
       </div>
       <div style={{padding:"11px 16px",borderTop:`1px solid ${T.b1}`,background:T.surface,display:"flex",gap:7,flexShrink:0}}>
         <button onClick={onClose} style={{flex:1,padding:"9px",borderRadius:6,background:T.surfaceB,border:`1px solid ${T.b1}`,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
-        <button onClick={()=>onSave(task.id,{...form,dhyanRakhen:showDhyan?form.dhyanRakhen:null,progress:Number(form.progress)})}
+        <button onClick={()=>onSave(task.id,{...form,dhyanRakhen:showDhyan?form.dhyanRakhen:null,
+            ...(isSummary?{progress:undefined,status:undefined}:{progress:Number(form.progress)})})}
           style={{flex:2,padding:"9px",borderRadius:6,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>Save Changes</button>
       </div>
     </div>
