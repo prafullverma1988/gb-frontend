@@ -586,6 +586,68 @@ const MATERIAL_LIBRARY_CONST = Object.freeze([
   "Centering Plate","Prop Stand","Shuttering Oil",
 ]);
 
+// ── Qty / Rate / Total three-way solver ────────────────────────────────
+// "Koi bhi do bharo, teesra khud" — each line tracks the last two fields
+// the user actually typed in (_t); the remaining one is auto-derived (_d).
+//   qty + rate  → total (default, works like before)
+//   qty + total → rate  (sand 600 sqft @ ₹15,000 — no calculator needed)
+//   rate + total→ qty   (direct rows only; GRN qty is inventory-locked and
+//                        alt_qty is a weighbridge reading — never derived)
+// The typed Total is the authoritative bill amount: rate is only a derived
+// record (₹25.8333) so qty×rounded-rate can no longer leak ₹1-2 off the bill.
+//
+// Absorber rule for TOTAL edits: adjusting Total changes RATE by default —
+// qty is physical reality (600 sqft laga hai to laga hai), rate is money.
+// Qty absorbs only when it's empty (rate+total→qty flow) or when the user
+// clicked the Qty cell to pick it (_pick, amber highlight = "Total adjust
+// karoge to YE badlega"). Typing in a picked field un-picks it — typing
+// always wins.
+const _touch=(prev,f)=>{const t=(prev||[]).filter(x=>x!==f);t.push(f);return t.slice(-2);};
+const _derivedOf=(t,qtyLocked)=>{
+  t=t||[];
+  if(qtyLocked){
+    // Only rate↔total can flip; a locked/weighbridge qty edit must not
+    // steal the user's typed total (it just refreshes the derived side).
+    const rt=t.filter(f=>f!=="qty");
+    return rt[rt.length-1]==="total"?"rate":"total";
+  }
+  if(t.length<2) return t[0]==="total"?"rate":"total";
+  return ["qty","rate","total"].find(f=>!t.includes(f))||"total";
+};
+const _r=(v,p)=>Math.round(v*p)/p;
+const _numStr=v=>(v==null||!isFinite(v))?"":String(v);
+// Solves the derived member in place. Operates on the BILLING basis qty
+// (alt_qty when the dual-unit switch is on).
+const solveLine=(r)=>{
+  const qtyLocked=!!r.fromGRN||!!r.altOn;
+  const t=r._t||[];
+  const last=t[t.length-1];
+  const qKey=r.altOn?"alt_qty":"qty";
+  const q=parseFloat(r[qKey]),rate=parseFloat(r.rate),total=parseFloat(r.total);
+  let d,pick=r._pick||null;
+  if(last==="total"){
+    // Total adjusted — absorber: locked rows always rate; else the picked
+    // field; else qty only when empty (rate+total flow), otherwise rate.
+    d = qtyLocked ? "rate" : (pick==="qty"||pick==="rate") ? pick : (!(q>0)?"qty":"rate");
+    pick = d; // sticky — next Total tweaks keep adjusting the same field
+  } else {
+    d=_derivedOf(t,qtyLocked);
+    if(last&&pick===last) pick=null; // typed the picked field → it's fixed now
+  }
+  const u={...r,_d:d,_pick:pick};
+  if(d==="total")      u.total=(q>0&&rate>0)?_numStr(_r(q*rate,100)):"";
+  else if(d==="rate")  u.rate =(q>0&&total>0)?_numStr(_r(total/q,10000)):"";
+  else                 u[qKey]=(rate>0&&total>0)?_numStr(_r(total/rate,1000)):"";
+  return u;
+};
+// True when qty×rate doesn't exactly reproduce the entered total (rate got
+// rounded to 4 dp) — UI shows a soft "≈" hint on the rate cell.
+const lineApprox=(r)=>{
+  const q=parseFloat(r.altOn?r.alt_qty:r.qty),rate=parseFloat(r.rate),total=parseFloat(r.total);
+  if(!(q>0)||!(rate>0)||!(total>0)) return false;
+  return Math.abs(q*rate-total)>0.005;
+};
+
 // ── Dual-unit billing strip (bill line) ────────────────────────────────
 // Some materials are received by count (TMT = bundle) but billed by weight
 // (kg). When the source GRN already carried that weight the switch is auto-ON
@@ -624,7 +686,9 @@ function DualBillStrip({ row, onFields }){
   };
 
   const rate=Number(row.rate)||0;
-  const altTotal=(Number(row.alt_qty)||0)*rate;
+  // Authoritative line total comes from the solver (row.total) — the user may
+  // have typed the total directly with rate derived from it.
+  const altTotal=Number(row.total)||0;
 
   return (
     <div style={{padding:"2px 12px 8px",background:on?T.bluL:"transparent",borderBottom:on?`1px solid ${T.b1}`:"none"}}>
@@ -907,7 +971,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [subMode,setSubMode]=useState("fresh");
 
   // ── invoice fresh rows — with auto-focus after addInvRow ─────
-  const blankInvRow=()=>({id:Date.now()+Math.random(),work:"",desc:"",qty:"",unit:"Sqft",rate:"",total:0});
+  const blankInvRow=()=>({id:Date.now()+Math.random(),work:"",desc:"",qty:"",unit:"Sqft",rate:"",total:"",_t:[],_d:"total"});
   const [invRows,setInvRows]=useState([blankInvRow()]);
   const invRowRefs=useRef({});
   const [focusInvId,setFocusInvId]=useState(null);
@@ -915,8 +979,8 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const removeInvRow=id=>invRows.length>1&&setInvRows(p=>p.filter(r=>r.id!==id));
   const updInvRow=(id,k,v)=>setInvRows(p=>p.map(r=>{
     if(r.id!==id) return r;
-    const u={...r,[k]:v};
-    if(k==="qty"||k==="rate") u.total=Number(u.qty||0)*Number(u.rate||0);
+    let u={...r,[k]:v};
+    if(k==="qty"||k==="rate"||k==="total"){ u._t=_touch(u._t,k); u=solveLine(u); }
     return u;
   }));
   useEffect(()=>{
@@ -924,11 +988,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
       invRowRefs.current[focusInvId].focus();setFocusInvId(null);
     }
   },[invRows,focusInvId]);
-  const invFreshTotal=invRows.reduce((s,r)=>s+(r.total||0),0);
+  const invFreshTotal=invRows.reduce((s,r)=>s+(Number(r.total)||0),0);
   const invTotal=invMode==="boq"?boqGrandTotal:invFreshTotal;
 
   // ── material / subcon rows — with auto-focus after addRow ────
-  const blankRow=()=>({id:Date.now()+Math.random(),material:"",head:MAT_HEADS[0],desc:"",qty:"",unit:UNITS[0],rate:"",total:0,
+  const blankRow=()=>({id:Date.now()+Math.random(),material:"",head:MAT_HEADS[0],desc:"",qty:"",unit:UNITS[0],rate:"",total:"",_t:[],_d:"total",
     altOn:false,alt_qty:"",alt_unit:"",alt_ratio:null,grnHadAlt:false});
   const [rows,setRows]=useState(()=>{
     if(prefillGRN?.items?.length){
@@ -937,7 +1001,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         // (bundle → kg), the switch is auto-ON, weight prefilled + editable.
         const hadAlt = it.alt_qty!=null && Number(it.alt_qty)>0 && !!it.alt_unit;
         const pQty = Number(it.qty||it.received_qty||0);
-        return {
+        return solveLine({
           id:Date.now()+i+Math.random(),
           material:it.name||it.description||"",
           head:it.head||MAT_HEADS[0],
@@ -945,7 +1009,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           qty:String(it.qty||it.received_qty||""),
           unit:it.unit||UNITS[0],
           rate:String(it.rate||""),
-          total:0,
+          total:"",_t:[],
           fromGRN:true, // material name + qty + unit locked, only rate / head editable
           grn_id:it.grn_id||null,         // source GRN per row (multi-GRN bills)
           grn_number:it.grn_number||null,
@@ -954,7 +1018,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
           alt_unit:hadAlt?it.alt_unit:"",
           alt_ratio:it.alt_ratio!=null?Number(it.alt_ratio):(hadAlt&&pQty>0?Math.round((Number(it.alt_qty)/pQty)*10000)/10000:null),
           grnHadAlt:!!hadAlt,
-        };
+        });
       });
     }
     return [blankRow()];
@@ -966,13 +1030,17 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Material library — used to auto-lock unit when material is picked
   const [matLib,setMatLib]=useState([]);
   useEffect(()=>{ api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{}); },[]);
-  // Total = billing-basis qty × rate. On dual-unit rows the billing basis is
-  // the alt (weight) qty; otherwise the primary qty. Rate is per billing unit.
-  const rowTotal=u=>(u.altOn ? Number(u.alt_qty||0) : Number(u.qty||0))*Number(u.rate||0);
+  // Line math lives in solveLine (module scope): the last two touched
+  // fields are fixed, the third is derived. Rate is per billing unit
+  // (alt_qty basis when the dual-unit switch is on).
   const updRow=(id,k,v)=>setRows(p=>p.map(r=>{
     if(r.id!==id) return r;
-    const u={...r,[k]:v};
-    if(k==="qty"||k==="rate"||k==="alt_qty"||k==="altOn") u.total=rowTotal(u);
+    let u={...r,[k]:v};
+    if(k==="qty"||k==="rate"||k==="total"||k==="alt_qty"||k==="altOn"){
+      // alt_qty plays the qty role in the solver's touch order
+      if(k!=="altOn") u._t=_touch(u._t,k==="alt_qty"?"qty":k);
+      u=solveLine(u);
+    }
     // Auto-lock unit from material library when material is picked
     if(k==="material" && v){
       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
@@ -983,16 +1051,21 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // Multi-field update (dual-unit strip sets altOn/alt_qty/alt_unit together).
   const updRowFields=(id,obj)=>setRows(p=>p.map(r=>{
     if(r.id!==id) return r;
-    const u={...r,...obj};
-    u.total=rowTotal(u);
+    let u={...r,...obj};
+    if(obj.alt_qty!==undefined&&obj.alt_qty!==r.alt_qty) u._t=_touch(u._t,"qty");
+    u=solveLine(u);
     return u;
   }));
+  // Click-to-pick: focusing the Qty/Rate cell marks it as the field that a
+  // Total adjustment will change (amber highlight). No recompute on pick.
+  const updPick=(id,f)=>setRows(p=>p.map(r=>r.id!==id?r:(r._pick===f?r:{...r,_pick:f})));
+  const updInvPick=(id,f)=>setInvRows(p=>p.map(r=>r.id!==id?r:(r._pick===f?r:{...r,_pick:f})));
   useEffect(()=>{
     if(focusMatId&&matRowRefs.current[focusMatId]){
       matRowRefs.current[focusMatId].focus();setFocusMatId(null);
     }
   },[rows,focusMatId]);
-  const grandTotal=rows.reduce((s,r)=>s+(r.total||0),0);
+  const grandTotal=rows.reduce((s,r)=>s+(Number(r.total)||0),0);
   const subTotal=subMode==="boq"?subBoqTotal:grandTotal;
 
   // ── GRN auto-suggest for non-prefill Material Bill flow ───────
@@ -1177,7 +1250,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             qty:billQty,
             unit:billUnit,
             rate,
-            amount:billQty*rate,
+            // The line total as entered/derived is authoritative — NOT
+            // billQty×rate, which can differ by paise when rate was derived
+            // from a fixed total (₹15,000 ÷ 600 = 25 vs 25.8333-type cases).
+            amount:Number(r.total)||billQty*rate,
             head:r.head||"",
             fromGRN: !!r.fromGRN,       // marker so backend can route new rows to inventory
             grn_id: r.grn_id || null,   // per-row source GRN — used by backend
@@ -1749,10 +1825,15 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                   <SearchSelect options={MAT_HEADS} value={row.head} onChange={v=>updRow(row.id,"head",v)} compact={true}/>
                   <input data-field="desc" value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Grade, spec, brand..."
                     style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                  {/* Qty — locked only for GRN rows */}
+                  {/* Qty — locked only for GRN rows; derived (dashed) when Rate+Total were typed */}
                   {row.fromGRN
                     ?<div style={{padding:"5px 8px",borderRadius:5,background:T.surfaceB,border:"1px solid "+T.b1,fontSize:12,color:T.t1,fontWeight:600,height:30,display:"flex",alignItems:"center",justifyContent:"flex-end"}}>{row.qty}</div>
-                    :<input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0" style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                    :<input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0"
+                      title={row._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(row._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined)}
+                      style={inp(row._d==="qty"
+                        ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
+                        :row._pick==="qty"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
+                      onFocus={e=>{e.target.style.borderColor=T.blu;updPick(row.id,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
                   }
                   {(()=>{
                     const lib=matLib.find(m=>(m.name||"").trim().toLowerCase()===(row.material||"").trim().toLowerCase());
@@ -1763,14 +1844,19 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       :<SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>;
                   })()}
                   <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
-                    style={inp({textAlign:"right",borderColor:T.amb,background:T.ambL})}
-                    onFocus={e=>e.target.style.borderColor=T.amb} onBlur={e=>e.target.style.borderColor=T.amb}
+                    title={row._d==="rate"?(lineApprox(row)?"Auto: Total ÷ Qty (≈ approx — bill amount Total se hi banega)":"Auto: Total ÷ Qty"):(row._pick==="rate"?"Selected — Total adjust karoge to Rate badlega":undefined)}
+                    style={inp(row._d==="rate"
+                      ?{textAlign:"right",borderStyle:"dashed",borderColor:T.amb,background:T.surfaceB,color:T.t2}
+                      :row._pick==="rate"?{textAlign:"right",borderColor:T.amb,background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right",borderColor:T.amb,background:T.ambL})}
+                    onFocus={e=>{e.target.style.borderColor=T.amb;updPick(row.id,"rate");}} onBlur={e=>e.target.style.borderColor=T.amb}
                     onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
-                  <div style={{height:30,display:"flex",alignItems:"center",justifyContent:"flex-end",fontWeight:700,fontSize:13,
-                    color:row.total>0?T.grn:T.t4,background:row.total>0?T.grnL:"transparent",
-                    borderRadius:5,padding:"0 7px",border:row.total>0?`1px solid ${T.grnM}`:"1px solid transparent"}}>
-                    {row.total>0?`Rs.${row.total.toLocaleString("en-IN")}`:"—"}
-                  </div>
+                  <input type="number" value={row.total} onChange={e=>updRow(row.id,"total",e.target.value)} placeholder="0"
+                    title={row._d==="total"?"Auto: Qty × Rate — bill ka final total yahin type bhi kar sakte ho":"Entered total — yahi bill amount banega"}
+                    style={inp(row._d==="total"
+                      ?{textAlign:"right",fontWeight:700,borderStyle:"dashed",background:T.surfaceB,color:Number(row.total)>0?T.grn:T.t4}
+                      :{textAlign:"right",fontWeight:700,borderColor:T.grnM,background:T.grnL,color:T.grn})}
+                    onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=row._d==="total"?T.b1:T.grnM}
+                    onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
                   <button onClick={()=>removeRow(row.id)} style={{background:"none",border:"none",cursor:rows.length>1?"pointer":"not-allowed",color:rows.length>1?T.red:T.b2,display:"flex",padding:0,alignItems:"center",justifyContent:"center"}}>
                     <IcX size={12} color="currentColor"/>
                   </button>
@@ -1840,17 +1926,26 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       <input value={row.desc} onChange={e=>updRow(row.id,"desc",e.target.value)} placeholder="Area, location, floor..."
                         style={inp()} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
                       <input type="number" value={row.qty} onChange={e=>updRow(row.id,"qty",e.target.value)} placeholder="0"
-                        style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                        title={row._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(row._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined)}
+                        style={inp(row._d==="qty"
+                          ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
+                          :row._pick==="qty"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
+                        onFocus={e=>{e.target.style.borderColor=T.slt;updPick(row.id,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
                       <SearchSelect options={UNITS} value={row.unit} onChange={v=>updRow(row.id,"unit",v)} compact={true}/>
                       <input type="number" value={row.rate} onChange={e=>updRow(row.id,"rate",e.target.value)} placeholder="0"
-                        style={inp({textAlign:"right"})}
-                        onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=T.b1}
+                        title={row._d==="rate"?"Auto: Total ÷ Qty":(row._pick==="rate"?"Selected — Total adjust karoge to Rate badlega":undefined)}
+                        style={inp(row._d==="rate"
+                          ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
+                          :row._pick==="rate"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
+                        onFocus={e=>{e.target.style.borderColor=T.slt;updPick(row.id,"rate");}} onBlur={e=>e.target.style.borderColor=T.b1}
                         onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
-                      <div style={{height:30,display:"flex",alignItems:"center",justifyContent:"flex-end",fontWeight:700,fontSize:13,
-                        color:row.total>0?T.slt:T.t4,background:row.total>0?T.sltL:"transparent",
-                        borderRadius:5,padding:"0 7px",border:row.total>0?`1px solid ${T.b2}`:"1px solid transparent"}}>
-                        {row.total>0?`Rs.${row.total.toLocaleString("en-IN")}`:"—"}
-                      </div>
+                      <input type="number" value={row.total} onChange={e=>updRow(row.id,"total",e.target.value)} placeholder="0"
+                        title={row._d==="total"?"Auto: Qty × Rate — final total yahin type bhi kar sakte ho":"Entered total — yahi bill amount banega"}
+                        style={inp(row._d==="total"
+                          ?{textAlign:"right",fontWeight:700,borderStyle:"dashed",background:T.surfaceB,color:Number(row.total)>0?T.slt:T.t4}
+                          :{textAlign:"right",fontWeight:700,borderColor:T.b2,background:T.sltL,color:T.slt})}
+                        onFocus={e=>e.target.style.borderColor=T.slt} onBlur={e=>e.target.style.borderColor=row._d==="total"?T.b1:T.b2}
+                        onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addRow();}}}/>
                       <button onClick={()=>removeRow(row.id)} style={{background:"none",border:"none",cursor:rows.length>1?"pointer":"not-allowed",color:rows.length>1?T.red:T.b2,display:"flex",padding:0,alignItems:"center",justifyContent:"center"}}>
                         <IcX size={12} color="currentColor"/>
                       </button>
@@ -1982,17 +2077,26 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       <input value={row.desc} onChange={e=>updInvRow(row.id,"desc",e.target.value)} placeholder="Scope, location..."
                         style={inp()} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
                       <input type="number" value={row.qty} onChange={e=>updInvRow(row.id,"qty",e.target.value)} placeholder="0"
-                        style={inp({textAlign:"right"})} onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                        title={row._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(row._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined)}
+                        style={inp(row._d==="qty"
+                          ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
+                          :row._pick==="qty"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
+                        onFocus={e=>{e.target.style.borderColor=T.grn;updInvPick(row.id,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
                       <SearchSelect options={INV_UNITS} value={row.unit} onChange={v=>updInvRow(row.id,"unit",v)} compact={true} accent={T.grn}/>
                       <input type="number" value={row.rate} onChange={e=>updInvRow(row.id,"rate",e.target.value)} placeholder="0"
-                        style={inp({textAlign:"right"})}
-                        onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}
+                        title={row._d==="rate"?"Auto: Total ÷ Qty":(row._pick==="rate"?"Selected — Total adjust karoge to Rate badlega":undefined)}
+                        style={inp(row._d==="rate"
+                          ?{textAlign:"right",borderStyle:"dashed",background:T.surfaceB,color:T.t2}
+                          :row._pick==="rate"?{textAlign:"right",background:T.ambL,boxShadow:`inset 0 0 0 1.5px ${T.amb}`}:{textAlign:"right"})}
+                        onFocus={e=>{e.target.style.borderColor=T.grn;updInvPick(row.id,"rate");}} onBlur={e=>e.target.style.borderColor=T.b1}
                         onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addInvRow();}}}/>
-                      <div style={{height:30,display:"flex",alignItems:"center",justifyContent:"flex-end",fontWeight:700,fontSize:13,
-                        color:row.total>0?T.grn:T.t4,background:row.total>0?T.grnL:"transparent",
-                        borderRadius:5,padding:"0 7px",border:row.total>0?`1px solid ${T.grnM}`:"1px solid transparent"}}>
-                        {row.total>0?`Rs.${row.total.toLocaleString("en-IN")}`:"—"}
-                      </div>
+                      <input type="number" value={row.total} onChange={e=>updInvRow(row.id,"total",e.target.value)} placeholder="0"
+                        title={row._d==="total"?"Auto: Qty × Rate — final total yahin type bhi kar sakte ho":"Entered total — yahi invoice amount banega"}
+                        style={inp(row._d==="total"
+                          ?{textAlign:"right",fontWeight:700,borderStyle:"dashed",background:T.surfaceB,color:Number(row.total)>0?T.grn:T.t4}
+                          :{textAlign:"right",fontWeight:700,borderColor:T.grnM,background:T.grnL,color:T.grn})}
+                        onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=row._d==="total"?T.b1:T.grnM}
+                        onKeyDown={e=>{if(e.key==="Enter"){e.preventDefault();addInvRow();}}}/>
                       <button onClick={()=>removeInvRow(row.id)} style={{background:"none",border:"none",cursor:invRows.length>1?"pointer":"not-allowed",color:invRows.length>1?T.red:T.b2,display:"flex",padding:0,alignItems:"center",justifyContent:"center"}}>
                         <IcX size={12} color="currentColor"/>
                       </button>

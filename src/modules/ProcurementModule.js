@@ -1097,6 +1097,40 @@ function CreateRFQModal({onClose,onSave,dbProjects,dbVendors=[]}){
 }
 
 // ── CREATE PO MODAL — full layout, library-driven, polished ────────────
+// ── Qty / Rate / Total three-way solver (PO lines) ────────────────────
+// Same rule as the Finance bill modal: the last two fields the user typed
+// are fixed, the third is derived (_d). Lets procurement enter "600 Sqft,
+// total ₹15,000" without a calculator — rate auto-derives to 4 decimals.
+// PO save still sends qty + rate only; total here is an entry aid.
+const _poTouch=(prev,f)=>{const t=(prev||[]).filter(x=>x!==f);t.push(f);return t.slice(-2);};
+const _poDerived=(t)=>{
+  t=t||[];
+  if(t.length<2) return t[0]==="total"?"rate":"total";
+  return ["qty","rate","total"].find(f=>!t.includes(f))||"total";
+};
+const _poNum=v=>(v==null||!isFinite(v))?"":String(v);
+// Absorber rule for TOTAL edits mirrors the Finance solver: adjusting Total
+// changes RATE by default (qty is physical), qty only when empty or when the
+// user clicked the Qty cell (_pick). Typing in a picked field un-picks it.
+const solvePOLine=(it)=>{
+  const t=it._t||[];
+  const last=t[t.length-1];
+  const q=parseFloat(it.qty),rate=parseFloat(it.rate),total=parseFloat(it.total);
+  let d,pick=it._pick||null;
+  if(last==="total"){
+    d=(pick==="qty"||pick==="rate")?pick:(!(q>0)?"qty":"rate");
+    pick=d;
+  }else{
+    d=_poDerived(t);
+    if(last&&pick===last) pick=null;
+  }
+  const u={...it,_d:d,_pick:pick};
+  if(d==="total")     u.total=(q>0&&rate>0)?_poNum(Math.round(q*rate*100)/100):"";
+  else if(d==="rate") u.rate =(q>0&&total>0)?_poNum(Math.round((total/q)*10000)/10000):"";
+  else                u.qty  =(rate>0&&total>0)?_poNum(Math.round((total/rate)*1000)/1000):"";
+  return u;
+};
+
 function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProjects,dbVendors=[]}){
   // Edit-mode prefill from existing PO
   const isEdit = !!editPo;
@@ -1118,18 +1152,18 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
     delivery:    editPo?.deliveryRaw || (editPo?.delivery && /^\d{4}-\d{2}-\d{2}/.test(String(editPo.delivery)) ? String(editPo.delivery).split("T")[0] : ""),
     notes:       editPo?.notes || "",
     items: editPo?.items?.length
-      ? editPo.items.map(it=>({
+      ? editPo.items.map(it=>solvePOLine({
           desc:it.desc||it.description||"",hsn:it.hsn||"",qty:String(it.qty||it.quantity||""),
-          unit:it.unit||"",rate:String(it.rate||""),
+          unit:it.unit||"",rate:String(it.rate||""),total:"",_t:[],
           // preserve per-item project info round-trip
           project_id: it.project_id||null, project_name: it.project_name||"",
           delivery_site: it.delivery_site||"", linked_mr_id: it.linked_mr_id||null,
         }))
       : prefillItems
-        ?prefillItems.map(m=>({
+        ?prefillItems.map(m=>solvePOLine({
             // rate prefilled when the item came from a locked RFQ quote
             desc:m.item,hsn:"",qty:String(m.approvedQty||m.qty),unit:m.unit,
-            rate:(m.rate!=null&&m.rate!=="")?String(m.rate):"",
+            rate:(m.rate!=null&&m.rate!=="")?String(m.rate):"",total:"",_t:[],
             // Each prefill row is a source MR — carry its project so the
             // PO can render per-line site even when items span multiple
             // projects (multi-site bulk order).
@@ -1138,7 +1172,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             delivery_site: m.delivery_site||m.project||"",
             linked_mr_id: m.id||null,
           }))
-        :[{desc:"",hsn:"",qty:"",unit:"",rate:"",project_id:null,project_name:"",delivery_site:"",linked_mr_id:null}]
+        :[{desc:"",hsn:"",qty:"",unit:"",rate:"",total:"",_t:[],_d:"total",project_id:null,project_name:"",delivery_site:"",linked_mr_id:null}]
   });
   const [matLib,setMatLib]=useState([]);
   const reloadMatLib=()=>api.get("/library/materials").then(r=>{ if(r.success) setMatLib(r.data||[]); }).catch(()=>{});
@@ -1218,6 +1252,10 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
   const updItem=(i,k,v)=>{
     const its=[...form.items];
     its[i]={...its[i],[k]:v};
+    if(k==="qty"||k==="rate"||k==="total"){
+      its[i]._t=_poTouch(its[i]._t,k);
+      its[i]=solvePOLine(its[i]);
+    }
     if(k==="desc"){
       const m=matLib.find(x=>(x.name||"").trim().toLowerCase()===String(v||"").trim().toLowerCase());
       if(m){
@@ -1229,18 +1267,24 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
     if(k==="desc" && v && !its[i].rate){
       api.get(`/warehouse/last-rate?name=${encodeURIComponent(v)}`).then(r=>{
         if(r.success && Number(r.data?.rate)>0){
-          setForm(p=>({...p,items:p.items.map((row,j)=>j===i&&!Number(row.rate)?{...row,rate:r.data.rate}:row)}));
+          // Auto-filled rate is a suggestion, not a user touch — re-solve so
+          // total updates but the touch order (user's fixed fields) stays.
+          setForm(p=>({...p,items:p.items.map((row,j)=>j===i&&!Number(row.rate)?solvePOLine({...row,rate:String(r.data.rate)}):row)}));
         }
       }).catch(()=>{});
     }
   };
+  // Click-to-pick: focusing Qty/Rate marks it as the field a Total
+  // adjustment will change (amber highlight). No recompute on pick.
+  const pickItem=(i,f)=>setForm(p=>({...p,items:p.items.map((row,j)=>j!==i||row._pick===f?row:{...row,_pick:f})}));
   const addItem=()=>{
     const newIdx = form.items.length;
-    setForm(p=>({...p,items:[...p.items,{desc:"",hsn:"",qty:"",unit:"",rate:""}]}));
+    setForm(p=>({...p,items:[...p.items,{desc:"",hsn:"",qty:"",unit:"",rate:"",total:"",_t:[],_d:"total"}]}));
     setPendingFocus(newIdx);
   };
   const removeItem=(i)=>{if(form.items.length===1)return;const its=[...form.items];its.splice(i,1);setForm(p=>({...p,items:its}));};
-  const total=form.items.reduce((s,it)=>s+(Number(it.qty)||0)*(Number(it.rate)||0),0);
+  // Entered/derived line totals are authoritative (solver) — not qty×rate.
+  const total=form.items.reduce((s,it)=>s+(Number(it.total)||0),0);
 
   // Project picker handler (only used when no prefillItems)
   const handleProjectChange=(v)=>{
@@ -1358,7 +1402,7 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
 
           {/* Header */}
           <div style={{display:"grid",gridTemplateColumns:"2.2fr 80px 70px 80px 80px 90px 28px",gap:7,padding:"6px 8px",background:T.sb,borderRadius:6,marginBottom:5}}>
-            {["Material (Library)","HSN","Qty","Unit","Rate ₹","Amount",""].map((h,i)=>(
+            {["Material (Library)","HSN","Qty","Unit","Rate ₹","Total ₹",""].map((h,i)=>(
               <span key={i} style={{fontSize:9,fontWeight:700,color:"rgba(255,255,255,0.55)",textTransform:"uppercase",letterSpacing:".4px",textAlign:i>=2&&i<=5?"left":"left"}}>{h}</span>
             ))}
           </div>
@@ -1368,7 +1412,6 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
             const lib = matLib.find(m=>(m.name||"").trim().toLowerCase()===(it.desc||"").trim().toLowerCase());
             const isLocked = !!it.desc;
             const u = lib?.unit || it.unit || "—";
-            const lineAmt = (Number(it.qty)||0)*(Number(it.rate)||0);
             return (
               <div key={i} style={{display:"grid",gridTemplateColumns:"2.2fr 80px 70px 80px 80px 90px 28px",gap:7,padding:"6px 8px",alignItems:"center",borderBottom:i<form.items.length-1?`1px dashed ${T.b1}`:"none"}}>
                 <LibrarySelect type="material" value={it.desc}
@@ -1380,8 +1423,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                   style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
                   onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 <input type="number" value={it.qty} onChange={e=>updItem(i,"qty",e.target.value)} placeholder="Qty"
-                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                  title={it._d==="qty"?"Auto: Total ÷ Rate — type karke fix kar sakte ho":(it._pick==="qty"?"Selected — Total adjust karoge to Qty badlega":undefined)}
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="qty"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="qty"?T.t2:T.t1,background:it._d==="qty"?T.surfaceB:(it._pick==="qty"?T.ambL:T.surface),boxShadow:it._pick==="qty"&&it._d!=="qty"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                  onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"qty");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
                 {isLocked
                   ? <div title="Unit Material Library se aata hai — change karne ke liye Library → Materials me edit karein"
                       style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surfaceB,fontFamily:"inherit",fontWeight:700,display:"flex",alignItems:"center",gap:5,justifyContent:"center",cursor:"not-allowed",boxSizing:"border-box"}}>
@@ -1390,11 +1434,13 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
                   : <SearchSelect value={it.unit} options={UNITS} compact onChange={v=>updItem(i,"unit",v)} placeholder="Unit"/>
                 }
                 <input type="number" value={it.rate} onChange={e=>updItem(i,"rate",e.target.value)} placeholder="Rate"
-                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px solid ${T.b1}`,fontSize:12,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
-                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-                <div style={{padding:"7px 9px",borderRadius:6,background:lineAmt>0?T.bluL:"transparent",fontSize:12,fontWeight:700,color:lineAmt>0?T.blu:T.t4,textAlign:"right",fontFamily:"inherit",boxSizing:"border-box"}}>
-                  {lineAmt>0?`₹${lineAmt.toLocaleString("en-IN")}`:"—"}
-                </div>
+                  title={it._d==="rate"?"Auto: Total ÷ Qty":(it._pick==="rate"?"Selected — Total adjust karoge to Rate badlega":undefined)}
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="rate"?"dashed":"solid"} ${T.b1}`,fontSize:12,color:it._d==="rate"?T.t2:T.t1,background:it._d==="rate"?T.surfaceB:(it._pick==="rate"?T.ambL:T.surface),boxShadow:it._pick==="rate"&&it._d!=="rate"?`inset 0 0 0 1.5px ${T.amb}`:"none",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                  onFocus={e=>{e.target.style.borderColor=T.blu;pickItem(i,"rate");}} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                <input type="number" value={it.total} onChange={e=>updItem(i,"total",e.target.value)} placeholder="Total"
+                  title={it._d==="total"?"Auto: Qty × Rate — final total yahin type bhi kar sakte ho":"Entered total"}
+                  style={{padding:"7px 9px",borderRadius:6,border:`1.5px ${it._d==="total"?"dashed":"solid"} ${it._d==="total"?T.b1:T.bluM}`,fontSize:12,fontWeight:700,color:Number(it.total)>0?T.blu:T.t4,background:it._d==="total"?T.surfaceB:T.bluL,textAlign:"right",outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}
+                  onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=it._d==="total"?T.b1:T.bluM}/>
                 <button onClick={()=>removeItem(i)} disabled={form.items.length===1}
                   title={form.items.length===1?"At least one item required":"Remove row"}
                   style={{width:26,height:26,borderRadius:6,background:form.items.length===1?"transparent":T.redL,border:`1px solid ${form.items.length===1?T.b1:T.redM}`,cursor:form.items.length===1?"not-allowed":"pointer",display:"flex",alignItems:"center",justifyContent:"center",opacity:form.items.length===1?.4:1}}>
@@ -1456,7 +1502,9 @@ function CreatePOModal({onClose,onSave,prefillItems,prefillVendor,editPo,dbProje
               desc:it.desc,hsn:it.hsn||"—",
               qty:Number(it.qty)||0,unit:it.unit,
               rate:Number(it.rate)||0,
-              amount:(Number(it.qty)||0)*(Number(it.rate)||0)
+              // Solver total is authoritative — qty×rounded-rate can drift
+              // by paise when rate was derived from a fixed total.
+              amount:Number(it.total)||((Number(it.qty)||0)*(Number(it.rate)||0))
             })),
             linkedMR:"—",delivery:form.delivery||"TBD",
             notes:form.notes||"",
