@@ -1,3 +1,5 @@
+import { recordFailedCall } from "../utils/diag";
+
 // ── GB Buildcon API Configuration ──────────────────────────────
 // Local dev → localhost:5000, else production.
 //
@@ -61,8 +63,11 @@ const api = async (endpoint, options={}) => {
   let res;
   try {
     res = await fetch(`${API_BASE}${endpoint}`, config);
+    // Diagnostics: status only, never bodies (see utils/diag.js).
+    if (!res.ok) recordFailedCall(config.method, endpoint, res.status);
   } catch (err) {
     clearTimeout(timer);
+    recordFailedCall(config.method, endpoint, 0);
     const isAbort = err?.name === "AbortError";
     return {
       success: false,

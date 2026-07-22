@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, lazy, Suspense, Fragment } from "react";
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth, API_BASE } from "./config/api";
+import { initDiag, recordScreen } from "./utils/diag";
 import apiCache from "./utils/apiCache";
 import EChart from "./components/EChart";
 import UploadToast from "./components/UploadToast";
@@ -1715,6 +1716,12 @@ export default function App(){
   useEffect(()=>{
     fetch(API_BASE + "/health").catch(()=>{});
   },[]);
+
+  // Diagnostic ring buffers (utils/diag.js). Collects console errors, failed
+  // API calls and the screens visited — in memory only. Nothing is ever sent
+  // unless the user taps "Haan, bhej do" on Sahayak's consent card.
+  useEffect(()=>{ initDiag(); },[]);
+  useEffect(()=>{ recordScreen(nav); },[nav]);
 
   // Prefetch all modules in background after dashboard loads
   useEffect(()=>{
