@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { API_BASE } from "../config/api";
+import { BundleView, TicketBadge, fmtTicketTime } from "./shared/TicketBundle";
 
 // Single source of truth — hardcoding the raw *.up.railway.app host here meant
 // this module stayed broken on ISPs that refuse that zone (see config/api.js).
@@ -3367,6 +3368,107 @@ function TabClients() {
 // ════════════════════════════════════════════════════════════════════════
 // MAIN SAAS MODULE
 // ════════════════════════════════════════════════════════════════════════
+// ── Bug Inbox — Phynaxon's cross-company Sahayak tickets ──────────
+// Bugs reported through Sahayak used to land on the COMPANY admin's desk,
+// where nobody could fix them and Phynaxon never heard about them. This is
+// the other half of that routing: every tenant's bugs in one place, with the
+// diagnostic bundle the user consented to send.
+function TabBugInbox() {
+  const [type, setType]     = useState("bug");
+  const [status, setStatus] = useState("open");
+  const [rows, setRows]     = useState(null);
+  const [openId, setOpenId] = useState(null);
+  const [note, setNote]     = useState("");
+  const [busy, setBusy]     = useState(false);
+
+  const load = useCallback((ty, st) => {
+    setRows(null);
+    apiFetch(`/support-bot/escalations/saas?type=${ty}&status=${st}`)
+      .then(r => setRows(r && r.success && Array.isArray(r.data) ? r.data : []))
+      .catch(() => setRows([]));
+  }, []);
+
+  useEffect(() => { load(type, status); }, [type, status, load]);
+
+  const resolve = (id) => {
+    setBusy(true);
+    apiFetch(`/support-bot/escalations/${id}/resolve`, { method:"POST", body:{ resolution: note.trim() || undefined } })
+      .then(r => { setBusy(false); if (r && r.success) { setOpenId(null); setNote(""); load(type, status); } })
+      .catch(() => setBusy(false));
+  };
+
+  const chip = (on) => ({
+    border:`1px solid ${on ? T.blu : T.b1}`, cursor:"pointer", borderRadius:7,
+    padding:"5px 12px", fontSize:12, fontWeight:600, fontFamily:"inherit",
+    background: on ? T.bluL : T.surface, color: on ? T.blu : T.t3,
+  });
+
+  return (
+    <div>
+      <PageHeader title="Bug Inbox" sub="Sahayak se aaye bug — saari companies"/>
+
+      <div style={{ display:"flex", gap:6, marginBottom:14, flexWrap:"wrap" }}>
+        {[["bug","Bug"],["query","Sawaal"]].map(([id,label]) => (
+          <button key={id} onClick={() => { setType(id); setOpenId(null); }} style={chip(type===id)}>{label}</button>
+        ))}
+        <span style={{ width:1, background:T.b1, margin:"0 2px" }}/>
+        {[["open","Open"],["resolved","Resolved"]].map(([id,label]) => (
+          <button key={id} onClick={() => { setStatus(id); setOpenId(null); }} style={chip(status===id)}>{label}</button>
+        ))}
+      </div>
+
+      {rows === null && <div style={{ padding:18, fontSize:12.5, color:T.t4 }}>Loading...</div>}
+      {rows && !rows.length && <EmptyState Icon={IcShield} text="Koi ticket nahi."/>}
+
+      {rows && rows.map(t => {
+        const isBug = t.type === "bug";
+        const expanded = openId === t.id;
+        return (
+          <div key={t.id} style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, marginBottom:8 }}>
+            <button onClick={() => { setOpenId(expanded ? null : t.id); setNote(""); }}
+              style={{ width:"100%", textAlign:"left", border:"none", background:"transparent", cursor:"pointer",
+                padding:"12px 14px", display:"flex", gap:10, alignItems:"flex-start", fontFamily:"inherit" }}>
+              <span style={{ flex:1, minWidth:0 }}>
+                <span style={{ display:"flex", alignItems:"center", gap:7, marginBottom:4, flexWrap:"wrap" }}>
+                  <TicketBadge text={isBug ? "Bug" : "Sawaal"} color={isBug ? T.red : T.slt} bg={isBug ? T.redL : T.sltL}/>
+                  {/* which tenant reported it — the whole point of this view */}
+                  <TicketBadge text={t.company_name || ("Company #" + t.company_id)} color={T.pur} bg={T.purL}/>
+                  <span style={{ fontSize:12, fontWeight:600, color:T.t1 }}>{t.ticket_no}</span>
+                  <span style={{ fontSize:11.5, color:T.t3 }}>{t.user_name || "—"}</span>
+                  <span style={{ fontSize:11, color:T.t4 }}>{fmtTicketTime(t.created_at)}</span>
+                  {t.bundle_meta && <TicketBadge text="Diagnostics" color={T.blu} bg={T.bluL}/>}
+                </span>
+                <span style={{ display:"block", fontSize:12.5, color:T.t2, lineHeight:1.45,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
+                  {t.question || "—"}
+                </span>
+              </span>
+            </button>
+
+            {expanded && (
+              <div style={{ padding:"0 14px 14px", display:"flex", flexDirection:"column", gap:10 }}>
+                {t.reason && <div style={{ fontSize:11.5, color:T.t3 }}>Reason: {t.reason}</div>}
+                <BundleView meta={t.bundle_meta} url={t.bundle_url}/>
+                {t.status === "open" ? (
+                  <div style={{ display:"flex", gap:7, alignItems:"center" }}>
+                    <input value={note} onChange={e => setNote(e.target.value)} placeholder="Kya fix kiya / kya jawab diya..."
+                      style={{ flex:1, minWidth:0, padding:"7px 10px", borderRadius:7, border:`1px solid ${T.b1}`,
+                        fontSize:12, color:T.t1, background:T.surfaceB, outline:"none", fontFamily:"inherit" }}/>
+                    <Btn onClick={() => resolve(t.id)} color={T.grn} disabled={busy}>Resolve karein</Btn>
+                  </div>
+                ) : (
+                  t.resolution && <div style={{ fontSize:11.5, color:T.t3, background:T.grnL,
+                    border:`1px solid ${T.grnM}`, borderRadius:7, padding:"7px 10px" }}>{t.resolution}</div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 const TABS = [
   { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
   { id:"clients",   label:"Clients & Billing", Icon:IcDollar  },
@@ -3380,6 +3482,7 @@ const TABS = [
   { id:"audit",     label:"Audit Logs",       Icon:IcShield   },
   { id:"export",    label:"Data Export",      Icon:IcDownload },
   { id:"sanchalan", label:"Sanchalan",        Icon:IcLock     },
+  { id:"bugs",      label:"Bug Inbox",        Icon:IcShield   },
 ];
 
 export default function SaaSModule() {
@@ -3458,6 +3561,7 @@ export default function SaaSModule() {
             {tab === "audit"     && <TabAuditLogs companies={companies}/>}
             {tab === "export"    && <TabExport companies={companies}/>}
             {tab === "sanchalan" && <TabSanchalan onOpenDetail={handleOpenDetail}/>}
+            {tab === "bugs"      && <TabBugInbox/>}
           </>
         )}
       </div>

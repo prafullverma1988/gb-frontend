@@ -687,7 +687,7 @@ function ShortcutCheatsheet({onClose}){
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────
-function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile,companies,onSwitchCompany}){
+function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile,companies,onSwitchCompany,ticketCount}){
   const [showSwitcher,setShowSwitcher]=useState(false);
   const [showCreateCo,setShowCreateCo]=useState(false);
   const [newCo,setNewCo]=useState({name:"",domain:"surya_ghar",city:""});
@@ -864,7 +864,15 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
               {grp.section&&showLabel&&(
                 <div style={{color:"rgba(255,255,255,0.3)",fontSize:9,fontWeight:700,letterSpacing:"1.3px",textTransform:"uppercase",padding:gi>0?"16px 18px 6px":"6px 18px 6px"}}>{grp.section}</div>
               )}
-              {visibleItems.map(item=>{
+              {visibleItems.map(item0=>{
+                // Ticket badge, injected at render time because the nav array is
+                // static while the count is live. Whose count depends on who is
+                // looking: super_admin gets open cross-company BUGS on SaaS Admin,
+                // a company admin gets their own open QUERIES on Sahayak — the
+                // same ownership split the backend enforces.
+                const badgeTarget = user?.role==="super_admin" ? "saas" : "sahayak";
+                const item = (ticketCount>0 && item0.id===badgeTarget)
+                  ? {...item0, badge:ticketCount, bc:"#DC2626"} : item0;
                 const isA=active===item.id;
                 return(
                   <button key={item.id} onClick={()=>handleNav(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label}
@@ -1667,6 +1675,7 @@ export default function App(){
   const [companies,setCompanies]=useState(()=>getCompanies());
   const [switching,setSwitching]=useState(false);
   const [nav,setNav]=useState("projects");
+  const [ticketCount,setTicketCount]=useState(0);   // sidebar Sahayak/SaaS badge
   const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showSearch,setShowSearch]=useState(false);
@@ -1781,13 +1790,25 @@ export default function App(){
         if(res.refreshed_token){ try{ localStorage.setItem("gb_token", res.refreshed_token); }catch(_){} }
       }catch(_){}
     };
-    refreshPerms();
-    window.addEventListener("focus", refreshPerms);
+    // Sidebar ticket badge. Rides the SAME timer rather than adding one, but
+    // cannot live inside refreshPerms: that function returns early for
+    // super_admin, and super_admin is exactly who needs the bug count.
+    // Admin-only endpoint, so anyone else is skipped instead of 403-ing.
+    const refreshTickets=async()=>{
+      if(!loggedIn||!["admin","super_admin"].includes(user?.role)){ setTicketCount(0); return; }
+      try{
+        const r=await api.get("/support-bot/escalations/unread-count");
+        if(r&&r.success) setTicketCount(Number(r.count)||0);
+      }catch(_){}
+    };
+    const tick=()=>{ refreshPerms(); refreshTickets(); };
+    tick();
+    window.addEventListener("focus", tick);
     // 60s poll (same cadence as the mobile app) — an admin's permission
     // change or a subscription lapse lands without waiting for a refocus.
-    const pollId=setInterval(refreshPerms, 60_000);
-    return()=>{window.removeEventListener("focus", refreshPerms);clearInterval(pollId);};
-  },[loggedIn]);
+    const pollId=setInterval(tick, 60_000);
+    return()=>{window.removeEventListener("focus", tick);clearInterval(pollId);};
+  },[loggedIn,user?.role]);
 
   // ── Global keyboard shortcuts ────────────────────────────────────────
   useEffect(()=>{
@@ -1924,7 +1945,7 @@ export default function App(){
         <div style={{width:32,height:32,border:"3px solid rgba(255,255,255,0.15)",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
         <div style={{color:"white",fontSize:14,fontWeight:600}}>Switching company...</div>
       </div>}
-      {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany}/>}
+      {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={(mod)=>setNav(mod)} isMobile={isMobile}/>}
         <div style={{flex:1,overflowY:"auto",paddingBottom:isMobile&&!hideAppShell?68:0}}>

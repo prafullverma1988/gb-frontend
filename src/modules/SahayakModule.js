@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import api, { getUser } from "../config/api";
 import { getDiagBundle } from "../utils/diag";
 import { T } from "./shared/tokens";
+import { BundleView, TicketBadge as Badge, fmtTicketTime as fmtTime } from "./shared/TicketBundle";
 
 // ── ICONS (SVG only, no emoji) ──────────────────────────────────
 const Ic = ({ d, size = 18, color = "currentColor", sw = 1.8, fill = "none" }) => (
@@ -57,6 +58,7 @@ const L = {
   ticketsEmpty: "Koi ticket nahi.",
   resolvePlaceholder: "Kya kiya / kya jawab diya...",
   resolveBtn: "Resolve karein",
+  bugHandedOff: "Yeh app ki dikkat hai — Phynaxon support team ko bhej diya gaya hai. Wahi isko theek karke band karegi.",
 };
 
 export default function SahayakModule() {
@@ -451,38 +453,48 @@ function ConsentCard({ ticket, onBundle, onDone }) {
 // Reuses the M1 endpoints: GET /escalations?status= and POST
 // /escalations/:id/resolve. Expanding a ticket shows the diagnostic bundle
 // the user consented to send, if any.
+// Company admin's inbox. Their job is the QUERY tickets — company policy the
+// bot could not answer. Bugs belong to Phynaxon, so they are visible here for
+// transparency but read-only; the backend refuses the resolve either way.
 function TicketsInbox() {
   const [status, setStatus] = useState("open");
+  const [type, setType] = useState("query");
   const [rows, setRows] = useState(null);
   const [openId, setOpenId] = useState(null);
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const load = useCallback(async (s) => {
+  const load = useCallback(async (s, ty) => {
     setRows(null);
-    const r = await api.get(`/support-bot/escalations?status=${s}`);
+    const r = await api.get(`/support-bot/escalations?status=${s}&type=${ty}`);
     setRows(r && r.success && Array.isArray(r.data) ? r.data : []);
   }, []);
 
-  useEffect(() => { load(status); }, [status, load]);
+  useEffect(() => { load(status, type); }, [status, type, load]);
 
   const resolve = async (id) => {
     setBusy(true);
     const r = await api.post(`/support-bot/escalations/${id}/resolve`, { resolution: note.trim() || undefined });
     setBusy(false);
-    if (r && r.success) { setOpenId(null); setNote(""); load(status); }
+    if (r && r.success) { setOpenId(null); setNote(""); load(status, type); }
   };
+
+  const chip = (on) => ({
+    border: `1px solid ${on ? ACCENT : T.b1}`, cursor: "pointer", borderRadius: 7,
+    padding: "5px 12px", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+    background: on ? ACCENT_SOFT : T.surface, color: on ? ACCENT : T.t3,
+  });
 
   return (
     <div style={{ flex: 1, overflowY: "auto", background: T.bg }}>
-      {/* status filter */}
-      <div style={{ display: "flex", gap: 6, padding: "12px 16px", borderBottom: `1px solid ${T.b1}`, background: T.surface, position: "sticky", top: 0, zIndex: 1 }}>
+      {/* filters */}
+      <div style={{ display: "flex", gap: 6, padding: "12px 16px", borderBottom: `1px solid ${T.b1}`, background: T.surface, position: "sticky", top: 0, zIndex: 1, flexWrap: "wrap" }}>
+        {[["query", "Sawaal"], ["bug", "Bug"]].map(([id, label]) => (
+          <button key={id} onClick={() => { setType(id); setOpenId(null); }} style={chip(type === id)}>{label}</button>
+        ))}
+        <span style={{ width: 1, background: T.b1, margin: "0 2px" }} />
         {[["open", "Open"], ["resolved", "Resolved"]].map(([id, label]) => (
-          <button key={id} onClick={() => { setStatus(id); setOpenId(null); }}
-            style={{ border: `1px solid ${status === id ? ACCENT : T.b1}`, cursor: "pointer", borderRadius: 7, padding: "5px 12px", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
-              background: status === id ? ACCENT_SOFT : T.surface, color: status === id ? ACCENT : T.t3 }}>
-            {label}
-          </button>
+          <button key={id} onClick={() => { setStatus(id); setOpenId(null); }} style={chip(status === id)}>{label}</button>
         ))}
       </div>
 
@@ -518,7 +530,13 @@ function TicketsInbox() {
                 {t.reason && <div style={{ fontSize: 11.5, color: T.t3 }}>Reason: {t.reason}</div>}
                 <BundleView meta={t.bundle_meta} url={t.bundle_url} />
 
-                {t.status === "open" ? (
+                {isBug ? (
+                  // Not this admin's ticket to close — say who has it instead
+                  // of showing a button the server would reject.
+                  <div style={{ fontSize: 11.5, color: T.t3, background: T.sltL, border: `1px solid ${T.b1}`, borderRadius: 7, padding: "8px 10px" }}>
+                    {L.bugHandedOff}
+                  </div>
+                ) : t.status === "open" ? (
                   <div style={{ display: "flex", gap: 7, alignItems: "center" }}>
                     <input value={note} onChange={(e) => setNote(e.target.value)} placeholder={L.resolvePlaceholder}
                       style={{ flex: 1, minWidth: 0, padding: "7px 10px", borderRadius: 7, border: `1px solid ${T.b1}`, fontSize: 12, color: T.t1, background: T.surfaceB, outline: "none", fontFamily: "inherit" }} />
@@ -540,60 +558,6 @@ function TicketsInbox() {
 }
 
 // Diagnostic bundle rendered as a readable list (it is stored as JSON text).
-function BundleView({ meta, url }) {
-  if (!meta && !url) return null;
-  let d = null;
-  if (meta) { try { d = typeof meta === "string" ? JSON.parse(meta) : meta; } catch (_) { d = null; } }
-
-  const row = (label, value) => (
-    <div style={{ display: "flex", gap: 8, fontSize: 11.5, lineHeight: 1.5 }}>
-      <span style={{ color: T.t4, minWidth: 88, flexShrink: 0 }}>{label}</span>
-      <span style={{ color: T.t2, wordBreak: "break-word" }}>{value}</span>
-    </div>
-  );
-
-  return (
-    <div style={{ border: `1px solid ${T.b1}`, background: T.surfaceB, borderRadius: 8, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 7 }}>
-      <div style={{ fontSize: 11.5, fontWeight: 700, color: T.t2 }}>Diagnostic bundle</div>
-      {!d && meta && <div style={{ fontSize: 11, color: T.t4 }}>Bundle padha nahi ja saka.</div>}
-      {d && (
-        <>
-          {row("App", `${d.app_version || "—"} · ${d.online === false ? "offline" : "online"}`)}
-          {d.captured_at && row("Kab", fmtTime(d.captured_at))}
-          {d.user_agent && row("Device", d.user_agent)}
-          {row("Screens", (d.screens || []).map((s) => s.name).join(" → ") || "—")}
-          <div>
-            <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 3 }}>Failed calls ({(d.failed_calls || []).length})</div>
-            {(d.failed_calls || []).map((c, i) => (
-              <div key={i} style={{ fontSize: 11, color: T.t2, fontFamily: "ui-monospace, monospace" }}>{c.status} {c.method} {c.path}</div>
-            ))}
-          </div>
-          <div>
-            <div style={{ fontSize: 11.5, color: T.t4, marginBottom: 3 }}>Errors ({(d.errors || []).length})</div>
-            {(d.errors || []).map((e, i) => (
-              <div key={i} style={{ fontSize: 11, color: T.t2, wordBreak: "break-word" }}>{e.msg}</div>
-            ))}
-          </div>
-        </>
-      )}
-      {url && (
-        <a href={url} target="_blank" rel="noreferrer" style={{ display: "inline-flex", alignItems: "center", gap: 6, fontSize: 11.5, color: ACCENT, textDecoration: "none" }}>
-          <IcImage size={13} color={ACCENT} />Screenshot kholein
-        </a>
-      )}
-    </div>
-  );
-}
-
-function Badge({ text, color, bg }) {
-  return <span style={{ fontSize: 10, fontWeight: 700, color, background: bg, borderRadius: 5, padding: "2px 7px", letterSpacing: "0.2px" }}>{text}</span>;
-}
-
-function fmtTime(v) {
-  if (!v) return "";
-  try { return new Date(v).toLocaleString("en-IN", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" }); }
-  catch (_) { return String(v); }
-}
 
 // Subtly highlight the escalation ticket line inside a bot reply.
 function renderWithTicket(text) {
