@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
+import { API_BASE } from "../config/api";
 
-const API = "https://gb-backend-production-7bd2.up.railway.app/api";
+// Single source of truth — hardcoding the raw *.up.railway.app host here meant
+// this module stayed broken on ISPs that refuse that zone (see config/api.js).
+const API = API_BASE;
 const tok = () => localStorage.getItem("gb_token");
 const apiFetch = (path, opts = {}) =>
   fetch(API + path, {

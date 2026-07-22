@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, lazy, Suspense, Fragment } from "react";
-import api, { getUser, getToken, getCompanies, clearAuth, saveAuth } from "./config/api";
+import api, { getUser, getToken, getCompanies, clearAuth, saveAuth, API_BASE } from "./config/api";
 import apiCache from "./utils/apiCache";
 import EChart from "./components/EChart";
 import UploadToast from "./components/UploadToast";
@@ -1713,7 +1713,7 @@ export default function App(){
 
   // Wake up Railway backend on app load — prevents cold start delay
   useEffect(()=>{
-    fetch("https://gb-backend-production-7bd2.up.railway.app/api/health").catch(()=>{});
+    fetch(API_BASE + "/health").catch(()=>{});
   },[]);
 
   // Prefetch all modules in background after dashboard loads

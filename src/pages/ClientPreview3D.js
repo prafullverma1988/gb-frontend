@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE as DEFAULT_API_BASE } from "../config/api";
 
 // Client 3D Preview Page — accessed via share link
 // URL: /3d-preview/:id?token=xxxx
@@ -29,7 +30,9 @@ export default function ClientPreview3D() {
   const [submitted, setSubmitted] = useState(false);
   const [submitMsg, setSubmitMsg] = useState("");
 
-  const API_BASE = process.env.REACT_APP_API_URL || "https://gb-backend-production-7bd2.up.railway.app/api";
+  // This page is opened by CLIENTS on their own networks, so it must not use
+  // the raw *.up.railway.app host — some ISPs refuse that zone (config/api.js).
+  const API_BASE = process.env.REACT_APP_API_URL || DEFAULT_API_BASE;
 
   useEffect(() => {
     if (!token) { setError("Invalid link — no token"); setLoading(false); return; }
