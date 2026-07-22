@@ -1,8 +1,14 @@
 // ── GB Buildcon API Configuration ──────────────────────────────
-// Local dev → localhost:5000, else production
+// Local dev → localhost:5000, else production.
+//
+// Production uses our own domain (api.sanchalanapp.com → Railway) instead of
+// the raw *.up.railway.app host: some ISP resolvers (observed on Reliance
+// broadband) REFUSE the up.railway.app zone outright, so every API call died
+// with ERR_NAME_NOT_RESOLVED for users on those networks while the backend
+// itself was perfectly healthy. sanchalanapp.com resolves fine there.
 const API_BASE = (typeof window !== "undefined" && /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname))
   ? "http://localhost:5000/api"
-  : "https://gb-backend-production-7bd2.up.railway.app/api";
+  : "https://api.sanchalanapp.com/api";
 
 const getToken  = () => localStorage.getItem("gb_token");
 const getUser   = () => { try { const u=localStorage.getItem("gb_user"); return u?JSON.parse(u):null; } catch{return null;} };
