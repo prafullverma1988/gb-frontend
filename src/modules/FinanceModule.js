@@ -70,6 +70,7 @@ const C={
   r:"#C62828",rl:"#FFEBEE",bl:"#E3F2FD",
   pur:"#6A1B9A",purl:"#F3E5F5",teal:"#00695C",tealL:"#E0F2F1",
   pink:"#AD1457",pinkL:"#FCE4EC",
+  ind:"#4B45C4",indL:"#EEF0FB",
 };
 const fmt=(n)=>n>=10000000?`${(n/10000000).toFixed(1)}Cr`:n>=100000?`${(n/100000).toFixed(1)}L`:`${(n/1000).toFixed(0)}K`;
 const fmtN=(n)=>Math.abs(n).toLocaleString("en-IN");
@@ -102,6 +103,7 @@ const T={
   red:"#DC2626",redL:"#FEF2F2",redM:"#FECACA",
   slt:"#64748B",sltL:"#F1F5F9",
   pur:"#7C3AED",purL:"#F5F3FF",
+  ind:"#4B45C4",indL:"#EEF0FB",indM:"#C7C9F0",
 };
 
 // ── SHARED DOWNLOAD HELPERS ───────────────────────────────────────────
@@ -164,7 +166,7 @@ const WALLET_TXNS=[];
 
 const PARTIES=[];
 const PARTY_TXNS={};
-const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL},"Wallet Payment":{color:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{color:C.p,bg:C.bl}};
+const TXN_TYPE_META={"Payment In":{color:C.g,bg:C.gl},"Payment Out":{color:C.r,bg:C.rl},"Material Purchase":{color:C.p,bg:C.bl},"Site Expense":{color:C.o,bg:C.ol},"Party Payment":{color:C.pur,bg:C.purl},"Sub-Con Expense":{color:C.teal,bg:C.tealL},"Material Return":{color:C.a,bg:"#FFF8E1"},"Sales Invoice":{color:C.g,bg:C.gl},"Unbilled Material":{color:C.pink,bg:C.pinkL},"Wallet Payment":{color:"#00695C",bg:"#E0F2F1"},"Wallet Top-up":{color:C.p,bg:C.bl},"Settlement":{color:C.ind,bg:C.indL}};
 const TRANSACTIONS_DATA=[];
 const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
@@ -734,6 +736,248 @@ function DualBillStrip({ row, onFields }){
           {suggest!=null&&!row.alt_qty&&<span style={{fontSize:10,color:T.t4}}>~{suggest} suggested (×{ratio})</span>}
         </div>
       )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════════
+// PARTY-TO-PARTY (P2P) SETTLEMENT MODAL
+// Ek party ka paisa doosri party ki dues chukata hai — no cash / bank
+// movement, sirf do party ledger legs (backend POST /finance/p2p-settlements).
+// Lean standalone modal (CreateTransactionModal bahut bada hai; ye alag flow
+// hai — do party selects, impact preview, koi account/mop nahi).
+// ══════════════════════════════════════════════════════════════════
+function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,onGoStaffWallets}){
+  const PARTY_NAMES=dbParties?.length?dbParties.map(p=>p.name):[];
+  const PROJECTS=dbProjects?.length?dbProjects:[];
+  const byName=(n)=>(dbParties||[]).find(p=>(p.name||"").toLowerCase().trim()===String(n||"").toLowerCase().trim())||null;
+
+  const [payer,setPayer]=useState("");
+  const [payee,setPayee]=useState("");
+  const [amount,setAmount]=useState("");
+  const [date,setDate]=useState(new Date().toISOString().slice(0,10));
+  const [project,setProject]=useState("");
+  const [note,setNote]=useState("");
+  const [linkedBill,setLinkedBill]=useState(null);   // {id, no, amount}
+  const [ackAdvance,setAckAdvance]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [err,setErr]=useState("");
+  const [done,setDone]=useState(false);
+  const savingRef=useRef(false);
+
+  const payerObj=byName(payer), payeeObj=byName(payee);
+  const bothStaff=payerObj?.is_staff===1 && payeeObj?.is_staff===1;
+  const amt=parseFloat(amount)||0;
+  const samePartyErr=payer&&payee&&payerObj&&payeeObj&&payerObj.id===payeeObj.id;
+
+  // Payee ke unpaid bills (Pending Payments source) — link karne par amount lock.
+  const payeeBills=(pendingBills||[]).filter(b=>b.type==="bill" && (b.party||"").toLowerCase().trim()===String(payee||"").toLowerCase().trim());
+
+  // Soft warning: payer ke paas itna balance nahi to advance me chala jayega.
+  const payerBal=payerObj?Number(payerObj.balance)||0:0;        // display magnitude
+  const overBalance=payerObj&&amt>0&&amt>payerBal;
+  const canPreview=payerObj&&payeeObj&&!samePartyErr&&amt>0;
+
+  const pickBill=(b)=>{
+    if(linkedBill&&linkedBill.id===b.id){ setLinkedBill(null); return; }
+    setLinkedBill({id:b.id,no:b.no,amount:b.amount});
+    setAmount(String(b.amount));          // bill linked → amount locked (full settle)
+  };
+
+  const submit=async(force)=>{
+    if(savingRef.current) return;
+    if(!payerObj||!payeeObj){ setErr("Payer aur Payee dono select karein."); return; }
+    if(samePartyErr){ setErr("Payer aur Payee alag hone chahiye."); return; }
+    if(!(amt>0)){ setErr("Amount daalein (positive)."); return; }
+    if(overBalance&&!ackAdvance){ setErr("Balance advance me jaayega — confirm checkbox tick karein."); return; }
+    savingRef.current=true; setSaving(true); setErr("");
+    try{
+      const body={
+        payer_party_id:payerObj.id, payee_party_id:payeeObj.id,
+        amount:amt, date,
+        project_id:null, project_name:project||null,
+        settles_bill_id:linkedBill?linkedBill.id:null,
+        note:note||null,
+      };
+      // project_id resolve — dbProjects is a name list, backend accepts name too;
+      // send name only (project is reference-only on a settlement).
+      if(force){ body.force_duplicate=true; body.force_reason="User confirmed possible duplicate settlement"; }
+      const res=await api.post("/finance/p2p-settlements",body);
+      if(res?.success===false){
+        // Soft duplicate — reuse the app's force-confirm pattern.
+        if(res.code==="DUPLICATE_SETTLEMENT"){
+          savingRef.current=false; setSaving(false);
+          const ok=await window.confirmAsync(res.message||"Ye settlement pehle ho chuka hai. Phir bhi banayein?");
+          if(ok) return submit(true);
+          return;
+        }
+        setErr(res.message||"Save failed"); setSaving(false); savingRef.current=false; return;
+      }
+      setDone(true);
+      onSaved&&onSaved();
+      setTimeout(()=>{ onClose&&onClose(); }, 1100);
+    }catch(e){ setErr(e?.message||"Network error"); setSaving(false); savingRef.current=false; }
+  };
+
+  const inp={height:34,padding:"0 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12.5,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,width:"100%"};
+  const lbl=(t)=><label style={{fontSize:10,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.5px",display:"block",marginBottom:5}}>{t}</label>;
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+      <div style={{background:T.surface,borderRadius:14,width:560,maxWidth:"96vw",maxHeight:"92vh",display:"flex",flexDirection:"column",boxShadow:"0 20px 60px rgba(0,0,0,0.3)",overflow:"hidden"}}>
+        {/* Header */}
+        <div style={{padding:"14px 20px",background:T.ind,display:"flex",alignItems:"center",justifyContent:"space-between",flexShrink:0}}>
+          <div>
+            <div style={{fontSize:15,fontWeight:700,color:"white"}}>Party-to-Party Settlement</div>
+            <div style={{fontSize:11,color:"rgba(255,255,255,0.75)",marginTop:2}}>Ek party ka paisa doosri ki dues chukaye</div>
+          </div>
+          <button onClick={onClose} style={{background:"rgba(255,255,255,0.15)",border:"none",borderRadius:6,cursor:"pointer",color:"white",padding:"4px 8px",fontSize:13}}>✕</button>
+        </div>
+
+        {done?(
+          <div style={{padding:"40px 20px",textAlign:"center"}}>
+            <div style={{fontSize:34,marginBottom:8}}>✓</div>
+            <div style={{fontSize:15,fontWeight:700,color:T.grn}}>Settlement save ho gaya</div>
+          </div>
+        ):(
+        <div style={{padding:"16px 20px",display:"flex",flexDirection:"column",gap:14,overflowY:"auto"}}>
+          {/* No-cash pill */}
+          <div style={{display:"flex",alignItems:"center",gap:7,alignSelf:"flex-start",padding:"5px 12px",borderRadius:20,background:T.indL,border:`1px solid ${T.indM}`}}>
+            <IcArrow size={13} color={T.ind}/>
+            <span style={{fontSize:11,fontWeight:700,color:T.ind}}>No cash / bank movement</span>
+          </div>
+
+          {/* Payer + Payee */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              {lbl("Payer — jiska paisa use hua")}
+              <SearchSelect options={PARTY_NAMES} value={payer} onChange={setPayer} placeholder="Client / Investor / Staff..." accent={T.ind} compact/>
+              <div style={{fontSize:10,color:T.t4,marginTop:4,lineHeight:1.35}}>Client / Investor / Staff / advance-wala vendor</div>
+            </div>
+            <div>
+              {lbl("Payee — jisko paisa mila")}
+              <SearchSelect options={PARTY_NAMES} value={payee} onChange={v=>{setPayee(v);setLinkedBill(null);}} placeholder="Vendor / Sub-Con..." accent={T.ind} compact/>
+              <div style={{fontSize:10,color:T.t4,marginTop:4,lineHeight:1.35}}>Jisko paisa mila (hamari taraf se)</div>
+            </div>
+          </div>
+          {samePartyErr&&<div style={{padding:"7px 11px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,color:T.red,fontSize:11.5,fontWeight:600}}>Payer aur Payee alag hone chahiye.</div>}
+
+          {/* STATE 4 — staff↔staff → Wallet Transfer */}
+          {bothStaff&&!samePartyErr?(
+            <div style={{padding:"12px 14px",background:T.indL,border:`1px solid ${T.indM}`,borderRadius:9}}>
+              <div style={{fontSize:12.5,fontWeight:700,color:T.ind,marginBottom:4}}>Ye entry Wallet Transfer se hogi</div>
+              <div style={{fontSize:11.5,color:T.t2,lineHeight:1.45}}>Dono parties staff hain — wallet balances update honge, cash/bank par asar nahi. Settlement iske liye nahi hai. Staff Wallets me jaakar transfer karein (sahi sender ke context me).</div>
+              <button onClick={()=>{ onClose&&onClose(); onGoStaffWallets&&onGoStaffWallets(); }}
+                style={{marginTop:10,padding:"8px 16px",borderRadius:7,background:T.ind,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>
+                Staff Wallets me jaayein →
+              </button>
+            </div>
+          ):(<>
+          {/* Amount + Date */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div>
+              {lbl("Amount (₹)")}
+              <input type="number" value={amount} disabled={!!linkedBill}
+                onChange={e=>setAmount(e.target.value)} placeholder="0"
+                style={{...inp,background:linkedBill?T.surfaceB:T.surface,color:linkedBill?T.t3:T.t1}}
+                onFocus={e=>{if(!linkedBill)e.target.style.borderColor=T.ind;}} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              {linkedBill&&<div style={{fontSize:10,color:T.ind,marginTop:4,fontWeight:600}}>Bill linked — amount locked (full settle)</div>}
+            </div>
+            <div>
+              {lbl("Date")}
+              <input type="date" value={date} onChange={e=>setDate(e.target.value)} style={inp}
+                onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b1}/>
+            </div>
+          </div>
+
+          {/* Project (optional) */}
+          <div>
+            {lbl("Project (optional)")}
+            <SearchSelect options={PROJECTS} value={project} onChange={setProject} placeholder="Reference project..." accent={T.ind} compact/>
+          </div>
+
+          {/* Settle against pending bill (payee) */}
+          {payeeObj&&payeeBills.length>0&&(
+            <div style={{border:`1px solid ${T.b1}`,borderRadius:9,overflow:"hidden"}}>
+              <div style={{padding:"7px 12px",background:T.surfaceB,fontSize:10.5,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:"0.4px",borderBottom:`1px solid ${T.b1}`}}>Settle against pending bill (optional)</div>
+              {payeeBills.slice(0,6).map(b=>{
+                const on=linkedBill&&linkedBill.id===b.id;
+                return(
+                  <button key={b.id} onClick={()=>pickBill(b)}
+                    style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"9px 12px",border:"none",borderBottom:`1px solid ${T.b1}`,background:on?T.indL:T.surface,cursor:"pointer",textAlign:"left"}}>
+                    <span style={{width:16,height:16,borderRadius:4,border:`2px solid ${on?T.ind:T.b2}`,background:on?T.ind:"white",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:10,fontWeight:800}}>{on?"✓":""}</span>
+                    <div style={{flex:1}}>
+                      <div style={{fontSize:12,fontWeight:600,color:T.t1}}>{b.no}</div>
+                      <div style={{fontSize:10.5,color:T.t4}}>{b.project||"—"}{b.date?` · ${b.date}`:""}</div>
+                    </div>
+                    <div style={{fontSize:12.5,fontWeight:700,color:T.t2}}>₹{Number(b.amount).toLocaleString("en-IN")}</div>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Note */}
+          <div>
+            {lbl("Note (optional)")}
+            <textarea value={note} onChange={e=>setNote(e.target.value)} placeholder="Kyun / kaise settle hua..."
+              style={{width:"100%",height:56,padding:"8px 10px",borderRadius:7,border:`1.5px solid ${T.b1}`,fontSize:12,outline:"none",boxSizing:"border-box",fontFamily:"inherit",background:T.surface,color:T.t1,resize:"none"}}
+              onFocus={e=>e.target.style.borderColor=T.ind} onBlur={e=>e.target.style.borderColor=T.b1}/>
+          </div>
+
+          {/* Impact preview */}
+          {canPreview&&(
+            <div style={{border:`1px solid ${T.indM}`,borderRadius:9,overflow:"hidden"}}>
+              <div style={{padding:"7px 12px",background:T.indL,fontSize:10.5,fontWeight:700,color:T.ind,textTransform:"uppercase",letterSpacing:"0.4px"}}>Iska asar</div>
+              <div style={{padding:"4px 12px"}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
+                  <span style={{fontSize:12,color:T.t2}}><b>{payerObj.name}</b> <span style={{color:T.t4}}>(Payer)</span> — Receivable</span>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>−₹{amt.toLocaleString("en-IN")}</span>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0",borderBottom:`1px solid ${T.b1}`}}>
+                  <span style={{fontSize:12,color:T.t2}}>
+                    <b>{payeeObj.name}</b> <span style={{color:T.t4}}>(Payee)</span> — Payable
+                    {linkedBill&&<span style={{marginLeft:6,fontSize:10,fontWeight:700,color:T.ind,background:T.indL,border:`1px solid ${T.indM}`,padding:"1px 6px",borderRadius:8}}>{linkedBill.no} → Paid</span>}
+                  </span>
+                  <span style={{fontSize:12.5,fontWeight:700,color:T.grn}}>−₹{amt.toLocaleString("en-IN")}</span>
+                </div>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"7px 0"}}>
+                  <span style={{fontSize:12,color:T.t4}}>Company Cash / Bank</span>
+                  <span style={{fontSize:12,fontWeight:600,color:T.t4}}>No change</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Soft balance warning */}
+          {overBalance&&(
+            <div style={{padding:"10px 12px",background:T.ambL,border:`1px solid ${T.ambM}`,borderRadius:9}}>
+              <div style={{fontSize:11.5,color:T.amb,fontWeight:600,lineHeight:1.45}}>
+                {payerObj.name} ka balance sirf ₹{payerBal.toLocaleString("en-IN")} hai — ₹{amt.toLocaleString("en-IN")} settle karne par balance advance me chala jayega.
+              </div>
+              <label style={{display:"flex",alignItems:"center",gap:8,marginTop:8,cursor:"pointer"}}>
+                <input type="checkbox" checked={ackAdvance} onChange={e=>setAckAdvance(e.target.checked)} style={{width:15,height:15,cursor:"pointer",accentColor:T.amb}}/>
+                <span style={{fontSize:11.5,fontWeight:600,color:T.t2}}>Samajh gaya — phir bhi continue</span>
+              </label>
+            </div>
+          )}
+
+          {err&&<div style={{padding:"8px 12px",background:T.redL,border:`1px solid ${T.redM}`,borderRadius:7,color:T.red,fontSize:12,fontWeight:600}}>{err}</div>}
+          </>)}
+        </div>
+        )}
+
+        {/* Footer */}
+        {!done&&!bothStaff&&(
+          <div style={{padding:"12px 20px",borderTop:`1px solid ${T.b1}`,display:"flex",justifyContent:"flex-end",gap:8,background:T.surfaceB,flexShrink:0}}>
+            <button onClick={onClose} style={{padding:"8px 18px",borderRadius:7,border:`1.5px solid ${T.b1}`,background:T.surface,fontSize:12,fontWeight:600,color:T.t3,cursor:"pointer"}}>Cancel</button>
+            <button onClick={()=>submit(false)} disabled={saving||!canPreview||(overBalance&&!ackAdvance)}
+              style={{padding:"8px 22px",borderRadius:7,background:(saving||!canPreview||(overBalance&&!ackAdvance))?T.t4:T.ind,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:(saving||!canPreview||(overBalance&&!ackAdvance))?"not-allowed":"pointer"}}>
+              {saving?"Saving...":"Save Settlement"}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -2793,6 +3037,7 @@ function FinanceModule(){
   const [showUB,setShowUB]=useState(false);const [selUBParty,setSelUBParty]=useState(null);
   const [showAccPanel,setShowAccPanel]=useState(false);const [accTab,setAccTab]=useState("accounts");
   const [showCreateTxn,setShowCreateTxn]=useState(false);
+  const [showP2P,setShowP2P]=useState(false);   // Party-to-Party Settlement modal
   // ── CREATE TRANSACTION MODAL state ──────────────────────────
   const [createTxnType,setCreateTxnType]=useState(null);
   const [createTxnParty,setCreateTxnParty]=useState("");
@@ -2976,6 +3221,7 @@ function FinanceModule(){
     "material_return":"Material Return","sales_invoice":"Sales Invoice",
     "unbilled_material":"Unbilled Material","wallet_payment":"Wallet Payment",
     "wallet_topup":"Wallet Top-up","bank_transfer":"Bank Transfer",
+    "settle_in":"Settlement","settle_out":"Settlement",
   };
 
   // ── MAP HELPERS ───────────────────────────────────────────────
@@ -3030,7 +3276,9 @@ function FinanceModule(){
     // All expense/purchase types are debit (money going out)
     const BACK_DEBIT=["payment","material_purchase","site_expense","party_payment",
       "subcon_expense","wallet_payment","wallet_topup","bank_transfer"];
-    const isDebit=BACK_DEBIT.includes(t.type)||t.dr===true||(!t.type&&t.dr);
+    // settle_out mirrors party_payment (out-like −), settle_in mirrors receipt
+    // (in-like +) — only for the list's +/− display; no cash is actually moved.
+    const isDebit=BACK_DEBIT.includes(t.type)||t.type==="settle_out"||t.dr===true||(!t.type&&t.dr);
     return {
       id:t.id,
       date:d.toLocaleDateString("en-IN",{day:"2-digit",month:"short"}),
@@ -3318,6 +3566,7 @@ function FinanceModule(){
       if (chipTxn === "Site Expense"  && t.type !== "Site Expense") return false;
       if (chipTxn === "Sub-Con"       && t.type !== "Sub-Con Expense") return false;
       if (chipTxn === "Party Payment" && t.type !== "Party Payment") return false;
+      if (chipTxn === "Settlement"    && t.type !== "Settlement") return false;
       if (chipTxn === "Unpaid"        && t.status === "paid") return false;
       return true;
     });
@@ -3887,6 +4136,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     {section:"Adjustments",items:[
                       {l:"Journal Entry",sub:"Manual debit / credit",Icon:IcFileInv,c:T.slt,bg:T.sltL},
                       {l:"Credit Note",sub:"Party balance adjust",Icon:IcCopy,c:T.pur,bg:T.purL},
+                      {l:"Party-to-Party Settlement",sub:"Ek party ka paisa doosri ko",Icon:IcArrow,c:T.ind,bg:T.indL,p2p:true},
                     ]},
                   ].map((grp,gi)=>(
                     <div key={gi}>
@@ -3895,7 +4145,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       </div>
                       {grp.items.map((item,ii)=>{const ItemIcon=item.Icon;return(
                         <button key={ii}
-                          onClick={()=>{setShowCreateTxn(false);openTxn(item.l);}}
+                          onClick={()=>{setShowCreateTxn(false); item.p2p?setShowP2P(true):openTxn(item.l);}}
                           style={{width:"100%",display:"flex",alignItems:"center",gap:9,padding:"7px 12px",border:"none",background:"none",cursor:"pointer",textAlign:"left"}}
                           onMouseEnter={e=>e.currentTarget.style.background=T.surfaceB}
                           onMouseLeave={e=>e.currentTarget.style.background="none"}>
@@ -4364,7 +4614,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"9px 11px",marginBottom:8,flexShrink:0}}>
               {/* Row 1: type filter chips */}
               <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap",marginBottom:8,minHeight:30}}>
-                {[["All",null],["Payment In",{c:T.grn,bg:T.grnL}],["Payment Out",{c:T.red,bg:T.redL}],["Material",{c:T.blu,bg:T.bluL}],["Site Expense",{c:T.amb,bg:T.ambL}],["Sub-Con",{c:T.slt,bg:T.sltL}],["Party Payment",{c:T.pur,bg:T.purL}],["Unpaid",{c:T.red,bg:T.redL}]].map(([id,col])=>{
+                {[["All",null],["Payment In",{c:T.grn,bg:T.grnL}],["Payment Out",{c:T.red,bg:T.redL}],["Material",{c:T.blu,bg:T.bluL}],["Site Expense",{c:T.amb,bg:T.ambL}],["Sub-Con",{c:T.slt,bg:T.sltL}],["Party Payment",{c:T.pur,bg:T.purL}],["Settlement",{c:T.ind,bg:T.indL}],["Unpaid",{c:T.red,bg:T.redL}]].map(([id,col])=>{
                   const on=chipTxn===id;const cc=col||{c:T.slt,bg:T.sltL};return(
                   <button key={id} onClick={()=>setChipTxn(id)}
                     style={{padding:"4px 12px",borderRadius:20,border:`1.5px solid ${on?cc.c:T.b1}`,background:on?cc.bg:T.surfaceB,color:on?cc.c:T.t3,fontSize:11.5,fontWeight:on?700:500,cursor:"pointer",fontFamily:"inherit",display:"flex",alignItems:"center",gap:5}}>
@@ -5544,6 +5794,16 @@ Status: ${ledgerRow.status||"unpaid"}`;
           onSave={async()=>{await refreshPayReqs();}}
           dbParties={masterParties}
           dbProjects={[...new Set([...apiProjects,...activeTxns.map(t=>t.project)].filter(Boolean))]}
+        />
+      )}
+      {showP2P&&(
+        <P2PSettlementModal
+          onClose={()=>setShowP2P(false)}
+          dbParties={masterParties}
+          dbProjects={[...new Set([...apiProjects,...activeTxns.map(t=>t.project)].filter(Boolean))]}
+          pendingBills={pendBills}
+          onSaved={async()=>{ await refreshTxns(); await refreshParties(); await refreshPendPmts(); }}
+          onGoStaffWallets={()=>{ setShowAccPanel(true); setAccTab("wallets"); }}
         />
       )}
       {/* ══ Settlement Pay — simple modal (cash + contra routed on backend) ══ */}

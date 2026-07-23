@@ -246,17 +246,22 @@ function TabParty({ projectId, projectName }) {
       for (const t of sortedTxns) {
         const amt = parseFloat(t.amount) || 0;
         const type = t.type || "";
+        // P2P settlement legs behave exactly like their cash cousins in the
+        // ledger: settle_out = party_payment (payee got paid), settle_in =
+        // receipt (payer paid on our behalf). Normalise before the DR/CR test.
+        const eff = type === "settle_out" ? "party_payment"
+                  : type === "settle_in"  ? "receipt" : type;
         let isCR;
         if (isVendor) {
           // payment / party_payment = DR (we paid); bills = CR (we owe)
-          if (type === "payment" || type === "party_payment") isCR = false;
-          else if (type === "material_purchase" || type === "subcon_expense" || type === "site_expense") isCR = true;
-          else if (type === "receipt") isCR = true; // money in from staff/vendor reimbursement
+          if (eff === "payment" || eff === "party_payment") isCR = false;
+          else if (eff === "material_purchase" || eff === "subcon_expense" || eff === "site_expense") isCR = true;
+          else if (eff === "receipt") isCR = true; // money in from staff/vendor reimbursement
           else isCR = true; // default bill-like
         } else {
           // Client: receipt = CR, sales_invoice = DR
-          if (type === "receipt") isCR = true;
-          else if (type === "sales_invoice") isCR = false;
+          if (eff === "receipt") isCR = true;
+          else if (eff === "sales_invoice") isCR = false;
           else isCR = false;
         }
         if (isCR) credit += amt; else debit += amt;
@@ -271,7 +276,7 @@ function TabParty({ projectId, projectName }) {
           // ("Payment Made — party — project") which would duplicate the
           // Type / Project / (party-already-selected) columns. Empty → "—".
           note: (t.note || "").trim(),
-          type: type.replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()),
+          type: (type === "settle_in" || type === "settle_out") ? "Settlement" : type.replace(/_/g," ").replace(/\b\w/g, c=>c.toUpperCase()),
           amount: amt,
           cr: isCR,
           runBal: running,    // signed: positive = To Pay (vendor) / To Receive (client)
