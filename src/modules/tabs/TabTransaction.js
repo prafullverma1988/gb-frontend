@@ -15,9 +15,10 @@ const TXN_TYPE_MAP={
   material_return:"Material Return", sales_invoice:"Sales Invoice",
   unbilled_material:"Unbilled Material", wallet_payment:"Wallet Payment",
   wallet_topup:"Wallet Top-up", bank_transfer:"Bank Transfer", advance:"Advance",
+  settle_in:"Settlement", settle_out:"Settlement",
 };
 const BACK_DEBIT=["payment","material_purchase","site_expense","party_payment",
-  "subcon_expense","wallet_payment","wallet_topup","bank_transfer"];
+  "subcon_expense","wallet_payment","wallet_topup","bank_transfer","settle_out"];
 const mapTxn=t=>{
   const d=t.date?new Date(t.date):new Date();
   return {
@@ -78,14 +79,14 @@ function TabTransaction({projectId, projectName}) {
     }).catch(()=>{});
   },[projectId]);
 
-  const TYPES   = ["All","Payment In","Payment Out","Material Purchase","Site Expense","Sub-Con","Sales Invoice","Advance"];
+  const TYPES   = ["All","Payment In","Payment Out","Material Purchase","Site Expense","Sub-Con","Sales Invoice","Advance","Settlement"];
   const PARTIES = ["All",...[...new Set(transactions.map(t=>t.party).filter(Boolean))]];
   const ACCOUNTS= ["All","HDFC","SBI","Petty Cash","ICICI OD"];
   const STATUSES= ["All","paid","unpaid","unbilled"];
   const INVOICES= ["All",...D.invoices.map(i=>i.no)];
   const PAYOUTS  = ["All","Inflow (Money In)","Outflow (Money Out)"];
 
-  const typeS={"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material Purchase":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Sub-Con":{c:T.pur,bg:T.purL},"Sales Invoice":{c:T.grn,bg:T.grnL},"Advance":{c:"#0891B2",bg:"#E0F2FE"}};
+  const typeS={"Payment In":{c:T.grn,bg:T.grnL},"Payment Out":{c:T.red,bg:T.redL},"Material Purchase":{c:T.blu,bg:T.bluL},"Site Expense":{c:T.amb,bg:T.ambL},"Sub-Con":{c:T.pur,bg:T.purL},"Sales Invoice":{c:T.grn,bg:T.grnL},"Advance":{c:"#0891B2",bg:"#E0F2FE"},"Settlement":{c:T.ind,bg:T.indL}};
   const acctColor={"HDFC":T.blu,"SBI":T.grn,"Petty Cash":T.amb,"ICICI OD":T.red};
 
   // account balances

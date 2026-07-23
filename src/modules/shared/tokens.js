@@ -34,6 +34,9 @@ export const T = {
   // Purple
   pur:  "#7C3AED",
   purL: "#F5F3FF",
+  // Indigo — Party-to-Party settlement
+  ind:  "#4B45C4",
+  indL: "#EEF0FB",
 };
 
 // STATUS_S and STAGE_S depend on T — defined after T
