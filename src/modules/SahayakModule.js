@@ -614,7 +614,9 @@ function OnboardingView() {
                 <span style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13, fontWeight: 600, color: T.t1 }}>{u.name || "—"}</span>
                   <Badge text={ROLE_LABEL[u.role] || u.role} color={T.slt} bg={T.sltL} />
-                  {u.stuck && <Badge text="Atka hua" color={T.amb} bg={T.ambL} />}
+                  {u.never_logged_in
+                    ? <Badge text="Login nahi kiya" color={T.red} bg={T.redL} />
+                    : u.stuck && <Badge text="Atka hua" color={T.amb} bg={T.ambL} />}
                   {u.pct >= 100 && <Badge text="Poora" color={T.grn} bg={T.grnL} />}
                 </span>
                 {/* progress bar */}
