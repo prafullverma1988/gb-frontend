@@ -55,6 +55,7 @@ const L = {
   // Tickets inbox
   tabChat: "Chat",
   tabTickets: "Tickets",
+  tabOnboarding: "Onboarding",
   ticketsEmpty: "Koi ticket nahi.",
   resolvePlaceholder: "Kya kiya / kya jawab diya...",
   resolveBtn: "Resolve karein",
@@ -213,6 +214,13 @@ export default function SahayakModule() {
       </Shell>
     );
   }
+  if (tab === "onboarding" && isAdmin) {
+    return (
+      <Shell tab={tab} setTab={setTab} isAdmin={isAdmin}>
+        <OnboardingView />
+      </Shell>
+    );
+  }
 
   return (
     <Shell tab={tab} setTab={setTab} isAdmin={isAdmin}>
@@ -290,7 +298,7 @@ function Shell({ tab, setTab, isAdmin, children }) {
         </div>
         {isAdmin && (
           <div style={{ display: "flex", gap: 2, background: T.sltL, borderRadius: 8, padding: 2 }}>
-            {[["chat", L.tabChat], ["tickets", L.tabTickets]].map(([id, label]) => (
+            {[["chat", L.tabChat], ["tickets", L.tabTickets], ["onboarding", L.tabOnboarding]].map(([id, label]) => (
               <button key={id} onClick={() => setTab(id)}
                 style={{ border: "none", cursor: "pointer", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
                   background: tab === id ? T.surface : "transparent", color: tab === id ? T.t1 : T.t3 }}>
@@ -548,6 +556,90 @@ function TicketsInbox() {
                 ) : (
                   t.resolution && <div style={{ fontSize: 11.5, color: T.t3, background: T.grnL, border: `1px solid ${T.grnM}`, borderRadius: 7, padding: "7px 10px" }}>{t.resolution}</div>
                 )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Onboarding view — admin's team-setup tracker ────────────────
+// One row per team member: role, a progress bar, last-active, a "stuck" chip
+// (a milestone pending 2+ days), and an expandable milestone checklist. The
+// same ownership scope as Tickets — this admin's own company.
+function OnboardingView() {
+  const [role, setRole] = useState("");
+  const [rows, setRows] = useState(null);
+  const [openId, setOpenId] = useState(null);
+
+  useEffect(() => {
+    setRows(null);
+    api.get("/support-bot/onboarding" + (role ? "?role=" + role : ""))
+      .then((r) => setRows(r && r.success && Array.isArray(r.data) ? r.data : []))
+      .catch(() => setRows([]));
+  }, [role]);
+
+  const ROLE_LABEL = { supervisor: "Supervisor", accountant: "Accountant", project_manager: "PM", admin: "Admin" };
+  const chip = (on) => ({
+    border: `1px solid ${on ? ACCENT : T.b1}`, cursor: "pointer", borderRadius: 7,
+    padding: "5px 12px", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+    background: on ? ACCENT_SOFT : T.surface, color: on ? ACCENT : T.t3,
+  });
+
+  return (
+    <div style={{ flex: 1, overflowY: "auto", background: T.bg }}>
+      <div style={{ display: "flex", gap: 6, padding: "12px 16px", borderBottom: `1px solid ${T.b1}`, background: T.surface, position: "sticky", top: 0, zIndex: 1, flexWrap: "wrap" }}>
+        <button onClick={() => setRole("")} style={chip(role === "")}>Sabhi</button>
+        {["supervisor", "accountant", "project_manager", "admin"].map((r) => (
+          <button key={r} onClick={() => setRole(r)} style={chip(role === r)}>{ROLE_LABEL[r]}</button>
+        ))}
+      </div>
+
+      {rows === null && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>Loading...</div>}
+      {rows && !rows.length && <div style={{ padding: 18, fontSize: 12.5, color: T.t4 }}>Abhi koi team member onboarding me nahi.</div>}
+
+      {rows && rows.map((u) => {
+        const expanded = openId === u.user_id;
+        const barColor = u.pct >= 100 ? T.grn : u.pct >= 50 ? ACCENT : T.amb;
+        return (
+          <div key={u.user_id} style={{ borderBottom: `1px solid ${T.b1}`, background: T.surface }}>
+            <button onClick={() => setOpenId(expanded ? null : u.user_id)}
+              style={{ width: "100%", textAlign: "left", border: "none", background: "transparent", cursor: "pointer", padding: "12px 16px", display: "flex", gap: 11, alignItems: "center", fontFamily: "inherit" }}>
+              <span style={{ transform: expanded ? "rotate(90deg)" : "none", transition: "transform .15s", lineHeight: 0, flexShrink: 0 }}>
+                <IcChevron size={13} color={T.t4} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 7, marginBottom: 5, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: T.t1 }}>{u.name || "—"}</span>
+                  <Badge text={ROLE_LABEL[u.role] || u.role} color={T.slt} bg={T.sltL} />
+                  {u.stuck && <Badge text="Atka hua" color={T.amb} bg={T.ambL} />}
+                  {u.pct >= 100 && <Badge text="Poora" color={T.grn} bg={T.grnL} />}
+                </span>
+                {/* progress bar */}
+                <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                  <span style={{ flex: 1, height: 6, background: T.b1, borderRadius: 4, overflow: "hidden", maxWidth: 220 }}>
+                    <span style={{ display: "block", height: "100%", width: u.pct + "%", background: barColor, borderRadius: 4 }} />
+                  </span>
+                  <span style={{ fontSize: 11, color: T.t3, fontVariantNumeric: "tabular-nums" }}>{u.done}/{u.total}</span>
+                  <span style={{ fontSize: 11, color: T.t4 }}>· {u.last_active ? "active " + fmtTime(u.last_active) : "abhi tak active nahi"}</span>
+                </span>
+              </span>
+            </button>
+
+            {expanded && (
+              <div style={{ padding: "0 16px 14px 40px", display: "flex", flexDirection: "column", gap: 6 }}>
+                {u.milestones.map((m) => (
+                  <div key={m.mkey} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5 }}>
+                    <span style={{ width: 16, height: 16, borderRadius: 5, flexShrink: 0, display: "flex", alignItems: "center", justifyContent: "center",
+                      background: m.done ? T.grnL : T.surfaceB, border: `1px solid ${m.done ? T.grnM : T.b1}` }}>
+                      {m.done && <IcCheck size={11} color={T.grn} />}
+                    </span>
+                    <span style={{ color: m.done ? T.t3 : T.t1, textDecoration: m.done ? "line-through" : "none" }}>{m.title_hi}</span>
+                    {m.done && m.done_at && <span style={{ fontSize: 10.5, color: T.t4, marginLeft: "auto" }}>{fmtTime(m.done_at)}</span>}
+                  </div>
+                ))}
               </div>
             )}
           </div>
