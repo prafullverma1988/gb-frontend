@@ -253,8 +253,9 @@ function TabParty({ projectId, projectName }) {
                   : type === "settle_in"  ? "receipt" : type;
         let isCR;
         if (isVendor) {
-          // payment / party_payment = DR (we paid); bills = CR (we owe)
-          if (eff === "payment" || eff === "party_payment") isCR = false;
+          // payment / party_payment = DR (we paid); bills = CR (we owe).
+          // material_return = vendor credit note → reduces our payable, DR-side.
+          if (eff === "payment" || eff === "party_payment" || eff === "material_return") isCR = false;
           else if (eff === "material_purchase" || eff === "subcon_expense" || eff === "site_expense") isCR = true;
           else if (eff === "receipt") isCR = true; // money in from staff/vendor reimbursement
           else isCR = true; // default bill-like

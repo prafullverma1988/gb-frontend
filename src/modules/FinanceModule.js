@@ -3232,19 +3232,20 @@ function FinanceModule(){
     // live_balance, kept for backwards-compat with older clients.
     const rawBal=parseFloat(p.live_balance ?? p.balance ?? p.opening_balance ?? 0)||0;
     const pType=p.type||(p.party_type)||(p.category)||"Other Vendor";
-    // Vendors/Labour/Sub-Con: negative balance means we OWE them (To Pay)
-    // Clients: positive balance means they OWE us (To Receive)
-    let balType=p.balance_type||"";
-    if(!balType){
-      const isVendor=isVendorType(pType);
-      if(isVendor) balType=rawBal<=0?"To Pay":"Advance Paid";
-      else balType=rawBal>=0?"To Receive":"Advance Received";
-    }
+    // Displayed label is ALWAYS derived from the current live balance's sign —
+    // NOT from p.balance_type, which is the OPENING direction (stale once any
+    // transaction lands). Backend signs live_balance so: >0 = party owes us,
+    // <0 = we owe them.  Vendor ≤0 → "To Pay", client ≥0 → "To Receive".
+    const isVendor=isVendorType(pType);
+    const balType = isVendor ? (rawBal<=0?"To Pay":"Advance Paid")
+                             : (rawBal>=0?"To Receive":"Advance Received");
     return {
       id:p.id, name:p.name, type:pType,
       balance:Math.abs(rawBal),          // always positive display
       rawBalance:rawBal,                 // keep original for calculations
       balType,
+      openingBalType:p.balance_type||"", // opening direction — for the edit dialog only
+      opening_balance:p.opening_balance,
       phone:p.phone||p.mobile||"",city:p.city||"",
       // Preserve staff flag so Payment Made/Received dropdowns can
       // include internal users (their wallet party row is_staff=1).
@@ -3514,36 +3515,12 @@ function FinanceModule(){
       : [...TRANSACTIONS_DATA, ...WALLET_TXNS]
   ), [apiTransactions]);
 
-  // Chip filters applied to data
-  // Compute real-time party balances from transactions
-  const computePartyBalance=(partyId,partyName,partyType)=>{
-    const txns=apiLedger[partyId]||activeTxns.filter(t=>t.party===partyName);
-    if(txns.length===0) return null;
-    const isVendorP=isVendorType(partyType);
-    const VENDOR_BILLS=["material_purchase","subcon_expense","site_expense","Material Purchase","Sub-Con Expense","Site Expense"];
-    const VENDOR_PAYS=["payment","party_payment","Payment Made","Payment Out"];
-    const CLIENT_RCPTS=["receipt","Payment Received","Payment In"];
-    let cr=0,dr=0;
-    txns.forEach(t=>{
-      const tType=t.txnType||t.type||"";
-      const note=t.note||t.sub||"";
-      let isCR=false;
-      if(isVendorP){
-        isCR=VENDOR_BILLS.some(x=>tType.includes(x)||note.includes("Purchase")||note.includes("Bill"));
-      } else {
-        isCR=CLIENT_RCPTS.some(x=>tType.includes(x)||note.includes("Payment Received"));
-      }
-      if(isCR) cr+=parseFloat(t.amount)||0;
-      else dr+=parseFloat(t.amount)||0;
-    });
-    const net=cr-dr;
-    const balType=isVendorP?(net>0?"To Pay":"Advance Paid"):(net>0?"To Receive":"Advance Received");
-    return {balance:Math.abs(net),balType,cr,dr};
-  };
-  const partiesWithBalance=masterParties.map(p=>{
-    const computed=computePartyBalance(p.id,p.name,p.type);
-    return computed?{...p,...computed}:p;
-  });
+  // Party balances come straight from the backend live_balance (single source
+  // of truth — utils/partyBalance). The old frontend re-derivation
+  // (computePartyBalance) used a fragile string/note heuristic with an inverted
+  // client sign, so it disagreed with the ledger and the bot; removed. mapParty
+  // already carries balance (abs) + balType (from the signed live_balance).
+  const partiesWithBalance=masterParties;
   const filteredParties=partiesWithBalance.filter(p=>chipParty==="All"||p.type===chipParty);
 
   const projects = useMemo(() => ["All", ...new Set(activeTxns.map(t => t.project))], [activeTxns]);
@@ -5762,9 +5739,11 @@ Status: ${ledgerRow.status||"unpaid"}`;
           onClose={()=>setShowAddParty(false)}
           onAdd={async(p)=>{
             try{
-              const res=await api.post("/finance/parties",{name:p.name,type:p.type,opening_balance:p.balance||0,phone:p.phone,city:p.city||""});
+              const res=await api.post("/finance/parties",{name:p.name,type:p.type,opening_balance:p.balance||0,balance_type:p.balType,phone:p.phone,city:p.city||""});
               if(res.success&&res.data){
-                setMasterParties(prev=>[...prev,{id:res.data.id,name:res.data.name,type:res.data.type||p.type,balance:parseFloat(res.data.balance)||p.balance,balType:res.data.balance_type||p.balType}]);
+                // Re-fetch so the row shows the live (signed) balance + derived
+                // label, not the opening magnitude.
+                refreshParties();
               }else{
                 setMasterParties(prev=>[...prev,p]);
               }
