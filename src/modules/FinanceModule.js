@@ -93,6 +93,21 @@ const isVendorType=(type)=>{
        ||t.includes("labour")||t.includes("labor")
        ||t.includes("contractor")||t.includes("sub-con")||t.includes("subcon");
 };
+// ── Party-ledger signed delta — MIRRORS backend utils/partyBalance ──────
+// Tally convention: DR the party = they owe us more (or we owe them less);
+// CR the party = we owe them more. Running balance = Σ(sign·amount) = the
+// backend's signed live_balance (>0 = they owe us). Keeps the ledger drawer,
+// the party card and the bot in exact agreement.
+const LEDGER_PLUS  = new Set(["sales_invoice","payment","party_payment","settle_out","material_return","contra"]);
+const LEDGER_MINUS = new Set(["material_purchase","subcon_expense","site_expense","receipt","settle_in"]);
+const ledgerSign = (rawType) => {
+  const t = String(rawType||"");
+  return LEDGER_PLUS.has(t) ? 1 : LEDGER_MINUS.has(t) ? -1 : 0;
+};
+// Label from the signed balance — same rule as mapParty / backend balanceLabel.
+const balanceLabelOf = (partyType, bal) => isVendorType(partyType)
+  ? (bal <= 0 ? "To Pay" : "Advance Paid")
+  : (bal >= 0 ? "To Receive" : "Advance Received");
 const T={
   bg:"#F4F6F9",surface:"#FFFFFF",surfaceB:"#F8F9FB",
   t1:"#111827",t2:"#374151",t3:"#6B7280",t4:"#9CA3AF",
@@ -3469,6 +3484,7 @@ function FinanceModule(){
           dr:BACK_DEBIT_L.includes(t.type)||t.dr===true,
           status:t.status||"approved",
           txnType:t.type||"",
+          paidBy:t.paid_by||null,
           items:t.line_items||null,
           sourceKind:t.source_kind||null,
           refId:t.ref_id||null,
@@ -3667,30 +3683,14 @@ function FinanceModule(){
       }));
     }
 
-    const isVendor=isVendorType(party.type);
-    const VENDOR_BILL_TYPES=["material_purchase","subcon_expense","site_expense","Material Purchase","Sub-Con Expense","Site Expense"];
-    const VENDOR_PAY_TYPES=["payment","party_payment","Payment Made","Payment Out","wallet_payment"];
-    const CLIENT_RECEIPT_TYPES=["receipt","payment","Payment Received","Payment In"];
-    const CLIENT_BILL_TYPES=["sales_invoice","Sales Invoice"];
-
-    // Remap dr flag based on party type for correct ledger accounting
+    // Signed model (mirrors backend): each row's sign decides DR (+1, they owe
+    // us more) vs CR (−1, we owe them more). runBal = Σ sign·amount = the
+    // backend's signed balance, so the drawer's closing matches the party card
+    // and the bot exactly. Old per-party-type string/note heuristic (inverted
+    // for clients, blind to settlements) is gone.
     const remapped=txns.map(t=>{
-      const tType=t.txnType||t.type||"";
-      let partyDr=t.dr;
-      if(isVendor){
-        // Vendor ledger: purchase/bill = CR (we owe them), payment to vendor = DR (we paid)
-        if(VENDOR_BILL_TYPES.some(x=>tType.includes(x)||t.note?.includes("Purchase")||t.note?.includes("Bill")))
-          partyDr=false; // CR — vendor gave us goods
-        else if(VENDOR_PAY_TYPES.some(x=>tType.includes(x)||t.note?.includes("Payment Made")))
-          partyDr=true;  // DR — we paid vendor
-      } else {
-        // Client ledger: receipt = CR (client paid us), invoice = DR (we billed them)
-        if(CLIENT_RECEIPT_TYPES.some(x=>tType.includes(x)||t.note?.includes("Payment Received")))
-          partyDr=false; // CR — client paid us
-        else if(CLIENT_BILL_TYPES.some(x=>tType.includes(x)))
-          partyDr=true;  // DR — we billed client
-      }
-      return {...t,dr:partyDr};
+      const sign=ledgerSign(t.txnType||t.type||"");
+      return {...t, ledSign:sign, dr:sign>0}; // dr kept for row tint / legacy reads
     });
 
     // Chronological sort — oldest first — so running balance accumulates
@@ -3709,11 +3709,13 @@ function FinanceModule(){
     // every element on each iteration. At 1000 txns that's ~500K
     // copies just to compute running balance. New: push into a
     // pre-allocated array, return at end.
-    let runBal = 0;
+    // Seed with the SIGNED opening balance so closing = opening + Σ deltas =
+    // backend live_balance. runBal>0 = party owes us; <0 = we owe them.
+    let runBal = parseFloat(party.opening_balance) || 0;
     const out = new Array(sorted.length);
     for (let i = 0; i < sorted.length; i++) {
       const t = sorted[i];
-      runBal += t.dr ? -t.amount : t.amount;
+      runBal += (t.ledSign||0) * t.amount;
       out[i] = { ...t, runBal };
     }
     return out;
@@ -3723,39 +3725,40 @@ function FinanceModule(){
     downloadCSV(`${party.name.replace(/\s+/g,"_")}_Ledger.csv`,[
       ["Party Ledger:",party.name],["Type:",party.type],["Balance:",party.balance,party.balType],[],
       ["Date","Project","Note","Type","CR","DR","Balance"],
-      ...rows.map(t=>[t.date,t.project||"",t.note||"",t.txnType||t.type||"",!t.dr?t.amount:"",t.dr?t.amount:"",`${Math.abs(t.runBal||0)} ${(t.runBal||0)>0?"Cr":(t.runBal||0)<0?"Dr":""}`.trim()]),
+      ...rows.map(t=>[t.date,t.project||"",t.note||"",t.txnType||t.type||"",(t.ledSign||0)<0?t.amount:"",(t.ledSign||0)>0?t.amount:"",`${Math.abs(t.runBal||0)} ${(t.runBal||0)>0?"Dr":(t.runBal||0)<0?"Cr":""}`.trim()]),
     ]);
   };
   const downloadLedgerPDF=(party)=>{
     const rows=getLedgerRows(party);
-    const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
+    const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
     const rowsHTML=rows.map(t=>{
       const typeLabel=TYPE_LABELS[t.txnType]||t.type||t.txnType||"Transaction";
       const proj=t.project||t.project_name||"";
       const noteTxt=(t.note||"").trim();
       const hasNote=!!noteTxt;
+      const sgn=t.ledSign||0;
       const balAbs=Math.abs(t.runBal||0);
-      const balGood=(t.runBal||0)<=0;
-      const balSfx=(t.runBal||0)===0?"":((t.runBal||0)>0?"Cr":"Dr");
+      const balGood=(t.runBal||0)>=0;
+      const balSfx=(t.runBal||0)===0?"":((t.runBal||0)>0?"Dr":"Cr");
       return `<tr>
         <td style="color:#6B7280;white-space:nowrap">${t.date}</td>
         <td style="color:#6B7280">${proj||"—"}</td>
         <td style="${hasNote?"":"color:#9CA3AF;font-style:italic"}">${hasNote?noteTxt:"—"}</td>
         <td><span style="font-size:9.5px;padding:2px 7px;border-radius:10px;background:#F8F9FB;color:#4B5563">${typeLabel}</span></td>
-        <td style="text-align:right;color:${!t.dr?"#059669":"#CBD5E1"};font-weight:600">${!t.dr?`₹${fmtN(t.amount)}`:"—"}</td>
-        <td style="text-align:right;color:${t.dr?"#DC2626":"#CBD5E1"};font-weight:600">${t.dr?`₹${fmtN(t.amount)}`:"—"}</td>
+        <td style="text-align:right;color:${sgn<0?"#059669":"#CBD5E1"};font-weight:600">${sgn<0?`₹${fmtN(t.amount)}`:"—"}</td>
+        <td style="text-align:right;color:${sgn>0?"#DC2626":"#CBD5E1"};font-weight:600">${sgn>0?`₹${fmtN(t.amount)}`:"—"}</td>
         <td style="text-align:right;color:${balAbs===0?"#9CA3AF":(balGood?"#059669":"#DC2626")};font-weight:700">${balAbs===0?"₹0.00":`₹${fmtN(balAbs)} ${balSfx}`}</td>
       </tr>`;
     }).join("");
-    const totalCR=rows.reduce((s,r)=>s+(!r.dr?(r.amount||0):0),0);
-    const totalDR=rows.reduce((s,r)=>s+(r.dr?(r.amount||0):0),0);
+    const totalCR=rows.reduce((s,r)=>s+((r.ledSign||0)<0?(r.amount||0):0),0);
+    const totalDR=rows.reduce((s,r)=>s+((r.ledSign||0)>0?(r.amount||0):0),0);
     const lastBal=rows.length?(rows[rows.length-1].runBal||0):0;
     const closeAbs=Math.abs(lastBal);
-    const closeGood=lastBal<=0;
-    const closeSfx=lastBal===0?"":(lastBal>0?"Cr":"Dr");
+    const closeGood=lastBal>=0;
+    const closeSfx=lastBal===0?"":(lastBal>0?"Dr":"Cr");
     const ob=parseFloat(party.opening_balance||0);
     const obAbs=Math.abs(ob);
-    const obSfx=ob===0?"":(ob>0?"Cr":"Dr");
+    const obSfx=ob===0?"":(ob>0?"Dr":"Cr");
     const openingHTML=rows.length?`<tr style="background:#F8F9FB"><td colspan="6" style="font-style:italic;color:#6B7280">Opening Balance</td><td style="text-align:right;font-weight:600;color:#6B7280">${obAbs===0?"₹0.00":`₹${fmtN(obAbs)} ${obSfx}`}</td></tr>`:"";
     const closingHTML=rows.length?`<tr style="background:#F8F9FB;border-top:2px solid #D1D5DB"><td colspan="4" style="font-weight:700;text-transform:uppercase;letter-spacing:.3px;font-size:10.5px">Closing Balance</td><td style="text-align:right;font-weight:700;color:#059669">₹${fmtN(totalCR)}</td><td style="text-align:right;font-weight:700;color:#DC2626">₹${fmtN(totalDR)}</td><td style="text-align:right;font-weight:800;color:${closeAbs===0?"#9CA3AF":(closeGood?"#059669":"#DC2626")}">${closeAbs===0?"₹0.00":`₹${fmtN(closeAbs)} ${closeSfx}`}</td></tr>`:"";
     printHTML(`Party Ledger — ${party.name}`,`<h2>Party Ledger — ${party.name}</h2><p>${party.type} &nbsp;|&nbsp; Balance: <strong>₹${fmtN(party.balance)}</strong> (${party.balType})</p><table><tr><th style="width:70px">Date</th><th style="width:110px">Project</th><th>Note</th><th style="width:130px">Type</th><th style="text-align:right;width:85px">CR ₹</th><th style="text-align:right;width:85px">DR ₹</th><th style="text-align:right;width:115px">Balance</th></tr>${openingHTML}${rowsHTML||`<tr><td colspan="7" style="text-align:center;padding:30px;color:#9CA3AF">No transactions</td></tr>`}${closingHTML}</table><p class="footer">Generated by Company · ${new Date().toLocaleDateString("en-IN",{day:"2-digit",month:"short",year:"numeric"})}</p>`);
@@ -4287,6 +4290,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
             </div>
             {selParty&&(()=>{
               const ledgerRows=getLedgerRows(selParty);
+              const LG_COLS="70px 90px 1fr 116px 122px 80px 80px 104px"; // Date Project Note Type PaidBy CR DR Balance
               // ── Ledger filters: type / project options + search/date/type/project ──
               // Each row keeps its TRUE running balance (computed on the full,
               // chronological ledger) — filtering only hides rows, so the
@@ -4308,14 +4312,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
                 return true;
               });
               const clearLedgerFilters=()=>{setLedgerSearch("");setLedgerType("All");setLedgerProj("All");setLedgerFrom("");setLedgerTo("");};
-              const totalCR=ledgerRows.reduce((s,r)=>s+(!r.dr?r.amount:0),0);
-              const totalDR=ledgerRows.reduce((s,r)=>s+(r.dr?r.amount:0),0);
-              // Compute balance from ledger rows (more accurate than opening_balance)
-              const ledgerClosing=totalCR-totalDR; // positive = we owe them (vendor) or they owe us (client)
-              const isVendorPty=isVendorType(selParty.type);
-              const computedBalType=isVendorPty
-                ?(ledgerClosing>0?"To Pay":ledgerClosing<0?"Advance Paid":"Settled")
-                :(ledgerClosing>0?"To Receive":ledgerClosing<0?"Advance Received":"Settled");
+              // Signed model: DR = rows that make the party owe us (ledSign>0),
+              // CR = rows where we owe them (ledSign<0). Closing includes the
+              // signed opening → equals the backend live_balance, so this chip
+              // matches the party card + the bot.
+              const totalDR=ledgerRows.reduce((s,r)=>s+((r.ledSign||0)>0?r.amount:0),0);
+              const totalCR=ledgerRows.reduce((s,r)=>s+((r.ledSign||0)<0?r.amount:0),0);
+              const ledgerClosing=(parseFloat(selParty.opening_balance)||0)+totalDR-totalCR; // >0 = they owe us
+              const computedBalType=ledgerClosing===0?"Settled":balanceLabelOf(selParty.type,ledgerClosing);
               const computedBal=Math.abs(ledgerClosing);
               // Chip colour by meaning: "To Pay" = our outstanding obligation
               // (red); "To Receive" = money due to us (amber); settled /
@@ -4377,11 +4381,10 @@ Status: ${ledgerRow.status||"unpaid"}`;
                       Showing {viewRows.length} of {ledgerRows.length} entries
                     </div>
                   )}
-                  {/* Clean 7-col ledger: Date | Project | Note | Type | CR | DR | Balance
-                      Matches the project-level Party tab for visual consistency. */}
-                  <div style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0,gap:4}}>
-                    {["Date","Project","Note","Type","CR ₹","DR ₹","Balance"].map((h,i)=>(
-                      <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i>=4?"right":"left",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h}</span>
+                  {/* 8-col ledger: Date | Project | Note | Type | Paid By | CR | DR | Balance */}
+                  <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"6px 14px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,flexShrink:0,gap:4}}>
+                    {["Date","Project","Note","Type","Paid By","CR ₹","DR ₹","Balance"].map((h,i)=>(
+                      <span key={i} style={{fontSize:9,fontWeight:700,color:T.t4,textTransform:"uppercase",letterSpacing:"0.3px",textAlign:i>=5?"right":"left",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{h}</span>
                     ))}
                   </div>
                   <div style={{flex:1,overflowY:"auto"}}>
@@ -4391,12 +4394,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     {ledgerRows.length>0 && !ledgerFiltered && (()=>{
                       const ob = parseFloat(selParty.opening_balance||0);
                       const obAbs = Math.abs(ob);
-                      const obSfx = ob===0 ? "" : (isVendorPty ? (ob>0?"Cr":"Dr") : (ob>0?"Dr":"Cr"));
+                      // Signed opening: ob>0 = they owe us = Dr the party.
+                      const obSfx = ob===0 ? "" : (ob>0?"Dr":"Cr");
                       return (
-                        <div style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"7px 14px",gap:4,background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
+                        <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"7px 14px",gap:4,background:T.surfaceB,borderBottom:`1px solid ${T.b1}`,alignItems:"center"}}>
                           <span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:11,color:T.t4,fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:12,color:T.t3,fontStyle:"italic",fontWeight:500}}>Opening Balance</span>
+                          <span style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:10.5,color:T.t4,fontStyle:"italic"}}>—</span>
                           <span style={{fontSize:12,color:T.t4,textAlign:"right"}}>—</span>
                           <span style={{fontSize:12,color:T.t4,textAlign:"right"}}>—</span>
@@ -4415,7 +4420,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
                           return(<>
                           {/* Type label from txnType */}
                           {(()=>{
-                            const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash"};
+                            const TYPE_LABELS={"material_purchase":"Material Purchase","payment":"Payment Made","party_payment":"Payment Made","receipt":"Payment Received","subcon_expense":"Sub-Con Bill","site_expense":"Site Expense","sales_invoice":"Sales Invoice","bank_transfer":"Bank Transfer","advance_payment":"Advance","petty_cash":"Petty Cash","settle_in":"Settlement","settle_out":"Settlement"};
                             const typeLabel=TYPE_LABELS[txn.txnType]||txn.type||txn.txnType||"Transaction";
                             const siteLabel=txn.project||txn.project_name||"";
                             // ONLY user-typed note. `sub` (= auto-generated description
@@ -4423,21 +4428,15 @@ Status: ${ledgerRow.status||"unpaid"}`;
                             // the Type / Project columns and add clutter.
                             const noteLabel=(txn.note||"").trim();
                             const hasNote = !!noteLabel;
-                            // Ledger sign convention — matches project-level Party tab:
-                            //   vendor: runBal > 0 → "Cr" (we owe them)        → red
-                            //   vendor: runBal < 0 → "Dr" (advance paid)        → green
-                            //   client: runBal > 0 → "Cr" (we owe them)        → red  (wait — for client runBal>0 = they paid more, advance recvd → Cr → red)
-                            //   client: runBal < 0 → "Dr" (they owe us)        → green
-                            // Note: runBal here = CR_total - DR_total (positive = credit balance).
-                            // For vendor: credit balance = "To Pay" (we owe them) → red, Cr suffix.
-                            // For client: credit balance = "Advance Received" → red, Cr suffix.
-                            //             debit balance  = "To Receive" → green, Dr suffix.
+                            // Signed running balance (Tally): runBal>0 = they owe us → "Dr"
+                            // (green, good for us); runBal<0 = we owe them → "Cr" (red).
                             const balAbs = Math.abs(txn.runBal||0);
-                            const balGood = isVendorPty ? (txn.runBal<=0) : (txn.runBal<=0);
-                            const balSfx  = (txn.runBal||0)===0 ? "" : (txn.runBal>0 ? "Cr" : "Dr");
+                            const balGood = (txn.runBal||0) >= 0;
+                            const balSfx  = (txn.runBal||0)===0 ? "" : (txn.runBal>0 ? "Dr" : "Cr");
+                            const sgn = txn.ledSign||0;
                             return(
                           <div onClick={()=>setSelTxn(txn)}
-                            style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"9px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",borderLeft:`3px solid ${!txn.dr?T.grn:T.red}33`,transition:"background 0.1s"}}
+                            style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"9px 14px",gap:4,borderBottom:isExpanded?`1px solid ${T.bluM}`:`1px solid ${T.b1}`,alignItems:"center",cursor:"pointer",background:isExpanded?T.bluL+"44":"none",borderLeft:`3px solid ${sgn<0?T.grn:sgn>0?T.red:T.b2}33`,transition:"background 0.1s"}}
                             onMouseEnter={e=>{if(!isExpanded)e.currentTarget.style.background=T.surfaceB;}}
                             onMouseLeave={e=>{if(!isExpanded)e.currentTarget.style.background="none";}}>
                             {/* 1. Date */}
@@ -4465,13 +4464,17 @@ Status: ${ledgerRow.status||"unpaid"}`;
                                 </span>
                               )}
                             </div>
-                            {/* 5. CR */}
-                            <span style={{fontSize:12.5,fontWeight:600,color:!txn.dr?T.grn:T.b2,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>
-                              {!txn.dr ? `₹${fmtN(txn.amount)}` : "—"}
+                            {/* 5. Paid By — who/what moved the money (settlement payer, company account, staff wallet) */}
+                            <span style={{fontSize:10.5,color:txn.paidBy?T.t3:T.t4,fontWeight:500,fontStyle:txn.paidBy?"normal":"italic",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}} title={txn.paidBy||""}>
+                              {txn.paidBy || "—"}
                             </span>
-                            {/* 6. DR */}
-                            <span style={{fontSize:12.5,fontWeight:600,color:txn.dr?T.red:T.b2,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>
-                              {txn.dr ? `₹${fmtN(txn.amount)}` : "—"}
+                            {/* 6. CR — we owe them more (ledSign<0) */}
+                            <span style={{fontSize:12.5,fontWeight:600,color:sgn<0?T.grn:T.b2,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>
+                              {sgn<0 ? `₹${fmtN(txn.amount)}` : "—"}
+                            </span>
+                            {/* 7. DR — they owe us more (ledSign>0) */}
+                            <span style={{fontSize:12.5,fontWeight:600,color:sgn>0?T.red:T.b2,fontVariantNumeric:"tabular-nums",textAlign:"right"}}>
+                              {sgn>0 ? `₹${fmtN(txn.amount)}` : "—"}
                             </span>
                             {/* 7. Running balance — Cr (red) means we owe (vendor) or
                                 we received advance (client). Dr (green) means we paid
@@ -4535,13 +4538,14 @@ Status: ${ledgerRow.status||"unpaid"}`;
                     // Closing-balance row — same Cr/Dr suffix + color rules
                     // as individual rows so the table tells a coherent story.
                     const closeAbs = Math.abs(ledgerClosing);
-                    const closeGood= ledgerClosing<=0;  // matches per-row balGood
-                    const closeSfx = ledgerClosing===0 ? "" : (ledgerClosing>0?"Cr":"Dr");
+                    const closeGood= ledgerClosing>=0;  // >=0 = they owe us / settled → green
+                    const closeSfx = ledgerClosing===0 ? "" : (ledgerClosing>0?"Dr":"Cr");
                     return (
-                      <div style={{display:"grid",gridTemplateColumns:"72px 110px 1fr 130px 92px 92px 118px",padding:"10px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
+                      <div style={{display:"grid",gridTemplateColumns:LG_COLS,padding:"10px 14px",gap:4,background:T.surfaceB,borderTop:`2px solid ${T.b2}`,flexShrink:0,alignItems:"center"}}>
                         <span/>
                         <span/>
                         <span style={{fontSize:12,color:T.t2,fontWeight:700,textTransform:"uppercase",letterSpacing:.3}}>Closing Balance</span>
+                        <span/>
                         <span/>
                         <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.grn,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(totalCR)}</span>
                         <span style={{textAlign:"right",fontSize:12.5,fontWeight:700,color:T.red,fontVariantNumeric:"tabular-nums"}}>₹{fmtN(totalDR)}</span>
