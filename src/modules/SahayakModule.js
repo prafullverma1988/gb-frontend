@@ -48,6 +48,9 @@ const L = {
   consentSending: "Bhej raha hu...",
   consentFail: "Bundle bhej nahi paya — baad me try karein.",
   shotTooBig: "Screenshot 5MB se bada hai.",
+  // Proactive alerts quick-action
+  alertsChip: "Kya dhyaan dun?",
+  alertsPrompt: "kya dhyaan dun",
   // Feedback
   fbDownAsk: "Kya galat tha?",
   fbSubmit: "Bhejein",
@@ -65,6 +68,9 @@ const L = {
 export default function SahayakModule() {
   const user = getUser();
   const isAdmin = ["admin", "super_admin"].includes(user?.role);
+  // Who the proactive "kya dhyaan dun" alerts are useful for — mirrors the
+  // sahayak_alerts tool's allowedRoles (site staff get no company-wide alerts).
+  const canAlerts = ["accountant", "project_manager", "admin", "super_admin"].includes(user?.role);
   const [tab, setTab] = useState("chat");
   const [messages, setMessages] = useState([]); // {id, role:'user'|'bot', text, transcript?, ticket?, messageId?, bugSuspect?}
   // messageId -> 'up' | 'down'. Session-only: /history does not return votes,
@@ -112,11 +118,14 @@ export default function SahayakModule() {
   const pushMessage = (m) => setMessages((prev) => [...prev, { id: "m" + Date.now() + Math.random(), ...m }]);
 
   // ── send text ──
-  const sendText = async () => {
-    const text = input.trim();
+  // `override` (a string) lets quick-action chips send a fixed prompt without
+  // touching the input box. The Send button passes a click event, so only a
+  // real string override is honoured.
+  const sendText = async (override) => {
+    const text = (typeof override === "string" ? override : input).trim();
     if (!text || sending) return;
     setErr("");
-    setInput("");
+    if (typeof override !== "string") setInput("");
     pushMessage({ role: "user", text });
     setSending(true);
     try {
@@ -248,6 +257,19 @@ export default function SahayakModule() {
       {/* Error strip */}
       {err && (
         <div style={{ padding: "8px 18px", background: T.redL, borderTop: `1px solid ${T.redM}`, color: T.red, fontSize: 12, flexShrink: 0 }}>{err}</div>
+      )}
+
+      {/* Quick-action chip — proactive "kya dhyaan dun" (oversight roles only) */}
+      {canAlerts && !recording && (
+        <div style={{ display: "flex", gap: 8, padding: "8px 14px 0", background: T.surface, flexShrink: 0 }}>
+          <button
+            onClick={() => sendText(L.alertsPrompt)}
+            disabled={sending || transcribing}
+            title={L.alertsChip}
+            style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "6px 12px", borderRadius: 999, border: `1px solid ${ACCENT}44`, background: sending ? T.b1 : `${ACCENT}0F`, color: sending ? T.t4 : ACCENT, fontSize: 12.5, fontWeight: 600, cursor: sending || transcribing ? "not-allowed" : "pointer", fontFamily: "inherit", transition: "all .15s" }}>
+            <span style={{ fontSize: 14, lineHeight: 0 }}>💡</span> {L.alertsChip}
+          </button>
+        </div>
       )}
 
       {/* Input row */}
