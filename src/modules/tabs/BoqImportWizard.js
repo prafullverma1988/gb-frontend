@@ -459,7 +459,7 @@ export default function BoqImportWizard({ projectId, existingTasks = [], onClose
 
               {/* Reconciliation strip */}
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(150px,1fr))", gap: 12, marginBottom: 14 }}>
-                {[["File total", inr(staged.file_total), T.t2], ["Parsed total", inr(staged.parsed_total), T.blu], ["Diff", inr(staged.diff), (Math.abs(Number(staged.diff)) <= 1 ? T.grn : T.red)]].map(([l, v, c]) => (
+                {[["File total", inr(staged.file_total), T.t2], ["Parsed total", inr(staged.parsed_total), T.blu], ["Diff", inr(staged.diff), (staged.matched ? T.grn : T.red)]].map(([l, v, c]) => (
                   <div key={l} style={{ background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, borderTop: `3px solid ${c}`, padding: "10px 14px" }}>
                     <div style={{ fontSize: 19, fontWeight: 800, color: c, fontVariantNumeric: "tabular-nums" }}>{v}</div>
                     <div style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, textTransform: "uppercase", letterSpacing: ".3px", marginTop: 2 }}>{l}</div>
