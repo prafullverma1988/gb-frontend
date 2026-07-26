@@ -3,6 +3,7 @@ import api from "../../config/api";
 import apiCache from "../../utils/apiCache";
 import SearchSelect from "../../components/SearchSelect";
 import LibrarySelect from "../../components/LibrarySelect";
+import BoqImportWizard from "./BoqImportWizard";
 import { T } from "../shared/tokens";
 
 // ─── SKELETON LOADER ─────────────────────────────────────────────
@@ -144,6 +145,7 @@ function TabTasks({ projectId, isAdmin }) {
   const [showRebaseModal, setShowRebaseModal] = useState(false);
   const [showBaselineHistory, setShowBaselineHistory] = useState(false);
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
+  const [showBoqWizard, setShowBoqWizard] = useState(false);
 
   const toggleShowBaseline = () => {
     setShowBaseline(v => { const n=!v; try { localStorage.setItem("gb_show_baseline_cols", n?"1":"0"); } catch(e){} return n; });
@@ -1007,6 +1009,11 @@ function TabTasks({ projectId, isAdmin }) {
             e.target.value="";
           }}/>
         </label>}
+        {isAdmin&&<button onClick={()=>setShowBoqWizard(true)} title="BOQ Excel se tasks import karein"
+          style={{height:32,padding:"0 12px",borderRadius:6,border:`1.5px solid ${T.ind}`,background:T.indL,fontSize:12,fontWeight:700,color:T.ind,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+          <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path d="M9 17V7h6v10M4 21h16M6 21V5a2 2 0 012-2h8a2 2 0 012 2v16"/></svg>
+          Import BOQ
+        </button>}
         {isAdmin&&<button onClick={()=>setShowTemplatePicker(true)}
           style={{display:"flex",alignItems:"center",gap:5,padding:"5px 12px",borderRadius:6,background:"linear-gradient(135deg,#EC4899,#BE185D)",color:"white",fontSize:11.5,fontWeight:700,border:"none",cursor:"pointer"}}>
           📋 Load Template
@@ -1398,6 +1405,11 @@ function TabTasks({ projectId, isAdmin }) {
       {/* Parent progress override */}
       {overrideTask&&<PTOverrideModal task={overrideTask} onClose={()=>setOverrideTask(null)}
         onSaved={async()=>{setOverrideTask(null);await refetchTasks();}}/>}
+
+      {/* BOQ Import wizard */}
+      {showBoqWizard&&<BoqImportWizard projectId={projectId} existingTasks={allFlat}
+        onClose={()=>setShowBoqWizard(false)}
+        onCommitted={async()=>{ apiCache.invalidate("tasks"); apiCache.invalidate("projects"); await refetchTasks(); }}/>}
 
       {/* Edit Task drawer */}
       {editTask&&<PTEditTask task={editTask} allTasks={allFlat} onClose={()=>setEditTask(null)} onSave={async(id,u)=>{
