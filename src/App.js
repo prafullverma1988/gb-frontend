@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, lazy, Suspense, Fragment } from "react";
+import { useState, useEffect, useRef, useCallback, lazy, Suspense, Fragment } from "react";
 import api, { getUser, getToken, getCompanies, clearAuth, saveAuth, API_BASE } from "./config/api";
 import { initDiag, recordScreen } from "./utils/diag";
 import apiCache from "./utils/apiCache";
@@ -1651,12 +1651,48 @@ function RealtimeFinancials({projects}){
 }
 
 // ── PROJECTS WRAPPER ──────────────────────────────────────────────────
-function ProjectsWrapper(){
+// Parse a notification link into {module, projectId, tab}. Two shapes are
+// emitted by the backend today:
+//   "/projects/59/estimate"  → project 59, Estimate tab
+//   "/projects?id=104"       → project 104, default tab
+// Anything else resolves to just its module segment.
+function parseNotifLink(link){
+  const raw=String(link||"").replace(/^\//,"");
+  if(!raw) return null;
+  const [path,query]=raw.split("?");
+  const parts=path.split("/").filter(Boolean);
+  const module=parts[0]; if(!module) return null;
+  let projectId=null,tab=null;
+  if(module==="projects"){
+    if(parts[1]&&/^\d+$/.test(parts[1])){ projectId=parseInt(parts[1],10); tab=parts[2]||null; }
+    else if(query){ const m=/(?:^|&)id=(\d+)/.exec(query); if(m) projectId=parseInt(m[1],10); }
+  }
+  return {module,projectId,tab};
+}
+
+function ProjectsWrapper({deepLink,onDeepLinkDone}){
   const [selectedProject,setSelectedProject]=useState(null);
   // Project switcher inside ProjectDetailPage calls this — we just swap the
   // project object. ProjectDetailPage's `tab` state survives the prop change
   // so the user lands on the same module of the new project.
   const switchProject = (p) => setSelectedProject(p);
+  // A notification deep-link ("/projects/59/estimate") arrives as {projectId,tab}.
+  // ProjectDetailPage needs a project object, so resolve the name first; if that
+  // lookup fails we still open the page with a placeholder rather than dead-end.
+  useEffect(()=>{
+    if(!deepLink||!deepLink.projectId) return;
+    let alive=true;
+    const {projectId,tab}=deepLink;
+    if(onDeepLinkDone) onDeepLinkDone();   // consume once, so re-clicks re-fire
+    api.get("/projects/"+projectId).then(r=>{
+      if(!alive) return;
+      const p=(r&&r.success&&r.data)?r.data:null;
+      setSelectedProject({...(p||{id:projectId,name:"Project"}),id:projectId,initialTab:tab||"overview"});
+    }).catch(()=>{
+      if(alive) setSelectedProject({id:projectId,name:"Project",initialTab:tab||"overview"});
+    });
+    return()=>{alive=false;};
+  },[deepLink,onDeepLinkDone]);
   if(selectedProject) return <ProjectDetailPage project={selectedProject} onBack={()=>setSelectedProject(null)} onSwitchProject={switchProject}/>;
   return <ProjectsPage onSelectProject={setSelectedProject}/>;
 }
@@ -1681,6 +1717,9 @@ export default function App(){
   const [nav,setNav]=useState("projects");
   const [ticketCount,setTicketCount]=useState(0);   // sidebar Sahayak/SaaS badge
   const [sahayakNotifCount,setSahayakNotifCount]=useState(0); // advisory Sahayak-stream unread (separate from main bell)
+  const [projDeepLink,setProjDeepLink]=useState(null);        // {projectId,tab} from a notification click
+  // Stable identity — ProjectsWrapper's deep-link effect depends on it.
+  const clearProjDeepLink=useCallback(()=>setProjDeepLink(null),[]);
   const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showSearch,setShowSearch]=useState(false);
@@ -1859,6 +1898,19 @@ export default function App(){
   },[showSearch,showCheatsheet]);
   const handleLogout=()=>{apiCache.clear();clearAuth();setUser(null);setCompanies([]);setEnabledModules(null);};
 
+  // Notification / alert click → land the user where the thing actually is.
+  // A project-scoped link also carries {projectId,tab} so ProjectsWrapper can
+  // open that project on that tab instead of the module home.
+  const handleNotifNav=(mod,link)=>{
+    const parsed=link?parseNotifLink(link):null;
+    if(parsed&&parsed.projectId){
+      setProjDeepLink({projectId:parsed.projectId,tab:parsed.tab});
+      setNav("projects");
+      return;
+    }
+    if(mod) setNav(mod);
+  };
+
   const handleSwitchCompany=async(companyId)=>{
     if(switching||companyId===user?.company_id) return;
     setSwitching(true);
@@ -1917,7 +1969,7 @@ export default function App(){
 
   const MODULE_MAP={
     dashboard: <DashboardModule/>,
-    projects:  <ProjectsWrapper/>,
+    projects:  <ProjectsWrapper deepLink={projDeepLink} onDeepLinkDone={clearProjDeepLink}/>,
     finance:   guard("finance",  "Finance",       <FinanceModule/>),
     procurement:guard("procurement","Procurement", <ProcurementModule/>),
     design:    guard("design",   "Design",        <DesignModule/>),
@@ -1933,7 +1985,7 @@ export default function App(){
     profile:   <SettingsModule initialSection="profile"/>,
     saas:     <SaaSModule/>,
     "saas-leads": <SaaSLeadsModule/>,
-    sahayak:  <SahayakModule onNavigate={setNav} onNotifCount={setSahayakNotifCount}/>,
+    sahayak:  <SahayakModule onNavigate={handleNotifNav} onNotifCount={setSahayakNotifCount}/>,
   };
 
   const page=PAGES[nav]||PAGES.dashboard;
@@ -1962,7 +2014,7 @@ export default function App(){
       </div>}
       {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount} sahayakNotifCount={sahayakNotifCount}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
-        {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={(mod)=>setNav(mod)} isMobile={isMobile}/>}
+        {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={handleNotifNav} isMobile={isMobile}/>}
         <div style={{flex:1,overflowY:"auto",paddingBottom:isMobile&&!hideAppShell?68:0}}>
           {/* Inner ErrorBoundary: if a single module's chunk fails or
               the module throws on mount, recover the module area only —

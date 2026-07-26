@@ -129,7 +129,49 @@ const PAY_REQS_DATA=[];
 const PEND_PMTS_DATA=[];
 
 const PULSE_ALL_TYPES=["progress","material","material_request","approval","payment","photo","document"];
-function SitePulseDrawer({onClose}){
+
+// Which project tab a pulse activity belongs to, so clicking a feed card lands
+// the user exactly where the activity happened instead of a generic overview.
+// Keyed on feed_type first, then narrowed by the row's `module` label (the
+// backend sets both). Same tab vocabulary as ProjectDetailPage's TAB list.
+const PULSE_TAB={
+  material:"material",           // GRN — Material tab
+  material_request:"material",
+  payment:"transaction",         // Payment request — Fin Activity
+  document:"files",
+  progress:"solar_stages",       // stage completions come from solar_stages
+};
+// Module labels as they actually appear in the feed / approval_requests.module
+// (verified against live data — e.g. "Purchase Order (PO)", not "Purchase Order").
+const PULSE_TAB_BY_MODULE={
+  "GRN":"material","Material Request":"material","Payment":"transaction",
+  "Installation":"solar_install","Stage":"solar_stages",
+  "Site Photo":"site","Document":"files",
+  // approval rows carry their approval module here
+  "Design Approval":"design","Purchase Order (PO)":"material",
+  "Payment Request":"transaction","Customer Estimate Amendment":"estimate",
+};
+function pulseTab(f){
+  return PULSE_TAB_BY_MODULE[f.module] || PULSE_TAB[f.feed_type] || "overview";
+}
+
+// Approval `_source` → project tab. This is the engine's own source vocabulary
+// (material_request, purchase_order, …) and is more reliable than the display
+// label, so both the Approvals drawer and the Pulse action strip use it.
+const APPROVAL_SRC_TAB={
+  ra_bill:"subcon", wo_amendment:"subcon",
+  ce_amendment:"estimate", auto_invoice:"estimate",
+  design:"design",
+  material_request:"material", purchase_order:"material",
+  payment_request:"transaction", labour_rate:"attendance",
+};
+function approvalTab(item){
+  return APPROVAL_SRC_TAB[item&&item._source]
+    || PULSE_TAB_BY_MODULE[item&&item.module]
+    || "overview";
+}
+
+function SitePulseDrawer({onClose,onSelectProject}){
   const [site,setSite]=useState("All");
   // Multi-select type filter — user tick-marks the activity types they care
   // about and Saves; the choice persists (per-device) and is applied on every
@@ -139,6 +181,15 @@ function SitePulseDrawer({onClose}){
   const [feed,setFeed]=useState([]);
   const [projects,setProjects]=useState([]);
   const [loading,setLoading]=useState(true);
+  // ── Actionable approvals (P3) ──────────────────────────────────────────
+  // Straight from /approvals/pending?scope=my — the approval engine's OWN
+  // whose-turn gating. We never re-derive "can I act?" here; scope=my already
+  // means "current level, my role, my projects", and _canActNow confirms it.
+  const [pending,setPending]=useState([]);
+  const [acting,setActing]=useState({});     // request_id -> 'approving'|'rejecting'
+  const [actErr,setActErr]=useState("");
+  const [rejectId,setRejectId]=useState(null);
+  const [rejectNote,setRejectNote]=useState("");
 
   const tagMeta={
     "progress":{c:C.g,b:C.gl,icon:"🏗️",label:"Progress"},
@@ -160,6 +211,12 @@ function SitePulseDrawer({onClose}){
         setProjects(r.data.projects||[]);
       }
     }).catch(()=>{}).finally(()=>setLoading(false));
+    // Items waiting on THIS user right now. Failure is non-fatal — the feed is
+    // still useful without the action strip.
+    api.get("/approvals/pending?scope=my").then(r=>{
+      const list=(r&&r.success&&Array.isArray(r.data))?r.data:[];
+      setPending(list.filter(i=>i._canActNow!==false&&(i._request_id||i.id)));
+    }).catch(()=>{});
   },[]);
 
   const timeAgo=(d)=>{
@@ -180,6 +237,38 @@ function SitePulseDrawer({onClose}){
   const toggleType=(k)=>setSelTypes(p=>p.includes(k)?p.filter(x=>x!==k):[...p,k]);
   const saveFilter=()=>{ try{localStorage.setItem("gb_pulse_types",JSON.stringify(selTypes));}catch(_){} setShowTypeMenu(false); };
   const resetFilter=()=>setSelTypes(PULSE_ALL_TYPES);
+
+  // Respect the drawer's project filter so "All" shows everything but a chosen
+  // site shows only its own pending items.
+  const pendingShown=pending.filter(i=>site==="All"||i.project_name===site);
+
+  // Jump to where an activity happened (P2). Works for feed cards and for the
+  // "open full item" affordance on an approval row.
+  const goTo=(projectId,projectName,tab)=>{
+    if(!projectId||!onSelectProject) return;
+    onClose();
+    onSelectProject({id:projectId,name:projectName,initialTab:tab||"overview"});
+  };
+
+  // Approve / reject through the SAME central engine endpoint the Approvals
+  // drawer uses (PATCH /approvals/:id/action) — no parallel approval path.
+  const reqIdOf=(i)=>i._request_id||i.id;
+  const decide=async(item,action,remarks)=>{
+    const id=reqIdOf(item); if(!id) return;
+    setActErr(""); setActing(p=>({...p,[id]:action==="approve"?"approving":"rejecting"}));
+    try{
+      const res=await api.patch("/approvals/"+id+"/action",
+        action==="approve"?{action:"approve"}:{action:"reject",remarks:remarks||"Rejected"});
+      if(res&&res.success){
+        setPending(p=>p.filter(x=>reqIdOf(x)!==id));
+        // Counts/drawer caches now stale.
+        apiCache.invalidate("approval-drawer");
+        apiCache.invalidate("approval-counts");
+      } else setActErr((res&&res.message)||(action==="approve"?"Approve failed":"Reject failed"));
+    }catch(e){ setActErr(e.message||"Action failed"); }
+    setActing(p=>({...p,[id]:null}));
+    setRejectId(null); setRejectNote("");
+  };
 
   return(<>
     <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.4)",zIndex:200,backdropFilter:"blur(2px)",animation:"fadeIn .25s ease"}}/>
@@ -234,6 +323,69 @@ function SitePulseDrawer({onClose}){
       </div>
 
       <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
+        {/* ── Aapke action ka intezaar — pending approvals where it is THIS
+            user's turn. Amount + party are shown so nothing is approved blind. */}
+        {pendingShown.length>0&&(
+          <div style={{marginBottom:10}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,padding:"2px 4px 6px"}}>
+              <span style={{fontSize:11.5,fontWeight:800,color:C.t}}>Aapke action ka intezaar</span>
+              <span style={{background:C.a,color:"white",fontSize:9,fontWeight:800,padding:"1px 6px",borderRadius:10}}>{pendingShown.length}</span>
+            </div>
+            {actErr&&<div style={{margin:"0 2px 6px",padding:"7px 10px",background:C.rl,border:`1px solid ${C.r}44`,borderRadius:8,fontSize:11,color:C.r}}>{actErr}</div>}
+            {pendingShown.map(it=>{
+              const id=reqIdOf(it);
+              const busy=acting[id];
+              const amt=it.amount?`₹${Number(it.amount).toLocaleString("en-IN")}`:"";
+              const who=it.party_name||it.vendor_name||it.submitted_by_name||"";
+              return(
+                <div key={"pend-"+id} style={{background:C.w,borderRadius:12,marginBottom:8,border:`1px solid ${C.a}55`,borderLeft:`3px solid ${C.a}`,boxShadow:"0 1px 6px rgba(0,0,0,0.06)",overflow:"hidden"}}>
+                  <div style={{padding:"10px 12px 8px"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:4}}>
+                      <span style={{background:"#FFF8E1",color:C.a,fontSize:9,fontWeight:800,padding:"2px 7px",borderRadius:20,whiteSpace:"nowrap"}}>{it.module||"Approval"}</span>
+                      {it.ref_no&&<span style={{fontSize:10,color:C.tl}}>{it.ref_no}</span>}
+                      <div style={{flex:1}}/>
+                      {amt&&<span style={{fontSize:12.5,fontWeight:800,color:C.t}}>{amt}</span>}
+                    </div>
+                    <div style={{fontSize:12.5,fontWeight:600,color:C.t,lineHeight:1.4}}>{it.title||"Approval request"}</div>
+                    <div style={{fontSize:10.5,color:C.tl,marginTop:2}}>
+                      📍 {it.project_name||"—"}{who?` · ${who}`:""}
+                    </div>
+                  </div>
+                  {rejectId===id?(
+                    <div style={{padding:"0 12px 10px",display:"flex",gap:6}}>
+                      <input autoFocus value={rejectNote} onChange={e=>setRejectNote(e.target.value)}
+                        placeholder="Reject ka reason..."
+                        style={{flex:1,height:30,padding:"0 9px",borderRadius:7,border:`1.5px solid ${C.r}66`,fontSize:11.5,outline:"none",fontFamily:"inherit"}}/>
+                      <button onClick={()=>decide(it,"reject",rejectNote)} disabled={!!busy}
+                        style={{height:30,padding:"0 11px",borderRadius:7,border:"none",background:C.r,color:"white",fontSize:11.5,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                        {busy==="rejecting"?"...":"Confirm"}
+                      </button>
+                      <button onClick={()=>{setRejectId(null);setRejectNote("");}}
+                        style={{height:30,padding:"0 9px",borderRadius:7,border:`1px solid ${C.b}`,background:C.w,color:C.tl,fontSize:11.5,cursor:"pointer",fontFamily:"inherit"}}>✕</button>
+                    </div>
+                  ):(
+                    <div style={{padding:"0 12px 10px",display:"flex",gap:6,alignItems:"center"}}>
+                      <button onClick={()=>decide(it,"approve")} disabled={!!busy}
+                        style={{height:30,padding:"0 14px",borderRadius:7,border:"none",background:C.g,color:"white",fontSize:11.5,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit",opacity:busy?0.6:1}}>
+                        {busy==="approving"?"...":"✓ Approve"}
+                      </button>
+                      <button onClick={()=>setRejectId(id)} disabled={!!busy}
+                        style={{height:30,padding:"0 12px",borderRadius:7,border:`1.5px solid ${C.r}66`,background:C.w,color:C.r,fontSize:11.5,fontWeight:700,cursor:busy?"not-allowed":"pointer",fontFamily:"inherit"}}>
+                        Reject
+                      </button>
+                      <div style={{flex:1}}/>
+                      <button onClick={()=>goTo(it.project_id,it.project_name,approvalTab(it))}
+                        style={{height:30,padding:"0 10px",borderRadius:7,border:`1px solid ${C.b}`,background:C.w,color:C.p,fontSize:11,fontWeight:600,cursor:"pointer",fontFamily:"inherit",whiteSpace:"nowrap"}}>
+                        Poora dekhein →
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+            <div style={{height:1,background:C.b,margin:"2px 4px 10px"}}/>
+          </div>
+        )}
         {loading?(
           <div style={{textAlign:"center",padding:"50px 0",color:C.tl}}>
             <div style={{width:24,height:24,border:"3px solid "+C.b,borderTopColor:C.p,borderRadius:"50%",animation:"spin .7s linear infinite",margin:"0 auto 12px"}}/>
@@ -252,8 +404,15 @@ function SitePulseDrawer({onClose}){
           const time=timeAgo(f.activity_date||f.created_at);
           const amt=f.amount?`₹${Number(f.amount).toLocaleString("en-IN")}`:"";
 
+          const tab=pulseTab(f);
+          const canGo=!!(f.project_id&&onSelectProject);
           return(
-            <div key={`${f.feed_type}-${f.id}-${idx}`} style={{background:C.w,borderRadius:12,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:`1px solid ${C.b}`}}>
+            <div key={`${f.feed_type}-${f.id}-${idx}`}
+              onClick={canGo?()=>goTo(f.project_id,f.project_name,tab):undefined}
+              title={canGo?`${f.project_name} → ${tab==="overview"?"Overview":tab} kholein`:undefined}
+              style={{background:C.w,borderRadius:12,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.06)",border:`1px solid ${C.b}`,cursor:canGo?"pointer":"default",transition:"box-shadow .12s, border-color .12s"}}
+              onMouseEnter={canGo?e=>{e.currentTarget.style.boxShadow=`0 2px 10px ${C.p}22`;e.currentTarget.style.borderColor=`${C.p}55`;}:undefined}
+              onMouseLeave={canGo?e=>{e.currentTarget.style.boxShadow="0 1px 6px rgba(0,0,0,0.06)";e.currentTarget.style.borderColor=C.b;}:undefined}>
               {/* User header */}
               <div style={{display:"flex",alignItems:"center",gap:9,padding:"10px 12px 7px"}}>
                 <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${ac},${ac}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"white",flexShrink:0,boxShadow:`0 0 0 2px ${ac}33`}}>{initials}</div>
@@ -301,10 +460,11 @@ function SitePulseDrawer({onClose}){
               <div style={{padding:"5px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user_name}</strong> {f.text}</span></div>
 
               {/* Footer */}
-              <div style={{padding:"5px 12px 10px",display:"flex",alignItems:"center"}}>
+              <div style={{padding:"5px 12px 10px",display:"flex",alignItems:"center",gap:6}}>
                 <span style={{fontSize:10,color:C.tl,fontStyle:"italic"}}>{f.module}</span>
                 <div style={{flex:1}}/>
                 <span style={{fontSize:9.5,color:C.tl}}>{time}</span>
+                {canGo&&<span style={{fontSize:10,color:C.p,fontWeight:700}}>→</span>}
               </div>
             </div>
           );
@@ -1969,15 +2129,9 @@ function ApprovalsDrawer({onClose,mode="approvals",onSelectProject,onCountSync})
     };
     const goToProject = ()=>{
       if (!item.project_id || !onSelectProject) return;
-      const tabFor = src==="ra_bill"||src==="wo_amendment" ? "subcon"
-                   : src==="ce_amendment"||src==="auto_invoice" ? "estimate"
-                   : src==="design" ? "design"
-                   : src==="material_request"||src==="purchase_order" ? "material"
-                   : src==="payment_request" ? "transaction"
-                   : src==="labour_rate" ? "attendance"
-                   : "overview";
+      // Same source→tab map the Pulse action strip uses (module-level helper).
       onClose();
-      onSelectProject({ id:item.project_id, name:item.project_name, initialTab:tabFor });
+      onSelectProject({ id:item.project_id, name:item.project_name, initialTab:approvalTab({_source:src,module:item.module}) });
     };
     return(
       <div onClick={isPO ? (e)=>{ if(e.target===e.currentTarget||!e.target.closest("button")) togglePoExpand(); } : undefined}
@@ -3377,7 +3531,7 @@ function ProjectsPage({onSelectProject}){
           <span style={{fontSize:11,color:T.t4,marginLeft:8}}>Page {page} of {totalPages}</span>
         </div>
       )}
-      {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)}/>}
+      {showPulse&&<SitePulseDrawer onClose={()=>setShowPulse(false)} onSelectProject={onSelectProject}/>}
       {showApprovals&&<ApprovalsDrawer onClose={()=>{setShowApprovals(false);apiCache.invalidate("approval-counts");loadApprovalCounts();}} mode={approvalMode} onSelectProject={onSelectProject}
         onCountSync={approvalMode==="materials"
           ? cnt=>{setMrPendingCount(cnt);apiCache.invalidate("approval-counts");}

@@ -76,11 +76,13 @@ export default function NotificationBell({ onNavigate }) {
     setOpen(false);
     fetchCount();
     // Link like "/finance/wallets/approvals?txnId=1" → module key "finance".
-    // DECISION: web app routes by module state, so we navigate to the
-    // module home; deep-scroll to a specific txn is not wired (fallback).
+    // The web app routes by module state, so the first segment picks the module.
+    // The FULL link is handed over too: project-scoped links
+    // ("/projects/59/estimate", "/projects?id=104") let the host deep-link
+    // straight to that project's tab instead of the module home.
     if (item.link && onNavigate) {
       const seg = String(item.link).replace(/^\//, "").split(/[/?]/)[0];
-      if (seg) onNavigate(seg);
+      if (seg) onNavigate(seg, item.link);
     }
   };
   const handleMarkAll = async () => {

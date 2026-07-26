@@ -540,9 +540,11 @@ function AlertsPanel({ onNavigate, onCount }) {
   const openItem = async (it) => {
     setItems((prev) => { const next = prev.filter((x) => x.id !== it.id); if (onCount) onCount(next.length); return next; });
     try { await api.post(`/notifications/${it.id}/read`); } catch (_) {}
+    // Hand over the module segment AND the full link — a project-scoped link
+    // deep-links to that project's tab instead of the module home.
     if (it.link && onNavigate) {
       const seg = String(it.link).replace(/^\//, "").split(/[/?]/)[0];
-      if (seg) onNavigate(seg);
+      if (seg) onNavigate(seg, it.link);
     }
   };
 
