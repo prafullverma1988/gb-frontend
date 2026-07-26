@@ -1376,7 +1376,24 @@ function TabTasks({ projectId, isAdmin }) {
                 hide:!(contextMenu.task.children?.length>0&&ptIsOverridden(contextMenu.task)),admin:true,
                 action:async()=>{const r=await api.del("/tasks/"+contextMenu.task.id+"/progress-override");setContextMenu(null);if(r.success)await refetchTasks();else alert(r.message||"Reset failed");}},
               null,
-              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{if(await window.confirmAsync("Delete this task?")){await api.del("/tasks/"+contextMenu.task.id);const removeFromTree=(list,id)=>list.filter(t=>t.id!==id).map(t=>({...t,children:removeFromTree(t.children||[],id)}));setTasks(removeFromTree(tasks,contextMenu.task.id));setContextMenu(null);}},color:"#EF4444",admin:true},
+              {icon:"M3 6h18M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2",label:"Delete Task",action:async()=>{
+                const task=contextMenu.task;
+                // A clean task hard-deletes; one with sub-tasks / issues / photos /
+                // dependencies is archived instead. Backend decides — the confirm
+                // text just sets expectations from what's visible in the tree.
+                const willArchive=(task.children?.length>0);
+                const msg=willArchive
+                  ? `"${task.name}" me sub-tasks hain — delete ke bajaye ARCHIVE hoga (history bachi rahegi). Continue?`
+                  : `"${task.name}" delete karein? Agar isme issue / photo / dependency hui to archive ho jayega.`;
+                setContextMenu(null);
+                if(!await window.confirmAsync(msg)) return;
+                const r=await api.del("/tasks/"+task.id);
+                if(!r.success){ if(window.toast) window.toast.error(r.message||"Delete fail"); else alert(r.message||"Delete fail"); return; }
+                const d=r.data||{};
+                if(d.mode==="archived") window.toast?.success(`Archive kiya${d.reasons?.length?" — "+d.reasons.join(", ")+" judi thi":""}${d.affected>1?` (${d.affected} rows)`:""}`);
+                else window.toast?.success("Task delete ho gaya");
+                await refetchTasks();
+              },color:"#EF4444",admin:true},
             ].filter(item=>item===null||(!item.hide&&(!item.admin||isAdmin))).map((item,i)=>
               item === null
               ? <div key={i} style={{height:1,background:"#F3F4F6",margin:"4px 0"}}/>
