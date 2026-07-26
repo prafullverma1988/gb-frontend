@@ -156,7 +156,7 @@ export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
       // LLM answers routinely take longer than the app-wide 15s default.
       const r = await api.post("/support-bot/chat", { text }, { timeoutMs: CHAT_TIMEOUT_MS });
       if (r && r.success) {
-        pushMessage({ role: "bot", text: r.reply, ticket: r.ticket_no || null, messageId: r.message_id || null, bugSuspect: !!r.bug_suspect });
+        pushMessage({ role: "bot", text: r.reply, ticket: r.ticket_no || null, messageId: r.message_id || null, bugSuspect: !!r.bug_suspect, view: r.view || null });
       } else {
         pushMessage({ role: "bot", text: (r && r.message) || L.errGeneric });
       }
@@ -207,7 +207,7 @@ export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
       setTranscribing(false);
       if (r && r.success) {
         pushMessage({ role: "user", text: r.transcript || "(awaaz)", transcript: r.transcript || null });
-        pushMessage({ role: "bot", text: r.reply, ticket: r.ticket_no || null, messageId: r.message_id || null, bugSuspect: !!r.bug_suspect });
+        pushMessage({ role: "bot", text: r.reply, ticket: r.ticket_no || null, messageId: r.message_id || null, bugSuspect: !!r.bug_suspect, view: r.view || null });
       } else {
         setErr((r && r.message) || L.errGeneric);
       }
@@ -369,6 +369,91 @@ function Shell({ tab, setTab, tabs = [], sahayakBadge = 0, children }) {
   );
 }
 
+// ── DataTable — the chat+table hybrid ──────────────────────────────────
+// Rendered from the `view` the backend builds out of the TOOL's own figures, not
+// from the model's prose, so the grid can never disagree with the sentence above
+// it. Columns declare their own formatting: `money` → ₹ Indian format,
+// `signed` → +/− colour, `badge` → pill, `align` → right for numbers.
+// Wide tables scroll inside their own box; the chat column never scrolls sideways.
+const inr = (n) => "₹" + Math.round(Number(n) || 0).toLocaleString("en-IN");
+
+function DataTable({ view }) {
+  if (!view || !Array.isArray(view.columns) || !Array.isArray(view.rows) || !view.rows.length) return null;
+  const t = view.totals || null;
+
+  const cell = (row, col) => {
+    const raw = row[col.key];
+    if (raw === null || raw === undefined || raw === "") return <span style={{ color: T.t4 }}>—</span>;
+    // project_summary mixes ₹ and non-₹ values in one column; `moneyFlag` names
+    // the per-row boolean that says which is which.
+    const isMoney = col.money || (col.moneyFlag && row[col.moneyFlag]);
+    if (col.badge) {
+      const s = String(raw).toLowerCase();
+      const good = /approv|paid|complet|done|receive|profit|high/.test(s);
+      const bad = /reject|cancel|pend|overdue|loss|to pay/.test(s);
+      const c = good ? T.grn : bad ? T.red : T.t2;
+      const bg = good ? T.grnL : bad ? T.redL : T.sltL;
+      return <span style={{ background: bg, color: c, fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 20, whiteSpace: "nowrap", textTransform: "capitalize" }}>{String(raw)}</span>;
+    }
+    if (isMoney) {
+      const n = Number(raw) || 0;
+      const col2 = col.signed ? (n > 0 ? T.grn : n < 0 ? T.red : T.t2) : (row.dir === "out" ? T.red : row.dir === "in" ? T.grn : T.t1);
+      return <span style={{ color: col2, fontWeight: 600, fontVariantNumeric: "tabular-nums", whiteSpace: "nowrap" }}>
+        {col.signed && n > 0 ? "+" : ""}{n < 0 ? "−" + inr(Math.abs(n)) : inr(n)}
+      </span>;
+    }
+    return <span style={{ fontVariantNumeric: "tabular-nums" }}>{String(raw)}</span>;
+  };
+
+  return (
+    <div style={{ marginTop: 8, border: `1px solid ${T.b1}`, borderRadius: 10, overflow: "hidden", background: T.surface }}>
+      {view.title && (
+        <div style={{ padding: "8px 11px", borderBottom: `1px solid ${T.b1}`, background: T.surfaceB, fontSize: 11.5, fontWeight: 700, color: T.t1 }}>
+          {view.title}
+        </div>
+      )}
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11.5 }}>
+          <thead>
+            <tr>
+              {view.columns.map((c) => (
+                <th key={c.key} style={{ textAlign: c.align === "right" ? "right" : "left", padding: "7px 11px", borderBottom: `1px solid ${T.b1}`, color: T.t4, fontWeight: 600, fontSize: 10.5, textTransform: "uppercase", letterSpacing: ".3px", whiteSpace: "nowrap" }}>
+                  {c.label}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {view.rows.map((row, i) => (
+              <tr key={i} style={{ background: i % 2 ? T.surfaceB : T.surface }}>
+                {view.columns.map((c) => (
+                  <td key={c.key} style={{ textAlign: c.align === "right" ? "right" : "left", padding: "7px 11px", borderBottom: i === view.rows.length - 1 ? "none" : `1px solid ${T.b1}`, color: T.t2, verticalAlign: "top" }}>
+                    {cell(row, c)}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {t && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 14, padding: "8px 11px", borderTop: `1.5px solid ${T.b1}`, background: T.surfaceB }}>
+          {Object.keys(t).filter((k) => typeof t[k] === "number").map((k) => (
+            <span key={k} style={{ fontSize: 10.5, color: T.t4 }}>
+              {k.replace(/_/g, " ")}: <b style={{ fontSize: 12, color: k === "net" || k === "pnl" ? (t[k] >= 0 ? T.grn : T.red) : T.t1, fontVariantNumeric: "tabular-nums" }}>
+                {t[k] < 0 ? "−" + inr(Math.abs(t[k])) : inr(t[k])}
+              </b>
+            </span>
+          ))}
+        </div>
+      )}
+      {view.note && (
+        <div style={{ padding: "6px 11px", borderTop: `1px solid ${T.b1}`, fontSize: 10.5, color: T.t4, lineHeight: 1.45 }}>{view.note}</div>
+      )}
+    </div>
+  );
+}
+
 // ── Message bubble ──
 function MessageBubble({ m, vote, onVote, bundleState, onBundle, onBundleDone }) {
   const isUser = m.role === "user";
@@ -392,6 +477,11 @@ function MessageBubble({ m, vote, onVote, bundleState, onBundle, onBundleDone })
       }}>
         {m.ticket ? renderWithTicket(m.text) : m.text}
       </div>
+
+      {/* Live-data table (chat + table hybrid). Sits OUTSIDE the bubble so it can
+          use the full width and scroll on its own. Only on bot replies that had a
+          data tool behind them. */}
+      {!isUser && m.view && <DataTable view={m.view} />}
 
       {/* thumbs — bot replies only, and only once the reply has a db id */}
       {!isUser && m.messageId && <Thumbs vote={vote} onVote={(r, c) => onVote(m.messageId, r, c)} />}
