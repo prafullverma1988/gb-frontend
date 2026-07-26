@@ -45,6 +45,82 @@ export default function TabBudget({ project }) {
   const [pSaving, setPSaving] = useState(false);
   const flash = (m, t = "ok") => { setToast({ m, t }); setTimeout(() => setToast(null), 2400); };
 
+  // ── Library picker (per estimate category) ─────────────────────
+  // Every category has a master list the company already maintains — the
+  // picker pulls item + unit + rate from there so lines match the library
+  // instead of being retyped (and drifting) per task.
+  //   material  → /library/materials      (name, unit, last/base rate)
+  //   labour    → /library/labour-rates   (role, unit, rate)
+  //   machinery → /library/equipment      (mode → unit: hourly/daily/trip/fixed)
+  //   overhead  → /library/expense-heads  (head name; amount manual ya % helper)
+  const [pick, setPick]           = useState(null);   // category id | null
+  const [pickSearch, setPickSearch] = useState("");
+  const [libCache, setLibCache]   = useState({});     // cat → rows
+  const [libLoading, setLibLoading] = useState(false);
+  const [ohPct, setOhPct]         = useState("");     // overhead % helper input
+
+  const MODE_UNIT = { hourly: "HOUR", daily: "DAY", trip: "TRIP", fixed: "LS" };
+  const LIB_EP = {
+    material:  "/library/materials",
+    labour:    "/library/labour-rates",
+    machinery: "/library/equipment",
+    overhead:  "/library/expense-heads",
+  };
+
+  const openPicker = async (c) => {
+    setPick(c); setPickSearch("");
+    if (libCache[c]) return;
+    setLibLoading(true);
+    const r = await api.get(LIB_EP[c]);
+    setLibLoading(false);
+    if (r?.success) setLibCache((p) => ({ ...p, [c]: r.data || [] }));
+    else flash(r?.message || "Library load nahi hui", "error");
+  };
+
+  // Normalise a library row into what the picker shows + what a pick fills.
+  const libEntry = (c, row) => {
+    if (c === "material") return { title: row.name, sub: [row.category_name, row.unit].filter(Boolean).join(" · "),
+      line: { item_name: row.name, unit: row.unit || "", rate: Number(row.last_rate || row.base_rate || 0) } };
+    if (c === "labour")   return { title: row.role, sub: [row.category, row.unit || "Day", row.rate ? "₹" + row.rate : ""].filter(Boolean).join(" · "),
+      line: { item_name: row.role, unit: row.unit || "Day", rate: Number(row.rate || 0) } };
+    if (c === "machinery") {
+      const mode = row.measurement_mode || "hourly";
+      const rate = Number((mode === "daily" ? (row.rate_per_day || row.default_rate) : row.default_rate) || 0);
+      const fuel = Number(row.fuel_per_hour || 0) > 0 && row.fuel_responsibility === "company";
+      return { title: row.name, sub: [row.type || row.category, MODE_UNIT[mode] || "HOUR", rate ? "₹" + rate : "", fuel ? `fuel ${row.fuel_per_hour} L/hr` : ""].filter(Boolean).join(" · "),
+        line: { item_name: row.name, unit: MODE_UNIT[mode] || "HOUR", rate }, fuelRow: fuel ? row : null };
+    }
+    return { title: row.name, sub: row.type || "", line: { item_name: row.name, unit: "LS", rate: 0 } };
+  };
+
+  const applyPick = async (entry) => {
+    setLines((p) => [...p, { category: pick, qty_per_unit: 0, ...entry.line }]);
+    // Company-fuel machine → ek Diesel line saath me, rate diesel library se.
+    if (entry.fuelRow) {
+      let dieselRate = 0;
+      try {
+        const r = await api.get("/library/materials?search=diesel");
+        const d = (r?.data || [])[0];
+        dieselRate = Number(d?.last_rate || d?.base_rate || 0);
+      } catch (_) {}
+      setLines((p) => [...p, { category: "machinery", item_name: `Diesel — ${entry.fuelRow.name} (@${entry.fuelRow.fuel_per_hour} L/hr)`, unit: "LTR", qty_per_unit: 0, rate: dieselRate }]);
+      flash(`Diesel line add hui (${entry.fuelRow.fuel_per_hour} L/hr) — hours ke hisaab se qty bharo`);
+    }
+    setPick(null);
+  };
+
+  // Overhead % helper: pct × (material+labour+machinery) ka ek LS line.
+  // qty_per_unit = 1/scope rakha hai taaki qty 1 bane aur amount = rate rahe.
+  const addOverheadPct = () => {
+    const pct = Number(ohPct);
+    if (!(pct > 0)) return flash("Pehle % daalo (jaise 5)", "error");
+    const direct = catTotal("material") + catTotal("labour") + catTotal("machinery");
+    if (!(direct > 0)) return flash("Pehle Material/Labour/Machinery lines banao — % unhi par lagta hai", "error");
+    const amt = Math.round(direct * pct / 100);
+    setLines((p) => [...p, { category: "overhead", item_name: `Overhead ${pct}% (direct cost par)`, unit: "LS", qty_per_unit: scope > 0 ? +(1 / scope).toFixed(8) : 1, rate: amt }]);
+    setOhPct("");
+  };
+
   const load = useCallback(async () => {
     if (!projectId) return;
     setLoading(true);
@@ -338,24 +414,65 @@ export default function TabBudget({ project }) {
                     ))}
                   </div>
                   <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                    <thead><tr>{["Item", "Qty/unit", "Qty", "Rate ₹", "Amount ₹", ""].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 2 && i <= 4 ? "right" : "left" }}>{h}</th>)}</tr></thead>
+                    <thead><tr>{["Item", "Unit", "Qty/unit", "Qty", "Rate ₹", "Amount ₹", ""].map((h, i) => <th key={i} style={{ ...th, textAlign: i >= 3 && i <= 5 ? "right" : "left" }}>{h}</th>)}</tr></thead>
                     <tbody>
                       {lines.map((l, idx) => l.category === cat && (
                         <tr key={idx}>
-                          <td style={{ ...td, width: "34%" }}><input value={l.item_name || ""} onChange={(e) => setLine(idx, "item_name", e.target.value)} style={inp} /></td>
-                          <td style={{ ...td, width: "16%" }}><input type="number" step="0.001" value={l.qty_per_unit ?? ""} onChange={(e) => setLine(idx, "qty_per_unit", e.target.value)} style={{ ...inp, textAlign: "right" }} /></td>
+                          <td style={{ ...td, width: "30%" }}><input value={l.item_name || ""} onChange={(e) => setLine(idx, "item_name", e.target.value)} style={inp} /></td>
+                          <td style={{ ...td, width: "10%" }}><input value={l.unit || ""} onChange={(e) => setLine(idx, "unit", e.target.value)} placeholder="—" style={inp} /></td>
+                          <td style={{ ...td, width: "14%" }}><input type="number" step="0.001" value={l.qty_per_unit ?? ""} onChange={(e) => setLine(idx, "qty_per_unit", e.target.value)} style={{ ...inp, textAlign: "right" }} /></td>
                           <td style={{ ...td, textAlign: "right", color: T.t2 }}>{n2(lineQty(l))}</td>
-                          <td style={{ ...td, width: "16%" }}><input type="number" value={l.rate ?? ""} onChange={(e) => setLine(idx, "rate", e.target.value)} style={{ ...inp, textAlign: "right" }} /></td>
+                          <td style={{ ...td, width: "14%" }}><input type="number" value={l.rate ?? ""} onChange={(e) => setLine(idx, "rate", e.target.value)} style={{ ...inp, textAlign: "right" }} /></td>
                           <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{inr(lineAmt(l))}</td>
                           <td style={{ ...td, textAlign: "center" }}><button onClick={() => delLine(idx)} aria-label="Remove" style={{ border: "none", background: "none", color: T.t4, cursor: "pointer", fontSize: 14 }}>✕</button></td>
                         </tr>
                       ))}
-                      {!lines.some((l) => l.category === cat) && <tr><td colSpan={6} style={{ ...td, textAlign: "center", color: T.t4 }}>No {cat} lines yet.</td></tr>}
+                      {!lines.some((l) => l.category === cat) && <tr><td colSpan={7} style={{ ...td, textAlign: "center", color: T.t4 }}>No {cat} lines yet.</td></tr>}
                     </tbody>
                   </table>
-                  <div style={{ display: "flex", justifyContent: "space-between", marginTop: 8 }}>
-                    <button onClick={addLine} style={{ fontSize: 12, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>+ Add {cat} line</button>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, position: "relative", flexWrap: "wrap", gap: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <button onClick={() => openPicker(cat)} style={{ fontSize: 12, color: T.ind, background: T.indL, border: `1px solid ${T.ind}33`, borderRadius: 7, padding: "5px 11px", cursor: "pointer", fontWeight: 700 }}>+ Library se</button>
+                      <button onClick={addLine} style={{ fontSize: 12, color: T.blu, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>+ Khali line</button>
+                      {cat === "overhead" && (
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 12, color: T.t3 }}>
+                          <input type="number" value={ohPct} onChange={(e) => setOhPct(e.target.value)} placeholder="%" style={{ ...inp, width: 52, padding: "5px 7px", textAlign: "right" }} />
+                          <button onClick={addOverheadPct} title="Material + Labour + Machinery ke total par %" style={{ fontSize: 12, color: T.ind, background: "none", border: "none", cursor: "pointer", fontWeight: 600 }}>% of direct cost</button>
+                        </span>
+                      )}
+                    </div>
                     {selNode && <button onClick={removeNode} style={{ fontSize: 12, color: T.red, background: "none", border: "none", cursor: "pointer" }}>Remove budget</button>}
+                    {pick && (
+                      <>
+                        <div onClick={() => setPick(null)} style={{ position: "fixed", inset: 0, zIndex: 640 }} />
+                        <div style={{ position: "absolute", left: 0, bottom: "calc(100% + 6px)", zIndex: 641, width: 340, maxHeight: 320, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: 10, boxShadow: "0 10px 32px rgba(0,0,0,.16)", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+                          <div style={{ padding: 8, borderBottom: `1px solid ${T.b1}` }}>
+                            <input autoFocus value={pickSearch} onChange={(e) => setPickSearch(e.target.value)} placeholder="Search library…" style={inp} />
+                          </div>
+                          <div style={{ overflowY: "auto" }}>
+                            {libLoading && <div style={{ padding: 16, fontSize: 12, color: T.t4, textAlign: "center" }}>Loading…</div>}
+                            {!libLoading && (libCache[pick] || [])
+                              .map((row) => libEntry(pick, row))
+                              .filter((e) => !pickSearch || e.title.toLowerCase().includes(pickSearch.toLowerCase()))
+                              .slice(0, 60)
+                              .map((e, i) => (
+                                <div key={i} onClick={() => applyPick(e)}
+                                  onMouseEnter={(ev) => ev.currentTarget.style.background = T.indL}
+                                  onMouseLeave={(ev) => ev.currentTarget.style.background = "transparent"}
+                                  style={{ padding: "8px 12px", cursor: "pointer", borderBottom: `1px solid ${T.b1}` }}>
+                                  <div style={{ fontSize: 12.5, fontWeight: 600, color: T.t1 }}>{e.title}</div>
+                                  {e.sub && <div style={{ fontSize: 11, color: T.t4, marginTop: 1 }}>{e.sub}</div>}
+                                </div>
+                              ))}
+                            {!libLoading && !(libCache[pick] || []).length && (
+                              <div style={{ padding: 16, fontSize: 12, color: T.t4, textAlign: "center" }}>
+                                Library khali hai — pehle Library module me {pick === "labour" ? "labour rates" : pick === "machinery" ? "equipment" : pick === "overhead" ? "expense heads" : "materials"} add karo.
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </>
               )}

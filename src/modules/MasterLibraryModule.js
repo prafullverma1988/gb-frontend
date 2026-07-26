@@ -5877,8 +5877,8 @@ function EquipmentSection() {
     } catch (e) { alert(e.message || "Delete failed"); }
   };
 
-  const rateUnit = (mode) => mode === "hourly" ? "/hr" : mode === "daily" ? "/day" : " lump";
-  const modeLabel = (mode) => mode === "hourly" ? "Hourly" : mode === "daily" ? "Daily" : "Fixed";
+  const rateUnit = (mode) => mode === "hourly" ? "/hr" : mode === "daily" ? "/day" : mode === "trip" ? "/trip" : " lump";
+  const modeLabel = (mode) => mode === "hourly" ? "Hourly" : mode === "daily" ? "Daily" : mode === "trip" ? "Per Trip" : "Fixed";
 
   const columns = [
     { key: "code", label: "Code", minW: 70, render: r => <code style={{ fontSize: 12, fontWeight: 600, color: T.teal, background: T.tealSoft, padding: "2px 8px", borderRadius: 4 }}>{r.code || "-"}</code> },
@@ -5922,7 +5922,7 @@ function EquipmentSection() {
           headers: ["Equipment Name","Code","Type","Ownership","Measurement Mode","Default Rate","Vendor"],
           sampleRows: [["JCB 3DX Backhoe Loader","EQ-001","Earthwork","Rented","hourly","850","Singh Cranes"],["Concrete Mixer 10/7","EQ-002","Concrete","Owned","daily","0",""]],
           filename: "gb_equipment_export.csv", templateFilename: "gb_template_equipment.csv",
-          instructions: "Instructions: Ownership: owned or rented. Measurement Mode: hourly, daily or fixed. Type: Earthwork, Lifting, Concrete, Steel, Safety, Transport, Pumping, Compaction",
+          instructions: "Instructions: Ownership: owned or rented. Measurement Mode: hourly, daily, trip or fixed. Type: Earthwork, Lifting, Concrete, Steel, Safety, Transport, Pumping, Compaction",
           mapRow: (e) => [e.name, e.code, e.type, e.ownership, e.measurement_mode, e.default_rate, vendors.find(v => v.id === e.default_vendor_id)?.name || ""],
         }}
         currentData={equipment}
@@ -5983,7 +5983,7 @@ function EquipmentSection() {
         <div style={{ marginBottom: 14 }}>
           <label style={{ fontSize: 12, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>Measurement Mode</label>
           <div style={{ display: "flex", gap: 6, background: T.borderLight, padding: 4, borderRadius: 8, width: "fit-content" }}>
-            {[{ k: "hourly", l: "Hourly" }, { k: "daily", l: "Daily" }, { k: "fixed", l: "Fixed" }].map(m => (
+            {[{ k: "hourly", l: "Hourly" }, { k: "daily", l: "Daily" }, { k: "trip", l: "Per Trip" }, { k: "fixed", l: "Fixed" }].map(m => (
               <button key={m.k} onClick={() => upd("measurement_mode", m.k)}
                 style={{
                   padding: "7px 18px", borderRadius: 6, border: "none",
