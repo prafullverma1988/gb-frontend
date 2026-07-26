@@ -19,6 +19,8 @@ const IcCheck = (p) => <Ic {...p} d="M20 6L9 17l-5-5" />;
 const IcImage = (p) => <Ic {...p} d="M3 3h18v18H3zM3 15l5-5 4 4 3-3 6 6" />;
 const IcChevron = (p) => <Ic {...p} d="M9 18l6-6-6-6" />;
 const IcBell = (p) => <Ic {...p} d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" />;
+// Four-point sparkle — the one "this is AI" cue, used on the assistant's avatar.
+const IcSpark = (p) => <Ic {...p} d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3zM18.5 15.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7.7-1.8z" />
 
 // The app-wide fetch timeout is 15s, which is too short for an LLM reply
 // (and for voice: STT + LLM). Sahayak asks for 60s on its own calls only.
@@ -27,16 +29,30 @@ const CHAT_TIMEOUT_MS = 60000;
 const ACCENT = T.blu;          // repo token — sober indigo/blue accent
 const ACCENT_SOFT = T.bluL;
 
+// Starter questions shown on an empty chat, so a first-time user can see what
+// Sahayak actually answers instead of guessing. `money: true` ones are hidden
+// from site staff — they mirror the finance tools' own role gate, so a tapped
+// chip can never land on a "aapko access nahi" reply.
+const STARTERS = [
+  { q: "Company me profit loss kitna hai?", money: true },
+  { q: "Project wise profit loss dikhao", money: true },
+  { q: "Kisse paisa lena baaki hai?", money: true },
+  { q: "GRN kaise karte hain?" },
+  { q: "Material request kaise banaye?" },
+  { q: "Meri salary ka status kya hai?" },
+];
+
 // Roman Hinglish labels
 const L = {
-  title: "Sanchalan Sahayak",
+  title: "Sahayak AI",
   subtitle: "App ke baare me kuch bhi poochein",
   placeholder: "Apna sawal likhein...",
   thinking: "soch raha hu...",
   recording: "Sun raha hu... chhodne par bhej dunga",
   transcribing: "Aapki awaaz samajh raha hu...",
   micHint: "Bolne ke liye daba ke rakhein",
-  welcome: "Namaste! Main Sanchalan Sahayak hoon. App chalane me koi bhi dikkat ho — attendance, project, finance, material, salary — mujhse poochein. Main aapki bhasha me madad karunga.",
+  welcome: "Namaste! Main Sahayak AI hoon. App chalane me koi bhi dikkat ho — attendance, project, finance, material, salary — mujhse poochein. Apne company ka live aankda bhi pooch sakte hain. Hindi ya English, jaise aaram ho.",
+  starterTitle: "Ye poochh ke dekhein",
   errGeneric: "Kuch gadbad ho gayi — dobara try karein.",
   micUnsupported: "Is browser me recording support nahi — kripya likh kar bhejein.",
   micDenied: "Mic ki permission chahiye — allow karke dobara try karein.",
@@ -277,6 +293,23 @@ export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
             onBundleDone={(t, s) => setBundles((p) => ({ ...p, [t]: s }))}
           />
         ))}
+        {/* Starter questions — only on a fresh chat (nothing asked yet), so they
+            never push a real conversation around. */}
+        {!sending && !transcribing && messages.length <= 1 && (
+          <div style={{ alignSelf: "stretch", marginTop: 2 }}>
+            <div style={{ fontSize: 11, color: T.t4, fontWeight: 600, textTransform: "uppercase", letterSpacing: ".4px", marginBottom: 8 }}>{L.starterTitle}</div>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 7 }}>
+              {STARTERS.filter((s) => !s.money || canAlerts).map((s) => (
+                <button key={s.q} onClick={() => sendText(s.q)}
+                  style={{ padding: "7px 12px", borderRadius: 999, border: `1px solid ${T.b1}`, background: T.surface, color: T.t2, fontSize: 12.5, cursor: "pointer", fontFamily: "inherit", textAlign: "left", transition: "all .13s" }}
+                  onMouseEnter={(e) => { e.currentTarget.style.borderColor = ACCENT; e.currentTarget.style.color = ACCENT; e.currentTarget.style.background = ACCENT_SOFT; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.borderColor = T.b1; e.currentTarget.style.color = T.t2; e.currentTarget.style.background = T.surface; }}>
+                  {s.q}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {(sending || transcribing) && (
           <div style={{ alignSelf: "flex-start", display: "flex", alignItems: "center", gap: 8, background: T.surface, border: `1px solid ${T.b1}`, borderRadius: "12px 12px 12px 3px", padding: "9px 13px" }}>
             <Dots />
@@ -342,11 +375,22 @@ function Shell({ tab, setTab, tabs = [], sahayakBadge = 0, children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", maxWidth: 780, margin: "0 auto", background: T.surface, borderLeft: `1px solid ${T.b1}`, borderRight: `1px solid ${T.b1}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, flexShrink: 0 }}>
-        <div style={{ width: 36, height: 36, borderRadius: 9, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-          <IcBot size={19} color={ACCENT} />
+        {/* Assistant mark — bot glyph with a small sparkle badge, the one visual
+            cue that this panel is AI-driven. Ring instead of a gradient so it
+            stays inside the app's sober palette. */}
+        <div style={{ position: "relative", flexShrink: 0 }}>
+          <div style={{ width: 36, height: 36, borderRadius: 9, background: ACCENT_SOFT, boxShadow: `0 0 0 1px ${ACCENT}33`, display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <IcBot size={19} color={ACCENT} />
+          </div>
+          <span style={{ position: "absolute", right: -3, top: -3, width: 15, height: 15, borderRadius: "50%", background: ACCENT, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: `0 0 0 2px ${T.surface}` }}>
+            <IcSpark size={9} color="#fff" sw={0} fill="#fff" />
+          </span>
         </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 14.5, fontWeight: 700, color: T.t1, letterSpacing: "-0.2px" }}>{L.title}</div>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ fontSize: 14.5, fontWeight: 700, color: T.t1, letterSpacing: "-0.2px" }}>{L.title}</span>
+            <span style={{ fontSize: 8.5, fontWeight: 800, letterSpacing: ".6px", color: ACCENT, background: ACCENT_SOFT, border: `1px solid ${ACCENT}33`, padding: "1px 5px", borderRadius: 4 }}>LIVE DATA</span>
+          </div>
           <div style={{ fontSize: 11.5, color: T.t4 }}>{L.subtitle}</div>
         </div>
         {tabs.length > 1 && (

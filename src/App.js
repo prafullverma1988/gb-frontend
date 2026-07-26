@@ -160,7 +160,7 @@ const NAV_GROUPS=[
     {id:"crm",       label:"CRM",          Icon:IcCRM,  sc:"C"},
     {id:"mom",       label:"MOM",          Icon:IcMOM,  sc:"M"},
     {id:"team",      label:"My Team",      Icon:IcTeam, sc:"T"},
-    {id:"sahayak",   label:"Sahayak",      Icon:IcHelp},
+    {id:"sahayak",   label:"Sahayak AI",   Icon:IcHelp},
   ]},
   {section:"FINANCE & OPS",items:[
     {id:"design",      label:"Design",      Icon:IcDes,  sc:"D"},
@@ -1954,7 +1954,7 @@ export default function App(){
     profile:{title:"My Profile",sub:"Your Account"},
     saas:{title:"SaaS Admin",sub:"Platform Management"},
     "saas-leads":{title:"SaaS Leads",sub:"Sales Pipeline"},
-    sahayak:{title:"Sanchalan Sahayak",sub:"Support & Help"},
+    sahayak:{title:"Sahayak AI",sub:"Aapka AI assistant — live data ke saath"},
   };
 
   // Check if a module is enabled
