@@ -87,6 +87,7 @@ function TabOverview({proj, onRequestPayment}) {
   const [mrs, setMrs]     = useState([]);
   const [team, setTeam]   = useState([]);
   const [payReqs, setPayReqs] = useState([]);
+  const [pnl, setPnl]     = useState(null); // accrual P&L for this project (shared /finance/project-pnl formula)
   const [loading, setLoading] = useState(true);
 
   useEffect(()=>{
@@ -99,7 +100,8 @@ function TabOverview({proj, onRequestPayment}) {
       api.get(`/procurement/mrs?project_id=${pid}`).catch(()=>null),
       api.get(`/projects/${pid}/workforce`).catch(()=>null),
       api.get(`/finance/payment-requests?project_id=${pid}`).catch(()=>null),
-    ]).then(([t,tk,m,wf,pr])=>{
+      api.get(`/finance/project-pnl?project_id=${pid}`).catch(()=>null),
+    ]).then(([t,tk,m,wf,pr,pl])=>{
       if(!alive) return;
       if(t?.success)  setTxns(t.data||[]);
       if(tk?.success) setTasks((tk.data||[]).filter(x=>!String(x.task_no||"").startsWith("TODO-")));
@@ -109,6 +111,7 @@ function TabOverview({proj, onRequestPayment}) {
         setTeam(Array.isArray(d)?d:[...(d?.company||[]),...(d?.subcon||[]),...(d?.vendor||[])]);
       }
       if(pr?.success) setPayReqs(pr.data||[]);
+      if(pl?.success) setPnl(pl.data?.items?.[0]||null);
     }).finally(()=>{ if(alive) setLoading(false); });
     return ()=>{ alive=false; };
   },[proj?.id]);
@@ -337,6 +340,36 @@ function TabOverview({proj, onRequestPayment}) {
           <Stat label="Receivable"  value={`₹${fmt(Math.max(0,num(proj?.boq)-fin.received))}`} note="Yet to collect" color={T.blu}/>
           <Stat label="Payable"     value={`₹${fmt(fin.payable)}`}           note={`${fin.pendingPay.length} request${fin.pendingPay.length===1?"":"s"}`} color={fin.payable?T.red:T.grn}/>
         </div>
+
+        {/* Project P&L (invoice-basis) — actual profit/loss, distinct from BOQ "Margin" above.
+            Numbers come from /finance/project-pnl (same shared formula as the Sahayak bot). */}
+        {pnl && (
+          <Panel>
+            <PHead title="Project P&L — Invoice basis" action={
+              <Pill label={pnl.pnl>=0?"Profit / Labh":"Loss / Haani"} c={pnl.pnl>=0?T.grn:T.red} bg={pnl.pnl>=0?T.grnL:T.redL}/>
+            }/>
+            <div style={{display:"flex",alignItems:"center",padding:"14px 16px",gap:16,flexWrap:"wrap"}}>
+              <div style={{minWidth:120}}>
+                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>Revenue (Invoiced)</div>
+                <div style={{fontSize:18,fontWeight:800,color:T.grn,marginTop:3}}>₹{fmt(num(pnl.revenue))}</div>
+              </div>
+              <div style={{fontSize:18,color:T.t4,fontWeight:600}}>−</div>
+              <div style={{minWidth:120}}>
+                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>Cost</div>
+                <div style={{fontSize:18,fontWeight:800,color:T.amb,marginTop:3}}>₹{fmt(num(pnl.cost))}</div>
+              </div>
+              <div style={{fontSize:18,color:T.t4,fontWeight:600}}>=</div>
+              <div style={{minWidth:130,background:pnl.pnl>=0?T.grnL:T.redL,borderRadius:8,padding:"7px 13px"}}>
+                <div style={{fontSize:10.5,color:T.t4,textTransform:"uppercase",letterSpacing:".4px",fontWeight:600}}>Net P&L</div>
+                <div style={{fontSize:20,fontWeight:800,color:pnl.pnl>=0?T.grn:T.red,marginTop:2}}>{signed(num(pnl.pnl))}</div>
+              </div>
+              <div style={{flex:1,minWidth:200,fontSize:11,color:T.t4,lineHeight:1.55,alignSelf:"center"}}>
+                Revenue = is project ki <b>invoice</b> (kaam ka bill). Cost = material + sub-con + site + equipment + transfer − material-return.
+                Payment/receipt <b>isme nahi</b> (wo cash flow hai). Upar wala <b>"Margin"</b> alag hai — wo BOQ − spent.
+              </div>
+            </div>
+          </Panel>
+        )}
 
         {/* Cashflow + Expense breakdown */}
         <div style={{display:"grid", gridTemplateColumns:"1.7fr 1fr", gap:14}}>
