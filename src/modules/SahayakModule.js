@@ -18,6 +18,7 @@ const IcShield = (p) => <Ic {...p} d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10
 const IcCheck = (p) => <Ic {...p} d="M20 6L9 17l-5-5" />;
 const IcImage = (p) => <Ic {...p} d="M3 3h18v18H3zM3 15l5-5 4 4 3-3 6 6" />;
 const IcChevron = (p) => <Ic {...p} d="M9 18l6-6-6-6" />;
+const IcBell = (p) => <Ic {...p} d="M18 8a6 6 0 00-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 01-3.4 0" />;
 
 // The app-wide fetch timeout is 15s, which is too short for an LLM reply
 // (and for voice: STT + LLM). Sahayak asks for 60s on its own calls only.
@@ -57,20 +58,34 @@ const L = {
   fbThanks: "Dhanyavaad",
   // Tickets inbox
   tabChat: "Chat",
+  tabAlerts: "Alerts",
   tabTickets: "Tickets",
   tabOnboarding: "Onboarding",
+  alertsEmpty: "Abhi koi dhyaan-layak notification nahi.",
+  alertsMarkAll: "Sab padh liya",
+  alertsHint: "Ye Sahayak ke advisory alerts hain — click par us jagah pahunch jayein.",
   ticketsEmpty: "Koi ticket nahi.",
   resolvePlaceholder: "Kya kiya / kya jawab diya...",
   resolveBtn: "Resolve karein",
   bugHandedOff: "Yeh app ki dikkat hai — Phynaxon support team ko bhej diya gaya hai. Wahi isko theek karke band karegi.",
 };
 
-export default function SahayakModule() {
+export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
   const user = getUser();
   const isAdmin = ["admin", "super_admin"].includes(user?.role);
   // Who the proactive "kya dhyaan dun" alerts are useful for — mirrors the
   // sahayak_alerts tool's allowedRoles (site staff get no company-wide alerts).
   const canAlerts = ["accountant", "project_manager", "admin", "super_admin"].includes(user?.role);
+  // Advisory Sahayak-stream count (nudges + digests), kept in sync with the nav
+  // badge via onNotifCount. The tabs shown depend on role.
+  const [sahayakUnread, setSahayakUnread] = useState(0);
+  const syncSahayakCount = useCallback((n) => { setSahayakUnread(n); if (onNotifCount) onNotifCount(n); }, [onNotifCount]);
+  const TABS = [
+    ["chat", L.tabChat],
+    canAlerts && ["alerts", L.tabAlerts],
+    isAdmin && ["tickets", L.tabTickets],
+    isAdmin && ["onboarding", L.tabOnboarding],
+  ].filter(Boolean);
   const [tab, setTab] = useState("chat");
   const [messages, setMessages] = useState([]); // {id, role:'user'|'bot', text, transcript?, ticket?, messageId?, bugSuspect?}
   // messageId -> 'up' | 'down'. Session-only: /history does not return votes,
@@ -114,6 +129,15 @@ export default function SahayakModule() {
   }, [scrollToEnd]);
 
   useEffect(scrollToEnd, [messages, sending, transcribing, scrollToEnd]);
+
+  // Sahayak-stream unread count on mount, so the Alerts tab badge + nav badge
+  // are in sync even before the tab is opened.
+  useEffect(() => {
+    if (!canAlerts) return;
+    api.get("/notifications/count?scope=sahayak")
+      .then((r) => { if (r && r.success) syncSahayakCount(Number(r.count) || 0); })
+      .catch(() => {});
+  }, [canAlerts, syncSahayakCount]);
 
   const pushMessage = (m) => setMessages((prev) => [...prev, { id: "m" + Date.now() + Math.random(), ...m }]);
 
@@ -216,23 +240,30 @@ export default function SahayakModule() {
     return { errors: (bundle.errors || []).length, calls: (bundle.failed_calls || []).length };
   }, []);
 
+  if (tab === "alerts" && canAlerts) {
+    return (
+      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread}>
+        <AlertsPanel onNavigate={onNavigate} onCount={syncSahayakCount} />
+      </Shell>
+    );
+  }
   if (tab === "tickets" && isAdmin) {
     return (
-      <Shell tab={tab} setTab={setTab} isAdmin={isAdmin}>
+      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread}>
         <TicketsInbox />
       </Shell>
     );
   }
   if (tab === "onboarding" && isAdmin) {
     return (
-      <Shell tab={tab} setTab={setTab} isAdmin={isAdmin}>
+      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread}>
         <OnboardingView />
       </Shell>
     );
   }
 
   return (
-    <Shell tab={tab} setTab={setTab} isAdmin={isAdmin}>
+    <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread}>
       {/* Messages */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "18px", display: "flex", flexDirection: "column", gap: 12, background: T.bg }}>
         {messages.map((m) => (
@@ -307,7 +338,7 @@ export default function SahayakModule() {
 }
 
 // ── Shell: header + (admin) Chat/Tickets tabs ──
-function Shell({ tab, setTab, isAdmin, children }) {
+function Shell({ tab, setTab, tabs = [], sahayakBadge = 0, children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", maxWidth: 780, margin: "0 auto", background: T.surface, borderLeft: `1px solid ${T.b1}`, borderRight: `1px solid ${T.b1}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, flexShrink: 0 }}>
@@ -318,13 +349,16 @@ function Shell({ tab, setTab, isAdmin, children }) {
           <div style={{ fontSize: 14.5, fontWeight: 700, color: T.t1, letterSpacing: "-0.2px" }}>{L.title}</div>
           <div style={{ fontSize: 11.5, color: T.t4 }}>{L.subtitle}</div>
         </div>
-        {isAdmin && (
+        {tabs.length > 1 && (
           <div style={{ display: "flex", gap: 2, background: T.sltL, borderRadius: 8, padding: 2 }}>
-            {[["chat", L.tabChat], ["tickets", L.tabTickets], ["onboarding", L.tabOnboarding]].map(([id, label]) => (
+            {tabs.map(([id, label]) => (
               <button key={id} onClick={() => setTab(id)}
-                style={{ border: "none", cursor: "pointer", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, fontFamily: "inherit",
+                style={{ border: "none", cursor: "pointer", borderRadius: 6, padding: "6px 12px", fontSize: 12, fontWeight: 600, fontFamily: "inherit", display: "flex", alignItems: "center", gap: 5,
                   background: tab === id ? T.surface : "transparent", color: tab === id ? T.t1 : T.t3 }}>
                 {label}
+                {id === "alerts" && sahayakBadge > 0 && (
+                  <span style={{ background: T.red, color: "#fff", fontSize: 9.5, fontWeight: 700, minWidth: 15, height: 15, borderRadius: 8, padding: "0 4px", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>{sahayakBadge}</span>
+                )}
               </button>
             ))}
           </div>
@@ -483,6 +517,77 @@ function ConsentCard({ ticket, onBundle, onDone }) {
 // Reuses the M1 endpoints: GET /escalations?status= and POST
 // /escalations/:id/resolve. Expanding a ticket shows the diagnostic bundle
 // the user consented to send, if any.
+// ── Alerts panel — the advisory Sahayak stream (onboarding nudges + proactive
+// insight digests), separated out of the main operational bell. Each item is
+// click-through: mark read, then divert to its module (same link → segment rule
+// the NotificationBell uses). "Sab padh liya" clears the stream.
+function AlertsPanel({ onNavigate, onCount }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(() => {
+    api.get("/notifications/unread?scope=sahayak")
+      .then((r) => {
+        const d = (r && r.success && Array.isArray(r.data)) ? r.data : [];
+        setItems(d);
+        if (onCount) onCount(d.length);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [onCount]);
+  useEffect(() => { load(); }, [load]);
+
+  const openItem = async (it) => {
+    setItems((prev) => { const next = prev.filter((x) => x.id !== it.id); if (onCount) onCount(next.length); return next; });
+    try { await api.post(`/notifications/${it.id}/read`); } catch (_) {}
+    if (it.link && onNavigate) {
+      const seg = String(it.link).replace(/^\//, "").split(/[/?]/)[0];
+      if (seg) onNavigate(seg);
+    }
+  };
+
+  const markAll = async () => {
+    setItems([]); if (onCount) onCount(0);
+    try { await api.post("/notifications/read-all?scope=sahayak"); } catch (_) {}
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", flex: 1, overflow: "hidden", background: T.bg }}>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 16px", borderBottom: `1px solid ${T.b1}`, flexShrink: 0 }}>
+        <span style={{ fontSize: 11.5, color: T.t4 }}>{L.alertsHint}</span>
+        {items.length > 0 && (
+          <button onClick={markAll} style={{ border: "none", background: "none", color: ACCENT, fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{L.alertsMarkAll}</button>
+        )}
+      </div>
+      <div style={{ flex: 1, overflowY: "auto" }}>
+        {loading ? (
+          <div style={{ padding: "40px 16px", textAlign: "center" }}><Dots /></div>
+        ) : items.length === 0 ? (
+          <div style={{ padding: "48px 20px", textAlign: "center", color: T.t4, fontSize: 13 }}>
+            <div style={{ marginBottom: 8, display: "flex", justifyContent: "center" }}><IcBell size={26} color={T.b2} /></div>
+            {L.alertsEmpty}
+          </div>
+        ) : (
+          items.map((it) => (
+            <button key={it.id} onClick={() => openItem(it)}
+              style={{ width: "100%", textAlign: "left", display: "flex", gap: 10, alignItems: "flex-start", padding: "12px 16px", borderBottom: `1px solid ${T.b1}`, background: "none", border: "none", cursor: "pointer", fontFamily: "inherit" }}>
+              <span style={{ width: 30, height: 30, borderRadius: 8, background: ACCENT_SOFT, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                <IcBell size={15} color={ACCENT} />
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: "block", fontSize: 13, fontWeight: 600, color: T.t1 }}>{it.title}</span>
+                {it.body && <span style={{ display: "block", fontSize: 12, color: T.t3, marginTop: 2, lineHeight: 1.4 }}>{it.body}</span>}
+                <span style={{ display: "block", fontSize: 10.5, color: T.t4, marginTop: 3 }}>{fmtTime(it.created_at)}</span>
+              </span>
+              {it.link && <span style={{ flexShrink: 0, alignSelf: "center" }}><IcChevron size={15} color={T.t4} /></span>}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Company admin's inbox. Their job is the QUERY tickets — company policy the
 // bot could not answer. Bugs belong to Phynaxon, so they are visible here for
 // transparency but read-only; the backend refuses the resolve either way.

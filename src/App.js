@@ -687,7 +687,7 @@ function ShortcutCheatsheet({onClose}){
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────
-function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile,companies,onSwitchCompany,ticketCount}){
+function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledModules,isMobile,companies,onSwitchCompany,ticketCount,sahayakNotifCount=0}){
   const [showSwitcher,setShowSwitcher]=useState(false);
   const [showCreateCo,setShowCreateCo]=useState(false);
   const [newCo,setNewCo]=useState({name:"",domain:"surya_ghar",city:""});
@@ -871,8 +871,12 @@ function Sidebar({active,setActive,collapsed,setCollapsed,user,onLogout,enabledM
                 // a company admin gets their own open QUERIES on Sahayak — the
                 // same ownership split the backend enforces.
                 const badgeTarget = user?.role==="super_admin" ? "saas" : "sahayak";
-                const item = (ticketCount>0 && item0.id===badgeTarget)
-                  ? {...item0, badge:ticketCount, bc:"#DC2626"} : item0;
+                // Sahayak nav folds in the advisory Sahayak-stream count (nudges
+                // + insight digests, now separated out of the main bell); SaaS
+                // Admin keeps just the open-bug count.
+                const badgeCount = item0.id==="sahayak" ? ticketCount + sahayakNotifCount : ticketCount;
+                const item = (badgeCount>0 && item0.id===badgeTarget)
+                  ? {...item0, badge:badgeCount, bc:"#DC2626"} : item0;
                 const isA=active===item.id;
                 return(
                   <button key={item.id} onClick={()=>handleNav(item.id)} title={item.sc?`${item.label}  (Alt+${item.sc})`:item.label}
@@ -1676,6 +1680,7 @@ export default function App(){
   const [switching,setSwitching]=useState(false);
   const [nav,setNav]=useState("projects");
   const [ticketCount,setTicketCount]=useState(0);   // sidebar Sahayak/SaaS badge
+  const [sahayakNotifCount,setSahayakNotifCount]=useState(0); // advisory Sahayak-stream unread (separate from main bell)
   const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
   const [isMobile,setIsMobile]=useState(()=>window.innerWidth<768);
   const [showSearch,setShowSearch]=useState(false);
@@ -1801,7 +1806,17 @@ export default function App(){
         if(r&&r.success) setTicketCount(Number(r.count)||0);
       }catch(_){}
     };
-    const tick=()=>{ refreshPerms(); refreshTickets(); };
+    // Advisory Sahayak-stream count (onboarding nudges + insight digests) — now
+    // out of the main bell, surfaced on the Sahayak nav badge instead. All
+    // logged-in users (site staff simply get 0).
+    const refreshSahayakNotif=async()=>{
+      if(!loggedIn){ setSahayakNotifCount(0); return; }
+      try{
+        const r=await api.get("/notifications/count?scope=sahayak");
+        if(r&&r.success) setSahayakNotifCount(Number(r.count)||0);
+      }catch(_){}
+    };
+    const tick=()=>{ refreshPerms(); refreshTickets(); refreshSahayakNotif(); };
     tick();
     window.addEventListener("focus", tick);
     // 60s poll (same cadence as the mobile app) — an admin's permission
@@ -1918,7 +1933,7 @@ export default function App(){
     profile:   <SettingsModule initialSection="profile"/>,
     saas:     <SaaSModule/>,
     "saas-leads": <SaaSLeadsModule/>,
-    sahayak:  <SahayakModule/>,
+    sahayak:  <SahayakModule onNavigate={setNav} onNotifCount={setSahayakNotifCount}/>,
   };
 
   const page=PAGES[nav]||PAGES.dashboard;
@@ -1945,7 +1960,7 @@ export default function App(){
         <div style={{width:32,height:32,border:"3px solid rgba(255,255,255,0.15)",borderTopColor:"#3B82F6",borderRadius:"50%",animation:"spin .7s linear infinite"}}/>
         <div style={{color:"white",fontSize:14,fontWeight:600}}>Switching company...</div>
       </div>}
-      {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount}/>}
+      {!hideAppShell && !isMobile && <Sidebar active={nav} setActive={setNav} collapsed={collapsed} setCollapsed={setCollapsed} user={user} onLogout={handleLogout} enabledModules={enabledModules} isMobile={isMobile} companies={companies} onSwitchCompany={handleSwitchCompany} ticketCount={ticketCount} sahayakNotifCount={sahayakNotifCount}/>}
       <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden"}}>
         {!hideAppShell && <TopBar title={page.title} sub={page.sub} collapsed={collapsed} setCollapsed={setCollapsed} alertCount={0} user={user} onLogout={handleLogout} onSearch={()=>setShowSearch(true)} onCheatsheet={()=>setShowCheatsheet(true)} onNotificationNav={(mod)=>setNav(mod)} isMobile={isMobile}/>}
         <div style={{flex:1,overflowY:"auto",paddingBottom:isMobile&&!hideAppShell?68:0}}>
