@@ -1352,7 +1352,12 @@ function TabTasks({ projectId, isAdmin }) {
       {/* Context Menu */}
       {contextMenu && <>
         <div onClick={()=>setContextMenu(null)} style={{position:"fixed",inset:0,zIndex:998}}/>
-        <div style={{position:"fixed",left:contextMenu.x,top:contextMenu.y,zIndex:999,background:"white",borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",border:"1px solid #E5E7EB",minWidth:200,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
+        <div style={{position:"fixed",
+          // Clamp into the viewport so a right-click near the bottom/right edge
+          // doesn't open a menu that spills off-screen and gets clipped.
+          left:Math.max(8,Math.min(contextMenu.x, window.innerWidth-218)),
+          top:Math.max(8,Math.min(contextMenu.y, window.innerHeight-360)),
+          zIndex:999,background:"white",borderRadius:8,boxShadow:"0 8px 24px rgba(0,0,0,0.15)",border:"1px solid #E5E7EB",minWidth:200,overflow:"hidden",fontFamily:"'Segoe UI',sans-serif"}}>
           <div style={{padding:"6px 0"}}>
             {/* Task info header */}
             <div style={{padding:"8px 14px 6px",borderBottom:"1px solid #F3F4F6",marginBottom:4}}>
