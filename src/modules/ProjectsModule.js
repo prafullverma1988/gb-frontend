@@ -3018,6 +3018,7 @@ function ProjectsPage({onSelectProject}){
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes slideIn{from{transform:translateX(100%);opacity:.7}to{transform:translateX(0);opacity:1}}
     @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+    @keyframes livePulse{0%,100%{opacity:1}50%{opacity:0.4}}
   `;document.head.appendChild(s);}
 
   const [allProjects,setAllProjects]=useState([]);

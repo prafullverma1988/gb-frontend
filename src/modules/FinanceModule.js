@@ -33,9 +33,6 @@ const IcLib   =(p)=><Ic {...p} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4
 const IcX     =(p)=><Ic {...p} d="M18 6L6 18M6 6l12 12"/>;
 const IcCopy  =(p)=><Ic {...p} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>;
 const IcChk   =(p)=><Ic {...p} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>;
-const IcHeart =(p)=><Ic {...p} d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" fill="currentColor"/>;
-const IcMsg   =(p)=><Ic {...p} d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/>;
-const IcWarn  =(p)=><Ic {...p} d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01"/>;
 const IcDown  =(p)=><Ic {...p} d="M6 9l6 6 6-6"/>;
 const IcBank  =(p)=><Ic {...p} d="M3 21h18M3 10h18M5 6l7-3 7 3M4 10v11M20 10v11M8 10v11M12 10v11M16 10v11"/>;
 const IcWallet=(p)=><Ic {...p} d="M20 7H4a2 2 0 00-2 2v10a2 2 0 002 2h16a2 2 0 002-2V9a2 2 0 00-2-2zM16 13a1 1 0 100 2 1 1 0 000-2zM2 9h20"/>;
@@ -171,7 +168,6 @@ const NAV_GROUPS=[
 // ── PROJECTS DATA ────────────────────────────────────────────────────
 const PROJECTS_DATA=[];
 const TEAM=[];
-const PULSE_FEED=[];
 const STATUS_META={"Ongoing":{bg:C.gl,text:C.g},"Completed":{bg:C.bl,text:C.p},"Hold":{bg:C.ol,text:C.o},"Not Started":{bg:C.b,text:C.tl}};
 
 // ── FINANCE DATA ─────────────────────────────────────────────────────
@@ -187,65 +183,6 @@ const UNBILLED_PARTIES=[];
 const PAY_REQS_DATA=[];
 const PEND_PMTS_DATA=[];
 
-
-// ── SITE PULSE DRAWER ─────────────────────────────────────────────────
-function SitePulseDrawer({onClose}){
-  const [site,setSite]=useState("All");const [type,setType]=useState("All");const [liked,setLiked]=useState({});
-  const tagMeta={"progress":{c:C.g,b:C.gl},"material":{c:C.p,b:C.bl},"issue":{c:C.r,b:C.rl},"approval":{c:C.teal,b:C.tealL}};
-  const filtered=PULSE_FEED.filter(f=>(site==="All"||f.site.includes(site))&&(type==="All"||f.type===type));
-  return(<>
-    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.48)",zIndex:200,backdropFilter:"blur(2px)"}}/>
-    <div style={{position:"fixed",right:0,top:0,bottom:0,width:390,background:T.bg,zIndex:201,boxShadow:"-8px 0 40px rgba(0,0,0,0.24)",display:"flex",flexDirection:"column",animation:"slideIn 0.22s ease",fontFamily:"'Segoe UI',sans-serif"}}>
-      <div style={{background:C.w,padding:"12px 14px 10px",borderBottom:`1px solid ${C.b}`,flexShrink:0}}>
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:9}}>
-          <div style={{display:"flex",alignItems:"center",gap:7}}>
-            <div style={{width:9,height:9,borderRadius:"50%",background:C.g,boxShadow:`0 0 0 3px ${C.gl}`,animation:"livePulse 1.5s infinite"}}/>
-            <span style={{fontSize:14,fontWeight:800,color:C.t}}>Site Pulse</span>
-            <span style={{background:C.r,color:"white",fontSize:8,fontWeight:800,padding:"2px 5px",borderRadius:4,letterSpacing:"0.6px"}}>LIVE</span>
-          </div>
-          <button onClick={onClose} style={{background:"none",border:"none",cursor:"pointer",color:C.tl,display:"flex"}}><IcX size={15}/></button>
-        </div>
-        <div style={{display:"flex",gap:6}}>
-          <select value={site} onChange={e=>setSite(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:T.sltL,outline:"none",fontFamily:"inherit",color:C.t}}>
-            <option>All</option>{[].map(s=><option key={s}>{s}</option>)}
-          </select>
-          <select value={type} onChange={e=>setType(e.target.value)} style={{flex:1,padding:"6px 8px",borderRadius:7,border:`1.5px solid ${C.b}`,fontSize:11.5,background:T.sltL,outline:"none",fontFamily:"inherit",color:C.t}}>
-            {["All","photo","material","issue","approval"].map(t=><option key={t} value={t}>{t==="All"?"All Types":t[0].toUpperCase()+t.slice(1)}</option>)}
-          </select>
-        </div>
-      </div>
-      <div style={{flex:1,overflowY:"auto",padding:"6px 8px"}}>
-        {filtered.map(f=>{
-          const tm=tagMeta[f.tag]||{c:C.tm,b:C.b};const isL=liked[f.id];
-          return(
-            <div key={f.id} style={{background:C.w,borderRadius:12,marginBottom:8,overflow:"hidden",boxShadow:"0 1px 6px rgba(0,0,0,0.08)"}}>
-              <div style={{display:"flex",alignItems:"center",gap:9,padding:"10px 12px 7px"}}>
-                <div style={{width:36,height:36,borderRadius:"50%",background:`linear-gradient(135deg,${f.ac},${f.ac}99)`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:"white",flexShrink:0}}>{f.user.split(" ").map(w=>w[0]).join("").slice(0,2)}</div>
-                <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:T.t1}}>{f.user} <span style={{fontSize:10,fontWeight:400,color:C.tl}}>· {f.role}</span></div><div style={{fontSize:10,color:C.tl}}>{f.site} · {f.time}</div></div>
-                <span style={{background:tm.b,color:tm.c,fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:20,textTransform:"capitalize"}}>{f.tag}</span>
-              </div>
-              {f.img&&<img src={f.img} alt="site" style={{width:"100%",height:180,objectFit:"cover",display:"block"}} onError={e=>{e.target.parentElement.innerHTML='<div style="height:180px;background:linear-gradient(135deg,#E3F2FD,#BBDEFB);display:flex;align-items:center;justify-content:center;font-size:40px">🏗️</div>';}}/>}
-              {!f.img&&f.type==="issue"&&<div style={{margin:"0 12px 6px",background:C.rl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.r}`,display:"flex",gap:7,alignItems:"center"}}><IcWarn size={13} color={C.r}/><span style={{fontSize:11.5,color:C.r,fontWeight:500}}>Issue Flagged</span></div>}
-              {!f.img&&f.type==="approval"&&<div style={{margin:"0 12px 6px",background:C.tealL,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.teal}`,display:"flex",gap:7,alignItems:"center"}}><IcChk size={13} color={C.teal}/><span style={{fontSize:11.5,color:C.teal,fontWeight:500}}>Payment Approved</span></div>}
-              {!f.img&&f.type==="material"&&<div style={{margin:"0 12px 6px",background:C.bl,borderRadius:8,padding:"8px 11px",borderLeft:`3px solid ${C.p}`,display:"flex",gap:7,alignItems:"center"}}><span style={{fontSize:16}}>📦</span><span style={{fontSize:11.5,color:C.p,fontWeight:500}}>Material Received</span></div>}
-              <div style={{padding:"7px 12px 4px"}}><span style={{fontSize:12,color:C.t,lineHeight:1.45}}><strong>{f.user}</strong> {f.caption}</span></div>
-              <div style={{padding:"5px 12px 10px",display:"flex",gap:14,alignItems:"center"}}>
-                <button onClick={()=>setLiked(p=>({...p,[f.id]:!p[f.id]}))} style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:isL?C.r:C.tl,padding:0}}>
-                  <IcHeart size={16} color={isL?C.r:C.tl} fill={isL?C.r:"none"}/><span style={{fontSize:11,fontWeight:600}}>{f.likes+(isL?1:0)}</span>
-                </button>
-                <button style={{background:"none",border:"none",cursor:"pointer",display:"flex",alignItems:"center",gap:4,color:C.tl,padding:0}}><IcMsg size={15} color={C.tl}/><span style={{fontSize:11,fontWeight:600}}>{f.comments}</span></button>
-                <div style={{flex:1}}/><span style={{fontSize:9.5,color:C.tl}}>{f.time}</span>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-      <div style={{padding:"10px 12px",background:T.surface,borderTop:`1px solid ${T.b1}`}}>
-        <button style={{width:"100%",padding:"9px",borderRadius:8,background:T.blu,color:"white",fontSize:12,fontWeight:700,border:"none",cursor:"pointer"}}>View Full Site Pulse →</button>
-      </div>
-    </div>
-  </>);
-}
 
 // ── DUPLICATE MODAL ───────────────────────────────────────────────────
 function DuplicateModal({project,onClose,onConfirm}){
@@ -6041,7 +5978,6 @@ Status: ${ledgerRow.status||"unpaid"}`;
       <style>{`
         @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
         @keyframes fadeSlideIn{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:translateY(0)}}
-        @keyframes livePulse{0%,100%{opacity:1}50%{opacity:0.4}}
         @keyframes spin{from{transform:rotate(0deg)}to{transform:rotate(360deg)}}
       `}</style>
     </div>
