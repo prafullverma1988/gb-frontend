@@ -304,7 +304,9 @@ function TabStats() {
                   <div key={i} style={{ padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <div style={{ minWidth:0 }}>
                       <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
-                      <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || c.status} · ₹{fmtMoney(c.mrr_amount||0)}/mo</div>
+                      {/* mrr_amount lived on the legacy per-company table and was
+                          never written — it only ever rendered "₹0/mo". */}
+                      <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || c.status}</div>
                     </div>
                     <Badge text={d <= 0 ? "Today" : `${d}d`} color={d <= 2 ? T.red : T.blu}/>
                   </div>
@@ -377,10 +379,18 @@ function TabStats() {
                     <div style={{ width:24, height:24, borderRadius:6, background:T.grnL, display:"flex", alignItems:"center", justifyContent:"center", fontSize:11, fontWeight:700, color:T.grn, flexShrink:0 }}>#{i+1}</div>
                     <div style={{ minWidth:0 }}>
                       <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
-                      <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || "No plan"} · {c.user_count} users</div>
+                      <div style={{ fontSize:10, color:T.t4 }}>
+                        {c.company_count} {c.company_count === 1 ? "company" : "companies"} · {c.user_count} users
+                        {parseFloat(c.total_paid) > 0 ? ` · ₹${fmtMoney(c.total_paid)} collected` : " · nothing collected yet"}
+                      </div>
                     </div>
                   </div>
-                  <div style={{ fontSize:12, fontWeight:700, color:T.grn }}>₹{fmtMoney(c.total_paid)}</div>
+                  {/* Contracted annual value — the honest ranking key. "Collected"
+                      stays in the subtitle because invoices may not be paid yet. */}
+                  <div style={{ textAlign:"right" }}>
+                    <div style={{ fontSize:12, fontWeight:700, color:T.grn }}>₹{fmtMoney(c.acv)}</div>
+                    <div style={{ fontSize:9.5, color:T.t4 }}>ACV / yr</div>
+                  </div>
                 </div>
               ))}
             </div>
@@ -1813,7 +1823,10 @@ function CompanyDetailPage({ companyId, onBack }) {
                 <div style={{ fontSize:16, fontWeight:700, color:T.blu }}>{current_sub.plan_name || "Custom"}</div>
                 <div style={{ fontSize:11, color:T.t4, marginBottom:10 }}>{current_sub.billing_cycle} · <Badge text={current_sub.status} color={current_sub.status === "active" ? T.grn : T.amb}/></div>
                 <div style={{ fontSize:11, color:T.t3 }}>Valid till <strong style={{ color:T.t1 }}>{fmtDate(current_sub.end_date)}</strong></div>
-                <div style={{ fontSize:11, color:T.t3 }}>MRR: <strong style={{ color:T.grn }}>₹{fmtMoney(current_sub.mrr_amount || 0)}</strong></div>
+                {/* No MRR line here: this is the legacy per-company subscription,
+                    which carries no real money. Billing lives on the CLIENT —
+                    see Clients & Billing. */}
+                <div style={{ fontSize:10.5, color:T.t4, marginTop:6 }}>Billing is per client — see Clients &amp; Billing</div>
               </div>
             ) : <div style={{ fontSize:12, color:T.t4 }}>No active subscription</div>}
           </div>
