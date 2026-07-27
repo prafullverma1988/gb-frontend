@@ -5,6 +5,104 @@ import { API, tok, apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney, DOMAIN_L
          IcBuilding, IcUsers, IcPuzzle, IcX, IcChk, IcDownload, IcShield,
          IcActivity, IcDollar, IcEdit, IcClip, IcChevL, IcFolder } from "./tokens";
 import { Toast, Toggle, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader } from "./ui";
+import { BundleView, TicketBadge, fmtTicketTime } from "../shared/TicketBundle";
+
+// ── Bugs raised by THIS company ────────────────────────────────────────
+// The cross-tenant Bug Inbox answers "what is broken anywhere". A support
+// person working one tenant needs the opposite cut, so this reuses the same
+// ticket rendering against GET /escalations/saas?company_id=…, which also
+// drops the inbox's open-bugs-only default: here you want the whole history,
+// questions included, because a resolved ticket is often the answer.
+function CompanyBugsTab({ companyId }) {
+  const [rows, setRows] = useState(null);
+  const [type, setType] = useState("bug");
+  const [status, setStatus] = useState("open");
+  const [openId, setOpenId] = useState(null);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    setRows(null);
+    apiFetch(`/support-bot/escalations/saas?company_id=${companyId}&type=${type}&status=${status}`)
+      .then(r => setRows(r && r.success && Array.isArray(r.data) ? r.data : []))
+      .catch(() => setRows([]));
+  }, [companyId, type, status]);
+  useEffect(() => { load(); }, [load]);
+
+  const resolve = (id) => {
+    setBusy(true);
+    apiFetch(`/support-bot/escalations/${id}/resolve`, { method:"POST", body:{ resolution: note.trim() || undefined } })
+      .then(r => { setBusy(false); if (r && r.success) { setOpenId(null); setNote(""); load(); } })
+      .catch(() => setBusy(false));
+  };
+
+  const chip = (on) => ({
+    border:`1px solid ${on ? T.blu : T.b1}`, cursor:"pointer", borderRadius:7,
+    padding:"4px 11px", fontSize:11.5, fontWeight:600, fontFamily:"inherit",
+    background: on ? T.bluL : T.surface, color: on ? T.blu : T.t3,
+  });
+
+  return (
+    <div>
+      <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap", alignItems:"center" }}>
+        {[["bug","Bug"],["query","Sawaal"],["all","Sab"]].map(([id,label]) => (
+          <button key={id} onClick={() => { setType(id); setOpenId(null); }} style={chip(type===id)}>{label}</button>
+        ))}
+        <span style={{ width:1, height:18, background:T.b1, margin:"0 4px" }}/>
+        {[["open","Open"],["resolved","Resolved"],["all","Sab"]].map(([id,label]) => (
+          <button key={id} onClick={() => { setStatus(id); setOpenId(null); }} style={chip(status===id)}>{label}</button>
+        ))}
+      </div>
+
+      {rows === null && <div style={{ padding:18, fontSize:12.5, color:T.t4 }}>Loading...</div>}
+      {rows && !rows.length && <EmptyState Icon={IcShield} text="Is company se koi ticket nahi aaya."/>}
+
+      {rows && rows.map(t => {
+        const isBug = t.type === "bug";
+        const expanded = openId === t.id;
+        return (
+          <div key={t.id} style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, marginBottom:8 }}>
+            <button onClick={() => { setOpenId(expanded ? null : t.id); setNote(""); }}
+              style={{ width:"100%", textAlign:"left", border:"none", background:"transparent", cursor:"pointer",
+                padding:"11px 14px", display:"flex", gap:10, alignItems:"flex-start", fontFamily:"inherit" }}>
+              <span style={{ flex:1, minWidth:0 }}>
+                <span style={{ display:"flex", alignItems:"center", gap:7, marginBottom:4, flexWrap:"wrap" }}>
+                  <TicketBadge text={isBug ? "Bug" : "Sawaal"} color={isBug ? T.red : T.slt} bg={isBug ? T.redL : T.sltL}/>
+                  {t.status === "resolved" && <TicketBadge text="Resolved" color={T.grn} bg={T.grnL}/>}
+                  <span style={{ fontSize:12, fontWeight:600, color:T.t1 }}>{t.ticket_no}</span>
+                  <span style={{ fontSize:11.5, color:T.t3 }}>{t.user_name || "—"}{t.user_phone ? ` · ${t.user_phone}` : ""}</span>
+                  <span style={{ fontSize:11, color:T.t4 }}>{fmtTicketTime(t.created_at)}</span>
+                  {t.bundle_meta && <TicketBadge text="Diagnostics" color={T.blu} bg={T.bluL}/>}
+                </span>
+                <span style={{ display:"block", fontSize:12.5, color:T.t2, lineHeight:1.45,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
+                  {t.question}
+                </span>
+              </span>
+            </button>
+            {expanded && (
+              <div style={{ padding:"0 14px 14px", borderTop:`1px solid ${T.b1}` }}>
+                {t.reason && <div style={{ fontSize:11, color:T.t4, margin:"10px 0" }}>Reason: {t.reason}</div>}
+                {t.context && <div style={{ fontSize:11, color:T.t3, marginBottom:8 }}>Context: {t.context}</div>}
+                <BundleView meta={t.bundle_meta} url={t.bundle_url}/>
+                {t.status === "resolved"
+                  ? <div style={{ fontSize:11.5, color:T.grn, marginTop:10 }}>Resolved: {t.resolution || "—"}</div>
+                  : (
+                    <div style={{ display:"flex", gap:8, marginTop:12 }}>
+                      <InputField label="" value={note} onChange={setNote} placeholder="Kya fix kiya? (optional)" style={{ flex:1 }}/>
+                      <Btn color={T.grn} disabled={busy} onClick={() => resolve(t.id)} style={{ alignSelf:"flex-end" }}>
+                        {busy ? "..." : "Resolve"}
+                      </Btn>
+                    </div>
+                  )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 
 // ════════════════════════════════════════════════════════════════════════
@@ -337,6 +435,7 @@ function CompanyDetailPage({ companyId, onBack }) {
     { id:"subscription",label:"Subscription",        Icon:IcDollar   },
     { id:"users",       label:`Users (${users.length})`, Icon:IcUsers },
     { id:"modules",     label:"Module Access",       Icon:IcPuzzle   },
+    { id:"bugs",        label:"Bugs",                Icon:IcShield   },
     { id:"audit",       label:"Activity",            Icon:IcActivity },
     { id:"features",    label:`Requests (${feature_requests.length})`, Icon:IcClip },
     { id:"crm",         label:`Notes/CRM (${crm_notes.length})`, Icon:IcShield },
@@ -523,6 +622,9 @@ function CompanyDetailPage({ companyId, onBack }) {
           <CompanyModulesTab companyId={companyId}/>
         </div>
       )}
+
+      {/* TAB: Bugs raised by this company */}
+      {tab === "bugs" && <CompanyBugsTab companyId={companyId}/>}
 
       {/* TAB 5: Activity / Audit */}
       {tab === "audit" && (

@@ -12,6 +12,7 @@ import { apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney,
 import { Toast, Toggle, StatCard, Badge, Btn, EmptyState, TableHeader, PageHeader } from "./saas/ui";
 import CompanyDetailPage from "./saas/CompanyDetailPage";
 import TabCustomers from "./saas/Customers";
+import TabCompanies from "./saas/Companies";
 
 
 // ════════════════════════════════════════════════════════════════════════
@@ -1346,6 +1347,7 @@ function TabBugInbox() {
 const TABS = [
   { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
   { id:"customers", label:"Customers",        Icon:IcDollar   },
+  { id:"companies", label:"Companies",        Icon:IcBuilding },
   { id:"users",     label:"All Users",        Icon:IcUsers    },
   { id:"features",  label:"Feature Requests", Icon:IcClip     },
   { id:"audit",     label:"Audit Logs",       Icon:IcShield   },
@@ -1417,6 +1419,7 @@ export default function SaaSModule() {
           <>
             {tab === "stats"     && <TabStats/>}
             {tab === "customers" && <TabCustomers onOpenCompany={handleOpenDetail}/>}
+            {tab === "companies" && <TabCompanies onOpenCompany={handleOpenDetail}/>}
             {tab === "users"     && <TabUsers/>}
             {tab === "features"  && <TabFeatureRequests/>}
             {tab === "audit"     && <TabAuditLogs companies={companies}/>}

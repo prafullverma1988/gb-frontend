@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, T, fmtDate, fmtNum, fmtMoney, fmtAmt, DOMAIN_LABELS,
          limitStr, limitColor, SUB_COLORS, INV_COLORS, CYCLE_LABELS,
-         IcBuilding, IcUsers, IcX, IcChk, IcPlus, IcEdit, IcSearch, IcActivity,
+         IcUsers, IcX, IcChk, IcPlus, IcEdit, IcSearch, IcActivity,
          IcDollar, IcTrend, IcRefresh, IcChevL, th, td } from "./tokens";
 import { Toast, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader, PageHeader } from "./ui";
 
@@ -655,7 +655,12 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
                 onClick={() => onOpenCompany && onOpenCompany(c)}
                 title={onOpenCompany ? "Open company details" : undefined}>
                 <div style={{ fontSize:12.5, fontWeight:600, color: onOpenCompany ? T.blu : T.t1 }}>{c.name}</div>
-                <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug} · {c.user_count} users · {c.project_count} projects</div>
+                {/* Modules are per COMPANY, so the summary lives on each company
+                    row rather than pretending the client has one entitlement. */}
+                <div style={{ fontSize:10.5, color:T.t4 }}>
+                  /{c.slug} · {c.user_count} users · {c.project_count} projects
+                  {c.modules_total ? ` · ${c.modules_enabled}/${c.modules_total} modules` : ""}
+                </div>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
                 <Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/>
@@ -840,7 +845,6 @@ function TabCustomers({ onOpenCompany }) {
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [showInternal, setShowInternal] = useState(false);
   const [toast, setToast] = useState(null);
-  const [expanded, setExpanded] = useState({});   // clientId -> bool (override)
   const [search, setSearch] = useState("");
 
   const load = useCallback(() => {
@@ -956,86 +960,54 @@ function TabCustomers({ onOpenCompany }) {
         <div style={{ fontSize:11.5, color:T.t4 }}>{visible.length} customers · {visible.reduce((n, c) => n + (byClient[c.id]?.length || 0), 0)} companies</div>
       </div>
 
-      {/* ── Customers: one row per PAYING CLIENT, its companies nested ──────
-          Client-primary because every money and enforcement concept is
-          client-level: limits count users distinct-by-phone across ALL the
-          client's companies, the subscription is one contract, and suspension
-          applies to the client. A company-primary list literally cannot render
-          the usage-vs-limit column correctly. Single-company clients expand
-          inline so the common case still reads flat. */}
+      {/* ── Customers: ONE row shape, all of it client-level ────────────────
+          Companies used to be nested inside this table, which meant company
+          rows rendering into a grid built for clients — three columns blank and
+          two carrying the wrong thing ("Registered <date>" under Subscription).
+          Companies now have their own tab; here a client shows only what it
+          bought and whether it is inside it. Depth is one click away, on the
+          client page. */}
       <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
-        <TableHeader gridCols="2fr 1fr 1fr 1fr 1.2fr 1fr 1fr" columns={["Customer / Company", "Companies", "Users", "Projects", "Subscription", "Next Due", "Collected"]}/>
+        <TableHeader gridCols="2.2fr 1fr 1fr 1fr 1.6fr 1fr" columns={["Customer", "Companies", "Users", "Projects", "Subscription", "Next Due"]}/>
         {visible.length === 0 && <EmptyState Icon={IcUsers} text="Koi customer nahi — New Customer se shuru karo"/>}
-        {visible.map(c => {
-          const cos  = byClient[c.id] || [];
-          const open = expanded[c.id] ?? (cos.length === 1);   // 1-company clients read flat
-          return (
-            <div key={c.id}>
-              <div onClick={() => setSelId(c.id)}
-                style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1.2fr 1fr 1fr", padding:"12px 16px", borderTop:`1px solid ${T.b1}`, cursor:"pointer", alignItems:"center", background: c.status === "suspended" ? T.redL : "transparent" }}
-                onMouseEnter={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : T.surfaceB}
-                onMouseLeave={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : "transparent"}>
-                <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-                  {cos.length > 1 && (
-                    <button onClick={e => { e.stopPropagation(); setExpanded(p => ({ ...p, [c.id]: !open })); }}
-                      title={open ? "Collapse" : "Expand"}
-                      style={{ width:20, height:20, flexShrink:0, border:`1px solid ${T.b1}`, background:T.surfaceB, borderRadius:5, cursor:"pointer", color:T.t3, fontSize:11, lineHeight:1, fontFamily:"inherit" }}>
-                      {open ? "−" : "+"}
-                    </button>
-                  )}
-                  <div style={{ minWidth:0 }}>
-                    <div style={{ fontSize:13, fontWeight:700, color:T.t1, display:"flex", alignItems:"center", gap:8 }}>
-                      {c.name}
-                      {c.is_internal ? <Badge text="INT" color={T.pur}/> : null}
-                      {c.status === "suspended" && <Badge text="SUSPENDED" color={T.red}/>}
-                      {c.billing_gap && <Badge text="NO BILLING" color={T.amb}/>}
-                    </div>
-                    <div style={{ fontSize:10.5, color:T.t4 }}>{[c.city, c.state].filter(Boolean).join(", ") || "--"}</div>
-                  </div>
-                </div>
-                <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.company_count, c.max_companies) }}>{limitStr(c.company_count, c.max_companies)}</div>
-                <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.user_count, c.max_users) }}>{limitStr(c.user_count, c.max_users)}</div>
-                <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.project_count, c.max_projects) }}>{limitStr(c.project_count, c.max_projects)}</div>
-                <div>
-                  {c.sub_status
-                    ? <><Badge text={c.sub_status.toUpperCase()} color={SUB_COLORS[c.sub_status] || T.slt}/>{c.sub_end && <div style={{ fontSize:10, color:T.t4, marginTop:3 }}>till {fmtDate(c.sub_end)}</div>}</>
-                    : <span style={{ fontSize:11, color:T.t4 }}>--</span>}
-                  {c.lifecycle && c.lifecycle.state === "grace" && <div style={{ marginTop:3 }}><Badge text={`GRACE · ${c.lifecycle.graceDaysLeft}d`} color={T.amb}/></div>}
-                  {c.lifecycle && c.lifecycle.state === "suspended" && <div style={{ marginTop:3 }}><Badge text={c.lifecycle.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED"} color={T.red}/></div>}
-                </div>
-                <div style={{ fontSize:11.5, color: c.overdue_count > 0 ? T.red : T.t3, fontWeight: c.overdue_count > 0 ? 700 : 400 }}>
-                  {c.overdue_count > 0 ? `${c.overdue_count} OVERDUE` : (c.next_due ? fmtDate(c.next_due) : "--")}
-                </div>
-                <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>{parseFloat(c.total_collected) > 0 ? fmtAmt(c.total_collected) : "--"}</div>
+        {visible.map(c => (
+          <div key={c.id} onClick={() => setSelId(c.id)}
+            style={{ display:"grid", gridTemplateColumns:"2.2fr 1fr 1fr 1fr 1.6fr 1fr", padding:"12px 16px", borderTop:`1px solid ${T.b1}`, cursor:"pointer", alignItems:"center", background: c.status === "suspended" ? T.redL : "transparent" }}
+            onMouseEnter={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : T.surfaceB}
+            onMouseLeave={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : "transparent"}>
+            <div style={{ minWidth:0 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:T.t1, display:"flex", alignItems:"center", gap:8 }}>
+                {c.name}
+                {c.is_internal ? <Badge text="INT" color={T.pur}/> : null}
+                {c.status === "suspended" && <Badge text="SUSPENDED" color={T.red}/>}
+                {c.billing_gap && <Badge text="NO BILLING" color={T.amb}/>}
               </div>
-
-              {/* Nested companies — click goes to the company page, not the client */}
-              {open && cos.map(co => (
-                <div key={co.id} onClick={e => { e.stopPropagation(); onOpenCompany && onOpenCompany(co); }}
-                  style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1.2fr 1fr 1fr", padding:"8px 16px 8px 34px", borderTop:`1px solid ${T.b1}`, cursor:"pointer", alignItems:"center", background:T.surfaceB }}
-                  onMouseEnter={e => e.currentTarget.style.background = T.bluL}
-                  onMouseLeave={e => e.currentTarget.style.background = T.surfaceB}>
-                  <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
-                    <IcBuilding size={12} color={T.t4}/>
-                    <div style={{ minWidth:0 }}>
-                      <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, display:"flex", alignItems:"center", gap:7 }}>
-                        {co.name}
-                        {!co.is_active && <Badge text="INACTIVE" color={T.red}/>}
-                      </div>
-                      <div style={{ fontSize:10, color:T.t4 }}>/{co.slug} · {DOMAIN_LABELS[co.module_type] || co.module_type || "--"}</div>
-                    </div>
-                  </div>
-                  <div/>
-                  <div style={{ fontSize:12, color:T.t2, textAlign:"left" }}>{co.user_count}</div>
-                  <div style={{ fontSize:12, color:T.t2, textAlign:"left" }}>{co.project_count}</div>
-                  <div style={{ fontSize:10.5, color:T.t4 }}>Registered {fmtDate(co.created_at)}</div>
-                  <div/>
-                  <div style={{ fontSize:10.5, color:T.blu, fontWeight:600 }}>Open →</div>
-                </div>
-              ))}
+              <div style={{ fontSize:10.5, color:T.t4 }}>{[c.city, c.state].filter(Boolean).join(", ") || "--"}</div>
             </div>
-          );
-        })}
+            {/* used / licensed — limitColor goes amber at 80%, red at the cap */}
+            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.company_count, c.max_companies) }}>{limitStr(c.company_count, c.max_companies)}</div>
+            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.user_count, c.max_users) }}>{limitStr(c.user_count, c.max_users)}</div>
+            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.project_count, c.max_projects) }}>{limitStr(c.project_count, c.max_projects)}</div>
+            <div>
+              {c.sub_status
+                ? <>
+                    <Badge text={c.sub_status.toUpperCase()} color={SUB_COLORS[c.sub_status] || T.slt}/>
+                    {/* the whole billing period, not just when it runs out */}
+                    {(c.sub_start || c.sub_end) && (
+                      <div style={{ fontSize:10, color:T.t4, marginTop:3 }}>
+                        {c.sub_start ? fmtDate(c.sub_start) : "?"} → {c.sub_end ? fmtDate(c.sub_end) : "open-ended"}
+                      </div>
+                    )}
+                  </>
+                : <span style={{ fontSize:11, color:T.t4 }}>--</span>}
+              {c.lifecycle && c.lifecycle.state === "grace" && <div style={{ marginTop:3 }}><Badge text={`GRACE · ${c.lifecycle.graceDaysLeft}d`} color={T.amb}/></div>}
+              {c.lifecycle && c.lifecycle.state === "suspended" && <div style={{ marginTop:3 }}><Badge text={c.lifecycle.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED"} color={T.red}/></div>}
+            </div>
+            <div style={{ fontSize:11.5, color: c.overdue_count > 0 ? T.red : T.t3, fontWeight: c.overdue_count > 0 ? 700 : 400 }}>
+              {c.overdue_count > 0 ? `${c.overdue_count} OVERDUE` : (c.next_due ? fmtDate(c.next_due) : "--")}
+            </div>
+          </div>
+        ))}
       </div>
 
       {showNew && <ClientFormModal onClose={() => setShowNew(false)} onSaved={load} setToast={setToast}/>}
