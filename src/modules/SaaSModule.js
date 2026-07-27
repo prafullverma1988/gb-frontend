@@ -514,8 +514,6 @@ function TabStats() {
 // ════════════════════════════════════════════════════════════════════════
 // TAB 2: COMPANIES (Enhanced)
 // ════════════════════════════════════════════════════════════════════════
-const EMPTY_COMPANY_FORM = { client_id:"", name:"", admin_name:"", admin_email:"", phone:"", city:"", state:"", module_type:"construction_individual" };
-
 // ── EDIT COMPANY ──────────────────────────────────────────────────────
 // Two things live behind one "Edit": the COMPANY record (its own name /
 // contact) and the ADMIN's LOGIN identity (name / email / mobile on the
@@ -640,476 +638,67 @@ function EditCompanyModal({ company, onClose, onSaved, setToast }) {
   );
 }
 
-function TabCompanies({ companies, reload, onSelectCompany, onOpenDetail }) {
-  const [showModal, setShowModal] = useState(false);
-  const [toast, setToast]         = useState(null);
-  const [form, setForm]           = useState(EMPTY_COMPANY_FORM);
-  const [saving, setSaving]       = useState(false);
-  const [clients, setClients]     = useState([]);   // paying customers — a company MUST belong to one
-  const [showNewClient, setShowNewClient] = useState(false);
-  const [toggling, setToggling]   = useState(null);
-  const [filter, setFilter]       = useState("all");
-  const [search, setSearch]       = useState("");
-  const [detail, setDetail]       = useState(null);
-  const [credentials, setCredentials] = useState(null); // shows after create
-  const [resetTarget, setResetTarget] = useState(null);  // company whose admin login is being reset
-  const [resetMobile, setResetMobile] = useState("");    // optional new mobile in reset flow
-  const [resetting, setResetting]     = useState(false);
-  const [editTarget, setEditTarget]   = useState(null);  // company being edited (profile + admin login)
+function CompanyModulesTab({ companyId }) {
+  const [modules, setModules] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving]   = useState(null);
+  const [toast, setToast]     = useState(null);
 
-  // Clients list — needed by the create-company picker. A company with no
-  // client lands outside the limit/subscription system, so this is required.
-  const loadClients = useCallback(() => {
-    return apiFetch("/saas-admin/clients").then(r => {
-      if (r.success) setClients(r.data || []);
-      return r.success ? (r.data || []) : [];
-    }).catch(() => []);
-  }, []);
-  useEffect(() => { loadClients(); }, [loadClients]);
-
-  // Selectable = real paying customers (internal client is for our own companies).
-  const pickableClients = clients.filter(c => !c.is_internal);
-  const selectedClient  = clients.find(c => String(c.id) === String(form.client_id)) || null;
-  const atCompanyLimit  = !!selectedClient && selectedClient.max_companies > 0
-                          && selectedClient.company_count >= selectedClient.max_companies;
-  const subInactive     = !!selectedClient && selectedClient.sub_status !== "active";
-
-  const filtered = companies.filter(c => {
-    if (filter === "active" && !c.is_active) return false;
-    if (filter === "inactive" && c.is_active) return false;
-    if (search) {
-      const s = search.toLowerCase();
-      return c.name.toLowerCase().includes(s) || (c.city||"").toLowerCase().includes(s) || (c.slug||"").toLowerCase().includes(s);
-    }
-    return true;
-  });
-
-  const createCompany = async () => {
-    // Client first — without it the backend auto-creates a duplicate client that
-    // has no subscription, and every user of the new company gets blocked.
-    if (!form.client_id) {
-      setToast({ msg:"Client select karna zaroori hai", type:"error" }); return;
-    }
-    if (!form.name || !form.admin_name || !form.admin_email || !form.phone) {
-      setToast({ msg:"Company name, admin name, email and admin mobile are required", type:"error" }); return;
-    }
-    // Mobile is the admin's login id (login screen is mobile-only) — must be valid
-    if (!/^[6-9]\d{9}$/.test((form.phone||"").trim())) {
-      setToast({ msg:"Enter a valid 10-digit admin mobile number — this is the login id", type:"error" }); return;
-    }
-    setSaving(true);
-    const res = await apiFetch("/saas-admin/companies", { method:"POST", body: form });
-    setSaving(false);
-    if (res.success) {
-      setShowModal(false);
-      setCredentials(res.data?.credentials || null);
-      setForm(EMPTY_COMPANY_FORM);
-      reload();
-      loadClients(); // usage counts moved
-    } else {
-      setToast({ msg: res.message, type:"error" });
-    }
-  };
-
-  const resetAdminLogin = async () => {
-    if (!resetTarget) return;
-    // mobile optional — but if the admin currently has none, it must be provided
-    const m = (resetMobile || "").trim();
-    if (m && !/^[6-9]\d{9}$/.test(m)) {
-      setToast({ msg:"Enter a valid 10-digit mobile number", type:"error" }); return;
-    }
-    setResetting(true);
-    const res = await apiFetch("/saas-admin/companies/" + resetTarget.id + "/reset-admin-login", {
-      method:"POST", body: m ? { mobile:m } : {},
-    });
-    setResetting(false);
-    if (res.success) {
-      setResetTarget(null);
-      setResetMobile("");
-      setCredentials(res.data?.credentials || null); // reuse the credentials popup
-      reload();
-    } else {
-      setToast({ msg: res.message, type:"error" });
-    }
-  };
-
-  const toggleCompany = async (id) => {
-    setToggling(id);
-    const res = await apiFetch("/saas-admin/companies/" + id + "/toggle", { method:"PUT" });
-    if (res.success) {
-      setToast({ msg: res.message, type:"success" });
-      reload();
-    }
-    setToggling(null);
-  };
-
-  return (
-    <div style={{ padding:"20px 24px" }}>
-      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
-
-      <PageHeader title="Companies" sub={`${companies.length} companies registered`} right={
-        <Btn onClick={() => setShowModal(true)}><IcPlus size={14} color="white"/> New Company</Btn>
-      }/>
-
-      {/* Filters */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
-        {["all","active","inactive"].map(f => (
-          <button key={f} onClick={() => setFilter(f)}
-            style={{ padding:"5px 14px", borderRadius:20, fontSize:12, fontWeight: filter===f ? 700 : 500, border:`1px solid ${filter===f ? T.blu : T.b1}`,
-              background: filter===f ? T.bluL : T.surface, color: filter===f ? T.blu : T.t3, cursor:"pointer", textTransform:"capitalize", fontFamily:"inherit" }}>
-            {f} {f === "all" ? `(${companies.length})` : f === "active" ? `(${companies.filter(c=>c.is_active).length})` : `(${companies.filter(c=>!c.is_active).length})`}
-          </button>
-        ))}
-        <div style={{ flex:1 }}/>
-        <div style={{ position:"relative" }}>
-          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search companies..."
-            style={{ width:220, padding:"7px 12px 7px 30px", borderRadius:8, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit" }}
-            onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
-          <IcSearch size={12} color={T.t4} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }}/>
-        </div>
-      </div>
-
-      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-        <TableHeader columns={["Company","Plan","Domain","Users","Projects","Created","Status",""]}
-          gridCols="1.8fr 1fr 1.2fr 65px 65px 95px 85px 105px"/>
-        {filtered.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No companies match filters</div>}
-        {filtered.map((c, i) => {
-          const planColor = { free:T.slt, starter:T.blu, pro:T.pur, enterprise:T.amb }[c.plan_slug] || T.t4;
-          return (
-            <div key={c.id} onClick={() => setDetail(detail?.id === c.id ? null : c)}
-              style={{ display:"grid", gridTemplateColumns:"1.8fr 1fr 1.2fr 65px 65px 95px 85px 105px", padding:"11px 16px",
-                borderBottom: i < filtered.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center",
-                cursor:"pointer", background: detail?.id === c.id ? T.bluL : "transparent", transition:"background 0.15s" }}>
-              <div>
-                <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{c.name}</div>
-                <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug}</div>
-              </div>
-              <div><Badge text={c.plan_name || "No Plan"} color={planColor}/></div>
-              <div><Badge text={DOMAIN_LABELS[c.module_type] || c.module_type || "Standard"} color={T.pur}/></div>
-              <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, textAlign:"center" }}>{c.user_count}</div>
-              <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, textAlign:"center" }}>{c.project_count}</div>
-              <div style={{ fontSize:11.5, color:T.t3 }}>{fmtDate(c.created_at)}</div>
-              <div><Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/></div>
-              <div style={{ display:"flex", gap:5, justifyContent:"flex-end" }} onClick={e => e.stopPropagation()}>
-                <button onClick={() => onOpenDetail && onOpenDetail(c)} title="Open full details"
-                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.bluM}`, background:T.bluL, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <IcEye size={12} color={T.blu}/>
-                </button>
-                <button onClick={() => onSelectCompany(c)} title="Module access"
-                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${T.b1}`, background:T.surface, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  <IcPuzzle size={12} color={T.t3}/>
-                </button>
-                <button onClick={() => toggleCompany(c.id)} disabled={toggling === c.id} title={c.is_active ? "Deactivate" : "Activate"}
-                  style={{ width:28, height:28, borderRadius:6, border:`1px solid ${c.is_active ? T.redM : T.grnM}`, background: c.is_active ? T.redL : T.grnL,
-                    cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                  {c.is_active ? <IcX size={11} color={T.red}/> : <IcChk size={11} color={T.grn}/>}
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Detail drawer */}
-      {detail && (
-        <div style={{ marginTop:12, background:T.surface, border:`1px solid ${T.bluM}`, borderRadius:10, padding:"16px 20px" }}>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:12 }}>
-            <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-              <div style={{ width:38, height:38, borderRadius:9, background:T.bluL, display:"flex", alignItems:"center", justifyContent:"center" }}>
-                <span style={{ fontSize:16, fontWeight:800, color:T.blu }}>{detail.name[0]}</span>
-              </div>
-              <div>
-                <div style={{ fontSize:15, fontWeight:700, color:T.t1 }}>{detail.name}</div>
-                <div style={{ fontSize:11, color:T.t4 }}>/{detail.slug} · {DOMAIN_LABELS[detail.module_type] || detail.module_type || "--"}</div>
-              </div>
-            </div>
-            <button onClick={() => setDetail(null)} style={{ background:"none", border:"none", cursor:"pointer", color:T.t4, display:"flex" }}><IcX size={16}/></button>
-          </div>
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10 }}>
-            {[
-              { l:"Email", v: detail.email || "--" },
-              { l:"Phone", v: detail.phone || "--" },
-              { l:"City / State", v: `${detail.city || "--"} / ${detail.state || "--"}` },
-              { l:"Status", v: detail.is_active ? "Active" : `Deactivated on ${fmtDate(detail.deleted_at)}` },
-              { l:"Created", v: fmtDate(detail.created_at) },
-            ].map((x,i) => (
-              <div key={i}>
-                <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:3 }}>{x.l}</div>
-                <div style={{ fontSize:12.5, fontWeight:500, color:T.t1 }}>{x.v}</div>
-              </div>
-            ))}
-          </div>
-          {/* Edit + admin login controls */}
-          <div style={{ marginTop:14, paddingTop:14, borderTop:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, flexWrap:"wrap" }}>
-            <div style={{ fontSize:11, color:T.t4 }}>Company ki detail ya admin ka naam / mobile badalna ho to Edit karo. Password bhool gaye ho to naya generate karo.</div>
-            <div style={{ display:"flex", gap:8 }}>
-              <Btn variant="outline" onClick={() => setEditTarget(detail)}><IcEdit size={13}/> Edit</Btn>
-              <Btn variant="outline" onClick={() => { setResetTarget(detail); setResetMobile(""); }}>Reset Admin Login</Btn>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Create Company Modal */}
-      {showModal && (
-        <>
-          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
-          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:520, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
-            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
-              <div><div style={{ fontSize:15, fontWeight:700, color:"white" }}>Register New Company</div><div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>Login password will be shown after creation</div></div>
-              <button onClick={() => setShowModal(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
-            </div>
-            <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
-              {/* Client picker — a company MUST hang off a paying client, else it
-                  falls outside limits + subscription and its users get blocked. */}
-              <div>
-                <div style={{ display:"flex", alignItems:"flex-end", gap:8 }}>
-                  <div style={{ flex:1 }}>
-                    <SelectField label="Client (paying customer) *" value={form.client_id}
-                      onChange={v => setForm(p=>({...p,client_id:v}))}
-                      placeholder="Select client..."
-                      options={pickableClients.map(c => ({
-                        value: String(c.id),
-                        label: `${c.name} — ${c.company_count}/${c.max_companies || "∞"} companies`,
-                      }))}/>
-                  </div>
-                  <button onClick={() => setShowNewClient(true)}
-                    style={{ background:"none", border:"none", cursor:"pointer", color:T.blu, fontSize:12, fontWeight:600,
-                      fontFamily:"inherit", padding:"9px 4px", whiteSpace:"nowrap" }}>
-                    + New Client
-                  </button>
-                </div>
-
-                {selectedClient && (
-                  <div style={{ marginTop:8, padding:"9px 12px", background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:8 }}>
-                    <div style={{ display:"flex", alignItems:"center", gap:14, flexWrap:"wrap" }}>
-                      {[
-                        { l:"Companies", used:selectedClient.company_count, max:selectedClient.max_companies },
-                        { l:"Users",     used:selectedClient.user_count,    max:selectedClient.max_users },
-                        { l:"Projects",  used:selectedClient.project_count, max:selectedClient.max_projects },
-                      ].map(x => (
-                        <div key={x.l} style={{ fontSize:11 }}>
-                          <span style={{ color:T.t4, textTransform:"uppercase", letterSpacing:"0.5px", fontWeight:600 }}>{x.l} </span>
-                          <span style={{ fontWeight:700, color:limitColor(x.used, x.max) }}>{limitStr(x.used, x.max)}</span>
-                        </div>
-                      ))}
-                      <div style={{ flex:1 }}/>
-                      {selectedClient.sub_status
-                        ? <Badge text={selectedClient.sub_status.toUpperCase()} color={SUB_COLORS[selectedClient.sub_status] || T.slt}/>
-                        : <Badge text="NO SUBSCRIPTION" color={T.slt}/>}
-                    </div>
-                    {atCompanyLimit && (
-                      <div style={{ marginTop:7, fontSize:11.5, fontWeight:600, color:T.red }}>
-                        Company limit reached — is client par nayi company nahi banegi
-                      </div>
-                    )}
-                    {subInactive && (
-                      <div style={{ marginTop:7, fontSize:11.5, fontWeight:600, color:T.amb }}>
-                        Is client ki subscription active nahi hai — users login nahi kar payenge. Pehle subscription activate karo.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <InputField label="Company Name" required value={form.name} onChange={v => setForm(p=>({...p,name:v}))} placeholder="e.g. Blackbox Constructions"/>
-                <SelectField label="Business Type" value={form.module_type} onChange={v => setForm(p=>({...p,module_type:v}))}
-                  options={Object.entries(DOMAIN_LABELS).map(([k,v]) => ({value:k, label:v}))}/>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <InputField label="Admin Name" required value={form.admin_name} onChange={v => setForm(p=>({...p,admin_name:v}))} placeholder="Full name"/>
-                <InputField label="Admin Email" required value={form.admin_email} onChange={v => setForm(p=>({...p,admin_email:v}))} placeholder="admin@company.com"/>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
-                <InputField label="Admin Mobile" required value={form.phone} onChange={v => setForm(p=>({...p,phone:v.replace(/\D/g,"").slice(0,10)}))} placeholder="9876543210"/>
-                <InputField label="City" value={form.city} onChange={v => setForm(p=>({...p,city:v}))} placeholder="Raipur"/>
-                <InputField label="State" value={form.state} onChange={v => setForm(p=>({...p,state:v}))} placeholder="Chhattisgarh"/>
-              </div>
-              <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb }}>
-                <strong>Note:</strong> Admin Mobile is the login id — the app login is <strong>mobile + password</strong>. A default password is set and shown after creation; share the <strong>mobile + password</strong> with the company admin. They must change it on first login.
-              </div>
-            </div>
-            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
-              <Btn onClick={() => setShowModal(false)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
-              <Btn onClick={createCompany} disabled={saving || atCompanyLimit} style={{ flex:2 }}>{saving ? "Registering..." : "Register Company"}</Btn>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* New Client — same modal the Clients tab uses. On save, refetch and
-          auto-select whichever client id is new so the picker is ready. */}
-      {showNewClient && (
-        <ClientFormModal
-          onClose={() => setShowNewClient(false)}
-          onSaved={async () => {
-            const before = new Set(clients.map(c => String(c.id)));
-            const fresh  = await loadClients();
-            const added  = fresh.find(c => !before.has(String(c.id)));
-            if (added) setForm(p => ({ ...p, client_id: String(added.id) }));
-          }}
-          setToast={setToast}/>
-      )}
-
-      {/* Edit Company Modal — company profile + the admin's login identity */}
-      {editTarget && (
-        <EditCompanyModal company={editTarget}
-          onClose={() => setEditTarget(null)}
-          onSaved={() => { setEditTarget(null); setDetail(null); reload(); }}
-          setToast={setToast}/>
-      )}
-
-      {/* Reset Admin Login Modal */}
-      {resetTarget && (
-        <>
-          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
-          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:440, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
-            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
-              <div>
-                <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Reset Admin Login</div>
-                <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{resetTarget.name}</div>
-              </div>
-              <button onClick={() => setResetTarget(null)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
-            </div>
-            <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
-              <InputField label="Login Mobile (leave blank to keep current)" value={resetMobile} onChange={v => setResetMobile(v.replace(/\D/g,"").slice(0,10))} placeholder="Set / change 10-digit mobile"/>
-              <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb }}>
-                A new password will be generated and shown once. Share the <strong>mobile + password</strong> with the admin. (OTP login also works as a fallback.)
-              </div>
-            </div>
-            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
-              <Btn onClick={() => setResetTarget(null)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
-              <Btn onClick={resetAdminLogin} disabled={resetting} style={{ flex:2 }}>{resetting ? "Resetting..." : "Generate New Password"}</Btn>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* Credentials Modal (shown after company creation) */}
-      {credentials && (
-        <>
-          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:500, backdropFilter:"blur(3px)" }}/>
-          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:440, background:T.surface, borderRadius:16, zIndex:501, boxShadow:"0 24px 64px rgba(0,0,0,0.3)", overflow:"hidden" }}>
-            <div style={{ padding:"20px 22px", background:"linear-gradient(135deg, #059669, #10B981)", textAlign:"center" }}>
-              <div style={{ width:48, height:48, borderRadius:"50%", background:"rgba(255,255,255,0.2)", display:"inline-flex", alignItems:"center", justifyContent:"center", marginBottom:10 }}>
-                <IcChk size={24} color="white"/>
-              </div>
-              <div style={{ fontSize:17, fontWeight:800, color:"white" }}>Login Credentials</div>
-              <div style={{ fontSize:12, color:"rgba(255,255,255,0.7)", marginTop:4 }}>Share these credentials with the company admin</div>
-            </div>
-            <div style={{ padding:"24px 22px" }}>
-              <div style={{ background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 18px", marginBottom:16 }}>
-                <div style={{ marginBottom:12 }}>
-                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Login Mobile</div>
-                  <div style={{ fontSize:16, fontWeight:800, color:T.blu, fontFamily:"monospace", letterSpacing:"0.5px" }}>{credentials.mobile || credentials.email}</div>
-                  {credentials.email && <div style={{ fontSize:10.5, color:T.t4, marginTop:3 }}>Email (reference only): {credentials.email}</div>}
-                </div>
-                <div>
-                  <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Auto-Generated Password</div>
-                  <div style={{ fontSize:18, fontWeight:800, color:T.t1, fontFamily:"monospace", letterSpacing:"1px", background:T.ambL, padding:"8px 12px", borderRadius:6, border:`1px solid ${T.ambM}` }}>{credentials.password}</div>
-                </div>
-              </div>
-              <div style={{ padding:"10px 14px", background:T.redL, border:`1px solid ${T.redM}`, borderRadius:8, fontSize:11, color:T.red, marginBottom:16 }}>
-                <strong>Important:</strong> This password is shown only once! Copy it now and share with the company admin. They must change it after first login.
-              </div>
-              <div style={{ display:"flex", gap:8 }}>
-                <Btn variant="outline" style={{ flex:1 }} onClick={() => {
-                  navigator.clipboard.writeText(`Login Mobile: ${credentials.mobile || ""}\nPassword: ${credentials.password}\nLogin with mobile + password.`);
-                  setToast({ msg:"Credentials copied to clipboard!", type:"success" });
-                }}><IcClip size={13}/> Copy Credentials</Btn>
-                <Btn style={{ flex:1 }} onClick={() => setCredentials(null)}>Done</Btn>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// TAB 3: MODULE ACCESS
-// ════════════════════════════════════════════════════════════════════════
-function TabModuleAccess({ selectedCompany, companies }) {
-  const [company, setCompany]   = useState(selectedCompany || null);
-  const [modules, setModules]   = useState([]);
-  const [loading, setLoading]   = useState(false);
-  const [saving, setSaving]     = useState(null);
-  const [toast, setToast]       = useState(null);
-
-  const loadModules = (cid) => {
+  useEffect(() => {
+    let alive = true;
     setLoading(true);
-    apiFetch("/saas-admin/companies/" + cid + "/modules").then(res => {
-      if (res.success) setModules(res.data);
+    // NOTE: /companies/:id/modules (not full-details.modules) — this endpoint
+    // returns the full catalogue with label/tier/canDisable, which the toggle
+    // rows need. full-details only carries raw company_modules rows.
+    apiFetch("/saas-admin/companies/" + companyId + "/modules").then(res => {
+      if (!alive) return;
+      if (res.success) setModules(res.data || []);
       setLoading(false);
-    }).catch(() => setLoading(false));
-  };
-
-  useEffect(() => { if (company) loadModules(company.id); }, [company?.id]);
+    }).catch(() => { if (alive) setLoading(false); });
+    return () => { alive = false; };
+  }, [companyId]);
 
   const toggle = async (key, newVal) => {
     setSaving(key);
-    const res = await apiFetch("/saas-admin/companies/" + company.id + "/modules/" + key, {
-      method:"PUT", body: { is_enabled: newVal }
+    const res = await apiFetch("/saas-admin/companies/" + companyId + "/modules/" + key, {
+      method: "PUT", body: { is_enabled: newVal },
     });
     if (res.success) {
       setModules(prev => prev.map(m => m.key === key ? { ...m, is_enabled: newVal } : m));
-      setToast({ msg: res.message, type:"success" });
+      setToast({ msg: res.message, type: "success" });
     } else {
-      setToast({ msg: res.message, type:"error" });
+      setToast({ msg: res.message, type: "error" });
     }
     setSaving(null);
   };
 
+  if (loading) return <div style={{ padding:40, textAlign:"center", color:T.t3, fontSize:13 }}>Loading modules...</div>;
+  if (!modules.length) return <EmptyState Icon={IcPuzzle} text="No modules configured for this company"/>;
+
+  const core = modules.filter(m => !m.canDisable);
+  const std  = modules.filter(m => m.canDisable);
+
   return (
-    <div style={{ padding:"20px 24px" }}>
+    <div>
       {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
-
-      <div style={{ display:"flex", alignItems:"center", gap:14, marginBottom:20 }}>
-        <div style={{ flex:1 }}>
-          <div style={{ fontSize:16, fontWeight:700, color:T.t1, marginBottom:6 }}>Module Access</div>
-          <div style={{ display:"flex", alignItems:"center", gap:10 }}>
-            <span style={{ fontSize:12, color:T.t3 }}>Company:</span>
-            <select value={company?.id || ""} onChange={e => {
-              const c = companies.find(x => x.id === Number(e.target.value));
-              setCompany(c || null);
-            }} style={{ padding:"6px 10px", borderRadius:7, border:`1px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit", cursor:"pointer" }}>
-              <option value="">-- Select company --</option>
-              {companies.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
+      <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", marginBottom:14 }}>
+        <div style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Module Access</div>
+        <div style={{ padding:"6px 12px", background:T.bluL, border:`1px solid ${T.bluM}`, borderRadius:8, fontSize:11.5, color:T.blu, fontWeight:600 }}>
+          {modules.filter(m => m.is_enabled).length} / {modules.length} enabled
         </div>
-        {company && modules.length > 0 && (
-          <div style={{ padding:"8px 14px", background:T.bluL, border:`1px solid ${T.bluM}`, borderRadius:8, fontSize:12, color:T.blu, fontWeight:600 }}>
-            {modules.filter(m => m.is_enabled).length} / {modules.length} modules enabled
-          </div>
-        )}
       </div>
-
-      {!company && <EmptyState Icon={IcBuilding} text="Select a company to manage its module access"/>}
-      {company && loading && <div style={{ textAlign:"center", padding:40, color:T.t3, fontSize:13 }}>Loading modules...</div>}
-
-      {company && !loading && modules.length > 0 && (
-        <div>
-          <div style={{ marginBottom:6, fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"1px", display:"flex", alignItems:"center", gap:8 }}>
-            Core Modules <div style={{ flex:1, height:1, background:T.b1 }}/> <Badge text="Always included" color={T.grn}/>
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:7, marginBottom:20 }}>
-            {modules.filter(m => !m.canDisable).map(m => (
-              <ModAccessRow key={m.key} m={m} saving={saving} onToggle={toggle}/>
-            ))}
-          </div>
-          <div style={{ marginBottom:6, fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"1px", display:"flex", alignItems:"center", gap:8 }}>
-            Standard Modules <div style={{ flex:1, height:1, background:T.b1 }}/> <Badge text="Toggleable" color={T.amb}/>
-          </div>
-          <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
-            {modules.filter(m => m.canDisable).map(m => (
-              <ModAccessRow key={m.key} m={m} saving={saving} onToggle={toggle}/>
-            ))}
-          </div>
-        </div>
-      )}
+      <div style={{ marginBottom:6, fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"1px", display:"flex", alignItems:"center", gap:8 }}>
+        Core Modules <div style={{ flex:1, height:1, background:T.b1 }}/> <Badge text="Always included" color={T.grn}/>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:7, marginBottom:20 }}>
+        {core.map(m => <ModAccessRow key={m.key} m={m} saving={saving} onToggle={toggle}/>)}
+      </div>
+      <div style={{ marginBottom:6, fontSize:10, fontWeight:700, color:T.t4, textTransform:"uppercase", letterSpacing:"1px", display:"flex", alignItems:"center", gap:8 }}>
+        Standard Modules <div style={{ flex:1, height:1, background:T.b1 }}/> <Badge text="Toggleable" color={T.amb}/>
+      </div>
+      <div style={{ display:"flex", flexDirection:"column", gap:7 }}>
+        {std.map(m => <ModAccessRow key={m.key} m={m} saving={saving} onToggle={toggle}/>)}
+      </div>
     </div>
   );
 }
@@ -1305,344 +894,6 @@ function TabAuditLogs({ companies }) {
 // ════════════════════════════════════════════════════════════════════════
 // TAB 6: DATA EXPORT (NEW)
 // ════════════════════════════════════════════════════════════════════════
-function TabExport({ companies }) {
-  const [selCompany, setSelCompany] = useState("");
-  const [exporting, setExporting]   = useState(false);
-  const [toast, setToast]           = useState(null);
-  const [lastExport, setLastExport] = useState(null);
-  const [history, setHistory]       = useState([]);
-
-  // Load export history from audit logs
-  useEffect(() => {
-    apiFetch("/saas-admin/audit-logs?action=EXPORT&limit=10").then(res => {
-      if (res.success) setHistory(res.data);
-    }).catch(() => {});
-  }, []);
-
-  const doExport = async () => {
-    if (!selCompany) { setToast({ msg:"Select a company first", type:"error" }); return; }
-    setExporting(true);
-    try {
-      // Complete exporter: enumerates every company-scoped table from
-      // information_schema, so it can't go stale as the schema grows. (The old
-      // GET /export-company had a hardcoded table list and silently dropped data.)
-      const res = await fetch(API + "/saas-admin/companies/" + selCompany + "/export-data", {
-        method: "POST",
-        headers: { Authorization: "Bearer " + tok(), "Content-Type": "application/json" },
-      });
-      const data = await res.json();
-      if (data.success) {
-        // Download as JSON file
-        const blob = new Blob([JSON.stringify(data.data, null, 2)], { type:"application/json" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        const company = companies.find(c => c.id === Number(selCompany));
-        a.href = url;
-        a.download = `export_${company?.slug || selCompany}_${new Date().toISOString().slice(0,10)}.json`;
-        a.click();
-        URL.revokeObjectURL(url);
-        setLastExport(data.data);
-        setToast({ msg:"Export downloaded successfully!", type:"success" });
-        // Refresh history
-        apiFetch("/saas-admin/audit-logs?action=EXPORT&limit=10").then(r => { if (r.success) setHistory(r.data); });
-      } else {
-        setToast({ msg: data.message || "Export failed", type:"error" });
-      }
-    } catch(e) {
-      setToast({ msg:"Export failed: " + e.message, type:"error" });
-    }
-    setExporting(false);
-  };
-
-  const company = companies.find(c => c.id === Number(selCompany));
-
-  return (
-    <div style={{ padding:"20px 24px" }}>
-      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
-      <PageHeader title="Data Export" sub="Export complete company data as JSON"/>
-
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:20 }}>
-        {/* Export panel */}
-        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB }}>
-            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Export Company Data</span>
-          </div>
-          <div style={{ padding:"20px 18px" }}>
-            <div style={{ marginBottom:16 }}>
-              <label style={{ fontSize:11, fontWeight:600, color:T.t3, display:"block", marginBottom:6 }}>SELECT COMPANY</label>
-              <select value={selCompany} onChange={e => { setSelCompany(e.target.value); setLastExport(null); }}
-                style={{ width:"100%", padding:"10px 12px", borderRadius:8, border:`1.5px solid ${T.b1}`, fontSize:13, color:T.t1, background:T.surfaceB, fontFamily:"inherit", cursor:"pointer" }}>
-                <option value="">-- Choose company --</option>
-                {companies.map(c => <option key={c.id} value={c.id}>{c.name} ({c.user_count} users, {c.project_count} projects)</option>)}
-              </select>
-            </div>
-
-            {company && (
-              <div style={{ padding:"12px 14px", background:T.bluL, border:`1px solid ${T.bluM}`, borderRadius:8, marginBottom:16 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:T.blu, marginBottom:4 }}>{company.name}</div>
-                <div style={{ fontSize:11, color:T.t3 }}>
-                  {company.user_count} users · {company.project_count} projects · {DOMAIN_LABELS[company.module_type] || company.module_type || "Standard"}
-                </div>
-              </div>
-            )}
-
-            <Btn onClick={doExport} disabled={exporting || !selCompany} style={{ width:"100%", justifyContent:"center", padding:"12px" }}>
-              <IcDownload size={15} color="white"/> {exporting ? "Exporting..." : "Export & Download JSON"}
-            </Btn>
-
-            {/* Last export summary — shape comes from utils/companyDataPurge:
-                { company, client, tables: {name: rows[]}, meta: {table_count, total_rows} } */}
-            {lastExport && lastExport.tables && (
-              <div style={{ marginTop:16 }}>
-                <div style={{ fontSize:11, fontWeight:700, color:T.t3, marginBottom:8, textTransform:"uppercase" }}>
-                  Export Summary — {lastExport.meta?.table_count || 0} tables · {fmtNum(lastExport.meta?.total_rows || 0)} rows
-                </div>
-                <div style={{ display:"flex", flexWrap:"wrap", gap:6 }}>
-                  {Object.entries(lastExport.tables)
-                    .sort((a, b) => b[1].length - a[1].length)
-                    .map(([table, rows]) => (
-                      <div key={table} style={{ padding:"3px 10px", borderRadius:6, background:T.grnL, border:`1px solid ${T.grnM}`, fontSize:11, color:T.grn }}>
-                        {table.replace(/_/g, " ")}: <strong>{rows.length}</strong>
-                      </div>
-                    ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Export history */}
-        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          <div style={{ padding:"14px 18px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB }}>
-            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Export History</span>
-          </div>
-          <div style={{ maxHeight:400, overflowY:"auto" }}>
-            {history.length === 0 && (
-              <div style={{ padding:40, textAlign:"center", color:T.t4, fontSize:12 }}>No exports yet</div>
-            )}
-            {history.map((h, i) => {
-              let d = {};
-              try { d = typeof h.details === "string" ? JSON.parse(h.details) : (h.details || {}); } catch(_) {}
-              return (
-                <div key={i} style={{ padding:"11px 18px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", gap:10 }}>
-                  <div style={{ width:32, height:32, borderRadius:7, background:T.purL, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0 }}>
-                    <IcDownload size={14} color={T.pur}/>
-                  </div>
-                  <div style={{ flex:1 }}>
-                    <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>{d.company_name || h.company_name || "Company"}</div>
-                    <div style={{ fontSize:10.5, color:T.t4 }}>
-                      by {h.user_name} · {fmtDateTime(h.created_at)}
-                      {d.tables_exported && ` · ${d.tables_exported} tables`}
-                    </div>
-                  </div>
-                  {d.self_export && <Badge text="Self" color={T.amb}/>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </div>
-
-      {/* What's exported info */}
-      <div style={{ marginTop:20, padding:"14px 18px", background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:10 }}>What's included in the export?</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
-          {["Projects & Tasks","Transactions & Accounts","Material Requests","Purchase Orders & GRN",
-            "Vendors & Parties","Users & Roles","Solar Leads & Stages","CRM Data",
-            "Subcontractor Data","Warehouse Items","Approval Workflows","Audit Logs"
-          ].map((item, i) => (
-            <div key={i} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, color:T.t2 }}>
-              <IcChk size={12} color={T.grn}/> {item}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// TAB 7: SUBSCRIPTIONS (NEW)
-// ════════════════════════════════════════════════════════════════════════
-const IcCrown = p => <Ic {...p} d="M2 4l3 12h14l3-12-5 4-5-4-5 4-5-4zM3 20h18" />;
-
-function TabSubscriptions({ companies }) {
-  const [plans, setPlans]           = useState([]);
-  const [subs, setSubs]             = useState([]);
-  const [loading, setLoading]       = useState(true);
-  const [toast, setToast]           = useState(null);
-  const [showAssign, setShowAssign] = useState(false);
-  const [assignForm, setAssignForm] = useState({ company_id:"", plan_id:"", billing_cycle:"monthly", amount_paid:"", payment_ref:"", notes:"" });
-  const [saving, setSaving]         = useState(false);
-
-  const load = useCallback(() => {
-    setLoading(true);
-    Promise.all([
-      apiFetch("/saas-admin/plans"),
-      apiFetch("/saas-admin/subscriptions"),
-    ]).then(([pRes, sRes]) => {
-      if (pRes.success) setPlans(pRes.data);
-      if (sRes.success) setSubs(sRes.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
-  const planColor = slug => ({ free:T.slt, starter:T.blu, pro:T.pur, enterprise:T.amb }[slug] || T.t4);
-  const statusColor = s => ({ active:T.grn, trial:T.amb, expired:T.red, cancelled:T.slt }[s] || T.t4);
-
-  const assignSub = async () => {
-    if (!assignForm.company_id || !assignForm.plan_id) {
-      setToast({ msg:"Select company and plan", type:"error" }); return;
-    }
-    setSaving(true);
-    const res = await apiFetch("/saas-admin/subscriptions", { method:"POST", body: assignForm });
-    setSaving(false);
-    if (res.success) {
-      setToast({ msg:"Subscription assigned!", type:"success" });
-      setShowAssign(false);
-      setAssignForm({ company_id:"", plan_id:"", billing_cycle:"monthly", amount_paid:"", payment_ref:"", notes:"" });
-      load();
-    } else {
-      setToast({ msg: res.message, type:"error" });
-    }
-  };
-
-  const cancelSub = async (id) => {
-    if (!await window.confirmAsync("Cancel this subscription?")) return;
-    const res = await apiFetch("/saas-admin/subscriptions/" + id + "/cancel", { method:"PUT" });
-    if (res.success) { setToast({ msg:"Subscription cancelled", type:"success" }); load(); }
-  };
-
-  if (loading) return <div style={{ textAlign:"center", padding:60, color:T.t3, fontSize:13 }}>Loading subscriptions...</div>;
-
-  return (
-    <div style={{ padding:"20px 24px" }}>
-      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
-
-      <PageHeader title="Subscriptions" sub={`${subs.filter(s=>s.status==="active"||s.status==="trial").length} active subscriptions`} right={
-        <Btn onClick={() => setShowAssign(true)}><IcPlus size={14} color="white"/> Assign Plan</Btn>
-      }/>
-
-      {/* Plans overview */}
-      <div style={{ display:"grid", gridTemplateColumns:`repeat(${plans.length},1fr)`, gap:12, marginBottom:24 }}>
-        {plans.map(p => (
-          <div key={p.id} style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, borderTop:`3px solid ${planColor(p.slug)}`, padding:"18px 16px", position:"relative" }}>
-            {p.slug === "pro" && (
-              <div style={{ position:"absolute", top:8, right:10, fontSize:9, fontWeight:700, padding:"2px 8px", borderRadius:20, background:T.purL, color:T.pur, border:`1px solid ${T.purM}` }}>POPULAR</div>
-            )}
-            <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:10 }}>
-              <IcCrown size={16} color={planColor(p.slug)}/>
-              <span style={{ fontSize:14, fontWeight:700, color:T.t1 }}>{p.name}</span>
-            </div>
-            <div style={{ marginBottom:10 }}>
-              <span style={{ fontSize:24, fontWeight:800, color:T.t1 }}>{p.price_monthly > 0 ? `₹${fmtNum(p.price_monthly)}` : "Free"}</span>
-              {p.price_monthly > 0 && <span style={{ fontSize:11, color:T.t4 }}>/month</span>}
-            </div>
-            <div style={{ fontSize:11, color:T.t3, marginBottom:10 }}>
-              {p.price_yearly > 0 && <div>₹{fmtNum(p.price_yearly)}/year (save {Math.round((1 - p.price_yearly/(p.price_monthly*12))*100)}%)</div>}
-            </div>
-            <div style={{ display:"flex", gap:8, marginBottom:12 }}>
-              <Badge text={`${p.max_users} users`} color={planColor(p.slug)}/>
-              <Badge text={`${p.max_projects} projects`} color={planColor(p.slug)}/>
-              <Badge text={`${p.max_storage_gb}GB`} color={planColor(p.slug)}/>
-            </div>
-            <div style={{ borderTop:`1px solid ${T.b1}`, paddingTop:10 }}>
-              {(() => { try { const f = typeof p.features === "string" ? JSON.parse(p.features) : (p.features||[]); return f.map((feat,i) => (
-                <div key={i} style={{ display:"flex", alignItems:"center", gap:6, fontSize:11, color:T.t2, marginBottom:4 }}>
-                  <IcChk size={11} color={T.grn}/> {feat}
-                </div>
-              )); } catch(_) { return null; } })()}
-            </div>
-            <div style={{ marginTop:10, padding:"5px 10px", background:planColor(p.slug)+"12", borderRadius:6, textAlign:"center", fontSize:11, fontWeight:600, color:planColor(p.slug) }}>
-              {p.subscriber_count} active subscriber{p.subscriber_count !== 1 ? "s" : ""}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Active subscriptions table */}
-      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-        <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>All Subscriptions</span>
-          <span style={{ fontSize:11, color:T.t4 }}>{subs.length} total</span>
-        </div>
-        <TableHeader columns={["Company","Plan","Billing","Status","Usage","Start","Expires","Payment",""]}
-          gridCols="1.5fr 1fr 80px 80px 1.2fr 90px 90px 90px 50px"/>
-        {subs.length === 0 && <div style={{ textAlign:"center", padding:"40px 0", color:T.t3, fontSize:13 }}>No subscriptions yet</div>}
-        {subs.map((s, i) => {
-          const isExpiring = s.status === "active" && s.end_date && new Date(s.end_date) < new Date(Date.now() + 7*24*60*60*1000);
-          return (
-            <div key={s.id} style={{ display:"grid", gridTemplateColumns:"1.5fr 1fr 80px 80px 1.2fr 90px 90px 90px 50px", padding:"10px 16px",
-              borderBottom: i < subs.length-1 ? `1px solid ${T.b1}` : "none", alignItems:"center",
-              background: isExpiring ? T.ambL : "transparent" }}>
-              <div>
-                <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{s.company_name}</div>
-                <div style={{ fontSize:10, color:T.t4 }}>/{s.company_slug}</div>
-              </div>
-              <div><Badge text={s.plan_name} color={planColor(s.plan_slug)}/></div>
-              <div style={{ fontSize:11.5, color:T.t2, textTransform:"capitalize" }}>{s.billing_cycle}</div>
-              <div><Badge text={s.status} color={statusColor(s.status)}/></div>
-              <div style={{ fontSize:11, color:T.t2 }}>
-                {s.current_users}/{s.max_users} users · {s.current_projects}/{s.max_projects} proj
-              </div>
-              <div style={{ fontSize:11, color:T.t3 }}>{fmtDate(s.start_date)}</div>
-              <div style={{ fontSize:11, color: isExpiring ? T.red : T.t3, fontWeight: isExpiring ? 600 : 400 }}>{fmtDate(s.end_date)}</div>
-              <div style={{ fontSize:11.5, fontWeight:600, color:T.grn }}>{s.amount_paid > 0 ? `₹${fmtNum(s.amount_paid)}` : "Free"}</div>
-              <div style={{ display:"flex", justifyContent:"flex-end" }}>
-                {(s.status === "active" || s.status === "trial") && (
-                  <button onClick={() => cancelSub(s.id)} title="Cancel"
-                    style={{ width:26, height:26, borderRadius:6, border:`1px solid ${T.redM}`, background:T.redL, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }}>
-                    <IcX size={11} color={T.red}/>
-                  </button>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Assign Plan Modal */}
-      {showAssign && (
-        <>
-          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
-          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:480, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
-            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, background:"#0D1B2A", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <div><div style={{ fontSize:15, fontWeight:700, color:"white" }}>Assign Subscription Plan</div></div>
-              <button onClick={() => setShowAssign(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
-            </div>
-            <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
-              <SelectField label="Company" value={assignForm.company_id} onChange={v => setAssignForm(p=>({...p,company_id:v}))}
-                placeholder="-- Select company --"
-                options={companies.map(c => ({value:String(c.id), label:c.name}))}/>
-              <SelectField label="Plan" value={assignForm.plan_id} onChange={v => setAssignForm(p=>({...p,plan_id:v}))}
-                placeholder="-- Select plan --"
-                options={plans.map(p => ({value:String(p.id), label:`${p.name} - ₹${fmtNum(p.price_monthly)}/mo`}))}/>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <SelectField label="Billing Cycle" value={assignForm.billing_cycle} onChange={v => setAssignForm(p=>({...p,billing_cycle:v}))}
-                  options={[{value:"monthly",label:"Monthly"},{value:"yearly",label:"Yearly"},{value:"lifetime",label:"Lifetime"}]}/>
-                <InputField label="Amount Paid (₹)" value={assignForm.amount_paid} onChange={v => setAssignForm(p=>({...p,amount_paid:v}))} placeholder="0"/>
-              </div>
-              <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
-                <InputField label="Payment Reference" value={assignForm.payment_ref} onChange={v => setAssignForm(p=>({...p,payment_ref:v}))} placeholder="UPI/Txn ID"/>
-                <InputField label="Notes" value={assignForm.notes} onChange={v => setAssignForm(p=>({...p,notes:v}))} placeholder="Optional notes"/>
-              </div>
-            </div>
-            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
-              <Btn onClick={() => setShowAssign(false)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
-              <Btn onClick={assignSub} disabled={saving} style={{ flex:2 }}>{saving ? "Assigning..." : "Assign Plan"}</Btn>
-            </div>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// COMPANY DETAIL PAGE (Phase 2) — full-page drill-down with 7 tabs
-// ════════════════════════════════════════════════════════════════════════
 function CompanyDetailPage({ companyId, onBack }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -1655,6 +906,11 @@ function CompanyDetailPage({ companyId, onBack }) {
   const [savingUser, setSavingUser] = useState(false);
   const [newCreds, setNewCreds] = useState(null);       // {name,mobile,email,password} after reset
   const [resettingId, setResettingId] = useState(null);
+  const [showEdit, setShowEdit] = useState(false);        // Edit Company modal
+  const [showResetAdmin, setShowResetAdmin] = useState(false);
+  const [resetMobile, setResetMobile] = useState("");
+  const [resettingAdmin, setResettingAdmin] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -1704,6 +960,46 @@ function CompanyDetailPage({ companyId, onBack }) {
     else setToast({ msg: res.message || "Reset failed", type:"error" });
   };
 
+  // Regenerate the primary admin's login (and optionally set their mobile).
+  // Moved here from the Companies tab — it is a company-scoped action.
+  const resetAdminLogin = async () => {
+    const m = (resetMobile || "").trim();
+    if (m && !/^[6-9]\d{9}$/.test(m)) return setToast({ msg:"Enter a valid 10-digit mobile number", type:"error" });
+    setResettingAdmin(true);
+    const res = await apiFetch("/saas-admin/companies/" + companyId + "/reset-admin-login", {
+      method:"POST", body: m ? { mobile: m } : {},
+    });
+    setResettingAdmin(false);
+    if (res.success) { setShowResetAdmin(false); setResetMobile(""); setNewCreds(res.data?.credentials || null); load(); }
+    else setToast({ msg: res.message || "Reset failed", type:"error" });
+  };
+
+  // Complete tenant export (information_schema-driven, same artifact the purge
+  // flow uses for recovery). Was a top-level tab with a company picker.
+  const doExport = async () => {
+    setExporting(true);
+    try {
+      const res = await fetch(API + "/saas-admin/companies/" + companyId + "/export-data", {
+        method: "POST",
+        headers: { Authorization: "Bearer " + tok(), "Content-Type": "application/json" },
+      });
+      const out = await res.json();
+      if (out.success) {
+        const blob = new Blob([JSON.stringify(out.data, null, 2)], { type:"application/json" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `export_${out.data.company?.slug || companyId}_${new Date().toISOString().slice(0,10)}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+        setToast({ msg: `Exported ${out.data.meta.table_count} tables · ${out.data.meta.total_rows} rows`, type:"success" });
+      } else setToast({ msg: out.message || "Export failed", type:"error" });
+    } catch (e) {
+      setToast({ msg:"Export failed: " + e.message, type:"error" });
+    }
+    setExporting(false);
+  };
+
   if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading company details...</div>;
   if (!data)   return <div style={{ padding:60, textAlign:"center", color:T.red, fontSize:13 }}>Failed to load.<br/><Btn onClick={onBack} variant="outline" style={{ marginTop:12 }}>← Back</Btn></div>;
 
@@ -1743,6 +1039,16 @@ function CompanyDetailPage({ companyId, onBack }) {
             <div style={{ fontSize:20, fontWeight:800, color:healthColor }}>{health.score}/100</div>
           </div>
         </div>
+      </div>
+
+      {/* Company-scoped actions — all of these used to live in the Companies tab
+          or as their own top-level tab with a company picker. */}
+      <div style={{ display:"flex", gap:8, marginBottom:16, flexWrap:"wrap" }}>
+        <Btn variant="outline" onClick={() => setShowEdit(true)}><IcEdit size={13}/> Edit</Btn>
+        <Btn variant="outline" onClick={() => { setShowResetAdmin(true); setResetMobile(""); }}>Reset Admin Login</Btn>
+        <Btn variant="outline" onClick={doExport} disabled={exporting}>
+          <IcDownload size={13}/> {exporting ? "Exporting..." : "Export Data"}
+        </Btn>
       </div>
 
       {/* Sub-tabs */}
@@ -1883,19 +1189,10 @@ function CompanyDetailPage({ companyId, onBack }) {
         </div>
       )}
 
-      {/* TAB 4: Module Access */}
+      {/* TAB 4: Module Access — editable, was a separate top-level tab */}
       {tab === "modules" && (
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
-          <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Enabled Modules ({modules.filter(m=>m.is_enabled).length}/{modules.length})</div>
-          {modules.length === 0 && <div style={{ fontSize:12, color:T.t4 }}>No modules configured</div>}
-          <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:8 }}>
-            {modules.map((m, i) => (
-              <div key={i} style={{ padding:"10px 12px", border:`1px solid ${m.is_enabled ? T.grnM : T.b1}`, background: m.is_enabled ? T.grnL : T.surfaceB, borderRadius:8, display:"flex", alignItems:"center", gap:8 }}>
-                {m.is_enabled ? <IcChk size={14} color={T.grn}/> : <IcX size={14} color={T.t4}/>}
-                <span style={{ fontSize:12, fontWeight:600, color: m.is_enabled ? T.grn : T.t4, textTransform:"capitalize" }}>{m.module_key}</span>
-              </div>
-            ))}
-          </div>
+          <CompanyModulesTab companyId={companyId}/>
         </div>
       )}
 
@@ -1986,6 +1283,40 @@ function CompanyDetailPage({ companyId, onBack }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Edit Company — profile + the admin's login identity */}
+      {showEdit && (
+        <EditCompanyModal company={company}
+          onClose={() => setShowEdit(false)}
+          onSaved={() => { setShowEdit(false); load(); }}
+          setToast={setToast}/>
+      )}
+
+      {/* Reset Admin Login */}
+      {showResetAdmin && (
+        <>
+          <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+          <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:440, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
+            <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
+              <div>
+                <div style={{ fontSize:15, fontWeight:700, color:"white" }}>Reset Admin Login</div>
+                <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{company.name}</div>
+              </div>
+              <button onClick={() => setShowResetAdmin(false)} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+            </div>
+            <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+              <InputField label="Login Mobile (leave blank to keep current)" value={resetMobile} onChange={v => setResetMobile(v.replace(/\D/g,"").slice(0,10))} placeholder="Set / change 10-digit mobile"/>
+              <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb }}>
+                A new password will be generated and shown once. Share the <strong>mobile + password</strong> with the admin. (OTP login also works as a fallback.)
+              </div>
+            </div>
+            <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+              <Btn onClick={() => setShowResetAdmin(false)} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+              <Btn onClick={resetAdminLogin} disabled={resettingAdmin} style={{ flex:2 }}>{resettingAdmin ? "Resetting..." : "Generate New Password"}</Btn>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Edit User Modal */}
@@ -3416,7 +2747,103 @@ function InvoiceEditModal({ invoice, onClose, onSaved, setToast }) {
   );
 }
 
-function ClientDetail({ clientId, onBack }) {
+// Add a company to an EXISTING client. The client is fixed by context, so
+// there is no client picker to get wrong — that ambiguity is exactly what the
+// old standalone Companies tab had. For a brand-new paying customer use
+// NewCustomerModal, which also creates the client and its contract.
+function AddCompanyModal({ client, onClose, onSaved, setToast }) {
+  const [f, setF] = useState({ name:"", module_type:"construction_company",
+                               admin_name:"", admin_email:"", phone:"", city:"", state:"" });
+  const [saving, setSaving] = useState(false);
+  const [done, setDone] = useState(null);
+  const set = (k) => (v) => setF(p => ({ ...p, [k]: v }));
+
+  const save = async () => {
+    if (!f.name.trim() || !f.admin_name.trim() || !f.admin_email.trim() || !f.phone.trim())
+      return setToast({ msg:"Company naam, admin naam, email aur mobile zaroori hai", type:"error" });
+    if (!/^[6-9]\d{9}$/.test(f.phone.trim()))
+      return setToast({ msg:"Admin mobile 10-digit hona chahiye — yahi login id hai", type:"error" });
+    setSaving(true);
+    const res = await apiFetch("/saas-admin/companies", { method:"POST", body: { ...f, client_id: client.id } });
+    setSaving(false);
+    // Same reason as NewCustomerModal: do NOT refresh the parent yet, or its
+    // loading state unmounts this modal before the one-time password is read.
+    if (res.success) setDone(res.data);
+    else setToast({ msg: res.message || "Company create nahi hui", type:"error" });
+  };
+
+  const finish = () => { onSaved(); onClose(); };
+
+  if (done) {
+    return (
+      <>
+        <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.5)", zIndex:500, backdropFilter:"blur(3px)" }}/>
+        <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:430, background:T.surface, borderRadius:16, zIndex:501, boxShadow:"0 24px 64px rgba(0,0,0,0.3)", overflow:"hidden" }}>
+          <div style={{ padding:"20px 22px", background:"linear-gradient(135deg, #059669, #10B981)", textAlign:"center" }}>
+            <div style={{ fontSize:17, fontWeight:800, color:"white" }}>{done.name} ban gayi</div>
+            <div style={{ fontSize:12, color:"rgba(255,255,255,0.75)", marginTop:3 }}>{client.name} ke neeche</div>
+          </div>
+          <div style={{ padding:"22px" }}>
+            <div style={{ background:T.surfaceB, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 18px", marginBottom:16 }}>
+              <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", marginBottom:4 }}>Login Mobile</div>
+              <div style={{ fontSize:16, fontWeight:800, color:T.blu, fontFamily:"monospace" }}>{done.credentials.mobile}</div>
+              <div style={{ fontSize:10, fontWeight:600, color:T.t4, textTransform:"uppercase", margin:"12px 0 4px" }}>Password</div>
+              <div style={{ fontSize:17, fontWeight:800, color:T.t1, fontFamily:"monospace", background:T.ambL, padding:"7px 11px", borderRadius:6, border:`1px solid ${T.ambM}` }}>{done.credentials.password}</div>
+              <div style={{ fontSize:10.5, color:T.t4, marginTop:5 }}>Pehli login par badalna padega.</div>
+            </div>
+            <div style={{ display:"flex", gap:9 }}>
+              <Btn variant="outline" style={{ flex:1 }} onClick={() => {
+                navigator.clipboard.writeText(`Login Mobile: ${done.credentials.mobile}\nPassword: ${done.credentials.password}`);
+                setToast({ msg:"Credentials copied" });
+              }}>Copy</Btn>
+              <Btn style={{ flex:2 }} onClick={finish}>Done</Btn>
+            </div>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:540, maxHeight:"90vh", overflowY:"auto", background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)" }}>
+        <div style={{ padding:"18px 22px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", background:"#0D1B2A" }}>
+          <div>
+            <div style={{ fontSize:15, fontWeight:700, color:"white" }}>New Company</div>
+            <div style={{ fontSize:10, color:"rgba(255,255,255,0.4)", marginTop:2 }}>{client.name} ke neeche · billing isi client par lagti hai</div>
+          </div>
+          <button onClick={onClose} style={{ background:"none", border:"none", cursor:"pointer", color:"rgba(255,255,255,0.5)", display:"flex" }}><IcX size={16}/></button>
+        </div>
+        <div style={{ padding:"20px 22px", display:"flex", flexDirection:"column", gap:13 }}>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <InputField label="Company Name" required value={f.name} onChange={set("name")} placeholder="e.g. Ratna Unit 2"/>
+            <SelectField label="Business Type" value={f.module_type} onChange={set("module_type")}
+              options={Object.entries(DOMAIN_LABELS).map(([k,v]) => ({ value:k, label:v }))}/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+            <InputField label="Admin Name" required value={f.admin_name} onChange={set("admin_name")} placeholder="Full name"/>
+            <InputField label="Admin Email" required value={f.admin_email} onChange={set("admin_email")} placeholder="admin@company.com"/>
+          </div>
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:10 }}>
+            <InputField label="Admin Mobile (login id)" required value={f.phone} onChange={v => set("phone")(v.replace(/\D/g,"").slice(0,10))} placeholder="9876543210"/>
+            <InputField label="City" value={f.city} onChange={set("city")} placeholder="Raipur"/>
+            <InputField label="State" value={f.state} onChange={set("state")} placeholder="Chhattisgarh"/>
+          </div>
+          <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb }}>
+            <strong>Admin Mobile hi login id hai.</strong> Password create ke baad ek baar dikhega.
+          </div>
+        </div>
+        <div style={{ padding:"14px 22px", borderTop:`1px solid ${T.b1}`, display:"flex", gap:9, background:T.surfaceB }}>
+          <Btn onClick={onClose} variant="outline" style={{ flex:1 }}>Cancel</Btn>
+          <Btn onClick={save} disabled={saving} style={{ flex:2 }}>{saving ? "Creating..." : "Create Company"}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ClientDetail({ clientId, onBack, onOpenCompany }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
@@ -3430,6 +2857,7 @@ function ClientDetail({ clientId, onBack }) {
   const [payDate, setPayDate] = useState(new Date().toISOString().slice(0, 10));
   const [allCompanies, setAllCompanies] = useState([]);
   const [assignCompanyId, setAssignCompanyId] = useState("");
+  const [showAddCompany, setShowAddCompany] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -3513,7 +2941,20 @@ function ClientDetail({ clientId, onBack }) {
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1.6fr", gap:16, alignItems:"start" }}>
         {/* Companies */}
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
-          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, fontSize:12.5, fontWeight:700, color:T.t1 }}>Companies ({companies.length})</div>
+          <div style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+            <span style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Companies ({companies.length})</span>
+            {/* Adding a company lives here now — it is a client-scoped action,
+                and doing it from here means the client is never ambiguous. */}
+            <Btn onClick={() => setShowAddCompany(true)} style={{ padding:"4px 10px", fontSize:11 }}
+              disabled={client.max_companies > 0 && companies.length >= client.max_companies}>
+              <IcPlus size={11}/> Company
+            </Btn>
+          </div>
+          {client.max_companies > 0 && companies.length >= client.max_companies && (
+            <div style={{ padding:"8px 16px", fontSize:11, color:T.red, background:T.redL, borderBottom:`1px solid ${T.b1}` }}>
+              Company limit poora ho gaya ({companies.length}/{client.max_companies}) — limit badhao tabhi nayi company banegi.
+            </div>
+          )}
           {companies.length === 0 && <div style={{ padding:"20px 16px", fontSize:12, color:T.t4 }}>No company linked yet — company banane ke baad yaha assign karo.</div>}
           {companies.map(c => {
             const dl = (obj, fname) => { try { const b = new Blob([JSON.stringify(obj, null, 2)], { type:"application/json" }); const a = document.createElement("a"); a.href = URL.createObjectURL(b); a.download = fname; a.click(); URL.revokeObjectURL(a.href); } catch(_){} };
@@ -3533,8 +2974,10 @@ function ClientDetail({ clientId, onBack }) {
             };
             return (
             <div key={c.id} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
-              <div style={{ minWidth:0 }}>
-                <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{c.name}</div>
+              <div style={{ minWidth:0, cursor: onOpenCompany ? "pointer" : "default" }}
+                onClick={() => onOpenCompany && onOpenCompany(c)}
+                title={onOpenCompany ? "Open company details" : undefined}>
+                <div style={{ fontSize:12.5, fontWeight:600, color: onOpenCompany ? T.blu : T.t1 }}>{c.name}</div>
                 <div style={{ fontSize:10.5, color:T.t4 }}>/{c.slug} · {c.user_count} users · {c.project_count} projects</div>
               </div>
               <div style={{ display:"flex", alignItems:"center", gap:6, flexShrink:0 }}>
@@ -3657,6 +3100,7 @@ function ClientDetail({ clientId, onBack }) {
 
       {/* Modals */}
       {editClient && <ClientFormModal initial={client} onClose={() => setEditClient(false)} onSaved={load} setToast={setToast}/>}
+      {showAddCompany && <AddCompanyModal client={client} onClose={() => setShowAddCompany(false)} onSaved={load} setToast={setToast}/>}
       {showSub && <SubscriptionFormModal clientId={client.id} initial={showSub === "new" ? null : showSub} onClose={() => setShowSub(null)} onSaved={load} setToast={setToast}/>}
       {activateSub && (
         <>
@@ -3706,8 +3150,12 @@ function ClientDetail({ clientId, onBack }) {
   );
 }
 
-function TabClients() {
+// ── CUSTOMERS — the merged Clients + Companies surface ────────────────
+// Was two tabs that showed the same tenants from two angles and never agreed.
+// Now one list: paying client on top, its companies nested underneath.
+function TabCustomers({ onOpenCompany }) {
   const [clients, setClients] = useState([]);
+  const [companies, setCompanies] = useState([]);
   const [overview, setOverview] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selId, setSelId] = useState(null);
@@ -3715,34 +3163,54 @@ function TabClients() {
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [showInternal, setShowInternal] = useState(false);
   const [toast, setToast] = useState(null);
+  const [expanded, setExpanded] = useState({});   // clientId -> bool (override)
+  const [search, setSearch] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
     Promise.all([
       apiFetch("/saas-admin/clients"),
       apiFetch("/saas-admin/billing/overview"),
-    ]).then(([r1, r2]) => {
+      // Companies are shown nested under their client, so this tab owns both
+      // levels now — the separate Companies tab is gone.
+      apiFetch("/saas-admin/companies"),
+    ]).then(([r1, r2, r3]) => {
       if (r1.success) setClients(r1.data);
       if (r2.success) setOverview(r2.data);
+      if (r3.success) setCompanies(r3.data || []);
       setLoading(false);
     }).catch(() => setLoading(false));
   }, []);
   useEffect(() => { load(); }, [load]);
 
-  if (selId) return <ClientDetail clientId={selId} onBack={() => { setSelId(null); load(); }}/>;
-  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading clients...</div>;
+  if (selId) return <ClientDetail clientId={selId} onBack={() => { setSelId(null); load(); }} onOpenCompany={onOpenCompany}/>;
+  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading customers...</div>;
 
   const kpi = overview?.kpi || {};
-  const visible = clients.filter(c => showInternal || !c.is_internal);
   const overdueInvoices = (overview?.upcoming || []).filter(i => i.is_overdue);
   // Live customers with no usable subscription — they work fine but are billed
   // for nothing. Backend derives the flag (saas-clients.js GET /clients).
   const billingGaps = clients.filter(c => c.billing_gap);
 
+  // Companies grouped under their owning client.
+  const byClient = {};
+  for (const co of companies) {
+    if (co.client_id == null) continue;
+    (byClient[co.client_id] = byClient[co.client_id] || []).push(co);
+  }
+
+  const q = search.trim().toLowerCase();
+  const visible = clients
+    .filter(c => showInternal || !c.is_internal)
+    .filter(c => !q
+      || c.name.toLowerCase().includes(q)
+      || (byClient[c.id] || []).some(co =>
+           co.name.toLowerCase().includes(q) || (co.slug || "").toLowerCase().includes(q)));
+
   return (
     <div style={{ padding:"18px 24px" }}>
       {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
-      <PageHeader title="Clients & Billing" sub="Paying customers — plan limits (companies / users / projects) + subscription billing"
+      <PageHeader title="Customers" sub="Paying clients, unki companies, limits aur billing — sab ek jagah"
         right={<>
           <label style={{ display:"flex", alignItems:"center", gap:6, fontSize:11.5, color:T.t3, cursor:"pointer" }}>
             <input type="checkbox" checked={showInternal} onChange={e => setShowInternal(e.target.checked)}/> Internal bhi dikhao
@@ -3801,39 +3269,96 @@ function TabClients() {
         </div>
       )}
 
-      {/* Clients table */}
+      {/* Search across both levels */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+        <div style={{ position:"relative" }}>
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customer or company..."
+            style={{ width:280, padding:"7px 12px 7px 30px", borderRadius:8, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit" }}/>
+          <IcSearch size={12} color={T.t4} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }}/>
+        </div>
+        <div style={{ fontSize:11.5, color:T.t4 }}>{visible.length} customers · {visible.reduce((n, c) => n + (byClient[c.id]?.length || 0), 0)} companies</div>
+      </div>
+
+      {/* ── Customers: one row per PAYING CLIENT, its companies nested ──────
+          Client-primary because every money and enforcement concept is
+          client-level: limits count users distinct-by-phone across ALL the
+          client's companies, the subscription is one contract, and suspension
+          applies to the client. A company-primary list literally cannot render
+          the usage-vs-limit column correctly. Single-company clients expand
+          inline so the common case still reads flat. */}
       <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:12, overflow:"hidden" }}>
-        <TableHeader gridCols="2fr 1fr 1fr 1fr 1.2fr 1fr 1fr" columns={["Client", "Companies", "Users", "Projects", "Subscription", "Next Due", "Collected"]}/>
-        {visible.length === 0 && <EmptyState Icon={IcUsers} text="Koi client nahi — New Client se shuru karo"/>}
-        {visible.map(c => (
-          <div key={c.id} onClick={() => setSelId(c.id)}
-            style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1.2fr 1fr 1fr", padding:"12px 16px", borderTop:`1px solid ${T.b1}`, cursor:"pointer", alignItems:"center", background: c.status === "suspended" ? T.redL : "transparent" }}
-            onMouseEnter={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : T.surfaceB}
-            onMouseLeave={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : "transparent"}>
-            <div>
-              <div style={{ fontSize:13, fontWeight:700, color:T.t1, display:"flex", alignItems:"center", gap:8 }}>
-                {c.name}
-                {c.is_internal ? <Badge text="INT" color={T.pur}/> : null}
-                {c.status === "suspended" && <Badge text="SUSPENDED" color={T.red}/>}
+        <TableHeader gridCols="2fr 1fr 1fr 1fr 1.2fr 1fr 1fr" columns={["Customer / Company", "Companies", "Users", "Projects", "Subscription", "Next Due", "Collected"]}/>
+        {visible.length === 0 && <EmptyState Icon={IcUsers} text="Koi customer nahi — New Customer se shuru karo"/>}
+        {visible.map(c => {
+          const cos  = byClient[c.id] || [];
+          const open = expanded[c.id] ?? (cos.length === 1);   // 1-company clients read flat
+          return (
+            <div key={c.id}>
+              <div onClick={() => setSelId(c.id)}
+                style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1.2fr 1fr 1fr", padding:"12px 16px", borderTop:`1px solid ${T.b1}`, cursor:"pointer", alignItems:"center", background: c.status === "suspended" ? T.redL : "transparent" }}
+                onMouseEnter={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : T.surfaceB}
+                onMouseLeave={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : "transparent"}>
+                <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                  {cos.length > 1 && (
+                    <button onClick={e => { e.stopPropagation(); setExpanded(p => ({ ...p, [c.id]: !open })); }}
+                      title={open ? "Collapse" : "Expand"}
+                      style={{ width:20, height:20, flexShrink:0, border:`1px solid ${T.b1}`, background:T.surfaceB, borderRadius:5, cursor:"pointer", color:T.t3, fontSize:11, lineHeight:1, fontFamily:"inherit" }}>
+                      {open ? "−" : "+"}
+                    </button>
+                  )}
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.t1, display:"flex", alignItems:"center", gap:8 }}>
+                      {c.name}
+                      {c.is_internal ? <Badge text="INT" color={T.pur}/> : null}
+                      {c.status === "suspended" && <Badge text="SUSPENDED" color={T.red}/>}
+                      {c.billing_gap && <Badge text="NO BILLING" color={T.amb}/>}
+                    </div>
+                    <div style={{ fontSize:10.5, color:T.t4 }}>{[c.city, c.state].filter(Boolean).join(", ") || "--"}</div>
+                  </div>
+                </div>
+                <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.company_count, c.max_companies) }}>{limitStr(c.company_count, c.max_companies)}</div>
+                <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.user_count, c.max_users) }}>{limitStr(c.user_count, c.max_users)}</div>
+                <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.project_count, c.max_projects) }}>{limitStr(c.project_count, c.max_projects)}</div>
+                <div>
+                  {c.sub_status
+                    ? <><Badge text={c.sub_status.toUpperCase()} color={SUB_COLORS[c.sub_status] || T.slt}/>{c.sub_end && <div style={{ fontSize:10, color:T.t4, marginTop:3 }}>till {fmtDate(c.sub_end)}</div>}</>
+                    : <span style={{ fontSize:11, color:T.t4 }}>--</span>}
+                  {c.lifecycle && c.lifecycle.state === "grace" && <div style={{ marginTop:3 }}><Badge text={`GRACE · ${c.lifecycle.graceDaysLeft}d`} color={T.amb}/></div>}
+                  {c.lifecycle && c.lifecycle.state === "suspended" && <div style={{ marginTop:3 }}><Badge text={c.lifecycle.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED"} color={T.red}/></div>}
+                </div>
+                <div style={{ fontSize:11.5, color: c.overdue_count > 0 ? T.red : T.t3, fontWeight: c.overdue_count > 0 ? 700 : 400 }}>
+                  {c.overdue_count > 0 ? `${c.overdue_count} OVERDUE` : (c.next_due ? fmtDate(c.next_due) : "--")}
+                </div>
+                <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>{parseFloat(c.total_collected) > 0 ? fmtAmt(c.total_collected) : "--"}</div>
               </div>
-              <div style={{ fontSize:10.5, color:T.t4 }}>{[c.city, c.state].filter(Boolean).join(", ") || "--"}</div>
+
+              {/* Nested companies — click goes to the company page, not the client */}
+              {open && cos.map(co => (
+                <div key={co.id} onClick={e => { e.stopPropagation(); onOpenCompany && onOpenCompany(co); }}
+                  style={{ display:"grid", gridTemplateColumns:"2fr 1fr 1fr 1fr 1.2fr 1fr 1fr", padding:"8px 16px 8px 34px", borderTop:`1px solid ${T.b1}`, cursor:"pointer", alignItems:"center", background:T.surfaceB }}
+                  onMouseEnter={e => e.currentTarget.style.background = T.bluL}
+                  onMouseLeave={e => e.currentTarget.style.background = T.surfaceB}>
+                  <div style={{ display:"flex", alignItems:"center", gap:8, minWidth:0 }}>
+                    <IcBuilding size={12} color={T.t4}/>
+                    <div style={{ minWidth:0 }}>
+                      <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, display:"flex", alignItems:"center", gap:7 }}>
+                        {co.name}
+                        {!co.is_active && <Badge text="INACTIVE" color={T.red}/>}
+                      </div>
+                      <div style={{ fontSize:10, color:T.t4 }}>/{co.slug} · {DOMAIN_LABELS[co.module_type] || co.module_type || "--"}</div>
+                    </div>
+                  </div>
+                  <div/>
+                  <div style={{ fontSize:12, color:T.t2, textAlign:"left" }}>{co.user_count}</div>
+                  <div style={{ fontSize:12, color:T.t2, textAlign:"left" }}>{co.project_count}</div>
+                  <div style={{ fontSize:10.5, color:T.t4 }}>Registered {fmtDate(co.created_at)}</div>
+                  <div/>
+                  <div style={{ fontSize:10.5, color:T.blu, fontWeight:600 }}>Open →</div>
+                </div>
+              ))}
             </div>
-            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.company_count, c.max_companies) }}>{limitStr(c.company_count, c.max_companies)}</div>
-            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.user_count, c.max_users) }}>{limitStr(c.user_count, c.max_users)}</div>
-            <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.project_count, c.max_projects) }}>{limitStr(c.project_count, c.max_projects)}</div>
-            <div>
-              {c.sub_status
-                ? <><Badge text={c.sub_status.toUpperCase()} color={SUB_COLORS[c.sub_status] || T.slt}/>{c.sub_end && <div style={{ fontSize:10, color:T.t4, marginTop:3 }}>till {fmtDate(c.sub_end)}</div>}</>
-                : <span style={{ fontSize:11, color:T.t4 }}>--</span>}
-              {c.lifecycle && c.lifecycle.state === "grace" && <div style={{ marginTop:3 }}><Badge text={`GRACE · ${c.lifecycle.graceDaysLeft}d`} color={T.amb}/></div>}
-              {c.lifecycle && c.lifecycle.state === "suspended" && <div style={{ marginTop:3 }}><Badge text={c.lifecycle.archived ? "SUSPENDED · PURGE-ELIGIBLE" : "SUSPENDED"} color={T.red}/></div>}
-            </div>
-            <div style={{ fontSize:11.5, color: c.overdue_count > 0 ? T.red : T.t3, fontWeight: c.overdue_count > 0 ? 700 : 400 }}>
-              {c.overdue_count > 0 ? `${c.overdue_count} OVERDUE` : (c.next_due ? fmtDate(c.next_due) : "--")}
-            </div>
-            <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>{parseFloat(c.total_collected) > 0 ? fmtAmt(c.total_collected) : "--"}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {showNew && <ClientFormModal onClose={() => setShowNew(false)} onSaved={load} setToast={setToast}/>}
@@ -3946,18 +3471,20 @@ function TabBugInbox() {
   );
 }
 
+// 13 tabs -> 9. Removed:
+//   Companies    -> merged into Customers (companies nest under their client)
+//   Module Access-> company detail page, where it is already scoped
+//   Data Export  -> button on the company detail page
+//   Subscriptions-> deleted; it edited the legacy per-company plan table, which
+//                   enforces nothing. Real contracts live under Customers.
 const TABS = [
   { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
-  { id:"clients",   label:"Clients & Billing", Icon:IcDollar  },
-  { id:"companies", label:"Companies",        Icon:IcBuilding },
+  { id:"customers", label:"Customers",        Icon:IcDollar   },
   { id:"crm",       label:"CRM & Health",     Icon:IcActivity },
   { id:"analytics", label:"Analytics",        Icon:IcTrend    },
-  { id:"subs",      label:"Subscriptions",    Icon:IcCrown    },
-  { id:"modules",   label:"Module Access",    Icon:IcPuzzle   },
   { id:"users",     label:"All Users",        Icon:IcUsers    },
   { id:"features",  label:"Feature Requests", Icon:IcClip     },
   { id:"audit",     label:"Audit Logs",       Icon:IcShield   },
-  { id:"export",    label:"Data Export",      Icon:IcDownload },
   { id:"sanchalan", label:"Sanchalan",        Icon:IcLock     },
   { id:"bugs",      label:"Bug Inbox",        Icon:IcShield   },
 ];
@@ -3965,7 +3492,6 @@ const TABS = [
 export default function SaaSModule() {
   const [tab, setTab]               = useState("stats");
   const [companies, setCompanies]   = useState([]);
-  const [selCompany, setSelCompany] = useState(null);
   const [detailCompanyId, setDetailCompanyId] = useState(null);
   const [loadingCo, setLoadingCo]   = useState(true);
 
@@ -3979,11 +3505,9 @@ export default function SaaSModule() {
 
   useEffect(() => { loadCompanies(); }, [loadCompanies]);
 
-  const handleSelectCompany = (c) => {
-    setSelCompany(c);
-    setTab("modules");
-  };
-
+  // The old selCompany/"jump to Module Access tab" plumbing is gone — module
+  // access now lives inside the company detail page, so opening a company IS
+  // the navigation.
   const handleOpenDetail = (c) => setDetailCompanyId(c.id);
 
   return (
@@ -4027,16 +3551,12 @@ export default function SaaSModule() {
         ) : (
           <>
             {tab === "stats"     && <TabStats/>}
-            {tab === "clients"   && <TabClients/>}
-            {tab === "companies" && <TabCompanies companies={companies} reload={loadCompanies} onSelectCompany={handleSelectCompany} onOpenDetail={handleOpenDetail}/>}
+            {tab === "customers" && <TabCustomers onOpenCompany={handleOpenDetail}/>}
             {tab === "crm"       && <TabCRMHealth/>}
             {tab === "analytics" && <TabAnalytics/>}
-            {tab === "subs"      && <TabSubscriptions companies={companies}/>}
-            {tab === "modules"   && <TabModuleAccess selectedCompany={selCompany} companies={companies}/>}
             {tab === "users"     && <TabUsers/>}
             {tab === "features"  && <TabFeatureRequests/>}
             {tab === "audit"     && <TabAuditLogs companies={companies}/>}
-            {tab === "export"    && <TabExport companies={companies}/>}
             {tab === "sanchalan" && <TabSanchalan onOpenDetail={handleOpenDetail}/>}
             {tab === "bugs"      && <TabBugInbox/>}
           </>
