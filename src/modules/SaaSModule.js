@@ -1112,6 +1112,119 @@ function bugOpenAgeDays(t) {
   return days > BUG_AGE_CUTOFF_DAYS ? days : null;
 }
 
+// ── KB Gaps — where Sahayak's knowledge base is missing something ──
+// Gaps come from the bot's own evidence (query escalations + thumbs-down),
+// and each one may carry a DRAFT of the missing KB text. Approving a draft
+// does NOT edit any file — the deployed filesystem is ephemeral and Git is the
+// truth, so the actual edit happens from a Claude Code session which reads
+// /saas/kb-drafts/pending. This screen is only where Prafull says yes or no.
+function TabKbGaps() {
+  const [rows, setRows]     = useState(null);
+  const [openId, setOpenId] = useState(null);
+  const [busy, setBusy]     = useState(false);
+
+  const load = useCallback(() => {
+    setRows(null);
+    apiFetch("/support-bot/saas/kb-gaps?status=open")
+      .then(r => setRows(r && r.success && Array.isArray(r.data) ? r.data : []))
+      .catch(() => setRows([]));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const decide = (id, decision) => {
+    setBusy(true);
+    apiFetch(`/support-bot/saas/kb-gaps/${id}/decide`, { method:"POST", body:{ decision } })
+      .then(r => { setBusy(false); if (r && r.success) { setOpenId(null); load(); } })
+      .catch(() => setBusy(false));
+  };
+
+  const parseList = (v) => { try { const a = JSON.parse(v || "[]"); return Array.isArray(a) ? a : []; } catch { return []; } };
+  const DRAFT_META = {
+    proposed: { label:"Draft taiyar",  color:T.blu, bg:T.bluL },
+    approved: { label:"Approved — apply hona baaki", color:T.grn, bg:T.grnL },
+    rejected: { label:"Rejected",      color:T.red, bg:T.redL },
+    applied:  { label:"KB me lag gaya", color:T.grn, bg:T.grnL },
+    none:     { label:"Draft nahi bana", color:T.t3, bg:T.sltL },
+  };
+
+  return (
+    <div>
+      <PageHeader title="KB Gaps" sub="Jahan Sahayak ke paas jawab nahi tha — aur uska proposed KB draft"/>
+
+      {rows === null && <div style={{ padding:18, fontSize:12.5, color:T.t4 }}>Loading...</div>}
+      {rows && !rows.length && <EmptyState Icon={IcClip} text="Abhi koi khula KB gap nahi."/>}
+
+      {rows && rows.map(g => {
+        const expanded = openId === g.id;
+        const meta = DRAFT_META[g.draft_status] || DRAFT_META.none;
+        const qs = parseList(g.sample_questions);
+        return (
+          <div key={g.id} style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, marginBottom:8 }}>
+            <button onClick={() => setOpenId(expanded ? null : g.id)}
+              style={{ width:"100%", textAlign:"left", border:"none", background:"transparent", cursor:"pointer",
+                padding:"12px 14px", display:"flex", gap:10, alignItems:"flex-start", fontFamily:"inherit" }}>
+              <span style={{ flex:1, minWidth:0 }}>
+                <span style={{ display:"flex", alignItems:"center", gap:7, marginBottom:4, flexWrap:"wrap" }}>
+                  <TicketBadge text={meta.label} color={meta.color} bg={meta.bg}/>
+                  <span style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{g.theme}</span>
+                  {g.target_file && <span style={{ fontSize:11, color:T.t3, fontFamily:"monospace" }}>{g.target_file}</span>}
+                  <span style={{ fontSize:11, color:T.t4 }}>{g.hit_count} sawaal</span>
+                </span>
+                <span style={{ display:"block", fontSize:12, color:T.t3, lineHeight:1.45,
+                  overflow:"hidden", textOverflow:"ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
+                  {qs[0] || "—"}
+                </span>
+              </span>
+              <span style={{ fontSize:11.5, color:T.blu, fontWeight:600, whiteSpace:"nowrap" }}>
+                {expanded ? "Band karein" : "Draft dekhein"}
+              </span>
+            </button>
+
+            {expanded && (
+              <div style={{ padding:"0 14px 14px", display:"flex", flexDirection:"column", gap:10 }}>
+                {qs.length > 0 && (
+                  <div style={{ fontSize:11.5, color:T.t3 }}>
+                    <b>Users ne poocha:</b>
+                    <ul style={{ margin:"4px 0 0", paddingLeft:18 }}>
+                      {qs.map((q,i) => <li key={i} style={{ marginBottom:2 }}>{q}</li>)}
+                    </ul>
+                  </div>
+                )}
+
+                {g.draft_text ? (
+                  <>
+                    <div style={{ fontSize:11, color:T.t4 }}>
+                      Proposed addition — <span style={{ fontFamily:"monospace" }}>{g.draft_file}</span>
+                      {g.draft_rationale ? ` · ${g.draft_rationale}` : ""}
+                    </div>
+                    <pre style={{ margin:0, whiteSpace:"pre-wrap", wordBreak:"break-word", fontSize:12,
+                      lineHeight:1.5, color:T.t1, background:T.surfaceB, border:`1px solid ${T.b1}`,
+                      borderRadius:8, padding:"10px 12px", fontFamily:"inherit" }}>{g.draft_text}</pre>
+                    <div style={{ fontSize:11, color:T.t4, lineHeight:1.5 }}>
+                      Approve karne par file abhi nahi badlegi — draft "apply hona baaki" list me chala jayega.
+                      Asli badlav Claude Code session se hoga (KB Git me hi sach hai).
+                    </div>
+                    {g.draft_status === "proposed" && (
+                      <div style={{ display:"flex", gap:7 }}>
+                        <Btn onClick={() => decide(g.id, "approved")} color={T.grn} disabled={busy}>Approve</Btn>
+                        <Btn onClick={() => decide(g.id, "rejected")} color={T.red} disabled={busy}>Reject</Btn>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{ fontSize:11.5, color:T.t4 }}>
+                    Draft abhi nahi bana{g.draft_rationale ? ` — ${g.draft_rationale}` : " (weekly job banata hai)"}.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 // ── Bug Inbox — Phynaxon's cross-company Sahayak tickets ──────────
 // Bugs reported through Sahayak used to land on the COMPANY admin's desk,
 // where nobody could fix them and Phynaxon never heard about them. This is
@@ -1238,6 +1351,7 @@ const TABS = [
   { id:"audit",     label:"Audit Logs",       Icon:IcShield   },
   { id:"sanchalan", label:"Sanchalan",        Icon:IcLock     },
   { id:"bugs",      label:"Bug Inbox",        Icon:IcShield   },
+  { id:"kbgaps",    label:"KB Gaps",          Icon:IcClip     },
 ];
 
 export default function SaaSModule() {
@@ -1308,6 +1422,7 @@ export default function SaaSModule() {
             {tab === "audit"     && <TabAuditLogs companies={companies}/>}
             {tab === "sanchalan" && <TabSanchalan onOpenDetail={handleOpenDetail}/>}
             {tab === "bugs"      && <TabBugInbox/>}
+            {tab === "kbgaps"    && <TabKbGaps/>}
           </>
         )}
       </div>
