@@ -195,10 +195,69 @@ function PageHeader({ title, sub, right }) {
 // ════════════════════════════════════════════════════════════════════════
 // TAB 1: DASHBOARD / STATS
 // ════════════════════════════════════════════════════════════════════════
+// Platform ops — scheduler, email queue and the auto-email switch. These were
+// the only genuinely useful controls on the old CRM & Health tab, so they moved
+// onto the Dashboard rather than dying with it.
+function PlatformOps({ setOuterToast }) {
+  const [d, setD] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(() => {
+    apiFetch("/saas-admin/crm-dashboard").then(r => setD(r.success ? r.data : null)).catch(() => setD(null));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const run = async (path, label) => {
+    setBusy(true);
+    const res = await apiFetch(path, { method: "POST" });
+    setBusy(false);
+    setOuterToast({ msg: res.success ? (res.message || label + " done") : (res.message || label + " failed"), type: res.success ? "success" : "error" });
+    load();
+  };
+
+  const toggleAutoEmails = async (next) => {
+    await apiFetch("/saas-admin/platform-settings", { method: "PUT", body: { auto_emails_enabled: next } });
+    setOuterToast({ msg: next ? "Auto emails ON" : "Auto emails OFF", type: "success" });
+    load();
+  };
+
+  const em = d?.email_stats || {};
+  const autoOn = String(d?.settings?.auto_emails_enabled ?? "1") === "1";
+
+  return (
+    <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
+      <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+        <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>Platform Ops</span>
+        <IcCog size={14} color={T.t4}/>
+      </div>
+      <div style={{ padding:"14px 16px", display:"flex", flexDirection:"column", gap:12 }}>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10 }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>Auto emails</div>
+            <div style={{ fontSize:10.5, color:T.t4 }}>{em.sent || 0} sent · {em.queued || 0} queued · {em.failed || 0} failed</div>
+          </div>
+          <Toggle value={autoOn} onChange={toggleAutoEmails}/>
+        </div>
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:10, borderTop:`1px solid ${T.b1}`, paddingTop:12 }}>
+          <div>
+            <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>Scheduler</div>
+            <div style={{ fontSize:10.5, color:T.t4 }}>Last run: {d?.last_scheduler_run ? fmtDateTime(d.last_scheduler_run) : "never"}</div>
+          </div>
+          <div style={{ display:"flex", gap:7 }}>
+            <Btn variant="outline" disabled={busy} onClick={() => run("/saas-admin/email-queue/flush", "Flush emails")} style={{ padding:"5px 10px", fontSize:11 }}>Flush Emails</Btn>
+            <Btn disabled={busy} onClick={() => run("/saas-admin/scheduler/run", "Scheduler")} style={{ padding:"5px 10px", fontSize:11 }}>{busy ? "..." : "Run Now"}</Btn>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TabStats() {
   const [data, setData] = useState(null);
   const [metrics, setMetrics] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState(null);
 
   const load = () => {
     setLoading(true);
@@ -244,49 +303,56 @@ function TabStats() {
 
   return (
     <div style={{ padding:"20px 24px" }}>
-      <PageHeader title="Platform Overview" sub="Customer intelligence & retention dashboard" right={
+      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+      <PageHeader title="Platform Overview" sub="Revenue, billing gaps and platform health" right={
         <Btn onClick={load} variant="outline"><IcRefresh size={13}/> Refresh</Btn>
       }/>
 
-      {/* Revenue KPI row */}
+      {/* Money — all of it from real client contracts (utils/saasRevenue.js) */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:12 }}>
-        <StatCard label="MRR"             value={"₹" + fmtMoney(kpi.mrr || 0)}       sub={`ARR: ₹${fmtMoney(kpi.arr || 0)}`} color={T.grn} Icon={IcDollar}/>
-        <StatCard label="Paid Active"     value={fmtNum(kpi.paid_active || 0)}       sub="Paying customers"                  color={T.blu} Icon={IcChk}/>
-        <StatCard label="Free Trial"      value={fmtNum(kpi.trial || 0)}             sub={`${kpi.trial_ending_count||0} ending in 3 days`} color={T.amb} Icon={IcClip}/>
-        <StatCard label="Inactive"        value={fmtNum(kpi.inactive || 0)}          sub="No active subscription"            color={T.slt} Icon={IcX}/>
+        <StatCard label="MRR"          value={"₹" + fmtMoney(kpi.mrr || 0)}         sub={`ARR: ₹${fmtMoney(kpi.arr || 0)} · ${kpi.active_subs || 0} contracts`} color={T.grn} Icon={IcDollar}/>
+        <StatCard label="Collected"    value={"₹" + fmtMoney(kpi.collected || 0)}   sub="paid invoices, incl. GST" color={T.cyn} Icon={IcChk}/>
+        <StatCard label="Outstanding"  value={"₹" + fmtMoney(kpi.outstanding || 0)}
+          sub={kpi.overdue_count > 0 ? `${kpi.overdue_count} overdue · ₹${fmtMoney(kpi.overdue)}` : "nothing overdue"}
+          color={kpi.overdue_count > 0 ? T.red : T.amb} Icon={IcActivity}/>
+        {/* Replaces the old "Free Trial" card. Trials were counted from the
+            legacy plan table that nothing enforces; an unbilled live customer
+            is the number that actually costs money. */}
+        <StatCard label="Billing Gaps" value={fmtNum(kpi.billing_gap_count || 0)}
+          sub={kpi.billing_gap_count > 0 ? "live but not billed" : "every customer is billed"}
+          color={kpi.billing_gap_count > 0 ? T.amb : T.grn} Icon={IcClip}/>
       </div>
 
-      {/* Retention KPI row */}
+      {/* Tenancy + health */}
       <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:10, marginBottom:20 }}>
-        <StatCard label="Total Companies" value={fmtNum(kpi.total || data.companies.total)} sub={`${data.new_today} new today`}         color={T.pur} Icon={IcBuilding}/>
-        <StatCard label="Total Users"     value={fmtNum(data.users.total)}           sub={`${data.users.active||0} active`}                color={T.cyn} Icon={IcUsers}/>
-        <StatCard label="Expiring Soon"   value={fmtNum(kpi.expiring_count || 0)}    sub="Next 7 days"                                     color={T.amb} Icon={IcActivity}/>
-        <StatCard label="Churn Risk"      value={fmtNum(kpi.churn_risk_count || 0)}  sub="No login 15+ days"                               color={T.red} Icon={IcShield}/>
+        <StatCard label="Companies"     value={fmtNum(kpi.total || data.companies.total)} sub={`${kpi.billed || 0} billed · ${kpi.unbilled || 0} unbilled`} color={T.pur} Icon={IcBuilding}/>
+        <StatCard label="Total Users"   value={fmtNum(data.users.total)}          sub={`${data.users.active||0} active`} color={T.cyn} Icon={IcUsers}/>
+        <StatCard label="Expiring Soon" value={fmtNum(kpi.expiring_count || 0)}   sub="contracts, next 30 days" color={T.amb} Icon={IcActivity}/>
+        <StatCard label="Churn Risk"    value={fmtNum(kpi.churn_risk_count || 0)} sub="no login 15+ days" color={T.red} Icon={IcShield}/>
       </div>
 
       {/* Retention alerts row */}
       {metrics && (
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:12, marginBottom:20 }}>
-          {/* Trial ending soon */}
+          {/* Billing gaps — replaces "Trial Ending Soon", which counted rows in
+              the legacy plan table. This is the state that actually loses money:
+              a customer working normally that nobody is invoicing. */}
           <div style={{ background:T.surface, border:`1px solid ${T.ambM}`, borderRadius:10, overflow:"hidden" }}>
             <div style={{ padding:"10px 14px", background:T.ambL, borderBottom:`1px solid ${T.ambM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:12, fontWeight:700, color:T.amb }}>⏳ Trial Ending Soon</span>
-              <span style={{ fontSize:10, color:T.amb, fontWeight:600 }}>{(metrics.trial_ending_soon||[]).length} companies</span>
+              <span style={{ fontSize:12, fontWeight:700, color:T.amb }}>Billing gaps</span>
+              <span style={{ fontSize:10, color:T.amb, fontWeight:600 }}>{(metrics.billing_gaps||[]).length} customers</span>
             </div>
             <div style={{ maxHeight:200, overflowY:"auto" }}>
-              {(metrics.trial_ending_soon||[]).length === 0 && <div style={{ padding:20, textAlign:"center", color:T.t4, fontSize:11 }}>No trials ending soon</div>}
-              {(metrics.trial_ending_soon||[]).map((c, i) => {
-                const d = daysUntil(c.end_date);
-                return (
-                  <div key={i} style={{ padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-                    <div style={{ minWidth:0 }}>
-                      <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
-                      <div style={{ fontSize:10, color:T.t4 }}>{c.email || c.phone || "--"}</div>
-                    </div>
-                    <Badge text={d <= 0 ? "Today" : `${d}d`} color={d <= 1 ? T.red : T.amb}/>
+              {(metrics.billing_gaps||[]).length === 0 && <div style={{ padding:20, textAlign:"center", color:T.t4, fontSize:11 }}>Every live customer is billed</div>}
+              {(metrics.billing_gaps||[]).map((c, i) => (
+                <div key={i} style={{ padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
+                  <div style={{ minWidth:0 }}>
+                    <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
+                    <div style={{ fontSize:10, color:T.t4 }}>{c.company_count} {c.company_count === 1 ? "company" : "companies"}</div>
                   </div>
-                );
-              })}
+                  <Badge text={c.sub_status ? c.sub_status.toUpperCase() : "NO SUB"} color={T.amb}/>
+                </div>
+              ))}
             </div>
           </div>
 
@@ -304,9 +370,10 @@ function TabStats() {
                   <div key={i} style={{ padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                     <div style={{ minWidth:0 }}>
                       <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
-                      {/* mrr_amount lived on the legacy per-company table and was
-                          never written — it only ever rendered "₹0/mo". */}
-                      <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || c.status}</div>
+                      {/* Client contract, not a per-company plan row */}
+                      <div style={{ fontSize:10, color:T.t4 }}>
+                        ₹{fmtMoney(c.base_annual_value)}/yr · {c.company_count} {c.company_count === 1 ? "company" : "companies"}
+                      </div>
                     </div>
                     <Badge text={d <= 0 ? "Today" : `${d}d`} color={d <= 2 ? T.red : T.blu}/>
                   </div>
@@ -327,7 +394,7 @@ function TabStats() {
                 <div key={i} style={{ padding:"9px 14px", borderBottom:`1px solid ${T.b1}`, display:"flex", justifyContent:"space-between", alignItems:"center" }}>
                   <div style={{ minWidth:0 }}>
                     <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
-                    <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || "No plan"}</div>
+                    <div style={{ fontSize:10, color:T.t4 }}>{c.client_name || "no client"}</div>
                   </div>
                   <span style={{ fontSize:10, color:T.red, fontWeight:600 }}>{daysSince(c.last_login)}</span>
                 </div>
@@ -427,6 +494,11 @@ function TabStats() {
             )}
           </div>
         </div>
+
+        {/* Platform Ops — the useful half of the old CRM & Health tab.
+            The rest of that tab (health distribution, at-risk list) duplicated
+            the churn-risk card above, so it went with the tab. */}
+        <PlatformOps setOuterToast={setToast}/>
 
         {/* Recent audit activity */}
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
@@ -1123,18 +1195,17 @@ function CompanyDetailPage({ companyId, onBack }) {
           </div>
 
           <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
-            <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Current Subscription</div>
+            {/* The CLIENT's contract — a company has no subscription of its own */}
+            <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Client Contract</div>
             {current_sub ? (
               <div>
-                <div style={{ fontSize:16, fontWeight:700, color:T.blu }}>{current_sub.plan_name || "Custom"}</div>
+                <div style={{ fontSize:16, fontWeight:700, color:T.blu }}>₹{fmtMoney(current_sub.base_annual_value)}<span style={{ fontSize:11, fontWeight:500, color:T.t4 }}> / yr</span></div>
                 <div style={{ fontSize:11, color:T.t4, marginBottom:10 }}>{current_sub.billing_cycle} · <Badge text={current_sub.status} color={current_sub.status === "active" ? T.grn : T.amb}/></div>
                 <div style={{ fontSize:11, color:T.t3 }}>Valid till <strong style={{ color:T.t1 }}>{fmtDate(current_sub.end_date)}</strong></div>
-                {/* No MRR line here: this is the legacy per-company subscription,
-                    which carries no real money. Billing lives on the CLIENT —
-                    see the Customers tab. */}
-                <div style={{ fontSize:10.5, color:T.t4, marginTop:6 }}>Billing is per client — see Customers</div>
+                <div style={{ fontSize:11, color:T.t3 }}>{current_sub.committed_users} committed users</div>
+                <div style={{ fontSize:10.5, color:T.t4, marginTop:6 }}>{current_sub.client_name} · invoices under Customers</div>
               </div>
-            ) : <div style={{ fontSize:12, color:T.t4 }}>No active subscription</div>}
+            ) : <div style={{ fontSize:12, color:T.t4 }}>No contract on this company's client</div>}
           </div>
         </div>
       )}
@@ -1142,18 +1213,21 @@ function CompanyDetailPage({ companyId, onBack }) {
       {/* TAB 2: Subscription */}
       {tab === "subscription" && (
         <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, fontSize:13, fontWeight:700, color:T.t1 }}>Subscription History</div>
-          {subscriptions.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No subscriptions yet</div>}
+          <div style={{ padding:"11px 16px", borderBottom:`1px solid ${T.b1}`, background:T.surfaceB, fontSize:13, fontWeight:700, color:T.t1 }}>
+            Client Contract History
+            <span style={{ fontSize:10.5, fontWeight:400, color:T.t4, marginLeft:8 }}>billing is client-level — edit under Customers</span>
+          </div>
+          {subscriptions.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No contract on this company's client</div>}
           {subscriptions.map((s, i) => (
-            <div key={i} style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"grid", gridTemplateColumns:"1.5fr 1fr 1fr 1fr 1fr", gap:10, alignItems:"center" }}>
+            <div key={i} style={{ padding:"12px 16px", borderBottom:`1px solid ${T.b1}`, display:"grid", gridTemplateColumns:"1.5fr 1fr 1.2fr 1fr 1fr", gap:10, alignItems:"center" }}>
               <div>
-                <div style={{ fontSize:13, fontWeight:700, color:T.t1 }}>{s.plan_name || "--"}</div>
-                <div style={{ fontSize:10, color:T.t4 }}>{s.billing_cycle}</div>
+                <div style={{ fontSize:13, fontWeight:700, color:T.t1 }}>₹{fmtMoney(s.base_annual_value)}/yr</div>
+                <div style={{ fontSize:10, color:T.t4 }}>{s.billing_cycle} · {s.term_months}mo term</div>
               </div>
-              <div><Badge text={s.status} color={s.status === "active" ? T.grn : s.status === "trial" ? T.amb : T.slt}/></div>
+              <div><Badge text={s.status} color={s.status === "active" ? T.grn : s.status === "pending" ? T.amb : T.slt}/></div>
               <div style={{ fontSize:11, color:T.t3 }}>{fmtDate(s.start_date)} → {fmtDate(s.end_date)}</div>
-              <div style={{ fontSize:12, fontWeight:700, color:T.grn }}>₹{fmtMoney(s.amount_paid)}</div>
-              <div style={{ fontSize:11, color:T.t4 }}>{s.payment_ref || "--"}</div>
+              <div style={{ fontSize:12, color:T.t2 }}>{s.committed_users} users</div>
+              <div style={{ fontSize:11, color:T.t4 }}>{s.order_ref || "--"}</div>
             </div>
           ))}
         </div>
@@ -1405,395 +1479,6 @@ function CompanyDetailPage({ companyId, onBack }) {
           </div>
         </>
       )}
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// TAB: ANALYTICS (Phase 5) — cohort, churn, adoption, revenue
-// ════════════════════════════════════════════════════════════════════════
-function TabAnalytics() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-
-  const load = () => {
-    setLoading(true);
-    apiFetch("/saas-admin/analytics").then(res => {
-      if (res.success) setData(res.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
-
-  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading analytics...</div>;
-  if (!data) return <div style={{ padding:60, textAlign:"center", color:T.red, fontSize:13 }}>Failed to load</div>;
-
-  const { cohorts, mrr_growth, churned_mrr, churn_metrics, churn_predictions, adoption, revenue, funnel } = data;
-
-  // Heatmap color by retention %
-  const retColor = (pct) => {
-    if (pct >= 80) return T.grn;
-    if (pct >= 60) return "#34D399";
-    if (pct >= 40) return T.amb;
-    if (pct >= 20) return "#FB923C";
-    if (pct > 0)   return T.red;
-    return T.b1;
-  };
-
-  // Funnel pct
-  const funnelPct = (n) => funnel.signups > 0 ? Math.round((n / funnel.signups) * 100) : 0;
-
-  return (
-    <div style={{ padding:"20px 24px" }}>
-      <PageHeader title="Analytics" sub="Cohort analysis, churn prediction & feature adoption" right={
-        <Btn onClick={load} variant="outline"><IcRefresh size={13}/> Refresh</Btn>
-      }/>
-
-      {/* Revenue KPIs */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:20 }}>
-        <StatCard label="Total Revenue"   value={"₹" + fmtMoney(revenue.total)} sub="All-time paid"  color={T.grn} Icon={IcDollar}/>
-        <StatCard label="MRR"             value={"₹" + fmtMoney(revenue.mrr)}   sub="Monthly recurring" color={T.blu} Icon={IcTrend}/>
-        <StatCard label="ARR"             value={"₹" + fmtMoney(revenue.arr)}   sub="Annualized"    color={T.pur} Icon={IcDollar}/>
-        <StatCard label="Avg Deal"        value={"₹" + fmtMoney(revenue.avg_deal)} sub="Per subscription" color={T.cyn} Icon={IcDollar}/>
-        <StatCard label="Monthly Churn"   value={churn_metrics.monthly_churn + "%"} sub={`${churn_metrics.churned_this_month} churned`} color={churn_metrics.monthly_churn > 5 ? T.red : T.grn} Icon={IcActivity}/>
-      </div>
-
-      {/* Conversion funnel */}
-      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px", marginBottom:20 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:14 }}>Conversion Funnel</div>
-        <div style={{ display:"grid", gridTemplateColumns:"repeat(4,1fr)", gap:12 }}>
-          {[
-            { l:"Signups",        v: funnel.signups,       color:T.slt },
-            { l:"Activated",      v: funnel.activated,     color:T.blu, hint:"At least 1 login" },
-            { l:"Trial → Paid",   v: funnel.trial_to_paid, color:T.pur, hint:"Converted trials" },
-            { l:"Paying",         v: funnel.paying,        color:T.grn, hint:"Active paid subs" },
-          ].map((f, i) => (
-            <div key={i} style={{ padding:"14px 16px", background:f.color + "12", border:`1px solid ${f.color}30`, borderRadius:10 }}>
-              <div style={{ fontSize:10, fontWeight:700, color:f.color, textTransform:"uppercase", marginBottom:6 }}>{f.l}</div>
-              <div style={{ fontSize:24, fontWeight:800, color:T.t1 }}>{fmtNum(f.v)}</div>
-              <div style={{ fontSize:11, color:T.t4, marginTop:2 }}>{funnelPct(f.v)}% of signups{f.hint ? " · " + f.hint : ""}</div>
-              <div style={{ height:5, background:T.b1, borderRadius:3, marginTop:8, overflow:"hidden" }}>
-                <div style={{ height:"100%", width:`${funnelPct(f.v)}%`, background:f.color }}/>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Cohort retention heatmap */}
-      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden", marginBottom:20 }}>
-        <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, fontSize:13, fontWeight:700, color:T.t1 }}>
-          Cohort Retention (% of signups still active by month)
-        </div>
-        <div style={{ padding:"14px 16px", overflowX:"auto" }}>
-          {cohorts.length === 0 ? <div style={{ color:T.t4, fontSize:12, textAlign:"center", padding:20 }}>Not enough data yet</div> : (
-            <table style={{ borderCollapse:"collapse", width:"100%", minWidth:600 }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign:"left", padding:"6px 8px", fontSize:11, fontWeight:700, color:T.t3, borderBottom:`1px solid ${T.b1}` }}>Cohort</th>
-                  <th style={{ textAlign:"center", padding:"6px 8px", fontSize:11, fontWeight:700, color:T.t3, borderBottom:`1px solid ${T.b1}` }}>Size</th>
-                  {[0,1,2,3,4,5].map(m => (
-                    <th key={m} style={{ textAlign:"center", padding:"6px 8px", fontSize:11, fontWeight:700, color:T.t3, borderBottom:`1px solid ${T.b1}` }}>M{m}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {cohorts.map((c, i) => (
-                  <tr key={i}>
-                    <td style={{ padding:"7px 8px", fontSize:11, fontWeight:600, color:T.t1 }}>{c.cohort}</td>
-                    <td style={{ padding:"7px 8px", fontSize:11, color:T.t3, textAlign:"center" }}>{c.size}</td>
-                    {[0,1,2,3,4,5].map(m => {
-                      const cell = c.retention.find(r => r.month === m);
-                      const pct = cell?.pct || 0;
-                      return (
-                        <td key={m} style={{ padding:4, textAlign:"center" }}>
-                          <div style={{ padding:"6px 0", background: retColor(pct), color: pct >= 40 ? "white" : T.t3, borderRadius:5, fontSize:10, fontWeight:700 }}>
-                            {pct > 0 ? pct + "%" : "—"}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </div>
-      </div>
-
-      {/* MRR growth + Feature adoption */}
-      <div style={{ display:"grid", gridTemplateColumns:"1.2fr 1fr", gap:16, marginBottom:20 }}>
-        {/* MRR net growth */}
-        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, fontSize:13, fontWeight:700, color:T.t1 }}>
-            MRR: New vs Churned (6 months)
-          </div>
-          <div style={{ padding:"16px" }}>
-            {mrr_growth.length === 0 ? <div style={{ color:T.t4, fontSize:12, textAlign:"center", padding:20 }}>No subscription data yet</div> : (
-              <div style={{ display:"flex", alignItems:"flex-end", gap:12, height:160 }}>
-                {mrr_growth.map((g, i) => {
-                  const churned = churned_mrr.find(c => c.month === g.month);
-                  const churnedVal = parseFloat(churned?.churned_mrr || 0);
-                  const newVal = parseFloat(g.new_mrr) || 0;
-                  const max = Math.max(...mrr_growth.map(x => parseFloat(x.new_mrr)||0), ...churned_mrr.map(x => parseFloat(x.churned_mrr)||0), 1);
-                  return (
-                    <div key={i} style={{ flex:1, display:"flex", flexDirection:"column", alignItems:"center", gap:3 }}>
-                      <div style={{ fontSize:10, fontWeight:700, color:T.grn }}>+₹{fmtMoney(newVal)}</div>
-                      <div style={{ width:"100%", display:"flex", flexDirection:"column", gap:2 }}>
-                        <div style={{ width:"100%", height:`${(newVal/max)*70}px`, minHeight:6, background:T.grn, borderRadius:"3px 3px 0 0" }}/>
-                        {churnedVal > 0 && <div style={{ width:"100%", height:`${(churnedVal/max)*70}px`, minHeight:6, background:T.red, borderRadius:"0 0 3px 3px" }}/>}
-                      </div>
-                      {churnedVal > 0 && <div style={{ fontSize:10, fontWeight:700, color:T.red }}>-₹{fmtMoney(churnedVal)}</div>}
-                      <div style={{ fontSize:9, color:T.t4, marginTop:4 }}>{g.month.split("-")[1]}/{g.month.split("-")[0].slice(2)}</div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Feature adoption */}
-        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, fontSize:13, fontWeight:700, color:T.t1 }}>
-            Feature Adoption
-          </div>
-          <div style={{ padding:"14px 16px", maxHeight:260, overflowY:"auto" }}>
-            {adoption.length === 0 && <div style={{ color:T.t4, fontSize:12, textAlign:"center", padding:20 }}>No modules configured</div>}
-            {adoption.map((m, i) => (
-              <div key={i} style={{ display:"flex", alignItems:"center", gap:10, marginBottom:10 }}>
-                <div style={{ width:95, fontSize:11.5, color:T.t2, fontWeight:500, textTransform:"capitalize" }}>{m.module}</div>
-                <div style={{ flex:1, height:8, background:T.b1, borderRadius:4, overflow:"hidden" }}>
-                  <div style={{ height:"100%", width:`${m.pct}%`, background: m.pct >= 60 ? T.grn : m.pct >= 30 ? T.amb : T.red, borderRadius:4 }}/>
-                </div>
-                <div style={{ width:40, fontSize:11, fontWeight:700, color:T.t1, textAlign:"right" }}>{m.pct}%</div>
-                <div style={{ width:38, fontSize:10, color:T.t4, textAlign:"right" }}>{m.enabled}/{m.total}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Churn predictions */}
-      <div style={{ background:T.surface, border:`1px solid ${T.redM}`, borderRadius:10, overflow:"hidden" }}>
-        <div style={{ padding:"11px 16px", background:T.redL, borderBottom:`1px solid ${T.redM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:13, fontWeight:700, color:T.red }}>🔮 Churn Predictions (health &lt; 50)</span>
-          <span style={{ fontSize:11, color:T.red, fontWeight:600 }}>{churn_predictions.length} at risk</span>
-        </div>
-        <div style={{ maxHeight:300, overflowY:"auto" }}>
-          {churn_predictions.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No predicted churns ✓</div>}
-          {churn_predictions.map((c, i) => {
-            const daysSince = c.last_login ? Math.floor((Date.now() - new Date(c.last_login)) / 86400000) : null;
-            const risk = c.health_score < 25 ? "Very High" : c.health_score < 40 ? "High" : "Medium";
-            const riskColor = c.health_score < 25 ? T.red : c.health_score < 40 ? T.amb : T.blu;
-            return (
-              <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"grid", gridTemplateColumns:"2fr 1fr 1fr 100px 70px", gap:10, alignItems:"center" }}>
-                <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
-                <div style={{ fontSize:11, color:T.t3 }}>Sub ends: {c.sub_end ? fmtDate(c.sub_end) : "—"}</div>
-                <div style={{ fontSize:11, color:T.t3 }}>{daysSince != null ? daysSince + "d since login" : "Never logged in"}</div>
-                <div><Badge text={risk + " risk"} color={riskColor}/></div>
-                <div style={{ fontSize:14, fontWeight:800, color:riskColor, textAlign:"right" }}>{c.health_score}</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════════════════════════
-// TAB: CRM & HEALTH (Phase 4) — health alerts, auto-emails, scheduler
-// ════════════════════════════════════════════════════════════════════════
-function TabCRMHealth() {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [running, setRunning] = useState(false);
-  const [toast, setToast] = useState(null);
-
-  const load = () => {
-    setLoading(true);
-    apiFetch("/saas-admin/crm-dashboard").then(res => {
-      if (res.success) setData(res.data);
-      setLoading(false);
-    }).catch(() => setLoading(false));
-  };
-  useEffect(() => { load(); }, []);
-
-  const runScheduler = async () => {
-    setRunning(true);
-    const res = await apiFetch("/saas-admin/scheduler/run", { method:"POST" });
-    setRunning(false);
-    if (res.success) {
-      setToast({ msg:`Scheduler done: ${res.data.checked} checked · ${res.data.emails_queued} emails · ${res.data.alerts} alerts`, type:"success" });
-      load();
-    } else setToast({ msg:"Scheduler failed", type:"error" });
-  };
-
-  const flushEmails = async () => {
-    setRunning(true);
-    const res = await apiFetch("/saas-admin/email-queue/flush", { method:"POST" });
-    setRunning(false);
-    if (res.success) {
-      setToast({ msg: res.data.reason === "no_smtp" ? "SMTP not configured — emails stay queued" : `Flushed: ${res.data.sent} sent, ${res.data.failed} failed`, type: res.data.reason === "no_smtp" ? "error" : "success" });
-      load();
-    }
-  };
-
-  const toggleAutoEmails = async () => {
-    const newVal = data.settings.auto_emails_enabled === "1" ? 0 : 1;
-    await apiFetch("/saas-admin/platform-settings", { method:"PUT", body:{ auto_emails_enabled: newVal } });
-    load();
-  };
-
-  if (loading) return <div style={{ padding:60, textAlign:"center", color:T.t3, fontSize:13 }}>Loading CRM dashboard...</div>;
-  if (!data) return <div style={{ padding:60, textAlign:"center", color:T.red, fontSize:13 }}>Failed to load</div>;
-
-  const { distribution, at_risk_companies, email_stats, recent_emails, system_alerts, last_scheduler_run, settings, smtp_configured } = data;
-  const total = distribution.healthy + distribution.medium + distribution.at_risk;
-  const pct = n => total > 0 ? Math.round((n / total) * 100) : 0;
-  const autoOn = settings.auto_emails_enabled === "1";
-
-  return (
-    <div style={{ padding:"20px 24px" }}>
-      {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
-
-      <PageHeader title="CRM & Customer Health" sub={`${total} active companies · Avg score: ${distribution.avg_score}/100`} right={
-        <div style={{ display:"flex", gap:8 }}>
-          <Btn onClick={flushEmails} variant="outline" disabled={running}>{running ? "..." : "Flush Emails"}</Btn>
-          <Btn onClick={runScheduler} disabled={running}>{running ? "Running..." : "Run Now"}</Btn>
-        </div>
-      }/>
-
-      {!smtp_configured && (
-        <div style={{ padding:"10px 14px", background:T.ambL, border:`1px solid ${T.ambM}`, borderRadius:8, fontSize:11.5, color:T.amb, marginBottom:16 }}>
-          <strong>SMTP not configured.</strong> Set <code>SMTP_HOST</code>, <code>SMTP_PORT</code>, <code>SMTP_USER</code>, <code>SMTP_PASS</code>, <code>SMTP_FROM</code> env vars on Railway to enable actual email sending. Emails are being queued safely until then.
-        </div>
-      )}
-
-      {/* KPI row */}
-      <div style={{ display:"grid", gridTemplateColumns:"repeat(5,1fr)", gap:10, marginBottom:20 }}>
-        <StatCard label="Avg Health"  value={distribution.avg_score + "/100"} sub="Platform average" color={distribution.avg_score >= 75 ? T.grn : distribution.avg_score >= 50 ? T.amb : T.red} Icon={IcShield}/>
-        <StatCard label="Healthy"     value={fmtNum(distribution.healthy)}    sub={pct(distribution.healthy) + "%"} color={T.grn} Icon={IcChk}/>
-        <StatCard label="Medium"      value={fmtNum(distribution.medium)}     sub={pct(distribution.medium) + "%"}  color={T.amb} Icon={IcActivity}/>
-        <StatCard label="At Risk"     value={fmtNum(distribution.at_risk)}    sub={pct(distribution.at_risk) + "%"} color={T.red} Icon={IcX}/>
-        <StatCard label="Emails"      value={fmtNum(email_stats.queued + email_stats.sent)} sub={`${email_stats.sent} sent, ${email_stats.queued} queued`} color={T.blu} Icon={IcActivity}/>
-      </div>
-
-      {/* Health distribution bar */}
-      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px", marginBottom:20 }}>
-        <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:12 }}>Health Distribution</div>
-        {total === 0 ? <div style={{ fontSize:12, color:T.t4 }}>No companies yet</div> : (
-          <>
-            <div style={{ display:"flex", height:26, borderRadius:8, overflow:"hidden", border:`1px solid ${T.b1}` }}>
-              {distribution.healthy > 0 && <div style={{ flex:distribution.healthy, background:T.grn, display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontSize:11, fontWeight:700 }}>{pct(distribution.healthy)}%</div>}
-              {distribution.medium > 0 &&  <div style={{ flex:distribution.medium,  background:T.amb, display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontSize:11, fontWeight:700 }}>{pct(distribution.medium)}%</div>}
-              {distribution.at_risk > 0 && <div style={{ flex:distribution.at_risk, background:T.red, display:"flex", alignItems:"center", justifyContent:"center", color:"white", fontSize:11, fontWeight:700 }}>{pct(distribution.at_risk)}%</div>}
-            </div>
-            <div style={{ display:"flex", gap:16, marginTop:10, fontSize:11, color:T.t3 }}>
-              <span><span style={{ display:"inline-block", width:10, height:10, background:T.grn, borderRadius:2, marginRight:5 }}/>Healthy (75+)</span>
-              <span><span style={{ display:"inline-block", width:10, height:10, background:T.amb, borderRadius:2, marginRight:5 }}/>Medium (50-74)</span>
-              <span><span style={{ display:"inline-block", width:10, height:10, background:T.red, borderRadius:2, marginRight:5 }}/>At Risk (&lt;50)</span>
-            </div>
-          </>
-        )}
-      </div>
-
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16, marginBottom:20 }}>
-        {/* At-risk companies */}
-        <div style={{ background:T.surface, border:`1px solid ${T.redM}`, borderRadius:10, overflow:"hidden" }}>
-          <div style={{ padding:"11px 16px", background:T.redL, borderBottom:`1px solid ${T.redM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-            <span style={{ fontSize:13, fontWeight:700, color:T.red }}>⚠️ At-Risk Customers</span>
-            <span style={{ fontSize:11, color:T.red, fontWeight:600 }}>{at_risk_companies.length} need attention</span>
-          </div>
-          <div style={{ maxHeight:320, overflowY:"auto" }}>
-            {at_risk_companies.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>All customers are healthy ✓</div>}
-            {at_risk_companies.map((c, i) => (
-              <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-                <div style={{ minWidth:0 }}>
-                  <div style={{ fontSize:12.5, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{c.name}</div>
-                  <div style={{ fontSize:10, color:T.t4 }}>{c.plan_name || "No plan"} · Last login: {c.last_login ? new Date(c.last_login).toLocaleDateString("en-IN") : "Never"}</div>
-                </div>
-                <div style={{ fontSize:16, fontWeight:800, color:T.red, marginLeft:10 }}>{c.health_score}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* System alerts */}
-        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden" }}>
-          <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}` }}>
-            <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>🤖 Auto-Generated Alerts</span>
-          </div>
-          <div style={{ maxHeight:320, overflowY:"auto" }}>
-            {system_alerts.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No system alerts yet</div>}
-            {system_alerts.map((a, i) => (
-              <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}` }}>
-                <div style={{ fontSize:11.5, color:T.t1, marginBottom:3 }}>{a.content}</div>
-                <div style={{ fontSize:10, color:T.t4 }}>{a.company_name} · {fmtDateTime(a.created_at)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* Email queue */}
-      <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, overflow:"hidden", marginBottom:20 }}>
-        <div style={{ padding:"11px 16px", background:T.surfaceB, borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-          <span style={{ fontSize:13, fontWeight:700, color:T.t1 }}>📧 Recent Email Queue</span>
-          <div style={{ display:"flex", gap:8, fontSize:10 }}>
-            <Badge text={`Queued: ${email_stats.queued}`} color={T.amb}/>
-            <Badge text={`Sent: ${email_stats.sent}`} color={T.grn}/>
-            {email_stats.failed > 0 && <Badge text={`Failed: ${email_stats.failed}`} color={T.red}/>}
-          </div>
-        </div>
-        <div style={{ maxHeight:280, overflowY:"auto" }}>
-          {recent_emails.length === 0 && <div style={{ padding:30, textAlign:"center", color:T.t4, fontSize:12 }}>No emails queued yet. Scheduler runs every 6 hours.</div>}
-          {recent_emails.map((e, i) => (
-            <div key={i} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"grid", gridTemplateColumns:"2fr 2fr 1fr 100px 120px", gap:10, alignItems:"center" }}>
-              <div style={{ fontSize:12, fontWeight:600, color:T.t1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{e.subject}</div>
-              <div style={{ fontSize:11, color:T.t3, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{e.to_email}</div>
-              <div style={{ fontSize:10, color:T.t4, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>{e.company_name || "—"}</div>
-              <div><Badge text={e.email_type} color={T.pur}/></div>
-              <div><Badge text={e.status} color={e.status === "sent" ? T.grn : e.status === "failed" ? T.red : T.amb}/></div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Settings + scheduler status */}
-      <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:16 }}>
-        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
-          <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:12 }}>Auto-Email Settings</div>
-          <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", padding:"10px 0", borderBottom:`1px solid ${T.b1}` }}>
-            <div>
-              <div style={{ fontSize:12, fontWeight:600, color:T.t1 }}>Auto-emails enabled</div>
-              <div style={{ fontSize:10, color:T.t4 }}>Trial day 3/7/14 + renewal reminders</div>
-            </div>
-            <button onClick={toggleAutoEmails}
-              style={{ width:42, height:24, borderRadius:12, border:"none", cursor:"pointer",
-                background: autoOn ? T.grn : T.b2, position:"relative", transition:"background 0.2s" }}>
-              <div style={{ position:"absolute", width:18, height:18, borderRadius:"50%", background:"white", top:3, left: autoOn ? 21 : 3, transition:"left 0.2s" }}/>
-            </button>
-          </div>
-          <div style={{ padding:"10px 0", fontSize:11, color:T.t3 }}>
-            <strong>Health alert threshold:</strong> {settings.health_alert_threshold}/100
-          </div>
-        </div>
-
-        <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 20px" }}>
-          <div style={{ fontSize:13, fontWeight:700, color:T.t1, marginBottom:12 }}>Scheduler Status</div>
-          <div style={{ fontSize:11, color:T.t3, marginBottom:6 }}>
-            <strong>Last run:</strong> {last_scheduler_run ? new Date(last_scheduler_run).toLocaleString("en-IN") : "Never"}
-          </div>
-          <div style={{ fontSize:11, color:T.t3, marginBottom:6 }}>
-            <strong>Frequency:</strong> Every 6 hours (auto)
-          </div>
-          <div style={{ fontSize:11, color:T.t3 }}>
-            <strong>SMTP:</strong> <span style={{ color: smtp_configured ? T.grn : T.red, fontWeight:700 }}>{smtp_configured ? "Configured ✓" : "Not configured"}</span>
-          </div>
-        </div>
-      </div>
     </div>
   );
 }
@@ -3471,17 +3156,20 @@ function TabBugInbox() {
   );
 }
 
-// 13 tabs -> 9. Removed:
+// 13 tabs -> 7. Removed:
 //   Companies    -> merged into Customers (companies nest under their client)
 //   Module Access-> company detail page, where it is already scoped
 //   Data Export  -> button on the company detail page
-//   Subscriptions-> deleted; it edited the legacy per-company plan table, which
-//                   enforces nothing. Real contracts live under Customers.
+//   Subscriptions-> deleted; it edited the legacy per-company plan table
+//   Analytics    -> deleted. Cohort retention, conversion funnel and churn
+//                   prediction were computing over a handful of tenants and one
+//                   contract; they rendered confident-looking empty charts.
+//   CRM & Health -> deleted. Its churn/health lists duplicated the Dashboard;
+//                   its genuinely useful half (scheduler, email queue, auto-email
+//                   toggle) moved onto the Dashboard as Platform Ops.
 const TABS = [
   { id:"stats",     label:"Dashboard",        Icon:IcTrend    },
   { id:"customers", label:"Customers",        Icon:IcDollar   },
-  { id:"crm",       label:"CRM & Health",     Icon:IcActivity },
-  { id:"analytics", label:"Analytics",        Icon:IcTrend    },
   { id:"users",     label:"All Users",        Icon:IcUsers    },
   { id:"features",  label:"Feature Requests", Icon:IcClip     },
   { id:"audit",     label:"Audit Logs",       Icon:IcShield   },
@@ -3552,8 +3240,6 @@ export default function SaaSModule() {
           <>
             {tab === "stats"     && <TabStats/>}
             {tab === "customers" && <TabCustomers onOpenCompany={handleOpenDetail}/>}
-            {tab === "crm"       && <TabCRMHealth/>}
-            {tab === "analytics" && <TabAnalytics/>}
             {tab === "users"     && <TabUsers/>}
             {tab === "features"  && <TabFeatureRequests/>}
             {tab === "audit"     && <TabAuditLogs companies={companies}/>}
