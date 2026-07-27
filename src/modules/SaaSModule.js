@@ -1131,8 +1131,8 @@ function CompanyDetailPage({ companyId, onBack }) {
                 <div style={{ fontSize:11, color:T.t3 }}>Valid till <strong style={{ color:T.t1 }}>{fmtDate(current_sub.end_date)}</strong></div>
                 {/* No MRR line here: this is the legacy per-company subscription,
                     which carries no real money. Billing lives on the CLIENT —
-                    see Clients & Billing. */}
-                <div style={{ fontSize:10.5, color:T.t4, marginTop:6 }}>Billing is per client — see Clients &amp; Billing</div>
+                    see the Customers tab. */}
+                <div style={{ fontSize:10.5, color:T.t4, marginTop:6 }}>Billing is per client — see Customers</div>
               </div>
             ) : <div style={{ fontSize:12, color:T.t4 }}>No active subscription</div>}
           </div>
