@@ -106,3 +106,18 @@ export function getDiagBundle() {
     return { app_version: "web", errors: [], failed_calls: [], screens: [] };
   }
 }
+
+// Tiny per-turn context for Sahayak: where the user is standing, and the last
+// API call that FAILED (method + path + status ONLY — the ring buffer never
+// held bodies to begin with). ~200 bytes, sent on every chat turn, unlike the
+// full bundle above which needs explicit consent because it is much richer.
+export function getChatContext() {
+  try {
+    const screen = screens.length ? screens[screens.length - 1].name : null;
+    const last = calls.length ? calls[calls.length - 1] : null;
+    const ctx = {};
+    if (screen) ctx.screen = screen;
+    if (last) ctx.last_failed_api = { method: last.method, path: last.path, status: last.status };
+    return Object.keys(ctx).length ? ctx : null;
+  } catch (_) { return null; }
+}

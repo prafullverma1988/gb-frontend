@@ -1718,6 +1718,10 @@ export default function App(){
   const [ticketCount,setTicketCount]=useState(0);   // sidebar Sahayak/SaaS badge
   const [sahayakNotifCount,setSahayakNotifCount]=useState(0); // advisory Sahayak-stream unread (separate from main bell)
   const [projDeepLink,setProjDeepLink]=useState(null);        // {projectId,tab} from a notification click
+  // Which module the user was on when they tapped the floating Sahayak button.
+  // Needed because opening Sahayak itself becomes the "current screen" — without
+  // this the context would always read "sahayak" instead of where they got stuck.
+  const [sahayakFrom,setSahayakFrom]=useState(null);
   // Stable identity — ProjectsWrapper's deep-link effect depends on it.
   const clearProjDeepLink=useCallback(()=>setProjDeepLink(null),[]);
   const [collapsed,setCollapsed]=useState(()=>window.innerWidth<768);
@@ -1992,7 +1996,7 @@ export default function App(){
     profile:   <SettingsModule initialSection="profile"/>,
     saas:     <SaaSModule/>,
     "saas-leads": <SaaSLeadsModule/>,
-    sahayak:  <SahayakModule onNavigate={handleNotifNav} onNotifCount={setSahayakNotifCount}/>,
+    sahayak:  <SahayakModule onNavigate={handleNotifNav} onNotifCount={setSahayakNotifCount} fromScreen={sahayakFrom}/>,
   };
 
   const page=PAGES[nav]||PAGES.dashboard;
@@ -2039,6 +2043,28 @@ export default function App(){
       {showSearch&&<QuickSearch onNavigate={(id)=>{setNav(id);setShowSearch(false);}} onClose={()=>setShowSearch(false)}/>}
       {/* Shortcut Cheatsheet Modal */}
       {showCheatsheet&&<ShortcutCheatsheet onClose={()=>setShowCheatsheet(false)}/>}
+      {/* Floating Sahayak AI — reachable from every module without hunting the
+          sidebar. Remembers which screen the user came from so the bot can read
+          a half-finished question in that module's context. Hidden while
+          already inside Sahayak. */}
+      {nav!=="sahayak"&&(
+        <button onClick={()=>{setSahayakFrom(nav);setNav("sahayak");}}
+          title="Sahayak AI — kuch bhi poochein"
+          style={{position:"fixed",right:isMobile?16:22,bottom:isMobile&&!hideAppShell?84:22,zIndex:120,
+            width:52,height:52,borderRadius:"50%",border:"none",cursor:"pointer",
+            background:"#1565C0",color:"#fff",boxShadow:"0 4px 16px rgba(21,101,192,0.38)",
+            display:"flex",alignItems:"center",justifyContent:"center",transition:"transform .13s, box-shadow .13s"}}
+          onMouseEnter={e=>{e.currentTarget.style.transform="scale(1.06)";e.currentTarget.style.boxShadow="0 6px 20px rgba(21,101,192,0.46)";}}
+          onMouseLeave={e=>{e.currentTarget.style.transform="none";e.currentTarget.style.boxShadow="0 4px 16px rgba(21,101,192,0.38)";}}>
+          <svg width={23} height={23} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+            <path d="M12 8V4H8M4 8h16v12H4zM2 14h2M20 14h2M9 13v2M15 13v2"/>
+          </svg>
+          <span style={{position:"absolute",right:-1,top:-1,width:15,height:15,borderRadius:"50%",background:"#FF6F00",
+            display:"flex",alignItems:"center",justifyContent:"center",boxShadow:"0 0 0 2px #fff"}}>
+            <svg width={9} height={9} viewBox="0 0 24 24" fill="#fff"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9L12 3z"/></svg>
+          </span>
+        </button>
+      )}
       {/* Mobile bottom navigation bar */}
       {isMobile&&!hideAppShell&&<MobileBottomNav active={nav} setActive={setNav} enabledModules={enabledModules} user={user}/>}
       {/* Background Upload Toast — always visible */}

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import api, { getUser } from "../config/api";
-import { getDiagBundle } from "../utils/diag";
+import { getDiagBundle, getChatContext } from "../utils/diag";
 import { T } from "./shared/tokens";
 import { BundleView, TicketBadge as Badge, fmtTicketTime as fmtTime } from "./shared/TicketBundle";
 
@@ -65,6 +65,8 @@ const L = {
   consentSending: "Bhej raha hu...",
   consentFail: "Bundle bhej nahi paya — baad me try karein.",
   shotTooBig: "Screenshot 5MB se bada hai.",
+  newChat: "Naya chat",
+  newChatHint: "Purani baat-cheet band karke naya chat shuru karein",
   // Proactive alerts quick-action
   alertsChip: "Kya dhyaan dun?",
   alertsPrompt: "kya dhyaan dun",
@@ -86,7 +88,7 @@ const L = {
   bugHandedOff: "Yeh app ki dikkat hai — Phynaxon support team ko bhej diya gaya hai. Wahi isko theek karke band karegi.",
 };
 
-export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
+export default function SahayakModule({ onNavigate, onNotifCount, fromScreen } = {}) {
   const user = getUser();
   const isAdmin = ["admin", "super_admin"].includes(user?.role);
   // Who the proactive "kya dhyaan dun" alerts are useful for — mirrors the
@@ -120,6 +122,28 @@ export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
   const scrollToEnd = useCallback(() => {
     requestAnimationFrame(() => { if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight; });
   }, []);
+
+  // Context sent with every turn. `fromScreen` (set when the user arrived via
+  // the floating button) wins over the diag ring buffer, whose newest entry by
+  // then is "sahayak" itself — not where they actually got stuck.
+  const chatContext = useCallback(() => {
+    const base = getChatContext() || {};
+    if (fromScreen) base.screen = fromScreen;
+    return Object.keys(base).length ? base : null;
+  }, [fromScreen]);
+
+  // Close the current thread and start fresh. The server keeps the old
+  // conversation (status='closed') — only the view and the model's context
+  // reset, because both are scoped to the OPEN conversation.
+  const [startingNew, setStartingNew] = useState(false);
+  const startNewChat = async () => {
+    if (startingNew || sending) return;
+    setStartingNew(true);
+    try { await api.post("/support-bot/chat/new", {}); } catch (_) {}
+    setMessages([{ id: "welcome" + Date.now(), role: "bot", text: L.welcome }]);
+    setVotes({}); setBundles({}); setInput(""); setErr("");
+    setStartingNew(false);
+  };
 
   // Load history on open.
   useEffect(() => {
@@ -170,7 +194,7 @@ export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
     setSending(true);
     try {
       // LLM answers routinely take longer than the app-wide 15s default.
-      const r = await api.post("/support-bot/chat", { text }, { timeoutMs: CHAT_TIMEOUT_MS });
+      const r = await api.post("/support-bot/chat", { text, context: chatContext() }, { timeoutMs: CHAT_TIMEOUT_MS });
       if (r && r.success) {
         pushMessage({ role: "bot", text: r.reply, ticket: r.ticket_no || null, messageId: r.message_id || null, bugSuspect: !!r.bug_suspect, view: r.view || null });
       } else {
@@ -219,7 +243,7 @@ export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
     try {
       const b64 = await blobToB64(blob);
       // Voice = speech-to-text + LLM, so it needs the longer budget too.
-      const r = await api.post("/support-bot/chat", { audio_base64: b64, mime_type: blob.type }, { timeoutMs: CHAT_TIMEOUT_MS });
+      const r = await api.post("/support-bot/chat", { audio_base64: b64, mime_type: blob.type, context: chatContext() }, { timeoutMs: CHAT_TIMEOUT_MS });
       setTranscribing(false);
       if (r && r.success) {
         pushMessage({ role: "user", text: r.transcript || "(awaaz)", transcript: r.transcript || null });
@@ -258,28 +282,28 @@ export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
 
   if (tab === "alerts" && canAlerts) {
     return (
-      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread}>
+      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread} onNewChat={startNewChat} newChatBusy={startingNew}>
         <AlertsPanel onNavigate={onNavigate} onCount={syncSahayakCount} />
       </Shell>
     );
   }
   if (tab === "tickets" && isAdmin) {
     return (
-      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread}>
+      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread} onNewChat={startNewChat} newChatBusy={startingNew}>
         <TicketsInbox />
       </Shell>
     );
   }
   if (tab === "onboarding" && isAdmin) {
     return (
-      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread}>
+      <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread} onNewChat={startNewChat} newChatBusy={startingNew}>
         <OnboardingView />
       </Shell>
     );
   }
 
   return (
-    <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread}>
+    <Shell tab={tab} setTab={setTab} tabs={TABS} sahayakBadge={sahayakUnread} onNewChat={startNewChat} newChatBusy={startingNew}>
       {/* Messages */}
       <div ref={scrollRef} style={{ flex: 1, overflowY: "auto", padding: "18px", display: "flex", flexDirection: "column", gap: 12, background: T.bg }}>
         {messages.map((m) => (
@@ -371,7 +395,7 @@ export default function SahayakModule({ onNavigate, onNotifCount } = {}) {
 }
 
 // ── Shell: header + (admin) Chat/Tickets tabs ──
-function Shell({ tab, setTab, tabs = [], sahayakBadge = 0, children }) {
+function Shell({ tab, setTab, tabs = [], sahayakBadge = 0, onNewChat, newChatBusy, children }) {
   return (
     <div style={{ display: "flex", flexDirection: "column", height: "100%", maxWidth: 780, margin: "0 auto", background: T.surface, borderLeft: `1px solid ${T.b1}`, borderRight: `1px solid ${T.b1}` }}>
       <div style={{ display: "flex", alignItems: "center", gap: 11, padding: "13px 18px", borderBottom: `1px solid ${T.b1}`, flexShrink: 0 }}>
@@ -393,6 +417,14 @@ function Shell({ tab, setTab, tabs = [], sahayakBadge = 0, children }) {
           </div>
           <div style={{ fontSize: 11.5, color: T.t4 }}>{L.subtitle}</div>
         </div>
+        {/* Naya chat — only meaningful on the chat tab */}
+        {onNewChat && tab === "chat" && (
+          <button onClick={onNewChat} disabled={newChatBusy} title={L.newChatHint}
+            style={{ flexShrink: 0, border: `1px solid ${T.b1}`, background: T.surface, color: newChatBusy ? T.t4 : T.t2,
+              fontSize: 11.5, fontWeight: 600, padding: "5px 10px", borderRadius: 7, cursor: newChatBusy ? "not-allowed" : "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>
+            {L.newChat}
+          </button>
+        )}
         {tabs.length > 1 && (
           <div style={{ display: "flex", gap: 2, background: T.sltL, borderRadius: 8, padding: 2 }}>
             {tabs.map(([id, label]) => (
