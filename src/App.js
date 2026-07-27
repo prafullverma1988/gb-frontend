@@ -491,7 +491,7 @@ function LoginScreen({onLogin}){
         {stage==="change"&&(
           <>
             <div style={{fontSize:14,fontWeight:700,color:C.t,textAlign:"center",marginBottom:6}}>Set a new password</div>
-            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:20}}>Aapka password default (admin@123) hai — surakshit ke liye naya password set karein.</div>
+            <div style={{fontSize:11.5,color:C.tl,textAlign:"center",marginBottom:20}}>Aapka password abhi default hai — surakshit ke liye naya password set karein.</div>
             <div style={{marginBottom:14}}>
               <label style={labelStyle}>New Password</label>
               <input type={show?"text":"password"} value={np1} onChange={e=>setNp1(e.target.value)} placeholder="Min 6 characters" style={inputStyle} autoFocus/>
@@ -1819,13 +1819,20 @@ export default function App(){
         // so the sidebar + menu gating update without a re-login.
         const liveRole = res.role;
         const roleChanged = liveRole && liveRole !== user?.role;
+        // Live project access — re-scope the projects list when an admin
+        // changes this user's assignments, without a re-login.
+        const liveProjects = Array.isArray(res.projects) ? res.projects : null;
+        const projectsChanged = liveProjects &&
+          JSON.stringify([...liveProjects].map(String).sort()) !== JSON.stringify([...(user?.projects||[])].map(String).sort());
         // Module-permission refresh: applies to any non-admin role. Recompute
         // "admin" against the live role, not the stale cached one.
         const effectiveRole = liveRole || user?.role;
-        if(res.success && (roleChanged || (res.module_permissions && effectiveRole!=="admin"))){
+        const permsChanged = res.module_permissions && effectiveRole!=="admin";
+        if(res.success && (roleChanged || projectsChanged || permsChanged)){
           const updated={...user,
             ...(roleChanged ? { role: liveRole } : {}),
-            ...(res.module_permissions && effectiveRole!=="admin" ? { module_permissions: res.module_permissions } : {}),
+            ...(projectsChanged ? { projects: liveProjects } : {}),
+            ...(permsChanged ? { module_permissions: res.module_permissions } : {}),
           };
           setUser(updated);
           try{ localStorage.setItem("gb_user", JSON.stringify(updated)); }catch(_){}
