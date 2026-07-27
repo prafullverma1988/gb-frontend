@@ -934,7 +934,7 @@ function P2PSettlementModal({onClose,dbParties,dbProjects,pendingBills,onSaved,o
   );
 }
 
-function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject,projectId}){
+function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbProjects,projectIdByName,onSaved,prefillGRN,settlesRef,lockParty,lockProject,preProject,projectId}){
   // Reference the module-scope constants (renamed to keep call sites
   // unchanged — saves dozens of touch-ups below).
   const MAT_HEADS = MAT_HEADS_CONST;
@@ -1110,8 +1110,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   // null = still loading, [] = no estimate on project, [...] = real items
   const [realBoqItems, setRealBoqItems] = useState(null);
 
+  // BOQ-linked invoicing is not offered from this modal any more — it belongs to
+  // the Estimate flow, which tracks cumulative billed qty and blocks over-billing.
+  // Flipping this back on also re-enables the mode toggle option below.
+  const BOQ_INVOICING_HERE = false;
+
   useEffect(()=>{
-    if(!isInvoice || !projectId){ setRealBoqItems(null); return; }
+    if(!BOQ_INVOICING_HERE || !isInvoice || !projectId){ setRealBoqItems(null); return; }
     setRealBoqItems(null); // loading
     api.get("/customer-estimates?project_id=" + projectId)
       .then(async r=>{
@@ -1367,8 +1372,12 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const savingRef = useRef(false); // ref-based guard against rapid double-click (state lags)
   const handleSave=async()=>{
     if(savingRef.current||savingTxn) return;       // ← idempotent: ignore subsequent clicks
-    const amt=isMaterial||isSubcon||isInvoice?grandTotal:Number(payAmt)||0;
-    if(!amt){setSaveErr(isMaterial?"Rate enter karo — Grand Total 0 hai.":"Amount required.");return;}
+    // Sales Invoice keeps its total in invTotal (its own line rows); material /
+    // sub-con bills use grandTotal. Reading grandTotal for an invoice always
+    // gave 0 and blocked the save on "Amount required." while the footer
+    // showed the correct figure.
+    const amt=isInvoice?invTotal:(isMaterial||isSubcon?grandTotal:Number(payAmt)||0);
+    if(!amt){setSaveErr(isMaterial?"Rate enter karo — Grand Total 0 hai.":isInvoice?"Invoice me kam se kam ek line (qty + rate) bharein.":"Amount required.");return;}
     // Party COMPULSORY for supplier bills — no vendor, no material purchase.
     // (Site Expense is the exception; it has no party dropdown.)
     if((isMaterial||isSubcon)&&!(party&&String(party).trim())){
@@ -1378,9 +1387,60 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     setSaveErr("");
     savingRef.current=true; setSavingTxn(true);    // ← lock immediately
     try{
+      // ── Sales Invoice → customer_invoices, NOT transactions ──────────────
+      // A client invoice is earned revenue and already has a home: the
+      // customer_invoices table, which project P&L, company P&L, Reports and
+      // Sahayak all read. Writing it as a transaction would create a SECOND
+      // revenue source and the two would disagree. The backend endpoint below
+      // is the same one the Estimate → milestone flow uses (source='manual'
+      // here, since this invoice is not tied to an estimate).
+      if(isInvoice){
+        const projId = projectId
+          || (projectIdByName||{})[String(project||"").trim().toLowerCase()]
+          || null;
+        if(!projId){
+          setSaveErr("Project select karein — invoice kisi project par hi ban sakti hai.");
+          savingRef.current=false; setSavingTxn(false); return;
+        }
+        if(!(party&&String(party).trim())){
+          setSaveErr("Client (party) select karein — bina client ke invoice nahi ban sakti.");
+          savingRef.current=false; setSavingTxn(false); return;
+        }
+        const clientObj=dbParties?.find(p=>p.name.toLowerCase().trim()===(party||"").toLowerCase().trim());
+        const items=invRows
+          .filter(r=>(r.work||r.desc)&&Number(r.qty)>0&&Number(r.rate)>0)
+          .map(r=>({
+            description:[r.work,r.desc].filter(Boolean).join(" — "),
+            qty:Number(r.qty)||0,
+            rate:Number(r.rate)||0,
+            unit:r.unit||"",
+          }));
+        if(!items.length){
+          setSaveErr("Har line me Work Item, Qty aur Rate bharein.");
+          savingRef.current=false; setSavingTxn(false); return;
+        }
+        const invRes=await api.post("/customer-estimates/invoices",{
+          project_id:projId,
+          source:"manual",
+          invoice_date:billDate||new Date().toISOString().slice(0,10),
+          customer_id:clientObj?.id||null,
+          customer_name:party||null,
+          remark:note||null,
+          items,
+        });
+        if(!invRes||invRes.success===false){
+          setSaveErr((invRes&&(invRes.message||invRes.error))||"Invoice save nahi hui.");
+          savingRef.current=false; setSavingTxn(false); return;
+        }
+        if(onSaved) onSaved();
+        setSaved(true);
+        setTimeout(()=>{setSaved(false);onClose();},900);
+        return;
+      }
+
       // Map type to backend enum
       const TXN_TYPE_BACK={
-        "Payment Received":"receipt","Sales Invoice":"receipt","Payment In":"receipt",
+        "Payment Received":"receipt","Payment In":"receipt",
         "Payment Made":"payment","Petty Cash Expense":"site_expense",
         "Advance Payment":"party_payment","Material Purchase Bill":"material_purchase",
         "Sub-Con Bill":"subcon_expense","Bank Transfer":"bank_transfer",
@@ -1744,9 +1804,11 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               <>
                 <div>
                   {lbl("Invoice No.")}
-                  <input value={invoiceNo} onChange={e=>setInvoiceNo(e.target.value)}
-                    style={inp({fontFamily:"monospace",fontSize:12.5,fontWeight:700})}
-                    onFocus={e=>e.target.style.borderColor=T.grn} onBlur={e=>e.target.style.borderColor=T.b1}/>
+                  {/* Read-only: the backend assigns MANINV-1, MANINV-2 … per
+                      project inside the insert transaction, so anything typed
+                      here would be silently replaced. */}
+                  <input value="auto (MANINV-…)" readOnly title="Save karte hi apne aap ban jata hai"
+                    style={inp({fontFamily:"monospace",fontSize:12.5,fontWeight:700,background:T.surfaceB,color:T.t4,cursor:"not-allowed"})}/>
                 </div>
                 <div>
                   {lbl("Invoice Date *")}
@@ -2248,15 +2310,17 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             <div>
               {/* BOQ tab only shown when: no project context (mock/free), or project has real items.
                   When projectId given but no estimate found → only "Fresh Invoice" is offered. */}
-              {(()=>{
-                const boqLoading = projectId && realBoqItems === null;
-                const boqHasItems = !projectId || (Array.isArray(realBoqItems) && realBoqItems.length > 0);
-                const modeOpts = [
-                  ...(boqHasItems ? [["boq", boqLoading ? "Loading BOQ…" : "Link with BOQ", boqLoading ? "Fetching estimate items" : "Pick items from project BOQ"]] : []),
-                  ["fresh","Fresh Invoice","Enter work items manually"],
-                ];
-                return <ModeToggle mode={invMode} setMode={setInvMode} c={T.grn} opts={modeOpts}/>;
-              })()}
+              {/* BOQ-linked billing deliberately NOT offered here. BOQ items belong
+                  to an estimate, and the Estimate flow is what tracks cumulative
+                  billed qty and blocks over-billing. Raising them as a manual
+                  invoice from this modal would bypass both of those silently.
+                  Estimate-based billing lives in: project → Estimate tab. */}
+              <ModeToggle mode="fresh" setMode={()=>{}} c={T.grn}
+                opts={[["fresh","Fresh Invoice","Enter work items manually"]]}/>
+              <div style={{fontSize:11,color:T.t4,margin:"-2px 0 8px",lineHeight:1.5}}>
+                BOQ / milestone ke hisaab se bill karna ho to project ke <b>Estimate</b> tab se karein —
+                wahan pichhla billed qty aur over-billing dono track hote hain.
+              </div>
 
               {invMode==="boq"&&(
                 <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,overflow:"hidden",marginBottom:10}}>
@@ -3315,6 +3379,7 @@ function FinanceModule(){
   // existing transactions, so a fresh company with no transactions had
   // an empty Project dropdown ("No match found").
   const [apiProjects,setApiProjects]=useState([]);
+  const [projectIdByName,setProjectIdByName]=useState({}); // lowercased name → id
   const [loading,setLoading]=useState({parties:false,txns:false,accounts:false,payreqs:false,pendpmts:false});
   const [apiError,setApiError]=useState({});
 
@@ -3548,6 +3613,12 @@ function FinanceModule(){
       const r=await api.get("/projects");
       if(r.success&&Array.isArray(r.data)){
         setApiProjects(r.data.map(p=>p.name).filter(Boolean));
+        // name → id, for flows that need a real project_id (manual customer
+        // invoice). dbProjects stays a plain name list because every picker
+        // in this module is built on names.
+        setProjectIdByName(Object.fromEntries(
+          r.data.filter(p=>p.name).map(p=>[String(p.name).trim().toLowerCase(), p.id])
+        ));
       }
     }catch(e){console.error("Refresh projects:",e);}
   };
@@ -5862,6 +5933,7 @@ Status: ${ledgerRow.status||"unpaid"}`;
           dbParties={masterParties}
           dbAccounts={activeAccounts}
           dbProjects={[...new Set([...apiProjects,...activeTxns.map(t=>t.project)].filter(Boolean))]}
+          projectIdByName={projectIdByName}
           onSaved={handleTxnSaved}
           prefillGRN={prefillGRNData}
           settlesRef={settlesRef}
