@@ -1100,6 +1100,18 @@ function TabSanchalan({ onOpenDetail }) {
 // ════════════════════════════════════════════════════════════════════════
 // MAIN SAAS MODULE
 // ════════════════════════════════════════════════════════════════════════
+// How long an OPEN ticket has been waiting. Null for resolved tickets and for
+// anything under the cutoff, so the chip only shows when it means something.
+// Kept local to this module (modules stay self-contained).
+const BUG_AGE_CUTOFF_DAYS = 2;
+function bugOpenAgeDays(t) {
+  if (!t || t.status !== "open" || !t.created_at) return null;
+  const ms = Date.now() - new Date(t.created_at).getTime();
+  if (!(ms > 0)) return null;
+  const days = Math.floor(ms / 86400000);
+  return days > BUG_AGE_CUTOFF_DAYS ? days : null;
+}
+
 // ── Bug Inbox — Phynaxon's cross-company Sahayak tickets ──────────
 // Bugs reported through Sahayak used to land on the COMPANY admin's desk,
 // where nobody could fix them and Phynaxon never heard about them. This is
@@ -1168,6 +1180,12 @@ function TabBugInbox() {
                   <span style={{ fontSize:12, fontWeight:600, color:T.t1 }}>{t.ticket_no}</span>
                   <span style={{ fontSize:11.5, color:T.t3 }}>{t.user_name || "—"}</span>
                   <span style={{ fontSize:11, color:T.t4 }}>{fmtTicketTime(t.created_at)}</span>
+                  {(() => { const d = bugOpenAgeDays(t); return d ? (
+                    <span title="Itne din se ye ticket khula pada hai"
+                      style={{ fontSize:10.5, fontWeight:600, color:T.t3, background:T.sltL,
+                        border:`1px solid ${T.b1}`, padding:"1px 7px", borderRadius:20, whiteSpace:"nowrap" }}>
+                      {d} din se open
+                    </span>) : null; })()}
                   {t.bundle_meta && <TicketBadge text="Diagnostics" color={T.blu} bg={T.bluL}/>}
                 </span>
                 <span style={{ display:"block", fontSize:12.5, color:T.t2, lineHeight:1.45,

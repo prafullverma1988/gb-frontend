@@ -756,6 +756,28 @@ function AlertsPanel({ onNavigate, onCount }) {
   );
 }
 
+// How long an OPEN ticket has been waiting. Returns null for resolved tickets
+// and for anything under the cutoff, so the chip only appears when it is
+// actually telling the reader something they should act on.
+const AGE_CUTOFF_DAYS = 2;
+function openAgeDays(t) {
+  if (!t || t.status !== "open" || !t.created_at) return null;
+  const ms = Date.now() - new Date(t.created_at).getTime();
+  if (!(ms > 0)) return null;
+  const days = Math.floor(ms / 86400000);
+  return days > AGE_CUTOFF_DAYS ? days : null;
+}
+function AgeChip({ days }) {
+  if (!days) return null;
+  return (
+    <span title="Itne din se ye ticket khula pada hai"
+      style={{ fontSize: 10.5, fontWeight: 600, color: T.t3, background: T.sltL, border: `1px solid ${T.b1}`,
+        padding: "1px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>
+      {days} din se open
+    </span>
+  );
+}
+
 // Company admin's inbox. Their job is the QUERY tickets — company policy the
 // bot could not answer. Bugs belong to Phynaxon, so they are visible here for
 // transparency but read-only; the backend refuses the resolve either way.
@@ -820,6 +842,7 @@ function TicketsInbox() {
                   <span style={{ fontSize: 12, fontWeight: 600, color: T.t1 }}>{t.ticket_no}</span>
                   <span style={{ fontSize: 11.5, color: T.t3 }}>{t.user_name || "—"}</span>
                   <span style={{ fontSize: 11, color: T.t4 }}>{fmtTime(t.created_at)}</span>
+                  <AgeChip days={openAgeDays(t)} />
                   {t.bundle_meta && <Badge text="Diagnostics" color={ACCENT} bg={ACCENT_SOFT} />}
                 </span>
                 <span style={{ display: "block", fontSize: 12.5, color: T.t2, lineHeight: 1.45, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: expanded ? "normal" : "nowrap" }}>
