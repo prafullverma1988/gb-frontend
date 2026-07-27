@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { API, tok, apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney, DOMAIN_LABELS,
          IcBuilding, IcUsers, IcPuzzle, IcX, IcChk, IcDownload, IcShield,
-         IcActivity, IcDollar, IcEdit, IcClip, IcChevL, IcFolder } from "./tokens";
+         IcActivity, IcDollar, IcEdit, IcClip, IcChevL, IcFolder, IcLock } from "./tokens";
 import { Toast, Toggle, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader } from "./ui";
 import { BundleView, TicketBadge, fmtTicketTime } from "../shared/TicketBundle";
 

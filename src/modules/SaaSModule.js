@@ -8,7 +8,7 @@ import { BundleView, TicketBadge, fmtTicketTime } from "./shared/TicketBundle";
 import { apiFetch, T, fmtDate, fmtDateTime, fmtNum, fmtMoney,
          IcBuilding, IcUsers, IcTrend, IcPlus, IcX, IcChk,
          IcRefresh, IcLock, IcClip, IcDownload, IcShield, IcSearch, IcActivity,
-         IcDollar, IcCog, IcChevR, IcFilter, IcLogin, th, td } from "./saas/tokens";
+         IcDollar, IcCog, IcChevR, IcChevL, IcFilter, IcLogin, th, td } from "./saas/tokens";
 import { Toast, Toggle, StatCard, Badge, Btn, EmptyState, TableHeader, PageHeader } from "./saas/ui";
 import CompanyDetailPage from "./saas/CompanyDetailPage";
 import TabCustomers from "./saas/Customers";

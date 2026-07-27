@@ -1,6 +1,9 @@
 // Shared UI primitives for the SaaS Admin module (module-owned — see tokens.js).
 import { useEffect } from "react";
-import { T } from "./tokens";
+// IcX / IcChk are used as JSX tags inside Toast. Base ESLint's no-undef does
+// NOT treat <Foo/> as a reference to Foo, so these went missing in the file
+// split, compiled clean, and threw the moment the first toast rendered.
+import { T, IcX, IcChk } from "./tokens";
 
 
 // ── SHARED COMPONENTS ──────────────────────────────────────────────────
