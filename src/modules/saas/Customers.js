@@ -8,6 +8,19 @@ import { apiFetch, T, fmtDate, fmtNum, fmtMoney, fmtAmt, DOMAIN_LABELS,
 import { Toast, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader, PageHeader } from "./ui";
 import DeleteCompanyModal from "./DeleteCompany";
 
+// Customer buckets. The backend derives these (utils/clientLifecycle.js) and
+// may also carry a human override; this only holds how they LOOK.
+// Note "active" deliberately still covers a customer with an overdue invoice —
+// a live contract is a live contract, and the money is shouted about by the
+// overdue strip and the row's own OVERDUE badge instead.
+const LIFECYCLE = {
+  active:    { label: "Active",        color: T.grn, blurb: "contract chalu hai" },
+  attention: { label: "Dhyan chahiye", color: T.amb, blurb: "renewal ya billing pending" },
+  dormant:   { label: "Dormant",       color: T.slt, blurb: "na company na contract — sirf record" },
+  archived:  { label: "Archived",      color: T.t4,  blurb: "file kar diya, finance ke liye rakha hai" },
+};
+const BUCKET_ORDER = ["active", "attention", "dormant", "archived"];
+
 
 
 // ── ONBOARD A NEW PAYING CUSTOMER ─────────────────────────────────────
@@ -521,6 +534,75 @@ function AddCompanyModal({ client, onClose, onSaved, setToast }) {
   );
 }
 
+// ── PIN A CUSTOMER TO A BUCKET ────────────────────────────────────────
+// The bucket is normally derived. This is for what the data cannot know —
+// "they told us they're not renewing" — so a note is the point, not a detail.
+function LifecycleModal({ client, onClose, onSaved, setToast }) {
+  const [pick, setPick] = useState(client.lifecycle_override || "");
+  const [note, setNote] = useState(client.lifecycle_note || "");
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    setSaving(true);
+    const res = await apiFetch(`/saas-admin/clients/${client.id}/lifecycle`, {
+      method:"PUT", body: { override: pick || null, note },
+    });
+    setSaving(false);
+    if (!res.success) return setToast({ msg: res.message || "Save nahi hua", type:"error" });
+    setToast({ msg: res.message });
+    onSaved(); onClose();
+  };
+
+  return (
+    <>
+      <div style={{ position:"fixed", inset:0, background:"rgba(0,0,0,0.4)", zIndex:400, backdropFilter:"blur(2px)" }}/>
+      <div style={{ position:"fixed", top:"50%", left:"50%", transform:"translate(-50%,-50%)", width:440, background:T.surface, borderRadius:16, zIndex:401, boxShadow:"0 24px 64px rgba(0,0,0,0.25)", overflow:"hidden" }}>
+        <div style={{ padding:"16px 20px", borderBottom:`1px solid ${T.b1}` }}>
+          <div style={{ fontSize:14.5, fontWeight:700, color:T.t1 }}>{client.name} — bucket</div>
+          <div style={{ fontSize:11, color:T.t3, marginTop:2 }}>
+            Apne aap: <strong>{LIFECYCLE[client.lifecycle_auto]?.label || client.lifecycle_auto}</strong>
+          </div>
+        </div>
+
+        <div style={{ padding:"16px 20px", display:"flex", flexDirection:"column", gap:8 }}>
+          <button onClick={() => setPick("")}
+            style={{ textAlign:"left", padding:"10px 13px", borderRadius:9, cursor:"pointer", fontFamily:"inherit",
+              border:`1.5px solid ${!pick ? T.blu : T.b1}`, background: !pick ? T.bluL : T.surface }}>
+            <div style={{ fontSize:12.5, fontWeight:700, color:T.t1 }}>Apne aap tay karo</div>
+            <div style={{ fontSize:11, color:T.t3, marginTop:2 }}>
+              Data se nikalta rahega — renewal, company, subscription badalne par apne aap sahi rahega.
+            </div>
+          </button>
+          {BUCKET_ORDER.map(b => (
+            <button key={b} onClick={() => setPick(b)}
+              style={{ textAlign:"left", padding:"10px 13px", borderRadius:9, cursor:"pointer", fontFamily:"inherit",
+                border:`1.5px solid ${pick === b ? LIFECYCLE[b].color : T.b1}`,
+                background: pick === b ? LIFECYCLE[b].color + "14" : T.surface }}>
+              <div style={{ fontSize:12.5, fontWeight:700, color: pick === b ? LIFECYCLE[b].color : T.t1 }}>{LIFECYCLE[b].label}</div>
+              <div style={{ fontSize:11, color:T.t3, marginTop:2 }}>{LIFECYCLE[b].blurb}</div>
+            </button>
+          ))}
+
+          {pick && (
+            <div style={{ marginTop:4 }}>
+              <label style={{ fontSize:10.5, fontWeight:600, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px", display:"block", marginBottom:5 }}>
+                Kyun? (baad me kaam aayega)
+              </label>
+              <input value={note} onChange={e => setNote(e.target.value)} placeholder="jaise: renewal se mana kar diya"
+                style={{ width:"100%", padding:"9px 12px", borderRadius:7, border:`1.5px solid ${T.b1}`, fontSize:12.5, color:T.t1, background:T.surfaceB, outline:"none", boxSizing:"border-box", fontFamily:"inherit" }}/>
+            </div>
+          )}
+        </div>
+
+        <div style={{ padding:"12px 20px", borderTop:`1px solid ${T.b1}`, display:"flex", justifyContent:"flex-end", gap:9 }}>
+          <Btn variant="outline" onClick={onClose} disabled={saving}>Rehne do</Btn>
+          <Btn onClick={save} disabled={saving}>{saving ? "Ruko..." : "Save"}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function ClientDetail({ clientId, onBack, onOpenCompany }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -537,6 +619,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
   const [assignCompanyId, setAssignCompanyId] = useState("");
   const [showAddCompany, setShowAddCompany] = useState(false);
   const [delCompany, setDelCompany] = useState(null);
+  const [showLifecycle, setShowLifecycle] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -609,6 +692,27 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
           {client.status === "suspended" ? "Reactivate" : "Suspend"}
         </Btn>
       </div>
+
+      {/* Which bucket, and why. The reason line matters more than the badge:
+          without it a customer silently sitting in "Dhyan chahiye" tells you
+          nothing about what to actually do. */}
+      {client.lifecycle && LIFECYCLE[client.lifecycle] && (
+        <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, padding:"9px 14px",
+          background: LIFECYCLE[client.lifecycle].color + "10", border:`1px solid ${LIFECYCLE[client.lifecycle].color}33`, borderRadius:9 }}>
+          <Badge text={LIFECYCLE[client.lifecycle].label} color={LIFECYCLE[client.lifecycle].color}/>
+          <span style={{ fontSize:11.5, color:T.t2 }}>{client.lifecycle_reason}</span>
+          {client.lifecycle_override && (
+            <span style={{ fontSize:10, color:T.t4, fontWeight:600 }}>
+              (manually set — apne aap: {LIFECYCLE[client.lifecycle_auto]?.label})
+            </span>
+          )}
+          <button onClick={() => setShowLifecycle(true)}
+            style={{ marginLeft:"auto", padding:"3px 10px", borderRadius:6, border:`1px solid ${T.b1}`,
+              background:T.surface, color:T.t2, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+            Badlo
+          </button>
+        </div>
+      )}
 
       {/* Limits vs usage */}
       <div style={{ display:"flex", gap:12, marginBottom:16 }}>
@@ -779,6 +883,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
       {editClient && <ClientFormModal initial={client} onClose={() => setEditClient(false)} onSaved={load} setToast={setToast}/>}
       {showAddCompany && <AddCompanyModal client={client} onClose={() => setShowAddCompany(false)} onSaved={load} setToast={setToast}/>}
       {delCompany && <DeleteCompanyModal company={delCompany} onClose={() => setDelCompany(null)} onDone={load} setToast={setToast}/>}
+      {showLifecycle && <LifecycleModal client={client} onClose={() => setShowLifecycle(false)} onSaved={load} setToast={setToast}/>}
       {showSub && <SubscriptionFormModal clientId={client.id} initial={showSub === "new" ? null : showSub} onClose={() => setShowSub(null)} onSaved={load} setToast={setToast}/>}
       {activateSub && (
         <>
@@ -842,6 +947,7 @@ function TabCustomers({ onOpenCompany }) {
   const [showInternal, setShowInternal] = useState(false);
   const [toast, setToast] = useState(null);
   const [search, setSearch] = useState("");
+  const [bucket, setBucket] = useState("all");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -877,12 +983,23 @@ function TabCustomers({ onOpenCompany }) {
   }
 
   const q = search.trim().toLowerCase();
-  const visible = clients
+  const matched = clients
     .filter(c => showInternal || !c.is_internal)
     .filter(c => !q
       || c.name.toLowerCase().includes(q)
       || (byClient[c.id] || []).some(co =>
            co.name.toLowerCase().includes(q) || (co.slug || "").toLowerCase().includes(q)));
+
+  // Counts reflect what the current search would show, so the chips never
+  // promise rows that a live search filter has already removed.
+  const counts = BUCKET_ORDER.reduce((a, b) => ({ ...a, [b]: matched.filter(c => c.lifecycle === b).length }), {});
+  // "All" deliberately leaves out archived — filing a customer away is the one
+  // deliberate act that should get it out of the way. Everything else stays.
+  counts.all = matched.filter(c => c.lifecycle !== "archived").length;
+
+  const visible = bucket === "all"
+    ? matched.filter(c => c.lifecycle !== "archived")
+    : matched.filter(c => c.lifecycle === bucket);
 
   return (
     <div style={{ padding:"18px 24px" }}>
@@ -946,12 +1063,28 @@ function TabCustomers({ onOpenCompany }) {
         </div>
       )}
 
-      {/* Search across both levels */}
-      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12 }}>
+      {/* Search + bucket chips, same chip pattern the Companies tab uses */}
+      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:12, flexWrap:"wrap" }}>
         <div style={{ position:"relative" }}>
           <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customer or company..."
             style={{ width:280, padding:"7px 12px 7px 30px", borderRadius:8, border:`1px solid ${T.b1}`, fontSize:12, color:T.t1, background:T.surface, outline:"none", fontFamily:"inherit" }}/>
           <IcSearch size={12} color={T.t4} style={{ position:"absolute", left:10, top:"50%", transform:"translateY(-50%)" }}/>
+        </div>
+        <div style={{ display:"flex", gap:6 }}>
+          {["all", ...BUCKET_ORDER].map(b => {
+            const on = bucket === b;
+            const meta = LIFECYCLE[b];
+            const col = on ? (meta ? meta.color : T.blu) : T.t3;
+            return (
+              <button key={b} onClick={() => setBucket(b)}
+                title={meta ? meta.blurb : "archived ke alawa sab"}
+                style={{ padding:"5px 11px", borderRadius:7, fontSize:11.5, fontWeight:on ? 700 : 600, cursor:"pointer",
+                  fontFamily:"inherit", color:col, background: on ? col + "18" : T.surface,
+                  border:`1px solid ${on ? col + "55" : T.b1}` }}>
+                {meta ? meta.label : "All"} <span style={{ opacity:0.65 }}>{counts[b] ?? 0}</span>
+              </button>
+            );
+          })}
         </div>
         <div style={{ fontSize:11.5, color:T.t4 }}>{visible.length} customers · {visible.reduce((n, c) => n + (byClient[c.id]?.length || 0), 0)} companies</div>
       </div>
@@ -972,13 +1105,29 @@ function TabCustomers({ onOpenCompany }) {
             onMouseEnter={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : T.surfaceB}
             onMouseLeave={e => e.currentTarget.style.background = c.status === "suspended" ? T.redL : "transparent"}>
             <div style={{ minWidth:0 }}>
-              <div style={{ fontSize:13, fontWeight:700, color:T.t1, display:"flex", alignItems:"center", gap:8 }}>
+              <div style={{ fontSize:13, fontWeight:700, color:T.t1, display:"flex", alignItems:"center", gap:8, flexWrap:"wrap" }}>
                 {c.name}
                 {c.is_internal ? <Badge text="INT" color={T.pur}/> : null}
                 {c.status === "suspended" && <Badge text="SUSPENDED" color={T.red}/>}
-                {c.billing_gap && <Badge text="NO BILLING" color={T.amb}/>}
+                {/* Only the exceptional buckets get a badge. Stamping "Active"
+                    on every healthy customer is noise, and the chips already
+                    say which bucket you are looking at. The old NO BILLING
+                    badge is gone — "Dhyan chahiye" plus the reason line below
+                    says the same thing and says why. */}
+                {c.lifecycle && c.lifecycle !== "active" && LIFECYCLE[c.lifecycle] && (
+                  <Badge text={LIFECYCLE[c.lifecycle].label} color={LIFECYCLE[c.lifecycle].color}/>
+                )}
+                {c.lifecycle_override && (
+                  <span title={`Manually set${c.lifecycle_note ? " — " + c.lifecycle_note : ""}`} style={{ display:"flex" }}>
+                    <IcEdit size={10} color={T.t4}/>
+                  </span>
+                )}
               </div>
-              <div style={{ fontSize:10.5, color:T.t4 }}>{[c.city, c.state].filter(Boolean).join(", ") || "--"}</div>
+              <div style={{ fontSize:10.5, color:T.t4 }}>
+                {c.lifecycle && c.lifecycle !== "active"
+                  ? c.lifecycle_reason
+                  : ([c.city, c.state].filter(Boolean).join(", ") || "--")}
+              </div>
             </div>
             {/* used / licensed — limitColor goes amber at 80%, red at the cap */}
             <div style={{ fontSize:12.5, fontWeight:700, color:limitColor(c.company_count, c.max_companies) }}>{limitStr(c.company_count, c.max_companies)}</div>
