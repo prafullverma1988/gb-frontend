@@ -6,12 +6,14 @@
 // how ui.js shipped using <IcChk/> without importing it.
 const fs = require("fs");
 const path = require("path");
-const DIR = "C:/Users/prafu/gb-frontend/src/modules";
-const FILES = [
-  "SaaSModule.js",
-  "saas/tokens.js", "saas/ui.js", "saas/Customers.js",
-  "saas/Companies.js", "saas/CompanyDetailPage.js",
-];
+const DIR = path.join(__dirname, "..", "src", "modules");
+// Discovered, never listed. A hardcoded list has the same blind spot as the bug
+// this script exists to catch: DeleteCompany.js was added and silently skipped.
+const FILES = ["SaaSModule.js"].concat(
+  fs.readdirSync(path.join(DIR, "saas"))
+    .filter(f => f.endsWith(".js"))
+    .map(f => "saas/" + f)
+);
 
 // Comments talk about JSX too ("does not treat <Foo/> as a reference"), so
 // drop whole comment lines before scanning or the checker cries wolf about its

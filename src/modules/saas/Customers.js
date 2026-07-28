@@ -6,6 +6,7 @@ import { apiFetch, T, fmtDate, fmtNum, fmtMoney, fmtAmt, DOMAIN_LABELS,
          IcUsers, IcX, IcChk, IcPlus, IcEdit, IcSearch, IcActivity,
          IcDollar, IcTrend, IcRefresh, IcChevL, th, td } from "./tokens";
 import { Toast, StatCard, Badge, Btn, InputField, SelectField, EmptyState, TableHeader, PageHeader } from "./ui";
+import DeleteCompanyModal from "./DeleteCompany";
 
 
 
@@ -535,6 +536,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
   const [allCompanies, setAllCompanies] = useState([]);
   const [assignCompanyId, setAssignCompanyId] = useState("");
   const [showAddCompany, setShowAddCompany] = useState(false);
+  const [delCompany, setDelCompany] = useState(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(() => {
@@ -641,14 +643,6 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
               if (res.success) { dl(res.data, `${c.slug || c.id}-export.json`); setToast({ msg:`Export downloaded — ${res.data.meta.total_rows} rows` }); }
               else setToast({ msg: res.message || "Export failed", type:"error" });
             };
-            const doPurge = async (e) => {
-              e.stopPropagation();
-              const nm = await window.promptAsync(`⚠️ HARD DELETE "${c.name}"?\n\nYeh company ka SAARA data permanently delete karega. Pehle ek recovery export download hoga (kabhi wapas chahiye to usse restore). Confirm ke liye company ka naam bilkul waisa hi type karein:`);
-              if (nm === null) return;
-              const res = await apiFetch(`/saas-admin/companies/${c.id}/purge`, { method:"DELETE", body:{ confirm_name: nm } });
-              if (res.success) { if (res.export) dl(res.export, `${c.slug || c.id}-recovery.json`); setToast({ msg: res.message }); load(); }
-              else setToast({ msg: res.message || "Purge failed", type:"error" });
-            };
             return (
             <div key={c.id} style={{ padding:"10px 16px", borderBottom:`1px solid ${T.b1}`, display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
               <div style={{ minWidth:0, cursor: onOpenCompany ? "pointer" : "default" }}
@@ -666,8 +660,9 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
                 <Badge text={c.is_active ? "Active" : "Inactive"} color={c.is_active ? T.grn : T.red}/>
                 <button title="Export all data (recovery file)" onClick={doExport}
                   style={{ padding:"3px 8px", borderRadius:6, border:`1px solid ${T.b1}`, background:T.surfaceB, color:T.t3, fontSize:10.5, fontWeight:600, cursor:"pointer" }}>⬇ Export</button>
-                <button title="Hard delete (export taken first, name confirm)" onClick={doPurge}
-                  style={{ padding:"3px 8px", borderRadius:6, border:`1px solid ${T.redM}`, background:T.redL, color:T.red, fontSize:10.5, fontWeight:700, cursor:"pointer" }}>Purge</button>
+                <button title="Company hatao — band karo ya hamesha ke liye delete"
+                  onClick={e => { e.stopPropagation(); setDelCompany(c); }}
+                  style={{ padding:"3px 8px", borderRadius:6, border:`1px solid ${T.redM}`, background:T.redL, color:T.red, fontSize:10.5, fontWeight:700, cursor:"pointer" }}>Delete</button>
               </div>
             </div>
             );
@@ -783,6 +778,7 @@ function ClientDetail({ clientId, onBack, onOpenCompany }) {
       {/* Modals */}
       {editClient && <ClientFormModal initial={client} onClose={() => setEditClient(false)} onSaved={load} setToast={setToast}/>}
       {showAddCompany && <AddCompanyModal client={client} onClose={() => setShowAddCompany(false)} onSaved={load} setToast={setToast}/>}
+      {delCompany && <DeleteCompanyModal company={delCompany} onClose={() => setDelCompany(null)} onDone={load} setToast={setToast}/>}
       {showSub && <SubscriptionFormModal clientId={client.id} initial={showSub === "new" ? null : showSub} onClose={() => setShowSub(null)} onSaved={load} setToast={setToast}/>}
       {activateSub && (
         <>

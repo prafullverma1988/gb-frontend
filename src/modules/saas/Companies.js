@@ -10,8 +10,9 @@
 // orphaned Companies tab that carried no client reference at all.
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch, T, fmtDate, DOMAIN_LABELS,
-         IcBuilding, IcSearch, IcRefresh, IcChk, IcX } from "./tokens";
+         IcBuilding, IcSearch, IcRefresh, IcChk } from "./tokens";
 import { Toast, Badge, Btn, EmptyState, TableHeader, PageHeader } from "./ui";
+import DeleteCompanyModal from "./DeleteCompany";
 
 const daysSince = (d) => {
   if (!d) return null;
@@ -36,6 +37,7 @@ export default function TabCompanies({ onOpenCompany }) {
   const [search, setSearch]   = useState("");
   const [toggling, setToggling] = useState(null);
   const [toast, setToast]     = useState(null);
+  const [delCompany, setDelCompany] = useState(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -69,6 +71,7 @@ export default function TabCompanies({ onOpenCompany }) {
   return (
     <div style={{ padding:"18px 24px" }}>
       {toast && <Toast {...toast} onClose={() => setToast(null)}/>}
+      {delCompany && <DeleteCompanyModal company={delCompany} onClose={() => setDelCompany(null)} onDone={load} setToast={setToast}/>}
       <PageHeader title="Companies" sub="Service console — kis tenant me kya chal raha hai"
         right={<Btn variant="outline" onClick={load}><IcRefresh size={13}/></Btn>}/>
 
@@ -130,11 +133,20 @@ export default function TabCompanies({ onOpenCompany }) {
                 <div style={{ fontSize:9.5, color:T.t4, fontWeight:400 }}>joined {fmtDate(c.created_at)}</div>
               </div>
               <div style={{ display:"flex", gap:6, justifyContent:"flex-end" }} onClick={e => e.stopPropagation()}>
-                <button onClick={e => toggle(e, c)} disabled={toggling === c.id}
-                  title={c.is_active ? "Deactivate company" : "Activate company"}
-                  style={{ width:28, height:28, borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
-                    border:`1px solid ${c.is_active ? T.redM : T.grnM}`, background: c.is_active ? T.redL : T.grnL }}>
-                  {c.is_active ? <IcX size={11} color={T.red}/> : <IcChk size={11} color={T.grn}/>}
+                {/* Turning a company back ON is harmless, so it stays a one-click
+                    toggle. Turning it off is a customer-visible outage, so it goes
+                    through the same modal as delete, where the choice is explained. */}
+                {!c.is_active && (
+                  <button onClick={e => toggle(e, c)} disabled={toggling === c.id} title="Wapas chalu karo"
+                    style={{ width:28, height:28, borderRadius:6, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                      border:`1px solid ${T.grnM}`, background:T.grnL }}>
+                    <IcChk size={11} color={T.grn}/>
+                  </button>
+                )}
+                <button onClick={e => { e.stopPropagation(); setDelCompany(c); }}
+                  title="Company hatao — band karo ya hamesha ke liye delete"
+                  style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${T.redM}`, background:T.redL, color:T.red, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
+                  Delete
                 </button>
                 <button onClick={e => { e.stopPropagation(); onOpenCompany && onOpenCompany(c); }} title="Open company"
                   style={{ padding:"4px 10px", borderRadius:6, border:`1px solid ${T.bluM}`, background:T.bluL, color:T.blu, fontSize:11, fontWeight:600, cursor:"pointer", fontFamily:"inherit" }}>
