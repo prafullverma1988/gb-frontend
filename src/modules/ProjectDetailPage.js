@@ -382,6 +382,18 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
   const [showMap, setShowMap] = useState(false);
   const savingRef = useRef(false);
 
+  // Same section split as the Projects-list settings modal, so both places
+  // look and read the same. Tabs run across the top rather than down the side
+  // because this one lives in a narrow right-hand drawer.
+  const [sec, setSec] = useState("basic");
+  const SECS = [
+    { id:"basic",   label:"Basic Info" },
+    { id:"team",    label:"Team & Roles" },
+    { id:"client",  label:"Client Access" },
+    { id:"status",  label:"Status & Dates" },
+    { id:"geo",     label:"Geo-Location" },
+  ];
+
   // ── Client Access ────────────────────────────────────────────
   // NOTE: the "Client" card above is only project metadata (who the customer
   // is). This is different — it creates an actual LOGIN so the customer can
@@ -391,6 +403,8 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
   const [cPhone, setCPhone] = useState("");
   const [cBusy, setCBusy] = useState(false);
   const [cErr, setCErr] = useState("");
+  const [newPw, setNewPw] = useState(null);   // {phone, password} — shown once
+  const [copied, setCopied] = useState(false);
   const loadClients = useCallback(() => {
     if (!project?.id) return;
     api.get("/client/projects/" + project.id + "/clients")
@@ -406,7 +420,12 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
     setCBusy(true);
     const r = await api.post("/client/projects/" + project.id + "/clients", { name: cName.trim(), phone });
     setCBusy(false);
-    if (r && r.success) { setCName(""); setCPhone(""); loadClients(); }
+    if (r && r.success) {
+      // A password comes back only when a NEW login was created; linking an
+      // existing client to another project returns none.
+      setNewPw(r.password ? { phone, password: r.password } : null);
+      setCName(""); setCPhone(""); loadClients();
+    }
     else setCErr((r && r.message) || "Add nahi hua");
   };
   const removeClient = async (uid) => {
@@ -494,38 +513,65 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
 
   return (
     <div style={{ padding:"4px 2px 20px" }}>
-      {/* ── DETAILS ── */}
+      {/* section tabs — wrap so every section is reachable without scrolling sideways */}
+      <div style={{ display:"flex", flexWrap:"wrap", gap:6, marginBottom:12 }}>
+        {SECS.map(s => (
+          <button key={s.id} onClick={()=>setSec(s.id)}
+            style={{ padding:"7px 12px", borderRadius:7, border:"1px solid "+(sec===s.id?T.blu:T.b1),
+              background:sec===s.id?T.blu:T.surface, color:sec===s.id?"white":T.t3,
+              fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+            {s.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── BASIC INFO ── */}
+      {sec==="basic"&&(
       <div style={card}>
         <div style={sectionTitle}>📋 Project Details</div>
         <div style={{ marginBottom:10 }}><label style={L}>Project Name *</label><input value={form.name} onChange={upd("name")} style={I}/></div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-          <div><label style={L}>Status</label>
-            <select value={form.status} onChange={upd("status")} style={{ ...I, cursor:"pointer" }}>
-              {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <div><label style={L}>City</label>
-            <select value={form.cityId} onChange={upd("cityId")} style={{ ...I, cursor:"pointer" }}>
-              <option value="">{project.city || "Select city…"}</option>
-              {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-            </select>
-          </div>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-          <div><label style={L}>Start Date</label><input type="date" value={form.start_date} onChange={upd("start_date")} style={I}/></div>
-          <div><label style={L}>End Date</label><input type="date" value={form.end_date} onChange={upd("end_date")} style={I}/></div>
-        </div>
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:10 }}>
-          <div><label style={L}>Project Manager</label><input value={form.pm_name} onChange={upd("pm_name")} placeholder="PM name" style={I}/></div>
-          <div><label style={L}>Site Supervisor</label><input value={form.site_supervisor} onChange={upd("site_supervisor")} placeholder="Supervisor" style={I}/></div>
+        <div style={{ marginBottom:10 }}><label style={L}>City</label>
+          <select value={form.cityId} onChange={upd("cityId")} style={{ ...I, cursor:"pointer" }}>
+            <option value="">{project.city || "Select city…"}</option>
+            {cities.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
         </div>
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
           <div><label style={L}>BOQ Value (₹)</label><input type="number" value={form.boq_value} onChange={upd("boq_value")} placeholder="0" style={I}/></div>
           <div><label style={L}>Contract Value (₹)</label><input type="number" value={form.contract_value} onChange={upd("contract_value")} placeholder="0" style={I}/></div>
         </div>
       </div>
+      )}
 
-      {/* ── CLIENT ── */}
+      {/* ── STATUS & DATES ── */}
+      {sec==="status"&&(
+      <div style={card}>
+        <div style={sectionTitle}>📅 Status & Dates</div>
+        <div style={{ marginBottom:10 }}><label style={L}>Status</label>
+          <select value={form.status} onChange={upd("status")} style={{ ...I, cursor:"pointer" }}>
+            {STATUS_OPTS.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
+        </div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div><label style={L}>Start Date</label><input type="date" value={form.start_date} onChange={upd("start_date")} style={I}/></div>
+          <div><label style={L}>End Date</label><input type="date" value={form.end_date} onChange={upd("end_date")} style={I}/></div>
+        </div>
+      </div>
+      )}
+
+      {/* ── TEAM & ROLES ── */}
+      {sec==="team"&&(
+      <div style={card}>
+        <div style={sectionTitle}>👷 Team & Roles</div>
+        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10 }}>
+          <div><label style={L}>Project Manager</label><input value={form.pm_name} onChange={upd("pm_name")} placeholder="PM name" style={I}/></div>
+          <div><label style={L}>Site Supervisor</label><input value={form.site_supervisor} onChange={upd("site_supervisor")} placeholder="Supervisor" style={I}/></div>
+        </div>
+      </div>
+      )}
+
+      {/* ── CLIENT (metadata + login live in the same tab) ── */}
+      {sec==="client"&&(<>
       <div style={card}>
         <div style={sectionTitle}>👤 Client</div>
         <div style={{ marginBottom:10 }}><label style={L}>Client Name</label><input value={form.client_name} onChange={upd("client_name")} style={I}/></div>
@@ -539,7 +585,7 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
 
       {/* ── CLIENT ACCESS (login, not just metadata) ── */}
       {isAdmin && (
-        <div style={card}>
+        <div style={{ ...card, borderColor:T.bluM, background:T.bluL }}>
           <div style={sectionTitle}>🔑 Client Access (app login)</div>
           <div style={{ fontSize:11, color:T.t3, marginBottom:12, lineHeight:1.5 }}>
             Upar wala "Client" sirf record hai. Yahan jode gaye client <b>mobile app me apne number se login</b> karke
@@ -573,15 +619,41 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
             style={{ padding:"9px 16px", borderRadius:8, background:cBusy?T.b2:T.blu, color:"white", border:"none", fontSize:12.5, fontWeight:700, cursor:cBusy?"not-allowed":"pointer" }}>
             {cBusy ? "Jod rahe hain…" : "+ Client jodein"}
           </button>
+
+          {/* Shown once, right after creation — the password is not stored in
+              readable form, so this is the only chance to pass it on. */}
+          {newPw && (
+            <div style={{ marginTop:12, padding:"12px 14px", borderRadius:9, background:T.grnL, border:"1px solid "+T.grn }}>
+              <div style={{ fontSize:11.5, fontWeight:700, color:T.grn, marginBottom:6 }}>
+                ✓ Client jud gaya — ye login details client ko bhej dein
+              </div>
+              <div style={{ fontSize:12.5, color:T.t1, lineHeight:1.7 }}>
+                Mobile: <b>{newPw.phone}</b><br/>
+                Password: <b style={{ fontFamily:"monospace", fontSize:14, letterSpacing:".5px" }}>{newPw.password}</b>
+              </div>
+              <div style={{ fontSize:10.5, color:T.t3, marginTop:7, lineHeight:1.45 }}>
+                Client OTP se bhi login kar sakta hai — ye password sirf tab kaam aata hai jab OTP na aaye.
+                <b> Ye password dobara nahi dikhega</b>, isliye abhi copy kar lein.
+              </div>
+              <button onClick={()=>{ try{ navigator.clipboard.writeText(`Sanchalan app\nMobile: ${newPw.phone}\nPassword: ${newPw.password}`); setCopied(true); setTimeout(()=>setCopied(false),2000);}catch(e){} }}
+                style={{ marginTop:9, padding:"7px 13px", borderRadius:7, border:"1px solid "+T.grn, background:T.surface, color:T.grn, fontSize:11.5, fontWeight:700, cursor:"pointer", fontFamily:"inherit" }}>
+                {copied ? "✓ Copy ho gaya" : "Copy karein"}
+              </button>
+            </div>
+          )}
+
           <div style={{ fontSize:10.5, color:T.t4, marginTop:8, lineHeight:1.45 }}>
             Client isi number se app me login karega. <b>Number kisi staff ka nahi hona chahiye</b> — staff ka number
             dene par system rok dega (client ke liye alag number lein).
           </div>
         </div>
       )}
+      </>)}
 
-      {msg && <div style={{ fontSize:12, fontWeight:600, color:msg.startsWith("✓")?T.grn:T.red, marginBottom:8 }}>{msg}</div>}
-      {isAdmin && (
+      {/* Save covers every project-detail field, whichever tab it sits on.
+          Geo-Location has its own save, so the button is hidden there. */}
+      {msg && sec!=="geo" && <div style={{ fontSize:12, fontWeight:600, color:msg.startsWith("✓")?T.grn:T.red, marginBottom:8 }}>{msg}</div>}
+      {isAdmin && sec!=="geo" && (
         <button onClick={saveDetails} disabled={saving}
           style={{ width:"100%", padding:"11px", borderRadius:8, background:saving?T.b2:T.blu, color:"white", border:"none", fontSize:13, fontWeight:700, cursor:saving?"not-allowed":"pointer", marginBottom:18 }}>
           {saving ? "Saving…" : "💾 Save Project Details"}
@@ -589,6 +661,7 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
       )}
 
       {/* ── GEO-LOCATION ── */}
+      {sec==="geo"&&(
       <div style={{ ...card, borderColor:T.bluM, background:T.bluL }}>
         <div style={sectionTitle}>📍 Site Geo-Location (Geofence)</div>
         <div style={{ fontSize:11, color:T.t3, marginBottom:12, lineHeight:1.5 }}>
@@ -629,6 +702,7 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
           {!isAdmin && <div style={{ fontSize:11, color:T.t4, fontStyle:"italic" }}>Admin/PM only — set location.</div>}
         </>)}
       </div>
+      )}
     </div>
   );
 }

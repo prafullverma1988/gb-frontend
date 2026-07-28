@@ -870,6 +870,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const [cPhone, setCPhone] = useState("");
   const [cBusy, setCBusy] = useState(false);
   const [cErr, setCErr] = useState("");
+  const [newPw, setNewPw] = useState(null);   // {phone, password} — shown once
   const loadClients = React.useCallback(() => {
     if(!project?.id) return;
     api.get("/client/projects/"+project.id+"/clients")
@@ -885,7 +886,12 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
     setCBusy(true);
     const r = await api.post("/client/projects/"+project.id+"/clients",{name:cName.trim(),phone});
     setCBusy(false);
-    if(r&&r.success){ setCName(""); setCPhone(""); loadClients(); }
+    if(r&&r.success){
+      // Password comes back only for a NEW login — an existing client linked
+      // to another project already has one.
+      setNewPw(r.password?{phone,password:r.password}:null);
+      setCName(""); setCPhone(""); loadClients();
+    }
     else setCErr((r&&r.message)||"Add nahi hua");
   };
   const removeClient = async (uid) => {
@@ -1121,6 +1127,22 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
                   style={{marginTop:9,background:T.blu,color:"white",border:"none",borderRadius:8,padding:"9px 16px",fontSize:12.5,fontWeight:700,cursor:cBusy?"wait":"pointer",fontFamily:"inherit"}}>
                   {cBusy?"Jod rahe hain…":"Client jodein"}
                 </button>
+
+                {/* Shown once — the password is not stored readably, so this
+                    is the only chance to pass it on. */}
+                {newPw&&(
+                  <div style={{marginTop:12,padding:"12px 14px",borderRadius:9,background:T.grnL,border:"1px solid "+T.grn}}>
+                    <div style={{fontSize:11.5,fontWeight:700,color:T.grn,marginBottom:6}}>✓ Client jud gaya — ye login details client ko bhej dein</div>
+                    <div style={{fontSize:12.5,color:T.t1,lineHeight:1.7}}>
+                      Mobile: <b>{newPw.phone}</b><br/>
+                      Password: <b style={{fontFamily:"monospace",fontSize:14,letterSpacing:".5px"}}>{newPw.password}</b>
+                    </div>
+                    <div style={{fontSize:10.5,color:T.t3,marginTop:7,lineHeight:1.45}}>
+                      Client OTP se bhi login kar sakta hai — ye password sirf tab kaam aata hai jab OTP na aaye.
+                      <b> Ye password dobara nahi dikhega</b>, isliye abhi copy kar lein.
+                    </div>
+                  </div>
+                )}
                 <div style={{fontSize:10.5,color:T.t4,marginTop:8,lineHeight:1.45}}>
                   Client isi mobile number se app me login karega. Number pehle se kisi staff ka ho to system rok dega.
                 </div>
