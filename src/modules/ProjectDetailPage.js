@@ -382,6 +382,39 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
   const [showMap, setShowMap] = useState(false);
   const savingRef = useRef(false);
 
+  // ── Client Access ────────────────────────────────────────────
+  // NOTE: the "Client" card above is only project metadata (who the customer
+  // is). This is different — it creates an actual LOGIN so the customer can
+  // open the app and see this project's progress, photos and their billing.
+  const [clients, setClients] = useState([]);
+  const [cName, setCName] = useState("");
+  const [cPhone, setCPhone] = useState("");
+  const [cBusy, setCBusy] = useState(false);
+  const [cErr, setCErr] = useState("");
+  const loadClients = useCallback(() => {
+    if (!project?.id) return;
+    api.get("/client/projects/" + project.id + "/clients")
+      .then(r => setClients(r && r.success && Array.isArray(r.data) ? r.data : []))
+      .catch(()=>{});
+  }, [project?.id]);
+  useEffect(() => { if (isAdmin) loadClients(); }, [isAdmin, loadClients]);
+  const addClient = async () => {
+    setCErr("");
+    const phone = cPhone.replace(/\D/g, "").slice(-10);
+    if (!cName.trim()) { setCErr("Client ka naam likhein"); return; }
+    if (phone.length !== 10) { setCErr("10 digit ka mobile number daalein"); return; }
+    setCBusy(true);
+    const r = await api.post("/client/projects/" + project.id + "/clients", { name: cName.trim(), phone });
+    setCBusy(false);
+    if (r && r.success) { setCName(""); setCPhone(""); loadClients(); }
+    else setCErr((r && r.message) || "Add nahi hua");
+  };
+  const removeClient = async (uid) => {
+    if (!window.confirm("Is client ka access hata dein?")) return;
+    await api.del("/client/projects/" + project.id + "/clients/" + uid);
+    loadClients();
+  };
+
   useEffect(() => {
     api.get("/library/cities").then(r => { if (r.success) setCities(r.data || []); }).catch(()=>{});
     // Load existing admin geofence for this project
@@ -503,6 +536,49 @@ function ProjectSettingsForm({ project, isAdmin, onClose }) {
         <div style={{ marginBottom:10 }}><label style={L}>Site Address</label><input value={form.site_address} onChange={upd("site_address")} placeholder="Full site address" style={I}/></div>
         <div><label style={L}>Notes / Description</label><textarea value={form.description} onChange={upd("description")} rows={2} style={{ ...I, resize:"vertical" }}/></div>
       </div>
+
+      {/* ── CLIENT ACCESS (login, not just metadata) ── */}
+      {isAdmin && (
+        <div style={card}>
+          <div style={sectionTitle}>🔑 Client Access (app login)</div>
+          <div style={{ fontSize:11, color:T.t3, marginBottom:12, lineHeight:1.5 }}>
+            Upar wala "Client" sirf record hai. Yahan jode gaye client <b>mobile app me apne number se login</b> karke
+            <b> sirf</b> is project ka progress, site photos aur apni billing dekh sakte hain. Cost, budget, staff,
+            procurement — kuch bhi unhe nahi dikhta. Ek client ko kai projects se joda ja sakta hai.
+          </div>
+
+          {clients.length > 0 && (
+            <div style={{ display:"flex", flexDirection:"column", gap:6, marginBottom:12 }}>
+              {clients.map(c => (
+                <div key={c.user_id} style={{ display:"flex", alignItems:"center", gap:10, padding:"9px 11px", borderRadius:8, border:"1px solid "+T.b1, background:T.surface }}>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{c.name}</div>
+                    <div style={{ fontSize:10.5, color:T.t4 }}>{c.phone}{c.is_active===0?" · inactive":""}</div>
+                  </div>
+                  <button onClick={()=>removeClient(c.user_id)}
+                    style={{ background:"none", border:"none", color:T.red, fontSize:11.5, fontWeight:600, cursor:"pointer" }}>
+                    Hatao
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div style={{ display:"grid", gridTemplateColumns:"1fr 150px", gap:10, marginBottom:8 }}>
+            <div><label style={L}>Client Name</label><input value={cName} onChange={e=>setCName(e.target.value)} placeholder="Client ka naam" style={I}/></div>
+            <div><label style={L}>Mobile</label><input value={cPhone} onChange={e=>setCPhone(e.target.value)} placeholder="10 digit" inputMode="numeric" style={I}/></div>
+          </div>
+          {cErr && <div style={{ fontSize:11.5, color:T.red, fontWeight:600, marginBottom:8 }}>{cErr}</div>}
+          <button onClick={addClient} disabled={cBusy}
+            style={{ padding:"9px 16px", borderRadius:8, background:cBusy?T.b2:T.blu, color:"white", border:"none", fontSize:12.5, fontWeight:700, cursor:cBusy?"not-allowed":"pointer" }}>
+            {cBusy ? "Jod rahe hain…" : "+ Client jodein"}
+          </button>
+          <div style={{ fontSize:10.5, color:T.t4, marginTop:8, lineHeight:1.45 }}>
+            Client isi number se app me login karega. <b>Number kisi staff ka nahi hona chahiye</b> — staff ka number
+            dene par system rok dega (client ke liye alag number lein).
+          </div>
+        </div>
+      )}
 
       {msg && <div style={{ fontSize:12, fontWeight:600, color:msg.startsWith("✓")?T.grn:T.red, marginBottom:8 }}>{msg}</div>}
       {isAdmin && (
