@@ -1411,7 +1411,7 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
     // gave 0 and blocked the save on "Amount required." while the footer
     // showed the correct figure.
     const amt=isInvoice?invTotal:(isMaterial||isSubcon?grandTotal:Number(payAmt)||0);
-    if(!amt){setSaveErr(isMaterial?"Rate enter karo — Grand Total 0 hai.":isInvoice?"Invoice me kam se kam ek line (qty + rate) bharein.":"Amount required.");return;}
+    if(!(amt>0)){setSaveErr(isMaterial?"Rate enter karo — Grand Total 0 hai.":isInvoice?"Invoice me kam se kam ek line (qty + rate) bharein.":"Amount 0 se zyada honi chahiye.");return;}
     // Party COMPULSORY for supplier bills — no vendor, no material purchase.
     // (Site Expense is the exception; it has no party dropdown.)
     if((isMaterial||isSubcon)&&!(party&&String(party).trim())){
@@ -2045,7 +2045,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 <div>
                   {lbl("Transfer Amount (Rs.) *")}
-                  <input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)} placeholder="Enter amount"
+                  <input type="number" min="0" step="any" inputMode="decimal" value={payAmt}
+                    onChange={e=>{const v=e.target.value; if(v===""||Number(v)>=0) setPayAmt(v);}}
+                    onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E") e.preventDefault();}}
+                    onWheel={e=>e.currentTarget.blur()} placeholder="Enter amount"
                     style={inp({fontSize:15,fontWeight:700,color:T.blu,borderColor:T.blu+"66",borderWidth:"2px"})}
                     onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.blu+"66"}/>
                 </div>
@@ -2076,7 +2079,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
             <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,padding:"12px 14px",marginBottom:12,display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
               <div>
                 {lbl("Amount (Rs.) *")}
-                <input type="number" value={payAmt} onChange={e=>setPayAmt(e.target.value)} placeholder="Enter amount"
+                <input type="number" min="0" step="any" inputMode="decimal" autoFocus value={payAmt}
+                  onChange={e=>{const v=e.target.value; if(v===""||Number(v)>=0) setPayAmt(v);}}
+                  onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E") e.preventDefault();}}
+                  onWheel={e=>e.currentTarget.blur()} placeholder="Enter amount"
                   style={inp({fontSize:15,fontWeight:700,color:tc,borderColor:tc+"66",borderWidth:"2px"})}
                   onFocus={e=>e.target.style.borderColor=tc} onBlur={e=>e.target.style.borderColor=tc+"66"}/>
               </div>
@@ -2127,8 +2133,10 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                       <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>of ₹{it.amount.toLocaleString("en-IN")}</div>
                       {allocAuto
                         ? <div style={{fontSize:12.5,fontWeight:700,color:on?T.grn:T.t4,textAlign:"right"}}>{on?`₹${alloc.toLocaleString("en-IN")}`:"—"}</div>
-                        : <input type="number" value={allocPick[it.target_id]||""} placeholder="0"
-                            onChange={e=>setAllocPick(p=>({...p,[it.target_id]:e.target.value}))}
+                        : <input type="number" min="0" step="any" inputMode="decimal" value={allocPick[it.target_id]||""} placeholder="0"
+                            onChange={e=>{const v=e.target.value; if(v===""||Number(v)>=0) setAllocPick(p=>({...p,[it.target_id]:v}));}}
+                            onKeyDown={e=>{if(e.key==="-"||e.key==="e"||e.key==="E") e.preventDefault();}}
+                            onWheel={e=>e.currentTarget.blur()}
                             style={inp({textAlign:"right",fontSize:12,height:28,fontWeight:700,color:T.grn})}/>}
                     </div>
                   );
