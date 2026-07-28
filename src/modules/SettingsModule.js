@@ -1147,6 +1147,9 @@ function ApprovalSettings() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
+  // "ok" | "warn" | "err" — drives the message colour. Was inferred from the
+  // text (`saveMsg.includes("Failed")`), which cannot express a partial save.
+  const [saveTone, setSaveTone] = useState("ok");
 
   const [showEditModal, setShowEditModal] = useState(false);
   const [editItem, setEditItem] = useState(null);
@@ -1194,7 +1197,7 @@ function ApprovalSettings() {
 
   // Save to API
   const saveAll = async () => {
-    setSaving(true); setSaveMsg("");
+    setSaving(true); setSaveMsg(""); setSaveTone("ok");
     try {
       const payload = approvals.map(a => ({
         id: a.id > 0 ? a.id : undefined,
@@ -1207,7 +1210,19 @@ function ApprovalSettings() {
       }));
       const res = await api.put("/approvals/workflows", { workflows: payload });
       if (res.success) {
-        setSaveMsg("Saved successfully!");
+        // A 200 does NOT mean every workflow landed. The API skips ids that
+        // don't belong to this company (stale ids kept across a company switch)
+        // and reports them in `skipped` — announcing "Saved successfully!" there
+        // left the admin believing a chain was updated when nothing was written.
+        const saved = Number(res.data?.saved || 0);
+        const skipped = Number(res.data?.skipped || 0);
+        if (payload.length > 0 && saved === 0) {
+          setSaveMsg("Kuch save nahi hua — page refresh karke dobara try karein"); setSaveTone("err");
+        } else if (skipped > 0) {
+          setSaveMsg(`${saved} save hue, ${skipped} nahi — page refresh karke dobara try karein`); setSaveTone("warn");
+        } else {
+          setSaveMsg("Saved successfully!"); setSaveTone("ok");
+        }
         // Reload to get IDs
         const r2 = await api.get("/approvals/workflows");
         if (r2.success && r2.data) {
@@ -1228,8 +1243,8 @@ function ApprovalSettings() {
           const apiModules = new Set(mapped.map(m => m.module));
           setApprovals([...mapped, ...DEFAULTS.filter(d => !apiModules.has(d.module))]);
         }
-      } else setSaveMsg("Failed to save: " + (res.message || "Unknown error"));
-    } catch (e) { console.error("Save approvals:", e); setSaveMsg("Failed to save"); }
+      } else { setSaveMsg("Failed to save: " + (res.message || "Unknown error")); setSaveTone("err"); }
+    } catch (e) { console.error("Save approvals:", e); setSaveMsg("Failed to save"); setSaveTone("err"); }
     setSaving(false);
     setTimeout(() => setSaveMsg(""), 3000);
   };
@@ -1300,7 +1315,7 @@ function ApprovalSettings() {
         return (
           <SectionCard key={cat} title={cat.charAt(0) + cat.slice(1).toLowerCase() + " Approvals"}
             desc={`${catApprovals.filter(a => a.enabled).length} of ${catApprovals.length} workflows active`}
-            action={<>{saveMsg&&<span style={{fontSize:12,color:saveMsg.includes("Failed")?T.red:T.green,marginRight:8}}>{saveMsg}</span>}<SaveBtn onClick={saveAll} label={saving?"Saving...":"Save Changes"}/></>}>
+            action={<>{saveMsg&&<span style={{fontSize:12,color:saveTone==="ok"?T.green:saveTone==="warn"?T.amber:T.red,marginRight:8}}>{saveMsg}</span>}<SaveBtn onClick={saveAll} label={saving?"Saving...":"Save Changes"}/></>}>
 
             {catApprovals.map((a, ai) => (
               <div key={a.id} style={{ borderBottom: ai < catApprovals.length - 1 ? `1px solid ${T.borderLight}` : "none", padding: "14px 0" }}>
@@ -2744,11 +2759,112 @@ function MyProfile() {
   );
 }
 
+// ─── COMPANY PRACTICES ───────────────────────────────────────────────
+// Ye company settings nahi hain — ye wo sawaal hain jinka jawab app me kahin
+// set nahi hota, aur is liye Sahayak ab tak "apne admin se poochein" bolkar
+// taal deta tha. Admin ek baar likh de, bot wahi jawab dene lagta hai.
+// Sawaalon ki list backend (services/companyPractices.js) se aati hai, yahan
+// hardcode NAHI hai — warna screen ka sawaal aur bot ka sawaal alag ho jaate.
+function CompanyPractices() {
+  const [fields, setFields] = useState([]);
+  const [vals, setVals] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savedTick, setSavedTick] = useState(false);
+  const [err, setErr] = useState("");
+
+  useEffect(() => {
+    api.get("/settings/practices").then(r => {
+      if (r?.success && Array.isArray(r.data)) {
+        setFields(r.data);
+        setVals(Object.fromEntries(r.data.map(f => [f.key, f.value || ""])));
+      }
+    }).catch(() => {}).finally(() => setLoading(false));
+  }, []);
+
+  const filled = fields.filter(f => (vals[f.key] || "").trim()).length;
+
+  const save = async () => {
+    setSaving(true); setErr("");
+    try {
+      // Poora set bhejte hain, sirf badle hue nahi — backend khali value ko
+      // "row hata do" maanta hai, to khali karna bhi save hona chahiye.
+      const r = await api.put("/settings/practices", vals);
+      if (r?.success === false) throw new Error(r.message || "Save failed");
+      setSavedTick(true);
+      setTimeout(() => setSavedTick(false), 1800);
+    } catch (e) { setErr(e?.message || "Save failed"); }
+    setSaving(false);
+  };
+
+  if (loading) return <div style={{ padding: 30, fontSize: 13, color: T.textLight }}>Loading…</div>;
+
+  const groups = [];
+  for (const f of fields) {
+    const g = groups.find(x => x.name === f.group);
+    if (g) g.items.push(f); else groups.push({ name: f.group, items: [f] });
+  }
+
+  const saveBtn = (
+    <button onClick={save} disabled={saving}
+      style={{ padding: "8px 18px", borderRadius: 8, background: savedTick ? T.green : `linear-gradient(135deg, ${T.blue}, ${T.blueMid})`, color: "white", fontSize: 13, fontWeight: 600, border: "none", cursor: saving ? "wait" : "pointer", opacity: saving ? 0.7 : 1 }}>
+      {savedTick ? "✓ Saved" : saving ? "Saving..." : "Save"}
+    </button>
+  );
+
+  return (
+    <div>
+      <SectionCard
+        title="Sahayak ke liye aapki practice"
+        desc="Ye sawaal app ki setting se nahi nikalte — ye aapki company ka apna tareeka hai. Jo aap yahan likhenge, Sahayak (AI) wahi jawab staff ko dega. Khaali chhodna theek hai — us sawaal par bot pehle jaisa 'apne admin se poochein' hi kahega."
+        action={saveBtn}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, paddingTop: 6 }}>
+          <div style={{ flex: 1, height: 6, background: T.borderLight, borderRadius: 4, overflow: "hidden" }}>
+            <div style={{ width: `${fields.length ? Math.round((filled / fields.length) * 100) : 0}%`, height: "100%", background: T.blue, transition: "width 0.2s" }}/>
+          </div>
+          <div style={{ fontSize: 12, color: T.textMid, fontWeight: 600, whiteSpace: "nowrap" }}>{filled} / {fields.length} bhare</div>
+        </div>
+        {err && <div style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: T.red }}>{err}</div>}
+      </SectionCard>
+
+      {groups.map(g => (
+        <SectionCard key={g.name} title={g.name}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 16, paddingTop: 6 }}>
+            {g.items.map(f => (
+              <div key={f.key}>
+                <label style={{ fontSize: 12.5, fontWeight: 600, color: T.textMid, display: "block", marginBottom: 6 }}>{f.q}</label>
+                {f.options ? (
+                  <select value={vals[f.key] || ""} onChange={e => setVals(v => ({ ...v, [f.key]: e.target.value }))}
+                    style={{ width: "100%", maxWidth: 420, padding: "10px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13.5, color: T.text, background: "white", outline: "none", fontFamily: T.font, boxSizing: "border-box" }}>
+                    <option value="">— chuna nahi —</option>
+                    {f.options.map(o => <option key={o} value={o}>{o}</option>)}
+                  </select>
+                ) : f.long ? (
+                  <textarea value={vals[f.key] || ""} onChange={e => setVals(v => ({ ...v, [f.key]: e.target.value }))}
+                    placeholder={f.hint || ""} rows={3} maxLength={300}
+                    style={{ width: "100%", padding: "10px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13.5, color: T.text, background: "white", outline: "none", fontFamily: T.font, boxSizing: "border-box", resize: "vertical" }}/>
+                ) : (
+                  <input value={vals[f.key] || ""} onChange={e => setVals(v => ({ ...v, [f.key]: e.target.value }))}
+                    placeholder={f.hint || ""} maxLength={300}
+                    style={{ width: "100%", maxWidth: 420, padding: "10px 12px", borderRadius: T.radiusSm, border: `1.5px solid ${T.border}`, fontSize: 13.5, color: T.text, background: "white", outline: "none", fontFamily: T.font, boxSizing: "border-box" }}/>
+                )}
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      ))}
+
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 20 }}>{saveBtn}</div>
+    </div>
+  );
+}
+
 const settingsSections = [
   { id: "profile",       label: "My Profile",           Icon: IcUsers,     Comp: MyProfile,              section: "ACCOUNT" },
   { id: "company",       label: "Company Profile",      Icon: IcBuilding,  Comp: CompanySettings,        section: "GENERAL" },
   { id: "roles",         label: "Roles & Access",       Icon: IcShield,    Comp: RolesAccess,            section: null },
   { id: "approval",      label: "Multi-Level Approval", Icon: IcLayers,    Comp: ApprovalSettings,       section: null },
+  { id: "practices",     label: "Company Practices",    Icon: IcClipboard, Comp: CompanyPractices,       section: null },
   { id: "backdate",      label: "Back-Date Control",    Icon: IcCalendar,  Comp: BackDateControl,        section: null },
   { id: "attendance",    label: "Attendance Settings",  Icon: IcCalendar,  Comp: AttendanceSettings,     section: null },
   { id: "locations",     label: "Office & Warehouse",   Icon: IcBuilding,  Comp: LocationsSettings,      section: null },
@@ -2772,6 +2888,7 @@ export default function SettingsModule({ initialSection = "company" } = {}) {
     profile: "Manage your personal account and password",
     company: "Manage your company profile and regional settings", roles: "Configure user roles, permissions and project access",
     approval: "Set up multi-level approval workflows", backdate: "Control back-dated entry permissions",
+    practices: "Aapki company ka apna tareeka — Sahayak inhi jawabon se madad karta hai",
     attendance: "Configure attendance mode and payment cycle for each labour type",
     appearance: "Choose layout style and other visual preferences",
     bank: "Manage bank accounts and payment methods", material: "Configure material stock and inventory rules",

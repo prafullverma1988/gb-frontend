@@ -76,6 +76,44 @@ function PlatformOps({ setOuterToast }) {
   );
 }
 
+// ── "IS HAFTE KA KAAM" ────────────────────────────────────────────────
+// Ek line, Dashboard ke sabse upar. TabStats ke ANDAR nahi rakha: wo apne
+// loading/error par poora return kar deta hai, aur tab ye strip gayab ho jata.
+// Jahan ginti 0 hai wo chip dikhta hi nahi — 0 dikhana shor hai, kaam nahi.
+function WeeklyWork({ onJump }) {
+  const [items, setItems] = useState(null);
+
+  useEffect(() => {
+    apiFetch("/support-bot/saas/weekly-work")
+      .then(r => setItems(r && r.success && Array.isArray(r.data) ? r.data : []))
+      .catch(() => setItems([]));
+  }, []);
+
+  if (!items) return null;
+  const live = items.filter(i => Number(i.n) > 0);
+  if (!live.length) return null;
+
+  return (
+    <div style={{ padding:"14px 24px 0" }}>
+      <div style={{ display:"flex", alignItems:"center", gap:10, flexWrap:"wrap",
+        background:T.surface, border:`1px solid ${T.b1}`, borderRadius:9, padding:"9px 14px" }}>
+        <span style={{ fontSize:11, fontWeight:700, color:T.t3, textTransform:"uppercase", letterSpacing:"0.5px" }}>
+          Is hafte ka kaam
+        </span>
+        {live.map(i => (
+          <button key={i.key} onClick={() => onJump && onJump(i.tab)}
+            style={{ display:"flex", alignItems:"center", gap:6, padding:"3px 9px", borderRadius:6,
+              border:`1px solid ${i.warn ? T.redM : T.b1}`, background:i.warn ? T.redL : T.surfaceB,
+              cursor:"pointer", fontFamily:"inherit" }}>
+            <span style={{ fontSize:12.5, fontWeight:700, color:i.warn ? T.red : T.t1 }}>{i.n}</span>
+            <span style={{ fontSize:11.5, color:i.warn ? T.red : T.t3 }}>{i.label}</span>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function TabStats() {
   const [data, setData] = useState(null);
   const [metrics, setMetrics] = useState(null);
@@ -1119,6 +1157,89 @@ function bugOpenAgeDays(t) {
 // does NOT edit any file — the deployed filesystem is ephemeral and Git is the
 // truth, so the actual edit happens from a Claude Code session which reads
 // /saas/kb-drafts/pending. This screen is only where Prafull says yes or no.
+// ── GO-LIVE CHECKLIST ─────────────────────────────────────────────────
+// Sab kuch backend se auto-computed aata hai. Yahan manual tick jaan-boojh kar
+// nahi hai: tick sirf ye batata hai ki kisi ne tick kiya, ye nahi ki client
+// sach me taiyaar hai. Is liye har item ke saath asli ginti bhi dikhti hai.
+function TabGoLive({ companies }) {
+  const [cid, setCid]  = useState(null);
+  const [data, setData] = useState(null);
+  const [err, setErr]   = useState("");
+
+  // Sabse kam taiyaar company pehle chunte hain — wahi to dekhni hoti hai.
+  useEffect(() => {
+    if (cid === null && companies && companies.length) setCid(companies[0].id);
+  }, [companies, cid]);
+
+  useEffect(() => {
+    if (!cid) return;
+    setData(null); setErr("");
+    apiFetch(`/support-bot/saas/golive/${cid}`)
+      .then(r => { if (r && r.success) setData(r.data); else setErr(r?.message || "Load nahi hua"); })
+      .catch(() => setErr("Load nahi hua"));
+  }, [cid]);
+
+  const pct = data ? data.readiness : 0;
+  const barColor = pct >= 80 ? T.grn : pct >= 50 ? T.amb : T.red;
+
+  return (
+    <div style={{ padding:20 }}>
+      <PageHeader title="Go-Live Checklist"
+        sub="Naya client live hone ke liye taiyaar hai ya nahi — sab auto-computed, koi manual tick nahi"
+        right={
+          <select value={cid || ""} onChange={e => setCid(Number(e.target.value))}
+            style={{ padding:"7px 10px", borderRadius:8, border:`1px solid ${T.b2}`, fontSize:12.5, color:T.t2, background:T.surface, fontFamily:"inherit", maxWidth:260 }}>
+            {(companies || []).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        }/>
+
+      {err && <div style={{ padding:14, background:T.redL, border:`1px solid ${T.redM}`, borderRadius:9, fontSize:12.5, color:T.red }}>{err}</div>}
+      {!err && !data && <div style={{ padding:18, fontSize:12.5, color:T.t4 }}>Loading...</div>}
+
+      {data && (
+        <>
+          <div style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"16px 18px", marginBottom:14 }}>
+            <div style={{ display:"flex", alignItems:"baseline", justifyContent:"space-between", marginBottom:10 }}>
+              <div style={{ fontSize:13, fontWeight:600, color:T.t1 }}>{data.company.name}</div>
+              <div style={{ fontSize:20, fontWeight:800, color:barColor }}>{pct}%</div>
+            </div>
+            <div style={{ height:7, background:T.sltL, borderRadius:4, overflow:"hidden" }}>
+              <div style={{ width:`${pct}%`, height:"100%", background:barColor, transition:"width 0.25s" }}/>
+            </div>
+            <div style={{ fontSize:11.5, color:T.t3, marginTop:8 }}>
+              {data.passed} / {data.total} cheezein ho gayi{pct === 100 ? " — ye client live ke liye taiyaar hai." : ""}
+            </div>
+          </div>
+
+          {data.items.map(it => {
+            // ok === null ka matlab count hi nahi mila — usko pass kabhi nahi
+            // dikhana, warna "taiyaar hai" ka jhootha bharosa ban jayega.
+            const unknown = it.ok === null || it.ok === undefined;
+            const c  = unknown ? T.slt : it.ok ? T.grn : T.amb;
+            const bg = unknown ? T.sltL : it.ok ? T.grnL : T.ambL;
+            return (
+              <div key={it.key} style={{ background:T.surface, border:`1px solid ${T.b1}`, borderRadius:10, padding:"12px 14px", marginBottom:8, display:"flex", gap:12, alignItems:"flex-start" }}>
+                <div style={{ width:22, height:22, borderRadius:6, background:bg, display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0, marginTop:1 }}>
+                  {unknown ? <span style={{ fontSize:12, color:c, fontWeight:700 }}>?</span>
+                    : it.ok ? <IcChk size={13} color={c}/>
+                    : <span style={{ width:7, height:7, borderRadius:"50%", background:c }}/>}
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ display:"flex", gap:8, alignItems:"center", flexWrap:"wrap" }}>
+                    <span style={{ fontSize:12.5, fontWeight:600, color:T.t1 }}>{it.label}</span>
+                    <span style={{ fontSize:11, color:T.t4 }}>{it.detail}</span>
+                  </div>
+                  {!it.ok && <div style={{ fontSize:11.5, color:T.t3, marginTop:4, lineHeight:1.5 }}>{it.hint}</div>}
+                </div>
+              </div>
+            );
+          })}
+        </>
+      )}
+    </div>
+  );
+}
+
 function TabKbGaps() {
   const [rows, setRows]     = useState(null);
   const [openId, setOpenId] = useState(null);
@@ -1354,6 +1475,7 @@ const TABS = [
   { id:"sanchalan", label:"Sanchalan",        Icon:IcLock     },
   { id:"bugs",      label:"Bug Inbox",        Icon:IcShield   },
   { id:"kbgaps",    label:"KB Gaps",          Icon:IcClip     },
+  { id:"golive",    label:"Go-Live",          Icon:IcChk      },
 ];
 
 export default function SaaSModule() {
@@ -1417,7 +1539,7 @@ export default function SaaSModule() {
           <CompanyDetailPage companyId={detailCompanyId} onBack={() => { setDetailCompanyId(null); loadCompanies(); }}/>
         ) : (
           <>
-            {tab === "stats"     && <TabStats/>}
+            {tab === "stats"     && <><WeeklyWork onJump={setTab}/><TabStats/></>}
             {tab === "customers" && <TabCustomers onOpenCompany={handleOpenDetail}/>}
             {tab === "companies" && <TabCompanies onOpenCompany={handleOpenDetail}/>}
             {tab === "users"     && <TabUsers/>}
@@ -1426,6 +1548,7 @@ export default function SaaSModule() {
             {tab === "sanchalan" && <TabSanchalan onOpenDetail={handleOpenDetail}/>}
             {tab === "bugs"      && <TabBugInbox/>}
             {tab === "kbgaps"    && <TabKbGaps/>}
+            {tab === "golive"    && <TabGoLive companies={companies}/>}
           </>
         )}
       </div>
