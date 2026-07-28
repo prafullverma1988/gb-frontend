@@ -862,7 +862,37 @@ const TYPE_OPTIONS   = ["Residential","Commercial","Industrial","Interior"];
 const CITIES         = ["Raipur","Bhilai","Bilaspur","Durg","Rajnandgaon","Other"];
 
 function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
-  const [section, setSection] = useState("basic"); // basic | team | status | danger
+  const [section, setSection] = useState("basic"); // basic | team | clients | status | danger
+  // Client logins for this project — these people get the read-only customer
+  // portal in the mobile app (progress / site photos / their billing).
+  const [clients, setClients] = useState([]);
+  const [cName, setCName] = useState("");
+  const [cPhone, setCPhone] = useState("");
+  const [cBusy, setCBusy] = useState(false);
+  const [cErr, setCErr] = useState("");
+  const loadClients = React.useCallback(() => {
+    if(!project?.id) return;
+    api.get("/client/projects/"+project.id+"/clients")
+      .then(r=>setClients(r&&r.success&&Array.isArray(r.data)?r.data:[]))
+      .catch(()=>{});
+  },[project?.id]);
+  useEffect(()=>{ if(section==="clients") loadClients(); },[section,loadClients]);
+  const addClient = async () => {
+    setCErr("");
+    const phone = cPhone.replace(/\D/g,"").slice(-10);
+    if(!cName.trim()) { setCErr("Client ka naam likhein"); return; }
+    if(phone.length!==10) { setCErr("10 digit ka mobile number daalein"); return; }
+    setCBusy(true);
+    const r = await api.post("/client/projects/"+project.id+"/clients",{name:cName.trim(),phone});
+    setCBusy(false);
+    if(r&&r.success){ setCName(""); setCPhone(""); loadClients(); }
+    else setCErr((r&&r.message)||"Add nahi hua");
+  };
+  const removeClient = async (uid) => {
+    if(!window.confirm("Is client ka access hata dein?")) return;
+    await api.del("/client/projects/"+project.id+"/clients/"+uid);
+    loadClients();
+  };
   const [saving,  setSaving]  = useState(false);
   const [error,   setError]   = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -941,6 +971,7 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
   const SECTIONS = [
     {id:"basic",  label:"Basic Info",    icon:"M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"},
     {id:"team",   label:"Team & Roles",  icon:"M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 7a4 4 0 100 8 4 4 0 000-8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"},
+    {id:"clients",label:"Client Access",  icon:"M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 3a4 4 0 100 8 4 4 0 000-8zM19 8v6M22 11h-6"},
     {id:"status", label:"Status & Dates",icon:"M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"},
     {id:"danger", label:"Danger Zone",   icon:"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"},
   ];
@@ -1043,6 +1074,55 @@ function ProjectSettingsModal({project, onClose, onUpdated, onDeleted}){
                     <input value={form.pm_name} onChange={e=>upd("pm_name",e.target.value)} placeholder="Type PM name..."
                       style={{width:"100%",padding:"8px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
                   </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* ── CLIENT ACCESS ── */}
+          {section==="clients"&&(
+            <div style={{display:"flex",flexDirection:"column",gap:14}}>
+              <div>
+                <div style={{fontSize:13,fontWeight:700,color:T.t1,marginBottom:4}}>Client Access</div>
+                <div style={{fontSize:11.5,color:T.t3,lineHeight:1.5}}>
+                  Yahan jode gaye client mobile app me apne number se login karke <b>sirf</b> is project ka
+                  progress, site photos aur apni billing dekh sakte hain. Cost, budget, staff, procurement —
+                  kuch bhi unhe nahi dikhta. Ek hi client ko kai projects se joda ja sakta hai.
+                </div>
+              </div>
+
+              {clients.length>0&&(
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {clients.map(c=>(
+                    <div key={c.user_id} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:8,border:"1px solid "+T.b1,background:T.surface}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:13,fontWeight:600,color:T.t1}}>{c.name}</div>
+                        <div style={{fontSize:11,color:T.t4}}>{c.phone}{c.is_active===0?" · inactive":""}</div>
+                      </div>
+                      <button onClick={()=>removeClient(c.user_id)}
+                        style={{background:"none",border:"none",color:T.red,fontSize:11.5,fontWeight:600,cursor:"pointer",fontFamily:"inherit"}}>
+                        Hatao
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div style={{borderTop:"1px solid "+T.b1,paddingTop:12}}>
+                {lbl("Naya client jodein")}
+                <div style={{display:"flex",gap:8}}>
+                  <input value={cName} onChange={e=>setCName(e.target.value)} placeholder="Client ka naam"
+                    style={{flex:1,padding:"9px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                  <input value={cPhone} onChange={e=>setCPhone(e.target.value)} placeholder="Mobile (10 digit)" inputMode="numeric"
+                    style={{width:150,padding:"9px 11px",borderRadius:7,border:"1.5px solid "+T.b1,fontSize:12.5,color:T.t1,background:T.surface,outline:"none",boxSizing:"border-box",fontFamily:"inherit"}}/>
+                </div>
+                {cErr&&<div style={{fontSize:11.5,color:T.red,marginTop:6,fontWeight:500}}>{cErr}</div>}
+                <button onClick={addClient} disabled={cBusy}
+                  style={{marginTop:9,background:T.blu,color:"white",border:"none",borderRadius:8,padding:"9px 16px",fontSize:12.5,fontWeight:700,cursor:cBusy?"wait":"pointer",fontFamily:"inherit"}}>
+                  {cBusy?"Jod rahe hain…":"Client jodein"}
+                </button>
+                <div style={{fontSize:10.5,color:T.t4,marginTop:8,lineHeight:1.45}}>
+                  Client isi mobile number se app me login karega. Number pehle se kisi staff ka ho to system rok dega.
                 </div>
               </div>
             </div>
