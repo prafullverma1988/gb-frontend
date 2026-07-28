@@ -1049,6 +1049,40 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
   const [payAmt,setPayAmt]=useState(settlesRef?.amount?String(settlesRef.amount):"");
   const [saved,setSaved]=useState(false);
 
+  // ── Payment allocation (settle against outstanding bills) ─────
+  // For "Payment Made", once a party is chosen we fetch their outstanding
+  // payables (vendor bills / staff reimbursements). Default = auto-FIFO the
+  // amount over the oldest; user can switch to manual and tick/edit per bill.
+  const [outstanding,setOutstanding]=useState([]);      // [{target_type,target_id,label,date,remaining,...}]
+  const [allocAuto,setAllocAuto]=useState(true);
+  const [allocPick,setAllocPick]=useState({});          // target_id → typed amount (manual mode)
+  const isPaymentMade = type==="Payment Made";
+  const payPartyObj = useMemo(()=>(dbParties||[]).find(p=>(p.name||"").toLowerCase().trim()===String(party||"").toLowerCase().trim()),[dbParties,party]);
+  useEffect(()=>{
+    if(!(isPaymentMade && payPartyObj?.id)){ setOutstanding([]); setAllocPick({}); return; }
+    let alive=true;
+    api.get(`/finance/parties/${payPartyObj.id}/outstanding`)
+      .then(r=>{ if(alive&&r?.success) setOutstanding(r.data?.items||[]); })
+      .catch(()=>{ if(alive) setOutstanding([]); });
+    return ()=>{alive=false;};
+  },[isPaymentMade,payPartyObj?.id]);
+  // Auto-FIFO preview: how much of `payAmt` lands on each outstanding bill.
+  const allocPreview = useMemo(()=>{
+    const amt=Number(payAmt)||0;
+    if(!outstanding.length) return {map:{},allocated:0,advance:amt};
+    const map={};
+    if(allocAuto){
+      let left=amt;
+      for(const it of outstanding){ if(left<=0.005) break; const take=Math.min(left,it.remaining); if(take>0.005){ map[it.target_id]=Math.round(take*100)/100; left=Math.round((left-take)*100)/100; } }
+      const allocated=Object.values(map).reduce((s,v)=>s+v,0);
+      return {map,allocated:Math.round(allocated*100)/100,advance:Math.round((amt-allocated)*100)/100};
+    }
+    // manual: clamp each typed amount to its remaining
+    let allocated=0;
+    for(const it of outstanding){ const v=Math.min(Number(allocPick[it.target_id])||0,it.remaining); if(v>0.005){ map[it.target_id]=Math.round(v*100)/100; allocated+=v; } }
+    return {map,allocated:Math.round(allocated*100)/100,advance:Math.round((amt-allocated)*100)/100};
+  },[payAmt,outstanding,allocAuto,allocPick]);
+
   // ── invoice state ────────────────────────────────────────────
   const [invMode,setInvMode]=useState("fresh");
   const [invoiceNo,setInvoiceNo]=useState("INV-2026-001");
@@ -1479,6 +1513,13 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
         // the backend can mark it paid in the same request.
         settles_bill_id: settlesRef?.kind==="bill"?settlesRef.id:null,
         settles_pr_id:   settlesRef?.kind==="pr"  ?settlesRef.id:null,
+        // Payment allocation — which outstanding bills this payment settles.
+        // Explicit list from the picker (auto-FIFO preview or manual amounts).
+        ...(isPaymentMade && outstanding.length ? {
+          allocations: outstanding
+            .map(it=>({ target_type: it.target_type, target_id: it.target_id, amount: allocPreview.map[it.target_id]||0 }))
+            .filter(a=>a.amount>0.005),
+        } : {}),
         // DR = money going OUT (expense), CR = money coming IN (receipt)
         dr: ["material_purchase","subcon_expense","site_expense","party_payment","bank_transfer","payment"].includes(backType),
         // Bank Transfer: destination account (always include, null for non-transfer)
@@ -2043,6 +2084,61 @@ function CreateTransactionModal({type,onClose,preParty,dbParties,dbAccounts,dbPr
                 {lbl("Description / Note")}
                 <input value={note} onChange={e=>setNote(e.target.value)} placeholder="What is this payment for?"
                   style={inp()} onFocus={e=>e.target.style.borderColor=T.blu} onBlur={e=>e.target.style.borderColor=T.b1}/>
+              </div>
+            </div>
+          )}
+
+          {/* ════════════════════════════════════════════════════
+              PAYMENT ALLOCATION — settle this payment against outstanding bills
+          ════════════════════════════════════════════════════ */}
+          {isPaymentMade && outstanding.length>0 && (
+            <div style={{background:T.surface,borderRadius:8,border:`1px solid ${T.b1}`,marginBottom:12,overflow:"hidden"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:T.surfaceB,borderBottom:`1px solid ${T.b1}`}}>
+                <span style={{fontSize:11,fontWeight:700,color:T.t3,textTransform:"uppercase",letterSpacing:".4px"}}>
+                  Kis bill ke against — {party} ke {outstanding.length} outstanding
+                </span>
+                <div style={{display:"flex",gap:4,background:T.b1+"55",borderRadius:6,padding:2}}>
+                  {[["auto","Auto (FIFO)"],["manual","Manual"]].map(([m,l])=>(
+                    <button key={m} type="button" onClick={()=>setAllocAuto(m==="auto")}
+                      style={{padding:"3px 10px",borderRadius:5,border:"none",fontSize:10.5,fontWeight:700,cursor:"pointer",fontFamily:"inherit",background:(allocAuto===(m==="auto"))?T.surface:"transparent",color:(allocAuto===(m==="auto"))?T.blu:T.t3,boxShadow:(allocAuto===(m==="auto"))?"0 1px 2px rgba(0,0,0,.12)":"none"}}>{l}</button>
+                  ))}
+                </div>
+              </div>
+              <div style={{maxHeight:190,overflowY:"auto"}}>
+                {outstanding.map(it=>{
+                  const alloc=allocPreview.map[it.target_id]||0;
+                  const on=alloc>0.005;
+                  const dt=it.date?new Date(it.date).toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+                  const isReimb=it.target_type==="reimbursement";
+                  return(
+                    <div key={it.target_id} style={{display:"grid",gridTemplateColumns:"22px 1fr 96px 104px",gap:8,alignItems:"center",padding:"8px 12px",borderBottom:`1px solid ${T.b1}`,background:on?T.grnL+"55":"transparent"}}>
+                      <span style={{display:"flex",justifyContent:"center"}}>
+                        {allocAuto
+                          ? <span style={{width:15,height:15,borderRadius:4,border:`1.5px solid ${on?T.grn:T.b2}`,background:on?T.grn:"transparent",display:"flex",alignItems:"center",justifyContent:"center",color:"white",fontSize:10,fontWeight:800}}>{on?"✓":""}</span>
+                          : <input type="checkbox" checked={on} onChange={e=>setAllocPick(p=>({...p,[it.target_id]:e.target.checked?it.remaining:0}))} style={{width:15,height:15,cursor:"pointer",accentColor:T.grn}}/>}
+                      </span>
+                      <div style={{minWidth:0}}>
+                        <div style={{fontSize:12,fontWeight:600,color:T.t1,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                          {isReimb?"On-behalf paid":(it.label||`Bill #${it.target_id}`)}
+                          {isReimb&&<span style={{marginLeft:6,fontSize:9,fontWeight:700,color:T.ind,background:T.indL,padding:"1px 5px",borderRadius:7}}>REIMBURSE</span>}
+                        </div>
+                        <div style={{fontSize:10,color:T.t4}}>{dt}{it.project_name?` · ${it.project_name}`:""} · remaining ₹{it.remaining.toLocaleString("en-IN")}</div>
+                      </div>
+                      <div style={{fontSize:11,color:T.t4,textAlign:"right"}}>of ₹{it.amount.toLocaleString("en-IN")}</div>
+                      {allocAuto
+                        ? <div style={{fontSize:12.5,fontWeight:700,color:on?T.grn:T.t4,textAlign:"right"}}>{on?`₹${alloc.toLocaleString("en-IN")}`:"—"}</div>
+                        : <input type="number" value={allocPick[it.target_id]||""} placeholder="0"
+                            onChange={e=>setAllocPick(p=>({...p,[it.target_id]:e.target.value}))}
+                            style={inp({textAlign:"right",fontSize:12,height:28,fontWeight:700,color:T.grn})}/>}
+                    </div>
+                  );
+                })}
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 12px",background:T.surfaceB,borderTop:`1px solid ${T.b1}`}}>
+                <span style={{fontSize:11,color:T.t3}}>Allocated <b style={{color:T.grn}}>₹{allocPreview.allocated.toLocaleString("en-IN")}</b></span>
+                {allocPreview.advance>0.5
+                  ? <span style={{fontSize:11,fontWeight:700,color:T.amb}}>Advance / bacha: ₹{allocPreview.advance.toLocaleString("en-IN")}</span>
+                  : <span style={{fontSize:11,color:T.t4}}>poora allocate ho gaya</span>}
               </div>
             </div>
           )}
