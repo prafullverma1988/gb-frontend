@@ -503,18 +503,10 @@ function TabEstimate({ project }) {
       const secTotal = items.reduce((s,i)=> s + (parseFloat(i.amount)||0), 0);
       grand += secTotal;
       const secCollapsed = collapsedSecs.has(sec.id);
-      // Section rollup qty + rate — mirrors the live render. Uniform-area
-      // sections show the area + Σ per-sqft rate; per-item sections show
-      // Σ qty and blank rate (per-sqft is meaningless there).
       const secPerItem = !!Number(sec.per_item_qty);
-      const secRateSum = items.reduce((s,i)=> s + (parseFloat(i.rate)||0), 0);
       const secQtySum  = items.reduce((s,i)=> s + (parseFloat(i.qty)||0), 0);
-      const secArea    = parseFloat(items[0]?.qty) || 0;
-      const secQtyDisp = secPerItem ? secQtySum : secArea;
-      const secRateDisp = secPerItem ? "" : inr(secRateSum) + "/sqft";
-      body += `<tr class="sec"><td colspan="2">${secCollapsed ? "▸ " : "▾ "}${esc(sec.title||"")}${secPerItem ? ' <span class="tag">PER-ITEM QTY</span>' : ""}</td><td class="r">${Math.round(secQtyDisp).toLocaleString("en-IN")}</td><td class="r">${secRateDisp}</td><td></td><td class="r">${inr(secTotal)}</td></tr>`;
-      if (secCollapsed) continue;
-      // Group items by category
+      // Group items by category (needed before the section row — the section
+      // rollup is derived from the per-category areas).
       const groups = {}; const catOrder = [];
       for (const it of items) {
         const m = /^\[([^\]]+)\]\s*(.*)$/.exec(it.description || "");
@@ -523,6 +515,19 @@ function TabEstimate({ project }) {
         (groups[cat] ||= []); if (!catOrder.includes(cat)) catOrder.push(cat);
         groups[cat].push({ ...it, _clean: clean });
       }
+      // Section rollup qty + rate — mirrors the live render. Uniform mode:
+      // Qty = Σ category areas, Rate = blended (total ÷ qty) so the row
+      // reconciles even when GF/FF/SF carry different areas. Per-item mode
+      // shows Σ qty and a blank rate (per-sqft is meaningless there).
+      const secAreaSum = catOrder.reduce(
+        (a, cn) => a + (parseFloat(groups[cn][0]?.qty) || 0), 0);
+      const secQtyDisp = secPerItem ? secQtySum : secAreaSum;
+      const secBlended = secQtyDisp > 0 ? secTotal / secQtyDisp : 0;
+      const secUnits = new Set(items.map(i => String(i.unit||"").trim().toLowerCase()).filter(Boolean));
+      const secRateDisp = (!secPerItem && secUnits.size <= 1 && secQtyDisp > 0)
+        ? inr(Math.round(secBlended)) + "/sqft" : "";
+      body += `<tr class="sec"><td colspan="2">${secCollapsed ? "▸ " : "▾ "}${esc(sec.title||"")}${secPerItem ? ' <span class="tag">PER-ITEM QTY</span>' : ""}</td><td class="r">${Math.round(secQtyDisp).toLocaleString("en-IN")}</td><td class="r">${secRateDisp}</td><td></td><td class="r">${inr(secTotal)}</td></tr>`;
+      if (secCollapsed) continue;
       for (const cat of catOrder) {
         const gi = groups[cat];
         const catTotal = gi.reduce((s,i)=> s + (parseFloat(i.amount)||0), 0);
@@ -1677,15 +1682,8 @@ function TabEstimate({ project }) {
                   const GRID = "1fr 60px 70px 95px 110px";
                   return (estDetail.sections||[]).map(sec => {
                     const secTotal   = (sec.items||[]).reduce((s,i) => s + parseFloat(i.amount||0), 0);
-                    const secRateSum = (sec.items||[]).reduce((s,i) => s + parseFloat(i.rate||0),   0);
                     const secQtySum  = (sec.items||[]).reduce((s,i) => s + parseFloat(i.qty||0),    0);
-                    // Mode = single source of truth from DB. Uniform mode:
-                    //   show the area (any item's qty), display per-sqft rate.
-                    // Per-item mode:
-                    //   show Σ qty, hide per-sqft (mathematically meaningless).
                     const secPerItem = !!Number(sec.per_item_qty);
-                    const secArea    = parseFloat((sec.items||[])[0]?.qty) || 0;
-                    const secQtyDisplay = secPerItem ? secQtySum : secArea;
                     // Group items by parsed [Category] prefix in description.
                     // EstimateBuilderModal flattens 3-level (sec › cat › item)
                     // → 2-level (section + items[]) by stuffing the category
@@ -1700,6 +1698,21 @@ function TabEstimate({ project }) {
                       if (!groups[catName]) { groups[catName] = []; catOrder.push(catName); }
                       groups[catName].push({ ...it, _cleanDesc: cleanDesc });
                     }
+                    // Uniform mode: every item in a category shares that
+                    // category's area, so the section Qty is the SUM of the
+                    // category areas and the Rate is BLENDED (total ÷ qty).
+                    // Old behaviour showed Σ item rates against the FIRST
+                    // item's qty — the moment two categories had different
+                    // areas (GF 1500, SF 1470…) rate × qty ≠ amount.
+                    const secAreaSum = catOrder.reduce(
+                      (a, cn) => a + (parseFloat(groups[cn][0]?.qty) || 0), 0);
+                    const secQtyDisplay = secPerItem ? secQtySum : secAreaSum;
+                    const secBlended    = secQtyDisplay > 0 ? secTotal / secQtyDisplay : 0;
+                    // A blended per-unit rate only means something when every
+                    // item shares one unit; hide it for a mixed-unit section.
+                    const secUnits = new Set((sec.items||[])
+                      .map(i => String(i.unit||"").trim().toLowerCase()).filter(Boolean));
+                    const secRateShown = !secPerItem && secUnits.size <= 1 && secQtyDisplay > 0;
                     const secCollapsed = collapsedSecs.has(sec.id);
                     return (
                       <div key={sec.id} style={{background:T.surface,border:"1px solid "+T.b1,borderRadius:8,marginBottom:10,overflow:"hidden"}}>
@@ -1717,7 +1730,7 @@ function TabEstimate({ project }) {
                             {Math.round(secQtyDisplay).toLocaleString("en-IN")}
                           </span>
                           <span style={{fontSize:11.5,fontWeight:700,color:T.blu,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:8}}>
-                            {secPerItem ? "" : fmtC(secRateSum) + "/sqft"}
+                            {secRateShown ? fmtC(Math.round(secBlended)) + "/sqft" : ""}
                           </span>
                           <span style={{fontSize:13.5,fontWeight:800,color:T.blu,fontVariantNumeric:"tabular-nums",textAlign:"right",paddingRight:0}}>
                             {fmtC(secTotal)}

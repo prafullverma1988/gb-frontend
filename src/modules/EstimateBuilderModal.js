@@ -620,12 +620,9 @@ export default function EstimateBuilderModal({
   };
 
   // ── Measurement patchers ───────────────────────────────────────
-  const patchSection = (sid, patch) => setMeasurements(m => ({
-    sections: {
-      ...m.sections,
-      [sid]: { ...(m.sections[sid] || { area: 0, categories: {} }), ...patch },
-    },
-  }));
+  // No patchSection: the section has no editable area any more. Its stored
+  // `area` survives only as the package default a category inherits until it
+  // is given its own; every edit goes through patchCategory.
   const patchCategory = (sid, cid, patch) => setMeasurements(m => {
     const sec = m.sections[sid] || { area: 0, categories: {} };
     return {
@@ -726,8 +723,16 @@ export default function EstimateBuilderModal({
         return { ...c, name: c.category_name || c.name, area: cArea, base: cBase, addOn: cAddOn, total: cTotal, items: itemRows };
       });
       grand += sTotal;
+      // Section header rollup. Qty = SUM of the category areas (GF/FF/SF each
+      // carry their own), rate = BLENDED average (total ÷ qty). The old header
+      // showed Σ of the category rates against ONE section area, which stopped
+      // reconciling the moment any category had a different area:
+      // rate × qty ≠ total. Sum + blended always reconciles.
+      const sQty  = catRows.reduce((a, c) => a + (Number(c.area) || 0), 0);
+      const sRate = sQty > 0 ? sTotal / sQty : 0;
       return { ...s, area: sArea, per_item_qty: perItem ? 1 : 0,
-               base: sBase, addOn: sAddOn, total: sTotal, categories: catRows };
+               base: sBase, addOn: sAddOn, total: sTotal,
+               qty: sQty, rate: sRate, categories: catRows };
     });
     return { grandTotal: grand, sections };
     // eslint-disable-next-line
@@ -1139,7 +1144,9 @@ export default function EstimateBuilderModal({
               </div>
             ) : breakdown.sections.map(sec => {
               const sCollapsed = !!collapsedSections[sec.id];
-              const noAreaHint = sec.area === 0;
+              // Warn when NO category has an area yet — the section's qty is
+              // derived, so a zero total means nothing has been entered below.
+              const noAreaHint = !(sec.qty > 0);
               const secPerItem = !!sec.per_item_qty;
               return (
                 <div key={sec.id}
@@ -1193,27 +1200,18 @@ export default function EstimateBuilderModal({
                           are mathematically meaningless. */}
                       {!secPerItem && (
                         <>
-                          {/* Σ Base + Σ Add-on across all categories in this
-                              section. Library shows the same triple — Base /
-                              Add-on / per-sqft pill — so the user can
-                              cross-check estimate values against the library. */}
-                          <span style={{ color:"rgba(255,255,255,0.6)" }}>Base <strong style={{ color:"white" }}>Rs.{inrIN(sec.base || 0)}</strong></span>
-                          <span style={{ color:"rgba(255,255,255,0.6)" }}>Add-on <strong style={{ color:COL_AMBER }}>Rs.{inrIN(sec.addOn || 0)}</strong></span>
-                          <span style={{ padding:"3px 9px", background:COL_TEAL_BG, color:COL_TEAL, borderRadius:4, fontWeight:700 }}>
-                            Rs.{inrIN((sec.base || 0) + (sec.addOn || 0))}/{sec.unit || "sqft"}
-                          </span>
+                          {/* Section rollup is DERIVED — area is entered per
+                              category (GF/FF/SF can differ), so the section
+                              shows Σ area and the blended rate. There is no
+                              section-level area input: one editable place for
+                              a number, and rate × qty always equals total. */}
                           <span style={{ display:"flex", alignItems:"center", gap:4 }}>
-                            <span style={{ color:"rgba(255,255,255,0.55)", fontSize:11, textTransform:"uppercase" }}>Area</span>
-                            {readOnly ? (
-                              <span style={{ padding:"4px 8px", color:"white", fontWeight:700, fontSize:12 }}>{inrIN(sec.area)}</span>
-                            ) : (
-                              <input type="number" value={sec.area}
-                                onChange={e => patchSection(sec.id, { area: e.target.value })}
-                                style={{ width:80, padding:"5px 8px", borderRadius:5, textAlign:"right",
-                                         fontFamily:"inherit", fontSize:12, fontWeight:700,
-                                         border:"1.5px solid rgba(255,255,255,0.2)",
-                                         background:"rgba(255,255,255,0.08)", color:"white", outline:"none" }}/>
-                            )}
+                            <span style={{ color:"rgba(255,255,255,0.55)", fontSize:11, textTransform:"uppercase" }}>Qty</span>
+                            <strong style={{ color:"white", fontSize:12.5 }}>{inrIN(sec.qty || 0)}</strong>
+                          </span>
+                          <span style={{ padding:"3px 9px", background:COL_TEAL_BG, color:COL_TEAL, borderRadius:4, fontWeight:700 }}
+                            title="Blended rate — total ÷ total area">
+                            Rs.{inrIN(Math.round(sec.rate || 0))}/{sec.unit || "sqft"}
                           </span>
                         </>
                       )}
@@ -1233,7 +1231,10 @@ export default function EstimateBuilderModal({
                         const catKey = `${sec.id}:${cat.id}`;
                         const catCollapsed = !!collapsedCats[catKey];
                         const cm = measurements.sections[sec.id]?.categories?.[cat.id] || {};
-                        const overrideVal = isSet(cm.area_override) ? String(cm.area_override) : "";
+                        // Category area is now the ONLY place a qty is entered.
+                        // Show the effective value (own area, else the package
+                        // default) so the field always reads what is in use.
+                        const areaVal = cat.area === 0 && !isSet(cm.area_override) ? "" : String(cat.area ?? "");
                         return (
                           <div key={cat.id} style={{ marginBottom:10, border:"1px solid #E5E7EB", borderRadius:8, overflow:"hidden" }}>
                             {/* Category header */}
@@ -1277,15 +1278,14 @@ export default function EstimateBuilderModal({
                                       {readOnly ? (
                                         <span style={{ padding:"3px 7px", color:"#0F172A", fontWeight:700, fontSize:12 }}>{inrIN(cat.area)}</span>
                                       ) : (
-                                        <input type="number" value={overrideVal}
+                                        <input type="number" value={areaVal}
                                           onChange={e => patchCategory(sec.id, cat.id, { area_override: e.target.value === "" ? null : e.target.value })}
-                                          placeholder={String(sec.area)}
-                                          title={overrideVal ? "Override active — clear to inherit section's area" : `Inherits ${sec.area} from section`}
+                                          placeholder="0"
+                                          title="Is category ki area / qty — section ka total inhi ka sum hai"
                                           style={{ width:70, padding:"4px 7px", borderRadius:5, textAlign:"right",
                                                    fontFamily:"inherit", fontSize:11.5, fontWeight:700,
-                                                   border:"1.5px solid " + (overrideVal ? COL_AMBER : "#CBD5E1"),
-                                                   background: overrideVal ? "#FFFBEB" : "white",
-                                                   color: overrideVal ? "#92400E" : "#0F172A", outline:"none" }}/>
+                                                   border:"1.5px solid #CBD5E1", background:"white",
+                                                   color:"#0F172A", outline:"none" }}/>
                                       )}
                                     </span>
                                   </>
