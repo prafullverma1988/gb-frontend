@@ -220,8 +220,16 @@ function TabStats() {
           {/* Expiring subscriptions */}
           <div style={{ background:T.surface, border:`1px solid ${T.bluM}`, borderRadius:10, overflow:"hidden" }}>
             <div style={{ padding:"10px 14px", background:T.bluL, borderBottom:`1px solid ${T.bluM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
-              <span style={{ fontSize:12, fontWeight:700, color:T.blu }}>📅 Expiring Soon (7d)</span>
-              <span style={{ fontSize:10, color:T.blu, fontWeight:600 }}>{(metrics.expiring_soon||[]).length} subs</span>
+              {/* 30d, not 7d — the backend widened this window (a quarterly or
+                  annual contract needs more notice than a trial) but the label
+                  was never updated, so it under-stated what it was showing. */}
+              <span style={{ fontSize:12, fontWeight:700, color:T.blu }}>📅 Expiring Soon (30d)</span>
+              {/* Capped at 20 server-side — same reason as the churn strip. */}
+              <span style={{ fontSize:10, color:T.blu, fontWeight:600 }}>
+                {(kpi.expiring_count ?? (metrics.expiring_soon||[]).length)} subs
+                {(kpi.expiring_count || 0) > (metrics.expiring_soon||[]).length
+                  && ` · showing ${(metrics.expiring_soon||[]).length}`}
+              </span>
             </div>
             <div style={{ maxHeight:200, overflowY:"auto" }}>
               {(metrics.expiring_soon||[]).length === 0 && <div style={{ padding:20, textAlign:"center", color:T.t4, fontSize:11 }}>None expiring</div>}
@@ -247,7 +255,15 @@ function TabStats() {
           <div style={{ background:T.surface, border:`1px solid ${T.redM}`, borderRadius:10, overflow:"hidden" }}>
             <div style={{ padding:"10px 14px", background:T.redL, borderBottom:`1px solid ${T.redM}`, display:"flex", alignItems:"center", justifyContent:"space-between" }}>
               <span style={{ fontSize:12, fontWeight:700, color:T.red }}>⚠️ Churn Risk</span>
-              <span style={{ fontSize:10, color:T.red, fontWeight:600 }}>{(metrics.churn_risk||[]).length} at risk</span>
+              {/* Count comes from the KPI, not the list: the list is capped at
+                  20 server-side, so its length flatlines at 20 while the real
+                  number keeps climbing. Say so when the two differ rather than
+                  quietly showing a short list. */}
+              <span style={{ fontSize:10, color:T.red, fontWeight:600 }}>
+                {(kpi.churn_risk_count ?? (metrics.churn_risk||[]).length)} at risk
+                {(kpi.churn_risk_count || 0) > (metrics.churn_risk||[]).length
+                  && ` · showing ${(metrics.churn_risk||[]).length}`}
+              </span>
             </div>
             <div style={{ maxHeight:200, overflowY:"auto" }}>
               {(metrics.churn_risk||[]).length === 0 && <div style={{ padding:20, textAlign:"center", color:T.t4, fontSize:11 }}>All customers active ✓</div>}
